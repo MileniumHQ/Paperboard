@@ -150,7 +150,20 @@ export function EffectExample() {
             <PaperText preset="body">
                 When href is provided, the component renders an anchor tag and omits button-specific attributes.
                 A square icon button is named by its aria-label prop, or by its title prop when aria-label is absent. Its icon name is never used as the name, so give every icon button one of the two.
+                A PaperIcon beside a label is held to the label's line, so a button with an icon is the same height as a text-only button of its size, and the two line up in a row.
             </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperFlex direction="row" gap="half" align="center">
+    <PaperButton>Kick</PaperButton>
+    <PaperButton variant="danger"><PaperIcon>block</PaperIcon>Ban</PaperButton>
+</PaperFlex>`}
+            </PaperCode>
+            <PaperCard padding="double" surface="front">
+                <PaperFlex direction="row" gap="half" align="center">
+                    <PaperButton>Kick</PaperButton>
+                    <PaperButton variant="danger"><PaperIcon>block</PaperIcon>Ban</PaperButton>
+                </PaperFlex>
+            </PaperCard>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
             <PaperText preset="body">

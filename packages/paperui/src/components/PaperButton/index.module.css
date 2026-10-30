@@ -22,6 +22,25 @@
     text-overflow: ellipsis;
 }
 
+/* An icon is a larger glyph than the label beside it, and its line box would
+   make the button taller than a text-only one. The button's text line is
+   resolved here, in the button's own font, and an icon in a labelled button
+   is held to it, so every button of a size has one height. The glyph still
+   draws at full size, centred on that line. */
+@property --paper-button-line {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 0px;
+}
+
+.PaperButton {
+    --paper-button-line: 1lh;
+}
+
+.PaperButton:not(.icon) > [class*="PaperIcon"] {
+    height: var(--paper-button-line);
+}
+
 .PaperButton.fullWidth {
     width: 100%;
 }
