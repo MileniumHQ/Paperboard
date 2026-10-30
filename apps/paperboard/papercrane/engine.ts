@@ -42,6 +42,9 @@ export const REGISTRY_URL = resolveRegistryUrl();
 
 // what a caller expects to install (the release it showed the user or
 // planned an update to); the daemon's own registry lookup must agree
+type StreamListeners = Record<string, ((...args: any[]) => void) | undefined>;
+type StreamClient = { on: (event: string, fn: any) => unknown; off: (event: string, fn: any) => unknown };
+
 export interface ExpectedPanelRelease {
     allowDowngrade?: boolean;
     version?: string;
@@ -284,25 +287,66 @@ export class PaperCraneEngine {
         return typeof os.homedir === "function" ? os.homedir() : process.cwd();
     }
 
-    // re-attach replaces listeners instead of stacking duplicates
-    private attachedStreamCallbacks = new WeakMap<
-        object,
-        Record<string, ((...args: any[]) => void) | undefined>
-    >();
+    // Stream subscriptions, keyed by workload id and then by subscriber (an
+    // RPC socket). Every subscriber gets every chunk. Subscribing again
+    // replaces that subscriber's own listeners, so a creator that also
+    // attaches is not handed each chunk twice, and no subscriber takes the
+    // stream from another. A subscription outlives the process it was made
+    // against: a shell that exits and starts again under the same id, or one
+    // subscribed to before it started, streams to everyone subscribed, until
+    // the socket closes.
+    private streamSubscriptions = new Map<string, Map<object, StreamListeners>>();
+    private streamSubscriptionCount = 0;
+    // what each live client currently has wired, so a replacement can be undone
+    private wiredStreams = new WeakMap<object, Map<object, StreamListeners>>();
 
-    private replaceStreamListeners(
-        client: SupervisedProcessClient,
-        listeners: Record<string, ((...args: any[]) => void) | undefined>,
-    ): void {
-        const prev = this.attachedStreamCallbacks.get(client);
-        if (prev) {
-            for (const [event, fn] of Object.entries(prev)) {
+    private subscribeStreams(id: string, subscriber: object, listeners: StreamListeners): void {
+        let bySubscriber = this.streamSubscriptions.get(id);
+        if (!bySubscriber?.has(subscriber)) {
+            if (this.streamSubscriptionCount >= 10_000) throw new LimitError("Too many stream subscriptions");
+            this.streamSubscriptionCount++;
+        }
+        if (!bySubscriber) {
+            bySubscriber = new Map();
+            this.streamSubscriptions.set(id, bySubscriber);
+        }
+        bySubscriber.set(subscriber, listeners);
+        const client = this.clients.get(id);
+        if (client) this.wireStreams(id, client);
+    }
+
+    // brings a client's listeners in line with the subscriptions for its id
+    private wireStreams(id: string, client: StreamClient): void {
+        let wired = this.wiredStreams.get(client);
+        if (!wired) {
+            wired = new Map();
+            this.wiredStreams.set(client, wired);
+        }
+        const wanted = this.streamSubscriptions.get(id);
+        for (const [subscriber, listeners] of [...wired]) {
+            if (wanted?.get(subscriber) === listeners) continue;
+            for (const [event, fn] of Object.entries(listeners)) {
                 if (fn) client.off(event, fn);
             }
+            wired.delete(subscriber);
         }
-        this.attachedStreamCallbacks.set(client, listeners);
-        for (const [event, fn] of Object.entries(listeners)) {
-            if (fn) client.on(event, fn);
+        for (const [subscriber, listeners] of wanted ?? []) {
+            if (wired.has(subscriber)) continue;
+            for (const [event, fn] of Object.entries(listeners)) {
+                if (fn) client.on(event, fn);
+            }
+            wired.set(subscriber, listeners);
+        }
+    }
+
+    // a closed socket stops receiving: its subscriptions leave every workload
+    public detachStreams(subscriber: object): void {
+        for (const [id, bySubscriber] of [...this.streamSubscriptions]) {
+            if (!bySubscriber.delete(subscriber)) continue;
+            this.streamSubscriptionCount--;
+            if (bySubscriber.size === 0) this.streamSubscriptions.delete(id);
+            const client = this.clients.get(id);
+            if (client) this.wireStreams(id, client);
         }
     }
 
@@ -404,6 +448,7 @@ export class PaperCraneEngine {
             client = new SupervisedProcessClient(id);
             if (!(await client.connect())) return null;
             this.clients.set(id, client);
+            this.wireStreams(id, client);
             const meta = this.supervisorConfig(id);
             this.clientCommands.set(id, typeof meta?.command === "string" ? meta.command : null);
             if (meta?.noStdin === true) this.inputless.add(id);
@@ -469,6 +514,9 @@ export class PaperCraneEngine {
         env?: Record<string, string>,
         onData?: (data: string) => void,
         onExit?: (exitCode: number) => void,
+        // the socket that receives the stream (see subscribeStreams); without
+        // one, the listeners belong to this shell alone
+        subscriber?: object,
     ): Promise<void> {
         // platform-aware shell, don't trust $SHELL in GUI apps
         const shell =
@@ -476,6 +524,7 @@ export class PaperCraneEngine {
         this.requireNoRuntimeReplacement(shell);
         const resolvedCwd = this.resolveSpawnCwd(cwd);
         logger.debug(`[Paperboard Server] creating terminal ${id} (shell=${shell} cwd=${resolvedCwd})`);
+        if (subscriber) this.subscribeStreams(id, subscriber, { data: onData, exit: onExit });
 
         await spawnSupervisedClient(
             id,
@@ -491,17 +540,24 @@ export class PaperCraneEngine {
                 rows,
             },
             this.clients,
-            { onData, onExit: (code) => {
-                this.clients.delete(id);
-                this.workloadEnded(id);
-                onExit?.(code);
-            } },
+            {
+                onData: subscriber ? undefined : onData,
+                onExit: (code) => {
+                    this.clients.delete(id);
+                    this.workloadEnded(id);
+                    if (!subscriber) onExit?.(code);
+                },
+                attach: (client) => this.wireStreams(id, client),
+            },
         );
         this.clientCommands.set(id, shell);
     }
 
     public writeTerminal(id: string, data: string): void {
-        this.clients.get(id)?.write(data);
+        const client = this.clients.get(id);
+        // keystrokes for a shell that is gone are a failure, not a delivery
+        if (!client) throw new Error(`Terminal "${id}" is not running`);
+        client.write(data);
     }
 
     public resizeTerminal(id: string, cols: number, rows: number): void {
@@ -519,13 +575,14 @@ export class PaperCraneEngine {
     // Reattaches streaming for a terminal owned by a previous session
     public async attachTerminal(
         id: string,
+        subscriber: object,
         onData?: (data: string) => void,
         onExit?: (code: number) => void,
     ): Promise<boolean> {
-        const client = await this.getOrConnectClient(id);
-        if (!client) return false;
-        this.replaceStreamListeners(client, { data: onData, exit: onExit });
-        return true;
+        // subscribed even when the shell is not running yet: it streams
+        // here as soon as it starts
+        this.subscribeStreams(id, subscriber, { data: onData, exit: onExit });
+        return (await this.getOrConnectClient(id)) !== null;
     }
 
     public async isTerminalRunning(id: string): Promise<boolean> {
@@ -550,7 +607,10 @@ export class PaperCraneEngine {
     public async startProcess(
         id: string, command: string, args: string[] = [], cwd?: string, env?: Record<string, string>,
         onData?: (data: string) => void, onStdout?: (data: string) => void, onStderr?: (data: string) => void,
-        options: { stdin?: boolean } = {},
+        // subscriber: the socket that receives the streams (see
+        // subscribeStreams), onExit its exit listener; without one, the
+        // listeners belong to this process alone
+        options: { stdin?: boolean; subscriber?: object; onExit?: (exitCode: number) => void } = {},
     ): Promise<{ completion: Promise<{ exitCode: number }> }> {
         if (!id || typeof id !== "string") {
             throw new Error("process id is required");
@@ -566,6 +626,15 @@ export class PaperCraneEngine {
         }
         this.requireNoRuntimeReplacement(command);
         const resolvedCwd = this.resolveSpawnCwd(cwd);
+        const subscriber = options.subscriber;
+        if (subscriber) {
+            this.subscribeStreams(id, subscriber, {
+                data: onData,
+                stdout: onStdout,
+                stderr: onStderr,
+                exit: options.onExit,
+            });
+        }
 
         let resolveExit!: (result: { exitCode: number }) => void;
         const completion = new Promise<{ exitCode: number }>((resolve) => { resolveExit = resolve; });
@@ -582,14 +651,16 @@ export class PaperCraneEngine {
                 },
                 this.clients,
                 {
-                    onData,
-                    onStdout,
-                    onStderr,
+                    onData: subscriber ? undefined : onData,
+                    onStdout: subscriber ? undefined : onStdout,
+                    onStderr: subscriber ? undefined : onStderr,
                     onExit: (exitCode: number) => {
                         this.clients.delete(id);
                         this.workloadEnded(id);
                         resolveExit({ exitCode });
+                        if (!subscriber) options.onExit?.(exitCode);
                     },
+                    attach: (client) => this.wireStreams(id, client),
                 },
             );
         this.clientCommands.set(id, command);
@@ -629,20 +700,19 @@ export class PaperCraneEngine {
 
     public async attachProcess(
         id: string,
+        subscriber: object,
         onData?: (data: string) => void,
         onStdout?: (data: string) => void,
         onStderr?: (data: string) => void,
         onExit?: (exitCode: number) => void,
     ): Promise<boolean> {
-        const client = await this.getOrConnectClient(id);
-        if (!client) return false;
-        this.replaceStreamListeners(client, {
+        this.subscribeStreams(id, subscriber, {
             data: onData,
             stdout: onStdout,
             stderr: onStderr,
             exit: onExit,
         });
-        return true;
+        return (await this.getOrConnectClient(id)) !== null;
     }
 
     // Panel file management

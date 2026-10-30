@@ -16,6 +16,9 @@ export interface PreListeners {
     onStdout?: (data: string) => void;
     onStderr?: (data: string) => void;
     onExit?: (code: number) => void;
+    // runs on the new client before it connects, so a caller can attach
+    // its own stream listeners without missing the first output
+    attach?: (client: any) => void;
 }
 
 export async function spawnSupervisedClient(
@@ -51,6 +54,7 @@ export async function spawnSupervisedClient(
                 clientsMap.delete(id);
                 preListeners!.onExit!(code);
             });
+        preListeners?.attach?.(embedded);
 
         if (!await embedded.connect()) {
             clientsMap.delete(id);
@@ -94,6 +98,7 @@ export async function spawnSupervisedClient(
     if (preListeners?.onStdout) client.on("stdout", preListeners.onStdout);
     if (preListeners?.onStderr) client.on("stderr", preListeners.onStderr);
     if (preListeners?.onExit) client.on("exit", preListeners.onExit);
+    preListeners?.attach?.(client);
 
     for (let i = 0; i < 40; i++) {
         const connected = await client.connect();

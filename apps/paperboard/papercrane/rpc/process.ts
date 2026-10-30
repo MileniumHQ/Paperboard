@@ -25,7 +25,7 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
                 throw new InvalidParamsError("Invalid parameter: stdin must be a boolean");
             }
             checkSpawnEnv(env, ctx, "process:run");
-            const started = await claimClient(procId, ctx, "process:run", () => engine.startProcess(
+            await claimClient(procId, ctx, "process:run", () => engine.startProcess(
                 procId,
                 command,
                 args,
@@ -34,14 +34,12 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
                 undefined, // onData omitted — stdout & stderr are individually routed below
                 (stdout) => sendEvent("process:data", { id: procId, data: stdout, stream: "stdout" }),
                 (stderr) => sendEvent("process:data", { id: procId, data: stderr, stream: "stderr" }),
-                { stdin: params?.stdin },
+                {
+                    stdin: params?.stdin,
+                    subscriber: ctx.ws,
+                    onExit: (exitCode) => sendEvent("process:exit", { id: procId, exitCode }),
+                },
             ));
-            void started.completion.then(({ exitCode }) => {
-                sendEvent("process:exit", { id: procId, exitCode });
-            }).catch((err) => {
-                sendEvent("process:data", { id: procId, data: `\n[Process Error] ${err.message}\n`, stream: "stderr" });
-                sendEvent("process:exit", { id: procId, exitCode: 1 });
-            });
             reply(id, { success: true });
             return true;
         }
@@ -71,6 +69,7 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
             checkClientOwnership(procId, ctx, "process:attach");
             const success = await engine.attachProcess(
                 procId,
+                ctx.ws,
                 (data) => sendEvent("process:data", { id: procId, data, stream: "stdout" }),
                 (stdout) => sendEvent("process:data", { id: procId, data: stdout, stream: "stdout" }),
                 (stderr) => sendEvent("process:data", { id: procId, data: stderr, stream: "stderr" }),

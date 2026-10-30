@@ -94,6 +94,11 @@ await terminalApi.write(termId, "ls -la\\n");`}
                 Terminal identity is supplied as an explicit argument to prevent options objects from clobbering identifiers.
                 Subscriptions are scoped to individual terminal session channels to avoid broadcast overhead.
             </PaperText>
+            <PaperText preset="body">
+                Every window or service that subscribes with <PaperCode>onData</PaperCode> receives each chunk once, including the one that
+                created the terminal. A subscription follows the id, not one shell: subscribe before <PaperCode>create</PaperCode>, or keep
+                a subscription while a shell exits and is created again, and the new shell streams to it.
+            </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
             <PaperText preset="body">

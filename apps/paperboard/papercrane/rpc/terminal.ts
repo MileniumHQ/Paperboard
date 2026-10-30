@@ -19,6 +19,7 @@ export async function handleTerminal(action: string, id: unknown, params: any, c
                 env,
                 (data) => sendEvent("term:data", { id: termId, data }),
                 (exitCode) => sendEvent("term:exit", { id: termId, exitCode }),
+                ctx.ws,
             ));
             reply(id, { success: true });
             return true;
@@ -42,6 +43,7 @@ export async function handleTerminal(action: string, id: unknown, params: any, c
             checkClientOwnership(termId, ctx, "term:attach");
             const success = await engine.attachTerminal(
                 termId,
+                ctx.ws,
                 (data) => sendEvent("term:data", { id: termId, data }),
                 (exitCode) => sendEvent("term:exit", { id: termId, exitCode }),
             );

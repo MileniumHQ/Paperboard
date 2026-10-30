@@ -316,6 +316,7 @@ export function setupWebSocketServer(
             unindex(byPanel, authedPanelId);
             unindexSubscriptions(ws);
             socketSubscriptions.delete(ws);
+            engine.detachStreams(ws);
             const registryChanged = actionsRegistry.handleSocketClose(ws);
             if (registryChanged) {
                 broadcastEvent("actions:registry-updated", { type: "socket:closed" });
