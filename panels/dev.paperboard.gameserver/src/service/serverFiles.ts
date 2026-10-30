@@ -184,12 +184,10 @@ export async function writeServerFile(
         throw new Error("The file would be larger than 2 MB, which is too big to save here.");
     }
     const root = await deps.serverDir();
-    const { absolute } = await readRegularFile(root, relative);
-
-    return serializedFileTask(absolute, async () => {
-        // checked again inside the queue: the version must be the one on disk
-        // right before the write, not before an earlier queued save
-        const { stat } = await readRegularFile(root, relative);
+    // Queue before the asynchronous file checks: two reads can finish in
+    // reverse order and otherwise let the later save overtake the first.
+    return serializedFileTask(nodePath.resolve(root, relative), async () => {
+        const { absolute, stat } = await readRegularFile(root, relative);
         if (stat.size > MAX_EDITABLE_BYTES) throw new Error("The file on disk is larger than 2 MB.");
         const current = await nodeFs.readFile(absolute);
         if (versionOf(current) !== expectedVersion) {
