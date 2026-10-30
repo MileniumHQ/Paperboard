@@ -80,8 +80,8 @@ describe("parseStoreListing", () => {
 describe("loadInstalledPanelMedia", () => {
     const { readFileSync } = require("fs") as typeof import("fs");
     const { join } = require("path") as typeof import("path");
-    const aiDir = (require("url") as typeof import("url")).fileURLToPath(
-        new URL("../../../panels/dev.paperboard.agents", import.meta.url),
+    const panelDir = (require("url") as typeof import("url")).fileURLToPath(
+        new URL("../../../panels/dev.paperboard.botcreator", import.meta.url),
     );
     const readFrom = (files: Record<string, Uint8Array>) => async (path: string) => {
         const bytes = files[path.replace(/^\.\//, "")];
@@ -90,13 +90,13 @@ describe("loadInstalledPanelMedia", () => {
     };
 
     test("reads a real panel's icon and listing as renderable data images", async () => {
-        const read = async (path: string) => new Uint8Array(readFileSync(join(aiDir, path)));
+        const read = async (path: string) => new Uint8Array(readFileSync(join(panelDir, path)));
         const media = await loadInstalledPanelMedia(read, true);
         expect(isDataImage(media.icon)).toBe(true);
         // the listing text is whatever the panel ships; assert it round-trips
         // instead of pinning copy that changes with every store refresh
-        expect(media.store!.about).toBe(readFileSync(join(aiDir, "store/about.md"), "utf8"));
-        expect(media.store!.screenshots.length).toBe(4);
+        expect(media.store!.about).toBe(readFileSync(join(panelDir, "store/about.md"), "utf8"));
+        expect(media.store!.screenshots.length).toBe(5);
         // what the shell sends survives the library's parser intact
         expect(parseStoreListing(media.store, { allowDataImages: true })).toEqual(media.store!);
         // and without the opt-in, data images never render
