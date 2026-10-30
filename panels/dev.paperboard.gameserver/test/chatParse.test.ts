@@ -31,3 +31,10 @@ test("ordinary Forge log lines are not chat", () => {
     ).toBeNull();
     expect(parseChatMessage("[23:45:57] [Server thread/WARN] [minecraft/MinecraftServer]: <Steve> hi")).toBeNull();
 });
+
+test("joins, leaves and server messages say what they are, for the shared Chat tab", () => {
+    expect(parseChatMessage("[23:45:57] [Server thread/INFO]: Steve joined the game")).toMatchObject({ event: "join", sender: "Steve" });
+    expect(parseChatMessage("[23:45:57] [Server thread/INFO]: Alex left the game")).toMatchObject({ event: "leave", sender: "Alex" });
+    expect(parseChatMessage("[23:45:57] [Server thread/INFO]: [Server] Restarting soon")).toMatchObject({ event: "server", content: "Restarting soon" });
+    expect(parseChatMessage("[23:45:57] [Server thread/INFO]: <Steve> hi")?.event).toBeUndefined();
+});

@@ -107,7 +107,7 @@ export function observeLine(ctx: ServiceContext<GameServerState>, line: string, 
             chatMessages: appendCapped(ctx.state.chatMessages, chat),
         });
         // only player messages emit the chat-message trigger
-        if (chat.sender) {
+        if (chat.sender && !chat.event) {
             ctx.emitTrigger(TRIGGER_IDS.chatMessage, chat);
         }
     }

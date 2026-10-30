@@ -1,5 +1,6 @@
 import type { PaperConsoleEntry } from "@mileniumhq/paperui";
 import stripAnsi from "strip-ansi";
+import type { ChatMessage } from "../core/state";
 
 export function parseLogLine(rawLine: string): PaperConsoleEntry {
     const clean = stripAnsi(rawLine);
@@ -17,12 +18,8 @@ export function parseLogLine(rawLine: string): PaperConsoleEntry {
     return { type: "output", content: clean };
 }
 
-export interface ChatMessage {
-    id: string;
-    sender?: string;
-    content?: string;
-    text: string;
-    timestamp: string;
+export function chatId(): string {
+    return `chat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
 export function parseChatMessage(rawLine: string): ChatMessage | null {
@@ -47,26 +44,15 @@ export function parseChatMessage(rawLine: string): ChatMessage | null {
 
     const playerChatMatch = text.match(/^<([a-zA-Z0-9_]{1,16})>\s+(.+)$/);
     if (playerChatMatch) {
-        return {
-            id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            sender: playerChatMatch[1],
-            content: playerChatMatch[2].trim(),
-            text,
-            timestamp: time,
-        };
+        return { id: chatId(), sender: playerChatMatch[1], content: playerChatMatch[2].trim(), text, timestamp: time };
     }
 
-    const isSystemChat =
-        /^\[Server(?::\s*[^\]]+)?\]\s+.+/i.test(text) ||
-        /^[a-zA-Z0-9_]{1,16}\s+joined the game$/i.test(text) ||
-        /^[a-zA-Z0-9_]{1,16}\s+left the game$/i.test(text);
+    const serverMatch = text.match(/^\[Server(?::\s*[^\]]+)?\]\s+(.+)$/i);
+    if (serverMatch) return { id: chatId(), event: "server", content: serverMatch[1], text, timestamp: time };
 
-    if (isSystemChat) {
-        return {
-            id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            text,
-            timestamp: time,
-        };
+    const presenceMatch = text.match(/^([a-zA-Z0-9_]{1,16})\s+(joined|left) the game$/i);
+    if (presenceMatch) {
+        return { id: chatId(), event: presenceMatch[2].toLowerCase() === "joined" ? "join" : "leave", sender: presenceMatch[1], text, timestamp: time };
     }
     return null;
 }

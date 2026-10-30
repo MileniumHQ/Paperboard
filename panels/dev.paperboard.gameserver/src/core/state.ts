@@ -12,10 +12,15 @@ export type ServerStatus =
 
 export interface ChatMessage {
     id: string;
+    /** the line as the game printed it */
     text: string;
     timestamp: string;
+    /** the player a message, join or leave is about */
     sender?: string;
+    /** what was said, without the sender */
     content?: string;
+    /** set for a join, a leave or a message from the server console; unset for player chat */
+    event?: "join" | "leave" | "server";
 }
 
 // Live install progress published by installServerVersion through service

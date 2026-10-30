@@ -4,6 +4,7 @@ import { minecraftSoftware } from "./index";
 import Setup from "../../components/Setup";
 import Overview from "../../components/Overview";
 import Chat from "../../components/Chat";
+import PlayerHead from "../../components/PlayerHead";
 import Options from "../../components/Options";
 import GameRules from "../../components/GameRules";
 import Players from "../../components/Players";
@@ -28,7 +29,7 @@ export const minecraftUI: GameUI = {
             tab(id) {
                 switch (id) {
                     case "overview": return <Overview active={ctx.active() === id} hasPlayersTab={ctx.hasTab("players")} onOpenTab={ctx.openTab} />;
-                    case "chat": return <Chat />;
+                    case "chat": return <Chat avatar={(name) => <PlayerHead name={name} alt={name} size="small" />} />;
                     case "options": return <Options />;
                     case "gamerules": return <GameRules />;
                     case "players": return <Players />;
