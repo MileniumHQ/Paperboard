@@ -29,6 +29,7 @@ import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadine
 import { currentGameService, gameServiceFor } from "./games/service";
 import { assertGameAction, gameFor, games } from "./games";
 import { livePortDeps } from "./service/portDeps";
+import { configureHeadStore } from "./service/skins";
 export * from "./service/types";
 export * from "./games/minecraft/actions";
 export { LEGACY_DEPRECATION };
@@ -369,6 +370,10 @@ export const gameServerService = definePanelService({
             // No file operations or data moves: installed records and all config
             // keys become settings of the migrated server in one atomic write.
             await config.set(saved, PANEL_ID);
+            // beside the servers, so no server's files or backups carry it
+            await configureHeadStore(
+                await fileApi.getPath(`${saved.serversDirectory}/player-heads`, PANEL_ID),
+            ).catch((err) => console.error("[gameserver] player head cache unavailable:", err));
             const scopes = saved.servers.map(createScope);
             for (const scope of scopes) {
                 try {

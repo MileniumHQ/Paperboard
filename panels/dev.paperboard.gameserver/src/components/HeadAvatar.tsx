@@ -12,7 +12,7 @@ export default function HeadAvatar(props: {
     uuid?: string;
     loader: HeadLoader;
     size?: PaperAvatarSize;
-    shape?: "circle" | "square";
+    shape?: "circle" | "square" | "sharp";
     alt?: string;
     class?: string;
 }) {
@@ -22,10 +22,12 @@ export default function HeadAvatar(props: {
     );
     return (
         <PaperAvatar
-            src={head() ?? undefined}
+            // a head already in the cache paints on the first frame instead
+            // of flashing the fallback while the resource settles
+            src={head() ?? props.loader.peekHead(props.name, props.uuid) ?? undefined}
             alt={props.alt}
             size={props.size ?? "medium"}
-            shape={props.shape ?? "square"}
+            shape={props.shape ?? "sharp"}
             fallbackIcon="person"
             class={props.class}
         />

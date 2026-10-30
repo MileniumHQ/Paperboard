@@ -9,7 +9,7 @@ export default function PlayerHead(props: {
     name: string;
     uuid?: string;
     size?: PaperAvatarSize;
-    shape?: "circle" | "square";
+    shape?: "circle" | "square" | "sharp";
     alt?: string;
     class?: string;
 }) {

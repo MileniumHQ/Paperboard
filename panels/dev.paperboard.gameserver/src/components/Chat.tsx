@@ -29,7 +29,6 @@ export function PlayerAvatar(props: { name: string }) {
             name={props.name}
             alt={props.name}
             size="small"
-            shape="square"
         />
     );
 }

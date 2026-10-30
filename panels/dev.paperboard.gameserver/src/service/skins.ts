@@ -1,9 +1,12 @@
 // Player heads from Mojang. The profile and skin endpoints do not send CORS
 // headers, so the browser cannot read them directly; the service fetches,
 // composites the head (face + hat) and returns a data URL the panel can draw.
-// Profiles and skins are immutable per UUID, so results are cached in-memory
-// for the life of the service and lookups are de-duplicated and concurrency
-// capped — a roster of a hundred players issues a bounded number of requests.
+// Results are cached in memory for the life of the service and on disk for a
+// day, so a restart repaints every roster without asking Mojang again; lookups
+// are de-duplicated and concurrency capped — a roster of a hundred players
+// issues a bounded number of requests.
+import * as nodeFs from "node:fs/promises";
+import * as nodePath from "node:path";
 import { apiFetch } from "../lib/userAgent";
 import { composeHeadFromSkin, clampHeadSize } from "../core/skin";
 import { uuidForPlayerName } from "./playerStats";
@@ -15,6 +18,12 @@ const MAX_CACHE = 512;
 const MAX_CONCURRENT = 4;
 const NEGATIVE_TTL_MS = 60_000;
 const MAX_SKIN_BYTES = 1_024 * 1_024;
+// skins change, so a stored head is refreshed after a day; until then it is
+// served without a request. A failed refresh keeps the stored head.
+const DISK_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_DISK_HEADS = 2048;
+// names and uuids only: the key becomes a file name
+const DISK_KEY_RE = /^[a-z0-9_-]{1,36}$/;
 
 const UUID_DASHED_RE =
     /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -26,6 +35,61 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>();
+let storeDir: string | null = null;
+
+/**
+ * Where composited heads are kept between runs. Prunes the oldest heads past
+ * the cap, so a long-lived server with thousands of visitors stays bounded.
+ */
+export async function configureHeadStore(dir: string): Promise<void> {
+    await nodeFs.mkdir(dir, { recursive: true });
+    storeDir = dir;
+    const names = (await nodeFs.readdir(dir)).filter((n) => n.endsWith(".png"));
+    if (names.length <= MAX_DISK_HEADS) return;
+    const dated = await Promise.all(
+        names.map(async (name) => ({
+            name,
+            at: (await nodeFs.stat(nodePath.join(dir, name))).mtimeMs,
+        })),
+    );
+    dated.sort((a, b) => a.at - b.at);
+    for (const { name } of dated.slice(0, dated.length - MAX_DISK_HEADS)) {
+        await nodeFs.rm(nodePath.join(dir, name), { force: true });
+    }
+}
+
+function storedPath(key: string): string | null {
+    if (!storeDir || !DISK_KEY_RE.test(key)) return null;
+    return nodePath.join(storeDir, `${key}.png`);
+}
+
+async function readStored(key: string): Promise<{ dataUrl: string; fresh: boolean } | null> {
+    const file = storedPath(key);
+    if (!file) return null;
+    try {
+        const [bytes, info] = await Promise.all([nodeFs.readFile(file), nodeFs.stat(file)]);
+        return {
+            dataUrl: `data:image/png;base64,${bytes.toString("base64")}`,
+            fresh: Date.now() - info.mtimeMs < DISK_TTL_MS,
+        };
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") {
+            console.warn(`[skins] stored head for ${key} is unreadable:`, String(err));
+        }
+        return null;
+    }
+}
+
+async function writeStored(key: string, dataUrl: string): Promise<void> {
+    const file = storedPath(key);
+    if (!file) return;
+    const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+    try {
+        await nodeFs.writeFile(file, Buffer.from(base64, "base64"));
+    } catch (err) {
+        console.warn(`[skins] could not store the head for ${key}:`, String(err));
+    }
+}
 const inflight = new Map<string, Promise<string | null>>();
 
 // a small semaphore: profile + texture are two round trips per player
@@ -178,15 +242,28 @@ export function getHeadDataUrl(inputs: {
     if (existing) return existing;
 
     const size = clampHeadSize(inputs?.size);
+    // one size is stored per key: heads are composited at the panel's size
+    const storeKey = size === clampHeadSize(undefined) ? key : null;
     const promise = (async () => {
-        await acquire();
         try {
-            const dataUrl = await resolveHead(name || undefined, uuid || undefined, size);
+            const stored = storeKey ? await readStored(storeKey) : null;
+            if (stored?.fresh) {
+                remember(key, stored.dataUrl);
+                return stored.dataUrl;
+            }
+            await acquire();
+            let fetched: string | null;
+            try {
+                fetched = await resolveHead(name || undefined, uuid || undefined, size);
+            } finally {
+                release();
+            }
+            if (fetched && storeKey) await writeStored(storeKey, fetched);
+            const dataUrl = fetched ?? stored?.dataUrl ?? null;
             remember(key, dataUrl);
             if (!dataUrl) console.debug(`[skins] no head for ${key}`);
             return dataUrl;
         } finally {
-            release();
             inflight.delete(key);
         }
     })();
