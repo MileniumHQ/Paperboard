@@ -213,6 +213,8 @@
 
 .PaperButton.icon {
     padding: 0;
+    /* a square never gives way to a flex row, or its glyph sits off-centre */
+    flex-shrink: 0;
     /* The glyph itself renders through PaperIcon (which carries the icon
        font and its variation settings); this variant only squares the hit
        area. Sizing still inherits: .size-* font-size flows into the glyph,
