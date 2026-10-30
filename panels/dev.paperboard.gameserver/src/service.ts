@@ -39,7 +39,7 @@ export interface ServerSummary extends Omit<StoredServer, "settings"> {
     icon: string | null;
     state: Pick<
         GameServerState,
-        "serverStatus" | "serverSoftware" | "serverVersion" | "recoveryBlock"
+        "serverStatus" | "serverSoftware" | "serverVersion" | "serverPort" | "recoveryBlock"
     >;
 }
 export interface ServersState extends Record<string, unknown> {
@@ -90,6 +90,7 @@ function publish(changed?: ServerScope): void {
                 serverStatus: state.serverStatus,
                 serverSoftware: state.serverSoftware,
                 serverVersion: state.serverVersion,
+                serverPort: state.serverPort,
                 recoveryBlock: state.recoveryBlock,
             },
         };

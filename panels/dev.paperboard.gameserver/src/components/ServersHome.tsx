@@ -134,6 +134,15 @@ export default function ServersHome(props: { state: ServersState }) {
                                         </PaperBadge>
                                     }
                                     onClick={() => openServer(server.id)}
+                                    footerLeft={
+                                        <Show when={server.configured && server.state.serverPort}>
+                                            {(port) => (
+                                                <PaperText size={2} color="text-subtle">
+                                                    Port {port()}
+                                                </PaperText>
+                                            )}
+                                        </Show>
+                                    }
                                     footerRight={
                                         <PaperButton
                                             icon
