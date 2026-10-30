@@ -53,7 +53,7 @@ export default function PanelPermissionSettings(props: { panelName: (panelId: st
             </Show>
             <Show
                 when={entries().length > 0}
-                fallback={<PaperText color="text-subtle">When a panel asks for your microphone, camera or screen, your answer shows up here.</PaperText>}
+                fallback={<PaperText size={2} color="text-subtle">When a panel asks for your microphone, camera or screen, your answer shows up here.</PaperText>}
             >
                 <PaperSettingList autoHeight>
                     <For each={entries()}>
