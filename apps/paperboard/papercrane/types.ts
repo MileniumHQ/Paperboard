@@ -17,6 +17,8 @@ export interface PanelManifest {
     service?: string;
     autostart?: boolean;
     widgets?: WidgetDeclaration[];
+    // kept off the store; installs still update
+    unlisted?: boolean;
     // "dev" = symlinked from a working tree; registry installs carry none
     installSource?: "dev";
 }

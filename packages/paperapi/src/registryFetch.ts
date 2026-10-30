@@ -18,7 +18,8 @@ export async function fetchRegistryJson(
             signal: controller.signal,
         });
         if (!res.ok) {
-            throw new Error(`Registry returned HTTP ${res.status}`);
+            // the status rides along: a 404 means the registry has no such record
+            throw Object.assign(new Error(`Registry returned HTTP ${res.status}`), { status: res.status });
         }
         // bound at the stream boundary: a declared Content-Length over the
         // cap is refused before a single byte is buffered

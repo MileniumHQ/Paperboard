@@ -1,7 +1,7 @@
 // update planning symmetry (bun test): checksum-less panel entries are
 // refused at plan time — never planned only to fail at execution.
 import { describe, it, expect } from "bun:test";
-import { planUpdateTasks, type ComputerUpdateState } from "../src/main/updatePlan";
+import { planUpdateTasks, withInstalledRecords, type ComputerUpdateState } from "../src/main/updatePlan";
 
 const SHA = "a".repeat(64);
 
@@ -142,5 +142,80 @@ describe("planUpdateTasks crane version gate", () => {
             OPTS,
         );
         expect(tasks).toHaveLength(0);
+    });
+});
+
+describe("installed panels the store doesn't list", () => {
+    // the registry worker itself, over an in-memory KV, publishing through
+    // the operator's own publish
+    async function registry() {
+        const { default: worker } = await import("../../origami/src/index");
+        const { publishPanel } = await import("../../origami/scripts/lib/panelPublish");
+        const records = new Map<string, string>([["panels:index", "{}"]]);
+        const kv = {
+            get: async (key: string, o?: { type?: string }) => {
+                const v = records.get(key);
+                return v === undefined ? null : o?.type === "json" ? JSON.parse(v) : v;
+            },
+            list: async (o: { prefix?: string }) => ({
+                keys: [...records.keys()].filter((k) => k.startsWith(o.prefix ?? "")).map((name) => ({ name })),
+                list_complete: true,
+            }),
+        };
+        const storage = {
+            getJson: async <T>(key: string) => (records.has(key) ? (JSON.parse(records.get(key)!) as T) : null),
+            putJson: async (key: string, value: unknown) => void records.set(key, JSON.stringify(value)),
+            // archives and media go nowhere: only the records matter here
+            putObject: async () => undefined,
+        };
+        const get = async (path: string) => {
+            const res = await worker.fetch(new Request(`http://localhost${path}`), { PACKAGES: kv } as never, {} as never);
+            if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+            return (await res.json()) as Record<string, any>;
+        };
+        const publish = (id: string, version: string, manifest: Record<string, unknown> = {}) =>
+            publishPanel(
+                { id, name: id, version, signature: "A".repeat(86) + "==", manifest: { id, name: id, version, ...manifest }, archive: new TextEncoder().encode(version) },
+                { storage, origin: "http://localhost" },
+            );
+        const record = async (id: string) => {
+            try {
+                return await get(`/panel/${id}.json`);
+            } catch (err: any) {
+                if (err?.status === 404) return null;
+                throw err;
+            }
+        };
+        return { get, publish, record };
+    }
+
+    it("update from their own registry record", async () => {
+        const r = await registry();
+        await r.publish("dev.test.old", "0.2.4", { unlisted: true });
+        const index = await r.get("/panels/index.json");
+        expect(index).toEqual({});
+        const computers = [localComputer([{ id: "dev.test.old", version: "0.2.3" }, { id: "dev.test.sideloaded", version: "1.0.0" }])];
+
+        // the index alone plans nothing for it
+        expect(await planUpdateTasks(computers, index, {}, {}, OPTS)).toHaveLength(0);
+
+        const { panels, failures } = await withInstalledRecords(computers, index, r.record);
+        expect(failures).toBe(0);
+        const tasks = await planUpdateTasks(computers, panels, {}, {}, OPTS);
+        expect(tasks.map((t) => [t.id, t.version])).toEqual([["dev.test.old", "0.2.4"]]);
+    });
+
+    it("count a record they can't read as a failure, and skip dev links", async () => {
+        const looked: string[] = [];
+        const { failures } = await withInstalledRecords(
+            [localComputer([{ id: "p1", version: "1.0.0" }, { id: "dev", version: "1.0.0", isDevLink: true }, { id: "listed", version: "1.0.0" }])],
+            { listed: { version: "1.0.0", sha256: SHA } },
+            async (id) => {
+                looked.push(id);
+                throw new Error("registry answered HTTP 500");
+            },
+        );
+        expect(looked).toEqual(["p1"]);
+        expect(failures).toBe(1);
     });
 });

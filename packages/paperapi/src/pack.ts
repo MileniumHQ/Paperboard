@@ -46,6 +46,11 @@ export function packPanel(options: PackOptions = {}): PackResult {
         );
     }
 
+    // the registry refuses any other value, so the packer does first
+    if (manifest.unlisted !== undefined && typeof manifest.unlisted !== "boolean") {
+        throw new Error("Panel manifest 'unlisted' must be true or false");
+    }
+
     // the daemon refuses a manifest whose widgets break the rules, so the
     // packer refuses it first instead of releasing a panel nobody can list
     const widgets = validateWidgetDeclarations(manifest.widgets);

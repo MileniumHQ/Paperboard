@@ -83,6 +83,17 @@ describe("packPanel widgets", () => {
         expect(packPanel({ targetDir: dir, autoBuild: false }).version).toBe("0.1.0");
     });
 });
+describe("packPanel unlisted", () => {
+    it("refuses an unlisted that isn't true or false", () => {
+        const dir = writeManifest({ version: "0.1.0", unlisted: "yes" });
+        expect(() => packPanel({ targetDir: dir, autoBuild: false })).toThrow(/unlisted' must be true or false/);
+    });
+
+    it("packs an unlisted panel", () => {
+        const dir = writeManifest({ version: "0.1.0", unlisted: true });
+        expect(packPanel({ targetDir: dir, autoBuild: false }).version).toBe("0.1.0");
+    });
+});
 describe("packPanel tutorial", () => {
     it("refuses a tutorial the daemon would refuse", () => {
         const dir = writeManifest({ version: "0.1.0", tutorial: [{ title: "Hi" }] });

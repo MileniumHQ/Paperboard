@@ -100,6 +100,11 @@ export default function CreatingPanelsDoc() {
                         <td>Optional widgets the panel offers for Home. See the Widgets page.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>unlisted</PaperCode></td>
+                        <td>boolean</td>
+                        <td>Optional. When true, publishing keeps the panel out of the panel library. Installs that already have it still get each new version.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>store</PaperCode></td>
                         <td>object</td>
                         <td>Optional panel library page. See Store listing below.</td>

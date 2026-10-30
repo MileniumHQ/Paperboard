@@ -8,7 +8,7 @@ import { is } from "@electron-toolkit/utils";
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { resolveRegistryUrl, withTimeout } from "../../papercrane/util";
 import { validSha256 } from "./updatePlan";
-import { planUpdateTasks } from "./updatePlan";
+import { planUpdateTasks, withInstalledRecords } from "./updatePlan";
 export type { UpdateTask, UpdateTaskType } from "./updatePlan";
 import { readStateFileSync, writeFileAtomicSync } from "../../papercrane/storage";
 import { getLocalDir } from "../../papercrane/paths";
@@ -266,12 +266,22 @@ async function runOrchestratorInner(
     );
     }
 
+    // unlisted panels are out of the index but still update from their records
+    const installed = await withInstalledRecords(computerStates, registryPanels, async (id) => {
+        try {
+            return await fetchRegistryJson(`${REGISTRY_URL}/panel/${encodeURIComponent(id)}.json`, FETCH_TIMEOUT_MS);
+        } catch (err: any) {
+            if (err?.status === 404) return null;
+            throw err;
+        }
+    });
+
     sendProgress(win, null, "Planning updates…");
     // planning is electron-free (updatePlan.ts) so the checksum-gate tests
     // run without a window; execution below only runs planned tasks
     const tasks = await planUpdateTasks(
         computerStates,
-        registryPanels,
+        installed.panels,
         registryPackages,
         craneDlIndex,
         {
@@ -302,11 +312,16 @@ async function runOrchestratorInner(
 
     const total = tasks.length;
     if (total === 0) {
-        sendProgress(win, 100, unavailableComputers ? `Could not check ${unavailableComputers} computer(s). Reconnect and try again` : "Panel and server check complete", unavailableComputers > 0);
-        return unavailableComputers;
+        const message = unavailableComputers
+            ? `Could not check ${unavailableComputers} computer(s). Reconnect and try again`
+            : installed.failures
+              ? `Could not check ${installed.failures} panel(s). Try again when the registry is reachable`
+              : "Panel and server check complete";
+        sendProgress(win, 100, message, unavailableComputers + installed.failures > 0);
+        return unavailableComputers + installed.failures;
     }
 
-    let failures = unavailableComputers;
+    let failures = unavailableComputers + installed.failures;
     // verified and staged, installed by the daemon once the panels running
     // the current release stop: accepted, neither failed nor done
     let waiting = 0;

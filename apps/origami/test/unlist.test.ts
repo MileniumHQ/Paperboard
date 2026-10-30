@@ -79,3 +79,35 @@ describe("unlisting a panel", () => {
         expect(JSON.parse(r.records.get(`${PANEL_KEY_PREFIX}dev.test.old`)!).unlistedAt).toBeUndefined();
     });
 });
+
+describe("a manifest that says unlisted", () => {
+    async function publishUnlisted(storage: PanelStorage, id: string, version: string, unlisted: unknown = true) {
+        return publishPanel(
+            { id, name: id, version, signature: SIGNATURE, manifest: { id, name: id, version, unlisted }, archive: new TextEncoder().encode(version) },
+            { storage, origin: ORIGIN },
+        );
+    }
+
+    it("keeps a listed panel's next release off the store, served to the installs that have it", async () => {
+        const r = registry();
+        await publish(r.storage, "dev.test.old");
+        const record = await publishUnlisted(r.storage, "dev.test.old", "1.0.1");
+        expect(record.unlistedAt).toBeString();
+        expect((await r.get("/panels/index.json")).body).toEqual({});
+        expect((await r.get("/panel/dev.test.old.json")).body).toMatchObject({ version: "1.0.1", unlistedAt: record.unlistedAt });
+
+        // later releases stay unlisted, from the same moment
+        await publishUnlisted(r.storage, "dev.test.old", "1.0.2");
+        expect((await r.get("/panels/index.json")).body).toEqual({});
+        expect((await r.get("/panel/dev.test.old.json")).body).toMatchObject({ version: "1.0.2", unlistedAt: record.unlistedAt });
+
+        r.records.delete(PANELS_INDEX_KEY);
+        expect((await r.get("/panels/index.json")).body).toEqual({});
+    });
+
+    it("refuses an unlisted that isn't true or false", async () => {
+        const r = registry();
+        await expect(publishUnlisted(r.storage, "dev.test.old", "1.0.0", "yes")).rejects.toThrow(/unlisted must be true or false/);
+        expect(r.records.has(`${PANEL_KEY_PREFIX}dev.test.old`)).toBe(false);
+    });
+});

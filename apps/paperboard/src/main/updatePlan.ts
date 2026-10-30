@@ -49,6 +49,38 @@ export function validSha256(value: unknown): value is string {
     return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
 }
 
+/**
+ * The store index leaves unlisted panels out, so an installed panel it
+ * doesn't name is looked up by its own registry record. Returns the index
+ * with those records added and the lookups that failed; a panel the registry
+ * has never heard of (`null`) has nothing to update to.
+ */
+export async function withInstalledRecords(
+    computers: ComputerUpdateState[],
+    registryPanels: Record<string, any>,
+    fetchRecord: (id: string) => Promise<Record<string, any> | null>,
+): Promise<{ panels: Record<string, any>; failures: number }> {
+    const missing = new Set<string>();
+    for (const comp of computers) {
+        for (const panel of comp.panels) {
+            if (panel.isDevLink || panel.isLinked || panel.id in registryPanels) continue;
+            missing.add(panel.id);
+        }
+    }
+    const panels = { ...registryPanels };
+    let failures = 0;
+    await Promise.all([...missing].map(async (id) => {
+        try {
+            const record = await fetchRecord(id);
+            if (record?.id === id) panels[id] = record;
+        } catch (err) {
+            failures++;
+            logger.warn(`[Updater] could not read the registry record for ${id}:`, err instanceof Error ? err.message : err);
+        }
+    }));
+    return { panels, failures };
+}
+
 export async function planUpdateTasks(
     computers: ComputerUpdateState[],
     registryPanels: Record<string, any>,

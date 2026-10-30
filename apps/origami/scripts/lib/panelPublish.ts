@@ -234,6 +234,9 @@ function assertInput(upload: PanelUpload): string | null {
     if (upload.manifest?.id !== undefined && upload.manifest.id !== upload.id) {
         return "manifest id must match the published panel id";
     }
+    if (upload.manifest?.unlisted !== undefined && typeof upload.manifest.unlisted !== "boolean") {
+        return "manifest unlisted must be true or false";
+    }
     if (upload.icon && !iconExtension(upload.icon.name)) {
         return `unsupported icon extension: '${upload.icon.name}' must be .png, .svg, or .webp`;
     }
@@ -400,6 +403,11 @@ export async function publishPanel(
         ...(upload.manifest && typeof upload.manifest === "object"
             ? { manifest: upload.manifest }
             : {}),
+        // "unlisted": true in the manifest keeps the panel off the store; the
+        // record still carries each release to the installs that have it
+        ...(upload.manifest?.unlisted === true
+            ? { unlistedAt: existing?.unlistedAt ?? new Date().toISOString() }
+            : {}),
     };
 
     // Panel bytes and media land first: the record (and index) only ever
@@ -411,7 +419,8 @@ export async function publishPanel(
         );
     }
     await storage.putJson(`${PANEL_KEY_PREFIX}${record.id}`, record);
-    index[record.id] = record;
+    if (record.unlistedAt) delete index[record.id];
+    else index[record.id] = record;
     await storage.putJson(PANELS_INDEX_KEY, index);
 
     return record;
