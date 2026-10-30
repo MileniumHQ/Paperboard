@@ -5,6 +5,8 @@
 //
 // The editor works on a MotdDoc: one styled cell per character, with "\n"
 // cells between lines, so an offset into the doc is an offset into the text.
+// A MotdDialect turns a doc into a game's own text and back; Minecraft's is
+// minecraftMotd below, and another game's lives with that game.
 
 // paper-literal-ok-file: the colour table is Minecraft's legacy palette, data not styling
 
@@ -139,10 +141,24 @@ export function motdFromDoc(doc: MotdDoc): string {
     return out;
 }
 
+/** How one game writes a styled message, and how much of it the game shows. */
+export interface MotdDialect {
+    /** the format codes the game reads; colours are always MOTD_COLORS */
+    formats: readonly (typeof MOTD_FORMATS)[number][];
+    lines: number;
+    /** characters kept, not counting markup or line breaks */
+    maxChars: number;
+    /** the MOTD_COLORS code text without a colour is drawn in */
+    defaultColor: string;
+    /** one cell per character; text without markup takes `start` */
+    parse(raw: string, start?: MotdStyle): MotdDoc;
+    serialize(doc: MotdDoc): string;
+}
+
 /** one array of styled runs per line */
-export function parseMotd(raw: string): MotdSegment[][] {
+export function parseMotd(raw: string, dialect: MotdDialect = minecraftMotd): MotdSegment[][] {
     const lines: MotdSegment[][] = [[]];
-    for (const cell of docFromMotd(raw)) {
+    for (const cell of dialect.parse(raw)) {
         if (cell.ch === "\n") {
             lines.push([]);
             continue;
@@ -165,21 +181,22 @@ export function styleAt(doc: MotdDoc, offset: number): MotdStyle {
 }
 
 /**
- * Replaces [start, end) with `cells`. Line breaks past MOTD_LINES become
- * spaces and characters past MAX_MOTD_CHARS are dropped.
+ * Replaces [start, end) with `cells`. Line breaks past the dialect's lines
+ * become spaces and characters past its maxChars are dropped.
  */
 export function replaceRange(
     doc: MotdDoc,
     start: number,
     end: number,
     cells: MotdDoc,
+    limits: Pick<MotdDialect, "lines" | "maxChars"> = minecraftMotd,
 ): { doc: MotdDoc; caret: number } {
     const kept = [...doc.slice(0, start), ...doc.slice(end)];
     let lines = kept.filter((c) => c.ch === "\n").length + 1;
-    let room = MAX_MOTD_CHARS - kept.filter((c) => c.ch !== "\n").length;
+    let room = limits.maxChars - kept.filter((c) => c.ch !== "\n").length;
     const inserted: MotdDoc = [];
     for (const cell of cells) {
-        if (cell.ch === "\n" && lines >= MOTD_LINES) {
+        if (cell.ch === "\n" && lines >= limits.lines) {
             if (room <= 0) continue;
             inserted.push({ ch: " ", style: cell.style });
             room--;
@@ -231,3 +248,13 @@ export function applyCode(doc: MotdDoc, start: number, end: number, code: string
         return { ...cell, style: styleWithCode(cell.style, code) };
     });
 }
+
+/** Minecraft's server list message: § codes, two lines, the list's gray. */
+export const minecraftMotd: MotdDialect = {
+    formats: MOTD_FORMATS,
+    lines: MOTD_LINES,
+    maxChars: MAX_MOTD_CHARS,
+    defaultColor: "7",
+    parse: docFromMotd,
+    serialize: motdFromDoc,
+};

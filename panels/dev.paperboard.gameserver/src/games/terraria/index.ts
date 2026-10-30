@@ -9,7 +9,7 @@ export const options: readonly GameOption[] = [
     { id: "autocreate", label: "World size", kind: "select", choices: [{ value: "1", label: "Small" }, { value: "2", label: "Medium" }, { value: "3", label: "Large" }], default: "1", restartRequired: true, scope: "world" },
     { id: "difficulty", label: "Difficulty", kind: "select", choices: [{ value: "0", label: "Classic" }, { value: "1", label: "Expert" }, { value: "2", label: "Master" }, { value: "3", label: "Journey" }], default: "0", restartRequired: true, scope: "world" },
     { id: "seed", label: "Seed", description: "Leave empty for a random world.", kind: "text", default: "", restartRequired: true, scope: "world" },
-    { id: "motd", label: "Message of the day", kind: "text", default: "", restartRequired: true },
+    { id: "motd", label: "Message of the day", kind: "text", default: "", restartRequired: false, scope: "overview" },
     { id: "secure", label: "Additional cheat protection", kind: "boolean", default: true, restartRequired: true },
     { id: "language", label: "Console language", description: "English console output is required by this release’s readiness and save adapter.", kind: "select", choices: ["en-US"].map(value => ({ value, label: value })), default: "en-US", restartRequired: true },
 ];
@@ -27,7 +27,7 @@ export const terraria: GameDefinition = {
         if (software !== "vanilla") throw new Error(`Unsupported Terraria software: ${software}`);
         return {
             options, control: { kind: "stdin" }, packages: [], widgets: ["status", "console"],
-            actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, "read-game-options", "write-game-options", "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", "terraria-save", "backup-server"],
+            actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, "read-game-options", "write-game-options", "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", "terraria-save", "terraria-motd", "backup-server"],
             tabs: [
                 { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
                 { id: "worlds", label: "Worlds", icon: "public", group: "World", owner: "game" },

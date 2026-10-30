@@ -124,6 +124,20 @@ export const terrariaService: GameService = {
         action("terraria-world-import", "Add uploaded world", async (_ctx, { file, name }) => { await importUpload(await root(), file, name); return true; }),
         action("terraria-world-discard", "Discard uploaded world", async (_ctx, { file }) => { await discardUpload(await root(), file); return true; }),
         action("terraria-save", "Save Terraria world", save),
+        action("terraria-motd", "Set message of the day", async (ctx, { motd }) => {
+            if (local().busy) throw new Error("Wait for the Terraria operation to finish");
+            const status = ctx.state.serverStatus;
+            if (status !== "online" && status !== "offline") throw new Error("Wait for Terraria to finish starting or stopping");
+            await config.set(validateOptions({ motd }, await settings()), PANEL_ID);
+            // a running server takes the new message at once; its console has
+            // no way to clear one, so an empty message waits for the next start
+            let appliesOnRestart = false;
+            if (status === "offline") await generate("");
+            else if (motd) await processApi.write(PROC, `motd ${motd}\n`);
+            else appliesOnRestart = true;
+            await loadOptions(ctx);
+            return { appliesOnRestart };
+        }),
     ]; },
     loadOptions,
     async initialize(ctx, running) {

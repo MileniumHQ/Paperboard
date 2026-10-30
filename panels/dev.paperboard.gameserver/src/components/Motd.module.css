@@ -43,13 +43,13 @@
     cursor: text;
 }
 
-.editor:focus {
-    outline: var(--paper-focus-ring);
+/* a one-line message needs no room for a second line */
+.editor[aria-multiline="false"] {
+    min-height: auto;
 }
 
-/* text with no colour code is the list's gray (§7) */
-.plain {
-    color: light-dark(oklch(0.48 0 0), oklch(0.84 0 0));
+.editor:focus {
+    outline: var(--paper-focus-ring);
 }
 
 /* one class per colour code, generated from core/motd.ts MOTD_COLORS */

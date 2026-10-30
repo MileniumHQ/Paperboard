@@ -8,23 +8,21 @@ import {
 } from "@mileniumhq/paperui";
 import {
     applyCode,
-    DEFAULT_MOTD,
-    docFromMotd,
+    MOTD_COLOR_CODES,
     MOTD_COLORS,
     MOTD_FORMATS,
     motdColorCss,
-    motdFromDoc,
     plainStyle,
     replaceRange,
     sameStyle,
     selectionStyle,
     styleAt,
     styleWithCode,
+    type MotdDialect,
     type MotdDoc,
     type MotdStyle,
 } from "../core/motd";
-import { readServerPropertiesStrict, writeServerProperties } from "../lib/properties";
-import { loadServerConfig } from "../lib/server";
+import { errorMessage } from "../lib/failure";
 import { motdClasses } from "./MotdPreview";
 import styles from "./Motd.module.css";
 
@@ -56,7 +54,7 @@ function decodeStyle(value: string): MotdStyle {
     return style;
 }
 
-function renderDoc(root: HTMLElement, doc: MotdDoc) {
+function renderDoc(root: HTMLElement, doc: MotdDoc, defaultColor: string) {
     const lines: HTMLDivElement[] = [document.createElement("div")];
     let run: { span: HTMLSpanElement; style: MotdStyle } | null = null;
     for (const cell of doc) {
@@ -68,7 +66,7 @@ function renderDoc(root: HTMLElement, doc: MotdDoc) {
         if (!run || !sameStyle(run.style, cell.style)) {
             const span = document.createElement("span");
             span.setAttribute(STYLE_ATTR, encodeStyle(cell.style));
-            span.className = motdClasses(cell.style, true);
+            span.className = motdClasses(cell.style, true, defaultColor);
             lines[lines.length - 1].append(span);
             run = { span, style: cell.style };
         }
@@ -137,10 +135,25 @@ function offsetToPoint(root: HTMLElement, offset: number): [Node, number] {
     return [root, 0];
 }
 
-export function MotdEditor(props: { open: boolean; onClose: () => void }) {
+/**
+ * A styled message editor for any game: the dialect says which codes the
+ * toolbar offers and how the text is written, and `load` and `save` reach
+ * wherever the game keeps it.
+ */
+export function MotdEditor(props: {
+    open: boolean;
+    onClose: () => void;
+    dialect: MotdDialect;
+    /** the modal's title, and the text box's label */
+    title: string;
+    /** what holds the message, for the load error: "server.properties" */
+    source: string;
+    load: () => Promise<string>;
+    save: (raw: string) => Promise<void>;
+}) {
     const [loaded, setLoaded] = createSignal(false);
-    const [loadError, setLoadError] = createSignal(false);
-    const [saveError, setSaveError] = createSignal(false);
+    const [loadError, setLoadError] = createSignal("");
+    const [saveError, setSaveError] = createSignal("");
     const [saving, setSaving] = createSignal(false);
     const [active, setActive] = createSignal<MotdStyle>(plainStyle());
 
@@ -179,7 +192,7 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
 
     const show = (next: MotdDoc, start: number, end = start) => {
         doc = next;
-        if (root) renderDoc(root, doc);
+        if (root) renderDoc(root, doc, props.dialect.defaultColor);
         select(start, end);
         refreshActive();
     };
@@ -201,19 +214,17 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
 
     const load = async () => {
         setLoaded(false);
-        setLoadError(false);
-        setSaveError(false);
+        setLoadError("");
+        setSaveError("");
         try {
-            const values = await readServerPropertiesStrict();
-            doc = docFromMotd(values.motd ?? DEFAULT_MOTD);
+            doc = props.dialect.parse(await props.load());
             undo.length = 0;
             redo.length = 0;
             pending = null;
-            if (root) renderDoc(root, doc);
+            if (root) renderDoc(root, doc, props.dialect.defaultColor);
             setLoaded(true);
         } catch (err) {
-            console.error("[motd] server.properties read failed:", err);
-            setLoadError(true);
+            setLoadError(errorMessage(err));
         }
     };
 
@@ -224,7 +235,11 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
     document.addEventListener("selectionchange", refreshActive);
     onCleanup(() => document.removeEventListener("selectionchange", refreshActive));
 
+    // a code the game doesn't read (Ctrl+B in a colours-only message) does nothing
+    const offers = (code: string) => code === "r" || MOTD_COLOR_CODES.has(code) || props.dialect.formats.some((f) => f.code === code);
+
     const applyFormat = (code: string) => {
+        if (!offers(code)) return;
         const range = selection();
         if (!range) return;
         const [start, end] = range;
@@ -240,8 +255,8 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
         const replaced = start < end && doc[start]?.ch !== "\n" ? doc[start].style : undefined;
         const base = pending?.style ?? replaced ?? styleAt(doc, start);
         pending = null;
-        // pasted § codes are read as formatting, plain text takes the caret's style
-        const next = replaceRange(doc, start, end, docFromMotd(text.replace(/\r\n?/g, "\n"), base));
+        // pasted markup is read as formatting, plain text takes the caret's style
+        const next = replaceRange(doc, start, end, props.dialect.parse(text.replace(/\r\n?/g, "\n"), base), props.dialect);
         commit(next.doc, next.caret);
     };
 
@@ -269,10 +284,13 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
         if (!range) return;
         const [start, end] = range;
         if (e.inputType.startsWith("delete")) {
-            if (start < end) commit(replaceRange(doc, start, end, []).doc, start);
+            if (start < end) commit(replaceRange(doc, start, end, [], props.dialect).doc, start);
             return;
         }
-        if (e.inputType === "insertParagraph" || e.inputType === "insertLineBreak") return insert(start, end, "\n");
+        if (e.inputType === "insertParagraph" || e.inputType === "insertLineBreak") {
+            if (props.dialect.lines > 1) insert(start, end, "\n");
+            return;
+        }
         const text = e.data ?? e.dataTransfer?.getData("text/plain") ?? "";
         if (text) insert(start, end, text);
     };
@@ -297,14 +315,12 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
 
     const save = async () => {
         setSaving(true);
-        setSaveError(false);
+        setSaveError("");
         try {
-            await writeServerProperties({ motd: motdFromDoc(doc) });
-            await loadServerConfig();
+            await props.save(props.dialect.serialize(doc));
             props.onClose();
         } catch (err) {
-            console.error("[motd] save failed:", err);
-            setSaveError(true);
+            setSaveError(errorMessage(err));
         } finally {
             setSaving(false);
         }
@@ -317,7 +333,7 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
         <PaperModal
             open={props.open}
             onClose={props.onClose}
-            title="Server list message"
+            title={props.title}
             size="medium"
             footer={
                 <>
@@ -331,9 +347,9 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
             <Show
                 when={!loadError()}
                 fallback={
-                    <PaperQuote variant="danger" icon="warning" title="Couldn't read server.properties">
+                    <PaperQuote variant="danger" icon="warning" title={`Couldn't read ${props.source}`}>
                         <PaperFlex direction="column" gap="half">
-                            <span>The message can't be edited until the file can be read.</span>
+                            <span>{loadError()} The message can't be edited until it can be read.</span>
                             <PaperFlex direction="row">
                                 <PaperButton onClick={() => void load()}>Retry</PaperButton>
                             </PaperFlex>
@@ -343,7 +359,7 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
             >
                 <PaperFlex direction="column" gap="half" fullWidth>
                     <PaperFlex direction="row" gap="onefourth" align="center" wrap class={styles.palette}>
-                        <For each={MOTD_FORMATS}>
+                        <For each={props.dialect.formats}>
                             {(format) => (
                                 <PaperButton
                                     size="tiny"
@@ -391,8 +407,8 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
                     <div
                         ref={root}
                         role="textbox"
-                        aria-multiline="true"
-                        aria-label="Server list message"
+                        aria-multiline={props.dialect.lines > 1 ? "true" : "false"}
+                        aria-label={props.title}
                         contentEditable={loaded()}
                         spellcheck={false}
                         onBeforeInput={onBeforeInput}
@@ -403,7 +419,7 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
 
                     <Show when={saveError()}>
                         <PaperQuote variant="danger" icon="warning" title="Couldn't save">
-                            The message wasn't saved. Try again.
+                            {saveError()}
                         </PaperQuote>
                     </Show>
                 </PaperFlex>

@@ -12,7 +12,7 @@ mock.module("../src/service/api", () => ({
     system: { getLocalIP: async () => "127.0.0.1" },
 }));
 
-const { applyCode, docFromMotd, MAX_MOTD_CHARS, MOTD_COLORS, motdColorCss, motdFromDoc, parseMotd, replaceRange, styleAt } = await import(
+const { applyCode, docFromMotd, MAX_MOTD_CHARS, minecraftMotd, MOTD_COLORS, motdColorCss, motdFromDoc, parseMotd, replaceRange, styleAt } = await import(
     "../src/core/motd"
 );
 const { loadConfigAndProperties } = await import("../src/games/minecraft/config");
@@ -96,9 +96,8 @@ describe("the MOTD stylesheet", () => {
         for (const color of MOTD_COLORS) {
             expect(css).toContain(`.color-${color.code} {\n    color: ${motdColorCss(color)};\n}`);
         }
-        // uncoloured text is the list's gray, §7
-        const gray = MOTD_COLORS.find((c) => c.code === "7")!;
-        expect(css).toContain(`.plain {\n    color: ${motdColorCss(gray)};\n}`);
+        // uncoloured text is the list's gray, §7, drawn by that code's class
+        expect(minecraftMotd.defaultColor).toBe("7");
     });
 
     // PaperUI's own surfaces, read from its stylesheet: the message sits on a card

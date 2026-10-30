@@ -9,14 +9,15 @@ import {
     PaperContextMenuItem,
     useContextMenuState,
 } from "@mileniumhq/paperui";
-import { serverStatus, serverMotd, serverSoftware, serverVersion } from "../lib/server";
+import { serverStatus, serverMotd, serverSoftware, serverVersion, loadServerConfig } from "../lib/server";
 import { SOFTWARE_NAMES } from "../lib/software";
 import ServerOverview from "./ServerOverview";
 import { MotdEditor, MotdPreview } from "./Motd";
 import { fileApi } from "../lib/api";
 import { PANEL_ID } from "../service/contract";
 import { parseProperties } from "../core/properties";
-import { whitelistDefault } from "../lib/properties";
+import { readServerPropertiesStrict, whitelistDefault, writeServerProperties } from "../lib/properties";
+import { DEFAULT_MOTD, minecraftMotd } from "../core/motd";
 import { countJsonEntries, joinRestriction, type JoinRestriction } from "../core/whitelist";
 import { readServerIcon, removeServerIcon, setServerIconFromFile } from "../lib/serverIcon";
 import { errorMessage } from "../lib/failure";
@@ -174,7 +175,18 @@ export default function Overview(props: {
                 </PaperQuote>
             </Show>
 
-            <MotdEditor open={motdOpen()} onClose={() => setMotdOpen(false)} />
+            <MotdEditor
+                open={motdOpen()}
+                onClose={() => setMotdOpen(false)}
+                dialect={minecraftMotd}
+                title="Server list message"
+                source="server.properties"
+                load={async () => (await readServerPropertiesStrict()).motd ?? DEFAULT_MOTD}
+                save={async (motd) => {
+                    await writeServerProperties({ motd });
+                    await loadServerConfig();
+                }}
+            />
         </ServerOverview>
     );
 }

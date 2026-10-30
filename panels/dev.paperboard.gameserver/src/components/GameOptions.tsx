@@ -92,13 +92,13 @@ export function GameOptionControl(props: {
     }
 }
 
-/** A game's own options, stored by its service. World-generation options live in New World instead. */
+/** A game's own options, stored by its service. Options with a scope are edited where it names instead. */
 export default function GameOptions(props: { fields: readonly GameOption[] }) {
     const [values, setValues] = createSignal<Record<string, unknown> | null>(null);
     const [loadError, setLoadError] = createSignal("");
     const [saveError, setSaveError] = createSignal("");
     const [saving, setSaving] = createSignal(false);
-    const fields = () => props.fields.filter((field) => field.scope !== "world");
+    const fields = () => props.fields.filter((field) => !field.scope);
     const online = () => serverStatus() !== "offline";
 
     const load = async () => {

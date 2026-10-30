@@ -23,8 +23,12 @@ type OptionBase = {
     label: string;
     description?: string;
     restartRequired: boolean;
-    /** "world": applies when a world is generated, so New World asks for it and Options leaves it out */
-    scope?: "world";
+    /**
+     * Where the option is edited instead of Options. "world": applies when a
+     * world is generated, so New World asks for it. "overview": the game's
+     * Overview edits it, as Terraria's message of the day.
+     */
+    scope?: "world" | "overview";
 };
 export type GameOption = OptionBase & (
     | { kind: "text"; default?: string }
@@ -48,12 +52,12 @@ export interface GameArt {
     poster: string;
     /** Wide band, about 3:1. */
     banner: string;
+    /** The game's square app icon. */
+    icon: string;
 }
 export interface GameDefinition {
     id: string;
     name: string;
-    /** The game's square app icon. */
-    icon: string;
     art: GameArt;
     icon: string;
     hostSupport(host: { os: string; arch: string }, options: GameOptions): { supported: boolean; reason?: string };

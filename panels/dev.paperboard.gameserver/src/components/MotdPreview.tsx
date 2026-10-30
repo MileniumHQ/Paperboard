@@ -1,7 +1,7 @@
 // The server-list MOTD preview. Kept apart from the editor in Motd.tsx so
 // the widget page can draw it without loading the panel's bridge.
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
-import { MOTD_COLOR_CODES, parseMotd, type MotdStyle } from "../core/motd";
+import { minecraftMotd, MOTD_COLOR_CODES, parseMotd, type MotdDialect, type MotdStyle } from "../core/motd";
 import styles from "./Motd.module.css";
 
 const OBFUSCATED_GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -19,10 +19,14 @@ function scramble(text: string): string {
     return out;
 }
 
-/** the classes that draw one run of MOTD text; `editing` blurs obfuscated text */
-export function motdClasses(style: MotdStyle, editing: boolean): string {
+/**
+ * the classes that draw one run of MOTD text; `editing` blurs obfuscated
+ * text, and text without a colour takes the dialect's default
+ */
+export function motdClasses(style: MotdStyle, editing: boolean, defaultColor: string): string {
+    const color = style.color && MOTD_COLOR_CODES.has(style.color) ? style.color : defaultColor;
     return [
-        style.color && MOTD_COLOR_CODES.has(style.color) ? styles[`color-${style.color}`] : styles.plain,
+        styles[`color-${color}`],
         style.bold && styles.bold,
         style.italic && styles.italic,
         style.underline && styles.underline,
@@ -34,11 +38,13 @@ export function motdClasses(style: MotdStyle, editing: boolean): string {
 }
 
 /**
- * the MOTD as the Multiplayer list draws it. `paused` stops the obfuscated
- * text's animation (a widget that can't be seen).
+ * the MOTD as the game draws it, Minecraft's Multiplayer list unless another
+ * dialect is given. `paused` stops the obfuscated text's animation (a widget
+ * that can't be seen).
  */
-export function MotdPreview(props: { motd: string; paused?: boolean; class?: string }) {
-    const lines = () => parseMotd(props.motd);
+export function MotdPreview(props: { motd: string; dialect?: MotdDialect; paused?: boolean; class?: string }) {
+    const dialect = () => props.dialect ?? minecraftMotd;
+    const lines = () => parseMotd(props.motd, dialect());
     const [frame, setFrame] = createSignal(0);
 
     // obfuscated text cycles like it does in game, unless motion is reduced
@@ -61,7 +67,7 @@ export function MotdPreview(props: { motd: string; paused?: boolean; class?: str
                         </Show>
                         <For each={line}>
                             {(segment) => (
-                                <span class={motdClasses(segment, false)}>
+                                <span class={motdClasses(segment, false, dialect().defaultColor)}>
                                     {segment.obfuscated ? (frame(), scramble(segment.text)) : segment.text}
                                 </span>
                             )}
