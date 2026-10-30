@@ -134,18 +134,20 @@ export default function Editor(props: {
                         onFailed={(text) => setFileNotice({ kind: "failed", title: "Not renamed", text })}
                     />
                     <PaperMenuBar aria-label={props.project().name}>
-                        <PaperMenuBarMenu label="File" size="tiny">
+                        <PaperMenuBarMenu label="Project" size="tiny">
                             <PaperContextMenuItem icon="add" disabled={working()} onClick={() => void newProject()}>New project</PaperContextMenuItem>
                             <PaperContextMenuItem icon="file_copy" disabled={working() || !doc.loaded()} onClick={() => void copyProject()}>Make a copy</PaperContextMenuItem>
                             <PaperContextMenuItem icon="edit" onClick={() => setRenaming(true)}>Rename</PaperContextMenuItem>
                             <PaperSeparator role="separator" />
+                            <PaperContextMenuItem icon="delete" danger onClick={() => setDeleting(true)}>Delete</PaperContextMenuItem>
+                        </PaperMenuBarMenu>
+                        <PaperMenuBarMenu label="File" size="tiny">
                             <PaperContextMenuItem icon="file_export" disabled={file.busy() || !doc.loaded()} onClick={() => void file.exportFlows()}>Export</PaperContextMenuItem>
                             <PaperContextMenuItem icon="file_open" disabled={file.busy() || !doc.loaded()} onClick={() => void file.importFlows()}>Import</PaperContextMenuItem>
-                            <PaperSeparator role="separator" />
+                        </PaperMenuBarMenu>
+                        <PaperMenuBarMenu label="Backup" size="tiny">
                             <PaperContextMenuItem icon="backup" disabled={file.busy()} onClick={() => void file.createBackup()}>Create backup</PaperContextMenuItem>
                             <PaperContextMenuItem icon="settings_backup_restore" disabled={file.busy()} onClick={() => void file.openLoad()}>Load backup</PaperContextMenuItem>
-                            <PaperSeparator role="separator" />
-                            <PaperContextMenuItem icon="delete" danger onClick={() => setDeleting(true)}>Delete</PaperContextMenuItem>
                         </PaperMenuBarMenu>
                         <PaperMenuBarMenu label="Insert" size="tiny">
                             <PaperContextMenuItem icon="note_add" disabled={!doc.loaded()} onClick={addNote}>Note</PaperContextMenuItem>
