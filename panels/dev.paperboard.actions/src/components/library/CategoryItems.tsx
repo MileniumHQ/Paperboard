@@ -1,12 +1,13 @@
-// The blocks of the chosen Library category: a panel's, in its sections,
-// or a builtin category's list.
+// The blocks of the chosen Library category: a panel's, in its sections (its
+// global blocks and the shown project's), or a builtin category's list.
 import { For, Show } from "solid-js";
 import { PaperBadge, PaperIcon, PaperText } from "@mileniumhq/paperui";
 import type { Category } from "../../lib/libraryCategories";
+import type { LibrarySection } from "../../lib/librarySections";
 import { isBuiltinTrigger } from "../../lib/libraryCategories";
 import LibraryItem, { type LibraryPress } from "./LibraryItem";
 
-export default function CategoryItems(props: { category: Category | undefined; onPress: LibraryPress }) {
+export default function CategoryItems(props: { category: Category | undefined; sections: LibrarySection[]; onPress: LibraryPress }) {
     const panel = () => (props.category?.domain === "panel" ? props.category : undefined);
     const builtin = () => (props.category && props.category.domain !== "panel" ? props.category : undefined);
 
@@ -14,7 +15,7 @@ export default function CategoryItems(props: { category: Category | undefined; o
         <>
             <Show when={panel()}>
                 {(category) => (
-                    <For each={category().sections}>
+                    <For each={props.sections}>
                         {(section) => (
                             <div
                                 class="library-category-section"

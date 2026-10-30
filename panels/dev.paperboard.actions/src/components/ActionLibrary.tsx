@@ -29,12 +29,19 @@ import {
     panelAssetUrl,
     type ActionInfo,
     type PanelItem,
+    type ProjectInfo,
 } from "@mileniumhq/paperapi";
 import { BUILTIN_CATEGORIES } from "../lib/builtins";
 import type { FunctionDef, FunctionParam } from "../lib/functions";
 import { loadLibraryLists } from "../lib/libraryLoad";
 import type { LibrarySection } from "../lib/librarySections";
-import { panelCategoriesFrom, searchLibrary, type Category } from "../lib/libraryCategories";
+import {
+    categorySections,
+    panelCategoriesFrom,
+    searchLibrary,
+    shownProject,
+    type Category,
+} from "../lib/libraryCategories";
 import FunctionList from "./library/FunctionList";
 import FunctionModal from "./library/FunctionModal";
 import SearchResults from "./library/SearchResults";
@@ -60,6 +67,9 @@ export default function ActionLibrary(props: ActionLibraryProps) {
     const [search, setSearch] = createSignal("");
     const [installedPanels, setInstalledPanels] = createSignal<PanelItem[]>([]);
     const [registeredActions, setRegisteredActions] = createSignal<ActionInfo[]>([]);
+    const [registeredProjects, setRegisteredProjects] = createSignal<ProjectInfo[]>([]);
+    // the project each panel's Library shows, by panel id
+    const [chosenProjects, setChosenProjects] = createSignal<Record<string, string>>({});
     const [isCollapsed, setIsCollapsed] = createSignal(false);
 
     const [functionModal, setFunctionModal] = createSignal<FunctionDef | "new" | null>(null);
@@ -70,7 +80,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
     let loadRequest = 0;
     const loadLibrary = async () => {
         const mine = ++loadRequest;
-        const result = await loadLibraryLists({ panels: () => panelsApi.list(), actions: () => actionsApi.list() });
+        const result = await loadLibraryLists({ panels: () => panelsApi.list(), actions: () => actionsApi.list(), projects: () => actionsApi.listProjects() });
         if (mine !== loadRequest) return;
         if (result.kind === "failed") {
             setLoadError(result.message);
@@ -78,6 +88,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
         }
         setInstalledPanels(result.panels);
         setRegisteredActions(result.actions);
+        setRegisteredProjects(result.projects);
         setLoadError("");
     };
 
@@ -117,7 +128,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
         BUILTIN_CATEGORIES.filter((c) => c.domain === "logic"),
     );
 
-    const panelCategories = createMemo(() => panelCategoriesFrom(registeredActions(), getPanelInfo));
+    const panelCategories = createMemo(() => panelCategoriesFrom(registeredActions(), getPanelInfo, registeredProjects()));
 
     const allCategories = createMemo<Category[]>(() => [
         ...logicCategories(),
@@ -129,11 +140,26 @@ export default function ActionLibrary(props: ActionLibraryProps) {
         return allCategories().find((c) => c.id === id) || logicCategories()[0];
     });
 
+    const currentProjects = createMemo(() => {
+        const cat = currentCategory();
+        return cat?.domain === "panel" ? cat.projects : [];
+    });
+
+    const currentProject = createMemo(() => {
+        const cat = currentCategory();
+        return cat?.domain === "panel" ? shownProject(cat, chosenProjects()[cat.id]) : null;
+    });
+
+    const panelSections = createMemo((): LibrarySection[] => {
+        const cat = currentCategory();
+        return cat?.domain === "panel" ? categorySections(cat, currentProject()?.id ?? null) : [];
+    });
+
     const currentItemCount = createMemo(() => {
         const cat = currentCategory();
         if (!cat) return 0;
         if (cat.domain === "panel") {
-            return cat.triggers.length + cat.actions.length;
+            return panelSections().reduce((n, section) => n + section.triggers.length + section.actions.length, 0);
         }
         return cat.items.length;
     });
@@ -152,11 +178,6 @@ export default function ActionLibrary(props: ActionLibraryProps) {
     });
 
     let libraryScrollRef: HTMLDivElement | undefined;
-
-    const panelSections = (): LibrarySection[] => {
-        const category = currentCategory();
-        return category?.domain === "panel" ? category.sections : [];
-    };
 
     // sections are navigated with a select above the list; the headers
     // themselves stay in flow (sticky stacking read as noise)
@@ -179,6 +200,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
     createEffect(() => {
         // a section name from another panel must not linger in the select
         selectedCategoryId();
+        currentProject();
         search();
         setJumpSection("");
     });
@@ -373,6 +395,29 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                     }
                                 />
 
+                                <Show when={!search() && currentProject()}>
+                                    {(project) => (
+                                        <PaperSelectMenu
+                                            name="libraryProject"
+                                            fullWidth
+                                            value={project().id}
+                                            aria-label="Project"
+                                            onValueChange={(value) => {
+                                                const cat = currentCategory();
+                                                if (cat) setChosenProjects((chosen) => ({ ...chosen, [cat.id]: String(value) }));
+                                            }}
+                                        >
+                                            <For each={currentProjects()}>
+                                                {(item) => (
+                                                    <PaperSelectMenuItem value={item.id} icon={item.icon || "folder"}>
+                                                        {item.name}
+                                                    </PaperSelectMenuItem>
+                                                )}
+                                            </For>
+                                        </PaperSelectMenu>
+                                    )}
+                                </Show>
+
                                 <Show when={!search() && panelSections().length > 1}>
                                     <PaperSelectMenu
                                         name="librarySectionJump"
@@ -416,7 +461,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                             </Show>
 
                             <Show when={!search().trim().length && selectedCategoryId() !== "functions"}>
-                                <CategoryItems category={currentCategory()} onPress={handlePointerDownItem} />
+                                <CategoryItems category={currentCategory()} sections={panelSections()} onPress={handlePointerDownItem} />
                             </Show>
                         </div>
                     </div>
