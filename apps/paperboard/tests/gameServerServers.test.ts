@@ -107,7 +107,7 @@ test("Game Server over the real daemon: migration, independent servers, projects
             "legacy world",
         );
         expect(backups.status(PANEL).schedule).toMatchObject({ everyHours: 24, keep: 7 });
-        const second = await actionsApi.call<any>(PANEL, "add-server", { name: "Creative" });
+        const second = await actionsApi.call<any>(PANEL, "add-server", { name: "Creative", game: "minecraft" });
         const saved = await config.get<any>(PANEL);
         expect(saved.servers).toHaveLength(2);
         expect(saved.servers[0].id).toBe(first.id);

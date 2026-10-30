@@ -214,7 +214,7 @@ test("a service with beforeBackup tells the daemon so and answers its request", 
             if (answer === "fail") throw new Error("could not save");
         } });
         await service.ready;
-        expect(sent).toContainEqual({ type: "paperboard:service-ready", panelId: "panel.backedup", beforeBackup: true });
+        expect(sent).toContainEqual({ type: "paperboard:service-ready", panelId: "panel.backedup", beforeBackup: true, beforeRestore: false });
         const asked = async (requestId: string) => {
             process.emit("message" as any, { type: "paperboard:before-backup", requestId } as any);
             const deadline = Date.now() + 2000;
