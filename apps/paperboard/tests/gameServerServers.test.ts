@@ -350,3 +350,66 @@ test("Game Server over the real daemon: migration, independent servers, projects
         fs.rmSync(root, { recursive: true, force: true });
     }
 }, 45_000);
+
+// A fresh OS service generation must reconstruct every scope before any
+// server publishes, including recovery of a pause left by a previous backup.
+test("persisted servers restart and recover paused saving through the daemon", async () => {
+    const { PanelServicesManager } = await import("../papercrane/panelServices");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gameservers-restart-"));
+    const bunExecutable = process.execPath;
+    const launcherSource = path.join(root, "supervisor.ts");
+    const launcher = path.join(root, process.platform === "win32" ? "supervisor.exe" : "supervisor");
+    fs.writeFileSync(launcherSource, `import { runSupervisor } from ${JSON.stringify(path.resolve(import.meta.dir, "../papercrane/supervisor.ts"))}; if (process.argv.includes("--panel-service")) await import(process.argv.at(-1)!); else await runSupervisor(process.argv.at(-1)!);`);
+    const build = Bun.spawnSync([bunExecutable, "build", launcherSource, "--compile", "--outfile", launcher]);
+    if (build.exitCode !== 0) throw new Error(build.stderr.toString());
+    process.execPath = launcher;
+    const services = new PanelServicesManager(root);
+    const engine = new PaperCraneEngine(root, services);
+    const auth = new PaperCraneAuth(false, path.join(root, "local"));
+    const wss = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+    setupWebSocketServer(wss, engine, auth);
+    await once(wss, "listening");
+    const backups = backupServiceFor(engine);
+    try {
+        await initPaperApi({ port: (wss.address() as any).port, token: auth.issuePanelToken(PANEL), computerId: "local", panelId: PANEL });
+        const panelDir = path.join(root, "panels", PANEL);
+        fs.mkdirSync(panelDir, { recursive: true });
+        fs.writeFileSync(path.join(panelDir, "manifest.json"), JSON.stringify({ id: PANEL, version: "0.4.0", service: "service.mjs" }));
+        const bundle = await Bun.build({ entrypoints: [path.resolve(import.meta.dir, "../../../panels/dev.paperboard.gameserver/src/service.ts")], target: "bun", format: "esm" });
+        if (!bundle.success) throw new AggregateError(bundle.logs, "Service build failed");
+        await Bun.write(path.join(panelDir, "service.mjs"), bundle.outputs[0]!);
+        const serversDirectory = "servers-0123456789ab";
+        const servers = ["survival", "creative"].map((id) => ({ id, name: id, game: "minecraft", directory: `${serversDirectory}/${id}`, createdAt: 1, settings: { configured: true, software: "vanilla", version: "1.21.4", ramGB: id === "survival" ? 3 : 7 } }));
+        await config.set({ version: 2, serversDirectory, servers }, PANEL);
+        for (const server of servers) await fileApi.write(`${server.directory}/world/level.dat`, server.id, PANEL);
+        const first = servers[0]!;
+        const marker = `${first.directory}/.paperboard-saving-paused`;
+        const child = `console.log('[Server thread/INFO]: Done (0.1s)!'); for await (const line of console) { if (line === 'save-on') console.log('[Server thread/INFO]: Automatic saving is now enabled'); }`;
+        await processApi.start({ id: "survival-mc-server", command: bunExecutable, args: ["-e", child], cwd: await fileApi.getPath(first.directory, PANEL) });
+        services.init((wss.address() as any).port, undefined, auth);
+        await services.waitUntilReady(PANEL);
+        await services.stopService(PANEL);
+        await fileApi.write(marker, "paused before restart", PANEL);
+        services.startService(PANEL);
+        await services.waitUntilReady(PANEL);
+        const state = await actionsApi.call<any>(PANEL, "list-servers");
+        expect(state.serversError).toBeNull();
+        expect(state.servers).toHaveLength(2);
+        for (const server of servers) {
+            expect(serverStateOf(state, server.id).recoveryBlock).toBeNull();
+            expect(serverStateOf(state, server.id).ramAllocation).toBe(server.settings.ramGB);
+        }
+        expect(serverStateOf(state, first.id).serverStatus).toBe("online");
+        expect(await fileApi.exists(marker, PANEL)).toBe(false);
+    } finally {
+        await services.stopService(PANEL);
+        await engine.killProcess("survival-mc-server", "SIGKILL");
+        process.execPath = bunExecutable;
+        backups.dispose();
+        closeTransport("local");
+        for (const socket of wss.clients) socket.terminate();
+        await new Promise<void>((resolve) => wss.close(() => resolve()));
+        auth.dispose();
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+}, 60_000);

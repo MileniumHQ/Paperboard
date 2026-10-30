@@ -74,7 +74,9 @@ function updateSaved(change: (current: ServersConfig) => ServersConfig): Promise
 const icons = new Map<string, string | null>();
 function publish(changed?: ServerScope): void {
     const servers = saved.servers.map((server): ServerSummary => {
-        const state = entries.get(server.id)!.ctx.state;
+        const scope = entries.get(server.id);
+        if (!scope) throw new Error(`Server scope is missing: ${server.id}`);
+        const state = scope.ctx.state;
         return {
             id: server.id,
             name: server.name,
@@ -140,7 +142,7 @@ function bind(scope: ServerScope, def: ActionDefinition): ActionDefinition {
             : {}),
     };
 }
-async function initialize(server: StoredServer): Promise<ServerScope> {
+function createScope(server: StoredServer): ServerScope {
     const game = gameServiceFor(server.game);
     let state = game.initialState();
     const scope: ServerScope = {
@@ -179,6 +181,11 @@ async function initialize(server: StoredServer): Promise<ServerScope> {
         bindAction: (def) => bind(scope, def),
     };
     entries.set(server.id, scope);
+    return scope;
+}
+async function initialize(scope: ServerScope): Promise<ServerScope> {
+    const { server } = scope;
+    const game = gameServiceFor(server.game);
     try {
         await nodeFs.mkdir(await fileApi.getPath(server.directory, PANEL_ID), { recursive: true });
         await backupApi.defineSource(PANEL_ID, {
@@ -205,7 +212,7 @@ async function initialize(server: StoredServer): Promise<ServerScope> {
             // A server left running keeps its identity and directory on migration.
             // Recovery must never modify that running process's files.
             const running = await scopedProcess.exists(SERVER_PROC_ID);
-            if (running) state = { ...state, serverStatus: "online" };
+            if (running) scope.ctx.setState({ serverStatus: "online" });
             scope.unsubscribe.push(
                 scopedProcess.onData(SERVER_PROC_ID, (chunk) =>
                     handleProcessData(scope.ctx, chunk),
@@ -222,7 +229,7 @@ async function initialize(server: StoredServer): Promise<ServerScope> {
     } catch (err) {
         const reason = `Server initialization failed: ${err instanceof Error ? err.message : String(err)}`;
         inServer(scope, () => setRecoveryBlock(reason));
-        state = { ...state, recoveryBlock: reason };
+        scope.ctx.setState({ recoveryBlock: reason });
         publish(scope);
         throw err;
     }
@@ -275,7 +282,7 @@ export const gameServerService = definePanelService({
                     servers: [...current.servers, server],
                 }));
                 await fileApi.getPath(server.directory, PANEL_ID);
-                await initialize(server);
+                await initialize(createScope(server));
                 publish();
                 return { id };
             }),
@@ -360,11 +367,12 @@ export const gameServerService = definePanelService({
             // No file operations or data moves: installed records and all config
             // keys become settings of the migrated server in one atomic write.
             await config.set(saved, PANEL_ID);
-            for (const server of saved.servers) {
+            const scopes = saved.servers.map(createScope);
+            for (const scope of scopes) {
                 try {
-                    await initialize(server);
+                    await initialize(scope);
                 } catch (err) {
-                    console.error(`[gameserver] ${server.name} could not initialize:`, err);
+                    console.error(`[gameserver] ${scope.server.name} could not initialize:`, err);
                 }
             }
             publish();

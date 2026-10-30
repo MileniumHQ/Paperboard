@@ -229,6 +229,7 @@ await backups.create({ label: "Before updating" });`}
                 restore refuses a backup that holds anything other than this panel's file storage and config document, and refuses links.
                 restore stops the service and the processes the panel started, then swaps the data in. When the service does not become ready on the restored data, the previous data goes back in place and the service restarts on it.
                 A service defined with a <PaperCode>beforeBackup</PaperCode> hook (see definePanelService) is asked first, while it still runs, so it can write out what it holds and stop processes it runs from writing. When the hook throws, create fails with CONFLICT and the service is still stopped and started again.
+                On restart, services that manage several workloads should initialize every workload and recover any saving pauses left by a previous backup.
                 A service that was stopped before a backup or restore stays stopped.
                 create and restore have no call timeout. They take as long as the bytes take to copy.
             </PaperText>
