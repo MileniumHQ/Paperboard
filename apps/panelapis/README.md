@@ -1,8 +1,12 @@
-# Modscan
+# Panel APIs
+
+Server-side APIs for Paperboard panels, served under `panels.ariapis.com`. Each API owns its own path; the first is modscan, at `/modscan`.
+
+## Modscan
 
 Paperboard's server-side Steam Workshop metadata service. The owner's Steam Web API key stays in a Worker secret; desktop users do not supply keys. This app is independent of the Game Server panel and is not integrated into it.
 
-## Terms review — 2026-10-30
+### Terms review — 2026-10-30
 
 **Conclusion: allowed with conditions**, as an application-specific backend for Paperboard, rather than a general Steam proxy. This is an interpretation of the published license, not written approval from Valve. Register Paperboard and its service domain accurately in the API key registration. The application owner remains responsible for every use of the key. No published clause reviewed requires one key per end user; serving data to multiple users is expressly contemplated.
 
@@ -31,7 +35,7 @@ Before operating publicly:
 4. Keep the key confidential and dedicate its upstream usage to this service. Coordinate any other key/account usage within Valve's total cap; the local guard cannot count unrelated applications. Do not reset the durable budget name, storage or migration while calls remain in its rolling window. When changing keys, retain the conservative guard rather than resetting it.
 5. Preserve attribution, disclaimers and source links when integrating the panel. Handle explicit API errors visibly. Re-review Valve's terms periodically and stop when access is withdrawn.
 
-## Endpoints
+### Endpoints
 
 Only GET is accepted. No permissive CORS headers are emitted; panel services call server-side. Unknown paths/games return 404; unknown/duplicate parameters and invalid values return 400; other methods return 405 with `Allow: GET`.
 
@@ -53,7 +57,7 @@ Success JSON is `{ items: Item[], total: number | null, meta: { attribution, sou
 
 Errors are `{ error: { code, message } }`, never cached. Missing secret/binding/cache failures return 503; bad Steam responses/network errors return 502; unavailable/cross-game items return 404; upstream throttling, client limiting and exhausted global budget return distinct 429 codes. Upstream text, URLs containing credentials and exception messages are never returned or logged. Redirects are not followed; timeout is ten seconds and response bodies are bounded to 2 MB.
 
-## Limits and storage
+### Limits and storage
 
 The [Cloudflare rate-limit binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) allows 60 requests/minute per Cloudflare client IP, including cache hits. This is approximate and per location, not an exact global limiter; shared NATs share a quota. The Worker requires Cloudflare's trusted `CF-Connecting-IP`, never a caller query/header identifying an arbitrary end user. Ensure no upstream Worker overwrites that header.
 
@@ -63,26 +67,26 @@ A single SQLite-backed Durable Object uses transactional storage to reserve ever
 
 The Cache API stores only successful reshaped responses, with canonical validated keys that exclude secrets/IPs: search 60 seconds, item/collection 300 seconds. It is local to each Cloudflare location, not a global cache. Cache failures fail explicitly rather than silently falling through to Steam. No permanent Steam metadata database exists.
 
-## Local development and operator deployment
+### Local development and operator deployment
 
 From the repository root, install workspace dependencies with `bun install`, then:
 
 ```sh
-bun run --cwd apps/modscan test
-bun run --cwd apps/modscan typecheck
-bun run --cwd apps/modscan dev
+bun run --cwd apps/panelapis test
+bun run --cwd apps/panelapis typecheck
+bun run --cwd apps/panelapis dev
 ```
 
-Tests run local workerd via Miniflare, with real cache, rate-limit and durable storage bindings; only outgoing Steam HTTP is mocked. Test storage is ephemeral, and dev persistence lives under `/tmp/paperboard-modscan-dev`, never the user's `.paperboard`. For dev requests supply a local `CF-Connecting-IP` header. Local secrets belong in an ignored `.dev.vars`, never source control. The test harness uses Miniflare's v4 configuration converter because the installed Wrangler dependency uses Miniflare 5's updated API.
+Tests run local workerd via Miniflare, with real cache, rate-limit and durable storage bindings; only outgoing Steam HTTP is mocked. Test storage is ephemeral, and dev persistence lives under `/tmp/paperboard-panelapis-dev`, never the user's `.paperboard`. For dev requests supply a local `CF-Connecting-IP` header. Local secrets belong in an ignored `.dev.vars`, never source control. The test harness uses Miniflare's v4 configuration converter because the installed Wrangler dependency uses Miniflare 5's updated API.
 
 Operator steps below are documentation only; no deployment, secret upload or Cloudflare writes were performed during implementation:
 
 1. Complete the pre-operation terms/privacy steps above and register the correct application/domain with Valve. Confirm that a normal Web API key can query the chosen games; a live authenticated smoke test was not performed here. Upstream access denial is explicit and must be resolved with Valve, never worked around.
 2. Authenticate Wrangler to the intended Cloudflare account; confirm the `ariapis.com` zone and that `panels.ariapis.com` has a proxied DNS record/origin. The config uses the path route `panels.ariapis.com/modscan/*`, not a host-wide custom domain. Other paths can serve other applications.
 3. Confirm rate-limit namespace `1281930` is unique in the account (change before first deployment if necessary). The first deployment migration creates the SQLite Durable Object; remote bindings are not used locally.
-4. Set the Worker secret named `STEAM_WEB_API_KEY` securely through the Cloudflare dashboard for Worker `modscan`; never put its value in `wrangler.jsonc`, shell history, a URL shared with users or Git. Missing configuration produces a clear 503. No secret-setting command is run by these scripts.
-5. When separately authorized to publish, run `bun run --cwd apps/modscan deploy`. Verify routing, attribution, privacy disclosures, cache behavior and visible failures before integrating any panel.
+4. Set the Worker secret named `STEAM_WEB_API_KEY` securely through the Cloudflare dashboard for Worker `panelapis`; never put its value in `wrangler.jsonc`, shell history, a URL shared with users or Git. Missing configuration produces a clear 503. No secret-setting command is run by these scripts.
+5. When separately authorized to publish, run `bun run --cwd apps/panelapis deploy`. Verify routing, attribution, privacy disclosures, cache behavior and visible failures before integrating any panel.
 
-## Emailing Valve about growth
+### Emailing Valve about growth
 
 Write to webapi@valvesoftware.com before exceeding the published limit. Include the owner/company contact, Steam account identity (not passwords or the secret key), Paperboard repository and product URLs, registered domain and endpoint, a description of the open-source desktop dashboard and its small current user base, the shared-backend architecture, the exact interfaces/methods and allowlisted game IDs, observed daily/peak call volume and projected growth, requested daily and burst limits, cache TTLs/hit rates, client limits and transactional global budget, privacy/storage countries and retention practices, attribution screenshots/text and user-facing disclaimers. Ask for written confirmation of this backend use, any additional caching/branding/privacy constraints, and the approved new quota/day boundary. Keep the existing cap until Valve approves; an email request itself does not raise it. Do not send the secret API key in email.

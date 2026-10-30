@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "modscan",
+  "name": "panelapis",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "workers_dev": false,

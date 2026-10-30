@@ -1,12 +1,12 @@
 {
-  "name": "modscan",
+  "name": "panelapis",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "module": "src/index.ts",
   "license": "PolyForm-Noncommercial-1.0.0",
   "scripts": {
-    "dev": "wrangler dev --persist-to /tmp/paperboard-modscan-dev",
+    "dev": "wrangler dev --persist-to /tmp/paperboard-panelapis-dev",
     "test": "bun test ./test",
     "typecheck": "tsc --noEmit",
     "deploy": "wrangler deploy -c wrangler.jsonc --no-autoconfig"

@@ -6,7 +6,7 @@ export default function WorkshopMetadataDoc() {
             <PaperText preset="header">Workshop metadata</PaperText>
             <PaperText preset="body">
                 Modscan is Paperboard's separately operated Steam Workshop metadata service.
-                Its source and operator instructions live in apps/modscan. It is not yet
+                Its source and operator instructions live in apps/panelapis. It is not yet
                 connected to the Game Server panel. The owner's Steam key belongs in the
                 Worker's secret storage and must never be shipped with a panel.
             </PaperText>
@@ -36,7 +36,7 @@ GET https://panels.ariapis.com/modscan/v1/garrysmod/collections/123`}</PaperCode
             </PaperText>
             <PaperText preset="subheader">Operating the service</PaperText>
             <PaperText preset="body">
-                Before public use, follow apps/modscan/README.md for the Steam terms
+                Before public use, follow apps/panelapis/README.md for the Steam terms
                 review, privacy and storage-country disclosures, user-facing terms,
                 attribution and deployment instructions. Searches are cached for one
                 minute and details for five minutes. A transactional Durable Object

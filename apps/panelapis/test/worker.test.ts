@@ -31,7 +31,7 @@ const instances: Miniflare[] = [];
 afterEach(async () => { await Promise.all(instances.splice(0).map(m => m.dispose())); });
 async function setup(options: { secret?: string; limit?: number; upstream?: (url: URL, body: string) => unknown; status?: number } = {}) {
   const calls: { url: URL; body: string; method: string }[] = [];
-  const mf = new Miniflare(convertV4MiniflareOptions({ workers: [{ name: "modscan",
+  const mf = new Miniflare(convertV4MiniflareOptions({ workers: [{ name: "panelapis",
     modules: true, script, compatibilityDate: "2026-10-01",
     bindings: { STEAM_WEB_API_KEY: options.secret ?? SECRET },
     durableObjects: { BUDGET: { className: "TestBudget", useSQLite: true } },
@@ -47,7 +47,7 @@ async function setup(options: { secret?: string; limit?: number; upstream?: (url
   instances.push(mf);
   const ns = await mf.getDurableObjectNamespace("BUDGET");
   const budget = ns.get(ns.idFromName("steam-key-budget-v1"));
-  const worker = await mf.getWorker("modscan");
+  const worker = await mf.getWorker("panelapis");
   const request = (path: string, method = "GET", ip = "192.0.2.1") => worker.fetch(`https://panels.ariapis.com${path}`, { method, headers: { "CF-Connecting-IP": ip } });
   return { mf, calls, request, budget };
 }
@@ -159,7 +159,7 @@ describe("Modscan HTTP boundary in workerd", () => {
     const responses = await Promise.all(Array.from({ length: 8 }, () => budget.fetch("https://budget/reserve", { method: "POST" })));
     expect(responses.filter(r => r.status === 200)).toHaveLength(1);
     expect(responses.filter(r => r.status === 429)).toHaveLength(7);
-    await mf.unsafeEvictDurableObject("modscan", "TestBudget", { name: "steam-key-budget-v1" });
+    await mf.unsafeEvictDurableObject("panelapis", "TestBudget", { name: "steam-key-budget-v1" });
     const response = await request(`${base}/search`);
     expect(response.status).toBe(429);
     expect(await response.text()).toContain("steam_budget");
