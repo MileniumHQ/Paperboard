@@ -2,41 +2,16 @@ import { minecraftSoftware } from "../games/minecraft/index";
 import { createEffect, createSignal, on, onMount, Show } from "solid-js";
 import {
     PaperFlex,
-    PaperText,
     PaperButton,
-    PaperIcon,
-    PaperSeparator,
-    PaperConsole,
-    PaperCopyButton,
-    PaperCard,
-    PaperBadge,
-    PaperEffect,
     PaperQuote,
     PaperAvatar,
     PaperContextMenu,
     PaperContextMenuItem,
     useContextMenuState,
 } from "@mileniumhq/paperui";
-import {
-    serverActionError,
-    serverStatus,
-    serverEntries,
-    localIp,
-    serverPort,
-    serverMotd,
-    serverSoftware,
-    serverVersion,
-    loadServerConfig,
-    initServerListeners,
-    startServer,
-    stopServer,
-    restartServer,
-    sendServerCommand,
-    getStatusBadge,
-} from "../lib/server";
+import { serverStatus, serverMotd, serverSoftware, serverVersion } from "../lib/server";
 import { SOFTWARE_NAMES } from "../lib/software";
-import ServerIssueModal from "./ServerIssueModal";
-import RecoveryNotice from "./RecoveryNotice";
+import ServerOverview from "./ServerOverview";
 import { MotdEditor, MotdPreview } from "./Motd";
 import { fileApi } from "../lib/api";
 import { PANEL_ID } from "../service/contract";
@@ -116,18 +91,12 @@ export default function Overview(props: {
         }
     };
 
-    onMount(() => {
-        loadServerConfig();
-        initServerListeners();
-        void loadIcon();
-    });
-
-    const badge = () => getStatusBadge(serverStatus());
+    onMount(() => void loadIcon());
 
     return (
-        <>
-            <PaperCard shrink={false} padding="full">
-                <PaperFlex direction="row" gap="full" align="center">
+        <ServerOverview
+            avatar={
+                <>
                     <PaperAvatar
                         size="xlarge"
                         shape="square"
@@ -162,86 +131,28 @@ export default function Overview(props: {
                             e.currentTarget.value = "";
                         }}
                     />
-                    <PaperFlex direction="column" gap="onefourth" minWidth={0}>
-                        <PaperFlex direction="row" gap="half" align="center">
-                            <PaperText preset="title">
-                                {localIp()}:{serverPort()}
-                            </PaperText>
-                            <PaperCopyButton text={`${localIp()}:${serverPort()}`} title="Copy address" />
-                            <PaperBadge variant={badge().variant}>
-                                {badge().label}
-                            </PaperBadge>
-                        </PaperFlex>
-                        <PaperFlex direction="row" gap="half" align="center">
-                            <MotdPreview motd={serverMotd()} />
-                            <PaperButton size="tiny"
-                                icon
-                                onClick={() => setMotdOpen(true)}
-                                title="Edit server list message"
-                                aria-label="Edit server list message">
-                                edit
-                            </PaperButton>
-                        </PaperFlex>
-                    </PaperFlex>
+                </>
+            }
+            detail={
+                <PaperFlex direction="row" gap="half" align="center">
+                    <MotdPreview motd={serverMotd()} />
+                    <PaperButton size="tiny"
+                        icon
+                        onClick={() => setMotdOpen(true)}
+                        title="Edit server list message"
+                        aria-label="Edit server list message">
+                        edit
+                    </PaperButton>
                 </PaperFlex>
-            </PaperCard>
-
+            }
+            software={SOFTWARE_NAMES[minecraftSoftware(serverSoftware())] || minecraftSoftware(serverSoftware())}
+        >
             <Show when={iconError()}>
                 {(error) => (
                     <PaperQuote variant="danger" icon="warning" title={error().title} onDismiss={() => setIconError(null)}>
                         {error().message}
                     </PaperQuote>
                 )}
-            </Show>
-
-            <PaperFlex
-                justify="space-between"
-                direction="row"
-                align="center"
-                shrink={false}
-            >
-                <PaperFlex gap="half" direction="row" align="center">
-                    <Show when={serverStatus() === "offline"}>
-                        <PaperEffect>
-                            <PaperButton onClick={startServer}>
-                                <PaperIcon>power</PaperIcon>
-                                Start
-                            </PaperButton>
-                        </PaperEffect>
-                    </Show>
-
-                    <Show when={serverStatus() !== "offline"}>
-                        <PaperButton
-                            variant="danger"
-                            onClick={stopServer}
-                            disabled={serverStatus() === "stopping"}>
-                            <PaperIcon>stop</PaperIcon>
-                            Stop
-                        </PaperButton>
-                    </Show>
-
-                    <Show when={serverStatus() === "online"}>
-                        <PaperButton variant="warning" onClick={restartServer}>
-                            <PaperIcon>restart_alt</PaperIcon>
-                            Restart
-                        </PaperButton>
-                    </Show>
-                </PaperFlex>
-
-                <PaperFlex direction="row" align="center" gap="onefourth">
-                    <PaperBadge>{serverVersion()}</PaperBadge>
-                    <PaperBadge>
-                        {SOFTWARE_NAMES[minecraftSoftware(serverSoftware())] || minecraftSoftware(serverSoftware())}
-                    </PaperBadge>
-                </PaperFlex>
-            </PaperFlex>
-
-            <RecoveryNotice />
-
-            <Show when={serverActionError()}>
-                <PaperQuote variant="danger" icon="warning" title="Server action failed">
-                    {serverActionError()}
-                </PaperQuote>
             </Show>
 
             <Show when={restriction()}>
@@ -263,19 +174,7 @@ export default function Overview(props: {
                 </PaperQuote>
             </Show>
 
-            <PaperSeparator />
-
-            <PaperCard grow minHeight={0} padding="full">
-                <PaperConsole
-                    entries={serverEntries()}
-                    onCommand={sendServerCommand}
-                    placeholder="Enter command..."
-                    prompt="chevron_right"
-                />
-            </PaperCard>
-
             <MotdEditor open={motdOpen()} onClose={() => setMotdOpen(false)} />
-            <ServerIssueModal />
-        </>
+        </ServerOverview>
     );
 }
