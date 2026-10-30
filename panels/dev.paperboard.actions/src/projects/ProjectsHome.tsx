@@ -102,7 +102,7 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                     }
                 >
                     <Show
-                        when={projects.list().length > 0}
+                        when={projects.kept().length > 0}
                         fallback={
                             <PaperEmptyState icon="account_tree" title="No projects yet" description="A project holds flows that run when something happens, like a message or a button on Home.">
                                 <PaperButton variant="primary" disabled={working()} onClick={() => void create()}>New project</PaperButton>
@@ -110,7 +110,7 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                         }
                     >
                         <PaperMediaCardGroup minCardWidth="card-min">
-                            <For each={projects.list()}>
+                            <For each={projects.kept()}>
                                 {(project) => (
                                     <PaperMediaCard
                                         effect={false}

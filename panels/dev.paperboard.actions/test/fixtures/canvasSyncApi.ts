@@ -38,7 +38,7 @@ export const config = {
 };
 // the service's state, as the home screen reads it through the bridge; a
 // project change announces the whole state again, as the service does
-const project = { ...FIXTURE_PROJECT, enabled: true, createdAt: 1, editedAt: Date.now(), flowCount: 1, preview: null };
+const project = { ...FIXTURE_PROJECT, enabled: true, createdAt: 1, editedAt: Date.now(), flowCount: 1, draft: false, preview: null };
 let rev = 1;
 const serviceState = () => ({
     rev,

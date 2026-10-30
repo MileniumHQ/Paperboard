@@ -98,12 +98,30 @@ export default function Editor(props: {
             setWorking(false);
         }
     };
-    const newProject = () => change("Project not made", async () => props.onOpen(await props.projects.create()));
+    // a new project left without a flow is not kept: its last edit is saved
+    // first, so the service sees whether it has one by now
+    const leaveDraft = async () => {
+        if (!props.project().draft) return;
+        const saved = await doc.flush();
+        if (!saved.ok) throw new Error(`Your latest changes are not saved: ${saved.message}`);
+        await props.projects.discardDraft(props.projectId);
+    };
+    const newProject = () => change("Project not made", async () => {
+        const made = await props.projects.create();
+        await leaveDraft();
+        props.onOpen(made);
+    });
     const copyProject = () => change("Project not copied", async () => {
         // the copy is of what was saved, so the latest edits go first
         const saved = await doc.flush();
         if (!saved.ok) throw new Error(`Your latest changes are not saved, so the copy would miss them: ${saved.message}`);
-        props.onOpen(await props.projects.duplicate(props.projectId));
+        const copy = await props.projects.duplicate(props.projectId);
+        await leaveDraft();
+        props.onOpen(copy);
+    });
+    const goHome = () => change("Project not closed", async () => {
+        await leaveDraft();
+        props.onHome();
     });
     // the switch flips on its own, never waiting on another change
     const setEnabled = (enabled: boolean) =>
@@ -124,7 +142,7 @@ export default function Editor(props: {
         <div class="paperui-root actions-editor">
         <div class="editor-topbar">
             <PaperFlex direction="row" align="center" gap="half" paddingX="half" background="surface" fullWidth fullHeight>
-                <PaperButton icon variant="text" title="All projects" aria-label="All projects" onClick={props.onHome}>
+                <PaperButton icon variant="text" title="All projects" aria-label="All projects" disabled={working()} onClick={() => void goHome()}>
                     <PaperIcon>arrow_back</PaperIcon>
                 </PaperButton>
                 <PaperFlex direction="column" align="flex-start" gap="onefourth">

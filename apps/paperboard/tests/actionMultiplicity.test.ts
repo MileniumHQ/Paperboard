@@ -158,6 +158,29 @@ test("Actions projects over the real daemon: the old canvas becomes a project, f
         expect((await actionsApi.listProjects(ACTIONS)).map((p) => p.id)).toEqual([mine]);
         await expect(actionsApi.call(ACTIONS, `${other.id}/list-flows`)).rejects.toThrow("not registered");
         expect((await config.get<any>(ACTIONS, "projects.json")).projects.map((p: any) => p.id)).toEqual([mine]);
+
+        // a new project is a draft: nothing of it is written until it has a flow
+        const kept = async () => (await config.get<any>(ACTIONS, "projects.json")).projects.map((p: any) => [p.id, p.name]);
+        const canvasOf = async (id: string) => (await config.get<any>(ACTIONS, `projects/${id}.json`)) ?? null;
+        const scratch = await actionsApi.call<any>(ACTIONS, "create-project", { name: "Scratch" });
+        expect(scratch.draft).toBe(true);
+        await actionsApi.call(ACTIONS, "update-project", { project: scratch.id, name: "Scratch pad" });
+        await save(scratch.id, { flows: [], notes: [{ id: "idea", pos: { x: 0, y: 0 }, text: "an idea" }], functions: [] });
+        expect(await kept()).toEqual([[mine, "My flows"]]);
+        expect(await canvasOf(scratch.id)).toBeNull();
+        // its first flow keeps it, with its name and what was on its canvas
+        await save(scratch.id, { flows: [{ ...flows[0], id: "scratch" }], notes: [{ id: "idea", pos: { x: 0, y: 0 }, text: "an idea" }], functions: [] });
+        expect(await kept()).toEqual([[mine, "My flows"], [scratch.id, "Scratch pad"]]);
+        expect((await canvasOf(scratch.id)).flows.map((f: any) => f.id)).toEqual(["scratch"]);
+        expect((await actionsApi.call<any[]>(ACTIONS, "list-projects")).find((p) => p.id === scratch.id).draft).toBe(false);
+        // leaving a project discards it only while it is a draft
+        await actionsApi.call(ACTIONS, "delete-project", { project: scratch.id, onlyDraft: true });
+        expect((await actionsApi.listProjects(ACTIONS)).map((p) => p.id)).toEqual([mine, scratch.id]);
+        const empty = await actionsApi.call<any>(ACTIONS, "create-project", {});
+        await actionsApi.call(ACTIONS, "delete-project", { project: empty.id, onlyDraft: true });
+        expect((await actionsApi.listProjects(ACTIONS)).map((p) => p.id)).toEqual([mine, scratch.id]);
+        expect(await kept()).toEqual([[mine, "My flows"], [scratch.id, "Scratch pad"]]);
+        expect(await canvasOf(empty.id)).toBeNull();
     } finally {
         bot?.terminate();
         for (const off of offs) off();

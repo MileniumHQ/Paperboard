@@ -44,12 +44,16 @@ export function createProjects() {
         loadError,
         load,
         list: () => state.projects,
+        /** the projects Home shows: a draft is only seen in its editor */
+        kept: () => state.projects.filter((p) => !p.draft),
         find: (id: string): ProjectSummary | undefined => state.projects.find((p) => p.id === id),
         create: (name?: string) => call<ProjectSummary>("create-project", name ? { name } : {}),
         rename: (project: string, name: string) => call<ProjectSummary>("update-project", { project, name }),
         setEnabled: (project: string, enabled: boolean) => call<ProjectSummary>("update-project", { project, enabled }),
         duplicate: (project: string) => call<ProjectSummary>("duplicate-project", { project }),
         remove: (project: string) => call<{ deleted: string }>("delete-project", { project }),
+        /** a new project left without a flow is not kept; the service checks it still is a draft */
+        discardDraft: (project: string) => call<{ deleted: string }>("delete-project", { project, onlyDraft: true }),
     };
 }
 

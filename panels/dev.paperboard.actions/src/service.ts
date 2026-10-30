@@ -55,6 +55,8 @@ export interface ProjectSummary {
     /** epoch ms of the last saved edit */
     editedAt: number;
     flowCount: number;
+    /** made but not kept yet: it is saved once it has a flow */
+    draft: boolean;
     /** set when the project's canvas could not be read */
     loadError?: string;
     preview: CanvasPreview | null;
@@ -87,6 +89,12 @@ interface Project {
     /** function id -> registered signature */
     registeredFunctions: Map<string, string>;
     handle: ActionProjectHandle;
+    /**
+     * Made but not kept: neither its canvas nor its place in the project
+     * list is written until a save gives it a flow, so a project left empty
+     * is gone when the service stops.
+     */
+    draft: boolean;
 }
 
 const projects = new Map<string, Project>();
@@ -176,6 +184,7 @@ function summary(project: Project): ProjectSummary {
         createdAt: project.meta.createdAt,
         editedAt: editedAt(project),
         flowCount: project.flows.filter((b) => b.isTrigger).length,
+        draft: project.draft,
         ...(project.loadError ? { loadError: project.loadError } : {}),
         preview: project.loadError ? null : canvasPreview(project.flows, project.notes),
     };
@@ -379,7 +388,7 @@ export function handleTriggerEventForTest(output: any, data: any): void {
 /** the project tests stand flows up in, without storage */
 export const TEST_PROJECT_ID = "p-test";
 
-function bareProject(meta: ProjectMeta): Project {
+function bareProject(meta: ProjectMeta, draft = false): Project {
     const project: Project = {
         meta,
         doc: projectDocument(meta.id),
@@ -390,6 +399,7 @@ function bareProject(meta: ProjectMeta): Project {
         loadError: null,
         registeredFunctions: new Map(),
         handle: actionsApi.project(meta.id, ACTIONS_PANEL_ID),
+        draft,
     };
     return project;
 }
@@ -541,7 +551,17 @@ async function applyDefinitions(project: Project, canvas: CanvasDocument, revisi
 function projectDocument(projectId: string) {
     const doc = createCanvasDocument({
         read: () => config.get<any>(ACTIONS_PANEL_ID, projectCanvasPath(projectId)),
-        write: (saved) => config.set(saved, ACTIONS_PANEL_ID, projectCanvasPath(projectId)),
+        write: async (saved) => {
+            const project = projects.get(projectId);
+            if (project?.draft) {
+                // a draft is kept from its first flow on: until then, nothing is written
+                if (!saved.flows.some((b) => b.isTrigger)) return;
+                await config.set(saved, ACTIONS_PANEL_ID, projectCanvasPath(projectId));
+                await keepDraft(project);
+                return;
+            }
+            await config.set(saved, ACTIONS_PANEL_ID, projectCanvasPath(projectId));
+        },
         // TODO(remove after v0.4): with the update in removedSteps.ts
         backup: (saved) => config.set(saved, ACTIONS_PANEL_ID, `projects/${projectId}.before-0.3.json`),
         validate: validateCanvas,
@@ -569,7 +589,28 @@ function serialIndex<T>(op: () => Promise<T>): Promise<T> {
 }
 
 async function writeIndex(): Promise<void> {
-    await config.set(projectIndexDocument([...projects.values()].map((p) => p.meta)), ACTIONS_PANEL_ID, PROJECTS_FILE);
+    const kept = [...projects.values()].filter((p) => !p.draft).map((p) => p.meta);
+    await config.set(projectIndexDocument(kept), ACTIONS_PANEL_ID, PROJECTS_FILE);
+}
+
+/** A draft's first flow is saved: it joins the project list. */
+function keepDraft(project: Project): Promise<void> {
+    return serialIndex(async () => {
+        if (projects.get(project.meta.id) !== project) {
+            // deleted while its first flow was being written
+            await config.set(null, ACTIONS_PANEL_ID, projectCanvasPath(project.meta.id));
+            throw new Error("This project was deleted");
+        }
+        if (!project.draft) return;
+        project.draft = false;
+        try {
+            await writeIndex();
+        } catch (err) {
+            project.draft = true;
+            throw err;
+        }
+        publish();
+    });
 }
 
 /**
@@ -598,8 +639,8 @@ async function readIndex(): Promise<ProjectMeta[]> {
  * windows load its canvas through them), then its canvas read and its
  * functions registered. `initial` is a new project's first canvas.
  */
-async function openProject(meta: ProjectMeta, initial?: CanvasDocument): Promise<Project> {
-    const project = bareProject(meta);
+async function openProject(meta: ProjectMeta, initial?: CanvasDocument, draft = false): Promise<Project> {
+    const project = bareProject(meta, draft);
     projects.set(meta.id, project);
     try {
         await actionsApi.defineProject({ id: meta.id, name: meta.name, icon: "account_tree" }, ACTIONS_PANEL_ID);
@@ -637,12 +678,16 @@ async function createProject(name: unknown, initial?: CanvasDocument): Promise<P
         const clean = name === undefined || name === "" ? nextProjectName(metas) : cleanProjectName(name);
         const now = Date.now();
         const meta: ProjectMeta = { id: createProjectId(), name: clean, enabled: true, createdAt: now, editedAt: now };
-        const project = await openProject(meta, initial);
-        try {
-            await writeIndex();
-        } catch (err) {
-            await closeProject(project);
-            throw err;
+        // a project with no flows is a draft, kept once it has one
+        const draft = !initial?.flows.some((b) => b.isTrigger);
+        const project = await openProject(meta, initial, draft);
+        if (!draft) {
+            try {
+                await writeIndex();
+            } catch (err) {
+                await closeProject(project);
+                throw err;
+            }
         }
         rev += 1;
         resubscribeTriggers();
@@ -666,7 +711,8 @@ async function updateProject(projectId: unknown, change: { name?: unknown; enabl
             project.meta.enabled = change.enabled;
         }
         try {
-            await writeIndex();
+            // a draft's name and switch are written with it, once it has a flow
+            if (!project.draft) await writeIndex();
         } catch (err) {
             project.meta = before;
             throw err;
@@ -681,18 +727,23 @@ async function updateProject(projectId: unknown, change: { name?: unknown; enabl
     });
 }
 
-async function deleteProject(projectId: unknown): Promise<void> {
+/** `onlyDraft`: a project kept by now stays, as leaving an empty new one asks */
+async function deleteProject(projectId: unknown, onlyDraft = false): Promise<void> {
     return serialIndex(async () => {
         const project = requireProject(projectId);
+        if (onlyDraft && !project.draft) return;
         projects.delete(project.meta.id);
-        try {
-            await writeIndex();
-        } catch (err) {
-            projects.set(project.meta.id, project);
-            throw err;
+        // a draft was never written: there is nothing to take back
+        if (!project.draft) {
+            try {
+                await writeIndex();
+            } catch (err) {
+                projects.set(project.meta.id, project);
+                throw err;
+            }
+            // the canvas file is emptied, not kept: a deleted project is gone
+            await config.set(null, ACTIONS_PANEL_ID, projectCanvasPath(project.meta.id));
         }
-        // the canvas file is emptied, not kept: a deleted project is gone
-        await config.set(null, ACTIONS_PANEL_ID, projectCanvasPath(project.meta.id));
         await project.handle.remove();
         rev += 1;
         resubscribeTriggers();
@@ -935,7 +986,7 @@ export const actions = [
         id: "create-project",
         name: "Create Project",
         hidden: true,
-        description: "Creates an empty Actions project and returns its id; its flows run once it has some",
+        description: "Creates an empty Actions project and returns its id. It is kept once it has a flow; one left empty is gone when Actions restarts",
         template: "Create project {name}",
         inputs: { name: { type: "string", label: "Name", maxLength: 128 } },
         output: { type: "object", label: "Project" },
@@ -984,14 +1035,17 @@ export const actions = [
         id: "delete-project",
         name: "Delete Project",
         hidden: true,
-        description: "Deletes a project and every flow in it. This can't be undone",
+        description: "Deletes a project and every flow in it. This can't be undone. With onlyDraft, only a project not kept yet (no flows saved) is deleted",
         template: "Delete project {project}",
-        inputs: { project: { type: "string", label: "Project id", required: true } },
+        inputs: {
+            project: { type: "string", label: "Project id", required: true },
+            onlyDraft: { type: "boolean", label: "Only if not kept yet" },
+        },
         output: { type: "object", label: "Deleted" },
         icon: "delete",
-        run: async (_ctx: Ctx, inputs: { project?: string }) => {
+        run: async (_ctx: Ctx, inputs: { project?: string; onlyDraft?: boolean }) => {
             await actionsService.ready;
-            await deleteProject(inputs?.project);
+            await deleteProject(inputs?.project, inputs?.onlyDraft === true);
             return { deleted: inputs?.project };
         },
     }),
