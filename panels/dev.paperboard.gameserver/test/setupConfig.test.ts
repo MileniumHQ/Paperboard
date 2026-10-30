@@ -9,7 +9,7 @@ mock.module("../src/service/api", () => ({
     files: {},
     system: {},
 }));
-const { updatePanelConfig } = await import("../src/service/config");
+const { updatePanelConfig } = await import("../src/games/minecraft/config");
 test("setup save preserves unreadable config and propagates persistence failures", async () => {
     await expect(updatePanelConfig({} as any, { configured: true })).rejects.toThrow("Config unreadable");
     expect(writes).toBe(0);

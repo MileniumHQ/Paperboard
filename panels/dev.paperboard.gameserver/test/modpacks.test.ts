@@ -380,8 +380,8 @@ test("pack activation and rollback failure preserve parked originals for recover
 });
 
 test("a refused combined record restores both server software and pack files", async () => {
-    const { installServerSoftwareLocked, withInstallLock } = await import("../src/service/softwareInstall");
-    const { SOFTWARE_PROVIDERS } = await import("../src/software/providers");
+    const { installServerSoftwareLocked, withInstallLock } = await import("../src/games/minecraft/softwareInstall");
+    const { SOFTWARE_PROVIDERS } = await import("../src/games/minecraft/providers");
     const h = harness({ installed: { version: "1.20.1", build: "0.15.0" } });
     h.write("server.jar", "old server");
     h.write("mods/old.jar", "old mods");

@@ -25,12 +25,12 @@ import { processApi as scopedProcess, LEGACY_DEPRECATION } from "./service/api";
 import { type GameServerState, SERVER_PROC_ID } from "./service/types";
 import { setRecoveryBlock } from "./service/recoveryState";
 import { handleProcessData, handleProcessExit, stopServerInstance } from "./service/lifecycle";
-import { customTypes } from "./service/actions";
+import { customTypes } from "./games/minecraft/actions";
 import { currentGameService, gameServiceFor } from "./games/service";
 import { assertGameAction, defaultGame, gameFor } from "./games";
 import { livePortDeps } from "./service/portDeps";
 export * from "./service/types";
-export * from "./service/actions";
+export * from "./games/minecraft/actions";
 export { LEGACY_DEPRECATION };
 
 export interface ServerSummary extends Omit<StoredServer, "settings"> {

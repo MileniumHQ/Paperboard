@@ -1,8 +1,8 @@
 import { createEffect, createSignal } from "solid-js";
 import type { LoaderStatus } from "@mileniumhq/paperui";
 import { ACTION_IDS } from "../service/contract";
-import type { InstallOutcome } from "../service/softwareInstall";
-import { providerFor } from "../software/providers";
+import type { InstallOutcome } from "../games/minecraft/softwareInstall";
+import { providerFor } from "../games/minecraft/providers";
 import { SOFTWARE_NAMES, getRequiredJavaVersion, type ServerSoftwareType } from "./software";
 import { ensureJavaRuntime } from "./ensureJava";
 import { installProgress, serverBridge, setInstallProgress } from "./server";

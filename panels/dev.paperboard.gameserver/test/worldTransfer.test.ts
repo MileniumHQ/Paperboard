@@ -41,7 +41,7 @@ mock.module("../src/service/api", () => ({
     },
 }));
 
-const saving = await import("../src/service/saving");
+const saving = await import("../src/games/minecraft/saving");
 const transfer = await import("../src/service/worldTransfer");
 const { planWorldImport, worldNameFromFile } = await import("../src/core/worldArchive");
 

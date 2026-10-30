@@ -1,8 +1,8 @@
 import { config, files as fileApi, type ServiceContext } from "./api";
-import { updatePanelConfig } from "./config";
-import { ensureJavaFor } from "./java";
+import { updatePanelConfig } from "../games/minecraft/config";
+import { ensureJavaFor } from "../games/minecraft/java";
 import { runInstallerProcess, stopLeftoverInstaller } from "./installerProcess";
-import type { InstallDeps } from "./softwareInstall";
+import type { InstallDeps } from "../games/minecraft/softwareInstall";
 import { PANEL_ID, type GameServerState } from "./types";
 
 async function readConfig(): Promise<Record<string, unknown>> {

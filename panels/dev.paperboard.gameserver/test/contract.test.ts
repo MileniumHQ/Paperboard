@@ -13,7 +13,7 @@ import {
     playerLeftTrigger,
     setActiveWorldAction,
     setGameruleAction,
-} from "../src/service/actions";
+} from "../src/games/minecraft/actions";
 
 // set-active-world, set-game-rule, delete-world and delete-plugin are
 // registered by republishDynamicActions: their dropdown options come from

@@ -16,7 +16,7 @@ import {
     storeWithoutCompression,
 } from "../core/worldArchive";
 import { assertShellSafeLevelName } from "../core/worlds";
-import { withSavingPaused } from "./saving";
+import { withSavingPaused } from "../games/minecraft/saving";
 import { resolveLevelName } from "./worlds";
 import { PANEL_ID, type GameServerState } from "./types";
 

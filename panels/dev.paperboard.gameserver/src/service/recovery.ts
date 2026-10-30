@@ -1,6 +1,6 @@
 import { serverLocal } from "./scope";
 import type { ServiceContext } from "./api";
-import { recoverInterruptedInstall } from "./softwareInstall";
+import { recoverInterruptedInstall } from "../games/minecraft/softwareInstall";
 import { liveRecoveryDeps } from "./softwareInstallDeps";
 import { recoverInterruptedModpack } from "./modpacks";
 import { liveModpackRecoveryDeps } from "./modpackDeps";

@@ -1,5 +1,5 @@
 import { config, files as fileApi, type ServiceContext } from "./api";
-import { updatePanelConfig } from "./config";
+import { updatePanelConfig } from "../games/minecraft/config";
 import { fetchJson } from "../software/http";
 import { resolveLevelName } from "./worlds";
 import { trashRemovePathsWith } from "./trash";

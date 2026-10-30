@@ -43,7 +43,7 @@ mock.module("../src/service/api", () => ({
 }));
 
 const { startServerInstance } = await import("../src/service/lifecycle");
-const { installServerSoftware } = await import("../src/service/softwareInstall");
+const { installServerSoftware } = await import("../src/games/minecraft/softwareInstall");
 
 const NEOFORGE = {
     software: "neoforge",

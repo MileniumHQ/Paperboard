@@ -15,7 +15,7 @@ mock.module("../src/service/api", () => ({
 const { applyCode, docFromMotd, MAX_MOTD_CHARS, MOTD_COLORS, motdColorCss, motdFromDoc, parseMotd, replaceRange, styleAt } = await import(
     "../src/core/motd"
 );
-const { loadConfigAndProperties } = await import("../src/service/config");
+const { loadConfigAndProperties } = await import("../src/games/minecraft/config");
 
 const text = (doc: { ch: string }[]) => doc.map((c) => c.ch).join("");
 

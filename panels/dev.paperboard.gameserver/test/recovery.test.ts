@@ -18,7 +18,7 @@ mock.module("../src/service/api", () => ({
 
 const { settleInterruptedWork } = await import("../src/service/recovery");
 const { startServerInstance } = await import("../src/service/lifecycle");
-const { installServerSoftware } = await import("../src/service/softwareInstall");
+const { installServerSoftware } = await import("../src/games/minecraft/softwareInstall");
 const { recoveryBlock, setRecoveryBlock } = await import("../src/service/recoveryState");
 
 function makeCtx() {

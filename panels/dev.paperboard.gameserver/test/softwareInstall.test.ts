@@ -6,9 +6,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { installServerSoftware, isInstallRunning, type InstallDeps } from "../src/service/softwareInstall";
+import { installServerSoftware, isInstallRunning, type InstallDeps } from "../src/games/minecraft/softwareInstall";
 import { InstallerStillRunningError, type InstallerRun } from "../src/service/installerProcess";
-import { SOFTWARE_PROVIDERS } from "../src/software/providers";
+import { SOFTWARE_PROVIDERS } from "../src/games/minecraft/providers";
 import type { ServerSoftwareType } from "../src/software/catalog";
 import type { SoftwareProvider } from "../src/software/types";
 

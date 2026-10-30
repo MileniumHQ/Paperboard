@@ -1,12 +1,12 @@
 import * as crypto from "node:crypto";
 import * as nodeFs from "node:fs";
 import { config, files as fileApi, type ServiceContext } from "./api";
-import { updatePanelConfig } from "./config";
+import { updatePanelConfig } from "../games/minecraft/config";
 import { fetchJson } from "../software/http";
 import { currentInstall } from "../software/installRecord";
 import { isServerSoftware } from "../software/catalog";
 import { resolveLevelName } from "./worlds";
-import { installServerSoftwareLocked } from "./softwareInstall";
+import { installServerSoftwareLocked } from "../games/minecraft/softwareInstall";
 import { liveInstallDeps } from "./softwareInstallDeps";
 import type { ModpackDeps } from "./modpacks";
 import { PANEL_ID, type GameServerState } from "./types";

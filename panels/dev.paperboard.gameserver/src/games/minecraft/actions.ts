@@ -36,7 +36,7 @@ import {
     setActiveWorld,
     deleteActiveWorldDirs,
 } from "../../service/worlds";
-import { loadConfigAndProperties, updatePanelConfig } from "../../service/config";
+import { loadConfigAndProperties, updatePanelConfig } from "./config";
 import { listMapRegions, renderMapTile } from "../../service/map";
 import { discardWorldTransfer, exportWorld, importWorld } from "../../service/worldTransfer";
 import type { MapDimension } from "../../core/map";
@@ -45,7 +45,7 @@ import { getHeadDataUrl } from "../../service/skins";
 import { listLogFiles, readLogFile } from "../../service/logs";
 import { queryGamerules, setGamerule } from "../../service/gamerules";
 import { applyRuntimeProperties } from "../../service/runtimeProperties";
-import { installServerSoftware, isInstallRunning, withInstallLock } from "../../service/softwareInstall";
+import { installServerSoftware, isInstallRunning, withInstallLock } from "./softwareInstall";
 import { settleInterruptedWork } from "../../service/recovery";
 import { readLoaderSettings, writeLoaderSetting } from "../../service/loaderSettings";
 import { listServerFiles, readServerFile, writeServerFile } from "../../service/serverFiles";

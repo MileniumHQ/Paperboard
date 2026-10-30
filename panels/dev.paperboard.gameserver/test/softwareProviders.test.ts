@@ -8,10 +8,10 @@ import {
     neoForgeInstallerUrl,
     parseNeoForgeVersion,
     pickNeoForgeBuild,
-} from "../src/software/providers/neoforge";
-import { forgeInstallerUrl, forgeMcVersions, pickForgeBuild } from "../src/software/providers/forge";
-import { pickFabricLoader } from "../src/software/providers/fabric";
-import { SOFTWARE_PROVIDERS } from "../src/software/providers";
+} from "../src/games/minecraft/providers/neoforge";
+import { forgeInstallerUrl, forgeMcVersions, pickForgeBuild } from "../src/games/minecraft/providers/forge";
+import { pickFabricLoader } from "../src/games/minecraft/providers/fabric";
+import { SOFTWARE_PROVIDERS } from "../src/games/minecraft/providers";
 import { SOFTWARE, SOFTWARE_IDS } from "../src/software/catalog";
 
 describe("NeoForge versions", () => {

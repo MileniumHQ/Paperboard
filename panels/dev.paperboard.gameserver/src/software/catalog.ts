@@ -4,7 +4,7 @@
 // the service and versionProfile can all read it without import cycles.
 //
 // Adding a software means one entry here plus one provider in
-// src/software/providers.ts (how to list versions, resolve a build and
+// src/games/minecraft/providers.ts (how to list versions, resolve a build and
 // install it). TypeScript refuses a provider table or picker that misses an
 // id listed here.
 
