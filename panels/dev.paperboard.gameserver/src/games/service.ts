@@ -1,0 +1,16 @@
+import { minecraft } from "./minecraft";
+import { currentServer } from "../service/scope";
+import { defaultGame, gameFor } from "./index";
+import { minecraftService } from "./minecraft/service";
+import type { GameService } from "./serviceTypes";
+const services: Readonly<Record<string, GameService>> = { [minecraft.id]: minecraftService };
+export function gameServiceFor(id: string): GameService {
+    const game = gameFor(id);
+    const service = services[game.id];
+    if (!service) throw new Error(`Game service missing: ${game.id}`);
+    return service;
+}
+// Unscoped adapters (legacy callers and unit tests) use the original module.
+// A stored server always resolves its explicit game id, including unknown ids.
+export const currentGame = () => gameFor(currentServer()?.server.game ?? defaultGame.id);
+export const currentGameService = () => gameServiceFor(currentGame().id);

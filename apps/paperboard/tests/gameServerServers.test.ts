@@ -137,6 +137,7 @@ test("Game Server over the real daemon: migration, independent servers, projects
         });
         expect((await config.get<any>(PANEL)).servers[0].settings).toEqual(legacy);
         expect(serverStateOf(gameServerService.getState(), second.id).ramAllocation).toBe(8);
+        await expect(actionsApi.call(PANEL, "prepare-crossplay", {})).rejects.toThrow("does not support action");
         await actionsApi.call(PANEL, "update-panel-config", { patch: { ramGB: 5 } });
         expect((await config.get<any>(PANEL)).servers.map((s: any) => s.settings.ramGB)).toEqual([
             5, 8,
@@ -161,6 +162,35 @@ test("Game Server over the real daemon: migration, independent servers, projects
         const { processApi: scopedProcessApi } = await import(
             "../../../panels/dev.paperboard.gameserver/src/service/api"
         );
+        // Launch preparation crosses the real config, file, package and system
+        // APIs. No Java is run: fixture package directories describe the runtime.
+        const { gameServiceFor } = await import("../../../panels/dev.paperboard.gameserver/src/games/service");
+        const { initialServerState } = await import("../../../panels/dev.paperboard.gameserver/src/service/initialState");
+        const javaHome = path.join(root, "packages", "java-21");
+        fs.mkdirSync(path.join(javaHome, "bin"), { recursive: true });
+        const launchServer = { ...saved.servers[1], settings: { software: "paper", version: "1.21.4" } };
+        const launchContext = { state: { ...initialServerState(), serverSoftware: "paper", serverVersion: "1.21.4", ramAllocation: 6 } } as any;
+        const launchDir = path.join(legacyDir, secondDirectory);
+        fs.writeFileSync(path.join(launchDir, "server.jar"), "launch fixture");
+        const resolveLaunch = () => inServer({ server: launchServer, legacy: false } as any, () => gameServiceFor(launchServer.game).prepareLaunch(launchContext));
+        const jar = await resolveLaunch();
+        expect(jar.command).toEqual({
+            executable: `${javaHome}/bin/${process.platform === "win32" ? "java.exe" : "java"}`,
+            args: ["-Xmx6G", "-Xms6G", "-jar", "server.jar", "nogui"],
+            cwd: launchDir,
+            env: { JAVA_HOME: javaHome },
+        });
+        const launch = { type: "argfile", unix: "libraries/unix_args.txt", windows: "libraries/win_args.txt" };
+        fs.mkdirSync(path.join(launchDir, "libraries"));
+        for (const name of [launch.unix, launch.windows]) fs.writeFileSync(path.join(launchDir, name), "launch fixture");
+        Object.assign(launchServer.settings, { install: { software: "neoforge", version: "1.21.4", build: "test", launch, files: ["libraries"], staging: ".install-1-1" } });
+        expect((await resolveLaunch()).command).toEqual({
+            ...jar.command,
+            args: ["-Xmx6G", "-Xms6G", `@${process.platform === "win32" ? launch.windows : launch.unix}`, "nogui"],
+        });
+        fs.unlinkSync(path.join(launchDir, process.platform === "win32" ? launch.windows : launch.unix));
+        await expect(resolveLaunch()).rejects.toThrow("is missing in the server folder");
+
         for (const server of saved.servers) {
             const legacy = server.id === first.id;
             if (legacy) continue; // the original process survived migration

@@ -20,28 +20,15 @@ import {
     type StoredServer,
 } from "./servers";
 import * as nodeFs from "node:fs/promises";
-import { initialServerState } from "./service/initialState";
 import { inServer, type ServerScope } from "./service/scope";
 import { processApi as scopedProcess, LEGACY_DEPRECATION } from "./service/api";
 import { type GameServerState, SERVER_PROC_ID } from "./service/types";
-import { stopLeftoverInstaller } from "./service/installerProcess";
 import { setRecoveryBlock } from "./service/recoveryState";
-import { settleInterruptedWork } from "./service/recovery";
-import { loadConfigAndProperties } from "./service/config";
 import { handleProcessData, handleProcessExit, stopServerInstance } from "./service/lifecycle";
-import {
-    panelActions,
-    panelEventActions,
-    customTypes,
-    cancelDynamicActions,
-    republishDynamicActions,
-    scheduleRepublishDynamicActions,
-} from "./service/actions";
-import { setPlayerNamesChangedHandler } from "./service/players";
-import { pauseSavingForBackup, recoverPausedSaving } from "./service/saving";
+import { customTypes } from "./service/actions";
+import { currentGameService, gameServiceFor } from "./games/service";
+import { assertGameAction, defaultGame, gameFor } from "./games";
 import { livePortDeps } from "./service/portDeps";
-import { JAVA_PORT_NAME, BEDROCK_PORT_NAME } from "./core/portNames";
-import { readServerIcon } from "./service/serverIcon";
 export * from "./service/types";
 export * from "./service/actions";
 export { LEGACY_DEPRECATION };
@@ -127,6 +114,11 @@ function bind(scope: ServerScope, def: ActionDefinition): ActionDefinition {
                   run: async (_ctx: unknown, ...args: any[]) => {
                       if (!entries.has(scope.server.id) || scope.removing)
                           throw new Error("This server was removed or is being removed");
+                      assertGameAction(gameFor(scope.server.game), {
+                          settings: scope.server.settings,
+                          software: scope.ctx.state.serverSoftware,
+                          version: scope.ctx.state.serverVersion,
+                      }, def.id);
                       scope.activeOperations++;
                       try {
                           const result = await inServer(scope, () =>
@@ -135,10 +127,7 @@ function bind(scope: ServerScope, def: ActionDefinition): ActionDefinition {
                           if (["set-server-icon", "remove-server-icon"].includes(def.id)) {
                               icons.set(
                                   scope.server.id,
-                                  await readServerIcon({
-                                      serverDir: () =>
-                                          fileApi.getPath(scope.server.directory, PANEL_ID),
-                                  }),
+                                  await inServer(scope, () => gameServiceFor(scope.server.game).readIcon()),
                               );
                               publish();
                           }
@@ -152,7 +141,8 @@ function bind(scope: ServerScope, def: ActionDefinition): ActionDefinition {
     };
 }
 async function initialize(server: StoredServer): Promise<ServerScope> {
-    let state = initialServerState();
+    const game = gameServiceFor(server.game);
+    let state = game.initialState();
     const scope: ServerScope = {
         server,
         legacy: saved.legacyServer === server.id,
@@ -190,22 +180,19 @@ async function initialize(server: StoredServer): Promise<ServerScope> {
     };
     entries.set(server.id, scope);
     try {
-        if (server.game !== "minecraft") throw new Error(`Unsupported game: ${server.game}`);
         await nodeFs.mkdir(await fileApi.getPath(server.directory, PANEL_ID), { recursive: true });
         await backupApi.defineSource(PANEL_ID, {
             id: server.id,
             directory: server.directory,
             config: ["servers", { id: server.id }, "settings"],
-            processes: scope.legacy
-                ? ["mc-server", "mc-installer"]
-                : [`${server.id}-mc-server`, `${server.id}-mc-installer`],
+            processes: game.processIds.map((id) => scope.legacy ? id : `${server.id}-${id}`),
             ...(scope.legacy ? { legacy: true, exclude: [saved.serversDirectory] } : {}),
         });
         scope.project = await actionsApi.defineProject(
             { id: server.id, name: server.name, icon: "dns" },
             PANEL_ID,
         );
-        for (const def of [...panelActions, ...panelEventActions]) {
+        for (const def of await game.actions()) {
             await scope.project.register(bind(scope, def));
             if (scope.legacy)
                 await actionsApi.register(
@@ -227,17 +214,9 @@ async function initialize(server: StoredServer): Promise<ServerScope> {
             scope.unsubscribe.push(
                 scopedProcess.onExit(SERVER_PROC_ID, () => handleProcessExit(scope.ctx)),
             );
-            await loadConfigAndProperties(scope.ctx);
-            if (!running) await settleInterruptedWork(scope.ctx);
-            await recoverPausedSaving();
-            setPlayerNamesChangedHandler(() => scheduleRepublishDynamicActions(scope.ctx));
-            await republishDynamicActions(scope.ctx);
-            icons.set(
-                server.id,
-                await readServerIcon({
-                    serverDir: () => fileApi.getPath(server.directory, PANEL_ID),
-                }),
-            );
+            await game.loadOptions(scope.ctx);
+            await game.initialize(scope.ctx, running);
+            icons.set(server.id, await game.readIcon());
         });
         return scope;
     } catch (err) {
@@ -285,7 +264,7 @@ export const gameServerService = definePanelService({
                 const server: StoredServer = {
                     id,
                     name: serverName(name),
-                    game: "minecraft",
+                    game: defaultGame.id,
                     directory: `${saved.serversDirectory}/${id}`,
                     createdAt: Date.now(),
                     settings: {},
@@ -326,7 +305,7 @@ export const gameServerService = definePanelService({
                 scope.removing = true;
                 try {
                     await inServer(scope, async () => {
-                        await stopLeftoverInstaller();
+                        await currentGameService().beforeRemove();
                         await stopServerInstance(scope.ctx);
                         const deadline = Date.now() + 40_000;
                         while (await scopedProcess.exists(SERVER_PROC_ID)) {
@@ -337,13 +316,13 @@ export const gameServerService = definePanelService({
                             await new Promise((resolve) => setTimeout(resolve, 100));
                         }
                         // Keep its directory and backups; removal never deletes user data.
-                        await livePortDeps().ports.release(JAVA_PORT_NAME);
-                        await livePortDeps().ports.release(BEDROCK_PORT_NAME);
+                        for (const name of currentGameService().portNames)
+                            await livePortDeps().ports.release(name);
                     });
                     await backupApi.forSource(PANEL_ID, scope.server.id).setSchedule(null);
                     await scope.project!.remove();
                     if (scope.legacy)
-                        for (const def of [...panelActions, ...panelEventActions])
+                        for (const def of await gameServiceFor(scope.server.game).actions())
                             await actionsApi.unregister(def.id, PANEL_ID);
                     await updateSaved((current) => {
                         const next = {
@@ -353,10 +332,7 @@ export const gameServerService = definePanelService({
                         if (next.legacyServer === server) delete next.legacyServer;
                         return next;
                     });
-                    inServer(scope, () => {
-                        cancelDynamicActions();
-                        setPlayerNamesChangedHandler(null);
-                    });
+                    await inServer(scope, () => currentGameService().dispose());
                     for (const off of scope.unsubscribe) off();
                     entries.delete(server);
                     icons.delete(server);
@@ -369,8 +345,11 @@ export const gameServerService = definePanelService({
                 }
             }),
         ),
-        management(WIDGET_CHOICES_ACTION, () =>
-            saved.servers.map((s) => ({ value: s.id, label: s.name })),
+        management(WIDGET_CHOICES_ACTION, ({ widgetId }: { widgetId: string }) =>
+            saved.servers.filter((server) => {
+                const state = entries.get(server.id)!.ctx.state;
+                return gameFor(server.game).describe({ software: state.serverSoftware, version: state.serverVersion }).widgets.includes(widgetId);
+            }).map((s) => ({ value: s.id, label: s.name })),
         ),
     ],
     async onInit(ctx) {
@@ -398,11 +377,16 @@ export const gameServerService = definePanelService({
         const paused: ServerScope[] = [];
         try {
             for (const entry of entries.values()) {
-                await inServer(entry, () => pauseSavingForBackup(entry.ctx));
+                await inServer(entry, () => {
+                    const policy = currentGameService().backup;
+                    if (policy.mode === "offline" && entry.ctx.state.serverStatus !== "offline")
+                        throw new Error(`Stop ${entry.server.name} before backing it up`);
+                    return policy.before(entry.ctx);
+                });
                 paused.push(entry);
             }
         } catch (err) {
-            for (const entry of paused) await inServer(entry, () => recoverPausedSaving());
+            for (const entry of paused) await inServer(entry, () => currentGameService().backup.recover());
             throw err;
         }
     },

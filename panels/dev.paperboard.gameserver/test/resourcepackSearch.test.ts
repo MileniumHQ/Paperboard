@@ -62,11 +62,13 @@ test("without a server version it refuses instead of searching every version", a
     expect(requests).toEqual([]);
 });
 
-test("only the Resource Pack tab owns the resource pack keys", () => {
+test("only the Resource Pack tab owns the resource pack keys", async () => {
     const src = (file: string) => readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
     expect(src("components/Advanced.tsx")).not.toContain("resource-pack");
     expect(src("components/ResourcePack.tsx")).toContain("require-resource-pack");
     expect(src("components/ResourcePack.tsx")).toContain("resource-pack-prompt");
     expect(src("components/ResourcePack.tsx")).toContain("resource-pack-id");
-    expect(src("App.tsx")).toContain('value="resourcepack"');
+    const { gameFor } = await import("../src/games");
+    expect(gameFor("minecraft").describe({ software: "paper", version: "1.21.4" }).tabs.find((tab) => tab.id === "resourcepack")).toMatchObject({ owner: "game", label: "Resource Pack" });
+    expect(src("games/minecraft/ui.tsx")).toContain('case "resourcepack": return <ResourcePack');
 });

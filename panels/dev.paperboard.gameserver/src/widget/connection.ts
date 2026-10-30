@@ -4,6 +4,7 @@
 // answer, never an empty server.
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 import { createPanelBridge, type WidgetContext } from "@mileniumhq/paperapi";
+import { gameFor } from "../games";
 import { serverStateOf } from "../servers";
 import { PANEL_ID } from "../service/contract";
 import type { ServersState } from "../service";
@@ -49,11 +50,14 @@ export function viewOf(state: Partial<GameServerState>): ServerView {
 }
 
 /** The option is explicit; only widgets from before several servers use the legacy server. */
-export function selectedWidgetServer(state: ServersState, option: string | undefined): { id: string; view: ServerView } {
+export function selectedWidgetServer(state: ServersState, option: string | undefined, widgetId?: string): { id: string; view: ServerView } {
     if (state.serversError) throw new Error(state.serversError);
     const id = option || state.legacyServer;
     const server = state.servers.find((s) => s.id === id);
     if (!server) throw new Error("No server is chosen, or it was removed. Choose a Server in the widget options.");
+    const game = gameFor(server.game);
+    if (widgetId && !game.describe({ software: server.state.serverSoftware, version: server.state.serverVersion }).widgets.includes(widgetId))
+        throw new Error(`${game.name} does not support the ${widgetId} widget`);
     return { id: server.id, view: viewOf(serverStateOf(state, server.id)) };
 }
 
@@ -82,7 +86,7 @@ export function useWidgetServer(widget: WidgetContext): WidgetServer {
 
     let chosen: string | null = null;
     const project = (state: ServersState): ServerView => {
-        const selected = selectedWidgetServer(state, widget.options.server);
+        const selected = selectedWidgetServer(state, widget.options.server, widget.widgetId);
         chosen = selected.id;
         return selected.view;
     };

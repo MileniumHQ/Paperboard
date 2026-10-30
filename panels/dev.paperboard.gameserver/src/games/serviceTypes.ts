@@ -1,0 +1,44 @@
+/** Service-only module contract. Never imported as a value by renderers. */
+import type { ActionDefinition, ServiceContext } from "../service/api";
+import type { GameServerState } from "../service/types";
+import type { PortDeps } from "../service/ports";
+export interface LaunchCommand {
+    executable: string;
+    args: string[];
+    cwd: string;
+    env: Record<string, string>;
+}
+export interface PreparedLaunch { command: LaunchCommand; message: string }
+export interface PortSpec {
+    name: string;
+    label: string;
+    protocol: "tcp" | "udp" | "tcp+udp";
+    preferred: number | null;
+    write(port: number): Promise<void>;
+}
+type Context = ServiceContext<GameServerState>;
+export interface GameService {
+    initialState(): GameServerState;
+    actions(): Promise<readonly ActionDefinition[]>;
+    initialize(ctx: Context, running: boolean): Promise<void>;
+    dispose(): Promise<void>;
+    beforeRemove(): Promise<void>;
+    readIcon(): Promise<string | null>;
+    processIds: readonly string[];
+    loadOptions(ctx: Context): Promise<void>;
+    prepareLaunch(ctx: Context): Promise<PreparedLaunch>;
+    isMutating(): boolean;
+    stopEntry: string;
+    stop(): void;
+    commandLine(command: string): string;
+    sendChat?(ctx: Context, message: string): Promise<void>;
+    observeLine(ctx: Context, line: string, final?: boolean): void;
+    portNames: readonly string[];
+    ports(ctx: Context, deps: PortDeps): AsyncIterable<PortSpec>;
+    backup: {
+        mode: "quiesce" | "offline";
+        before(ctx: Context): Promise<void>;
+        recover(): Promise<unknown>;
+        withConsistentData<T>(ctx: Context, work: () => Promise<T>): Promise<T>;
+    };
+}

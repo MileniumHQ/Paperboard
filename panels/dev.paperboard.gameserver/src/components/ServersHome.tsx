@@ -21,7 +21,7 @@ import {
 } from "@mileniumhq/paperui";
 import { serversBridge, openServer } from "../lib/api";
 import type { ServerSummary, ServersState } from "../service";
-import { SOFTWARE_NAMES } from "../lib/software";
+import { gameFor } from "../games";
 export default function ServersHome(props: { state: ServersState }) {
     const [dialog, setDialog] = createSignal<"add" | "rename" | "remove" | null>(null);
     const [target, setTarget] = createSignal<ServerSummary | null>(null);
@@ -105,7 +105,7 @@ export default function ServersHome(props: { state: ServersState }) {
                                     effect={false}
                                     icon={server.icon ?? "dns"}
                                     title={server.name}
-                                    subtitle={`${server.game === "minecraft" ? "Minecraft" : server.game} · ${SOFTWARE_NAMES[server.state.serverSoftware]} ${server.state.serverVersion}`}
+                                    subtitle={`${gameFor(server.game).name} · ${gameFor(server.game).softwareLabel({ software: server.state.serverSoftware, version: server.state.serverVersion })}`}
                                     description={
                                         server.state.recoveryBlock ??
                                         (!server.configured ? "Finish setup" : undefined)

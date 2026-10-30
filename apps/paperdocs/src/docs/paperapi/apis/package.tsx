@@ -17,6 +17,14 @@ export default function PackageApiDoc() {
                 stages, extraction, and verification hashes.
             </PaperText>
 
+            <PaperText preset="body">
+                A panel that manages several game servers can describe runtime
+                requirements per game and version, then resolve those package
+                ids through the same API. Runtimes are shared; each server keeps
+                its own saves, settings and launch configuration. Game Server's
+                Minecraft module uses this boundary for Java.
+            </PaperText>
+
             <PaperText preset="subheader" id="overview">
                 Overview
             </PaperText>

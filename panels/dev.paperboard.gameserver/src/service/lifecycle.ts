@@ -1,35 +1,10 @@
 import { serverLocal } from "./scope";
-import {
-    processApi,
-    files as fileApi,
-    packages as packageApi,
-    config,
-    system,
-    type ServiceContext,
-} from "./api";
-import stripAnsi from "strip-ansi";
-import { getRequiredJavaVersion, SOFTWARE_NAMES } from "../lib/software";
-import { isWindowsTarget } from "../lib/platform";
-import { currentInstall } from "../software/installRecord";
-import { javaLaunchArgs, launchEntryFile } from "../software/launch";
-import { isInstallRunning } from "./softwareInstall";
+import { processApi, type ServiceContext } from "./api";
+import { currentGame, currentGameService } from "../games/service";
 import { assertRecoverySettled } from "./recoveryState";
-import { javaBinaryPath } from "./java";
-import { parseChatMessage, parseLogLine } from "../lib/logs";
-import { parseGameruleValue } from "../core/gamerules";
-import { resolveVersionProfile } from "../lib/versionProfile";
-import { isSupportedMcVersion, MIN_SUPPORTED_MC_VERSION } from "../lib/versionProfile";
-import { loadConfigAndProperties } from "./config";
-import { trackPlayerActivity, handleStatResponse, handlePositionResponse, queryOnlinePlayers } from "./players";
-import { assertSingleLine, extractStatValue, extractPosition, extractDimension, isPlayerListResponse } from "../core/players";
-import { checkLogForIssues } from "./diagnostics";
-import { onServerOnline } from "./gamerules";
-import { applyPendingRuntimeProperties } from "./runtimeProperties";
-import { observeSavingLine } from "./saving";
-import { writeServerLineBestEffort } from "./serverConsole";
-import { prepareServerPorts } from "./ports";
+import { prepareGamePorts } from "./ports";
 import { livePortDeps } from "./portDeps";
-import { type GameServerState, SERVER_PROC_ID, appendCapped, PANEL_ID } from "./types";
+import { type GameServerState, SERVER_PROC_ID, appendCapped } from "./types";
 import { TRIGGER_IDS } from "./contract";
 
 const local = serverLocal(() => ({ lineBuffer: "", isRestarting: false, stopTimeout: null as ReturnType<typeof setTimeout> | null }));
@@ -73,68 +48,24 @@ export async function startServerInstance(
     assertRecoverySettled("starting the server");
     try {
         ctx.setState({ activeIssue: null });
-        await loadConfigAndProperties(ctx);
+        await currentGameService().loadOptions(ctx);
 
-        const saved = await config.get<Record<string, unknown>>(PANEL_ID);
-        let version = ctx.state.serverVersion;
-        if (!version && typeof saved?.version === "string" && saved.version) {
-            version = saved.version;
-            ctx.setState({ serverVersion: version });
-        }
-
-        if (version && !isSupportedMcVersion(version)) {
-            throw new Error(
-                `Minecraft ${version} is below Paperboard's minimum supported version (${MIN_SUPPORTED_MC_VERSION}).`,
-            );
-        }
-
-        const javaPkg = getRequiredJavaVersion(version);
-        if (!javaPkg) {
-            throw new Error(
-                `Could not determine the Minecraft version (got ${JSON.stringify(version)}) — complete Setup before starting the server.`,
-            );
-        }
-        const isInstalled = await packageApi.isInstalled(javaPkg).catch(() => false);
-        if (!isInstalled) {
-            throw new Error(
-                `Required Java package "${javaPkg}" is not installed. Please run Setup or install it in Packages.`,
-            );
-        }
-
-        const javaPath = await packageApi.getPath(javaPkg);
-        const serverDir = await fileApi.getPath("", PANEL_ID);
-        const targetOs = (await system.getInfo()).os;
-        const isWin = isWindowsTarget(serverDir, targetOs);
-        // launch what the last install recorded; a pre-record install is a
-        // plain server.jar
-        const { launch } = currentInstall(saved);
-        const entry = launchEntryFile(launch, isWin);
-        const softwareName = SOFTWARE_NAMES[ctx.state.serverSoftware];
-        // fail here instead of a confusing "unable to access jarfile" exit
-        const hasEntry = await fileApi.exists(entry, PANEL_ID).catch(() => false);
-        if (!hasEntry) {
-            throw new Error(
-                `${entry} is missing in the server folder — reinstall ${softwareName} ${version || ""} from Versions (or run Setup) before starting.`,
-            );
-        }
-        console.log(
-            `[Service:Lifecycle] starting in ${serverDir} (${entry} present) using ${javaPkg}...`,
-        );
-        const javaBin = javaBinaryPath(javaPath, isWin);
+        const game = currentGameService();
+        const launch = await game.prepareLaunch(ctx);
 
         // the port files are the install's while one runs
-        if (isInstallRunning()) {
+        if (currentGameService().isMutating()) {
             throw new Error("A server install is running; start the server once it finishes.");
         }
         // throws, with who has it, when a port is taken and the user's
         // setting refuses to move it
-        const moves = await prepareServerPorts(ctx.state.serverSoftware, livePortDeps());
+        const moves = await prepareGamePorts(game.ports(ctx, livePortDeps()), livePortDeps());
 
         // an install owns the server folder until it activates or rolls
         // back. Checked with no await before the status flips: the install
         // action likewise checks "offline" and claims the folder in one
         // synchronous step, so the two can never both proceed.
-        if (isInstallRunning()) {
+        if (currentGameService().isMutating()) {
             throw new Error("A server install is running; start the server once it finishes.");
         }
         ctx.setState({
@@ -143,7 +74,7 @@ export async function startServerInstance(
             serverEntries: [
                 {
                     type: "info",
-                    content: `[Server] Starting ${softwareName} ${version || "server"} using ${javaPkg}...`,
+                    content: launch.message,
                 },
                 ...moves.map((move) => ({
                     type: "warn" as const,
@@ -154,10 +85,10 @@ export async function startServerInstance(
 
         await processApi.start({
             id: SERVER_PROC_ID,
-            command: javaBin,
-            args: javaLaunchArgs(launch, ctx.state.ramAllocation, isWin),
-            cwd: serverDir,
-            env: { JAVA_HOME: javaPath },
+            command: launch.command.executable,
+            args: launch.command.args,
+            cwd: launch.command.cwd,
+            env: launch.command.env,
         });
     } catch (err: any) {
         console.error("[Service:Lifecycle] Failed to start server:", err);
@@ -189,10 +120,10 @@ export async function stopServerInstance(
             serverStatus: "stopping",
             serverEntries: appendCapped(ctx.state.serverEntries, {
                 type: "command",
-                content: "stop",
+                content: currentGameService().stopEntry,
             }),
         });
-        writeServerLineBestEffort("stop\n");
+        currentGameService().stop();
 
         scheduleStopForceKill(ctx);
     }
@@ -208,7 +139,7 @@ export async function restartServerInstance(
         serverEntries: appendCapped(
             appendCapped(ctx.state.serverEntries, {
                 type: "command",
-                content: "stop",
+                content: currentGameService().stopEntry,
             }),
             {
                 type: "info",
@@ -216,7 +147,7 @@ export async function restartServerInstance(
             },
         ),
     });
-    writeServerLineBestEffort("stop\n");
+    currentGameService().stop();
 
     scheduleStopForceKill(ctx);
 }
@@ -230,7 +161,10 @@ export async function sendServerCommand(
     // validation (kick/ban reasons) does not replace this check — it is
     // the last line of defense for raw-command callers too, matching
     // sendChatMessage's discipline one action over.
-    assertSingleLine(String(cmd), "console command", 500);
+    const game = currentGameService();
+    if (currentGame().describe({ software: ctx.state.serverSoftware, version: ctx.state.serverVersion }).control.kind === "none")
+        throw new Error("This game does not support console commands");
+    const line = game.commandLine(cmd);
     const trimmed = cmd.trim();
     if (!trimmed) return;
 
@@ -250,8 +184,7 @@ export async function sendServerCommand(
         ctx.state.serverStatus === "online" ||
         ctx.state.serverStatus === "starting"
     ) {
-        const rawCmd = trimmed.startsWith("/") ? trimmed.slice(1) : trimmed;
-        await processApi.write(SERVER_PROC_ID, `${rawCmd}\n`);
+        await processApi.write(SERVER_PROC_ID, line);
     } else {
         ctx.setState({
             serverEntries: appendCapped(ctx.state.serverEntries, {
@@ -265,149 +198,24 @@ export async function sendServerCommand(
     }
 }
 
-export async function sendChatMessage(
-    ctx: ServiceContext<GameServerState>,
-    msg: string,
-): Promise<void> {
-    const trimmed = msg.trim();
-    if (!trimmed) return;
-
-    if (
-        ctx.state.serverStatus === "online" ||
-        ctx.state.serverStatus === "starting"
-    ) {
-        await processApi.write(SERVER_PROC_ID, `say ${trimmed}\n`);
-    } else {
-        const now = new Date();
-        const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
-        ctx.setState({
-            chatMessages: appendCapped(ctx.state.chatMessages, {
-                id: `chat-${Date.now()}`,
-                text: "Cannot send message: server is offline.",
-                timestamp: timeStr,
-            }),
-        });
-        throw new Error("Cannot send message: server is offline.");
-    }
-}
-
-// gamerule readouts ride the same log stream as every other server line:
-// query responses keep the UI honest, write confirmations converge an
-// online edit on server truth. Returns whether the line was consumed.
-function handleGameruleResponse(
-    ctx: ServiceContext<GameServerState>,
-    clean: string,
-): boolean {
-    const profile = resolveVersionProfile(
-        ctx.state.serverSoftware,
-        ctx.state.serverVersion,
-    );
-    const parsed = parseGameruleValue(clean, profile);
-    if (!parsed) return false;
-    ctx.setState((prev) => ({
-        gamerules: { ...prev.gamerules, [parsed.name]: parsed.value },
-    }));
-    return true;
-}
-
-export function handleProcessData(
-    ctx: ServiceContext<GameServerState>,
-    chunk: string,
-): void {    local().lineBuffer += chunk;
+/** Log viewing is available even when a game has no command control. */
+export function handleProcessData(ctx: ServiceContext<GameServerState>, chunk: string): void {
+    local().lineBuffer += chunk;
     const lines = local().lineBuffer.split("\n");
     local().lineBuffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-        const clean = stripAnsi(line);
-        if (!clean.trim()) continue;
-
-        const portMatch = clean.match(/Starting (?:Minecraft )?server on .*:(\d+)/i);
-        if (portMatch?.[1] && portMatch[1] !== "0") {
-            ctx.setState({ serverPort: portMatch[1] });
-        }
-
-        observeSavingLine(clean);
-        trackPlayerActivity(ctx, clean);
-        const statConsumed = handleStatResponse(ctx, clean);
-        const positionConsumed = handlePositionResponse(ctx, clean);
-        const gameruleConsumed = handleGameruleResponse(ctx, clean);
-        checkLogForIssues(ctx, clean);
-
-        if (
-            clean.includes("Done (") ||
-            clean.includes("Done in") ||
-            clean.includes('For help, type "help"') ||
-            clean.includes("Started server")
-        ) {
-            if (ctx.state.serverStatus !== "online") {
-                ctx.setState({ serverStatus: "online" });
-                ctx.emitTrigger(TRIGGER_IDS.serverStarted, true);
-                // one `list` so the player cap is known from the start
-                queryOnlinePlayers(ctx);
-                // boot-time truth: offline gamerule edits re-apply, then
-                // every rule is queried so the UI reads live values
-                onServerOnline(ctx).catch((err) =>
-                    console.error("[Service:Lifecycle] gamerule boot sync failed:", err),
-                );
-                applyPendingRuntimeProperties(ctx).catch((err) =>
-                    console.error("[Service:Lifecycle] runtime property boot sync failed:", err),
-                );
-            }
-        } else if (clean.includes("Stopping server") || clean.includes("Saving players")) {
-            ctx.setState({ serverStatus: "stopping" });
-        }
-
-        const chat = parseChatMessage(line);
-        if (chat) {
-            ctx.setState({
-                chatMessages: appendCapped(ctx.state.chatMessages, chat),
-            });
-            // only player messages emit the chat-message trigger
-            if (chat.sender) {
-                ctx.emitTrigger(TRIGGER_IDS.chatMessage, chat);
-            }
-        }
-
-        // Poll responses are consumed into state above; appending them as
-        // well floods the console every few seconds (positions every 2s,
-        // list every 15s, stats every 30s, gamerule bursts on sync). The
-        // entity-data shape is matched directly — not just the pending
-        // queues — so a response that arrives after its marker was evicted
-        // stays out too. Join/leave lines, chat, errors and real server
-        // output still append.
-        const pollResponse =
-            statConsumed ||
-            positionConsumed ||
-            gameruleConsumed ||
-            isPlayerListResponse(clean) ||
-            extractStatValue(clean) !== undefined ||
-            extractPosition(clean) !== undefined ||
-            extractDimension(clean) !== undefined;
-
-        if (!pollResponse) {
-            ctx.setState({
-                serverEntries: appendCapped(ctx.state.serverEntries, parseLogLine(line)),
-            });
-        }
-    }
+    for (const line of lines) currentGameService().observeLine(ctx, line);
+}
+export function sendChatMessage(ctx: ServiceContext<GameServerState>, msg: string): Promise<void> {
+    const game = currentGameService();
+    if (!game.sendChat) throw new Error("This game does not support chat");
+    return game.sendChat(ctx, msg);
 }
 
 export function handleProcessExit(ctx: ServiceContext<GameServerState>): void {
     cancelStopForceKill();
 
     if (local().lineBuffer.trim()) {
-        const lastChat = parseChatMessage(local().lineBuffer);
-        if (lastChat) {
-            ctx.setState({
-                chatMessages: appendCapped(ctx.state.chatMessages, lastChat),
-            });
-        }
-        ctx.setState({
-            serverEntries: appendCapped(
-                ctx.state.serverEntries,
-                parseLogLine(local().lineBuffer),
-            ),
-        });
+        currentGameService().observeLine(ctx, local().lineBuffer, true);
         local().lineBuffer = "";
     }
 

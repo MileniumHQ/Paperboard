@@ -1,3 +1,4 @@
+import { defaultGame, gameFor } from "./games";
 import type { GameServerState } from "./service/types";
 // A server's id is also its Actions project id. Files stay where they were
 // created: the migrated server owns the original panel folder.
@@ -54,7 +55,7 @@ export function readServersConfig(saved: unknown): ServersConfig {
                 {
                     id,
                     name: "Minecraft server",
-                    game: "minecraft",
+                    game: defaultGame.id,
                     directory: "",
                     createdAt: Date.now(),
                     settings: { ...raw },
@@ -90,6 +91,7 @@ export function readServersConfig(saved: unknown): ServersConfig {
             !Number.isFinite(s.createdAt)
         )
             throw new Error("The saved servers are damaged");
+        gameFor(s.game);
         ids.add(s.id);
         directories.add(s.directory);
         return {
