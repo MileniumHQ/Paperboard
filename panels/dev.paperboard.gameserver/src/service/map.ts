@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "../games/minecraft/index";
 import { serverLocal } from "./scope";
 import * as fs from "node:fs";
 import { gunzipSync, inflateSync } from "node:zlib";
@@ -126,7 +127,7 @@ async function resolveRegionDir(
 const DIMENSION_ORDER = MAP_DIMENSIONS;
 
 function profileOf(ctx: ServiceContext<GameServerState>): VersionProfile {
-    return resolveVersionProfile(ctx.state.serverSoftware, ctx.state.serverVersion);
+    return resolveVersionProfile(minecraftSoftware(ctx.state.serverSoftware), ctx.state.serverVersion);
 }
 
 export async function listMapRegions(

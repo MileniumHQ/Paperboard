@@ -92,7 +92,7 @@ export default function ServersHome(props: { state: ServersState }) {
                         <PaperEmptyState
                             icon="dns"
                             title="No servers yet"
-                            description="Pick a game, set up your server, and invite your friends."
+                            description="Choose a game, set up a server, and invite your friends."
                         >
                             <PaperButton
                                 variant="primary"
@@ -109,7 +109,7 @@ export default function ServersHome(props: { state: ServersState }) {
                             {(server) => (
                                 <PaperMediaCard
                                     effect={false}
-                                    icon={server.icon ?? "dns"}
+                                    icon={server.icon ?? gameFor(server.game).icon}
                                     title={server.name}
                                     subtitle={`${gameFor(server.game).name} · ${gameFor(server.game).softwareLabel({ software: server.state.serverSoftware, version: server.state.serverVersion })}`}
                                     description={

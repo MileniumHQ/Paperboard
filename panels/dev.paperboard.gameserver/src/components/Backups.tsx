@@ -203,7 +203,7 @@ export default function Backups(props: { active: boolean }) {
                 </PaperSettingItem>
                 <PaperSettingItem
                     title="Routine Backups"
-                    description="Backs up the server on a schedule, even with Paperboard closed. A running server pauses saving during the copy."
+                    description="Backs up the server on a schedule, even with Paperboard closed. Minecraft pauses saving during the copy; offline-only games save, stop and restart if running."
                 >
                     <PaperToggle
                         checked={schedule() !== null}
@@ -307,7 +307,7 @@ export default function Backups(props: { active: boolean }) {
                     <PaperText preset="body">
                         {confirming()?.kind === "delete"
                             ? `The backup from ${confirming() ? dateText(confirming()!.record.createdAt) : ""} is deleted from ${status()?.location?.label ?? "its location"}.`
-                            : `The server stops, and its whole folder (worlds, settings, plugins and mods) is replaced with the backup from ${confirming() ? dateText(confirming()!.record.createdAt) : ""}. Anything since then is lost. Start the server again afterwards.`}
+                            : `The server stops, and its whole folder (worlds, settings, plugins and mods) is replaced with the backup from ${confirming() ? dateText(confirming()!.record.createdAt) : ""}. Anything since then is lost. Offline-only games restart if they were running; otherwise start the server afterwards.`}
                     </PaperText>
                     <Show when={confirmError()}>
                         <PaperText size={2} color="danger">{confirmError()}</PaperText>

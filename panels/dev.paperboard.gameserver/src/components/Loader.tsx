@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "../games/minecraft/index";
 import { createEffect, createSignal, on, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperPageHeader, PaperQuote } from "@mileniumhq/paperui";
 import ConfigSettings from "./ConfigSettings";
@@ -30,7 +31,7 @@ export default function Loader(props: { active: boolean }) {
         }),
     );
 
-    const name = () => SOFTWARE_NAMES[serverSoftware()];
+    const name = () => SOFTWARE_NAMES[minecraftSoftware(serverSoftware())];
 
     return (
         <>

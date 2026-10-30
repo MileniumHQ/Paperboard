@@ -1,9 +1,11 @@
+import { terrariaService } from "./terraria/service";
+import { terraria } from "./terraria";
 import { minecraft } from "./minecraft";
 import { currentServer } from "../service/scope";
 import { defaultGame, gameFor } from "./index";
 import { minecraftService } from "./minecraft/service";
 import type { GameService } from "./serviceTypes";
-const services: Readonly<Record<string, GameService>> = { [minecraft.id]: minecraftService };
+const services: Readonly<Record<string, GameService>> = { [minecraft.id]: minecraftService, [terraria.id]: terrariaService };
 export function gameServiceFor(id: string): GameService {
     const game = gameFor(id);
     const service = services[game.id];

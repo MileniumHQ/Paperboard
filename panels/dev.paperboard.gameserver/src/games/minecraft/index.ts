@@ -19,6 +19,8 @@ export const minecraft: GameDefinition = {
     id: "minecraft",
     name: "Minecraft",
     art: gameArt("minecraft"),
+    icon: "grass",
+    hostSupport: () => ({ supported: true }),
     softwareLabel: ({ software, version }) => `${SOFTWARE_NAMES[minecraftSoftware(software)]} ${version}`,
     describe({ software: raw, version }: GameOptions) {
         const software = minecraftSoftware(raw);
@@ -58,6 +60,7 @@ export const minecraft: GameDefinition = {
         if (!ready("playerStats")) unavailable.add(ACTION_IDS.listPlayerStats);
         const java = getRequiredJavaVersion(version);
         return {
+            options: [],
             control: { kind: "stdin" },
             tabs,
             actions: [...Object.values(ACTION_IDS), ...Object.values(TRIGGER_IDS)].filter((id) => !unavailable.has(id)),

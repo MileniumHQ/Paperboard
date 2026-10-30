@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "../games/minecraft/index";
 import {
     files as fileApi,
     config,
@@ -49,7 +50,7 @@ async function writeInstallRecords(
 export async function listInstalledPlugins(
     ctx: ServiceContext<GameServerState>,
 ): Promise<{ plugins: InstalledPlugin[]; warning?: string }> {
-    const dirName = pluginDirName(ctx.state.serverSoftware);
+    const dirName = pluginDirName(minecraftSoftware(ctx.state.serverSoftware));
     // a missing directory means "nothing installed yet", not an error: the
     // folder is only created on first install, and a warning here taught
     // users to ignore the warning bar
@@ -84,14 +85,14 @@ export async function deletePlugin(
     // here is irreversible destruction on a single RPC
     await trashRemovePathsWith(
         makeTrashRemoveDeps(),
-        [`${pluginDirName(ctx.state.serverSoftware)}/${safe}`],
+        [`${pluginDirName(minecraftSoftware(ctx.state.serverSoftware))}/${safe}`],
     );
     const records = await getInstallRecords();
     if (records[safe]) {
         delete records[safe];
         await writeInstallRecords(records);
     }
-    await forgetUploads(liveUploadDeps(ctx), [`${pluginDirName(ctx.state.serverSoftware)}/${safe}`]);
+    await forgetUploads(liveUploadDeps(ctx), [`${pluginDirName(minecraftSoftware(ctx.state.serverSoftware))}/${safe}`]);
 }
 
 // every add-on dir regardless of software: switching software changes

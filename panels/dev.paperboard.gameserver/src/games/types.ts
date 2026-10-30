@@ -18,7 +18,16 @@ export interface GameTab {
     variant?: "fill" | "full";
     width?: "full";
 }
+type OptionBase = { id: string; label: string; description?: string; restartRequired: boolean };
+export type GameOption = OptionBase & (
+    | { kind: "text"; default?: string }
+    | { kind: "number"; min: number; max: number; default?: number }
+    | { kind: "boolean"; default?: boolean }
+    | { kind: "select"; choices: readonly { value: string; label: string }[]; default?: string }
+    | { kind: "secret" }
+);
 export interface GameFeatures {
+    options: readonly GameOption[];
     control: Control;
     tabs: readonly GameTab[];
     actions: readonly string[];
@@ -37,6 +46,8 @@ export interface GameDefinition {
     id: string;
     name: string;
     art: GameArt;
+    icon: string;
+    hostSupport(host: { os: string; arch: string }, options: GameOptions): { supported: boolean; reason?: string };
     describe(options: GameOptions): GameFeatures;
     softwareLabel(options: GameOptions): string;
 }

@@ -43,7 +43,8 @@ export interface StateSetters {
     setLocalIp: (v: string) => void;
     setServerPort: (v: string) => void;
     setServerMotd: (v: string) => void;
-    setServerSoftware: (v: ServerSoftwareType) => void;
+    setServerSoftware: (v: string) => void;
+    setGameSettings?: (v: Readonly<Record<string, unknown>>) => void;
     setServerVersion: (v: string) => void;
     setRamAllocation: (v: number) => void;
     setActiveIssue: (v: ServerIssue | null) => void;
@@ -66,6 +67,7 @@ export function applyStatePatch(
     if (!source || typeof source !== "object") return;
 
     const table: { key: string; apply: (value: unknown) => void }[] = [
+        { key: "gameSettings", apply: (v) => setters.setGameSettings?.(v as Record<string, unknown>) },
         { key: "serverStatus", apply: (v) => setters.setServerStatus(v as ServerStatus) },
         { key: "serverEntries", apply: (v) => setters.setServerEntries(v as PaperConsoleEntry[]) },
         { key: "chatMessages", apply: (v) => setters.setChatMessages(v as ChatMessage[]) },

@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "../games/minecraft/index";
 import { serverBridge, serverSoftware, serverVersion } from "./server";
 import { ACTION_IDS } from "../service/contract";
 import { levelTypeOptionsFor } from "./versionProfile";
@@ -25,7 +26,7 @@ export const WORLD_CREATE_FIELDS: PropertyField[] = [
         // preset ids differ by era (see versionProfile); serverVersion is
         // unknown at module load, so the options resolve per render
         defaultValue: "normal",
-        options: () => levelTypeOptionsFor(serverSoftware(), serverVersion()),
+        options: () => levelTypeOptionsFor(minecraftSoftware(serverSoftware()), serverVersion()),
     },
     {
         key: "generate-structures",

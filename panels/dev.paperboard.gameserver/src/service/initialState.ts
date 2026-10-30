@@ -7,6 +7,7 @@ export const initialServerState = (): GameServerState => ({
     localIp: "127.0.0.1",
     serverPort: "25565",
     serverMotd: DEFAULT_MOTD,
+    gameSettings: {},
     serverSoftware: "paper",
     serverVersion: "",
     ramAllocation: 4,

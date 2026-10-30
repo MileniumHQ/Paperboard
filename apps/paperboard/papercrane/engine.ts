@@ -1611,6 +1611,10 @@ export class PaperCraneEngine {
         return this.services.prepareForBackup(requirePanelId(panelId), sourceId);
     }
 
+    public prepareServiceForRestore(panelId: string, sourceId?: string): Promise<boolean> {
+        return this.services.prepareForBackup(requirePanelId(panelId), sourceId, 300_000, "restore");
+    }
+
     /** runs fn (a backup copying the panel's data) with the panel's service
      * stopped, so the copy is not taken mid-write, then starts the service
      * again if it was running and waits for it to be ready. An optional rollback

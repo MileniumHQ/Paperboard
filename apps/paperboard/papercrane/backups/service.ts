@@ -476,7 +476,10 @@ export class BackupService {
                 if (record.sourceId && record.sourceId !== source?.id) throw new Error("This backup belongs to another source");
                 const entries = record.sourceId ? { files: "files", config: "config.json" } : this.engine.panelDataEntries(this.sources.owner(panelId));
                 const staged = await extractPanelArchive(archive, entries, staging);
-                await this.engine.withPanelOperation(this.sources.owner(panelId), () => source ? this.sources.restore(panelId, staged) : this.engine.replacePanelData(panelId, staged));
+                await this.engine.withPanelOperation(this.sources.owner(panelId), async () => {
+                    await this.engine.prepareServiceForRestore(this.sources.owner(panelId), source?.id);
+                    return source ? this.sources.restore(panelId, staged) : this.engine.replacePanelData(panelId, staged);
+                });
                 return record;
             } finally {
                 await fs.promises.rm(archive, { force: true });

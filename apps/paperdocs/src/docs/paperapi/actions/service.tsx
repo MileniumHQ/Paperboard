@@ -45,6 +45,16 @@ const service = definePanelService({
 });`}
             </PaperCode>
 
+            <PaperText preset="body">
+                Use beforeBackup to save or quiesce data before copying it. Use beforeRestore to
+                stop owned processes gracefully before files are replaced. Both receive the service
+                context and an options object with an optional sourceId for a named backup source.
+                A rejected hook fails the operation visibly. The daemon stops the service during
+                copying/replacement and starts it again afterwards if it was active; owned process
+                restart policy belongs to the panel, and should not be stored in a restored snapshot.
+                These hooks apply to all backup destinations and scheduled backups use beforeBackup.
+            </PaperText>
+
             <PaperText preset="subheader" id="configuration-options">Configuration options</PaperText>
             <PaperText preset="body">
                 definePanelService accepts the following options:

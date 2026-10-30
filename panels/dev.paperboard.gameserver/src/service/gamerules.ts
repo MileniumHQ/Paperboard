@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "../games/minecraft/index";
 import { config, processApi, type ServiceContext } from "./api";
 import { writeServerLineBestEffort } from "./serverConsole";
 import {
@@ -25,7 +26,7 @@ const MAX_GAMERULE_WRITES = 100;
 // pre-1.21.11 servers spell gamerules in camelCase and invert the `disable*`
 // rules; every console write and query is translated through the profile.
 function profileFor(ctx: ServiceContext<GameServerState>): VersionProfile {
-    return resolveVersionProfile(ctx.state.serverSoftware, ctx.state.serverVersion);
+    return resolveVersionProfile(minecraftSoftware(ctx.state.serverSoftware), ctx.state.serverVersion);
 }
 
 export function setGamerule(

@@ -46,7 +46,8 @@ export const [chatMessages, setChatMessages] = createSignal<ChatMessage[]>([]);
 export const [localIp, setLocalIp] = createSignal("127.0.0.1");
 export const [serverPort, setServerPort] = createSignal("25565");
 export const [serverMotd, setServerMotd] = createSignal(DEFAULT_MOTD);
-export const [serverSoftware, setServerSoftware] = createSignal<ServerSoftwareType>("paper");
+export const [serverSoftware, setServerSoftware] = createSignal<string>("paper");
+export const [gameSettings, setGameSettings] = createSignal<Readonly<Record<string, unknown>>>({});
 export const [serverVersion, setServerVersion] = createSignal("");
 export const [ramAllocation, setRamAllocation] = createSignal(4);
 export const [gamerules, setGamerules] = createSignal<Record<string, string>>({});
@@ -76,6 +77,7 @@ function currentSetters() {
         setServerPort,
         setServerMotd,
         setServerSoftware,
+        setGameSettings,
         setServerVersion,
         setRamAllocation,
         setActiveIssue,
