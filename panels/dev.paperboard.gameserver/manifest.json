@@ -1,7 +1,7 @@
 {
     "name": "Game Server",
     "id": "dev.paperboard.gameserver",
-    "version": "0.5.0",
+    "version": "0.3.0",
     "description": "Dedicated Minecraft and Terraria server manager",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
