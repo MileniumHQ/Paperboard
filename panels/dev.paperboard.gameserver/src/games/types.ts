@@ -29,7 +29,13 @@ type OptionBase = {
      * Overview edits it, as Terraria's message of the day.
      */
     scope?: "world" | "overview";
+    /** Options sharing a section are listed together under its title, after the unsectioned ones. */
+    section?: OptionSection;
 };
+export interface OptionSection {
+    title: string;
+    description?: string;
+}
 export type GameOption = OptionBase & (
     | { kind: "text"; default?: string }
     | { kind: "number"; min: number; max: number; default?: number }

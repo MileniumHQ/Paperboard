@@ -12,7 +12,7 @@ import {
     PaperText,
     PaperToggle,
 } from "@mileniumhq/paperui";
-import type { GameOption } from "../games";
+import type { GameOption, OptionSection } from "../games";
 import { serverBridge, serverStatus } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 
@@ -99,6 +99,16 @@ export default function GameOptions(props: { fields: readonly GameOption[] }) {
     const [saveError, setSaveError] = createSignal("");
     const [saving, setSaving] = createSignal(false);
     const fields = () => props.fields.filter((field) => !field.scope);
+    // unsectioned options first, then each section in the order it first appears
+    const groups = () => {
+        const list: { section?: OptionSection; fields: GameOption[] }[] = [{ fields: [] }];
+        for (const field of fields()) {
+            const group = list.find((g) => g.section?.title === field.section?.title);
+            if (group) group.fields.push(field);
+            else list.push({ section: field.section, fields: [field] });
+        }
+        return list.filter((g) => g.fields.length > 0);
+    };
     const online = () => serverStatus() !== "offline";
 
     const load = async () => {
@@ -161,21 +171,39 @@ export default function GameOptions(props: { fields: readonly GameOption[] }) {
                     </Show>
                 }
             >
-                <PaperSettingList autoHeight>
-                    <For each={fields()}>
-                        {(field) => (
-                            <PaperSettingItem title={field.label} description={field.description}>
-                                <GameOptionControl
-                                    field={field}
-                                    value={value(field)}
-                                    secretStored={Boolean(values()?.[field.id])}
-                                    disabled={online() || saving()}
-                                    onChange={(next) => void save(field.id, next)}
-                                />
-                            </PaperSettingItem>
+                <PaperFlex direction="column" gap="full" fullWidth>
+                    <For each={groups()}>
+                        {(group) => (
+                            <PaperFlex direction="column" gap="half" fullWidth>
+                                <Show when={group.section}>
+                                    {(section) => (
+                                        <PaperFlex direction="column" gap="onefourth">
+                                            <PaperText size={2} weight={700} color="text-subtle">{section().title}</PaperText>
+                                            <Show when={section().description}>
+                                                <PaperText size={2} color="text-subtle">{section().description}</PaperText>
+                                            </Show>
+                                        </PaperFlex>
+                                    )}
+                                </Show>
+                                <PaperSettingList autoHeight>
+                                    <For each={group.fields}>
+                                        {(field) => (
+                                            <PaperSettingItem title={field.label} description={field.description}>
+                                                <GameOptionControl
+                                                    field={field}
+                                                    value={value(field)}
+                                                    secretStored={Boolean(values()?.[field.id])}
+                                                    disabled={online() || saving()}
+                                                    onChange={(next) => void save(field.id, next)}
+                                                />
+                                            </PaperSettingItem>
+                                        )}
+                                    </For>
+                                </PaperSettingList>
+                            </PaperFlex>
                         )}
                     </For>
-                </PaperSettingList>
+                </PaperFlex>
             </Show>
         </>
     );
