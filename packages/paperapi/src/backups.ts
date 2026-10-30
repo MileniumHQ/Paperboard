@@ -13,6 +13,8 @@ export interface BackupRecord {
     /** sorts by creation time */
     id: string;
     panelId: string;
+    /** Present for backups made from a named source. */
+    sourceId?: string;
     /** ISO timestamp */
     createdAt: string;
     /** archive bytes */
@@ -101,7 +103,33 @@ function named(location: BackupLocation | null): BackupLocation | null {
 
 const status = (r: any): BackupStatus => ({ location: named(r?.destination ?? null), running: r?.running ?? null, schedule: r?.schedule ?? null });
 
+/** A named subset of a panel's files and config, with its own backup history. */
+export interface BackupSource {
+    id: string;
+    directory: string;
+    /** Property keys, or an array entry selected by its stable id. */
+    config: Array<string | { id: string }>;
+    processes: string[];
+    exclude?: string[];
+    /** One source may retain the panel's original backup history and schedule. */
+    legacy?: boolean;
+}
+
 export const backupApi = {
+    defineSource: (appId: string, source: BackupSource, scope?: string): Promise<void> =>
+        invokeIn<void>(scope, "backup-source-define", { panelId: requirePanelId(appId), source }),
+    forSource: (appId: string, sourceId: string, scope?: string) => {
+        const identity = { panelId: requirePanelId(appId), sourceId };
+        return {
+            status: async (): Promise<BackupStatus> => status(await invokeIn(scope, "backup-status", identity)),
+            list: (): Promise<BackupRecord[]> => invokeIn(scope, "backup-list", identity),
+            create: (options: { label?: string } = {}): Promise<BackupRecord> => invokeIn(scope, "backup-create", { ...identity, label: options.label }),
+            restore: (backupId: string): Promise<BackupRecord> => invokeIn(scope, "backup-restore", { ...identity, backupId }),
+            delete: (backupId: string): Promise<void> => invokeIn(scope, "backup-delete", { ...identity, backupId }),
+            setSchedule: async (schedule: { everyHours: BackupSchedule["everyHours"]; keep: number } | null): Promise<BackupStatus> => status(await invokeIn(scope, "backup-schedule-set", { ...identity, schedule })),
+            chooseLocation: (): Promise<ChooseBackupLocationResult> => backupApi.chooseLocation(appId, sourceId),
+        };
+    },
     /** where this panel's backups go, and whether one is running */
     status: async (appId: string, scope?: string): Promise<BackupStatus> =>
         status(await invokeIn(scope, "backup-status", { panelId: requirePanelId(appId) })),
@@ -130,10 +158,10 @@ export const backupApi = {
 
     /** shows Paperboard's backup location window for this panel. Call it
      * from the panel page, not a widget. */
-    chooseLocation: (appId: string): Promise<ChooseBackupLocationResult> =>
+    chooseLocation: (appId: string, sourceId?: string): Promise<ChooseBackupLocationResult> =>
         requestShell<ChooseBackupLocationResult>({
             type: "paperboard:backup-location",
-            fields: { panelId: requirePanelId(appId) },
+            fields: { panelId: requirePanelId(appId), ...(sourceId ? { sourceId } : {}) },
             unavailable: () => new BackupLocationError("unavailable", "Choosing a backup location needs a panel shown in Paperboard"),
             widget: () => new BackupLocationError("unavailable", "A widget cannot choose a backup location; open its panel instead"),
             busy: () => new BackupLocationError("busy", "The backup location window is already open"),
@@ -166,6 +194,6 @@ export const backupLocationsApi = {
     remove: (locationId: string, scope?: string): Promise<void> =>
         invokeIn<void>(scope, "backup-location-remove", { destinationId: locationId }),
     /** null clears the panel's choice */
-    setForPanel: async (panelId: string, locationId: string | null, scope?: string): Promise<BackupStatus> =>
-        status(await invokeIn(scope, "backup-panel-location-set", { panelId: requirePanelId(panelId), destinationId: locationId })),
+    setForPanel: async (panelId: string, locationId: string | null, scope?: string, sourceId?: string): Promise<BackupStatus> =>
+        status(await invokeIn(scope, "backup-panel-location-set", { panelId: requirePanelId(panelId), destinationId: locationId, sourceId })),
 };

@@ -208,6 +208,31 @@ describe("backups on this computer", () => {
         expect(f.seen()).toEqual(["good", "good"]);
     });
 
+    test("named source rollback restores its data and restarts the service without changing other sources", async () => {
+        const f = panelFixture();
+        const source = { id: "one", directory: "", config: ["projects", { id: "one" }, "settings"], processes: [], exclude: ["other"], legacy: true };
+        const one = { panelId: ID, sourceId: "one" };
+        f.writeData("broken", { projects: [{ id: "one", settings: { n: 1 } }, { id: "two", settings: { n: 9 } }] });
+        const files = f.engine.getFilePath("", ID);
+        fs.mkdirSync(path.join(files, "other"));
+        fs.writeFileSync(path.join(files, "other", "keep.txt"), "other workload");
+        expect((await f.call("backup:source-define", { panelId: ID, source }, ID)).error).toBeUndefined();
+        await f.call("backup:panel-destination-set", { ...one, destinationId: "local" });
+        const made = await f.call("backup:create", one, ID);
+        expect(made.error).toBeUndefined();
+        f.writeData("good", { projects: [{ id: "one", settings: { n: 2 } }, { id: "two", settings: { n: 10 } }] });
+        f.services.startService(ID);
+        await f.services.waitUntilReady(ID);
+        const restored = await f.call("backup:restore", { ...one, backupId: made.result.id }, ID);
+        expect(restored.error).toContain("exited before readiness");
+        expect(f.readData()).toEqual({ mode: "good", config: { projects: [{ id: "one", settings: { n: 2 } }, { id: "two", settings: { n: 10 } }] } });
+        expect(f.services.isActive(ID)).toBe(true);
+        expect(f.seen()).toEqual(["good", "good"]);
+        expect(fs.readFileSync(path.join(files, "other", "keep.txt"), "utf8")).toBe("other workload");
+        expect((await f.call("backup:source-define", { panelId: ID, source: { ...source, directory: "changed" } }, ID)).error).toContain("cannot change");
+        expect((await f.call("backup:status", { panelId: "dev.other.panel", sourceId: "one" }, ID)).code).toBe("FORBIDDEN");
+    });
+
     test("a restore that cannot park the config puts the parked files back and restarts the panel", async () => {
         const f = panelFixture();
         f.writeData("one", { n: 1 });

@@ -43,6 +43,42 @@ async function restoreNewest() {
 }`}
             </PaperCode>
 
+            <PaperText preset="subheader" id="named-sources">Named backup sources</PaperText>
+            <PaperText preset="body">
+                A panel that manages several workloads can register a source for each with <PaperCode>defineSource(appId, source)</PaperCode>.
+                Register sources from the service before showing their backup controls. The definition is durable: routine backups work while the panel is closed.
+                Each source has its own location, history and schedule. <PaperCode>forSource(appId, sourceId, computerId?)</PaperCode> returns
+                status, list, create, restore, delete, setSchedule and chooseLocation methods with the same arguments as the panel methods, without appId.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`await backupApi.defineSource(PANEL_ID, {
+    id: "project-one",
+    directory: "projects/project-one",
+    config: ["projects", { id: "project-one" }, "settings"],
+    processes: ["project-one-worker"],
+});
+const backups = backupApi.forSource(PANEL_ID, "project-one");
+if (!(await backups.status()).location) {
+    const choice = await backups.chooseLocation();
+    if (choice.status === "canceled") return;
+}
+await backups.create({ label: "Before updating" });`}
+            </PaperCode>
+            <PaperText preset="body">
+                The source id follows the Actions project id rule. directory is relative to the panel’s file storage.
+                config is a path into its config document: strings select properties and an object with id selects an array entry by its stable id.
+                processes names the panel-owned process ids that must stop before a restore. Only that source’s files and selected config value are restored.
+                The service still prepares for a backup and pauses during a copy or restore; its other workload processes keep running.
+                Source definitions cannot change after registration. Removing a workload should disable its schedule with <PaperCode>setSchedule(null)</PaperCode>; its backups stay available.
+            </PaperText>
+            <PaperText preset="body">
+                One source may set <PaperCode>legacy: true</PaperCode> to retain the panel’s existing backup location, history and routine schedule.
+                Use <PaperCode>directory: ""</PaperCode> when those files stay in the original panel folder, and <PaperCode>exclude: ["projects"]</PaperCode>
+                to keep other workloads’ top-level directories outside this source’s copies and restores.
+                Existing backups restore their original config as that source’s config value. New source backup records include sourceId.
+                The location window accepts an optional sourceId for the shell; panels should use the source handle’s chooseLocation method.
+            </PaperText>
+
             <PaperText preset="subheader" id="methods-and-signatures">Methods and signatures</PaperText>
             <PaperTable>
                 <thead>

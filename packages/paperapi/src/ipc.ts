@@ -185,6 +185,7 @@ export const RPC_ROUTES: Record<string, WsRoute> = {
         action: "secrets:purge",
         unwrap: (r) => r.purged ?? 0,
     },
+    "backup-source-define": { action: "backup:source-define" },
     "backup-status": { action: "backup:status" },
     // a backup copies and uploads the panel's data, a restore downloads and
     // swaps it in: both take as long as the bytes do

@@ -26,7 +26,8 @@ function destinationId(value: unknown): string {
 
 // a panel reaches only its own backups: the token claim names the panel
 function panelFor(params: any, action: string, ctx: RpcContext): string {
-    return resourcePanelId(ctx.callerPanelId(), assertPanelId(params?.panelId), action)!;
+    const owner = resourcePanelId(ctx.callerPanelId(), assertPanelId(params?.panelId), action)!;
+    return params?.sourceId === undefined ? owner : backupServiceFor(ctx.engine).sources.resolve(owner, assertStr(params.sourceId, "sourceId", 64));
 }
 
 // Locations are the user's choice, made in the shell: every location
@@ -37,6 +38,12 @@ export async function handleBackups(action: string, id: unknown, params: any, ct
     const backups = backupServiceFor(engine);
     try {
         switch (action) {
+            case "backup:source-define": {
+                const owner = resourcePanelId(ctx.callerPanelId(), assertPanelId(params?.panelId), action)!;
+                backups.sources.define(owner, params?.source);
+                reply(id, { success: true });
+                return true;
+            }
             case "backup:destinations":
                 requireHost(ctx.callerPanelId(), action);
                 reply(id, { destinations: backups.listDestinations() });
@@ -68,7 +75,7 @@ export async function handleBackups(action: string, id: unknown, params: any, ct
                 return true;
             case "backup:panel-destination-set": {
                 requireHost(ctx.callerPanelId(), action);
-                const panelId = assertPanelId(params?.panelId);
+                const panelId = panelFor(params, action, ctx);
                 const dest = params?.destinationId === null ? null : destinationId(params?.destinationId);
                 await backups.setPanelDestination(panelId, dest);
                 reply(id, backups.status(panelId));

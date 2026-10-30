@@ -30,7 +30,7 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
     let frame: HTMLIFrameElement | undefined;
     let generation = "";
     // the backup location window this frame asked for, answered on it
-    const [chooser, setChooser] = createSignal<{ requestId: string; generation: string; target: Window } | null>(null);
+    const [chooser, setChooser] = createSignal<{ requestId: string; sourceId?: string; generation: string; target: Window } | null>(null);
     createEffect(() => {
         const reload = props.reload;
         generation = crypto.randomUUID();
@@ -57,7 +57,7 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
                 const answer = (result: BackupLocationChoice) =>
                     target.postMessage({ type: BACKUP_LOCATION_RESULT, generation: current, requestId: request.requestId, result }, "*");
                 if (request.refused) answer({ status: "failed", message: request.refused });
-                else setChooser({ requestId: request.requestId, generation: current, target });
+                else setChooser({ requestId: request.requestId, sourceId: request.sourceId, generation: current, target });
             } else {
                 // a save or open dialog, answered on the frame that asked
                 const request = parseFileTransferMessage(event.data);
@@ -79,7 +79,7 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
             allow="clipboard-read; clipboard-write; microphone; camera; display-capture"
             onLoad={() => frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName }, "*")}
             class={`${styles.frame} ${styles.panelFrame}`} classList={{ [styles.unpainted]: !ready() || Boolean(failure()) || Boolean(props.restart) }} />
-        <BackupLocationChooser computerId={computerId} computerName={props.computerName} panelId={panelId} open={chooser() !== null} onDone={(result) => {
+        <BackupLocationChooser computerId={computerId} computerName={props.computerName} panelId={panelId} sourceId={chooser()?.sourceId} open={chooser() !== null} onDone={(result) => {
             const request = chooser();
             setChooser(null);
             if (request && request.generation === generation) request.target.postMessage({ type: BACKUP_LOCATION_RESULT, generation: request.generation, requestId: request.requestId, result }, "*");

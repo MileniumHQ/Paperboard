@@ -16,3 +16,10 @@ test("refuses another panel's id and a second open window", () => {
     expect(parseBackupLocationRequest({ type: "paperboard:backup-location", requestId: "r", panelId: "dev.example.other" }, PANEL, false)?.refused).toContain("does not match");
     expect(parseBackupLocationRequest({ type: "paperboard:backup-location", requestId: "r", panelId: PANEL }, PANEL, true)?.refused).toContain("already open");
 });
+
+test("a source choice keeps the frame owner and the named source", () => {
+    const request = { type: "paperboard:backup-location", requestId: "source-choice", panelId: PANEL, sourceId: "project-one" };
+    expect(parseBackupLocationRequest(request, PANEL, false)).toEqual({ requestId: "source-choice", refused: null, sourceId: "project-one" });
+    expect(parseBackupLocationRequest({ ...request, sourceId: "../other" }, PANEL, false)).toBeNull();
+    expect(parseBackupLocationRequest({ ...request, panelId: "dev.other.panel" }, PANEL, false)?.refused).toContain("does not match");
+});

@@ -1,3 +1,4 @@
+import { BackupSources } from "./sources";
 // The daemon's backup service: which location each panel backs up to, and
 // creating, listing, restoring and deleting a panel's backups there.
 //
@@ -111,6 +112,7 @@ export function isNewerVersion(made: string | null, installed: string | null): b
 }
 
 export class BackupService {
+    readonly sources: BackupSources;
     private readonly root: string;
     private readonly configFile: string;
     private readonly workDir: string;
@@ -132,6 +134,7 @@ export class BackupService {
         private readonly driveEndpoints: DriveEndpoints = GOOGLE_ENDPOINTS,
         options: { now?: () => number } = {},
     ) {
+        this.sources = new BackupSources(engine);
         this.root = path.join(engine.getAppDataDir(), "backups");
         this.configFile = path.join(this.root, "destinations.json");
         this.schedulesFile = path.join(this.root, "schedules.json");
@@ -139,7 +142,9 @@ export class BackupService {
         this.workDir = path.join(this.root, ".work");
         this.now = options.now ?? Date.now;
         // a panel whose data is deleted takes its routine backups with it
-        this.unsubscribe = engine.onPanelDataDeleted((panelId) => this.forgetSchedule(panelId));
+        this.unsubscribe = engine.onPanelDataDeleted(async (panelId) => {
+            for (const key of new Set([panelId, ...this.sources.keysForOwner(panelId)])) await this.forgetSchedule(key);
+        });
     }
 
     // ─── Locations ──────────────────────────────────────────────────────
@@ -337,7 +342,7 @@ export class BackupService {
     }
 
     async setPanelDestination(panelId: string, destinationId: string | null): Promise<void> {
-        this.engine.installedPanelVersion(panelId); // refuses a panel that is not installed
+        this.engine.installedPanelVersion(this.sources.owner(panelId)); // refuses a panel that is not installed
         await this.mutate((config) => {
             if (destinationId === null) delete config.panels[panelId];
             else config.panels[panelId] = this.destination(destinationId, config).id;
@@ -393,23 +398,30 @@ export class BackupService {
             const id = newBackupId();
             const archive = path.join(this.workDir, `${id}.pbbackup`);
             try {
-                const { size, sha256, panelVersion } = await this.engine.withPanelOperation(panelId, async () => {
+                const { size, sha256, panelVersion } = await this.engine.withPanelOperation(this.sources.owner(panelId), async () => {
                     // a service that takes part gets ready first (a game
                     // server stops writing its world). When that fails the
                     // service is still stopped and started again below, which
                     // undoes a half-done preparation, and nothing is copied.
                     let notReady: unknown = null;
                     try {
-                        await this.engine.prepareServiceForBackup(panelId);
+                        await this.engine.prepareServiceForBackup(this.sources.owner(panelId));
                     } catch (err) {
                         notReady = err;
                     }
-                    return this.engine.withServicePaused(panelId, async () => {
+                    return this.engine.withServicePaused(this.sources.owner(panelId), async () => {
                         if (notReady !== null) {
                             throw conflict(`The panel could not get ready for a backup: ${notReady instanceof Error ? notReady.message : String(notReady)}`);
                         }
-                        const panelVersion = this.engine.installedPanelVersion(panelId);
-                        const made = await createPanelArchive(this.engine.getAppDataDir(), this.engine.panelDataEntries(panelId), archive);
+                        const panelVersion = this.engine.installedPanelVersion(this.sources.owner(panelId));
+                        let made: { size: number; sha256: string };
+                        if (this.sources.get(panelId)) {
+                            const snapshot = await fs.promises.mkdtemp(path.join(this.workDir, "source-"));
+                            try {
+                                const entries = await this.sources.snapshot(panelId, snapshot);
+                                made = await createPanelArchive(snapshot, entries, archive);
+                            } finally { await fs.promises.rm(snapshot, { recursive: true, force: true }); }
+                        } else made = await createPanelArchive(this.engine.getAppDataDir(), this.engine.panelDataEntries(panelId), archive);
                         return { ...made, panelVersion };
                     });
                 });
@@ -422,6 +434,7 @@ export class BackupService {
                     sha256,
                     panelVersion,
                     label: label?.trim() || null,
+                    ...(this.sources.get(panelId) ? { sourceId: this.sources.get(panelId)!.id } : {}),
                 };
                 await store.put(record, archive);
                 return record;
@@ -446,7 +459,7 @@ export class BackupService {
         const store = this.panelStore(panelId);
         return this.job(panelId, "restore", async () => {
             const record = await this.find(store, panelId, backupId);
-            const installed = this.engine.installedPanelVersion(panelId);
+            const installed = this.engine.installedPanelVersion(this.sources.owner(panelId));
             if (isNewerVersion(record.panelVersion, installed)) {
                 throw conflict(`This backup was made by version ${record.panelVersion} of the panel; ${installed} is installed. Update the panel first`);
             }
@@ -458,9 +471,12 @@ export class BackupService {
                 if (size !== record.size || (await sha256File(archive)) !== record.sha256) {
                     throw new Error("The downloaded backup does not match its record; it was not restored");
                 }
-                const entries = this.engine.panelDataEntries(panelId);
+                const source = this.sources.get(panelId);
+                if (source && !source.legacy && !record.sourceId) throw new Error("This backup is not a named source backup");
+                if (record.sourceId && record.sourceId !== source?.id) throw new Error("This backup belongs to another source");
+                const entries = record.sourceId ? { files: "files", config: "config.json" } : this.engine.panelDataEntries(this.sources.owner(panelId));
                 const staged = await extractPanelArchive(archive, entries, staging);
-                await this.engine.withPanelOperation(panelId, () => this.engine.replacePanelData(panelId, staged));
+                await this.engine.withPanelOperation(this.sources.owner(panelId), () => source ? this.sources.restore(panelId, staged) : this.engine.replacePanelData(panelId, staged));
                 return record;
             } finally {
                 await fs.promises.rm(archive, { force: true });
@@ -491,7 +507,7 @@ export class BackupService {
 
     /** sets or (with null) removes the panel's routine backups */
     async setSchedule(panelId: string, input: unknown): Promise<BackupSchedule | null> {
-        this.engine.installedPanelVersion(panelId); // refuses a panel that is not installed
+        this.engine.installedPanelVersion(this.sources.owner(panelId)); // refuses a panel that is not installed
         if (input === null) {
             await this.mutateSchedules((schedules) => {
                 delete schedules.panels[panelId];
@@ -593,7 +609,7 @@ export class BackupService {
         let result: ScheduleResult;
         let retrySoon = false;
         try {
-            this.engine.installedPanelVersion(panelId);
+            this.engine.installedPanelVersion(this.sources.owner(panelId));
         } catch (err) {
             // an uninstalled panel's data is kept for a reinstall, and so is
             // its schedule; it is looked at again after a full interval

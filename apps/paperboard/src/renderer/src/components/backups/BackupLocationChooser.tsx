@@ -11,7 +11,7 @@ export type BackupLocationChoice = { status: "chosen"; location: BackupLocation 
 // backup locations with how much space each has, and which one this
 // panel's backups go to. Only the shell sets the choice. It stays mounted and
 // opens per request, so PaperModal plays its own open and close.
-const BackupLocationChooser: Component<{ computerId: string; computerName: string; panelId: string; open: boolean; onDone: (choice: BackupLocationChoice) => void }> = (props) => {
+const BackupLocationChooser: Component<{ computerId: string; computerName: string; panelId: string; sourceId?: string; open: boolean; onDone: (choice: BackupLocationChoice) => void }> = (props) => {
     const [locations, setLocations] = createSignal<BackupLocation[] | null>(null);
     const [usage, setUsage] = createSignal<Record<string, UsageState>>({});
     const [selected, setSelected] = createSignal("");
@@ -34,7 +34,7 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
         setError("");
         setLocations(null);
         try {
-            const [list, status] = await Promise.all([backupLocationsApi.list(props.computerId), backupApi.status(props.panelId, props.computerId)]);
+            const [list, status] = await Promise.all([backupLocationsApi.list(props.computerId), props.sourceId ? backupApi.forSource(props.panelId, props.sourceId, props.computerId).status() : backupApi.status(props.panelId, props.computerId)]);
             if (!openings.isCurrent(token)) return;
             setLocations(list);
             setSelected(status.location?.id ?? list[0]?.id ?? "");
@@ -58,7 +58,7 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
         setSaving(true);
         setError("");
         try {
-            const status = await backupLocationsApi.setForPanel(props.panelId, selected(), props.computerId);
+            const status = await backupLocationsApi.setForPanel(props.panelId, selected(), props.computerId, props.sourceId);
             if (!status.location) throw new Error("The computer did not keep the choice");
             finish({ status: "chosen", location: status.location }, token);
         } catch (err) {

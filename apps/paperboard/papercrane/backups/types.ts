@@ -8,6 +8,7 @@ export interface BackupRecord {
     format: 1;
     id: string;
     panelId: string;
+    sourceId?: string;
     /** ISO timestamp */
     createdAt: string;
     /** archive bytes */
@@ -64,6 +65,7 @@ export function parseBackupRecord(raw: unknown): BackupRecord | null {
     if (!raw || typeof raw !== "object") return null;
     const r = raw as Record<string, unknown>;
     if (r.format !== 1) return null;
+    if (r.sourceId !== undefined && (typeof r.sourceId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(r.sourceId))) return null;
     if (typeof r.id !== "string" || !BACKUP_ID_RE.test(r.id)) return null;
     if (!isPanelId(r.panelId)) return null;
     if (typeof r.createdAt !== "string" || Number.isNaN(Date.parse(r.createdAt))) return null;
@@ -75,6 +77,7 @@ export function parseBackupRecord(raw: unknown): BackupRecord | null {
         format: 1,
         id: r.id,
         panelId: r.panelId,
+        ...(typeof r.sourceId === "string" ? { sourceId: r.sourceId } : {}),
         createdAt: r.createdAt,
         size: r.size,
         sha256: r.sha256,

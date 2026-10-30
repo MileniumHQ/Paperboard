@@ -1543,12 +1543,30 @@ export class PaperCraneEngine {
 
     /** runs fn (a backup copying the panel's data) with the panel's service
      * stopped, so the copy is not taken mid-write, then starts the service
-     * again if it was running and waits for it to be ready. A service that
+     * again if it was running and waits for it to be ready. An optional rollback
+     * runs while stopped if the work or its restart fails, then the original
+     * service is restarted. A service that
      * does not come back fails the call. Call inside withPanelOperation. */
-    public async withServicePaused<T>(panelId: string, fn: () => Promise<T>): Promise<T> {
+    public async withServicePaused<T>(panelId: string, fn: () => Promise<T>, rollback?: () => Promise<void>): Promise<T> {
         const cleanId = requirePanelId(panelId);
         const wasActive = this.services.isActive(cleanId);
         if (wasActive) await this.services.stopService(cleanId);
+        if (rollback) {
+            try {
+                const result = await fn();
+                if (wasActive && this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
+                return result;
+            } catch (err) {
+                try {
+                    await this.services.stopService(cleanId);
+                    await rollback();
+                    if (wasActive && this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
+                } catch (rollbackError) {
+                    throw new Error(`The operation failed (${err instanceof Error ? err.message : String(err)}) and rollback failed (${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)})`, { cause: err });
+                }
+                throw err;
+            }
+        }
         let result: T;
         try {
             result = await fn();

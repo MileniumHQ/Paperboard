@@ -6,7 +6,7 @@
 export const BACKUP_LOCATION_REQUEST = "paperboard:backup-location";
 export const BACKUP_LOCATION_RESULT = `${BACKUP_LOCATION_REQUEST}-result`;
 
-export type BackupLocationRequest = { requestId: string; refused: string | null };
+export type BackupLocationRequest = { requestId: string; sourceId?: string; refused: string | null };
 
 /** null for anything that is not a well-formed backup location request */
 export function parseBackupLocationRequest(data: unknown, framePanelId: string, alreadyOpen: boolean): BackupLocationRequest | null {
@@ -14,7 +14,8 @@ export function parseBackupLocationRequest(data: unknown, framePanelId: string, 
     const message = data as Record<string, unknown>;
     if (message.type !== BACKUP_LOCATION_REQUEST) return null;
     if (typeof message.requestId !== "string" || !message.requestId || message.requestId.length > 128) return null;
+    if (message.sourceId !== undefined && (typeof message.sourceId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(message.sourceId))) return null;
     const refused =
         message.panelId !== framePanelId ? "The panel id does not match the panel that asked" : alreadyOpen ? "The backup location window is already open" : null;
-    return { requestId: message.requestId, refused };
+    return { requestId: message.requestId, refused, ...(typeof message.sourceId === "string" ? { sourceId: message.sourceId } : {}) };
 }
