@@ -12,6 +12,20 @@
         "tar": "^7.5.22",
       },
     },
+    "apps/modscan": {
+      "name": "modscan",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@cloudflare/workers-types": "^5.20261005.1",
+        "@types/bun": "latest",
+        "wrangler": "^4.147.0",
+        "miniflare": "5.20261001.0-alpha",
+        "esbuild": "^0.28.1"
+      },
+      "peerDependencies": {
+        "typescript": "^5"
+      }
+    },
     "apps/origami": {
       "name": "origami",
       "version": "0.3.0",
@@ -1272,6 +1286,8 @@
     "obug": ["obug@2.2.1", "", {}, "sha512-XrsrhT5sybtKI6wakr2SPOlGZWWYbUXZ7a0jT8/QOeAPau+1X/bSegNe5YR75oJmEZQbKningirmGOEJCIk61Q=="],
 
     "once": ["once@1.4.0", "", { "dependencies": { "wrappy": "1" } }, "sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w=="],
+
+    "modscan": ["modscan@workspace:apps/modscan"],
 
     "origami": ["origami@workspace:apps/origami"],
 

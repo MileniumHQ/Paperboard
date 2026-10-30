@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "lib": ["ESNext"], "target": "ESNext", "module": "Preserve",
+    "moduleResolution": "bundler", "types": ["@cloudflare/workers-types", "bun"],
+    "strict": true, "skipLibCheck": true, "noEmit": true,
+    "noUncheckedIndexedAccess": true, "verbatimModuleSyntax": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

@@ -339,6 +339,11 @@
                         "name": "Widgets",
                         "file": "widgets",
                         "index": 2
+                    },
+                    "workshop-metadata": {
+                        "name": "Workshop metadata",
+                        "file": "workshop-metadata",
+                        "index": 3
                     }
                 }
             },

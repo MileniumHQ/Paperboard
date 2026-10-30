@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "modscan",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "panels.ariapis.com/modscan/*", "zone_name": "ariapis.com" }],
+  "ratelimits": [{ "name": "CLIENT_LIMIT", "namespace_id": "1281930", "simple": { "limit": 60, "period": 60 } }],
+  "durable_objects": { "bindings": [{ "name": "BUDGET", "class_name": "SteamBudget" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SteamBudget"] }],
+  // No request/subrequest tracing: Steam authenticates search via a query-string key.
+  "observability": { "enabled": false }
+}
