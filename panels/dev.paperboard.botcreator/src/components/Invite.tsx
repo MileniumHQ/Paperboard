@@ -11,13 +11,14 @@ import {
     PaperSeparator,
 } from "@mileniumhq/paperui";
 import { actionsApi } from "@mileniumhq/paperapi";
+import { PANEL_ID, type BotSummary } from "../bots";
 import {
     PERMISSION_DEFINITIONS,
     DEFAULT_SELECTED_PERMISSIONS,
     errorToMessage,
 } from "../types";
 
-export default function Invite() {
+export default function Invite(props: { bot: () => BotSummary }) {
     const [inviteUrl, setInviteUrl] = createSignal("");
     const [inviteError, setInviteError] = createSignal("");
     const [userInstallUrl, setUserInstallUrl] = createSignal("");
@@ -33,9 +34,9 @@ export default function Invite() {
         setInviteError("");
         try {
             const url = await actionsApi.call<string>(
-                "dev.paperboard.botcreator",
+                PANEL_ID,
                 "get-invite-url",
-                perms,
+                { bot: props.bot().id, permissions: perms },
             );
             if (!url) throw new Error("get-invite-url returned no link");
             if (request === inviteRequest) setInviteUrl(url);
@@ -52,8 +53,9 @@ export default function Invite() {
         setUserInstallError("");
         try {
             const url = await actionsApi.call<string>(
-                "dev.paperboard.botcreator",
+                PANEL_ID,
                 "get-user-install-url",
+                { bot: props.bot().id },
             );
             if (!url) throw new Error("get-user-install-url returned no link");
             setUserInstallUrl(url);

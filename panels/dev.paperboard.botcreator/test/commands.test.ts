@@ -30,7 +30,7 @@ import {
     type SlashCommandOption,
 } from "../src/types";
 import {
-    buildHealth,
+    BotSession,
     buildInviteUrl,
     buildUserInstallUrl,
     buildGuildDetail,
@@ -39,11 +39,22 @@ import {
     commandTriggerDefinition,
     describeChannelKind,
     syncSlashCommands,
-    rememberInteraction,
-    takeInteraction,
-    pendingInteractionCount,
-    clearPendingInteractions,
 } from "../src/service";
+
+// one bot's session: its pending interactions and health are its own
+const session = new BotSession("bot", { emit: () => {}, changed: () => {} });
+const rememberInteraction = (interaction: any) => session.rememberInteraction(interaction);
+const takeInteraction = (id: string) => session.takeInteraction(id);
+const pendingInteractionCount = () => session.pendingCount();
+const clearPendingInteractions = () => session.clearPendingInteractions();
+const buildHealth = (client: Client | null) => {
+    session.client = client;
+    try {
+        return session.health();
+    } finally {
+        session.client = null;
+    }
+};
 
 function command(
     name: string,
@@ -560,7 +571,7 @@ describe("pending interaction store", () => {
     it("keeps an answered interaction for a follow-up and an edit", async () => {
         const { actions } = await import("../src/service");
         const run = (id: string, inputs: Record<string, unknown>) =>
-            (actions.find((a: any) => a.id === id) as any).run({}, inputs);
+            (actions.find((a: any) => a.id === id) as any).run({ session }, inputs);
         const calls: string[] = [];
         const live: any = {
             id: "live",

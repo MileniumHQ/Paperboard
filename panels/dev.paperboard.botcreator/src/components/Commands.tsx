@@ -18,7 +18,8 @@ import {
     PaperCheckbox,
     PaperCopyButton,
 } from "@mileniumhq/paperui";
-import { actionsApi, config } from "@mileniumhq/paperapi";
+import { actionsApi } from "@mileniumhq/paperapi";
+import { PANEL_ID, type BotSummary } from "../bots";
 import {
     GLOBAL_SCOPE,
     COMMAND_DESCRIPTION_MAX_LENGTH,
@@ -42,7 +43,6 @@ import {
     type SlashCommandOption,
 } from "../types";
 
-const PANEL_ID = "dev.paperboard.botcreator";
 
 interface Outcome {
     title: string;
@@ -57,7 +57,8 @@ function newOptionId(): string {
     return `opt-${Date.now().toString(36)}-${nextOptionId++}`;
 }
 
-export default function Commands() {
+export default function Commands(props: { bot: () => BotSummary }) {
+    const bot = () => props.bot().id;
     const [commands, setCommands] = createSignal<SlashCommandDefinition[]>([]);
     const [guilds, setGuilds] = createSignal<GuildSummary[]>([]);
     // null until the first health read answers: unknown is not offline
@@ -85,15 +86,15 @@ export default function Commands() {
         setGuildsError("");
         setHealthError("");
         try {
-            const saved = await config.get<any>(PANEL_ID);
-            setCommands(normalizeCommandDefinitions(saved?.commands));
+            const saved = await actionsApi.call<unknown>(PANEL_ID, "list-commands", { bot: bot() });
+            setCommands(normalizeCommandDefinitions(saved));
         } catch (err) {
             console.error("[Commands] saved commands read failed:", err);
             setLoadError(errorToMessage(err));
         }
 
         try {
-            const list = await actionsApi.call<GuildSummary[]>(PANEL_ID, "list-guilds");
+            const list = await actionsApi.call<GuildSummary[]>(PANEL_ID, "list-guilds", { bot: bot() });
             if (!Array.isArray(list)) throw new Error("list-guilds returned no server list");
             setGuilds(list);
         } catch (err) {
@@ -102,7 +103,7 @@ export default function Commands() {
         }
 
         try {
-            const health = await actionsApi.call<Health>(PANEL_ID, "get-health");
+            const health = await actionsApi.call<Health>(PANEL_ID, "get-health", { bot: bot() });
             if (!health || typeof health !== "object") {
                 throw new Error("get-health returned no health payload");
             }
@@ -230,6 +231,7 @@ export default function Commands() {
                 PANEL_ID,
                 "create-command",
                 {
+                    bot: bot(),
                     name: name(),
                     description: description(),
                     scope: scope(),
@@ -258,7 +260,7 @@ export default function Commands() {
             const result = await actionsApi.call<CommandMutationResult>(
                 PANEL_ID,
                 "delete-command",
-                { id: target.id },
+                { bot: bot(), id: target.id },
             );
             setCommands((prev) => prev.filter((c) => c.id !== target.id));
             setActionError(mutationProblem(result));

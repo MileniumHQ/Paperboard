@@ -1,26 +1,15 @@
-import {
-    Client,
-    GatewayIntentBits,
-    ChannelType,
-    PermissionsBitField,
-    ActivityType,
-    MessageFlags,
-    ApplicationCommandOptionType,
-    ApplicationCommandType,
-    ApplicationIntegrationType,
-    type ApplicationCommandOptionData,
-    type ChatInputApplicationCommandData,
-    type ChatInputCommandInteraction,
-    type ColorResolvable,
-    type RepliableInteraction,
-} from "discord.js";
+// Bot Creator's service: every bot the panel runs, each with its own
+// session and its own Actions project. A bot's Discord actions and events
+// live in its project ("<bot>/send-message"), so two bots share nothing in
+// a flow; the builders that never touch Discord (embeds, buttons, menus)
+// are global. The panel's own controls reach the service through internal
+// actions that name the bot.
+import { ActivityType, ChannelType, PermissionsBitField, type Client, type ColorResolvable } from "discord.js";
 import {
     INPUTS,
     MessageOps,
     InteractionOps,
     buildDiscordEmbed,
-    AUTO_ACK_DELAY_MS,
-    autoAcknowledge,
     buildButtonComponent,
     buildComponentRow,
     buildModalField,
@@ -28,8 +17,6 @@ import {
     buildSelectMenuComponent,
     MAX_MODAL_FIELDS,
     MAX_SELECT_OPTIONS,
-    componentClickPayload,
-    modalSubmitPayload,
     resolveGuild,
     resolveMember,
     type DiscordEmbedData,
@@ -39,47 +26,60 @@ import {
     definePanelService,
     defineAction,
     defineType,
-    config,
     secretsApi,
     actionsApi,
+    projectActionId,
+    resolveItemCategory,
+    config,
+    type ActionDefinition,
+    type ActionProjectHandle,
     type ServiceContext,
 } from "@mileniumhq/paperapi";
 import { randomUUID } from "node:crypto";
-import { CommandActivityRecorder } from "./commandActivity";
 import {
     extractApplicationIdFromToken,
-    appendCapped,
-    RECENT_MESSAGE_CAP,
     GLOBAL_SCOPE,
     MAX_COMMANDS_PER_SCOPE,
     MAX_COMMAND_OPTIONS,
     SNOWFLAKE_PATTERN,
-    INTERACTION_TTL_MS,
-    PENDING_INTERACTION_CAP,
     MEMBER_SEARCH_LIMIT,
     describeCommandProblem,
     describeCommandOptionProblem,
-    normalizeCommandDefinitions,
     normalizeCommandName,
     commandTriggerId,
-    findCommandForInteraction,
     errorToMessage,
     type SlashCommandDefinition,
     type SlashCommandOption,
     type CommandOptionType,
     type CommandMutationResult,
-    type DiscordChannelKind,
-    type Health,
-    type GuildSummary,
-    type GuildDetail,
-    type MemberSummary,
 } from "./types";
+import {
+    BOTS_VERSION,
+    LEGACY_TOKEN_NAME,
+    MAX_BOTS,
+    PANEL_ID,
+    createBotId,
+    isBotId,
+    readBotsConfig,
+    tokenName,
+    type BotSummary,
+    type BotsServiceState,
+    type StoredBot,
+} from "./bots";
+import {
+    BotSession,
+    buildGuildDetail,
+    buildMemberSummaries,
+} from "./session";
 
-// pass PANEL_ID explicitly, ambient scope resolves to last-imported panel
-const PANEL_ID = "dev.paperboard.botcreator";
-
-// bot token lives in the daemon secret vault, never in panel config
-const TOKEN_NAME = "bot-token";
+export {
+    BotSession,
+    buildGuildDetail,
+    buildMemberSummaries,
+    commandPayload,
+    describeChannelKind,
+    syncSlashCommands,
+} from "./session";
 
 export const discordChannelType = defineType({
     id: "discord-channel",
@@ -193,252 +193,31 @@ function discordCategory(name: string): { name: string; icon: string; order: num
     return found ? { ...found } : { name, icon: "category", order: 999 };
 }
 
-let client: Client | null = null;
-let savedAppId = "";
-
-// sequence guard for concurrent connect attempts: only the newest
-// startBot attempt may write shared state (client/connectionStatus) —
-// a losing attempt's outcome must never overwrite a winner's
-let connectSequence = 0;
-
-// connection state is explicit, never inferred: a failed login nulls the
-// client and records the typed error here (surfaced via get-bot-info and
-// the on-connection-error trigger), so the UI can never show "online"
-// for a bot that isn't running. The same rule applies mid-session:
-// gateway disconnects invalidate the status (see attachListeners), and a
-// successful reconnect marks it live again via clientReady/shardReady.
-export interface ConnectionStatus {
-    connected: boolean;
-    error?: string;
-}
-
-let connectionStatus: ConnectionStatus = { connected: false };
-
-export function getConnectionStatus(): ConnectionStatus {
-    return { ...connectionStatus };
-}
-
-// proof-of-loop evidence: the last messages the bot session received,
-// capped so a busy server can never grow this without bound. A new session
-// starts empty (cleared in startBot); disconnecting keeps the last evidence
-// beside connected:false. Exposed through get-bot-info. The cap lives in
-// types.ts, shared with the UI's live subscription of the same list.
-export { RECENT_MESSAGE_CAP };
-
-export interface RecentMessage {
-    content: string;
-    author: string;
-    authorId: string;
-    channelId: string;
-    guildId: string | null;
-    messageId: string;
-}
-
-let recentMessages: RecentMessage[] = [];
-
-export function getRecentMessages(): RecentMessage[] {
-    return [...recentMessages];
-}
-
-export function clearRecentMessages(): void {
-    recentMessages = [];
-}
-
-export function recordRecentMessage(msg: RecentMessage): void {
-    recentMessages = appendCapped(recentMessages, msg, RECENT_MESSAGE_CAP);
-}
-
-export interface BotChannelInfo {
-    id: string;
-    name: string;
-}
-
-export interface BotGuildInfo {
-    id: string;
-    name: string;
-    channels: BotChannelInfo[];
-}
-
-// guild list straight from the client cache (bounded slices: the cache is
-// already finite, this keeps the wire shape finite too)
-export function listGuilds(bot: Client | null = client): BotGuildInfo[] {
-    if (!bot) return [];
-    return [...bot.guilds.cache.values()].slice(0, 100).map((guild) => ({
-        id: guild.id,
-        name: guild.name,
-        channels: [...guild.channels.cache.values()]
-            .filter(
-                (channel) =>
-                    channel.type === ChannelType.GuildText ||
-                    channel.type === ChannelType.GuildAnnouncement,
-            )
-            .slice(0, 100)
-            .map((channel) => ({
-                id: channel.id,
-                name: (channel as { name?: string }).name ?? channel.id,
-            })),
-    }));
-}
-
-export function buildBotInfo(bot: Client | null = client) {
-    return {
-        name: bot?.user?.username || "Discord Bot",
-        avatar: bot?.user?.displayAvatarURL() || "",
-        tag: bot?.user?.tag || "",
-        guildCount: bot?.guilds?.cache?.size || 0,
-        guilds: listGuilds(bot),
-        applicationId: bot?.user?.id || savedAppId,
-        connected: bot !== null && connectionStatus.connected,
-        lastError: connectionStatus.error ?? null,
-        recentMessages: getRecentMessages(),
-    };
-}
-
 // ---------------------------------------------------------------------------
-// Home widgets
+// which bot an action runs as
 // ---------------------------------------------------------------------------
 
-// slash commands run, per hour, for the Command activity widget. One owner
-// (this module), fixed size, outlives reconnects so a gateway blip does not
-// wipe the day's chart
-export const commandActivity = new CommandActivityRecorder();
-
-export interface BotWidgetStatus {
-    /** a token was saved through setup; false means the bot needs setting up */
-    configured: boolean;
-    connected: boolean;
-    lastError: string | null;
-    name: string;
-    avatar: string;
-    guildCount: number;
+// a bot's actions run with its session as their context; the service binds
+// it when it registers them into the bot's project
+interface BotActionContext {
+    session: BotSession;
 }
 
-// what the Bot status widget shows: the identity and server count of the
-// live session only. A bot that is not connected reports no servers rather
-// than a stale count from a session that ended
-export function buildWidgetStatus(configured: boolean, bot: Client | null = client): BotWidgetStatus {
-    const connected = bot !== null && connectionStatus.connected;
-    return {
-        configured,
-        connected,
-        lastError: connectionStatus.error ?? null,
-        name: bot?.user?.username || "Discord bot",
-        avatar: bot?.user?.displayAvatarURL() || "",
-        guildCount: connected ? bot?.guilds?.cache?.size ?? 0 : 0,
-    };
-}
-
-// ---------------------------------------------------------------------------
-// live health
-// ---------------------------------------------------------------------------
-
-// set on a successful login, cleared on stop: uptime must never survive the
-// session it describes
-let sessionStartedAt: number | null = null;
-let commandsReceived = 0;
-let commandSyncError: string | null = null;
-
-export function buildHealth(bot: Client | null = client): Health {
-    return {
-        connected: bot !== null && connectionStatus.connected,
-        lastError: connectionStatus.error ?? null,
-        uptimeMs: bot && sessionStartedAt ? Math.max(0, Date.now() - sessionStartedAt) : 0,
-        wsPing: bot?.ws?.ping ?? -1,
-        wsStatus: bot?.ws?.status ?? -1,
-        guildCount: bot?.guilds?.cache?.size ?? 0,
-        cachedUsers: bot?.users?.cache?.size ?? 0,
-        cachedChannels: bot?.channels?.cache?.size ?? 0,
-        commandsReceived,
-        pendingInteractions: pendingInteractions.size,
-        commandSyncError,
-    };
-}
-
-// ---------------------------------------------------------------------------
-// pending slash-command interactions
-// ---------------------------------------------------------------------------
-
-// A flow can take longer than Discord's 3-second acknowledgement window, so
-// the interaction object stays here for its whole 15-minute token life:
-// Respond, Follow Up, and a second Respond (an edit) all reach it. Bounded:
-// oldest entries are dropped at the cap, and every entry's TTL and
-// auto-acknowledge timers are cleared on removal or disconnect.
-interface PendingInteraction {
-    interaction: RepliableInteraction;
-    timer: ReturnType<typeof setTimeout>;
-    ackTimer: ReturnType<typeof setTimeout>;
-}
-
-const pendingInteractions = new Map<string, PendingInteraction>();
-
-export function pendingInteractionCount(): number {
-    return pendingInteractions.size;
-}
-
-function dropEntry(key: string): void {
-    const entry = pendingInteractions.get(key);
-    if (!entry) return;
-    clearTimeout(entry.timer);
-    clearTimeout(entry.ackTimer);
-    pendingInteractions.delete(key);
-}
-
-// timers must not keep the host process alive on their own (Node/Bun
-// timers expose unref; the browser double does not)
-function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
-    (timer as unknown as { unref?: () => void }).unref?.();
-}
-
-/**
- * Records a live interaction and arms its automatic acknowledgement: if no
- * flow answered after AUTO_ACK_DELAY_MS, the bot acknowledges so Discord
- * does not show "interaction failed". Flows never need a Defer step.
- */
-const LATE_INTERACTION_MS = 1_500;
-
-export function rememberInteraction(interaction: RepliableInteraction): void {
-    const key = interaction.id;
-    if (pendingInteractions.has(key)) dropEntry(key);
-
-    if (pendingInteractions.size >= PENDING_INTERACTION_CAP) {
-        const oldestKey = pendingInteractions.keys().next().value;
-        if (oldestKey !== undefined) dropEntry(oldestKey);
+function sessionOf(ctx: unknown): BotSession {
+    const session = (ctx as Partial<BotActionContext> | undefined)?.session;
+    if (!session) {
+        throw new Error("This action belongs to a bot. Place it from the bot's project in the Actions library.");
     }
-
-    // Discord's 3-second window starts when it creates the interaction, not
-    // when the bot receives it; a late arrival cannot be answered in time
-    const lateByMs = Date.now() - interaction.createdTimestamp;
-    if (lateByMs > LATE_INTERACTION_MS) {
-        console.warn(
-            `[DiscordService] interaction ${key} arrived ${lateByMs} ms after Discord created it; Discord expires it at 3000 ms`,
-        );
-    }
-    const timer = setTimeout(() => dropEntry(key), INTERACTION_TTL_MS);
-    const ackTimer = setTimeout(() => {
-        autoAcknowledge(interaction).catch((err: unknown) =>
-            console.error(
-                `[DiscordService] automatic acknowledgement failed ${Date.now() - interaction.createdTimestamp} ms after Discord created the interaction:`,
-                errorToMessage(err),
-            ),
-        );
-    }, AUTO_ACK_DELAY_MS);
-    unrefTimer(timer);
-    unrefTimer(ackTimer);
-    pendingInteractions.set(key, { interaction, timer, ackTimer });
+    return session;
 }
 
-export function takeInteraction(interactionId: string): RepliableInteraction {
-    const entry = pendingInteractions.get(interactionId);
-    if (!entry) {
-        throw new Error(
-            `Interaction ${interactionId} is not pending. It was never recorded or its 15-minute window expired.`,
-        );
-    }
-    return entry.interaction;
+function clientOf(ctx: unknown): Client {
+    return sessionOf(ctx).requireClient();
 }
 
-export function clearPendingInteractions(): void {
-    for (const key of [...pendingInteractions.keys()]) dropEntry(key);
+function interactionsOf(ctx: unknown): InteractionOps {
+    const session = sessionOf(ctx);
+    return new InteractionOps((id) => session.takeInteraction(id));
 }
 
 // discord presence statuses — the only legal values for set-status
@@ -452,13 +231,6 @@ export function validatePresenceStatus(status: unknown): PresenceStatus {
     throw new Error(
         `Unknown status "${String(status)}": expected one of ${PRESENCE_STATUSES.join(", ")}`,
     );
-}
-
-function getClient(): Client {
-    if (!client) {
-        throw new Error("Discord bot is not currently connected.");
-    }
-    return client;
 }
 
 export function buildInviteUrl(appId: string, permissions: string[]): string {
@@ -490,10 +262,6 @@ export function buildInviteUrl(appId: string, permissions: string[]): string {
     return `https://discord.com/api/oauth2/authorize?client_id=${appId}&scope=bot%20applications.commands&permissions=${bitfield.bitfield.toString()}`;
 }
 
-function generateInvite(permissions: string[]): string {
-    return buildInviteUrl(client?.user?.id || savedAppId, permissions);
-}
-
 // User installs carry no bot permissions: the link authorizes
 // applications.commands for the user's own account. It only works once
 // User Install is enabled for the app in the Discord developer portal.
@@ -504,475 +272,9 @@ export function buildUserInstallUrl(appId: string): string {
     return `https://discord.com/api/oauth2/authorize?client_id=${appId}&integration_type=1&scope=applications.commands`;
 }
 
-async function stopBot() {
-    if (client) {
-        try {
-            await client.destroy();
-        } catch (err) {
-            console.error("[DiscordService] bot destroy failed:", err);
-        }
-        client = null;
-    }
-    // a stopped session has no answerable interactions, no uptime, no sync
-    // state — anything else would let the health page describe a bot that
-    // is not running
-    clearPendingInteractions();
-    sessionStartedAt = null;
-    commandSyncError = null;
-}
-
-function serializeCommandOptions(
-    interaction: ChatInputCommandInteraction,
-): { name: string; type: number; value: string | number | boolean | null }[] {
-    return interaction.options.data.map((option) => ({
-        name: option.name,
-        type: option.type,
-        value:
-            typeof option.value === "string" ||
-            typeof option.value === "number" ||
-            typeof option.value === "boolean"
-                ? option.value
-                : null,
-    }));
-}
-
-function attachListeners(bot: Client, ctx: ServiceContext<any>) {
-    // only the live session's events may touch shared state: a superseded
-    // session's listeners are still registered on its bot object until
-    // destroy completes, and its messages/reactions must not be reported
-    // as if they came from the bot the user is running now
-    const ownsSession = () => client === bot;
-
-    bot.on("messageCreate", (msg) => {
-        if (msg.author.bot) return;
-        if (!ownsSession()) return;
-
-        const payload = {
-            content: msg.content,
-            author: msg.author.username,
-            authorId: msg.author.id,
-            channelId: msg.channelId,
-            guildId: msg.guildId,
-            messageId: msg.id,
-        };
-
-        recordRecentMessage(payload);
-        ctx.emitTrigger("on-message", payload);
-    });
-
-    bot.on("guildMemberAdd", (member) => {
-        if (!ownsSession()) return;
-        ctx.emitTrigger("on-member-join", {
-            username: member.user.username,
-            userId: member.user.id,
-            guildId: member.guild.id,
-            guildName: member.guild.name,
-        });
-    });
-
-    bot.on("guildMemberRemove", (member) => {
-        if (!ownsSession()) return;
-        ctx.emitTrigger("on-member-leave", {
-            username: member.user.username,
-            userId: member.user.id,
-            guildId: member.guild.id,
-        });
-    });
-
-    bot.on("messageReactionAdd", (reaction, user) => {
-        if (user.bot) return;
-        if (!ownsSession()) return;
-        ctx.emitTrigger("on-reaction-add", {
-            emoji: reaction.emoji.name || reaction.emoji.id,
-            userId: user.id,
-            username: user.username,
-            messageId: reaction.message.id,
-            channelId: reaction.message.channelId,
-        });
-    });
-
-    bot.on("messageReactionRemove", (reaction, user) => {
-        if (user.bot) return;
-        if (!ownsSession()) return;
-        ctx.emitTrigger("on-reaction-removed", {
-            emoji: reaction.emoji.name || reaction.emoji.id,
-            userId: user.id,
-            username: user.username,
-            messageId: reaction.message.id,
-            channelId: reaction.message.channelId,
-        });
-    });
-
-    bot.on("messageUpdate", (oldMsg, newMsg) => {
-        if (!ownsSession()) return;
-        const apply = async () => {
-            const msg = newMsg.partial ? await newMsg.fetch().catch((err: unknown) => {
-                console.error(
-                    "[DiscordService] edited message fetch failed:",
-                    errorToMessage(err),
-                );
-                return null;
-            }) : newMsg;
-            if (!msg || msg.author?.bot) return;
-            ctx.emitTrigger("on-message-edited", {
-                content: msg.content ?? "",
-                author: msg.author?.username ?? "",
-                authorId: msg.author?.id ?? "",
-                channelId: msg.channelId,
-                guildId: msg.guildId,
-                messageId: msg.id,
-            });
-        };
-        void apply();
-    });
-
-    bot.on("messageDelete", (msg) => {
-        if (!ownsSession()) return;
-        ctx.emitTrigger("on-message-deleted", {
-            messageId: msg.id,
-            channelId: msg.channelId,
-            guildId: msg.guildId ?? "",
-        });
-    });
-
-    bot.on("guildBanAdd", (ban) => {
-        if (!ownsSession()) return;
-        ctx.emitTrigger("on-member-banned", {
-            userId: ban.user.id,
-            username: ban.user.username,
-            reason: ban.reason ?? "",
-            guildId: ban.guild.id,
-        });
-    });
-
-    bot.on("guildMemberUpdate", (oldMember, newMember) => {
-        if (!ownsSession()) return;
-        const before = new Set((oldMember?.roles?.cache?.keys?.() ?? []) as Iterable<string>);
-        for (const roleId of newMember.roles.cache.keys()) {
-            if (!before.has(roleId)) {
-                ctx.emitTrigger("on-role-added", {
-                    userId: newMember.user.id,
-                    username: newMember.user.username,
-                    roleId,
-                    guildId: newMember.guild.id,
-                });
-            }
-        }
-        for (const roleId of before) {
-            if (!newMember.roles.cache.has(roleId)) {
-                ctx.emitTrigger("on-role-removed", {
-                    userId: newMember.user.id,
-                    username: newMember.user.username,
-                    roleId,
-                    guildId: newMember.guild.id,
-                });
-            }
-        }
-    });
-
-    bot.on("threadCreate", (thread) => {
-        if (!ownsSession()) return;
-        ctx.emitTrigger("on-thread-created", {
-            threadId: thread.id,
-            name: thread.name ?? "",
-            channelId: thread.parentId ?? "",
-            ownerId: thread.ownerId ?? "",
-            guildId: thread.guildId,
-        });
-    });
-
-    bot.on("voiceStateUpdate", (oldState, newState) => {
-        if (!ownsSession()) return;
-        ctx.emitTrigger("on-voice-state-change", {
-            userId: newState.id,
-            username: newState.member?.user?.username ?? "",
-            channelId: newState.channelId ?? "",
-            previousChannelId: oldState?.channelId ?? "",
-            guildId: newState.guild.id,
-        });
-    });
-
-    bot.on("interactionCreate", (interaction) => {
-        if (!ownsSession()) return;
-        // button clicks and menu picks route through the parameterized
-        // interaction-triggered event by custom id
-        if (interaction.isButton() || interaction.isAnySelectMenu()) {
-            rememberInteraction(interaction);
-            ctx.emitTrigger("interaction-triggered", componentClickPayload(interaction));
-            return;
-        }
-        // submitted modals route by modal id the same way
-        if (interaction.isModalSubmit()) {
-            rememberInteraction(interaction);
-            ctx.emitTrigger("modal-submitted", modalSubmitPayload(interaction));
-            return;
-        }
-        if (!interaction.isChatInputCommand()) return;
-        commandsReceived++;
-        commandActivity.record();
-
-        // Discord resolves a guild command over a same-named global one;
-        // the trigger to fire must follow the same rule
-        const command = findCommandForInteraction(
-            knownCommands,
-            interaction.commandName,
-            interaction.guildId ?? null,
-        );
-        if (!command) {
-            // an interaction for a command this panel does not manage: there
-            // is no trigger to fire and no stored definition to answer with
-            console.error(
-                `[DiscordService] ignored interaction for unknown command /${interaction.commandName}; no trigger is registered for it`,
-            );
-            return;
-        }
-
-        rememberInteraction(interaction);
-        const payload = {
-            interactionId: interaction.id,
-            commandName: command.name,
-            commandId: command.id,
-            scope: command.scope,
-            userId: interaction.user.id,
-            username: interaction.user.username,
-            channelId: interaction.channelId,
-            guildId: interaction.guildId,
-            options: serializeCommandOptions(interaction),
-            values: Object.fromEntries(
-                interaction.options.data.map((option) => [option.name, option.value ?? null]),
-            ),
-        };
-        try {
-            ctx.emitTrigger(commandTriggerId(command), payload);
-        } catch (err) {
-            console.error(
-                `[DiscordService] trigger emit failed for /${command.name}:`,
-                err,
-            );
-        }
-    });
-
-    // gateway truth mid-session: a drop must invalidate connectionStatus
-    // the same way a failed login does — otherwise the UI shows "online"
-    // for a bot that is not running. A successful reconnect flips it back.
-
-    const gatewayErrorMessage = (err: unknown): string => {
-        if (err instanceof Error) return err.message;
-        if (typeof err === "string") return err;
-        if (err && typeof err === "object") {
-            const obj = err as { code?: unknown; reason?: unknown; message?: unknown };
-            if (obj.message) return String(obj.message);
-            if (obj.code !== undefined) {
-                return obj.reason ? `close ${obj.code}: ${obj.reason}` : `close code ${obj.code}`;
-            }
-            return "gateway closed";
-        }
-        return err === undefined || err === null ? "gateway closed" : String(err);
-    };
-
-    const markGatewayDown = (source: string, err?: unknown) => {
-        if (!ownsSession()) return;
-        const message = gatewayErrorMessage(err);
-        console.error(`[DiscordService] gateway ${source}:`, message);
-        connectionStatus = { connected: false, error: message };
-        try {
-            ctx.emitTrigger("on-connection-error", { error: message });
-        } catch (emitErr) {
-            console.error("[DiscordService] connection-error emit failed:", emitErr);
-        }
-    };
-
-    // discord.js retries these internally; shardReady/clientReady below restores
-    // the connected flag when the gateway actually comes back
-    bot.on("disconnect", (err?) => markGatewayDown("disconnect", err));
-    bot.on("shardDisconnect", (event) =>
-        markGatewayDown("shardDisconnect", event),
-    );
-    // a resume replays what the dropped connection missed; interactions in
-    // that replay are already past Discord's answer window
-    bot.on("shardResume", (_shardId, replayed) => {
-        if (replayed > 0) console.warn(`[DiscordService] gateway resumed and replayed ${replayed} missed events`);
-    });
-
-    // fatal: the token was reset/revoked — destroy immediately and record
-    bot.on("invalidated", () => {
-        if (!ownsSession()) return;
-        console.error("[DiscordService] session invalidated (token reset or revoked)");
-        connectionStatus = { connected: false, error: "Session invalidated: token was reset or revoked" };
-        client = null;
-        void bot
-            .destroy()
-            .catch((destroyErr: unknown) =>
-                console.error("[DiscordService] bot destroy after invalidation failed:", destroyErr),
-            );
-        try {
-            ctx.emitTrigger("on-connection-error", {
-                error: "Session invalidated: token was reset or revoked",
-            });
-        } catch (emitErr) {
-            console.error("[DiscordService] connection-error emit failed:", emitErr);
-        }
-    });
-
-    // transient client/shard errors: log and surface as a trigger, but do
-    // NOT claim disconnected — the gateway session may still be live
-    bot.on("error", (err) => {
-        if (!ownsSession()) return;
-        console.error("[DiscordService] client error:", err instanceof Error ? err.message : String(err));
-        try {
-            ctx.emitTrigger("on-connection-error", { error: String(err) });
-        } catch (emitErr) {
-            console.error("[DiscordService] connection-error emit failed:", emitErr);
-        }
-    });
-    bot.on("shardError", (err) => {
-        if (!ownsSession()) return;
-        console.error("[DiscordService] shard error:", err instanceof Error ? err.message : String(err));
-        try {
-            ctx.emitTrigger("on-connection-error", { error: String(err) });
-        } catch (emitErr) {
-            console.error("[DiscordService] connection-error emit failed:", emitErr);
-        }
-    });
-
-    // reconnect success: back online
-    bot.on("clientReady", () => {
-        if (!ownsSession()) return;
-        connectionStatus = { connected: true };
-    });
-    bot.on("shardReady", () => {
-        if (!ownsSession()) return;
-        connectionStatus = { connected: true };
-    });
-}
-
-async function startBot(
-    token: string,
-    ctx?: ServiceContext<any>,
-    clientFactory?: () => Client,
-) {
-    if (!token) return;
-    const attempt = ++connectSequence;
-    await stopBot();
-    // A newer attempt may have started while we awaited stopBot: from
-    // here on every write to shared state (client/connectionStatus) is
-    // sequence-checked — a losing attempt must not overwrite the winner.
-    if (attempt !== connectSequence) {
-        console.warn("[DiscordService] superseded connect attempt discarded before login");
-        return;
-    }
-    clearRecentMessages();
-    commandsReceived = 0;
-
-    // privileged intents, without them content arrives empty
-    const bot = clientFactory
-        ? clientFactory()
-        : new Client({
-            intents: [
-                GatewayIntentBits.Guilds,
-                GatewayIntentBits.GuildMessages,
-                GatewayIntentBits.MessageContent,
-                GatewayIntentBits.GuildMembers,
-                GatewayIntentBits.GuildMessageReactions,
-                GatewayIntentBits.DirectMessages,
-            ],
-        });
-    client = bot;
-    connectionStatus = { connected: false };
-
-    if (ctx) {
-        attachListeners(bot, ctx);
-    }
-
-    try {
-        await bot.login(token);
-        // a newer startBot won the race: its stopBot already destroyed our
-        // client — destroy is idempotent-safe here, and shared state stays
-        // the winner's
-        if (attempt !== connectSequence) {
-            console.warn("[DiscordService] superseded connect attempt discarded");
-            try {
-                await bot.destroy();
-            } catch (destroyErr) {
-                console.error("[DiscordService] bot destroy after supersede failed:", destroyErr);
-            }
-            return;
-        }
-        connectionStatus = { connected: true };
-        sessionStartedAt = Date.now();
-        // command registration must not fail the login: a connected bot
-        // whose commands are not on Discord yet is a sync problem, recorded
-        // in health rather than reported as a connection failure
-        await syncSlashCommandsAfterLogin(bot);
-    } catch (err: any) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error("[DiscordService] Login failed:", message);
-        try {
-            await bot.destroy();
-        } catch (destroyErr) {
-            console.error("[DiscordService] bot destroy after failed login failed:", destroyErr);
-        }
-        // only clear our own attempt — a newer login may already own client
-        if (client === bot) client = null;
-        // only the newest attempt may write shared status
-        if (attempt === connectSequence) {
-            connectionStatus = { connected: false, error: message };
-        }
-        try {
-            ctx?.emitTrigger("on-connection-error", { error: message });
-        } catch (emitErr) {
-            console.error("[DiscordService] connection-error emit failed:", emitErr);
-        }
-        throw new Error(`Discord login failed: ${message}`);
-    }
-}
-
-// test seam: drives the real startBot with a fake transport so tests can
-// assert the state machine after failure without touching the network
-export const __botTest = { startBot, stopBot };
-
 // ---------------------------------------------------------------------------
-// slash command storage and registration
+// slash command triggers
 // ---------------------------------------------------------------------------
-
-interface StoredPanelConfig {
-    configured?: boolean;
-    applicationId?: string;
-    commands?: unknown;
-}
-
-async function readStoredConfig(): Promise<StoredPanelConfig> {
-    try {
-        const saved = await config.get<StoredPanelConfig>(PANEL_ID);
-        return saved && typeof saved === "object" ? saved : {};
-    } catch (err) {
-        console.error("[DiscordService] panel config read failed:", err);
-        throw new Error(`Could not read saved commands: ${errorToMessage(err)}`);
-    }
-}
-
-// writeStoredCommands preserves every other config field: a command save
-// must never drop the application id or the configured flag
-async function writeStoredCommands(commands: SlashCommandDefinition[]): Promise<void> {
-    const saved = await readStoredConfig();
-    try {
-        await config.set(
-            {
-                ...saved,
-                configured: true,
-                commands,
-            },
-            PANEL_ID,
-        );
-    } catch (err) {
-        console.error("[DiscordService] panel config write failed:", err);
-        throw new Error(`Could not save commands: ${errorToMessage(err)}`);
-    }
-}
-
-// the live view of stored commands: the interaction handler needs a
-// synchronous lookup, and the trigger registry mirrors this list
-let knownCommands: SlashCommandDefinition[] = [];
 
 const OPTION_FIELD_TYPES: Record<
     CommandOptionType,
@@ -1037,277 +339,6 @@ export function commandTriggerDefinition(command: SlashCommandDefinition) {
     });
 }
 
-// one event action per command: registering is part of creating the command, so a
-// command whose event action is missing is reported, never quietly half-created
-async function registerCommandTrigger(command: SlashCommandDefinition): Promise<void> {
-    try {
-        await actionsApi.register(commandTriggerDefinition(command), undefined, PANEL_ID);
-    } catch (err) {
-        console.error(
-            `[DiscordService] event action registration failed for /${command.name}:`,
-            err,
-        );
-        throw new Error(
-            `Could not register the trigger for /${command.name}: ${errorToMessage(err)}`,
-        );
-    }
-}
-
-async function unregisterCommandTrigger(command: SlashCommandDefinition): Promise<void> {
-    try {
-        await actionsApi.unregister(commandTriggerId(command), PANEL_ID);
-    } catch (err) {
-        console.error(
-            `[DiscordService] event action removal failed for /${command.name}:`,
-            err,
-        );
-        throw new Error(
-            `Could not remove the trigger for /${command.name}: ${errorToMessage(err)}`,
-        );
-    }
-}
-
-function optionPayload(option: SlashCommandOption): ApplicationCommandOptionData {
-    const base = {
-        name: option.name,
-        description: option.description,
-        required: option.required,
-    };
-    switch (option.type) {
-        case "string":
-            return { ...base, type: ApplicationCommandOptionType.String };
-        case "integer":
-            return { ...base, type: ApplicationCommandOptionType.Integer };
-        case "number":
-            return { ...base, type: ApplicationCommandOptionType.Number };
-        case "boolean":
-            return { ...base, type: ApplicationCommandOptionType.Boolean };
-        case "user":
-            return { ...base, type: ApplicationCommandOptionType.User };
-        case "channel":
-            return { ...base, type: ApplicationCommandOptionType.Channel };
-        case "role":
-            return { ...base, type: ApplicationCommandOptionType.Role };
-        case "mentionable":
-            return { ...base, type: ApplicationCommandOptionType.Mentionable };
-    }
-    // unreachable: CommandOptionType is exhausted above
-    throw new Error(`Unsupported command option type: ${String(option.type)}`);
-}
-
-export function commandPayload(
-    def: SlashCommandDefinition,
-): ChatInputApplicationCommandData {
-    // Always explicit: omitting integration types inherits the app's
-    // configured contexts, which would silently promote a guild-only
-    // command to user installs once the portal enables them. contexts is
-    // left unset so a user-install command works on every surface.
-    return {
-        type: ApplicationCommandType.ChatInput,
-        name: def.name,
-        description: def.description,
-        options: def.options.map(optionPayload),
-        integrationTypes: def.userInstall
-            ? [
-                ApplicationIntegrationType.GuildInstall,
-                ApplicationIntegrationType.UserInstall,
-            ]
-            : [ApplicationIntegrationType.GuildInstall],
-    };
-}
-
-/**
- * Declarative registration: each scope is set to exactly the stored list, so
- * deleted commands disappear. `scopesToClear` carries scopes that no longer
- * have any command (an empty list cannot be inferred from the commands).
- * Returns human-readable errors instead of throwing so partial success is
- * reported truthfully.
- */
-export async function syncSlashCommands(
-    bot: Client,
-    commands: SlashCommandDefinition[],
-    scopesToClear: string[] = [],
-): Promise<string[]> {
-    const application = bot.application;
-    if (!application) {
-        throw new Error(
-            "Discord application is not available on this client; commands were not registered.",
-        );
-    }
-
-    const errors: string[] = [];
-    const byScope = new Map<string, SlashCommandDefinition[]>();
-    for (const command of commands) {
-        const list = byScope.get(command.scope) ?? [];
-        list.push(command);
-        byScope.set(command.scope, list);
-    }
-
-    try {
-        await application.commands.set(
-            (byScope.get(GLOBAL_SCOPE) ?? []).map(commandPayload),
-        );
-    } catch (err) {
-        errors.push(`Global commands: ${errorToMessage(err)}`);
-    }
-
-    for (const scope of new Set([...byScope.keys(), ...scopesToClear])) {
-        if (scope === GLOBAL_SCOPE) continue;
-        const definitions = byScope.get(scope) ?? [];
-        const guild = bot.guilds.cache.get(scope);
-        if (!guild) {
-            errors.push(
-                `Guild ${scope} is not in this bot's server list; its commands were not registered.`,
-            );
-            continue;
-        }
-        try {
-            await guild.commands.set(definitions.map(commandPayload));
-        } catch (err) {
-            errors.push(`Guild ${guild.name}: ${errorToMessage(err)}`);
-        }
-    }
-
-    return errors;
-}
-
-async function syncSlashCommandsAfterLogin(bot: Client): Promise<void> {
-    try {
-        const saved = await readStoredConfig();
-        const commands = normalizeCommandDefinitions(saved.commands);
-        // keep the interaction lookup honest even if the socket that
-        // registered the triggers came from a previous config
-        knownCommands = commands;
-        const errors = await syncSlashCommands(bot, commands);
-        // a newer session may own shared state by now
-        if (client !== bot) return;
-        commandSyncError = errors.length > 0 ? errors.join(" ") : null;
-        if (commandSyncError) {
-            console.error("[DiscordService] command sync reported errors:", commandSyncError);
-        }
-    } catch (err) {
-        if (client !== bot) return;
-        commandSyncError = errorToMessage(err);
-        console.error("[DiscordService] command sync failed:", err);
-    }
-}
-
-// save-then-sync for UI mutations: offline is reported as "not registered"
-// rather than as an error, because the stored definition is not a lie
-async function syncAfterMutation(
-    commands: SlashCommandDefinition[],
-    scopesToClear: string[] = [],
-): Promise<{ registered: boolean; syncError: string | null }> {
-    const bot = client;
-    if (!bot || !connectionStatus.connected) {
-        return { registered: false, syncError: null };
-    }
-    try {
-        const errors = await syncSlashCommands(bot, commands, scopesToClear);
-        commandSyncError = errors.length > 0 ? errors.join(" ") : null;
-        if (commandSyncError) {
-            console.error("[DiscordService] command sync reported errors:", commandSyncError);
-        }
-        return { registered: commandSyncError === null, syncError: commandSyncError };
-    } catch (err) {
-        commandSyncError = errorToMessage(err);
-        console.error("[DiscordService] command sync failed:", err);
-        return { registered: false, syncError: commandSyncError };
-    }
-}
-
-// ---------------------------------------------------------------------------
-// server explorer
-// ---------------------------------------------------------------------------
-
-const CHANNEL_KIND_BY_TYPE: Record<number, DiscordChannelKind> = {
-    [ChannelType.GuildText]: "text",
-    [ChannelType.GuildVoice]: "voice",
-    [ChannelType.GuildCategory]: "category",
-    [ChannelType.GuildAnnouncement]: "announcement",
-    [ChannelType.GuildStageVoice]: "stage",
-    [ChannelType.GuildForum]: "forum",
-    [ChannelType.GuildMedia]: "media",
-};
-
-export function describeChannelKind(type: number): DiscordChannelKind {
-    return CHANNEL_KIND_BY_TYPE[type] ?? "other";
-}
-
-export function listGuildSummaries(bot: Client | null = client): GuildSummary[] {
-    if (!bot) return [];
-    return [...bot.guilds.cache.values()].slice(0, 100).map((guild) => ({
-        id: guild.id,
-        name: guild.name,
-        icon: guild.iconURL() ?? "",
-        memberCount: guild.memberCount,
-        channelCount: guild.channels.cache.size,
-        roleCount: guild.roles.cache.size,
-        ownerId: guild.ownerId,
-    }));
-}
-
-// bounded slices: Discord caps channels and roles per guild, and these caps
-// keep the wire shape finite even if a future API does not
-const GUILD_CHANNEL_CAP = 500;
-const GUILD_ROLE_CAP = 250;
-
-export function buildGuildDetail(guild: {
-    id: string;
-    name: string;
-    iconURL: () => string | null;
-    memberCount: number;
-    ownerId: string;
-    createdAt: Date | null;
-    channels: { cache: Map<string, any> };
-    roles: { cache: Map<string, any> };
-}): GuildDetail {
-    const channels = [...guild.channels.cache.values()]
-        .slice(0, GUILD_CHANNEL_CAP)
-        .map((channel) => ({
-            id: String(channel.id),
-            name: String(channel.name ?? channel.id),
-            kind: describeChannelKind(Number(channel.type)),
-            parentId:
-                typeof channel.parentId === "string" ? channel.parentId : null,
-            position: typeof channel.position === "number" ? channel.position : 0,
-        }))
-        .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
-
-    const roles = [...guild.roles.cache.values()]
-        .slice(0, GUILD_ROLE_CAP)
-        .map((role) => ({
-            id: String(role.id),
-            name: String(role.name),
-            color: typeof role.color === "number" ? role.color : 0,
-            position: typeof role.position === "number" ? role.position : 0,
-            managed: Boolean(role.managed),
-        }))
-        .sort((a, b) => b.position - a.position || a.name.localeCompare(b.name));
-
-    return {
-        id: guild.id,
-        name: guild.name,
-        icon: guild.iconURL() ?? "",
-        memberCount: guild.memberCount,
-        ownerId: guild.ownerId,
-        createdAt: guild.createdAt ? guild.createdAt.toISOString() : "",
-        channels,
-        roles,
-    };
-}
-
-export function buildMemberSummaries(members: Iterable<any>): MemberSummary[] {
-    return [...members].slice(0, MEMBER_SEARCH_LIMIT).map((member) => ({
-        id: String(member.id),
-        username: String(member.user?.username ?? ""),
-        displayName: String(member.displayName ?? member.user?.username ?? ""),
-        avatar: member.displayAvatarURL ? member.displayAvatarURL() : "",
-        joinedAt: member.joinedAt ? member.joinedAt.toISOString() : null,
-        bot: Boolean(member.user?.bot),
-    }));
-}
-
 export const actions = [
     defineAction({
         id: "get-channel",
@@ -1328,8 +359,8 @@ export const actions = [
             label: "Channel",
         },
         icon: "tag",
-        run: async (_ctx, inputs: { channelId: string }) => {
-            const bot = getClient();
+        run: async (ctx, inputs: { channelId: string }) => {
+            const bot = clientOf(ctx);
             const channel = await bot.channels.fetch(inputs.channelId.trim());
             if (!channel) {
                 throw new Error(`Channel ${inputs.channelId} not found`);
@@ -1357,8 +388,8 @@ export const actions = [
             label: "User",
         },
         icon: "person",
-        run: async (_ctx, inputs: { userId: string }) => {
-            const bot = getClient();
+        run: async (ctx, inputs: { userId: string }) => {
+            const bot = clientOf(ctx);
             const user = await bot.users.fetch(inputs.userId.trim());
             if (!user) {
                 throw new Error(`User ${inputs.userId} not found`);
@@ -1393,10 +424,10 @@ export const actions = [
         },
         icon: "chat",
         run: async (
-            _ctx,
+            ctx,
             inputs: { channel: string; messageId: string },
         ) => {
-            const bot = getClient();
+            const bot = clientOf(ctx);
             const channel = await bot.channels.fetch(inputs.channel.trim());
             if (channel && "messages" in channel) {
                 const msg = await (channel as any).messages.fetch(
@@ -1455,7 +486,7 @@ export const actions = [
             label: "Embed",
         },
         icon: "article",
-        run: async (_ctx, inputs: DiscordEmbedData) => {
+        run: async (ctx, inputs: DiscordEmbedData) => {
             const embed = buildDiscordEmbed(inputs || {});
             return embed.toJSON();
         },
@@ -1480,7 +511,7 @@ export const actions = [
         },
         icon: "send",
         run: async (
-            _ctx,
+            ctx,
             inputs: {
                 channel: string;
                 content: string;
@@ -1489,7 +520,7 @@ export const actions = [
                 components?: unknown;
             },
         ) => {
-            const ops = new MessageOps(getClient());
+            const ops = new MessageOps(clientOf(ctx));
             if (inputs.reply) {
                 return ops.reply(inputs.channel, inputs.reply, inputs);
             }
@@ -1514,8 +545,8 @@ export const actions = [
             label: "Message",
         },
         icon: "person",
-        run: async (_ctx, inputs: { user: string; content: string }) => {
-            const ops = new MessageOps(getClient());
+        run: async (ctx, inputs: { user: string; content: string }) => {
+            const ops = new MessageOps(clientOf(ctx));
             return ops.dm(inputs.user, inputs);
         },
     }),
@@ -1536,8 +567,8 @@ export const actions = [
             label: "Success",
         },
         icon: "add_reaction",
-        run: async (_ctx, inputs: { channel: string; message: string; emoji: string }) => {
-            const ops = new MessageOps(getClient());
+        run: async (ctx, inputs: { channel: string; message: string; emoji: string }) => {
+            const ops = new MessageOps(clientOf(ctx));
             await ops.react(inputs.channel, inputs.message, inputs.emoji);
             return true;
         },
@@ -1572,8 +603,8 @@ export const actions = [
             label: "Success",
         },
         icon: "tune",
-        run: async (_ctx, inputs: { activity: string; status?: string }) => {
-            const bot = getClient();
+        run: async (ctx, inputs: { activity: string; status?: string }) => {
+            const bot = clientOf(ctx);
             const status = validatePresenceStatus(inputs.status || "online");
             bot.user?.setPresence({
                 activities: [
@@ -1605,7 +636,7 @@ export const actions = [
         },
         icon: "reply",
         run: async (
-            _ctx,
+            ctx,
             inputs: {
                 interactionId: string;
                 content?: string;
@@ -1614,7 +645,7 @@ export const actions = [
                 ephemeral?: boolean;
             },
         ) => {
-            const ops = new InteractionOps(takeInteraction);
+            const ops = interactionsOf(ctx);
             return ops.respond(inputs.interactionId, inputs);
         },
     }),
@@ -1638,7 +669,7 @@ export const actions = [
         },
         icon: "forward",
         run: async (
-            _ctx,
+            ctx,
             inputs: {
                 interactionId: string;
                 content?: string;
@@ -1647,7 +678,7 @@ export const actions = [
                 ephemeral?: boolean;
             },
         ) => {
-            const ops = new InteractionOps(takeInteraction);
+            const ops = interactionsOf(ctx);
             return ops.followUp(inputs.interactionId, inputs);
         },
     }),
@@ -1707,7 +738,7 @@ export const actions = [
             label: "Button",
         },
         icon: "smart_button",
-        run: async (_ctx, inputs: DiscordButtonData) =>
+        run: async (ctx, inputs: DiscordButtonData) =>
             buildButtonComponent(inputs || {}),
     }),
 
@@ -1774,7 +805,7 @@ export const actions = [
             label: "Select Menu",
         },
         icon: "arrow_drop_down_circle",
-        run: async (_ctx, inputs: Parameters<typeof buildSelectMenuComponent>[0]) =>
+        run: async (ctx, inputs: Parameters<typeof buildSelectMenuComponent>[0]) =>
             buildSelectMenuComponent(inputs || {}),
     }),
 
@@ -1793,7 +824,7 @@ export const actions = [
             label: "Interaction Row",
         },
         icon: "view_week",
-        run: async (_ctx, inputs: { components?: unknown }) =>
+        run: async (ctx, inputs: { components?: unknown }) =>
             buildComponentRow(inputs?.components),
     }),
 
@@ -1857,7 +888,7 @@ export const actions = [
             label: "Text Field",
         },
         icon: "text_fields",
-        run: async (_ctx, inputs: Parameters<typeof buildModalField>[0]) =>
+        run: async (ctx, inputs: Parameters<typeof buildModalField>[0]) =>
             buildModalField(inputs || {}),
     }),
 
@@ -1899,11 +930,11 @@ export const actions = [
         },
         icon: "dynamic_form",
         run: async (
-            _ctx,
+            ctx,
             inputs: { interactionId: string; title?: string; modalId?: string; fields?: unknown },
         ) => {
             const modal = buildModalPayload(inputs);
-            const ops = new InteractionOps(takeInteraction);
+            const ops = interactionsOf(ctx);
             return ops.showModal(inputs.interactionId, modal);
         },
     }),
@@ -1927,7 +958,7 @@ export const actions = [
         },
         icon: "edit",
         run: async (
-            _ctx,
+            ctx,
             inputs: {
                 channel: string;
                 message: string;
@@ -1935,7 +966,7 @@ export const actions = [
                 embeds?: unknown;
             },
         ) => {
-            const ops = new MessageOps(getClient());
+            const ops = new MessageOps(clientOf(ctx));
             return ops.edit(inputs.channel, inputs.message, inputs);
         },
     }),
@@ -1956,10 +987,10 @@ export const actions = [
         },
         icon: "delete",
         run: async (
-            _ctx,
+            ctx,
             inputs: { channel: string; message: string },
         ) => {
-            const ops = new MessageOps(getClient());
+            const ops = new MessageOps(clientOf(ctx));
             await ops.delete(inputs.channel, inputs.message);
             return true;
         },
@@ -1980,8 +1011,8 @@ export const actions = [
             label: "Deleted",
         },
         icon: "delete_sweep",
-        run: async (_ctx, inputs: { channel: string; count?: number }) => {
-            const ops = new MessageOps(getClient());
+        run: async (ctx, inputs: { channel: string; count?: number }) => {
+            const ops = new MessageOps(clientOf(ctx));
             return ops.bulkDelete(inputs.channel, inputs.count);
         },
     }),
@@ -2001,8 +1032,8 @@ export const actions = [
             label: "Success",
         },
         icon: "push_pin",
-        run: async (_ctx, inputs: { channel: string; message: string }) => {
-            const ops = new MessageOps(getClient());
+        run: async (ctx, inputs: { channel: string; message: string }) => {
+            const ops = new MessageOps(clientOf(ctx));
             await ops.pin(inputs.channel, inputs.message);
             return true;
         },
@@ -2023,8 +1054,8 @@ export const actions = [
             label: "Success",
         },
         icon: "keep_off",
-        run: async (_ctx, inputs: { channel: string; message: string }) => {
-            const ops = new MessageOps(getClient());
+        run: async (ctx, inputs: { channel: string; message: string }) => {
+            const ops = new MessageOps(clientOf(ctx));
             await ops.unpin(inputs.channel, inputs.message);
             return true;
         },
@@ -2045,8 +1076,8 @@ export const actions = [
             label: "Success",
         },
         icon: "podcasts",
-        run: async (_ctx, inputs: { channel: string; message: string }) => {
-            const ops = new MessageOps(getClient());
+        run: async (ctx, inputs: { channel: string; message: string }) => {
+            const ops = new MessageOps(clientOf(ctx));
             await ops.crosspost(inputs.channel, inputs.message);
             return true;
         },
@@ -2070,10 +1101,10 @@ export const actions = [
         },
         icon: "heart_broken",
         run: async (
-            _ctx,
+            ctx,
             inputs: { channel: string; message: string; emoji: string; user?: string },
         ) => {
-            const ops = new MessageOps(getClient());
+            const ops = new MessageOps(clientOf(ctx));
             await ops.removeReaction(inputs.channel, inputs.message, inputs.emoji, inputs.user);
             return true;
         },
@@ -2096,10 +1127,10 @@ export const actions = [
         },
         icon: "how_to_reg",
         run: async (
-            _ctx,
+            ctx,
             inputs: { user: string; role: string; guildId?: string },
         ) => {
-            const bot = getClient();
+            const bot = clientOf(ctx);
             const member = await resolveMember(bot, inputs.user, inputs.guildId);
             await member.roles.add(inputs.role.trim());
             return true;
@@ -2123,10 +1154,10 @@ export const actions = [
         },
         icon: "do_not_disturb_on",
         run: async (
-            _ctx,
+            ctx,
             inputs: { user: string; role: string; guildId?: string },
         ) => {
-            const bot = getClient();
+            const bot = clientOf(ctx);
             const member = await resolveMember(bot, inputs.user, inputs.guildId);
             await member.roles.remove(inputs.role.trim());
             return true;
@@ -2150,10 +1181,10 @@ export const actions = [
         },
         icon: "add_moderator",
         run: async (
-            _ctx,
+            ctx,
             inputs: { name: string; color?: string; guildId?: string },
         ) => {
-            const bot = getClient();
+            const bot = clientOf(ctx);
             const guild = await resolveGuild(bot, inputs.guildId);
             const role = await guild.roles.create({
                 name: inputs.name.trim(),
@@ -2178,8 +1209,8 @@ export const actions = [
             label: "Success",
         },
         icon: "remove_moderator",
-        run: async (_ctx, inputs: { role: string; guildId?: string }) => {
-            const bot = getClient();
+        run: async (ctx, inputs: { role: string; guildId?: string }) => {
+            const bot = clientOf(ctx);
             const guild = await resolveGuild(bot, inputs.guildId);
             const role = await guild.roles.fetch(inputs.role.trim());
             if (!role) {
@@ -2208,10 +1239,10 @@ export const actions = [
         },
         icon: "block",
         run: async (
-            _ctx,
+            ctx,
             inputs: { user: string; deleteDays?: number; reason?: string; guildId?: string },
         ) => {
-            const bot = getClient();
+            const bot = clientOf(ctx);
             const guild = await resolveGuild(bot, inputs.guildId);
             const days = Math.max(0, Math.min(7, Math.floor(Number(inputs.deleteDays ?? 0))));
             await guild.members.ban(inputs.user.trim(), {
@@ -2237,8 +1268,8 @@ export const actions = [
             label: "Success",
         },
         icon: "person_remove",
-        run: async (_ctx, inputs: { user: string; guildId?: string }) => {
-            const bot = getClient();
+        run: async (ctx, inputs: { user: string; guildId?: string }) => {
+            const bot = clientOf(ctx);
             const guild = await resolveGuild(bot, inputs.guildId);
             await guild.members.unban(inputs.user.trim());
             return true;
@@ -2262,10 +1293,10 @@ export const actions = [
         },
         icon: "logout",
         run: async (
-            _ctx,
+            ctx,
             inputs: { user: string; reason?: string; guildId?: string },
         ) => {
-            const bot = getClient();
+            const bot = clientOf(ctx);
             const member = await resolveMember(bot, inputs.user, inputs.guildId);
             await member.kick(inputs.reason ?? undefined);
             return true;
@@ -2290,10 +1321,10 @@ export const actions = [
         },
         icon: "timer",
         run: async (
-            _ctx,
+            ctx,
             inputs: { user: string; minutes?: number; reason?: string; guildId?: string },
         ) => {
-            const bot = getClient();
+            const bot = clientOf(ctx);
             const member = await resolveMember(bot, inputs.user, inputs.guildId);
             const minutes = Math.max(1, Math.min(40_320, Math.floor(Number(inputs.minutes ?? 10))));
             await member.timeout(minutes * 60_000, inputs.reason ?? undefined);
@@ -2319,10 +1350,10 @@ export const actions = [
         },
         icon: "add_comment",
         run: async (
-            _ctx,
+            ctx,
             inputs: { name: string; kind?: string; topic?: string; guildId?: string },
         ) => {
-            const bot = getClient();
+            const bot = clientOf(ctx);
             const guild = await resolveGuild(bot, inputs.guildId);
             const kindMap: Record<
                 string,
@@ -2362,8 +1393,8 @@ export const actions = [
             label: "Success",
         },
         icon: "delete_forever",
-        run: async (_ctx, inputs: { channel: string }) => {
-            const ops = new MessageOps(getClient());
+        run: async (ctx, inputs: { channel: string }) => {
+            const ops = new MessageOps(clientOf(ctx));
             const channel = await ops.fetchChannel(inputs.channel);
             await channel.delete();
             return true;
@@ -2388,10 +1419,10 @@ export const actions = [
         },
         icon: "tune",
         run: async (
-            _ctx,
+            ctx,
             inputs: { channel: string; name?: string; topic?: string; slowmode?: number },
         ) => {
-            const ops = new MessageOps(getClient());
+            const ops = new MessageOps(clientOf(ctx));
             const channel = await ops.fetchChannel(inputs.channel);
             if (
                 inputs.name === undefined &&
@@ -2428,10 +1459,10 @@ export const actions = [
         },
         icon: "forum",
         run: async (
-            _ctx,
+            ctx,
             inputs: { channel: string; message: string; name: string },
         ) => {
-            const ops = new MessageOps(getClient());
+            const ops = new MessageOps(clientOf(ctx));
             return ops.startThread(inputs.channel, inputs.message, inputs.name);
         },
     }),
@@ -2453,10 +1484,10 @@ export const actions = [
         },
         icon: "swap_horiz",
         run: async (
-            _ctx,
+            ctx,
             inputs: { user: string; channel: string; guildId?: string },
         ) => {
-            const bot = getClient();
+            const bot = clientOf(ctx);
             const member = await resolveMember(bot, inputs.user, inputs.guildId);
             if (!member.voice.channel) {
                 throw new Error(
@@ -2484,10 +1515,10 @@ export const actions = [
         },
         icon: "voice_over_off",
         run: async (
-            _ctx,
+            ctx,
             inputs: { user: string; guildId?: string },
         ) => {
-            const bot = getClient();
+            const bot = clientOf(ctx);
             const member = await resolveMember(bot, inputs.user, inputs.guildId);
             if (!member.voice.channel) {
                 throw new Error(
@@ -2514,8 +1545,8 @@ export const actions = [
             label: "Invite",
         },
         icon: "link",
-        run: async (_ctx, inputs: { channel: string; maxUses?: number }) => {
-            const ops = new MessageOps(getClient());
+        run: async (ctx, inputs: { channel: string; maxUses?: number }) => {
+            const ops = new MessageOps(clientOf(ctx));
             const channel = await ops.fetchChannel(inputs.channel);
             if (!("createInvite" in channel)) {
                 throw new Error(`Channel ${inputs.channel} cannot have invites`);
@@ -2855,6 +1886,315 @@ export const staticTriggers = [
     }),
 ];
 
+// the actions that only build a payload: they never reach Discord, so every
+// bot shares them as the panel's global blocks
+const BUILDER_ACTION_IDS = new Set([
+    "create-embed",
+    "create-button",
+    "create-select-menu",
+    "create-interaction-row",
+    "create-text-field",
+]);
+
+export const builderActions = actions.filter((def) => BUILDER_ACTION_IDS.has(def.id));
+/** Everything a bot's project holds besides its commands: its actions, then its events. */
+export const botActions = [...actions.filter((def) => !BUILDER_ACTION_IDS.has(def.id)), ...staticTriggers];
+
+/** A bot's copy of a definition: its category resolved, its run bound to the session. */
+export function bindToBot(def: ActionDefinition, session: BotSession): ActionDefinition {
+    const run = def.run;
+    return {
+        ...def,
+        category: resolveItemCategory(def.category, DISCORD_CATEGORIES),
+        run: run ? (_ctx: unknown, inputs: any) => run({ session } as any, inputs) : undefined,
+    };
+}
+
+// ---------------------------------------------------------------------------
+// the bots
+// ---------------------------------------------------------------------------
+
+// TODO(remove after v0.5): flows from before several bots name the one bot's
+// actions without a project. Until then they stay registered under their
+// old ids, forwarding to the bot they meant, and say how to move on.
+export const LEGACY_DEPRECATION =
+    "From before Bot Creator ran several bots. Place this block again from your bot in the Actions library; this one stops working in v0.5.";
+
+interface BotEntry {
+    stored: StoredBot;
+    session: BotSession;
+    hasToken: boolean;
+    /** the bot's Actions project, once defined; null while it isn't */
+    project: ActionProjectHandle | null;
+    /** why the bot's actions are not in Actions, when they aren't */
+    actionsError: string | null;
+}
+
+const bots = new Map<string, BotEntry>();
+let legacyBot: string | undefined;
+// the config as read, so fields this version doesn't know are written back
+let savedExtras: Record<string, unknown> = {};
+// why the saved bots couldn't be read; nothing is written over them meanwhile
+let botsError: string | null = null;
+let serviceCtx: ServiceContext<BotsServiceState> | null = null;
+
+function summary(entry: BotEntry): BotSummary {
+    const { stored, session } = entry;
+    const connected = session.connected();
+    return {
+        id: stored.id,
+        name: stored.name,
+        avatar: stored.avatar,
+        applicationId: stored.applicationId,
+        enabled: stored.enabled,
+        connected,
+        hasToken: entry.hasToken,
+        lastError: entry.actionsError ?? session.status().error ?? null,
+        guildCount: connected ? session.client?.guilds?.cache?.size ?? 0 : 0,
+        createdAt: stored.createdAt,
+    };
+}
+
+function publish(): void {
+    serviceCtx?.setState({ bots: [...bots.values()].map(summary), botsError });
+}
+
+function requireReadable(): void {
+    if (botsError) throw new Error(`Bot Creator couldn't read its saved bots, so nothing is changed: ${botsError}`);
+}
+
+function requireBot(id: unknown): BotEntry {
+    const entry = typeof id === "string" ? bots.get(id) : undefined;
+    if (!entry) throw new Error(isBotId(id) ? "This bot was deleted from Bot Creator." : "A bot id is required.");
+    return entry;
+}
+
+// writes run one after another, each saving the list as it is then, so an
+// older write never lands after a newer one
+let writing: Promise<void> = Promise.resolve();
+
+function saveBots(): Promise<void> {
+    const write = writing.then(async () => {
+        const document = {
+            ...savedExtras,
+            version: BOTS_VERSION,
+            bots: [...bots.values()].map((entry) => entry.stored),
+            ...(legacyBot ? { legacyBot } : {}),
+        };
+        if (!legacyBot) delete (document as Record<string, unknown>).legacyBot;
+        try {
+            await config.set(document, PANEL_ID);
+        } catch (err) {
+            throw new Error(`Could not save the bots: ${errorToMessage(err)}`);
+        }
+    });
+    // the caller hears of a failed write; the chain moves on to the next
+    writing = write.catch(logFailure("saving the bots failed"));
+    return write;
+}
+
+function logFailure(what: string) {
+    return (err: unknown) => console.error(`[DiscordService] ${what}:`, errorToMessage(err));
+}
+
+function sessionHost(id: string) {
+    return {
+        emit(trigger: string, output: unknown) {
+            actionsApi.emitTrigger(projectActionId(id, trigger), output, PANEL_ID)
+                .catch(logFailure(`event ${id}/${trigger} failed`));
+            if (legacyBot === id) {
+                actionsApi.emitTrigger(trigger, output, PANEL_ID)
+                    .catch(logFailure(`event ${trigger} failed`));
+            }
+        },
+        changed() {
+            const entry = bots.get(id);
+            if (entry) noteIdentity(entry);
+            publish();
+        },
+    };
+}
+
+// the bot's name and avatar are Discord's: kept as of the last login, so the
+// home screen and Actions name an offline bot the way it was last seen
+function noteIdentity(entry: BotEntry): void {
+    const user = entry.session.client?.user;
+    if (!user) return;
+    const name = user.username;
+    const avatar = user.displayAvatarURL();
+    if (name === entry.stored.name && avatar === entry.stored.avatar && user.id === entry.stored.applicationId) return;
+    const renamed = name !== entry.stored.name;
+    entry.stored = { ...entry.stored, name, avatar, applicationId: user.id };
+    saveBots().catch(logFailure(`saving ${name}'s identity failed`));
+    if (renamed && entry.project) {
+        entry.project.update({ name, icon: "smart_toy" }).catch(logFailure(`renaming ${name}'s project failed`));
+    }
+}
+
+function createEntry(stored: StoredBot, hasToken: boolean): BotEntry {
+    const session = new BotSession(stored.id, sessionHost(stored.id));
+    session.applicationId = stored.applicationId;
+    session.commands = stored.commands;
+    return { stored, session, hasToken, project: null, actionsError: null };
+}
+
+/** Defines the bot's project and registers its actions, events and commands into it. */
+async function registerBot(entry: BotEntry): Promise<void> {
+    const project = await actionsApi.defineProject({ id: entry.stored.id, name: entry.stored.name, icon: "smart_toy" }, PANEL_ID);
+    entry.project = project;
+    for (const def of botActions) await project.register(bindToBot(def, entry.session));
+    for (const command of entry.stored.commands) await project.register(commandTriggerDefinition(command));
+    if (legacyBot === entry.stored.id) await registerLegacyForwarders(entry);
+    entry.actionsError = null;
+}
+
+async function registerLegacyForwarders(entry: BotEntry): Promise<void> {
+    for (const def of botActions) {
+        await actionsApi.register({ ...bindToBot(def, entry.session), deprecated: LEGACY_DEPRECATION }, undefined, PANEL_ID);
+    }
+    for (const command of entry.stored.commands) {
+        await actionsApi.register({ ...commandTriggerDefinition(command), deprecated: LEGACY_DEPRECATION }, undefined, PANEL_ID);
+    }
+}
+
+async function unregisterLegacyForwarders(entry: BotEntry): Promise<void> {
+    for (const def of botActions) await actionsApi.unregister(def.id, PANEL_ID);
+    for (const command of entry.stored.commands) await actionsApi.unregister(commandTriggerId(command), PANEL_ID);
+}
+
+async function readToken(id: string): Promise<string | null> {
+    const stored = await secretsApi.get(tokenName(id), PANEL_ID);
+    return stored.found && stored.value ? stored.value : null;
+}
+
+/** Connects a saved bot with its vault token; the reason it can't is the bot's error. */
+async function connect(entry: BotEntry): Promise<void> {
+    const token = await readToken(entry.stored.id);
+    entry.hasToken = Boolean(token);
+    if (!token) {
+        const message = "No token is saved for this bot. Replace its token in Configuration.";
+        entry.session.fail(message);
+        throw new Error(message);
+    }
+    await entry.session.start(token);
+}
+
+async function setEnabled(entry: BotEntry, enabled: boolean): Promise<void> {
+    if (entry.stored.enabled !== enabled) {
+        entry.stored = { ...entry.stored, enabled };
+        await saveBots();
+        publish();
+    }
+    if (enabled) await connect(entry);
+    else await entry.session.stop();
+}
+
+// The one bot from before several bots becomes the first of them: its
+// token moves to its own vault name, its commands come along, and flows
+// that used it keep running through the deprecated forwarders.
+async function migrateLegacyBot(saved: Record<string, unknown>, legacy: { applicationId: string; commands: SlashCommandDefinition[] }): Promise<void> {
+    const old = await secretsApi.get(LEGACY_TOKEN_NAME, PANEL_ID);
+    const token = old.found && old.value ? old.value : null;
+    const id = createBotId();
+    if (token) await secretsApi.set(tokenName(id), token, PANEL_ID);
+    const { configured: _configured, applicationId: _applicationId, commands: _commands, ...extras } = saved;
+    savedExtras = extras;
+    legacyBot = id;
+    const stored: StoredBot = {
+        id,
+        name: "Discord bot",
+        avatar: "",
+        applicationId: legacy.applicationId || (token ? extractApplicationIdFromToken(token) ?? "" : ""),
+        enabled: true,
+        commands: legacy.commands,
+        createdAt: Date.now(),
+    };
+    bots.set(id, createEntry(stored, Boolean(token)));
+    await saveBots();
+    if (token) await secretsApi.delete(LEGACY_TOKEN_NAME, PANEL_ID);
+    console.log(`[DiscordService] moved the bot from before several bots into ${id}`);
+}
+
+async function loadBots(): Promise<void> {
+    const saved = await config.get<unknown>(PANEL_ID);
+    const read = readBotsConfig(saved);
+    if (read.kind === "legacy") {
+        await migrateLegacyBot(saved as Record<string, unknown>, read);
+        return;
+    }
+    const { bots: _bots, version: _version, legacyBot: _legacyBot, ...extras } = (saved ?? {}) as Record<string, unknown>;
+    savedExtras = extras;
+    legacyBot = read.config.legacyBot;
+    for (const stored of read.config.bots) bots.set(stored.id, createEntry(stored, false));
+}
+
+// a bot's actions, then its connection: one bot failing never holds back another
+async function startEntry(entry: BotEntry): Promise<void> {
+    try {
+        await registerBot(entry);
+    } catch (err) {
+        entry.actionsError = `Its actions couldn't be added to Actions: ${errorToMessage(err)}`;
+        console.error(`[DiscordService] ${entry.stored.name}:`, entry.actionsError);
+    }
+    try {
+        entry.hasToken = Boolean(await readToken(entry.stored.id));
+        if (!entry.hasToken) entry.session.fail("No token is saved for this bot. Replace its token in Configuration.");
+        else if (entry.stored.enabled) await connect(entry);
+    } catch (err) {
+        // the reason is the bot's error, on its card and in its Overview
+        console.error(`[DiscordService] ${entry.stored.name} didn't connect:`, errorToMessage(err));
+    }
+    publish();
+}
+
+// ---------------------------------------------------------------------------
+// commands
+// ---------------------------------------------------------------------------
+
+async function setCommands(entry: BotEntry, commands: SlashCommandDefinition[]): Promise<void> {
+    const before = entry.stored;
+    entry.stored = { ...entry.stored, commands };
+    try {
+        await saveBots();
+    } catch (err) {
+        entry.stored = before;
+        throw err;
+    }
+    entry.session.commands = commands;
+}
+
+// one event action per command: registering is part of creating the
+// command, so a command whose event action is missing is reported, never
+// quietly half-created
+async function registerCommandTrigger(entry: BotEntry, command: SlashCommandDefinition): Promise<string | null> {
+    try {
+        if (!entry.project) throw new Error(entry.actionsError ?? "the bot's project is not in Actions");
+        await entry.project.register(commandTriggerDefinition(command));
+        if (legacyBot === entry.stored.id) {
+            await actionsApi.register({ ...commandTriggerDefinition(command), deprecated: LEGACY_DEPRECATION }, undefined, PANEL_ID);
+        }
+        return null;
+    } catch (err) {
+        console.error(`[DiscordService] event action registration failed for /${command.name}:`, err);
+        return `Could not register the trigger for /${command.name}: ${errorToMessage(err)}`;
+    }
+}
+
+async function unregisterCommandTrigger(entry: BotEntry, command: SlashCommandDefinition): Promise<string | null> {
+    try {
+        if (entry.project) await entry.project.unregister(commandTriggerId(command));
+        if (legacyBot === entry.stored.id) await actionsApi.unregister(commandTriggerId(command), PANEL_ID);
+        return null;
+    } catch (err) {
+        console.error(`[DiscordService] event action removal failed for /${command.name}:`, err);
+        return `Could not remove the trigger for /${command.name}: ${errorToMessage(err)}`;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// the panel's own controls
+// ---------------------------------------------------------------------------
+
 // UI-only RPCs: internal actions stay callable through actionsApi.call for
 // the panel's own controls, and the Actions library hides them by schema
 // instead of by a name suffix
@@ -2915,285 +2255,277 @@ function parseCommandOptions(raw: unknown): SlashCommandOption[] {
     }));
 }
 
+// a widget placed before several bots has no bot chosen: it meant the one
+// there was. TODO(remove after v0.5): with the deprecated forwarders.
+function widgetBot(id: unknown): BotEntry {
+    if (id === undefined || id === "") {
+        if (legacyBot && bots.has(legacyBot)) return bots.get(legacyBot)!;
+        throw new Error("No bot is chosen for this widget. Remove it and add it again to pick one.");
+    }
+    return requireBot(id);
+}
+
+function requireGuild(entry: BotEntry, guildId: unknown) {
+    const id = typeof guildId === "string" ? guildId.trim() : "";
+    if (!id) throw new Error("A guild id is required.");
+    const guild = entry.session.requireClient().guilds.cache.get(id);
+    if (!guild) throw new Error(`Guild ${id} is not available to this bot.`);
+    return guild;
+}
+
+export const internalActions = [
+    internalAction("get-bot-info", "Get Bot Info", "Panel UI only: identity and recent-message read.", (inputs) =>
+        requireBot(inputs?.bot).session.info()),
+
+    internalAction("get-widget-status", "Get Widget Status", "Home widget only: identity, connection and server count.", (inputs) => {
+        const entry = widgetBot(inputs?.bot);
+        return entry.session.widgetStatus(entry.hasToken, entry.stored);
+    }),
+
+    internalAction("get-command-activity", "Get Command Activity", "Home widget only: slash commands run per hour over the last day.", (inputs) =>
+        widgetBot(inputs?.bot).session.activity.snapshot()),
+
+    internalAction("get-invite-url", "Get Invite URL", "Panel UI only: builds the invite URL for the selected permissions.", (inputs) => {
+        const entry = requireBot(inputs?.bot);
+        const permissions = Array.isArray(inputs?.permissions) ? inputs.permissions : [];
+        return buildInviteUrl(entry.session.client?.user?.id || entry.stored.applicationId, permissions);
+    }),
+
+    internalAction("get-user-install-url", "Get User Install URL", "Panel UI only: builds the account-install URL for user-app commands.", (inputs) => {
+        const entry = requireBot(inputs?.bot);
+        return buildUserInstallUrl(entry.session.client?.user?.id || entry.stored.applicationId);
+    }),
+
+    internalAction(
+        "add-bot",
+        "Add Bot",
+        "Panel UI only: adds a bot whose token the panel saved in the vault under the bot's id, once it logs in.",
+        async (inputs): Promise<BotSummary> => {
+            requireReadable();
+            const id = inputs?.bot;
+            if (!isBotId(id)) throw new Error("A bot id is required.");
+            if (bots.has(id)) throw new Error("This bot is already added.");
+            if (bots.size >= MAX_BOTS) throw new Error(`Bot Creator runs at most ${MAX_BOTS} bots.`);
+            const token = await readToken(id);
+            if (!token) throw new Error("No token was saved for the new bot.");
+            const forget = () => secretsApi.delete(tokenName(id), PANEL_ID).catch(logFailure("forgetting the refused token failed"));
+            const applicationId = extractApplicationIdFromToken(token);
+            if (!applicationId) {
+                await forget();
+                throw new Error("That isn't a Discord bot token.");
+            }
+            const twin = [...bots.values()].find((entry) => entry.stored.applicationId === applicationId);
+            if (twin) {
+                await forget();
+                throw new Error(`${twin.stored.name} already uses this bot. One bot can only run once.`);
+            }
+            const entry = createEntry({
+                id,
+                name: "Discord bot",
+                avatar: "",
+                applicationId,
+                enabled: true,
+                commands: [],
+                createdAt: Date.now(),
+            }, true);
+            // the project first, so the bot's first events have somewhere to go
+            try {
+                await registerBot(entry);
+                await entry.session.start(token);
+                bots.set(id, entry);
+                noteIdentity(entry);
+                await saveBots();
+            } catch (err) {
+                bots.delete(id);
+                await entry.session.stop();
+                if (entry.project) await entry.project.remove().catch(logFailure("removing the refused bot's project failed"));
+                await forget();
+                throw err;
+            }
+            publish();
+            return summary(entry);
+        },
+    ),
+
+    internalAction("connect-bot", "Connect Bot", "Panel UI only: turns a bot on with its vault token. Never accepts a token over the wire.", async (inputs) => {
+        requireReadable();
+        await setEnabled(widgetBot(inputs?.bot), true);
+        return true;
+    }),
+
+    internalAction("disconnect-bot", "Disconnect Bot", "Panel UI only: turns a bot off.", async (inputs) => {
+        requireReadable();
+        await setEnabled(requireBot(inputs?.bot), false);
+        return true;
+    }),
+
+    internalAction(
+        "replace-token",
+        "Replace Bot Token",
+        "Panel UI only: the panel saved a new token for the same bot in the vault; reconnects with it when the bot is on.",
+        async (inputs) => {
+            requireReadable();
+            const entry = requireBot(inputs?.bot);
+            const token = await readToken(entry.stored.id);
+            if (!token) throw new Error("No token was saved for this bot.");
+            entry.hasToken = true;
+            if (entry.stored.enabled) await connect(entry);
+            else publish();
+            return true;
+        },
+    ),
+
+    internalAction(
+        "delete-bot",
+        "Delete Bot",
+        "Panel UI only: stops a bot and removes it, its token, its commands and its Actions project.",
+        async (inputs) => {
+            requireReadable();
+            const entry = requireBot(inputs?.bot);
+            const id = entry.stored.id;
+            // each step lands before the next, so a retry picks up where a
+            // failed one stopped
+            let step = "stop the bot";
+            try {
+                await entry.session.stop();
+                step = "remove its actions from Actions";
+                if (entry.project) {
+                    await entry.project.remove();
+                    entry.project = null;
+                }
+                if (legacyBot === id) {
+                    await unregisterLegacyForwarders(entry);
+                    legacyBot = undefined;
+                }
+                step = "delete its token";
+                await secretsApi.delete(tokenName(id), PANEL_ID);
+                step = "save the bot list";
+                bots.delete(id);
+                try {
+                    await saveBots();
+                } catch (err) {
+                    bots.set(id, entry);
+                    throw err;
+                }
+            } catch (err) {
+                publish();
+                throw new Error(`Couldn't ${step}: ${errorToMessage(err)}`);
+            }
+            publish();
+            return { deleted: id };
+        },
+    ),
+
+    internalAction("get-health", "Get Health", "Panel UI only: gateway, cache and memory health read.", (inputs) =>
+        requireBot(inputs?.bot).session.health()),
+
+    internalAction("list-guilds", "List Guilds", "Panel UI only: server summaries from the client cache.", (inputs) =>
+        requireBot(inputs?.bot).session.guildSummaries()),
+
+    internalAction("get-guild-detail", "Get Guild Detail", "Panel UI only: channels and roles for the server explorer.", (inputs) =>
+        buildGuildDetail(requireGuild(requireBot(inputs?.bot), inputs?.guildId))),
+
+    internalAction("search-guild-members", "Search Guild Members", "Panel UI only: one bounded member-search page.", async (inputs) => {
+        const guild = requireGuild(requireBot(inputs?.bot), inputs?.guildId);
+        const query = typeof inputs?.query === "string" ? inputs.query.trim() : "";
+        // one bounded page; member search is a gateway request, never a
+        // full member download
+        const members = await guild.members.fetch({ query: query || undefined, limit: MEMBER_SEARCH_LIMIT });
+        return buildMemberSummaries(members.values());
+    }),
+
+    internalAction("list-commands", "List Slash Commands", "Panel UI only: a bot's saved slash commands.", (inputs) =>
+        requireBot(inputs?.bot).stored.commands),
+
+    internalAction(
+        "create-command",
+        "Create Slash Command",
+        "Panel UI only: stores a command and registers its trigger and Discord definition.",
+        async (input): Promise<CommandMutationResult> => {
+            requireReadable();
+            const entry = requireBot(input?.bot);
+            const name = typeof input?.name === "string" ? normalizeCommandName(input.name) : "";
+            const description = typeof input?.description === "string" ? input.description.trim() : "";
+            const scope = typeof input?.scope === "string" && input.scope ? input.scope : GLOBAL_SCOPE;
+            const userInstall = Boolean(input?.userInstall);
+            const problem = describeCommandProblem({ name, description });
+            if (problem) throw new Error(problem);
+            if (scope !== GLOBAL_SCOPE && !SNOWFLAKE_PATTERN.test(scope)) {
+                throw new Error(`Unknown command scope "${scope}".`);
+            }
+            if (userInstall && scope !== GLOBAL_SCOPE) {
+                throw new Error(
+                    "User apps are only available for global commands: Discord ignores installation contexts on server-scoped commands.",
+                );
+            }
+            const options = parseCommandOptions(input?.options);
+
+            const commands = entry.stored.commands;
+            if (commands.some((c) => c.scope === scope && c.name === name)) {
+                throw new Error(`A command named /${name} already exists in this scope.`);
+            }
+            if (commands.filter((c) => c.scope === scope).length >= MAX_COMMANDS_PER_SCOPE) {
+                throw new Error(`Discord allows at most ${MAX_COMMANDS_PER_SCOPE} commands per scope.`);
+            }
+
+            const definition: SlashCommandDefinition = { id: randomUUID(), name, description, scope, options, userInstall };
+            await setCommands(entry, [...commands, definition]);
+            const triggerError = await registerCommandTrigger(entry, definition);
+            const sync = await entry.session.syncAfterMutation();
+            return { command: definition, ...sync, triggerError };
+        },
+    ),
+
+    internalAction(
+        "delete-command",
+        "Delete Slash Command",
+        "Panel UI only: removes a stored command, its trigger, and its Discord definition.",
+        async (input): Promise<CommandMutationResult> => {
+            requireReadable();
+            const entry = requireBot(input?.bot);
+            const id = typeof input?.id === "string" ? input.id.trim() : "";
+            if (!id) throw new Error("A command id is required.");
+            const target = entry.stored.commands.find((c) => c.id === id);
+            if (!target) throw new Error(`No command with id ${id} is stored.`);
+            const next = entry.stored.commands.filter((c) => c.id !== id);
+            // a scope with no commands left cannot be inferred from the
+            // list, so it is explicitly cleared on Discord
+            const scopesToClear = next.some((c) => c.scope === target.scope) ? [] : [target.scope];
+            await setCommands(entry, next);
+            const triggerError = await unregisterCommandTrigger(entry, target);
+            const sync = await entry.session.syncAfterMutation(scopesToClear);
+            return { command: target, ...sync, triggerError };
+        },
+    ),
+];
+
+// what a widget's "Bot" dropdown offers in Home's gallery
+const botChoices = () =>
+    [...bots.values()]
+        .sort((a, b) => a.stored.createdAt - b.stored.createdAt)
+        .map((entry) => ({ value: entry.stored.id, label: entry.stored.name }));
+
 export const botService = definePanelService({
-    id: "dev.paperboard.botcreator",
-    actions: [...actions, ...staticTriggers],
+    id: PANEL_ID,
+    state: { bots: [], botsError: null } as BotsServiceState,
+    actions: [...builderActions, ...internalActions],
     types: customTypes,
     categories: [...DISCORD_CATEGORIES],
-    async onInit(ctx: ServiceContext<any>) {
-        const panelId = "dev.paperboard.botcreator";
-        const registerInternal = (
-            id: string,
-            name: string,
-            description: string,
-            run: (inputs: any) => unknown | Promise<unknown>,
-        ) =>
-            actionsApi
-                .register(internalAction(id, name, description, run), undefined, panelId)
-                .catch((err) =>
-                    console.error(
-                        `[DiscordService] internal action "${id}" registration failed:`,
-                        err,
-                    ),
-                );
-
-        registerInternal(
-            "get-bot-info",
-            "Get Bot Info",
-            "Panel UI only: identity and recent-message read.",
-            () => buildBotInfo(),
-        );
-
-        registerInternal(
-            "get-widget-status",
-            "Get Widget Status",
-            "Home widget only: identity, connection and server count.",
-            async () => {
-                // an unreadable config is a failure, never "not set up"
-                const saved = await readStoredConfig();
-                return buildWidgetStatus(Boolean(saved.configured));
-            },
-        );
-
-        registerInternal(
-            "get-command-activity",
-            "Get Command Activity",
-            "Home widget only: slash commands run per hour over the last day.",
-            () => commandActivity.snapshot(),
-        );
-
-        registerInternal(
-            "get-invite-url",
-            "Get Invite URL",
-            "Panel UI only: builds the invite URL for the selected permissions.",
-            (perms: string[]) => generateInvite(perms || []),
-        );
-
-        registerInternal(
-            "get-user-install-url",
-            "Get User Install URL",
-            "Panel UI only: builds the account-install URL for user-app commands.",
-            () => buildUserInstallUrl(client?.user?.id || savedAppId),
-        );
-
-        registerInternal(
-            "connect-bot",
-            "Connect Bot",
-            "Panel UI only: connects the vault token. Never accepts a token over the wire.",
-            async () => {
-                // vault-only by design: no token arguments over the
-                // actions channel, matching the 1.1.0 changelog
-                const stored = await secretsApi.get(TOKEN_NAME, PANEL_ID);
-                if (!stored.found || !stored.value) {
-                    throw new Error("No bot token stored");
-                }
-                savedAppId = extractApplicationIdFromToken(stored.value) || "";
-                await startBot(stored.value, ctx);
-                return true;
-            },
-        );
-
-        registerInternal(
-            "disconnect-bot",
-            "Disconnect Bot",
-            "Panel UI only: stops the bot session.",
-            async () => {
-                await stopBot();
-                return true;
-            },
-        );
-
-        registerInternal(
-            "get-health",
-            "Get Health",
-            "Panel UI only: gateway, cache and memory health read.",
-            () => buildHealth(),
-        );
-
-        registerInternal(
-            "list-guilds",
-            "List Guilds",
-            "Panel UI only: server summaries from the client cache.",
-            () => listGuildSummaries(),
-        );
-
-        registerInternal(
-            "get-guild-detail",
-            "Get Guild Detail",
-            "Panel UI only: channels and roles for the server explorer.",
-            (guildId: string) => {
-                const id = typeof guildId === "string" ? guildId.trim() : "";
-                if (!id) throw new Error("A guild id is required.");
-                const bot = getClient();
-                const guild = bot.guilds.cache.get(id);
-                if (!guild) {
-                    throw new Error(`Guild ${id} is not available to this bot.`);
-                }
-                return buildGuildDetail(guild);
-            },
-        );
-
-        registerInternal(
-            "search-guild-members",
-            "Search Guild Members",
-            "Panel UI only: one bounded member-search page.",
-            async (input: { guildId?: string; query?: string }) => {
-                const id =
-                    typeof input?.guildId === "string" ? input.guildId.trim() : "";
-                if (!id) throw new Error("A guild id is required.");
-                const query =
-                    typeof input?.query === "string" ? input.query.trim() : "";
-                const bot = getClient();
-                const guild = bot.guilds.cache.get(id);
-                if (!guild) {
-                    throw new Error(`Guild ${id} is not available to this bot.`);
-                }
-                // one bounded page; member search is a gateway request,
-                // never a full member download
-                const members = await guild.members.fetch({
-                    query: query || undefined,
-                    limit: MEMBER_SEARCH_LIMIT,
-                });
-                return buildMemberSummaries(members.values());
-            },
-        );
-
-        registerInternal(
-            "create-command",
-            "Create Slash Command",
-            "Panel UI only: stores a command and registers its trigger and Discord definition.",
-            async (input: {
-                name?: string;
-                description?: string;
-                scope?: string;
-                options?: unknown;
-                userInstall?: unknown;
-            }): Promise<CommandMutationResult> => {
-                const name =
-                    typeof input?.name === "string"
-                        ? normalizeCommandName(input.name)
-                        : "";
-                const description =
-                    typeof input?.description === "string"
-                        ? input.description.trim()
-                        : "";
-                const scope =
-                    typeof input?.scope === "string" && input.scope
-                        ? input.scope
-                        : GLOBAL_SCOPE;
-                const userInstall = Boolean(input?.userInstall);
-                const problem = describeCommandProblem({ name, description });
-                if (problem) throw new Error(problem);
-                if (scope !== GLOBAL_SCOPE && !SNOWFLAKE_PATTERN.test(scope)) {
-                    throw new Error(`Unknown command scope "${scope}".`);
-                }
-                if (userInstall && scope !== GLOBAL_SCOPE) {
-                    throw new Error(
-                        "User apps are only available for global commands: Discord ignores installation contexts on server-scoped commands.",
-                    );
-                }
-                const options = parseCommandOptions(input?.options);
-
-                const saved = await readStoredConfig();
-                const commands = normalizeCommandDefinitions(saved.commands);
-                if (commands.some((c) => c.scope === scope && c.name === name)) {
-                    throw new Error(`A command named /${name} already exists in this scope.`);
-                }
-                if (commands.filter((c) => c.scope === scope).length >= MAX_COMMANDS_PER_SCOPE) {
-                    throw new Error(
-                        `Discord allows at most ${MAX_COMMANDS_PER_SCOPE} commands per scope.`,
-                    );
-                }
-
-                const definition: SlashCommandDefinition = {
-                    id: randomUUID(),
-                    name,
-                    description,
-                    scope,
-                    options,
-                    userInstall,
-                };
-                const next = [...commands, definition];
-                await writeStoredCommands(next);
-                knownCommands = next;
-
-                let triggerError: string | null = null;
-                try {
-                    await registerCommandTrigger(definition);
-                } catch (err) {
-                    triggerError = errorToMessage(err);
-                }
-
-                const sync = await syncAfterMutation(next);
-                return { command: definition, ...sync, triggerError };
-            },
-        );
-
-        registerInternal(
-            "delete-command",
-            "Delete Slash Command",
-            "Panel UI only: removes a stored command, its trigger, and its Discord definition.",
-            async (input: { id?: string }): Promise<CommandMutationResult> => {
-                const id = typeof input?.id === "string" ? input.id.trim() : "";
-                if (!id) throw new Error("A command id is required.");
-                const saved = await readStoredConfig();
-                const commands = normalizeCommandDefinitions(saved.commands);
-                const target = commands.find((c) => c.id === id);
-                if (!target) {
-                    throw new Error(`No command with id ${id} is stored.`);
-                }
-                const next = commands.filter((c) => c.id !== id);
-                // a scope with no commands left cannot be inferred from
-                // the list, so it is explicitly cleared on Discord
-                const scopesToClear = next.some((c) => c.scope === target.scope)
-                    ? []
-                    : [target.scope];
-                await writeStoredCommands(next);
-                knownCommands = next;
-
-                let triggerError: string | null = null;
-                try {
-                    await unregisterCommandTrigger(target);
-                } catch (err) {
-                    triggerError = errorToMessage(err);
-                }
-
-                const sync = await syncAfterMutation(next, scopesToClear);
-                return { command: target, ...sync, triggerError };
-            },
-        );
-
-        // commands created before this session's socket existed still need
-        // triggers; a failure here must not block the auto-connect below
+    widgetChoices: {
+        "bot-status": { bot: botChoices },
+        "command-activity": { bot: botChoices },
+    },
+    async onInit(ctx: ServiceContext<BotsServiceState>) {
+        serviceCtx = ctx;
         try {
-            const saved = await config.get<any>(PANEL_ID);
-            knownCommands = normalizeCommandDefinitions(saved?.commands);
-            for (const command of knownCommands) {
-                await registerCommandTrigger(command);
-            }
+            await loadBots();
         } catch (err) {
-            console.error("[DiscordService] command trigger registration failed:", err);
+            botsError = errorToMessage(err);
+            console.error("[DiscordService] reading the saved bots failed:", botsError);
         }
-
-        try {
-            const saved = await config.get<any>(PANEL_ID);
-            // auto-connect from the vault; missing token = needs re-setup,
-            // never a silent no-op
-            if (saved?.configured) {
-                const stored = await secretsApi.get(TOKEN_NAME, PANEL_ID);
-                if (stored.found && stored.value) {
-                    savedAppId =
-                        saved.applicationId ||
-                        extractApplicationIdFromToken(stored.value) ||
-                        "";
-                    await startBot(stored.value, ctx);
-                } else {
-                    console.error("[DiscordService] marked configured but no vault token; re-setup required");
-                }
-            }
-        } catch (err) {
-            console.error("[DiscordService] Init error:", err);
-        }
+        publish();
+        await Promise.all([...bots.values()].map(startEntry));
+        console.log(`[DiscordService] Ready with ${bots.size} bot(s).`);
     },
 });
 

@@ -18,7 +18,8 @@ import {
     PaperTable,
     PaperCopyButton,
 } from "@mileniumhq/paperui";
-import { actionsApi } from "@mileniumhq/paperapi";
+import { actionsApi, projectActionId } from "@mileniumhq/paperapi";
+import { PANEL_ID, type BotSummary } from "../bots";
 import {
     CHANNEL_KIND_LABELS,
     errorToMessage,
@@ -30,7 +31,6 @@ import {
     type MemberSummary,
 } from "../types";
 
-const PANEL_ID = "dev.paperboard.botcreator";
 
 const CHANNEL_KIND_ICONS: Record<DiscordChannelKind, string> = {
     text: "tag",
@@ -69,7 +69,8 @@ interface ChannelGroup {
     channels: GuildChannel[];
 }
 
-export default function Servers() {
+export default function Servers(props: { bot: () => BotSummary }) {
+    const bot = () => props.bot().id;
     const [guilds, setGuilds] = createSignal<GuildSummary[]>([]);
     // null until the first health read answers: unknown is not offline
     const [connected, setConnected] = createSignal<boolean | null>(null);
@@ -97,7 +98,7 @@ export default function Servers() {
         setLoadingList(true);
         setListError("");
         try {
-            const list = await actionsApi.call<GuildSummary[]>(PANEL_ID, "list-guilds");
+            const list = await actionsApi.call<GuildSummary[]>(PANEL_ID, "list-guilds", { bot: bot() });
             if (!Array.isArray(list)) throw new Error("list-guilds returned no server list");
             setGuilds(list);
         } catch (err) {
@@ -109,7 +110,7 @@ export default function Servers() {
 
         setHealthError("");
         try {
-            const health = await actionsApi.call<Health>(PANEL_ID, "get-health");
+            const health = await actionsApi.call<Health>(PANEL_ID, "get-health", { bot: bot() });
             if (!health || typeof health !== "object") {
                 throw new Error("get-health returned no health payload");
             }
@@ -143,7 +144,7 @@ export default function Servers() {
             const next = await actionsApi.call<GuildDetail>(
                 PANEL_ID,
                 "get-guild-detail",
-                guildId,
+                { bot: bot(), guildId },
             );
             setDetail(next);
             setChannelId(textChannels()[0]?.id ?? "");
@@ -170,7 +171,7 @@ export default function Servers() {
             const found = await actionsApi.call<MemberSummary[]>(
                 PANEL_ID,
                 "search-guild-members",
-                { guildId: id, query: memberQuery() },
+                { bot: bot(), guildId: id, query: memberQuery() },
             );
             if (!Array.isArray(found)) throw new Error("search-guild-members returned no member list");
             setMembers(found);
@@ -196,7 +197,7 @@ export default function Servers() {
         }
         setSending(true);
         try {
-            await actionsApi.call(PANEL_ID, "send-message", {
+            await actionsApi.call(PANEL_ID, projectActionId(bot(), "send-message"), {
                 channel: channelId(),
                 content: content().trim(),
             });

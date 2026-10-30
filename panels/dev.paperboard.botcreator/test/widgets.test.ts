@@ -9,7 +9,7 @@ import {
     ACTIVITY_BUCKET_MS,
     CommandActivityRecorder,
 } from "../src/commandActivity";
-import { __botTest, buildWidgetStatus, commandActivity } from "../src/service";
+import { BotSession } from "../src/service";
 
 const HOUR = ACTIVITY_BUCKET_MS;
 const T0 = 1_000 * HOUR; // an hour boundary
@@ -54,19 +54,30 @@ const recordingFactory = (handlers: Map<string, Handler>) =>
         },
     }) as unknown as Client;
 
-const ctx = { emitTrigger: () => {} } as any;
+const session = new BotSession("bot", { emit: () => {}, changed: () => {} });
+const commandActivity = session.activity;
+const saved = { name: "Saved name", avatar: "" };
+// the widget's read, against a client the session never logged in
+const buildWidgetStatus = (configured: boolean, client: Client | null) => {
+    const live = session.client;
+    session.client = client;
+    try {
+        return session.widgetStatus(configured, saved);
+    } finally {
+        session.client = live;
+    }
+};
 
-// startBot leaves a live session (client, uptime, command-sync result) in
-// module state shared by every suite in the process; stop it so no later
-// suite observes this one's session, whatever order the files run in
+// a started session keeps its client, uptime and command-sync result; stop
+// it so no later test observes this one's
 afterEach(async () => {
-    await __botTest.stopBot();
+    await session.stop();
 });
 
 describe("command activity from the live session", () => {
     it("records each slash command, not button clicks", async () => {
         const handlers = new Map<string, Handler>();
-        await __botTest.startBot("good-token", ctx, () => recordingFactory(handlers));
+        await session.start("good-token", () => recordingFactory(handlers));
         const before = commandActivity.snapshot().total;
         const slash = {
             isButton: () => false,
@@ -97,7 +108,7 @@ describe("bot status widget", () => {
     } as unknown as Client;
 
     it("reports identity and servers for the connected session", async () => {
-        await __botTest.startBot("good-token", ctx, () => recordingFactory(new Map()));
+        await session.start("good-token", () => recordingFactory(new Map()));
         expect(buildWidgetStatus(true, fakeClient)).toEqual({
             configured: true,
             connected: true,
@@ -110,7 +121,7 @@ describe("bot status widget", () => {
 
     it("reports no servers once the gateway drops", async () => {
         const handlers = new Map<string, Handler>();
-        await __botTest.startBot("good-token", ctx, () => recordingFactory(handlers));
+        await session.start("good-token", () => recordingFactory(handlers));
         handlers.get("shardDisconnect")!({ code: 1006 });
         const status = buildWidgetStatus(true, fakeClient);
         expect(status.connected).toBe(false);

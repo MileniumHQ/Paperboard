@@ -2,14 +2,22 @@
 // entries per session, and guild summaries come straight from client cache
 import { describe, it, expect, beforeEach } from "bun:test";
 import type { Client } from "discord.js";
-import {
-    RECENT_MESSAGE_CAP,
-    recordRecentMessage,
-    getRecentMessages,
-    clearRecentMessages,
-    listGuilds,
-    buildBotInfo,
-} from "../src/service";
+import { BotSession } from "../src/service";
+import { RECENT_MESSAGE_CAP } from "../src/types";
+
+const session = new BotSession("bot", { emit: () => {}, changed: () => {} });
+const recordRecentMessage = session.recordRecentMessage.bind(session);
+const getRecentMessages = session.getRecentMessages.bind(session);
+const clearRecentMessages = session.clearRecentMessages.bind(session);
+// the session's reads, against a client it never logged in
+const listGuilds = (client: Client | null) => {
+    session.client = client;
+    return session.listGuilds();
+};
+const buildBotInfo = (client: Client | null) => {
+    session.client = client;
+    return session.info();
+};
 
 function fakeMessage(n: number) {
     return {

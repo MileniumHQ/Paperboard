@@ -11,18 +11,30 @@
         {
             "id": "bot-status",
             "name": "Bot status",
-            "description": "Your bot's avatar, whether it is online, and how many servers it is in",
+            "description": "A bot's avatar, whether it is online, and how many servers it is in",
             "sizes": [
                 "1x1",
                 "2x1"
+            ],
+            "options": [
+                {
+                    "id": "bot",
+                    "label": "Bot"
+                }
             ]
         },
         {
             "id": "command-activity",
             "name": "Command activity",
-            "description": "Slash commands run per hour over the last day",
+            "description": "A bot's slash commands run per hour over the last day",
             "sizes": [
                 "2x2"
+            ],
+            "options": [
+                {
+                    "id": "bot",
+                    "label": "Bot"
+                }
             ]
         }
     ],

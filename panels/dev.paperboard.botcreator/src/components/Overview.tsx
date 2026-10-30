@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, Show, For } from "solid-js";
+import { createEffect, createSignal, on, onMount, onCleanup, Show, For } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -9,8 +9,10 @@ import {
     PaperTable,
     PaperCard,
     PaperCopyButton,
+    PaperToggle,
 } from "@mileniumhq/paperui";
-import { actionsApi, config } from "@mileniumhq/paperapi";
+import { actionsApi, projectActionId } from "@mileniumhq/paperapi";
+import { PANEL_ID, type BotSummary } from "../bots";
 import {
     appendCapped,
     DEFAULT_DISCORD_AVATAR,
@@ -19,7 +21,6 @@ import {
     errorToMessage,
 } from "../types";
 
-const PANEL_ID = "dev.paperboard.botcreator";
 const HEALTH_POLL_MS = 10000;
 
 interface RecentMessage {
@@ -43,39 +44,29 @@ interface Health {
     commandSyncError: string | null;
 }
 
-export default function Overview() {
-    const [name, setName] = createSignal("Discord Bot");
+export interface OverviewProps {
+    bot: () => BotSummary;
+    /** turns the bot on or off; rejects with the reason it couldn't */
+    onSetEnabled: (enabled: boolean) => Promise<unknown>;
+}
+
+export default function Overview(props: OverviewProps) {
     const [tag, setTag] = createSignal("");
-    const [avatar, setAvatar] = createSignal(DEFAULT_DISCORD_AVATAR);
-    const [appId, setAppId] = createSignal("");
-    // null until the bot's details answer: unknown is not offline
-    const [connected, setConnected] = createSignal<boolean | null>(null);
-    const [connectionError, setConnectionError] = createSignal<string | null>(null);
     const [infoError, setInfoError] = createSignal("");
     const [healthError, setHealthError] = createSignal("");
+    const [toggleError, setToggleError] = createSignal("");
     const [recent, setRecent] = createSignal<RecentMessage[]>([]);
     const [health, setHealth] = createSignal<Health | null>(null);
+    // the bot's name, avatar and connection are the service's, kept live
+    const connected = () => props.bot().connected;
+    const connectionError = () => props.bot().lastError;
 
     const loadBotInfo = async () => {
         setInfoError("");
         try {
-            const saved = await config.get<any>(PANEL_ID);
-            if (saved?.applicationId) setAppId(saved.applicationId);
-        } catch (err) {
-            console.error("[Overview] saved application id read failed:", err);
-            setInfoError(errorToMessage(err));
-        }
-
-        try {
-            const info = await actionsApi.call<any>(PANEL_ID, "get-bot-info");
+            const info = await actionsApi.call<any>(PANEL_ID, "get-bot-info", { bot: props.bot().id });
             if (!info || typeof info !== "object") throw new Error("get-bot-info returned no bot details");
-            if (info.name) setName(info.name);
-            if (info.tag) setTag(info.tag);
-            if (info.avatar) setAvatar(info.avatar);
-            if (info.applicationId) setAppId(info.applicationId);
-            if (typeof info.connected === "boolean") setConnected(info.connected);
-            if (typeof info.lastError === "string") setConnectionError(info.lastError);
-            else if (info.connected) setConnectionError(null);
+            setTag(typeof info.tag === "string" ? info.tag : "");
             if (Array.isArray(info.recentMessages)) setRecent(info.recentMessages);
         } catch (err) {
             console.error("[Overview] bot info read failed:", err);
@@ -85,7 +76,7 @@ export default function Overview() {
 
     const loadHealth = async () => {
         try {
-            const next = await actionsApi.call<Health>(PANEL_ID, "get-health");
+            const next = await actionsApi.call<Health>(PANEL_ID, "get-health", { bot: props.bot().id });
             if (!next || typeof next !== "object") {
                 throw new Error("get-health returned no health payload");
             }
@@ -105,11 +96,19 @@ export default function Overview() {
         onCleanup(() => clearInterval(poll));
     });
 
-    // live session truth: the service already emits these triggers — each
-    // subscription is cleaned up with the component (bounded: no listener
-    // outlives it).
+    // a bot that comes online has a tag and a fresh session to show
+    createEffect(on(connected, (now, before) => {
+        if (now && before === false) {
+            void loadBotInfo();
+            void loadHealth();
+        }
+    }, { defer: true }));
+
+    // live session truth: the service emits each message as the bot's
+    // event; the subscription is cleaned up with the component (bounded: no
+    // listener outlives it)
     onCleanup(
-        actionsApi.onTrigger(PANEL_ID, "on-message", (msg: any) => {
+        actionsApi.onTrigger(PANEL_ID, projectActionId(props.bot().id, "on-message"), (msg: any) => {
             if (!msg || typeof msg !== "object") return;
             setRecent((prev) =>
                 appendCapped(
@@ -124,25 +123,18 @@ export default function Overview() {
                     RECENT_MESSAGE_CAP,
                 ),
             );
-            // a gateway-delivered message is live connectivity evidence:
-            // flip the badge back online and clear the stale error
-            setConnected(true);
-            setConnectionError(null);
         }),
     );
 
-    onCleanup(
-        actionsApi.onTrigger<{ error?: string }>(
-            PANEL_ID,
-            "on-connection-error",
-            (payload) => {
-                setConnected(false);
-                setConnectionError(payload?.error ? String(payload.error) : "Connection error");
-            },
-        ),
-    );
+    const setEnabled = async (enabled: boolean) => {
+        setToggleError("");
+        try {
+            await props.onSetEnabled(enabled);
+        } catch (err) {
+            setToggleError(errorToMessage(err));
+        }
+    };
 
-    const unknownText = () => (infoError() ? "Unknown" : "Checking…");
 
     const pingText = () => {
         const h = health();
@@ -161,41 +153,53 @@ export default function Overview() {
             <PaperCard>
                         <PaperFlex direction="row" padding="full" gap="full" align="center">
                             <PaperAvatar
-                                src={avatar() || DEFAULT_DISCORD_AVATAR}
-                                alt={name()}
+                                src={props.bot().avatar || DEFAULT_DISCORD_AVATAR}
+                                alt={props.bot().name}
                                 size="xlarge"
                             />
 
                             <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
                                 <PaperFlex direction="row" gap="half" align="baseline" wrap>
                                     <PaperText weight={700} size={6}>
-                                        {name()}
+                                        {props.bot().name}
                                     </PaperText>
-                                    <Show when={tag() && tag() !== name()}>
+                                    <Show when={tag() && tag() !== props.bot().name}>
                                         <PaperText size={3} color="text-subtle">
                                             @{tag()}
                                         </PaperText>
                                     </Show>
-                                    <PaperBadge variant={connected() === null ? "monochrome" : connected() ? "success" : "danger"}>
-                                        {connected() === null ? unknownText() : connected() ? "Online" : "Offline"}
+                                    <PaperBadge variant={connected() ? "success" : props.bot().enabled ? "danger" : "monochrome"}>
+                                        {connected() ? "Online" : "Offline"}
                                     </PaperBadge>
                                 </PaperFlex>
 
-                                <Show when={appId()}>
+                                <Show when={props.bot().applicationId}>
                                     <PaperFlex direction="row" gap="half" align="center">
                                         <PaperText size={2} color="text-subtle" family="code">
-                                            {appId()}
+                                            {props.bot().applicationId}
                                         </PaperText>
-                                        <PaperCopyButton text={appId()} title="Copy application ID" />
+                                        <PaperCopyButton text={props.bot().applicationId} title="Copy application ID" />
                                     </PaperFlex>
                                 </Show>
                             </PaperFlex>
+                            <PaperToggle
+                                checked={props.bot().enabled}
+                                aria-label={`${props.bot().name} is on`}
+                                title={props.bot().enabled ? "On: runs while Paperboard does" : "Off"}
+                                onChange={(enabled) => void setEnabled(enabled)}
+                            />
                 </PaperFlex>
             </PaperCard>
 
             <Show when={infoError()}>
                 <PaperQuote variant="danger" icon="warning" title="Couldn't read the bot's details">
                     {infoError()}
+                </PaperQuote>
+            </Show>
+
+            <Show when={toggleError()}>
+                <PaperQuote variant="danger" icon="warning" title="Couldn't turn the bot on or off" onDismiss={() => setToggleError("")}>
+                    {toggleError()}
                 </PaperQuote>
             </Show>
 
@@ -237,7 +241,7 @@ export default function Overview() {
                                     <tbody>
                                         <tr>
                                             <th>Gateway status</th>
-                                            <td>{connected() === null ? unknownText() : connected() ? "Connected" : "Disconnected"}</td>
+                                            <td>{connected() ? "Connected" : "Disconnected"}</td>
                                         </tr>
                                         <tr>
                                             <th>Gateway latency</th>
@@ -305,5 +309,3 @@ export default function Overview() {
         </>
     );
 }
-
-export { Overview };

@@ -2,13 +2,24 @@
 // client, record the typed error, and emit it — never report "connected"
 import { afterEach, describe, it, expect } from "bun:test";
 import { Client } from "discord.js";
-import {
-    __botTest,
-    clearRecentMessages,
-    getConnectionStatus,
-    getRecentMessages,
-    validatePresenceStatus,
-} from "../src/service";
+import { BotSession, validatePresenceStatus } from "../src/service";
+
+type Emitted = { triggerId: string; output: unknown }[];
+
+// each test's bot; every session started here is stopped after the test
+let session: BotSession;
+const sessions: BotSession[] = [];
+const serviceCtx = (emitted: Emitted) => {
+    session = new BotSession("bot", {
+        emit: (triggerId, output) => emitted.push({ triggerId, output }),
+        changed: () => {},
+    });
+    sessions.push(session);
+    return session;
+};
+const getConnectionStatus = () => session.status();
+const getRecentMessages = () => session.getRecentMessages();
+const clearRecentMessages = () => session.clearRecentMessages();
 
 const failingFactory = () =>
     ({
@@ -21,14 +32,10 @@ const failingFactory = () =>
 
 describe("bot login failure state", () => {
     it("nulls the client, records the typed error, and emits it", async () => {
-        const emitted: { triggerId: string; output: unknown }[] = [];
-        const ctx = {
-            emitTrigger: (triggerId: string, output: unknown) => {
-                emitted.push({ triggerId, output });
-            },
-        } as any;
+        const emitted: Emitted = [];
+        const ctx = serviceCtx(emitted);
         await expect(
-            __botTest.startBot("bad-token", ctx, failingFactory),
+            ctx.start("bad-token", failingFactory),
         ).rejects.toThrow(/Discord login failed: Invalid token/);
         // client nulled: not connected, error recorded, trigger emitted
         const status = getConnectionStatus();
@@ -70,22 +77,16 @@ const recordingFactory = (handlers: Map<string, Handler>, hooks: object = {}) =>
 // every startBot here leaves a session in module state shared by the whole
 // test process; stop it so no other suite inherits it, in any file order
 afterEach(async () => {
-    await __botTest.stopBot();
+    for (const started of sessions.splice(0)) await started.stop();
 });
 
-const serviceCtx = (emitted: { triggerId: string; output: unknown }[]) =>
-    ({
-        emitTrigger: (triggerId: string, output: unknown) => {
-            emitted.push({ triggerId, output });
-        },
-    }) as any;
 
 describe("gateway disconnect truth", () => {
     it("clientReady restores connection status without subscribing to deprecated ready", async () => {
         const bot = new Client({ intents: [] });
         bot.login = async () => "test-token";
         try {
-            await __botTest.startBot("test-token", serviceCtx([]), () => bot);
+            await serviceCtx([]).start("test-token", () => bot);
             expect(bot.listenerCount("ready")).toBe(0);
             bot.emit("shardDisconnect", { code: 1006 } as any, 0);
             expect(getConnectionStatus().connected).toBe(false);
@@ -99,7 +100,7 @@ describe("gateway disconnect truth", () => {
     it("shardDisconnect invalidates connected status and emits the error", async () => {
         const handlers = new Map<string, Handler>();
         const emitted: { triggerId: string; output: unknown }[] = [];
-        await __botTest.startBot("good-token", serviceCtx(emitted), () =>
+        await serviceCtx(emitted).start("good-token", () =>
             recordingFactory(handlers),
         );
         expect(getConnectionStatus().connected).toBe(true);
@@ -114,7 +115,7 @@ describe("gateway disconnect truth", () => {
     it("shardReady after a drop restores connected status", async () => {
         const handlers = new Map<string, Handler>();
         const emitted: { triggerId: string; output: unknown }[] = [];
-        await __botTest.startBot("good-token", serviceCtx(emitted), () =>
+        await serviceCtx(emitted).start("good-token", () =>
             recordingFactory(handlers),
         );
         handlers.get("shardDisconnect")!({ code: 1006 });
@@ -127,7 +128,7 @@ describe("gateway disconnect truth", () => {
         const handlers = new Map<string, Handler>();
         const emitted: { triggerId: string; output: unknown }[] = [];
         const destroyed: boolean[] = [];
-        await __botTest.startBot("good-token", serviceCtx(emitted), () =>
+        await serviceCtx(emitted).start("good-token", () =>
             recordingFactory(handlers, {
                 destroy: async () => {
                     destroyed.push(true);
@@ -145,10 +146,10 @@ describe("gateway disconnect truth", () => {
         const secondHandlers = new Map<string, Handler>();
         const emitted: { triggerId: string; output: unknown }[] = [];
         const ctx = serviceCtx(emitted);
-        await __botTest.startBot("good-token", ctx, () => recordingFactory(firstHandlers));
+        await ctx.start("good-token", () => recordingFactory(firstHandlers));
         // second login wins the race while the first session's listeners
         // are still registered on its bot object
-        await __botTest.startBot("good-token", ctx, () => recordingFactory(secondHandlers));
+        await ctx.start("good-token", () => recordingFactory(secondHandlers));
         // first session's gateway drop must NOT mark the live bot offline
         firstHandlers.get("shardDisconnect")!({ code: 1006 });
         expect(getConnectionStatus().connected).toBe(true);
@@ -172,8 +173,8 @@ describe("superseded session events", () => {
             id: "m1",
         };
 
-        await __botTest.startBot("good-token", ctx, () => recordingFactory(firstHandlers));
-        await __botTest.startBot("good-token", ctx, () => recordingFactory(secondHandlers));
+        await ctx.start("good-token", () => recordingFactory(firstHandlers));
+        await ctx.start("good-token", () => recordingFactory(secondHandlers));
 
         // the superseded session's gateway event must not be reported as the
         // live bot's activity
@@ -200,7 +201,7 @@ describe("connect race: pre-login supersede", () => {
         });
 
         // seed session C0; its destroy hangs on the first call
-        await __botTest.startBot("t0", ctx, () =>
+        await ctx.start("t0", () =>
             recordingFactory(new Map(), {
                 destroy: async () => {
                     firstDestroyCalled++;
@@ -213,9 +214,9 @@ describe("connect race: pre-login supersede", () => {
         expect(getConnectionStatus().connected).toBe(true);
 
         // attempt A: its stopBot awaits C0.destroy — suspended mid-flight
-        const attemptA = __botTest.startBot("t2", ctx, () => recordingFactory(new Map()));
+        const attemptA = ctx.start("t2", () => recordingFactory(new Map()));
         // attempt B: completes while A is suspended
-        await __botTest.startBot("t3", ctx, () => recordingFactory(new Map()));
+        await ctx.start("t3", () => recordingFactory(new Map()));
         expect(getConnectionStatus().connected).toBe(true);
 
         // resume A: it must return early (superseded), leaving state alone
@@ -224,5 +225,48 @@ describe("connect race: pre-login supersede", () => {
         expect(getConnectionStatus().connected).toBe(true);
         expect(getConnectionStatus().error).toBeUndefined();
         expect(firstDestroyCalled).toBeGreaterThanOrEqual(1);
+    });
+});
+
+describe("ready event", () => {
+    it("fires on-bot-ready with the bot's identity when the gateway is ready", async () => {
+        const handlers = new Map<string, Handler>();
+        const emitted: Emitted = [];
+        const ctx = serviceCtx(emitted);
+        const bot = Object.assign(recordingFactory(handlers), { user: { id: "app1", username: "PaperBot" } });
+        await ctx.start("good-token", () => bot);
+        handlers.get("clientReady")!();
+        expect(emitted.filter((e) => e.triggerId === "on-bot-ready")).toEqual([
+            { triggerId: "on-bot-ready", output: { userId: "app1", username: "PaperBot" } },
+        ]);
+    });
+});
+
+describe("two bots", () => {
+    it("keep their own connection, messages and events", async () => {
+        const firstHandlers = new Map<string, Handler>();
+        const secondHandlers = new Map<string, Handler>();
+        const firstEmitted: Emitted = [];
+        const secondEmitted: Emitted = [];
+        const first = serviceCtx(firstEmitted);
+        const second = serviceCtx(secondEmitted);
+        await first.start("first-token", () => recordingFactory(firstHandlers));
+        await second.start("second-token", () => recordingFactory(secondHandlers));
+
+        firstHandlers.get("messageCreate")!({
+            author: { bot: false, username: "alice", id: "u1" },
+            content: "hi",
+            channelId: "c1",
+            guildId: "g1",
+            id: "m1",
+        });
+        firstHandlers.get("shardDisconnect")!({ code: 1006 });
+
+        expect(first.getRecentMessages()).toHaveLength(1);
+        expect(second.getRecentMessages()).toEqual([]);
+        expect(first.status().connected).toBe(false);
+        expect(second.status()).toEqual({ connected: true });
+        expect(firstEmitted.map((e) => e.triggerId)).toEqual(["on-message", "on-connection-error"]);
+        expect(secondEmitted).toEqual([]);
     });
 });

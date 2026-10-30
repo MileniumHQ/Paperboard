@@ -1,39 +1,36 @@
 // Build with failures.vite.ts and open /test/fixtures/failures.html. The real tabs against a
-// service and vault that fail on cue: every failure must be shown, never read as "offline" or
-// a stuck "Generating…", and a reset must stop at a failed step instead of overwriting the
-// saved commands or claiming success with the token still stored.
+// service that fails on cue: every failure must be shown, never read as "offline" or a stuck
+// "Generating…", and a delete the service refuses must say so and leave the bot in place.
 import { render } from "solid-js/web";
 import { PaperProvider } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
-import { actionsApi, config, secretsApi } from "@mileniumhq/paperapi";
+import { actionsApi } from "@mileniumhq/paperapi";
+import type { BotSummary } from "../../src/bots";
 
 const failing = new Set<string>();
-const writes: unknown[] = [];
-let configReads = 0;
-let readsBeforeFailure = Infinity;
-const saved = { configured: true, applicationId: "123456789012345678", commands: [] };
+const bot: BotSummary = {
+    id: "b-fixture",
+    name: "Bot",
+    avatar: "",
+    applicationId: "123456789012345678",
+    enabled: true,
+    connected: true,
+    hasToken: true,
+    lastError: null,
+    guildCount: 1,
+    createdAt: 1,
+};
 actionsApi.on = (() => () => {}) as typeof actionsApi.on;
 actionsApi.onTrigger = (() => () => {}) as typeof actionsApi.onTrigger;
 actionsApi.call = (async (_panel: string, action: string) => {
     if (failing.has(action)) throw new Error(`${action} is down`);
     if (action === "get-health") return { connected: true, lastError: null, uptimeMs: 1000, wsPing: 40, guildCount: 1, cachedUsers: 2, cachedChannels: 3, commandsReceived: 4, pendingInteractions: 0, commandSyncError: null };
     if (action === "get-bot-info") return { name: "Bot", connected: true, recentMessages: [] };
-    if (action === "list-guilds") return [];
+    if (action === "list-guilds" || action === "list-commands") return [];
+    if (action === "delete-bot") throw new Error("Couldn't delete its token: vault is down");
     if (action === "get-invite-url" || action === "get-user-install-url") return "https://discord.com/oauth2/authorize?client_id=1";
     return true;
 }) as typeof actionsApi.call;
-(config as any).get = async () => {
-    configReads++;
-    if (configReads > readsBeforeFailure) throw new Error("config is down");
-    return structuredClone(saved);
-};
-(config as any).set = async (value: unknown) => {
-    writes.push(value);
-};
-(secretsApi as any).delete = async () => {
-    if (failing.has("vault")) throw new Error("vault is down");
-    return true;
-};
 
 const { default: Commands } = await import("../../src/components/Commands");
 const { default: Overview } = await import("../../src/components/Overview");
@@ -51,9 +48,9 @@ const wait = async (predicate: () => boolean, label: string) => {
 const text = () => document.body.textContent ?? "";
 const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].reverse().find((b) => b.textContent?.trim() === label);
 const assert = (value: unknown, label: string) => { if (!value) throw new Error(label); };
-const mount = (Tab: () => any) => {
+const mount = (Tab: (props: { bot: () => BotSummary }) => any) => {
     dispose();
-    dispose = render(() => <PaperProvider><Tab /></PaperProvider>, root);
+    dispose = render(() => <PaperProvider><Tab bot={() => bot} /></PaperProvider>, root);
 };
 
 try {
@@ -63,7 +60,7 @@ try {
     await wait(() => text().includes("get-health is down"), "Commands must show a failed health read");
     assert(!text().includes("Bot offline"), "Commands must not call an unknown connection offline");
 
-    mount(Overview);
+    mount((props) => <Overview bot={props.bot} onSetEnabled={async () => true} />);
     await wait(() => text().includes("Couldn't check health"), "Overview must show a failed health read");
     assert(!text().includes("Commands received"), "Overview must not show a health table of zeros");
 
@@ -73,26 +70,28 @@ try {
     await wait(() => text().includes("Couldn't make the invite link"), "Invite must show a failed link");
     assert(!text().includes("Generating invite link"), "Invite must not keep generating after a failure");
 
-    for (const [label, setup] of [
-        ["the vault", () => failing.add("vault")],
-        ["the saved settings", () => { readsBeforeFailure = configReads; }],
-    ] as const) {
-        failing.clear();
-        readsBeforeFailure = Infinity;
-        writes.length = 0;
-        let reset = false;
-        dispose();
-        dispose = render(() => <PaperProvider><Configuration onReset={() => { reset = true; }} /></PaperProvider>, root);
-        await wait(() => text().includes(saved.applicationId), "Configuration must load");
-        await wait(() => !button("Cancel"), "the last reset modal must be gone");
-        setup();
-        button("Reset")!.click();
-        await wait(() => Boolean(button("Cancel")), "the reset modal must open");
-        button("Reset")!.click();
-        await wait(() => text().includes("Reset incomplete"), `a reset with ${label} failing must say it stopped`);
-        assert(!reset, `a reset with ${label} failing must not finish`);
-        assert(writes.length === 0, `a reset with ${label} failing must not save over the settings`);
-    }
+    failing.clear();
+    let deleted = false;
+    dispose();
+    dispose = render(() => (
+        <PaperProvider>
+            <Configuration
+                bot={() => bot}
+                onReplaceToken={async () => true}
+                onDelete={async (id) => {
+                    await actionsApi.call("dev.paperboard.botcreator", "delete-bot", { bot: id });
+                    deleted = true;
+                }}
+            />
+        </PaperProvider>
+    ), root);
+    await wait(() => text().includes(bot.applicationId), "Configuration must load");
+    button("Delete")!.click();
+    await wait(() => Boolean(button("Cancel")), "the delete modal must open");
+    button("Delete")!.click();
+    await wait(() => text().includes("vault is down"), "a refused delete must say why");
+    assert(!deleted, "a refused delete must not finish");
+    assert(Boolean(button("Cancel")), "a refused delete must leave its modal open");
     document.getElementById("result")!.textContent = "PASS";
 } catch (err) {
     document.getElementById("result")!.textContent = `FAIL: ${err instanceof Error ? err.message : String(err)}`;

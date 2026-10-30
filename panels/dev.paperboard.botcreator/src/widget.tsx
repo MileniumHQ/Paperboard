@@ -22,8 +22,8 @@ import {
 import { actionsApi, defineWidgets, type WidgetContext } from "@mileniumhq/paperapi";
 import type { CommandActivity } from "./commandActivity";
 import { DEFAULT_DISCORD_AVATAR, errorToMessage } from "./types";
+import { PANEL_ID } from "./bots";
 
-const PANEL_ID = "dev.paperboard.botcreator";
 const STATUS_POLL_MS = 15_000;
 const ACTIVITY_POLL_MS = 60_000;
 
@@ -84,16 +84,20 @@ function createSize(widget: WidgetContext) {
     return size;
 }
 
-async function readStatus(): Promise<BotWidgetStatus> {
-    const status = await actionsApi.call<BotWidgetStatus>(PANEL_ID, "get-widget-status");
+// the bot chosen in the gallery; a widget placed before several bots has
+// none, and the service answers for the bot there was then
+const chosenBot = (widget: WidgetContext) => ({ bot: widget.options.bot ?? "" });
+
+async function readStatus(widget: WidgetContext): Promise<BotWidgetStatus> {
+    const status = await actionsApi.call<BotWidgetStatus>(PANEL_ID, "get-widget-status", chosenBot(widget));
     if (!status || typeof status !== "object" || typeof status.connected !== "boolean") {
         throw new Error("Bot Creator returned no status");
     }
     return status;
 }
 
-async function readActivity(): Promise<CommandActivity> {
-    const activity = await actionsApi.call<CommandActivity>(PANEL_ID, "get-command-activity");
+async function readActivity(widget: WidgetContext): Promise<CommandActivity> {
+    const activity = await actionsApi.call<CommandActivity>(PANEL_ID, "get-command-activity", chosenBot(widget));
     if (!activity || !Array.isArray(activity.counts)) {
         throw new Error("Bot Creator returned no command activity");
     }
@@ -116,7 +120,7 @@ function HeaderButton(props: { icon: string; label: string; onClick: () => void;
 function BotStatus(props: { widget: WidgetContext }) {
     const size = createSize(props.widget);
     const wide = () => size().w > 1;
-    const { ready, failed, refresh } = createPolledRead(props.widget, STATUS_POLL_MS, readStatus);
+    const { ready, failed, refresh } = createPolledRead(props.widget, STATUS_POLL_MS, () => readStatus(props.widget));
     const [connecting, setConnecting] = createSignal(false);
     const [connectError, setConnectError] = createSignal<string | null>(null);
     const open = () => props.widget.openPanel();
@@ -127,7 +131,7 @@ function BotStatus(props: { widget: WidgetContext }) {
         setConnecting(true);
         setConnectError(null);
         try {
-            await actionsApi.call(PANEL_ID, "connect-bot");
+            await actionsApi.call(PANEL_ID, "connect-bot", chosenBot(props.widget));
         } catch (err) {
             setConnectError(errorToMessage(err));
         } finally {
@@ -146,7 +150,7 @@ function BotStatus(props: { widget: WidgetContext }) {
         if (!status.connected && status.configured) {
             return <HeaderButton icon="power_settings_new" label={connecting() ? "Connecting" : "Connect bot"} disabled={connecting()} onClick={() => void reconnect()} />;
         }
-        return <HeaderButton icon="open_in_new" label={status.configured ? "Open Bot Creator" : "Set up in Bot Creator"} onClick={open} />;
+        return <HeaderButton icon="open_in_new" label="Open Bot Creator" onClick={open} />;
     };
 
     const connectButton = () => (
@@ -204,11 +208,11 @@ function BotStatus(props: { widget: WidgetContext }) {
                                         fallback={
                                             <PaperWidgetMessage
                                                 tone="warning"
-                                                title={wide() ? "No bot token" : "Not set up"}
-                                                description={wide() ? "Add one in Bot Creator" : undefined}
+                                                title={wide() ? "No bot token" : "No token"}
+                                                description={wide() ? "Replace it in Bot Creator" : undefined}
                                             >
                                                 <Show when={!wide()}>
-                                                    <PaperButton size="tiny" onClick={open}>Set up</PaperButton>
+                                                    <PaperButton size="tiny" onClick={open}>Open</PaperButton>
                                                 </Show>
                                             </PaperWidgetMessage>
                                         }
@@ -249,7 +253,7 @@ function formatHour(ms: number): string {
 }
 
 function CommandActivityWidget(props: { widget: WidgetContext }) {
-    const { ready, failed, refresh } = createPolledRead(props.widget, ACTIVITY_POLL_MS, readActivity);
+    const { ready, failed, refresh } = createPolledRead(props.widget, ACTIVITY_POLL_MS, () => readActivity(props.widget));
 
     // hours before recording began were not observed: they are left off the
     // chart rather than drawn as quiet hours
