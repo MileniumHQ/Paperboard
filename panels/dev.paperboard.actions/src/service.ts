@@ -42,7 +42,7 @@ import {
     type ProjectMeta,
 } from "./lib/projects";
 import { canvasPreview, canvasRects, flowRect, placeFlow, type CanvasPreview } from "./lib/flowLayout";
-import { buildFlow, viewFlow } from "./lib/flowSpec";
+import { buildFlow, builtinBlocks, viewFlow } from "./lib/flowSpec";
 import { BUILTIN_SCHEMA_ENTRIES } from "./lib/builtins";
 import { addFlowFile } from "./lib/flowFile";
 
@@ -905,7 +905,7 @@ function projectActions(project: Project): ActionDefinition[] {
             description:
                 "Adds a flow to this project's canvas, placed clear of every other flow. " +
                 "`flow` is { trigger: { panel, action, values? }, steps: [{ panel, action, values?, ref?, name?, steps?, else? }] }. " +
-                "The trigger is an event action (\"builtin.logic\" \"on-play\" starts by hand). Containers (\"builtin.logic\" repeat, if, if-else) take steps, and if-else takes else. " +
+                "The trigger is an event action (\"builtin.logic\" \"on-play\" starts by hand). Containers (\"builtin.logic\" repeat, if, if-else) take steps, and if-else takes else; list-blocks lists every built-in block. " +
                 "A value reads an earlier step's result as {{ref}} and a trigger's field as {{field}}. A step can be any registered action that isn't an event.",
             template: "Add flow {flow}",
             inputs: { flow: { type: "object", label: "Flow", required: true } },
@@ -963,6 +963,20 @@ function projectActions(project: Project): ActionDefinition[] {
 }
 
 export const actions = [
+    defineAction({
+        id: "list-blocks",
+        name: "List Built-in Blocks",
+        hidden: true,
+        description:
+            "The blocks every flow can use besides panels' actions: On Play, Wait, Repeat, If, If/Else, variables, text, math, dates, web requests and more, " +
+            "each with its panel, action and inputs, to name in add-flow. Blocks that hold steps say so",
+        template: "List built-in blocks",
+        inputs: {},
+        output: { type: "list<object>", label: "Blocks" },
+        icon: "widgets",
+        run: () => builtinBlocks(),
+    }),
+
     defineAction({
         id: "list-projects",
         name: "List Projects",

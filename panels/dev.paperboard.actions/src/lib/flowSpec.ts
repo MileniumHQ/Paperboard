@@ -5,6 +5,7 @@
 // reason the writer can fix; nothing half-built reaches a canvas.
 import type { ActionSchema } from "@mileniumhq/paperapi";
 import { blockVariableName, type CanvasBlock } from "./tree";
+import { BUILTIN_CATEGORIES } from "./builtins";
 
 export interface FlowStepSpec {
     panel: string;
@@ -174,4 +175,52 @@ export function viewFlow(block: CanvasBlock): FlowView {
         ...(block.children ? { steps: block.children.map(viewFlow) } : {}),
         ...(block.elseChildren ? { else: block.elseChildren.map(viewFlow) } : {}),
     };
+}
+
+/** One built-in block as a program reads it, to place it with add-flow. */
+export interface BuiltinBlockView {
+    panel: string;
+    action: string;
+    name: string;
+    category: string;
+    description: string;
+    inputs: Record<string, { type?: string; label?: string; required?: true; default?: unknown; options?: unknown[] }>;
+    output?: string;
+    /** an event a flow starts from, never a step */
+    event?: true;
+    /** Repeat, If and If/Else hold steps; If/Else also holds else steps */
+    holds?: "steps" | "steps and else";
+}
+
+/** Every built-in block the library offers, for programs that write flows. */
+export function builtinBlocks(): BuiltinBlockView[] {
+    return BUILTIN_CATEGORIES.flatMap((category) =>
+        category.items.flatMap((item) => {
+            const s = item.schema;
+            if (!s || !item.action) return [];
+            const inputs: BuiltinBlockView["inputs"] = {};
+            for (const [key, p] of Object.entries(s.inputs ?? {})) {
+                inputs[key] = {
+                    type: p.type,
+                    ...(p.label && p.label !== key ? { label: p.label } : {}),
+                    ...(p.required ? { required: true as const } : {}),
+                    ...(p.default !== undefined ? { default: p.default } : {}),
+                    ...(p.options?.length ? { options: p.options.map((o) => o.value) } : {}),
+                };
+            }
+            const output = typeof s.output === "string" ? s.output : s.output?.type;
+            const kind = containerKind(item.panelId, item.action);
+            return [{
+                panel: item.panelId,
+                action: item.action,
+                name: s.name,
+                category: category.name,
+                description: s.description,
+                inputs,
+                ...(output ? { output } : {}),
+                ...(s.eventOnly ? { event: true as const } : {}),
+                ...(kind ? { holds: kind === "if-else" ? "steps and else" as const : "steps" as const } : {}),
+            }];
+        }),
+    );
 }

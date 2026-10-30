@@ -140,6 +140,14 @@ test("Actions projects over the real daemon: the old canvas becomes a project, f
             ],
         });
         expect(one.position).not.toEqual(two.position);
+        // the built-in blocks a program names in a flow, with their inputs
+        const blocks = await actionsApi.call<any[]>(ACTIONS, "list-blocks");
+        const block = (action: string) => blocks.find((b) => b.panel === "builtin.logic" && b.action === action);
+        expect(block("on-play")).toMatchObject({ event: true });
+        expect(block("if")).toMatchObject({ holds: "steps", inputs: { left: { type: "string", required: true }, operator: { options: expect.arrayContaining(["==", "includes"]) } } });
+        expect(block("if-else")?.holds).toBe("steps and else");
+        expect(block("math-calculate")?.inputs.expression).toBeDefined();
+        expect((await actionsApi.list(ACTIONS)).find((a) => a.action === "list-blocks")?.schema?.hidden).toBe(true);
         const run = await actionsApi.call<any>(ACTIONS, `${other.id}/run-flow`, { flowId: two.flowId });
         expect(run.status).toBe("passed");
         const view = await actionsApi.call<any>(ACTIONS, `${other.id}/get-flow`, { flowId: two.flowId });
