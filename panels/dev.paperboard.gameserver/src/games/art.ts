@@ -2,11 +2,11 @@ import type { GameArt } from "./types";
 const taglines: Readonly<Record<string, string>> = {
     minecraft: "Create! Explore! Survive!",
     terraria: "Dig, fight, explore, build!",
-    "counter-strike-2": "Counter-Strike offers an elite competitive experience.",
-    "team-fortress-2": "Nine distinct classes provide a broad range of tactical abilities and personalities.",
-    "garrys-mod": "Garry's Mod is a physics sandbox.",
-    palworld: "Fight, farm, build and work alongside mysterious creatures called Pals!",
-    "ark-survival-ascended": "ARK is reimagined with Unreal Engine 5!",
+    "counter-strike-2": "An elite competitive experience.",
+    "team-fortress-2": "The most fun you can have online.",
+    "garrys-mod": "We give you the tools and leave you to play.",
+    palworld: "Don't worry; there are no labor laws for Pals.",
+    rust: "Do whatever it takes to last another night.",
 };
 /** Where scripts/fetch-game-art.ts puts a game's art; the panel never fetches art at runtime. */
 export const gameArt = (id: string): GameArt => ({

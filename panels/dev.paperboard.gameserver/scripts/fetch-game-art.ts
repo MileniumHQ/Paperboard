@@ -28,7 +28,7 @@ const GAMES: Readonly<Record<string, Source>> = {
     "team-fortress-2": { kind: "steam", app: 440 },
     "garrys-mod": { kind: "steam", app: 4000 },
     palworld: { kind: "steam", app: 1623730 },
-    "ark-survival-ascended": { kind: "steam", app: 2399830 },
+    rust: { kind: "steam", app: 252490 },
 };
 
 /** Posters are shown a few hundred px tall at most, banners across a card. */

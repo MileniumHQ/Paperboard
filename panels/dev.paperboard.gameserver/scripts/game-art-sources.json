@@ -7,7 +7,7 @@
     "terraria": {
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/105600/library_600x900_2x.jpg",
         "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/105600/library_hero.jpg",
-        "taglineSource": "https://store.steampowered.com/app/105600/"
+        "taglineSource": "https://terraria.org/"
     },
     "counter-strike-2": {
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/730/library_600x900_2x.jpg",
@@ -29,9 +29,9 @@
         "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1623730/library_hero.jpg",
         "taglineSource": "https://store.steampowered.com/app/1623730/"
     },
-    "ark-survival-ascended": {
-        "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2399830/library_600x900_2x.jpg",
-        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2399830/library_hero.jpg",
-        "taglineSource": "https://store.steampowered.com/app/2399830/"
+    "rust": {
+        "taglineSource": "https://store.steampowered.com/app/252490/",
+        "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/252490/library_600x900_2x.jpg",
+        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/252490/library_hero.jpg"
     }
 }
