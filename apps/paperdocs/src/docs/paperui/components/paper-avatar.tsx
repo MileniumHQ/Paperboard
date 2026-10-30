@@ -79,9 +79,9 @@ export function Example() {
                         </tr>
                         <tr>
                             <td><PaperCode>shape</PaperCode></td>
-                            <td><PaperCode>"circle" | "square"</PaperCode></td>
+                            <td><PaperCode>"circle" | "square" | "sharp"</PaperCode></td>
                             <td><PaperCode>"circle"</PaperCode></td>
-                            <td>Sets the border radius to full circle or rounded tile.</td>
+                            <td>Sets the border radius to full circle, rounded tile, or square corners.</td>
                         </tr>
                         <tr>
                             <td><PaperCode>fallbackIcon</PaperCode></td>
@@ -114,6 +114,7 @@ export function Example() {
             <PaperText preset="body">
                 PaperAvatar renders an HTML span containing either an img element or a PaperIcon component.
                 The square shape matches application launcher tiles and plugin icons.
+                The sharp shape keeps square corners for art that draws its own edge, such as a pixel-art player head.
                 The surface chip background is applied only when the fallback icon is shown, so an image with transparency does not sit on an opaque tile.
             </PaperText>
             <PaperText preset="body">

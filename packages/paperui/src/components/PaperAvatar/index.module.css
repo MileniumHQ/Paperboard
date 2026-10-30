@@ -25,6 +25,10 @@
     border-radius: var(--paper-border-radius-half);
 }
 
+.PaperAvatar.sharp {
+    border-radius: 0;
+}
+
 .PaperAvatar.small {
     width: var(--paper-avatar-size-small);
     height: var(--paper-avatar-size-small);

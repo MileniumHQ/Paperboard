@@ -10,8 +10,9 @@ export interface PaperAvatarProps extends JSX.HTMLAttributes<HTMLSpanElement> {
     src?: string;
     alt?: string;
     size?: PaperAvatarSize;
-    /** square tiles for app and plugin icons */
-    shape?: "circle" | "square";
+    /** square: rounded tiles for app and plugin icons; sharp: square corners
+     * for art that draws its own edge, such as pixel art */
+    shape?: "circle" | "square" | "sharp";
     /** material icon shown when src is missing or fails */
     fallbackIcon?: string;
     /** tint the fallback chip with a semantic role (the active item of a set) */
@@ -47,6 +48,7 @@ export function PaperAvatar(props: PaperAvatarProps) {
             styles.PaperAvatar,
             styles[local.size ?? "medium"],
             local.shape === "square" ? styles.square : "",
+            local.shape === "sharp" ? styles.sharp : "",
             local.src ? "" : styles.chip,
             !local.src && local.accent ? styles.accent : "",
             local.onEdit ? styles.editable : "",
