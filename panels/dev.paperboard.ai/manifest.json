@@ -4,6 +4,7 @@
     "version": "0.2.3",
     "description": "Chat with local models",
     "publisher": "Paperboard",
+    "unlisted": true,
     "base": "./dist/index.html",
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
