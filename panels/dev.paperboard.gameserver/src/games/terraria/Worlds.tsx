@@ -4,6 +4,7 @@ import {
     PaperBadge,
     PaperButton,
     PaperCard,
+    PaperCopyButton,
     PaperEffect,
     PaperFlex,
     PaperIcon,
@@ -309,6 +310,18 @@ export default function TerrariaWorlds() {
                                         <PaperBadge variant="success">Active world</PaperBadge>
                                     </Show>
                                     <PaperText size={3}>{summary(world.header, world.generated)}</PaperText>
+                                    <Show when={world.header}>
+                                        {(header) => (
+                                            <PaperFlex direction="row" gap="onefourth" wrap>
+                                                <PaperBadge variant={header().evil === "crimson" ? "danger" : "primary"}>
+                                                    {header().evil === "crimson" ? "Crimson" : "Corruption"}
+                                                </PaperBadge>
+                                                <PaperBadge variant={header().hardmode ? "warning" : "monochrome"}>
+                                                    {header().hardmode ? "Hardmode" : "Pre-Hardmode"}
+                                                </PaperBadge>
+                                            </PaperFlex>
+                                        )}
+                                    </Show>
                                 </PaperFlex>
                             </PaperFlex>
                             <Show when={world.error}>
@@ -331,7 +344,16 @@ export default function TerrariaWorlds() {
                                                 </tr>
                                                 <tr>
                                                     <th>Seed</th>
-                                                    <td>{seedParts(header().seed).number}</td>
+                                                    <td>
+                                                        <PaperFlex direction="row" gap="half" align="center">
+                                                            {seedParts(header().seed).number}
+                                                            <PaperCopyButton text={seedParts(header().seed).number} />
+                                                        </PaperFlex>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <th>Bosses defeated</th>
+                                                    <td>{header().bosses.length ? header().bosses.join(", ") : "None yet"}</td>
                                                 </tr>
                                                 <Show when={seedParts(header().seed).flags.length > 0}>
                                                     <tr>
