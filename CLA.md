@@ -1,11 +1,13 @@
 # Paperboard Individual Contributor License Agreement
 
-Thank you for your interest in contributing to Paperboard ("We" or "Us").
+Thank you for your interest in contributing to Paperboard. "We" or "Us" means
+Pxl (GitHub: pxlkt, tails@pxlkt.com), publishing as Milenium, and their
+successors and assigns.
 
 This contributor agreement ("Agreement") documents the rights granted by
 contributors to Us. To make this document effective, please accept it by
 electronic submission through a pull request, following the instructions in
-[CONTRIBUTING.md](./CONTRIBUTING.md). This is a legally binding document, so
+"How to accept" below. This is a legally binding document, so
 please read it carefully before agreeing to it. The Agreement may cover more
 than one software project managed by Us.
 
@@ -15,8 +17,8 @@ than one software project managed by Us.
 
 "Contribution" means any work of authorship that is Submitted by You to Us in
 which You own or assert ownership of the Copyright. If You do not own the
-Copyright in the entire work of authorship, please follow the instructions in
-[CONTRIBUTING.md](./CONTRIBUTING.md).
+Copyright in the entire work of authorship, identify the parts You did not
+write, where they come from, and their license in Your pull request.
 
 "Copyright" means all rights protecting works of authorship owned or controlled
 by You, including copyright, moral and neighboring rights, as appropriate, for
@@ -106,8 +108,9 @@ You have had Your employer approve this Agreement or sign a separate corporate
 agreement with Us. If You are less than eighteen years old, please have Your
 parents or guardian sign the Agreement.
 
-(d) You have followed the instructions in [CONTRIBUTING.md](./CONTRIBUTING.md),
-if You do not own the Copyright in the entire work of authorship Submitted.
+(d) If You do not own the Copyright in the entire work of authorship Submitted,
+You have identified the parts You did not write, where they come from, and
+their license in Your pull request.
 
 ## 4. Disclaimer
 
