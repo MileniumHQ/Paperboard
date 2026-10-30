@@ -2,36 +2,43 @@
     "minecraft": {
         "poster": "https://store-images.s-microsoft.com/image/apps.17382.13510798885735219.9735d495-578c-4a4c-b892-3eb3a780b3a0.d3792486-cf98-40c0-a2c1-d6443f0e2b70",
         "banner": "https://store-images.s-microsoft.com/image/apps.608.13510798885735219.cf55aeca-e690-41e0-a88b-41b0e517a3be.c94e1bfa-1b68-4cf5-9954-f967168480b4",
-        "taglineSource": "https://www.minecraft.net/en-us/article/how-minecraft"
+        "taglineSource": "https://www.minecraft.net/en-us/article/how-minecraft",
+        "icon": "https://store-images.s-microsoft.com/image/apps.31326.13510798885735219.3dfb176a-2479-4b17-ab6e-418794f3932d.a8aae002-3be2-4cd4-9ca3-b3e2e7e14882"
     },
     "terraria": {
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/105600/library_600x900_2x.jpg",
         "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/105600/library_hero.jpg",
-        "taglineSource": "https://terraria.org/"
+        "taglineSource": "https://terraria.org/",
+        "icon": "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/105600/a4ce7b163832f35ffcbf560ca40974bccd5d4cd5.ico"
     },
     "counter-strike-2": {
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/730/library_600x900_2x.jpg",
         "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/730/library_hero.jpg",
-        "taglineSource": "https://store.steampowered.com/app/730/"
+        "taglineSource": "https://store.steampowered.com/app/730/",
+        "icon": "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/730/324b323045b09bace182f928f4104dfcd93cb7f3.ico"
     },
     "team-fortress-2": {
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/440/library_600x900_2x.jpg",
         "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/440/library_hero.jpg",
-        "taglineSource": "https://store.steampowered.com/app/440/"
+        "taglineSource": "https://store.steampowered.com/app/440/",
+        "icon": "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/440/f568912870a4684f9ec76277a1a404dda6bab213.ico"
     },
     "garrys-mod": {
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/4000/library_600x900_2x.jpg",
         "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/4000/library_hero.jpg",
-        "taglineSource": "https://store.steampowered.com/app/4000/"
+        "taglineSource": "https://store.steampowered.com/app/4000/",
+        "icon": "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/4000/01b545c997d68f6c4ac18ccef6c57d1d5d690e03.ico"
     },
     "palworld": {
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1623730/library_600x900_2x.jpg",
         "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1623730/library_hero.jpg",
-        "taglineSource": "https://store.steampowered.com/app/1623730/"
+        "taglineSource": "https://store.steampowered.com/app/1623730/",
+        "icon": "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/1623730/22a20bdaa6d782f60caa45eb7b02fc2411dcd988.ico"
     },
     "rust": {
         "taglineSource": "https://store.steampowered.com/app/252490/",
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/252490/library_600x900_2x.jpg",
-        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/252490/library_hero.jpg"
+        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/252490/library_hero.jpg",
+        "icon": "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/252490/acf87ad23570b3c81f8c9cfc19544a07edd8b632.ico"
     }
 }

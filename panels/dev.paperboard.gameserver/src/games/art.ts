@@ -13,4 +13,5 @@ export const gameArt = (id: string): GameArt => ({
     tagline: taglines[id] ?? (() => { throw new Error(`No tagline for game "${id}"`); })(),
     poster: `/assets/games/${id}/poster.webp`,
     banner: `/assets/games/${id}/banner.webp`,
+    icon: `/assets/games/${id}/icon.webp`,
 });

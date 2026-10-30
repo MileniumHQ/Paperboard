@@ -52,6 +52,8 @@ export interface GameArt {
 export interface GameDefinition {
     id: string;
     name: string;
+    /** The game's square app icon. */
+    icon: string;
     art: GameArt;
     icon: string;
     hostSupport(host: { os: string; arch: string }, options: GameOptions): { supported: boolean; reason?: string };
