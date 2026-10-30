@@ -38,6 +38,7 @@ Browser mode:
 UI:
 - **AVOID USING CUSTOM COMPONENTS UNLESS THEY DO SOMETHING UNIQUE!** If there's something that should be a component, ask about it.
 - **NEVER use static values, use PaperUI tokens.** In fact, avoid using any CSS at all, and let me know if the component needs an improvement.
+- This app does not use shadows. Shadows are very rare in this app. Don't start creating your own design style for this app, we have one.
 
 Docs for PaperUI and PaperDocs are available extensively at apps/paperdocs/src/docs. Use these if you need!
 
