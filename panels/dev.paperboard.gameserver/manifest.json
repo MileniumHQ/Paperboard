@@ -1,8 +1,8 @@
 {
     "name": "Game Server",
     "id": "dev.paperboard.gameserver",
-    "version": "0.4.0",
-    "description": "Dedicated Minecraft & game server manager",
+    "version": "0.5.0",
+    "description": "Dedicated Minecraft and Terraria server manager",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
     "service": "./dist/service.js",
@@ -79,6 +79,7 @@
             }
         ],
         "services": [
+            { "name": "Re-Logic / Terraria", "detail": "Verified vanilla dedicated-server downloads from terraria.org" },
             {
                 "name": "Mojang",
                 "detail": "Downloading vanilla servers and player skins"

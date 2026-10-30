@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "../../games/minecraft/index";
 import { serverSoftware, serverStatus, serverVersion } from "../server";
 import { installModpack, listModpackVersions, readModpack, removeModpack, searchModpacks } from "../modpacks";
 import { SOFTWARE } from "../../software/catalog";
@@ -10,7 +11,7 @@ import type { AddonKind, AddonListing, InstalledAddon } from "./kind";
 // the mod set and may switch the Minecraft version and loader build; the
 // service does all of it (service/modpacks.ts).
 
-export const loaderName = () => SOFTWARE[serverSoftware()].name;
+export const loaderName = () => SOFTWARE[minecraftSoftware(serverSoftware())].name;
 const offline = () => serverStatus() === "offline";
 
 export function installedModpack(pack: ModpackRecord): InstalledAddon {

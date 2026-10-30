@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "../games/minecraft/index";
 import semver from "semver";
 import { fileApi, config } from "./api";
 import { PANEL_ID } from "../service/types";
@@ -120,14 +121,14 @@ export function getEcosystem(software: ServerSoftwareType): EcosystemInfo | null
 
 /** the Modrinth loader id of the installed software; it must have add-ons */
 function currentModrinthLoader(): string {
-    const software = serverSoftware();
+    const software = minecraftSoftware(serverSoftware());
     const addons = SOFTWARE[software].addons;
     if (!addons) throw new Error(`${SOFTWARE[software].name} has no plugin or mod system.`);
     return addons.modrinthLoader;
 }
 
 export async function searchModrinth(query: string, signal?: AbortSignal): Promise<ModrinthHit[]> {
-    const eco = getEcosystem(serverSoftware());
+    const eco = getEcosystem(minecraftSoftware(serverSoftware()));
     if (!eco) return [];
     const mcVersion = serverVersion();
     if (eco.kind === "mod" && !mcVersion) throw new Error("Choose a server version before browsing Modrinth.");
@@ -592,7 +593,7 @@ async function downloadAndRecordFile(input: {
 
     await fileApi.download({
         url: input.file.url,
-        targetPath: `${pluginDirName(serverSoftware())}/${safe}`,
+        targetPath: `${pluginDirName(minecraftSoftware(serverSoftware()))}/${safe}`,
         appId: PANEL_ID,
         // Modrinth hashes ride the same fields vanilla (sha1) and Paper
         // (sha256) already use. The daemon enforces sha1/sha256 today;
@@ -971,7 +972,7 @@ export async function updatePlugin(check: PluginUpdateCheck): Promise<void> {
 
     await fileApi.download({
         url: file.url,
-        targetPath: `${pluginDirName(serverSoftware())}/${safe}`,
+        targetPath: `${pluginDirName(minecraftSoftware(serverSoftware()))}/${safe}`,
         appId: PANEL_ID,
         ...(file.sha1 ? { sha1: file.sha1 } : {}),
         ...(file.sha256 ? { sha256: file.sha256 } : {}),
@@ -1001,7 +1002,7 @@ export async function installGeyserMCProject(source: GeyserMCSource, filename: s
     const latest = await resolveGeyserMCLatest(source, filename);
     await fileApi.download({
         url: latest.url,
-        targetPath: `${pluginDirName(serverSoftware())}/${latest.filename}`,
+        targetPath: `${pluginDirName(minecraftSoftware(serverSoftware()))}/${latest.filename}`,
         appId: PANEL_ID,
         sha256: latest.sha256,
     });

@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "../games/minecraft/index";
 import * as crypto from "node:crypto";
 import * as nodeFs from "node:fs";
 import { config, files as fileApi, type ServiceContext } from "./api";
@@ -44,7 +45,7 @@ export function liveModpackDeps(ctx: ServiceContext<GameServerState>): ModpackDe
             const { record } = currentInstall(saved);
             if (record) return { software: record.software, version: record.version, build: record.build };
             // installs from before the record: what config and state say, build unknown
-            const software = isServerSoftware(saved.software) ? saved.software : ctx.state.serverSoftware;
+            const software = isServerSoftware(saved.software) ? saved.software : minecraftSoftware(ctx.state.serverSoftware);
             const version = typeof saved.version === "string" ? saved.version : ctx.state.serverVersion;
             return { software, version, build: null };
         },

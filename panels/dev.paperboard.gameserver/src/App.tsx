@@ -1,3 +1,4 @@
+import GameOptions from "./components/GameOptions";
 import { createEffect, createMemo, createSignal, onMount, onCleanup, For, Show } from "solid-js";
 import {
     PaperPanel, PaperButton, PaperModal, PaperQuote, PaperLoader, PaperFlex, PaperText,
@@ -11,7 +12,7 @@ import { serversBridge, selectedServerId, selectedServer, openServer } from "./l
 import { loadServerConfig } from "./lib/server";
 import type { ServersState } from "./service";
 import ServersHome from "./components/ServersHome";
-import { serverSoftware, serverVersion } from "./lib/server";
+import { serverSoftware, serverVersion, gameSettings } from "./lib/server";
 import { defaultGame, gameFor } from "./games";
 import { gameUIFor } from "./games/ui";
 import Files from "./components/Files";
@@ -28,7 +29,7 @@ export default function App() {
     const [filesReveal, setFilesReveal] = createSignal<PaperFileReveal | null>(null);
 
     const [gameId, setGameId] = createSignal(defaultGame.id);
-    const features = createMemo(() => gameFor(gameId()).describe({ software: serverSoftware(), version: serverVersion() }));
+    const features = createMemo(() => gameFor(gameId()).describe({ software: serverSoftware(), version: serverVersion(), settings: gameSettings() }));
     const hasTab = (id: string) => features().tabs.some((tab) => tab.id === id);
     const tabContext = {
         active: activeTab,
@@ -40,6 +41,7 @@ export default function App() {
     const renderTab = (id: string, owner: "shared" | "game") => {
         if (owner === "game") return gameUI().tab(id);
         switch (id) {
+            case "options": return <GameOptions fields={features().options} />;
             case "files": return <Files reveal={filesReveal()} />;
             case "logs": return <Logs />;
             case "backups": return <Backups active={activeTab() === id} />;

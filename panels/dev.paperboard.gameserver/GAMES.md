@@ -1,6 +1,6 @@
 # Game modules
 
-Minecraft Java is the only registered game. The completed module-boundary refactor adds no other game or runtime, and preserves Minecraft's installers, launch arguments, readiness markers, console parsing, port names, tabs, Actions schemas and widgets.
+Minecraft Java and Terraria vanilla are registered modules. Terraria uses a pinned publisher ZIP, stdin control, generated settings, a vault join password and offline backups. Minecraft retains its installers, launch arguments, readiness markers, console parsing, port names, tabs, Actions schemas and widgets. Phase 1b (tModLoader) remains separate.
 
 ## Module contract
 
@@ -72,7 +72,7 @@ This is a plan, not implemented support. Keep Minecraft behavior and stored iden
 | 1a | Terraria vanilla + the remaining generic seams | Small download, no SteamCMD, stdin console, publisher builds for all three OSes. Proves the boundary with a genuinely different game. |
 | 1b | tModLoader as Terraria's `software: "tmodloader"` option | Reuses worlds/console/ports; proves versioned software variants without another game id. Separate join check from vanilla. |
 | 2a | `steam` workspace + TF2 + Source RCON/A2S | TF2's dedicated download is smaller than CS2's combined client/server depot. Prove the Steam seam with SRCDS before Source 2. |
-| 2b | CS2, then Garry's Mod | Share Steam and protocols, not launch/config assumptions. GMod adds explicitly selected Workshop content. Each game ships independently. |
+| 2b | CS2, then Garry's Mod | Share Steam and protocols, not launch/config assumptions. GMod Workshop waits for a suitable search/download API. Each game ships independently. |
 | 3 | Palworld, native Linux/Windows, REST administration | Reuses Steam installation; introduces typed HTTP operations. Current upstream deprecates RCON, so do not make it the primary adapter. |
 | 4 | ASA native Windows, then Linux via pinned GE-Proton | Highest memory/storage cost; adds linked ports, process-tree supervision and per-server compatibility state. macOS stays unsupported. |
 
@@ -109,7 +109,7 @@ Commands below use install-relative paths; adapters resolve absolute executables
 - TCP P=7777 only. Generate `serverconfig.txt`: world path, autocreate size, world name/seed, difficulty, maxplayers, motd, port, password, secure/UPnP policy (UPnP off initially). Expose name, world select/create/import, size, seed, difficulty, player cap, MOTD, port, and join password; creation-only settings must say so. Vanilla and modded worlds stay separate; switching software requires stop and a compatible world selection, never an implicit conversion.
 - Admin: stdin `help`, `say`, `kick`, `ban`, `save`, `exit`; parse real `playing` output plus join/leave events for roster. No A2S/RCON. Readiness requires the pinned build's listening/startup completion marker, bounded probe verifying its listener, and no interactive world-selection prompt. Port-open alone does not establish completed world generation.
 - `save` waits for completion; graceful `exit` saves, then await actual exit (initial 120s stop budget). Backups are offline only: retain `.wld`, `.bak`, `.twld`, mod manifests/config, banlist and server configuration. Refuse live copy even after `save`; autosaves can resume. Keep data on update/uninstall, and migrate neither vanilla nor modded saves without explicit action. Terraria version updates may rewrite world formats; retain a pre-update offline backup.
-- Tabs: Overview, Players, Worlds, Options, Versions, plus shared Files/Logs/Backups. tModLoader adds Mods: local `.tmod` upload, enable/disable, dependency/version validation and mod config reveal; no arbitrary URL executable installer or automatic Workshop subscriptions in v1. Widgets: status, players, console; no Minecraft MOTD renderer/stats/map features.
+- Tabs: Overview, Players, Worlds, Options, Versions, plus shared Files/Logs/Backups. tModLoader itself is phase 1b; mods are excluded until a proper search/download API is approved. Widgets: status, players, console; no Minecraft MOTD renderer/stats/map features.
 
 **Team Fortress 2 (`tf2`)**
 
@@ -152,7 +152,7 @@ These are intended certification targets, not already-tested claims. Unsupported
 
 | Game/software | Linux x64 | Windows x64 | macOS Intel | macOS Apple Silicon | Linux ARM64 |
 |---|---|---|---|---|---|
-| Terraria vanilla | Native target | Native target | Publisher Intel build target | Rosetta target, verify OS compatibility | Unsupported |
+| Terraria vanilla | Native target | Native target | Publisher Intel build target | Unsupported: no certification machine | Unsupported |
 | Terraria tModLoader | Native target | Native target | Supported-release .NET/Intel target | Release-specific runtime/Rosetta target; block until certified | Unsupported initially |
 | TF2 | Native target; SteamCMD i386 libs | Native target | Unsupported | Unsupported | Unsupported |
 | CS2 | Native target | Native target | Unsupported | Unsupported | Unsupported |
@@ -195,9 +195,43 @@ Owner client-join checklist, **per game/software and supported host route**, bef
 
 ### Owner decisions
 
-1. Which machines are available for client-join certification: Linux x64, Windows x64, Intel Mac and/or Apple Silicon Mac? Ship only certified routes; Rosetta is proposed for vanilla on Apple Silicon.
-2. Is offline-only backup acceptable for these first versions (stop → back up → start), with no automatic stop behind a scheduled backup? A zero-downtime requirement changes the save-consistency work substantially.
-3. Are explicitly selected tModLoader mods and GMod Workshop collections in scope for the first release, with other plugin/mod marketplaces and ASA clusters deferred? This plan assumes yes; downloadable executable addons still need an explicit selection.
+Decided by the owner on 2026-10-30:
+
+1. Certification machines: Linux x64 (this Arch host), Windows x64 laptop and Intel Mac. Apple Silicon has no test machine; it remains unsupported with an explicit reason until certified. Do not ship a Rosetta route based on inference. Windows x64 and Intel Mac stay blocked in setup/service until their independent certification passes. Linux's real-server smoke test does not replace the owner's client join; complete the join checklist before release.
+2. Offline backups are acceptable, including schedules: announce when supported → save → graceful stop and verify process exit → copy → restart if previously running. Full named-source Backup API integration is required: separate history and schedules per server, local/Google Drive/S3 destinations, restore with stop-before-replacement and restart, and retention. Terraria uses that existing API rather than a second backup system. Its resume marker lives outside its source so restored settings cannot request a restart. The SDK's generic `beforeRestore` hook prepares owned processes before the daemon replaces files.
+3. Mods are excluded from first versions until a proper search/download API comparable to Modrinth is available. No tModLoader mods or GMod Workshop in v1. tModLoader itself remains phase 1b, outside vanilla phase 1a.
+
+### Phase 1a operator verification
+
+Run `bun panels/dev.paperboard.gameserver/scripts/terraria-smoke.ts` from the repository root. This operator script downloads the real pinned publisher archive into a disposable explicit `PAPERBOARD_DIR` outside the checkout, starts the bundled service through the real daemon, creates a small world, checks its relocated TCP listener, saves, backs up, runs a scheduled offline backup, restores, restarts and stops. It removes only its disposable directory after stopping owned processes. Downloads are deliberately outside the gate: public CDN availability is not a deterministic regression test. `apps/paperboard/tests/gameServerTerraria.test.ts` instead compiles a tiny real process that reads the generated config, opens a real TCP listener, handles real stdin and acknowledges saves/exits through the same daemon and SDK boundaries. No environment-skipped tests.
+
+The pinned catalog is `src/games/terraria/catalog.ts`. On 2026-10-30 the publisher's `/api/get/dedicated-servers-names` API returned `terraria-server-1458.zip`. The archive is 46,415,317 bytes; SHA-256 `f513a4ac9789d34af766291ae217c9cd7d9472e13782a0e2b17512f70d7a8334`. Publisher checksums were not provided, so new releases require explicit operator verification and a reviewed catalog entry. Unknown releases and mismatched bytes fail before extraction. Install records retain source/version/digest/host; no Origami game package is created.
+
+Terraria exposes no Players tab or player widget until a reliable roster adapter is verified. Status and console widgets work; Minecraft MOTD/players selections refuse unsupported servers. Worlds are `.wld` files inside the server's `worlds` folder; copy/import an existing world there while stopped, refresh Worlds and select it. Creation-only size/difficulty/seed apply on first launch. Generated `serverconfig.txt` retains unknown keys but is managed through Options; it temporarily contains the vault password with private Unix permissions while running. Offline backups remove the materialized password; the vault is never backed up. Restoring onto another machine requires re-entering the password. Binaries, worlds and config stay on removal. Terraria updates that change world formats require an explicit offline backup and compatible world selection; no automatic conversion or mods.
+
+Verified on 2026-10-30, Arch Linux x64, publisher Terraria Server v1.4.5.8, through the daemon:
+
+```text
+Terraria 1.4.5.8: ONLINE, TCP 38104; collision 38103 relocated; host linux/x64
+playing: command delivered
+save: returned console prompt and changed world file confirmed
+backup: source s-122a9d77144d, 23678622 bytes
+SHA-256: 0b253f7f8bd1352a2be7d2a3441fe3a7a7536e7b7a129a29cc136375bc73cdc1
+scheduled offline backup: success, keep=1 retention verified, restarted ONLINE
+restore: original world loaded, later file removed, vault credential retained, restarted ONLINE
+stop: exit completed; process absent; state OFFLINE
+Publisher: Terraria Server v1.4.5.8 / Listening on port 38104 / : Server started
+Publisher: No players connected. / Saving world data / Validating world save / Backing up world file
+```
+
+The pinned binary prints no “World saved” message: save completion requires its returned `: ` prompt and a changed, nonempty world file. Shutdown must change the world file again and the process must be absent before copying. New modules can observe a partial console line for prompts without changing Minecraft's newline parser. The listener probe retries connection refusal until the startup deadline because this build prints its listening line before accepting sockets. Console language is English in this first certified adapter; other languages are not offered until their console behavior is verified.
+
+Owner join checklist (record server/client build, OS/arch and date):
+
+- **Linux x64:** create vanilla 1.4.5.8, join the relocated TCP port from a matching client; verify password rejection/acceptance, two-server isolation, player cap and options; edit terrain, save, stop, restart and rejoin; scheduled offline backup must announce/disconnect/restart; change terrain, restore and rejoin the restored world. Confirm missing executable, occupied port and startup deadline errors are visible. Linux smoke certification is server-only until this join passes.
+- **Windows x64 laptop:** inspect publisher `Windows/TerrariaServer.exe`, private generated-password config handling and stdin/save/exit; run the same client-join/backup/restore checklist. Certify the route before enabling it in `hostSupport`.
+- **Intel Mac:** inspect publisher `Mac/Terraria Server.app` native Intel binary, bundled dylibs, executable permissions and launch environment (avoid a wrapper that leaks descendants); run the same client-join/backup/restore checklist. Certify the route before enabling it in `hostSupport`.
+- **Apple Silicon:** unavailable; no owner test machine or certified runtime route. Do not enable.
 
 ### Upstream references and remaining verification
 

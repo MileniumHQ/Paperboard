@@ -105,6 +105,7 @@ function askForCap(server: WidgetServer) {
     createEffect(() => {
         const c = server.connection();
         if (asked || !server.visible() || c.phase !== "ready") return;
+        if (c.server.supportsPlayers === false) return;
         if (c.server.serverStatus !== "online" || c.server.maxPlayers !== null) return;
         asked = true;
         server.call(ACTION_IDS.queryOnlinePlayers).catch((err) =>
@@ -142,7 +143,7 @@ export function StatusWidget(props: Props) {
                 const online = () => status() === "online";
                 const busy = () => pending() || status() === "stopping" || status() === "restarting";
                 const address = () => `${s().localIp}:${s().serverPort}`;
-                const players = () => playerCount(s().onlinePlayers.length, s().maxPlayers);
+                const players = () => s().supportsPlayers === false ? { ...playerCount(0, null), short: "Unavailable", long: "Player count unavailable", online: "—" } : playerCount(s().onlinePlayers.length, s().maxPlayers);
                 // what the one button does now; a server with nothing installed
                 // can't start, so it opens the panel to set up
                 const control = () =>
@@ -174,7 +175,7 @@ export function StatusWidget(props: Props) {
                         title={SERVER_TITLE}
                         // a 2x1 header holds the version and the button; the icon would cut the title
                         icon={tall() ? "dns" : undefined}
-                        detail={installed() ? softwareLabel(s().serverSoftware, s().serverVersion, SOFTWARE_NAMES) : "Not set up"}
+                        detail={installed() ? s().softwareLabel ?? softwareLabel(s().serverSoftware, s().serverVersion, SOFTWARE_NAMES) : "Not set up"}
                         action={!tall() && canControl() ? button(false) : undefined}
                         footer={
                             tall() && canControl() ? (

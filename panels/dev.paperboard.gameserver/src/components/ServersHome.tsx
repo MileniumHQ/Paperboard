@@ -21,8 +21,10 @@ import {
 } from "@mileniumhq/paperui";
 import { serversBridge, openServer } from "../lib/api";
 import type { ServerSummary, ServersState } from "../service";
-import { gameFor } from "../games";
+import GamePicker from "./GamePicker";
+import { games, defaultGame, gameFor } from "../games";
 export default function ServersHome(props: { state: ServersState }) {
+    const [game, setGame] = createSignal(defaultGame.id);
     const [dialog, setDialog] = createSignal<"add" | "rename" | "remove" | null>(null);
     const [target, setTarget] = createSignal<ServerSummary | null>(null);
     const [name, setName] = createSignal("");
@@ -44,6 +46,7 @@ export default function ServersHome(props: { state: ServersState }) {
             if (kind === "add") {
                 const added = await serversBridge.call<{ id: string }>("add-server", {
                     name: name(),
+                    game: game(),
                 });
                 openServer(added.id);
             } else {
@@ -86,7 +89,7 @@ export default function ServersHome(props: { state: ServersState }) {
                         <PaperEmptyState
                             icon="dns"
                             title="No servers yet"
-                            description="Create a Minecraft server, choose its software and version, and invite your friends."
+                            description="Choose a game, set up a server, and invite your friends."
                         >
                             <PaperButton
                                 variant="primary"
@@ -103,7 +106,7 @@ export default function ServersHome(props: { state: ServersState }) {
                             {(server) => (
                                 <PaperMediaCard
                                     effect={false}
-                                    icon={server.icon ?? "dns"}
+                                    icon={server.icon ?? gameFor(server.game).icon}
                                     title={server.name}
                                     subtitle={`${gameFor(server.game).name} · ${gameFor(server.game).softwareLabel({ software: server.state.serverSoftware, version: server.state.serverVersion })}`}
                                     description={
@@ -219,6 +222,7 @@ export default function ServersHome(props: { state: ServersState }) {
                         </PaperText>
                     }
                 >
+                    <Show when={dialog() === "add"}><GamePicker games={games} value={game()} onPick={g => setGame(g.id)} /></Show>
                     <PaperInput
                         fullWidth
                         autofocus

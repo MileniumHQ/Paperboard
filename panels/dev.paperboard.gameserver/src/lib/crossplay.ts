@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "../games/minecraft/index";
 import { portApi } from "./api";
 import { SOFTWARE } from "../software/catalog";
 import { CROSSPLAY, GEYSER_MODRINTH_ID, type CrossplayPlatform } from "../software/crossplay";
@@ -14,18 +15,18 @@ import { getProject, installGeyserMCProject, installProjectVersion, modrinthFetc
 // API; it is recorded too, so Update plugins covers it the same way.
 
 export function crossplayPlatform(): CrossplayPlatform | null {
-    return CROSSPLAY[serverSoftware()] ?? null;
+    return CROSSPLAY[minecraftSoftware(serverSoftware())] ?? null;
 }
 
 function requirePlatform(): CrossplayPlatform {
     const platform = crossplayPlatform();
-    if (!platform) throw new Error(`Crossplay needs Paper, Fabric or NeoForge, not ${SOFTWARE[serverSoftware()].name}.`);
+    if (!platform) throw new Error(`Crossplay needs Paper, Fabric or NeoForge, not ${SOFTWARE[minecraftSoftware(serverSoftware())].name}.`);
     return platform;
 }
 
 /** the newest build made for this server's software and Minecraft version, installed with its dependencies */
 async function installFromModrinth(projectId: string): Promise<void> {
-    const addons = SOFTWARE[serverSoftware()].addons!;
+    const addons = SOFTWARE[minecraftSoftware(serverSoftware())].addons!;
     const mcVersion = serverVersion();
     if (!mcVersion) throw new Error("Install a Minecraft version first, so Paperboard knows which build to pick.");
     const project = await getProject(projectId);
@@ -35,7 +36,7 @@ async function installFromModrinth(projectId: string): Promise<void> {
     });
     const latest = versions[0];
     if (!latest) {
-        throw new Error(`${project.title} has no build for ${SOFTWARE[serverSoftware()].name} ${mcVersion} yet.`);
+        throw new Error(`${project.title} has no build for ${SOFTWARE[minecraftSoftware(serverSoftware())].name} ${mcVersion} yet.`);
     }
     await installProjectVersion({
         projectId,

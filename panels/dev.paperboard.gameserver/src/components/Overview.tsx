@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "../games/minecraft/index";
 import { createEffect, createSignal, on, onMount, Show } from "solid-js";
 import {
     PaperFlex,
@@ -230,7 +231,7 @@ export default function Overview(props: {
                 <PaperFlex direction="row" align="center" gap="onefourth">
                     <PaperBadge>{serverVersion()}</PaperBadge>
                     <PaperBadge>
-                        {SOFTWARE_NAMES[serverSoftware()] || serverSoftware()}
+                        {SOFTWARE_NAMES[minecraftSoftware(serverSoftware())] || minecraftSoftware(serverSoftware())}
                     </PaperBadge>
                 </PaperFlex>
             </PaperFlex>

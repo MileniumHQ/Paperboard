@@ -31,7 +31,8 @@ export interface GameServerState {
     localIp: string;
     serverPort: string;
     serverMotd: string;
-    serverSoftware: ServerSoftwareType;
+    serverSoftware: string;
+    gameSettings: Readonly<Record<string, unknown>>;
     serverVersion: string;
     ramAllocation: number;
     onlinePlayers: string[];

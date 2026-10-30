@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "../games/minecraft/index";
 import { serverBridge, serverSoftware } from "./server";
 import { ACTION_IDS } from "../service/contract";
 import { searchProjects, type ModrinthHit } from "./modrinth";
@@ -11,7 +12,7 @@ export type { ModpackInstallOutcome, ModpackRecord, ModrinthHit, ModrinthVersion
 // and removing the pack belong to the service (service/modpacks.ts).
 
 export async function searchModpacks(query: string, signal?: AbortSignal): Promise<ModrinthHit[]> {
-    const loader = MODPACK_LOADER[serverSoftware()];
+    const loader = MODPACK_LOADER[minecraftSoftware(serverSoftware())];
     if (!loader) return [];
     return searchProjects({
         query,

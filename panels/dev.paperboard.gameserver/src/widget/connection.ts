@@ -27,6 +27,8 @@ export type ServerView = Pick<
 > & {
     /** null while unknown: offline, not yet answered, or an older service */
     maxPlayers: number | null;
+    supportsPlayers?: boolean;
+    softwareLabel?: string;
 };
 
 export type Connection =
@@ -56,9 +58,11 @@ export function selectedWidgetServer(state: ServersState, option: string | undef
     const server = state.servers.find((s) => s.id === id);
     if (!server) throw new Error("No server is chosen, or it was removed. Choose a Server in the widget options.");
     const game = gameFor(server.game);
-    if (widgetId && !game.describe({ software: server.state.serverSoftware, version: server.state.serverVersion }).widgets.includes(widgetId))
+    if (widgetId && !game.describe({ software: server.state.serverSoftware, version: server.state.serverVersion, settings: serverStateOf(state, server.id).gameSettings }).widgets.includes(widgetId))
         throw new Error(`${game.name} does not support the ${widgetId} widget`);
-    return { id: server.id, view: viewOf(serverStateOf(state, server.id)) };
+    const snapshot = serverStateOf(state, server.id);
+    const features = game.describe({ software: snapshot.serverSoftware, version: snapshot.serverVersion, settings: snapshot.gameSettings });
+    return { id: server.id, view: { ...viewOf(snapshot), supportsPlayers: features.widgets.includes("players"), softwareLabel: game.softwareLabel({ software: snapshot.serverSoftware, version: snapshot.serverVersion, settings: snapshot.gameSettings }) } };
 }
 
 export interface WidgetServer {

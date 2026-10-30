@@ -194,7 +194,7 @@ test("Game Server over the real daemon: migration, independent servers, projects
         for (const server of saved.servers) {
             const legacy = server.id === first.id;
             if (legacy) continue; // the original process survived migration
-            await inServer({ server, legacy } as any, () =>
+            await inServer({ server, legacy, processIds: gameServiceFor(server.game).processIds } as any, () =>
                 scopedProcessApi.start({
                     id: "mc-server",
                     command: bunExecutable,

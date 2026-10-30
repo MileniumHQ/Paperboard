@@ -32,14 +32,14 @@ export const processApi = new Proxy(rawProcess, {
             if (scope) {
                 if (
                     typeof args[0] === "string" &&
-                    ["mc-server", "mc-installer"].includes(args[0]) &&
+                    scope.processIds.includes(args[0]) &&
                     !scope.legacy
                 )
                     args[0] = `${scope.server.id}-${args[0]}`;
                 if (
                     args[0] &&
                     typeof args[0] === "object" &&
-                    ["mc-server", "mc-installer"].includes(args[0].id) &&
+                    scope.processIds.includes(args[0].id) &&
                     !scope.legacy
                 )
                     args[0] = { ...args[0], id: `${scope.server.id}-${args[0].id}` };

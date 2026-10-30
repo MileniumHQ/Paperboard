@@ -5,8 +5,8 @@ import { SOFTWARE_IDS } from "../src/software/catalog";
 import manifest from "../manifest.json";
 
 describe("bundled game modules", () => {
-    test("only Minecraft is offered; unknown stored games never fall back to it", () => {
-        expect(games.map((game) => game.id)).toEqual(["minecraft"]);
+    test("Minecraft and Terraria are offered; unknown stored games never fall back to it", () => {
+        expect(games.map((game) => game.id)).toEqual(["minecraft", "terraria"]);
         const saved = readServersConfig({ configured: true });
         for (const id of ["factorio", "", "constructor", "__proto__"]) {
             expect(() => gameFor(id)).toThrow(`Unsupported game: ${id}`);

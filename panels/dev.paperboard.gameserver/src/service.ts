@@ -24,10 +24,10 @@ import { inServer, type ServerScope } from "./service/scope";
 import { processApi as scopedProcess, LEGACY_DEPRECATION } from "./service/api";
 import { type GameServerState, SERVER_PROC_ID } from "./service/types";
 import { setRecoveryBlock } from "./service/recoveryState";
-import { handleProcessData, handleProcessExit, stopServerInstance } from "./service/lifecycle";
-import { customTypes } from "./games/minecraft/actions";
+import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness } from "./service/lifecycle";
+
 import { currentGameService, gameServiceFor } from "./games/service";
-import { assertGameAction, defaultGame, gameFor } from "./games";
+import { assertGameAction, defaultGame, gameFor, games } from "./games";
 import { livePortDeps } from "./service/portDeps";
 export * from "./service/types";
 export * from "./games/minecraft/actions";
@@ -117,7 +117,7 @@ function bind(scope: ServerScope, def: ActionDefinition): ActionDefinition {
                       if (!entries.has(scope.server.id) || scope.removing)
                           throw new Error("This server was removed or is being removed");
                       assertGameAction(gameFor(scope.server.game), {
-                          settings: scope.server.settings,
+                          settings: scope.ctx.state.gameSettings,
                           software: scope.ctx.state.serverSoftware,
                           version: scope.ctx.state.serverVersion,
                       }, def.id);
@@ -147,6 +147,7 @@ function createScope(server: StoredServer): ServerScope {
     let state = game.initialState();
     const scope: ServerScope = {
         server,
+        processIds: game.processIds,
         legacy: saved.legacyServer === server.id,
         locals: new Map(),
         activeOperations: 0,
@@ -196,7 +197,7 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
             ...(scope.legacy ? { legacy: true, exclude: [saved.serversDirectory] } : {}),
         });
         scope.project = await actionsApi.defineProject(
-            { id: server.id, name: server.name, icon: "dns" },
+            { id: server.id, name: server.name, icon: gameFor(server.game).icon },
             PANEL_ID,
         );
         for (const def of await game.actions()) {
@@ -211,15 +212,15 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
         await inServer(scope, async () => {
             // A server left running keeps its identity and directory on migration.
             // Recovery must never modify that running process's files.
-            const running = await scopedProcess.exists(SERVER_PROC_ID);
+            const running = await scopedProcess.exists(game.primaryProcessId);
             if (running) scope.ctx.setState({ serverStatus: "online" });
             scope.unsubscribe.push(
-                scopedProcess.onData(SERVER_PROC_ID, (chunk) =>
+                scopedProcess.onData(game.primaryProcessId, (chunk) =>
                     handleProcessData(scope.ctx, chunk),
                 ),
             );
             scope.unsubscribe.push(
-                scopedProcess.onExit(SERVER_PROC_ID, () => handleProcessExit(scope.ctx)),
+                scopedProcess.onExit(game.primaryProcessId, () => handleProcessExit(scope.ctx)),
             );
             await game.loadOptions(scope.ctx);
             await game.initialize(scope.ctx, running);
@@ -246,7 +247,7 @@ const management = (id: string, run: (...args: any[]) => any) =>
 export const gameServerService = definePanelService({
     id: PANEL_ID,
     state: { servers: [], serversError: null } as ServersState,
-    types: customTypes,
+    types: (await Promise.all(games.map(g => gameServiceFor(g.id).customTypes?.() ?? []))).flat(),
     categories: [
         { name: "Server", icon: "dns", order: 1 },
         { name: "Players", icon: "group", order: 2 },
@@ -262,16 +263,17 @@ export const gameServerService = definePanelService({
             "read-server-config",
             ({ server }: any) => requireServer(server).server.settings,
         ),
-        management("add-server", ({ name }: any) =>
+        management("add-server", ({ name, game = defaultGame.id }: any) =>
             serial(async () => {
                 if (rootContext.state.serversError) throw new Error(rootContext.state.serversError);
                 if (saved.servers.length >= MAX_SERVERS)
                     throw new Error(`This computer can keep at most ${MAX_SERVERS} servers`);
+                const definition = gameFor(game);
                 const id = createServerId();
                 const server: StoredServer = {
                     id,
                     name: serverName(name),
-                    game: defaultGame.id,
+                    game: definition.id,
                     directory: `${saved.serversDirectory}/${id}`,
                     createdAt: Date.now(),
                     settings: {},
@@ -291,7 +293,7 @@ export const gameServerService = definePanelService({
             serial(async () => {
                 const scope = requireServer(server);
                 const renamed = { ...scope.server, name: serverName(name) };
-                await scope.project!.update({ name: renamed.name, icon: "dns" });
+                await scope.project!.update({ name: renamed.name, icon: gameFor(renamed.game).icon });
                 await updateSaved((current) => ({
                     ...current,
                     servers: current.servers.map((s) =>
@@ -315,7 +317,7 @@ export const gameServerService = definePanelService({
                         await currentGameService().beforeRemove();
                         await stopServerInstance(scope.ctx);
                         const deadline = Date.now() + 40_000;
-                        while (await scopedProcess.exists(SERVER_PROC_ID)) {
+                        while (await scopedProcess.exists(currentGameService().primaryProcessId)) {
                             if (Date.now() >= deadline)
                                 throw new Error(
                                     "The server has not stopped; its files and entry were kept",
@@ -339,7 +341,7 @@ export const gameServerService = definePanelService({
                         if (next.legacyServer === server) delete next.legacyServer;
                         return next;
                     });
-                    await inServer(scope, () => currentGameService().dispose());
+                    await inServer(scope, async () => { cancelReadiness(); await currentGameService().dispose(); });
                     for (const off of scope.unsubscribe) off();
                     entries.delete(server);
                     icons.delete(server);
@@ -355,7 +357,7 @@ export const gameServerService = definePanelService({
         management(WIDGET_CHOICES_ACTION, ({ widgetId }: { widgetId: string }) =>
             saved.servers.filter((server) => {
                 const state = entries.get(server.id)!.ctx.state;
-                return gameFor(server.game).describe({ software: state.serverSoftware, version: state.serverVersion }).widgets.includes(widgetId);
+                return gameFor(server.game).describe({ software: state.serverSoftware, version: state.serverVersion, settings: state.gameSettings }).widgets.includes(widgetId);
             }).map((s) => ({ value: s.id, label: s.name })),
         ),
     ],
@@ -381,6 +383,12 @@ export const gameServerService = definePanelService({
             console.error("[gameserver] servers could not be loaded:", err);
         }
     },
+    async beforeRestore(_ctx, { sourceId }) {
+        const selected = sourceId === undefined ? [...entries.values()] : [requireServer(sourceId)];
+        for (const entry of selected) await inServer(entry, async () => {
+            if (currentGameService().backup.mode === "offline") await currentGameService().backup.before(entry.ctx);
+        });
+    },
     async beforeBackup(_ctx, { sourceId }) {
         const paused: ServerScope[] = [];
         try {
@@ -388,8 +396,6 @@ export const gameServerService = definePanelService({
             for (const entry of selected) {
                 await inServer(entry, () => {
                     const policy = currentGameService().backup;
-                    if (policy.mode === "offline" && entry.ctx.state.serverStatus !== "offline")
-                        throw new Error(`Stop ${entry.server.name} before backing it up`);
                     return policy.before(entry.ctx);
                 });
                 paused.push(entry);

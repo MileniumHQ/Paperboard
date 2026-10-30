@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "../../games/minecraft/index";
 import { serverSoftware, serverVersion } from "../server";
 import {
     deletePlugin,
@@ -15,7 +16,7 @@ import type { AddonKind, AddonListing, InstalledAddon } from "./kind";
 // folder rules, a different word. Installing runs here in the page (lib/plugins);
 // listing and removing belong to the service.
 
-const isMods = () => getEcosystem(serverSoftware())?.kind === "mod";
+const isMods = () => getEcosystem(minecraftSoftware(serverSoftware()))?.kind === "mod";
 
 export const pluginTitle = (filename: string) => filename.replace(/\.jar$/i, "");
 
@@ -56,18 +57,18 @@ export const pluginsKind: AddonKind = {
         return isMods() ? "Installed Mods" : "Installed Plugins";
     },
     resultBadge: "Installed",
-    watch: () => [serverSoftware(), serverVersion()],
+    watch: () => [minecraftSoftware(serverSoftware()), serverVersion()],
 
     async list(): Promise<AddonListing> {
         const { plugins, warning } = await listInstalledPlugins();
-        const dir = pluginDirName(serverSoftware());
+        const dir = pluginDirName(minecraftSoftware(serverSoftware()));
         return {
             items: installedPlugins(plugins),
             warning: warning ? { title: `Couldn't list ${dir}/`, message: warning } : undefined,
             meta: undefined,
         };
     },
-    listFailureTitle: () => `Couldn't read ${pluginDirName(serverSoftware())}/`,
+    listFailureTitle: () => `Couldn't read ${pluginDirName(minecraftSoftware(serverSoftware()))}/`,
 
     search: (query, signal) => searchModrinth(query, signal),
     async versions(projectId) {
@@ -121,7 +122,7 @@ export const pluginsKind: AddonKind = {
         busyAction: "Uninstalling…",
         errorTitle: "Couldn't uninstall",
         describe: () =>
-            `This moves the jar out of the server's ${pluginDirName(serverSoftware())}/ folder into a .trash folder inside the server folder, where it can be restored. The change takes effect after a restart.`,
+            `This moves the jar out of the server's ${pluginDirName(minecraftSoftware(serverSoftware()))}/ folder into a .trash folder inside the server folder, where it can be restored. The change takes effect after a restart.`,
         run: (item) => deletePlugin(item.id),
     },
 };

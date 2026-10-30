@@ -5,6 +5,7 @@ import type { GameServerState } from "./types";
 export interface ServerScope {
     server: StoredServer;
     legacy: boolean;
+    processIds: readonly string[];
     ctx: ServiceContext<GameServerState>;
     project?: ActionProjectHandle;
     saveSettings(settings: Record<string, unknown>): Promise<void>;

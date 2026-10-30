@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "./index";
 import { config, files as fileApi, packages as packageApi, system, type ServiceContext } from "../../service/api";
 import type { GameServerState } from "../../service/types";
 import { PANEL_ID } from "../../service/types";
@@ -24,7 +25,7 @@ export async function prepareLaunch(ctx: ServiceContext<GameServerState>): Promi
         );
     }
 
-    const javaPkg = minecraft.describe({ software: ctx.state.serverSoftware, version }).packages[0]?.id;
+    const javaPkg = minecraft.describe({ software: minecraftSoftware(ctx.state.serverSoftware), version }).packages[0]?.id;
     if (!javaPkg) {
         throw new Error(
             `Could not determine the Minecraft version (got ${JSON.stringify(version)}) — complete Setup before starting the server.`,
@@ -45,7 +46,7 @@ export async function prepareLaunch(ctx: ServiceContext<GameServerState>): Promi
     // plain server.jar
     const { launch } = currentInstall(saved);
     const entry = launchEntryFile(launch, isWin);
-    const softwareName = SOFTWARE_NAMES[ctx.state.serverSoftware];
+    const softwareName = SOFTWARE_NAMES[minecraftSoftware(ctx.state.serverSoftware)];
     // fail here instead of a confusing "unable to access jarfile" exit
     const hasEntry = await fileApi.exists(entry, PANEL_ID).catch(() => false);
     if (!hasEntry) {

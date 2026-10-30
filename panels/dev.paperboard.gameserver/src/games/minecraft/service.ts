@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "./index";
 import { initialServerState } from "../../service/initialState";
 import { files as fileApi } from "../../service/api";
 import { PANEL_ID } from "../../service/types";
@@ -5,7 +6,7 @@ import { settleInterruptedWork } from "../../service/recovery";
 import { stopLeftoverInstaller } from "../../service/installerProcess";
 import { setPlayerNamesChangedHandler } from "../../service/players";
 import { readServerIcon } from "../../service/serverIcon";
-import { writeServerLineBestEffort } from "../../service/serverConsole";
+import { processApi } from "../../service/api";
 import type { GameService } from "../serviceTypes";
 import { loadConfigAndProperties } from "./config";
 import { prepareLaunch } from "./launch";
@@ -15,6 +16,8 @@ import { portSpecs, portNames } from "./ports";
 import { withSavingPaused, pauseSavingForBackup, recoverPausedSaving } from "./saving";
 
 export const minecraftService: GameService = {
+    primaryProcessId: "mc-server",
+    customTypes: async () => (await import("./actions")).customTypes,
     initialState: initialServerState,
     actions: async () => {
         const { panelActions, panelEventActions } = await import("./actions");
@@ -39,12 +42,12 @@ export const minecraftService: GameService = {
     prepareLaunch,
     isMutating: isInstallRunning,
     stopEntry: "stop",
-    stop: () => writeServerLineBestEffort("stop\n"),
+    stop: () => processApi.write("mc-server", "stop\n"),
     commandLine,
     sendChat: sendChatMessage,
     observeLine,
     portNames,
-    ports: (ctx, deps) => portSpecs(ctx.state.serverSoftware, deps),
+    ports: (ctx, deps) => portSpecs(minecraftSoftware(ctx.state.serverSoftware), deps),
     backup: {
         mode: "quiesce",
         before: pauseSavingForBackup,

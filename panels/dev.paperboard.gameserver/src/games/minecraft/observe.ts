@@ -1,3 +1,4 @@
+import { minecraftSoftware } from "./index";
 import stripAnsi from "strip-ansi";
 import { processApi, type ServiceContext } from "../../service/api";
 import { parseChatMessage, parseLogLine } from "../../lib/logs";
@@ -45,7 +46,7 @@ function handleGameruleResponse(
     clean: string,
 ): boolean {
     const profile = resolveVersionProfile(
-        ctx.state.serverSoftware,
+        minecraftSoftware(ctx.state.serverSoftware),
         ctx.state.serverVersion,
     );
     const parsed = parseGameruleValue(clean, profile);
