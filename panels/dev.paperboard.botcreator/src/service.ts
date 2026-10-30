@@ -4,7 +4,16 @@
 // a flow; the builders that never touch Discord (embeds, buttons, menus)
 // are global. The panel's own controls reach the service through internal
 // actions that name the bot.
-import { ActivityType, ChannelType, PermissionsBitField, type Client, type ColorResolvable } from "discord.js";
+import {
+    ActivityType,
+    ChannelType,
+    GuildScheduledEventEntityType,
+    GuildScheduledEventPrivacyLevel,
+    PermissionsBitField,
+    type Client,
+    type ColorResolvable,
+    type GuildMember,
+} from "discord.js";
 import {
     INPUTS,
     MessageOps,
@@ -19,7 +28,13 @@ import {
     MAX_SELECT_OPTIONS,
     MAX_FOUND_MEMBERS,
     MAX_RECENT_MESSAGES,
+    MAX_POLL_ANSWERS,
+    MAX_POLL_HOURS,
+    buildPoll,
+    fileFromUrl,
     findMembers,
+    parseMoment,
+    permissionNames,
     resolveGuild,
     resolveMember,
     type DiscordEmbedData,
@@ -240,25 +255,8 @@ export function buildInviteUrl(appId: string, permissions: string[]): string {
     if (!appId) {
         throw new Error("Cannot build an invite URL: no application ID is known.");
     }
-    const bitfield = new PermissionsBitField();
-    const unknown: string[] = [];
-    for (const p of permissions) {
-        if (p in PermissionsBitField.Flags) {
-            bitfield.add(
-                PermissionsBitField.Flags[
-                    p as keyof typeof PermissionsBitField.Flags
-                ],
-            );
-        } else {
-            unknown.push(p);
-        }
-    }
-    if (unknown.length > 0) {
-        // typo'd permission names must fail loud, never silently vanish
-        throw new Error(
-            `Unknown Discord permission(s): ${unknown.join(", ")}`,
-        );
-    }
+    // typo'd permission names must fail loud, never silently vanish
+    const bitfield = new PermissionsBitField(permissionNames(permissions));
     // applications.commands is requested because the panel now registers
     // slash commands (see syncSlashCommands); an invite without it produces
     // a bot that registers commands it can never receive interactions for
@@ -1890,6 +1888,412 @@ export const staticTriggers = [
     }),
 ];
 
+// Added after flows named actions by bare id, so no deprecated forwarder
+// carries them: they only ever lived in a bot's project. The ones that
+// return lists or records are hidden from the Actions library, for programs
+// and the Agents panel.
+const MAX_LISTED_MEMBERS = 100;
+
+export const laterActions = [
+    defineAction({
+        id: "send-poll",
+        name: "Send Poll",
+        category: "Messages",
+        description: `Posts a poll to a channel. Answers are one per line, at most ${MAX_POLL_ANSWERS}; it runs for Hours (24 unless set, at most ${MAX_POLL_HOURS})`,
+        template: "Send poll {question} to {channel}",
+        inputs: {
+            channel: INPUTS.channel,
+            question: { type: "string", label: "Question", placeholder: "Question", required: true },
+            answers: { type: "list<string>", label: "Answers", placeholder: "One per line", required: true },
+            hours: { type: "number", label: "Hours", placeholder: "24" },
+            multiple: { type: "boolean", label: "Allow several answers", default: false },
+        },
+        output: { type: "discord-message", label: "Message" },
+        icon: "ballot",
+        run: async (ctx, inputs: { channel: string; question: string; answers: unknown; hours?: number; multiple?: boolean }) => {
+            const poll = buildPoll(inputs);
+            const channel = await new MessageOps(clientOf(ctx)).fetchChannel(inputs.channel);
+            if (!("send" in channel)) throw new Error(`Channel ${inputs.channel} can't take messages`);
+            const sent = await channel.send({ poll });
+            return sent.id;
+        },
+    }),
+
+    defineAction({
+        id: "get-poll-results",
+        name: "Get Poll Results",
+        hidden: true,
+        category: "Messages",
+        description: "A poll's question, each answer with its vote count, and whether voting has closed",
+        template: "Get poll results of {message}",
+        inputs: { channel: INPUTS.channel, message: INPUTS.message },
+        output: { type: "object", label: "Results" },
+        icon: "ballot",
+        run: async (ctx, inputs: { channel: string; message: string }) => {
+            const message = await new MessageOps(clientOf(ctx)).fetchMessage(inputs.channel, inputs.message);
+            if (!message.poll) throw new Error(`Message ${inputs.message} isn't a poll`);
+            const poll = message.poll;
+            return {
+                question: poll.question.text ?? "",
+                closed: Boolean(poll.resultsFinalized) || (poll.expiresTimestamp !== null && poll.expiresTimestamp <= Date.now()),
+                answers: [...poll.answers.values()].map((answer: any) => ({ text: answer.text ?? "", votes: answer.voteCount ?? 0 })),
+            };
+        },
+    }),
+
+    defineAction({
+        id: "send-file",
+        name: "Send File",
+        category: "Messages",
+        description: "Sends a file from a web address to a channel, with an optional message. Discord downloads it; at most 10 MB unless the server is boosted",
+        template: "Send file {url} to {channel}",
+        inputs: {
+            channel: INPUTS.channel,
+            url: { type: "url", label: "File address", placeholder: "https://…", required: true },
+            name: { type: "string", label: "File name", placeholder: "Keep its name" },
+            content: INPUTS.content,
+        },
+        output: { type: "discord-message", label: "Message" },
+        icon: "attach_file",
+        run: async (ctx, inputs: { channel: string; url: string; name?: string; content?: string }) => {
+            const file = fileFromUrl(inputs.url, inputs.name);
+            const channel = await new MessageOps(clientOf(ctx)).fetchChannel(inputs.channel);
+            if (!("send" in channel)) throw new Error(`Channel ${inputs.channel} can't take messages`);
+            const sent = await channel.send({ ...(inputs.content ? { content: inputs.content } : {}), files: [file] });
+            return sent.id;
+        },
+    }),
+
+    defineAction({
+        id: "show-typing",
+        name: "Show Typing",
+        category: "Messages",
+        description: "Shows \"is typing…\" in a channel for about ten seconds, or until the bot sends a message",
+        template: "Show typing in {channel}",
+        inputs: { channel: INPUTS.channel },
+        output: { type: "boolean", label: "Success" },
+        icon: "more_horiz",
+        run: async (ctx, inputs: { channel: string }) => {
+            const channel = await new MessageOps(clientOf(ctx)).fetchChannel(inputs.channel);
+            if (!("sendTyping" in channel)) throw new Error(`Channel ${inputs.channel} isn't one people type in`);
+            await channel.sendTyping();
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "get-pinned-messages",
+        name: "Get Pinned Messages",
+        hidden: true,
+        category: "Messages",
+        description: "A channel's pinned messages, newest pin first: id, author, authorId, content and when it was pinned",
+        template: "Get pinned messages in {channel}",
+        inputs: { channel: INPUTS.channel },
+        output: { type: "list<object>", label: "Messages" },
+        icon: "push_pin",
+        run: async (ctx, inputs: { channel: string }) => {
+            const channel = await new MessageOps(clientOf(ctx)).fetchChannel(inputs.channel);
+            if (!("messages" in channel)) throw new Error(`Channel ${inputs.channel} not found or not text-based`);
+            const pins = await channel.messages.fetchPins();
+            return pins.items.map((pin: any) => ({
+                id: String(pin.message.id),
+                author: String(pin.message.author?.username ?? ""),
+                authorId: String(pin.message.author?.id ?? ""),
+                content: String(pin.message.content ?? ""),
+                pinnedAt: pin.pinnedAt.toISOString(),
+            }));
+        },
+    }),
+
+    defineAction({
+        id: "get-reactions",
+        name: "Get Reactions",
+        hidden: true,
+        category: "Reactions",
+        description: "Every reaction on a message: the emoji, how many, and who reacted (the first 100 people each)",
+        template: "Get reactions on {message}",
+        inputs: { channel: INPUTS.channel, message: INPUTS.message },
+        output: { type: "list<object>", label: "Reactions" },
+        icon: "add_reaction",
+        run: async (ctx, inputs: { channel: string; message: string }) => {
+            const message = await new MessageOps(clientOf(ctx)).fetchMessage(inputs.channel, inputs.message);
+            const out = [];
+            for (const reaction of message.reactions.cache.values()) {
+                const users = await reaction.users.fetch({ limit: 100 });
+                out.push({
+                    emoji: reaction.emoji.id ? `<:${reaction.emoji.name}:${reaction.emoji.id}>` : String(reaction.emoji.name ?? ""),
+                    count: reaction.count,
+                    users: [...users.values()].map((user: any) => ({ userId: String(user.id), username: String(user.username) })),
+                });
+            }
+            return out;
+        },
+    }),
+
+    defineAction({
+        id: "get-member",
+        name: "Get Member",
+        hidden: true,
+        category: "Members",
+        description: "One member of a server: username, display name, nickname, roles (id, name), when they joined, whether they're a bot, until when they're timed out, and the voice channel they're in",
+        template: "Get member {user}",
+        inputs: { user: INPUTS.user, guildId: INPUTS.guildId },
+        output: { type: "object", label: "Member" },
+        icon: "badge",
+        run: async (ctx, inputs: { user: string; guildId?: string }) => {
+            const member = await resolveMember(clientOf(ctx), inputs.user, inputs.guildId);
+            return describeMember(member);
+        },
+    }),
+
+    defineAction({
+        id: "list-role-members",
+        name: "List Role Members",
+        hidden: true,
+        category: "Roles",
+        description: `Everyone in a server with a role, at most ${MAX_LISTED_MEMBERS}, and how many there are in all`,
+        template: "List members with {role}",
+        inputs: { role: INPUTS.role, guildId: INPUTS.guildId },
+        output: { type: "object", label: "Members" },
+        icon: "groups",
+        run: async (ctx, inputs: { role: string; guildId?: string }) => {
+            const guild = await resolveGuild(clientOf(ctx), inputs.guildId);
+            const role = await guild.roles.fetch(inputs.role.trim());
+            if (!role) throw new Error(`Role ${inputs.role} not found`);
+            // the whole member list once, so the role's members aren't only the cached ones
+            await guild.members.fetch();
+            const members = [...role.members.values()];
+            return {
+                role: { id: role.id, name: role.name },
+                total: members.length,
+                members: members.slice(0, MAX_LISTED_MEMBERS).map((m) => ({ userId: m.id, username: m.user.username, displayName: m.displayName })),
+            };
+        },
+    }),
+
+    defineAction({
+        id: "set-nickname",
+        name: "Set Nickname",
+        category: "Members",
+        description: "Changes a member's nickname in a server; an empty nickname clears it. The bot's own user id renames the bot there",
+        template: "Set {user}'s nickname to {nickname}",
+        inputs: {
+            user: INPUTS.user,
+            nickname: { type: "string", label: "Nickname", placeholder: "No nickname" },
+            reason: INPUTS.reason,
+            guildId: INPUTS.guildId,
+        },
+        output: { type: "boolean", label: "Success" },
+        icon: "edit",
+        run: async (ctx, inputs: { user: string; nickname?: string; reason?: string; guildId?: string }) => {
+            const nickname = (inputs.nickname ?? "").trim();
+            if (nickname.length > 32) throw new Error("A nickname is at most 32 characters");
+            const member = await resolveMember(clientOf(ctx), inputs.user, inputs.guildId);
+            await member.setNickname(nickname || null, inputs.reason || undefined);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "remove-timeout",
+        name: "Remove Timeout",
+        category: "Members",
+        description: "Ends a member's timeout early",
+        template: "Remove {user}'s timeout",
+        inputs: { user: INPUTS.user, reason: INPUTS.reason, guildId: INPUTS.guildId },
+        output: { type: "boolean", label: "Success" },
+        icon: "timer_off",
+        run: async (ctx, inputs: { user: string; reason?: string; guildId?: string }) => {
+            const member = await resolveMember(clientOf(ctx), inputs.user, inputs.guildId);
+            await member.timeout(null, inputs.reason || undefined);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "edit-role",
+        name: "Edit Role",
+        category: "Roles",
+        description: "Renames a role or changes its color, whether it's shown apart in the member list, and whether anyone can mention it",
+        template: "Edit role {role}",
+        inputs: {
+            role: INPUTS.role,
+            name: { ...INPUTS.name, required: false },
+            color: INPUTS.color,
+            hoist: { type: "boolean", label: "Show apart" },
+            mentionable: { type: "boolean", label: "Anyone can mention" },
+            guildId: INPUTS.guildId,
+        },
+        output: { type: "boolean", label: "Success" },
+        icon: "workspace_premium",
+        run: async (ctx, inputs: { role: string; name?: string; color?: string; hoist?: boolean; mentionable?: boolean; guildId?: string }) => {
+            const changes = {
+                ...(inputs.name ? { name: inputs.name.trim() } : {}),
+                ...(inputs.color ? { color: inputs.color as ColorResolvable } : {}),
+                ...(typeof inputs.hoist === "boolean" ? { hoist: inputs.hoist } : {}),
+                ...(typeof inputs.mentionable === "boolean" ? { mentionable: inputs.mentionable } : {}),
+            };
+            if (!Object.keys(changes).length) throw new Error("Edit Role needs a name, color, or setting to change");
+            const guild = await resolveGuild(clientOf(ctx), inputs.guildId);
+            const role = await guild.roles.fetch(inputs.role.trim());
+            if (!role) throw new Error(`Role ${inputs.role} not found`);
+            await role.edit(changes);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "set-channel-permissions",
+        name: "Set Channel Permissions",
+        category: "Channels",
+        description:
+            "Allows or denies permissions in one channel for a role or a person: Discord's names, like ViewChannel, SendMessages, Connect, separated by commas. " +
+            "\"everyone\" is the server's everyone role, so denying it SendMessages locks the channel. Permissions named in neither list stay as they are; Reset ones go back to the server's",
+        template: "Set {target}'s permissions in {channel}",
+        inputs: {
+            channel: INPUTS.channel,
+            target: { type: "string", label: "Role or user", placeholder: "Role id, user id, or everyone", required: true },
+            allow: { type: "list<string>", label: "Allow", placeholder: "SendMessages, ViewChannel" },
+            deny: { type: "list<string>", label: "Deny", placeholder: "SendMessages" },
+            reset: { type: "list<string>", label: "Reset", placeholder: "AttachFiles" },
+            reason: INPUTS.reason,
+        },
+        output: { type: "boolean", label: "Success" },
+        icon: "lock",
+        run: async (ctx, inputs: { channel: string; target: string; allow?: unknown; deny?: unknown; reset?: unknown; reason?: string }) => {
+            const changes = channelPermissionChanges(inputs);
+            const channel = await new MessageOps(clientOf(ctx)).fetchChannel(inputs.channel);
+            if (!channel.guild || !channel.permissionOverwrites) throw new Error(`Channel ${inputs.channel} isn't a server channel with permissions`);
+            const raw = inputs.target.trim();
+            const target = raw.toLowerCase() === "everyone" || raw === "@everyone" ? channel.guild.id : raw;
+            if (!SNOWFLAKE_PATTERN.test(target)) throw new Error(`"${raw}" isn't a role id, a user id, or everyone`);
+            await channel.permissionOverwrites.edit(target, changes, { reason: inputs.reason || undefined });
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "edit-thread",
+        name: "Edit Thread",
+        category: "Channels",
+        description: "Renames a thread, archives or reopens it, or locks it so only moderators can reopen it",
+        template: "Edit thread {thread}",
+        inputs: {
+            thread: { ...INPUTS.channel, label: "Thread", placeholder: "Thread" },
+            name: { ...INPUTS.name, required: false },
+            archived: { type: "boolean", label: "Archived" },
+            locked: { type: "boolean", label: "Locked" },
+        },
+        output: { type: "boolean", label: "Success" },
+        icon: "forum",
+        run: async (ctx, inputs: { thread: string; name?: string; archived?: boolean; locked?: boolean }) => {
+            const changes = {
+                ...(inputs.name ? { name: inputs.name.trim() } : {}),
+                ...(typeof inputs.archived === "boolean" ? { archived: inputs.archived } : {}),
+                ...(typeof inputs.locked === "boolean" ? { locked: inputs.locked } : {}),
+            };
+            if (!Object.keys(changes).length) throw new Error("Edit Thread needs a name, or to archive or lock it");
+            const channel = await new MessageOps(clientOf(ctx)).fetchChannel(inputs.thread);
+            if (!channel.isThread?.()) throw new Error(`Channel ${inputs.thread} isn't a thread`);
+            await channel.edit(changes);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "create-event",
+        name: "Create Scheduled Event",
+        category: "Channels",
+        description:
+            "Schedules a server event people can say they're going to. In a voice or stage channel it needs only a start; anywhere else it needs a location and an end. " +
+            "Times are like 2026-11-02T18:00:00Z, or timestamps. Returns the event's link",
+        template: "Schedule {name}",
+        inputs: {
+            name: INPUTS.name,
+            start: { type: "string", label: "Starts", placeholder: "2026-11-02T18:00:00Z", required: true },
+            end: { type: "string", label: "Ends", placeholder: "2026-11-02T20:00:00Z" },
+            channel: { ...INPUTS.channel, label: "Voice channel", required: false },
+            location: { type: "string", label: "Location", placeholder: "Where, when not in a channel" },
+            description: { type: "string", label: "Description", placeholder: "Description" },
+            guildId: INPUTS.guildId,
+        },
+        output: { type: "url", label: "Event link" },
+        icon: "event",
+        run: async (ctx, inputs: { name: string; start: unknown; end?: unknown; channel?: string; location?: string; description?: string; guildId?: string }) => {
+            const bot = clientOf(ctx);
+            const options = await scheduledEventOptions(bot, inputs);
+            const guild = await resolveGuild(bot, inputs.guildId);
+            const event = await guild.scheduledEvents.create(options);
+            return event.url;
+        },
+    }),
+];
+
+
+function describeMember(member: GuildMember) {
+    return {
+        userId: member.id,
+        username: member.user.username,
+        displayName: member.displayName,
+        nickname: member.nickname,
+        bot: member.user.bot,
+        roles: [...member.roles.cache.values()]
+            .filter((role) => role.id !== member.guild.id)
+            .sort((a, b) => b.position - a.position)
+            .map((role) => ({ id: role.id, name: role.name })),
+        joinedAt: member.joinedAt ? member.joinedAt.toISOString() : null,
+        timedOutUntil: member.communicationDisabledUntil && member.communicationDisabledUntil.getTime() > Date.now()
+            ? member.communicationDisabledUntil.toISOString()
+            : null,
+        voiceChannelId: member.voice?.channelId ?? null,
+        guildId: member.guild.id,
+    };
+}
+
+/** Set Channel Permissions' inputs as one overwrite: true allows, false denies, null resets. */
+export function channelPermissionChanges(inputs: { allow?: unknown; deny?: unknown; reset?: unknown }): Record<string, boolean | null> {
+    const changes: Record<string, boolean | null> = {};
+    const lists: [unknown, boolean | null][] = [[inputs.allow, true], [inputs.deny, false], [inputs.reset, null]];
+    for (const [list, value] of lists) {
+        for (const name of permissionNames(list)) {
+            if (name in changes && changes[name] !== value) throw new Error(`${name} is named in more than one list`);
+            changes[name] = value;
+        }
+    }
+    if (!Object.keys(changes).length) throw new Error("Name at least one permission to allow, deny, or reset");
+    return changes;
+}
+
+/** Create Scheduled Event's inputs as Discord's options, refused with what's missing. */
+export async function scheduledEventOptions(
+    bot: Client,
+    inputs: { name: string; start: unknown; end?: unknown; channel?: string; location?: string; description?: string },
+) {
+    const name = (inputs.name ?? "").trim();
+    if (!name || name.length > 100) throw new Error("An event's name is 1 to 100 characters");
+    const start = parseMoment(inputs.start, "Starts");
+    if (start.getTime() <= Date.now()) throw new Error("An event starts in the future");
+    const end = inputs.end === undefined || inputs.end === "" ? undefined : parseMoment(inputs.end, "Ends");
+    if (end && end.getTime() <= start.getTime()) throw new Error("An event ends after it starts");
+    const description = inputs.description?.trim() ? { description: inputs.description.trim() } : {};
+    const base = { name, scheduledStartTime: start, privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly, ...description };
+    if (inputs.channel && inputs.channel.trim()) {
+        const channel = await bot.channels.fetch(inputs.channel.trim());
+        const type = (channel as any)?.type;
+        if (type !== ChannelType.GuildVoice && type !== ChannelType.GuildStageVoice) throw new Error(`Channel ${inputs.channel} isn't a voice or stage channel`);
+        return {
+            ...base,
+            ...(end ? { scheduledEndTime: end } : {}),
+            entityType: type === ChannelType.GuildStageVoice ? GuildScheduledEventEntityType.StageInstance : GuildScheduledEventEntityType.Voice,
+            channel: channel!.id,
+        };
+    }
+    const location = inputs.location?.trim() ?? "";
+    if (!location) throw new Error("An event outside a voice channel needs a location");
+    if (!end) throw new Error("An event outside a voice channel needs an end");
+    return { ...base, scheduledEndTime: end, entityType: GuildScheduledEventEntityType.External, entityMetadata: { location } };
+}
+
 // the actions that only build a payload: they never reach Discord, so every
 // bot shares them as the panel's global blocks
 const BUILDER_ACTION_IDS = new Set([
@@ -1902,7 +2306,9 @@ const BUILDER_ACTION_IDS = new Set([
 
 export const builderActions = actions.filter((def) => BUILDER_ACTION_IDS.has(def.id));
 /** Everything a bot's project holds besides its commands: its actions, then its events. */
-export const botActions = [...actions.filter((def) => !BUILDER_ACTION_IDS.has(def.id)), ...staticTriggers];
+export const botActions = [...actions.filter((def) => !BUILDER_ACTION_IDS.has(def.id)), ...laterActions, ...staticTriggers];
+/** What flows from before several bots named by bare id: the deprecated forwarders. */
+const legacyBotActions = [...actions.filter((def) => !BUILDER_ACTION_IDS.has(def.id)), ...staticTriggers];
 
 /** A bot's copy of a definition: its category resolved, its run bound to the session. */
 export function bindToBot(def: ActionDefinition, session: BotSession): ActionDefinition {
@@ -2054,7 +2460,7 @@ async function registerBot(entry: BotEntry): Promise<void> {
 }
 
 async function registerLegacyForwarders(entry: BotEntry): Promise<void> {
-    for (const def of botActions) {
+    for (const def of legacyBotActions) {
         await actionsApi.register({ ...bindToBot(def, entry.session), deprecated: LEGACY_DEPRECATION }, undefined, PANEL_ID);
     }
     for (const command of entry.stored.commands) {
@@ -2063,7 +2469,7 @@ async function registerLegacyForwarders(entry: BotEntry): Promise<void> {
 }
 
 async function unregisterLegacyForwarders(entry: BotEntry): Promise<void> {
-    for (const def of botActions) await actionsApi.unregister(def.id, PANEL_ID);
+    for (const def of legacyBotActions) await actionsApi.unregister(def.id, PANEL_ID);
     for (const command of entry.stored.commands) await actionsApi.unregister(commandTriggerId(command), PANEL_ID);
 }
 

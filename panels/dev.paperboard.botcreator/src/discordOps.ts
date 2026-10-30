@@ -10,6 +10,7 @@ import {
     ComponentType,
     EmbedBuilder,
     MessageFlags,
+    PermissionsBitField,
     TextInputStyle,
     type MessageComponentInteraction,
     type ModalSubmitInteraction,
@@ -937,6 +938,10 @@ export class MessageOps {
         return thread.id;
     }
 
+    async fetchMessage(channelId: string, messageId: string): Promise<any> {
+        return this.message(channelId, messageId);
+    }
+
     async fetchChannel(channelId: string): Promise<any> {
         const channel = await this.bot.channels.fetch(channelId.trim());
         if (!channel) {
@@ -1099,4 +1104,70 @@ export class InteractionOps {
             return true;
         });
     }
+}
+
+// ─── polls, files, permissions and dates ────────────────────────────────────
+
+/**
+ * A list input as a flow or an agent writes it: a real list, or text with
+ * one item per line (and, when `commas`, separated by commas too).
+ */
+export function listInput(value: unknown, commas = false): string[] {
+    if (value === undefined || value === null || value === "") return [];
+    const raw = Array.isArray(value) ? value.map(String) : String(value).split(commas ? /[\n,]/ : /\n/);
+    return raw.map((item) => item.trim()).filter(Boolean);
+}
+
+export const MAX_POLL_ANSWERS = 10;
+export const MAX_POLL_HOURS = 768;
+
+/** A Discord poll from a question and its answers, refused with the rule it breaks. */
+export function buildPoll(inputs: { question?: unknown; answers?: unknown; hours?: unknown; multiple?: unknown }) {
+    const question = typeof inputs.question === "string" ? inputs.question.trim() : "";
+    if (!question) throw new Error("A poll needs a question");
+    if (question.length > 300) throw new Error("A poll's question is at most 300 characters");
+    const answers = listInput(inputs.answers);
+    if (answers.length < 1) throw new Error("A poll needs at least one answer, one per line");
+    if (answers.length > MAX_POLL_ANSWERS) throw new Error(`A poll has at most ${MAX_POLL_ANSWERS} answers`);
+    const long = answers.find((a) => a.length > 55);
+    if (long) throw new Error(`"${long.slice(0, 20)}…" is longer than the 55 characters a poll answer can be`);
+    const hours = inputs.hours === undefined || inputs.hours === "" ? 24 : Number(inputs.hours);
+    if (!Number.isFinite(hours) || hours < 1 || hours > MAX_POLL_HOURS) throw new Error(`A poll runs from 1 to ${MAX_POLL_HOURS} hours`);
+    return {
+        question: { text: question },
+        answers: answers.map((text) => ({ text })),
+        duration: Math.floor(hours),
+        allowMultiselect: inputs.multiple === true,
+    };
+}
+
+/** A file to attach, from a web address; Discord reads it, Paperboard doesn't run it. */
+export function fileFromUrl(url: unknown, name?: unknown): { attachment: string; name?: string } {
+    const text = typeof url === "string" ? url.trim() : "";
+    let parsed: URL;
+    try {
+        parsed = new URL(text);
+    } catch {
+        throw new Error(`"${text}" isn't a web address`);
+    }
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("A file is sent from an http or https address");
+    const fileName = typeof name === "string" && name.trim() ? name.trim() : undefined;
+    return { attachment: parsed.href, ...(fileName ? { name: fileName } : {}) };
+}
+
+/** Discord permission names (SendMessages, ViewChannel, ...), each checked; a typo is refused, never dropped. */
+export function permissionNames(value: unknown): (keyof typeof PermissionsBitField.Flags)[] {
+    const names = listInput(value, true);
+    const unknown = names.filter((n) => !(n in PermissionsBitField.Flags));
+    if (unknown.length) throw new Error(`Unknown Discord permission(s): ${unknown.join(", ")}`);
+    return names as (keyof typeof PermissionsBitField.Flags)[];
+}
+
+/** A moment from a timestamp in milliseconds or a date and time like 2026-11-02T18:00:00Z. */
+export function parseMoment(value: unknown, what: string): Date {
+    const date = typeof value === "number" ? new Date(value) : new Date(String(value ?? "").trim());
+    if (value === undefined || value === "" || Number.isNaN(date.getTime())) {
+        throw new Error(`${what} is a date and time like 2026-11-02T18:00:00Z, or a timestamp`);
+    }
+    return date;
 }
