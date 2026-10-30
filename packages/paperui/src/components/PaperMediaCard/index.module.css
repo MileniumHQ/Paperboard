@@ -5,6 +5,8 @@
 }
 
 .card {
+    /* a poster is 2:3 and a step wider than the largest icon */
+    --media-poster-width: calc(var(--paper-control-size-xlarge) * 1.5);
     position: relative;
     display: flex;
     flex-direction: column;
@@ -74,6 +76,37 @@
     box-sizing: border-box;
 }
 
+.posterWrapper {
+    position: absolute;
+    left: var(--paper-uigap);
+    bottom: calc(var(--media-poster-width) * -0.75);
+    width: var(--media-poster-width);
+    aspect-ratio: 2 / 3;
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-sunken);
+    border: var(--paper-thick-border-width) solid var(--paper-surface);
+    box-shadow: var(--paper-element-shadow);
+    overflow: hidden;
+    z-index: 2;
+    box-sizing: border-box;
+}
+
+.posterImage,
+.posterStandalone {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.posterStandalone {
+    width: var(--media-poster-width);
+    height: auto;
+    aspect-ratio: 2 / 3;
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-sunken);
+}
+
 .iconImage {
     width: 100%;
     height: 100%;
@@ -130,6 +163,12 @@
 
 .bodyWithOverlappingIcon {
     padding-top: calc(var(--paper-uigap) + (var(--paper-control-size-large) * 0.5));
+}
+
+/* the text takes the room beside a poster, and the card keeps its height */
+.bodyBesidePoster {
+    padding-left: calc(var(--paper-uigap) * 2 + var(--media-poster-width));
+    min-height: calc(var(--media-poster-width) * 0.75 + var(--paper-uigap));
 }
 
 .headerRow {

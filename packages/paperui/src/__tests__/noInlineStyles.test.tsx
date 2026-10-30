@@ -13,7 +13,7 @@ import { PaperIcon } from "../components/PaperIcon";
 import { PaperCopyButton } from "../components/PaperCopyButton";
 import { PaperInterfaceGroup, PaperInterfaceItem } from "../templates/PaperInterfaceGroup";
 import { PaperGrid } from "../components/PaperGrid";
-import { PaperMediaCardGroup } from "../components/PaperMediaCard";
+import { PaperMediaCard, PaperMediaCardGroup } from "../components/PaperMediaCard";
 import { PaperSwatch } from "../components/PaperSwatch";
 import { paperSizes } from "../types";
 
@@ -64,6 +64,13 @@ describe("size tokens", () => {
         ));
         expect(getByTestId("grid").style.gridTemplateColumns).toContain("var(--paper-size-field)");
         expect(getByTestId("cards").style.gridTemplateColumns).toContain("var(--paper-size-card-min)");
+    });
+
+    test("a media card's poster is sized by the stylesheet, not by a style tag", () => {
+        const { getByTestId } = render(() => (
+            <PaperMediaCard data-testid="card" banner="/b.webp" poster="/p.webp" title="Game" />
+        ));
+        expect(getByTestId("card").querySelector("[class*=posterWrapper]")!.hasAttribute("style")).toBe(false);
     });
 
     test("fullWidth={false} sizes a card to its content", () => {

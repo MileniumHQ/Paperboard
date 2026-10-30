@@ -100,6 +100,12 @@ export function Example() {
                             <td>Icon ligature name or image URL.</td>
                         </tr>
                         <tr>
+                            <td><PaperCode>poster</PaperCode></td>
+                            <td><PaperCode>string</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Portrait (2:3) cover art image URL, standing in the icon's place and replacing it. Under a <PaperCode>banner</PaperCode> it overlaps the banner's bottom edge with the text beside it; without one it stands above the title. <PaperCode>posterAlt</PaperCode> describes it.</td>
+                        </tr>
+                        <tr>
                             <td><PaperCode>banner</PaperCode></td>
                             <td><PaperCode>string | JSX.Element</PaperCode></td>
                             <td><PaperCode>undefined</PaperCode></td>
@@ -154,6 +160,20 @@ export function Example() {
                     <PaperMediaCard icon="extension" title="Extension 2" />
                 </PaperMediaCardGroup>
             </PaperCard>
+            <PaperText preset="body">
+                Pair a banner with a poster to present something with cover art, such as a game to choose.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperMediaCardGroup minCardWidth="field-wide">
+    <PaperMediaCard
+        banner="/assets/games/terraria/banner.webp"
+        poster="/assets/games/terraria/poster.webp"
+        posterAlt="Terraria cover art"
+        title="Terraria"
+        onClick={() => pick("terraria")}
+    />
+</PaperMediaCardGroup>`}
+            </PaperCode>
         </PaperFlex>
     );
 }

@@ -13,6 +13,13 @@ export interface PaperMediaCardProps
     bannerAlt?: string;
     bannerHeight?: string;
     icon?: string | JSX.Element;
+    /**
+     * Portrait cover art (2:3) in the icon's place. With a banner it
+     * overlaps the banner's bottom edge and the text sits beside it;
+     * without one it stands above the title. It replaces `icon`.
+     */
+    poster?: string;
+    posterAlt?: string;
     title: string | JSX.Element;
     subtitle?: string | JSX.Element;
     description?: string | JSX.Element;
@@ -47,6 +54,8 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
         "bannerAlt",
         "bannerHeight",
         "icon",
+        "poster",
+        "posterAlt",
         "title",
         "subtitle",
         "description",
@@ -73,7 +82,8 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
     const isLink = () => Boolean(local.href);
 
     const hasBanner = () => Boolean(local.banner);
-    const hasOverlappingIcon = () => hasBanner() && Boolean(local.icon);
+    const hasOverlappingIcon = () => hasBanner() && !local.poster && Boolean(local.icon);
+    const hasOverlappingPoster = () => hasBanner() && Boolean(local.poster);
 
     // the footer holds the card's own controls (a button, a toggle): using
     // one does just that, never also opening the card
@@ -145,7 +155,13 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                         local.banner
                     )}
 
-                    <Show when={local.icon}>
+                    <Show when={local.poster}>
+                        <div class={styles.posterWrapper}>
+                            <img src={local.poster} alt={local.posterAlt || ""} class={styles.posterImage} />
+                        </div>
+                    </Show>
+
+                    <Show when={!local.poster && local.icon}>
                         <div class={styles.iconWrapper}>
                             {typeof local.icon === "string" ? (
                                 local.icon.startsWith("http") ||
@@ -175,11 +191,16 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                     hasOverlappingIcon()
                         ? styles.bodyWithOverlappingIcon
                         : "",
+                    hasOverlappingPoster() ? styles.bodyBesidePoster : "",
                 ]
                     .filter(Boolean)
                     .join(" ")}
             >
-                <Show when={!hasBanner() && local.icon}>
+                <Show when={!hasBanner() && local.poster}>
+                    <img src={local.poster} alt={local.posterAlt || ""} class={styles.posterStandalone} />
+                </Show>
+
+                <Show when={!hasBanner() && !local.poster && local.icon}>
                     <div style={{ "margin-bottom": `${getVarCss("uigap-half")}` }}>
                         {typeof local.icon === "string" ? (
                             local.icon.startsWith("http") ||
