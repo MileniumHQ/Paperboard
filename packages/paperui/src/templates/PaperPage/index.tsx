@@ -26,7 +26,9 @@ export interface PaperPageProps
  */
 export function PaperPage(props: ParentProps<PaperPageProps>) {
     const layoutCtx = usePaperLayout();
-    const [local, rest] = splitProps(props, [
+    // layout props split apart: the style getter must never read children,
+    // or every restyle would build the page's contents again
+    const [local, layout, rest] = splitProps(props, [
         "width",
         "padding",
         "gap",
@@ -34,6 +36,7 @@ export function PaperPage(props: ParentProps<PaperPageProps>) {
         "classList",
         "style",
         "children",
+    ], [
         "flex",
         "shrink",
         "grow",
@@ -61,7 +64,7 @@ export function PaperPage(props: ParentProps<PaperPageProps>) {
 
     const pageStyle = () => ({
         // width names the column here, not a size token
-        ...resolveLayoutStyles({ ...local, width: undefined }, layoutCtx),
+        ...resolveLayoutStyles(layout, layoutCtx),
         padding: resolveSpacing(local.padding ?? "full"),
         gap: resolveSpacing(local.gap ?? "full"),
         ...(typeof local.style === "object" ? local.style : {}),
