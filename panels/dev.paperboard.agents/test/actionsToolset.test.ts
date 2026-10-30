@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ACTION_TOOLS, MAX_FOUND, actionsToolset, type ActionEntry, type ActionsHost, type ProjectEntry } from "../src/service/actionsToolset";
+import { ACTION_TOOLS, MAX_LISTED, actionsToolset, type ActionEntry, type ActionsHost, type ProjectEntry } from "../src/service/actionsToolset";
 
 const act = (panelId: string, action: string, schema: ActionEntry["schema"] = {}): ActionEntry => ({
     panelId,
@@ -35,43 +35,43 @@ const registry = [
     act("dev.paperboard.terminal", "run-terminal-command", { description: "Run a shell command" }),
 ];
 
-describe("finding actions", () => {
-    test("searches by name, description and panel, and shows the inputs", async () => {
+describe("listing actions", () => {
+    const listOf = async (set: ReturnType<typeof fake>["set"], args: Record<string, unknown>) => JSON.parse((await set.call("list_actions", args)).text);
+
+    test("lists every action a panel offers, with its inputs", async () => {
         const { set } = fake(registry);
-        const r = JSON.parse((await set.call("find_actions", { query: "game server" })).text);
-        expect(r.actions.map((a: any) => `${a.panel}:${a.action}`)).toEqual(["dev.paperboard.gameserver:start-server", "dev.paperboard.gameserver:stop-server"]);
+        const r = await listOf(set, { panel: "dev.paperboard.gameserver" });
+        expect(r.actions.map((a: any) => a.action)).toEqual(["start-server", "stop-server"]);
         expect(r.actions[0].inputs).toEqual({ server: { type: "string", label: "Server", description: "which one", required: true } });
-        const byPanel = JSON.parse((await set.call("find_actions", { panel: "dev.paperboard.botcreator" })).text);
-        expect(byPanel.actions[0]).toMatchObject({ action: "send-message", output: "string" });
+        expect(r.projects).toBeUndefined();
+        const bot = await listOf(set, { panel: "dev.paperboard.botcreator" });
+        expect(bot.actions[0]).toMatchObject({ action: "send-message", output: "string" });
     });
 
-    test("the agent's own actions, internal, event-only, deprecated and schema-less ones are never offered", async () => {
+    test("the agent's own actions, internal, event-only, deprecated and schema-less ones are never listed", async () => {
         const { set } = fake(registry);
-        const msg = JSON.parse((await set.call("find_actions", { query: "message" })).text);
-        expect(msg.actions.map((a: any) => a.panel)).toEqual(["dev.paperboard.botcreator"]);
         // everything the actions panel registers here is one of those kinds
-        expect((await set.call("find_actions", { panel: "dev.paperboard.actions" })).text).toBe("No actions match.");
-        expect((await set.call("find_actions", { panel: "dev.paperboard.agents" })).text).toBe("No actions match.");
+        expect(await set.call("list_actions", { panel: "dev.paperboard.actions" })).toMatchObject({ isError: true, text: expect.stringContaining("offers no actions") });
+        expect(await set.call("list_actions", { panel: "dev.paperboard.agents" })).toMatchObject({ isError: true });
     });
 
-    test("a withheld panel (the terminal: shell commands on the user's computer) is never offered or named", async () => {
+    test("a withheld panel (the terminal: shell commands on the user's computer) is never listed or named", async () => {
         const { set } = fake(registry);
-        expect((await set.call("find_actions", { panel: "dev.paperboard.terminal" })).text).toBe("No actions match.");
-        expect((await set.call("find_actions", { query: "shell command" })).text).toBe("No actions match.");
+        expect(await set.call("list_actions", { panel: "dev.paperboard.terminal" })).toMatchObject({ isError: true });
         expect(await set.instructions!()).not.toContain("dev.paperboard.terminal");
     });
 
-    test("at most MAX_FOUND answers, and the rest are counted", async () => {
-        const many = Array.from({ length: 25 }, (_, i) => act("dev.paperboard.many", `do-${i}`, { description: "does a thing" }));
+    test("at most MAX_LISTED actions, and the rest are counted", async () => {
+        const many = Array.from({ length: MAX_LISTED + 15 }, (_, i) => act("dev.paperboard.many", `do-${i}`, { description: "does a thing" }));
         const { set } = fake(many);
-        const r = JSON.parse((await set.call("find_actions", { query: "thing" })).text);
-        expect(r.actions).toHaveLength(MAX_FOUND);
+        const r = await listOf(set, { panel: "dev.paperboard.many" });
+        expect(r.actions).toHaveLength(MAX_LISTED);
         expect(r.more).toMatch(/15 more/);
     });
 
-    test("a search needs something to look for", async () => {
+    test("a list needs a panel", async () => {
         const { set } = fake(registry);
-        expect(await set.call("find_actions", {})).toMatchObject({ isError: true });
+        expect(await set.call("list_actions", {})).toMatchObject({ isError: true, text: "Say which panel." });
     });
 });
 
@@ -129,7 +129,7 @@ describe("running actions", () => {
     test("an unavailable registry is a tool error, not an empty result", async () => {
         const down: ActionsHost = { list: async () => Promise.reject(new Error("the daemon is gone")), listProjects: async () => [], call: async () => null };
         const set = actionsToolset({ host: down, enabled: () => true });
-        expect(await set.call("find_actions", { query: "x" })).toMatchObject({ isError: true, text: "the daemon is gone" });
+        expect(await set.call("list_actions", { panel: "dev.paperboard.gameserver" })).toMatchObject({ isError: true, text: "the daemon is gone" });
         expect(await set.instructions!()).toContain("isn't available");
     });
 });
@@ -149,46 +149,39 @@ describe("panels with projects", () => {
         act("dev.paperboard.actions", "p-1/add-flow", { hidden: true, description: `Adds a flow. ${"The format is spelled out here. ".repeat(30)}` }),
     ];
 
-    test("browsing a panel shows its categories and each project with its own", async () => {
+    test("a panel's list shows its own actions and each project with how many it has", async () => {
         const { set } = fake(withProjects, true, projects);
-        const r = JSON.parse((await set.call("browse_panel", { panel: SERVERS })).text);
-        expect(r).toEqual({
-            panel: SERVERS,
-            actions: 1,
-            categories: { Servers: 1 },
-            projects: [
-                { id: "survival", name: "Survival", actions: 2, categories: { Chat: 1, Players: 1 } },
-                { id: "creative", name: "Creative", actions: 1, categories: { Chat: 1 } },
-            ],
-        });
-        expect(await set.call("browse_panel", { panel: "dev.paperboard.terminal" })).toMatchObject({ isError: true });
-        expect(await set.call("browse_panel", {})).toMatchObject({ isError: true, text: "Say which panel." });
+        const r = JSON.parse((await set.call("list_actions", { panel: SERVERS })).text);
+        expect(r.actions.map((a: any) => [a.action, a.category])).toEqual([["create-server", "Servers"]]);
+        expect(r.projects).toEqual([
+            { id: "survival", name: "Survival", actions: 2 },
+            { id: "creative", name: "Creative", actions: 1 },
+        ]);
     });
 
-    test("a search can look in one project, and says which project each match is in", async () => {
+    test("a project's list shows its actions, which run by their full id", async () => {
         const { set, calls } = fake(withProjects, true, projects);
-        const r = JSON.parse((await set.call("find_actions", { panel: SERVERS, project: "creative" })).text);
-        expect(r.actions.map((a: any) => [a.action, a.project])).toEqual([["creative/send", "creative"]]);
-        const chat = JSON.parse((await set.call("find_actions", { query: "chat" })).text);
-        expect(chat.actions.map((a: any) => a.action)).toEqual(["creative/send", "survival/send"]);
-        // a project's action runs by its full id
+        const r = JSON.parse((await set.call("list_actions", { panel: SERVERS, project: "survival" })).text);
+        expect(r.project).toEqual({ id: "survival", name: "Survival" });
+        expect(r.actions.map((a: any) => [a.action, a.project])).toEqual([["survival/send", "survival"], ["survival/kick", "survival"]]);
+        expect(await set.call("list_actions", { panel: SERVERS, project: "hardcore" })).toMatchObject({ isError: true, text: expect.stringContaining("no project") });
         await set.call("run_action", { panel: SERVERS, action: "survival/send", inputs: {} });
         expect(calls.map((c) => c.action)).toEqual(["survival/send"]);
     });
 
-    test("hidden actions are offered, and a lone match shows its whole description", async () => {
+    test("hidden actions are listed, cut short in a list and whole when named", async () => {
         const { set } = fake(withProjects, true, projects);
-        const one = JSON.parse((await set.call("find_actions", { query: "add flow" })).text);
-        expect(one.actions).toHaveLength(1);
-        expect(one.actions[0].description).toBe(withProjects[4].schema!.description);
-        const many = JSON.parse((await set.call("find_actions", { query: "a" })).text);
-        const flow = many.actions.find((a: any) => a.action === "p-1/add-flow");
-        expect(flow.description.length).toBeLessThanOrEqual(300);
+        const listed = JSON.parse((await set.call("list_actions", { panel: "dev.paperboard.actions" })).text);
+        expect(listed.actions[0].action).toBe("p-1/add-flow");
+        expect(listed.actions[0].description.length).toBeLessThanOrEqual(300);
+        const one = JSON.parse((await set.call("list_actions", { panel: "dev.paperboard.actions", action: "p-1/add-flow" })).text);
+        expect(one.description).toBe(withProjects[4].schema!.description);
+        expect(await set.call("list_actions", { panel: SERVERS, action: "nope" })).toMatchObject({ isError: true });
     });
 });
 
 describe("the toolset", () => {
-    test("three tools and one line naming the panels, however many actions there are", async () => {
+    test("two tools and one line naming the panels, however many actions there are", async () => {
         const many = Array.from({ length: 500 }, (_, i) => act(`dev.paperboard.p${i % 30}`, `a${i}`));
         const { set } = fake(many);
         expect((await set.tools()).map((t) => t.name)).toEqual(ACTION_TOOLS.map((t) => t.name));

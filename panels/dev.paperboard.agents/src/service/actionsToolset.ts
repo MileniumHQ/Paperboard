@@ -1,8 +1,8 @@
-// Paperboard's actions as the agent's tools, without listing them: every
-// installed panel registers dozens, so the agent gets three tools and a line
-// naming the panels. `browse_panel` shows what one panel offers, in its
-// categories and projects; `find_actions` searches (at most MAX_FOUND
-// answers, each with its inputs) and `run_action` runs one by panel and
+// Paperboard's actions as the agent's tools, without putting them all in its
+// prompt: every installed panel registers dozens, so the agent gets two tools
+// and a line naming the panels. `list_actions` lists what one panel offers,
+// each action with its inputs, and its projects; a project's actions, or one
+// action's whole description, on request. `run_action` runs one by panel and
 // action id. Actions hidden from the Actions library (made for programs,
 // like Actions' own flow editing) are offered like any other.
 //
@@ -26,16 +26,15 @@ import type { Toolset } from "./toolsets";
  */
 export const WITHHELD_PANELS: ReadonlySet<string> = new Set(["dev.paperboard.terminal"]);
 
-export const MAX_FOUND = 10;
-// a lone match shows its whole description: a program-facing action spells
-// out its input format there
+/** the most actions, or projects, one list shows */
+export const MAX_LISTED = 100;
+// a list cuts descriptions short; one action asked for by name shows its
+// whole description: a program-facing action spells out its input format there
 const MAX_DESCRIPTION = 300;
 const MAX_LONE_DESCRIPTION = 4000;
-const MAX_BROWSED = 200;
 const MAX_PANEL_NAMES = 20;
 const MAX_INPUT_BYTES = 64 * 1024;
 const MAX_RESULT_CHARS = 16_000;
-const MAX_QUERY = 200;
 const LIST_TTL_MS = 10_000;
 const DEFAULT_CALL_MS = 30_000;
 const MAX_CALL_MS = 60_000; // the daemon refuses a longer deadline
@@ -81,36 +80,30 @@ export interface ActionsToolsetDeps {
 
 export const ACTION_TOOLS: ToolSpec[] = [
     {
-        name: "browse_panel",
+        name: "list_actions",
         description:
-            "What one Paperboard panel offers: its categories of actions with how many each has, and its projects (a server, a bot, ...), " +
-            "each with its own actions named \"project/action\". Then search it with `find_actions`.",
-        inputSchema: { type: "object", properties: { panel: { type: "string", description: "A panel id." } }, required: ["panel"] },
-    },
-    {
-        name: "find_actions",
-        description:
-            "Search the actions other Paperboard panels offer (start a game server, post to Discord, ...). " +
-            `Returns at most ${MAX_FOUND} matches with the inputs each takes; a single match shows its whole description. ` +
-            "Give a search `query`, or just a `panel` (and `project`) to see what it offers.",
+            "What one Paperboard panel can do (start a game server, post to Discord, ...): every action it offers, with the inputs each takes, " +
+            "and its projects (a server, a bot, ...). Name a `project` to list that project's actions (\"project/action\"), " +
+            `or an \`action\` to see its whole description; a list cuts descriptions at ${MAX_DESCRIPTION} characters.`,
         inputSchema: {
             type: "object",
             properties: {
-                query: { type: "string" },
-                panel: { type: "string", description: "A panel id, to look only at its actions." },
-                project: { type: "string", description: "A project id from browse_panel, to look only at that project's actions." },
+                panel: { type: "string", description: "A panel id." },
+                project: { type: "string", description: "A project id the panel's list showed." },
+                action: { type: "string", description: "An action id, for that one action in full." },
             },
+            required: ["panel"],
         },
     },
     {
         name: "run_action",
-        description: "Run one action found with `find_actions`, with its inputs as an object. Returns the action's output or its error.",
+        description: "Run one action listed by `list_actions`, with its inputs as an object. Returns the action's output or its error.",
         inputSchema: {
             type: "object",
             properties: {
                 panel: { type: "string" },
                 action: { type: "string" },
-                inputs: { type: "object", description: "Values by input name, as find_actions showed them." },
+                inputs: { type: "object", description: "Values by input name, as list_actions showed them." },
                 timeout_seconds: { type: "integer", minimum: 1, maximum: 60 },
             },
             required: ["panel", "action"],
@@ -152,13 +145,12 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
             }
             const named = panels.slice(0, MAX_PANEL_NAMES).join(", ") + (panels.length > MAX_PANEL_NAMES ? `, and ${panels.length - MAX_PANEL_NAMES} more` : "");
             if (!panels.length) return "Other Paperboard panels offer no actions right now.";
-            return `**Other panels:** ${named} can do things for you. See what one offers with \`browse_panel\`, search with \`find_actions\`, then \`run_action\`. Never run one the user wouldn't expect, and say what you did.`;
+            return `**Other panels:** ${named} can do things for you. See what one offers with \`list_actions\`, then \`run_action\`. Never run one the user wouldn't expect, and say what you did.`;
         },
         call: async (name, args) => {
             if (!deps.enabled()) return fault("The user has switched Paperboard actions off for you.");
             try {
-                if (name === "browse_panel") return await browse(args);
-                return name === "find_actions" ? await find(args) : await run(args);
+                return name === "list_actions" ? await list(args) : await run(args);
             } catch (e) {
                 console.error(`[ai] ${name} failed:`, message(e));
                 return fault(message(e));
@@ -166,51 +158,40 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
         },
     };
 
-    async function browse(args: Record<string, unknown>): Promise<ToolResult> {
+    async function list(args: Record<string, unknown>): Promise<ToolResult> {
         const panel = typeof args.panel === "string" ? args.panel.trim() : "";
+        const project = typeof args.project === "string" ? args.project.trim() : "";
+        const action = typeof args.action === "string" ? args.action.trim() : "";
         if (!panel) return fault("Say which panel.");
         const mine = (await listed(true)).filter((a) => a.panelId === panel);
         if (!mine.length) return fault(`${panel} offers no actions you can run.`);
+        if (action) {
+            const one = mine.find((a) => a.action === action);
+            if (!one) return fault(`${panel} has no action "${action}" you can run. List its actions without one.`);
+            return { text: JSON.stringify(describe(one, MAX_LONE_DESCRIPTION), null, 1) };
+        }
+        const shown = (list: ActionEntry[]) => ({
+            actions: list.slice(0, MAX_LISTED).map((a) => describe(a, MAX_DESCRIPTION)),
+            ...(list.length > MAX_LISTED ? { more: `${list.length - MAX_LISTED} more actions aren't shown` } : {}),
+        });
         const projects = (await deps.host.listProjects()).filter((p) => p.panelId === panel);
-        const categories = (list: ActionEntry[]) => {
-            const counts: Record<string, number> = {};
-            for (const a of list) {
-                const name = categoryOf(a) || "General";
-                counts[name] = (counts[name] ?? 0) + 1;
-            }
-            return counts;
-        };
-        const global = mine.filter((a) => !a.project);
+        if (project) {
+            const named = projects.find((p) => p.id === project);
+            if (!named) return fault(`${panel} has no project "${project}". List the panel's actions to see its projects.`);
+            return { text: JSON.stringify({ panel, project: { id: named.id, name: named.name }, ...shown(mine.filter((a) => a.project === project)) }, null, 1) };
+        }
         return {
             text: JSON.stringify({
                 panel,
-                actions: global.length,
-                categories: categories(global),
-                projects: projects.slice(0, MAX_BROWSED).map((p) => {
-                    const inProject = mine.filter((a) => a.project === p.id);
-                    return { id: p.id, name: p.name, actions: inProject.length, categories: categories(inProject) };
-                }),
-                ...(projects.length > MAX_BROWSED ? { more: `${projects.length - MAX_BROWSED} more projects` } : {}),
+                ...shown(mine.filter((a) => !a.project)),
+                ...(projects.length
+                    ? {
+                          projects: projects.slice(0, MAX_LISTED).map((p) => ({ id: p.id, name: p.name, actions: mine.filter((a) => a.project === p.id).length })),
+                          ...(projects.length > MAX_LISTED ? { moreProjects: `${projects.length - MAX_LISTED} more projects aren't shown` } : {}),
+                      }
+                    : {}),
             }, null, 1),
         };
-    }
-
-    async function find(args: Record<string, unknown>): Promise<ToolResult> {
-        const query = typeof args.query === "string" ? args.query.trim().slice(0, MAX_QUERY).toLowerCase() : "";
-        const panel = typeof args.panel === "string" ? args.panel.trim() : "";
-        const project = typeof args.project === "string" ? args.project.trim() : "";
-        if (!query && !panel) return fault("Say what to look for (query) or which panel (panel).");
-        const words = query.split(/[\s,._:/-]+/).filter(Boolean);
-        const scored = (await listed(true))
-            .filter((a) => !panel || a.panelId === panel)
-            .filter((a) => !project || a.project === project)
-            .map((a) => ({ a, score: score(a, words) }))
-            .filter((x) => !words.length || x.score > 0)
-            .sort((x, y) => y.score - x.score || x.a.panelId.localeCompare(y.a.panelId) || x.a.action.localeCompare(y.a.action));
-        if (!scored.length) return { text: "No actions match." };
-        const shown = scored.slice(0, MAX_FOUND).map(({ a }) => describe(a, scored.length === 1 ? MAX_LONE_DESCRIPTION : MAX_DESCRIPTION));
-        const more = scored.length - shown.length;
-        return { text: JSON.stringify({ actions: shown, ...(more > 0 ? { more: `${more} more match; narrow the query or name a panel` } : {}) }, null, 1) };
     }
 
     async function run(args: Record<string, unknown>): Promise<ToolResult> {
@@ -224,7 +205,7 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
         if (JSON.stringify(inputs).length > MAX_INPUT_BYTES) return fault(`inputs are limited to ${MAX_INPUT_BYTES / 1024} KB.`);
         // fresh: what may run is decided against the registry as it is now, not as it was found
         const target = (await listed(true)).find((a) => a.panelId === panel && a.action === action);
-        if (!target) return fault(`${panel}:${action} isn't an action you can run. Use find_actions.`);
+        if (!target) return fault(`${panel}:${action} isn't an action you can run. See list_actions.`);
         const seconds = Number(args.timeout_seconds);
         const timeoutMs = Number.isFinite(seconds) && seconds >= 1 ? Math.min(seconds * 1000, MAX_CALL_MS) : DEFAULT_CALL_MS;
         const result = await deps.host.call(panel, action, inputs, { timeoutMs });
@@ -236,23 +217,6 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
 function categoryOf(a: ActionEntry): string {
     const c = a.schema?.category;
     return typeof c === "string" ? c : c?.name ?? "";
-}
-
-function score(a: ActionEntry, words: string[]): number {
-    if (!words.length) return 1;
-    const s = a.schema!;
-    const fields: [string, number][] = [
-        [a.action, 4],
-        [s.name ?? "", 4],
-        [a.panelId, 2],
-        [categoryOf(a), 2],
-        [s.description ?? "", 1],
-    ];
-    let total = 0;
-    for (const w of words) {
-        for (const [text, weight] of fields) if (text.toLowerCase().includes(w)) total += weight;
-    }
-    return total;
 }
 
 function describe(a: ActionEntry, descriptionChars: number) {
@@ -273,6 +237,7 @@ function describe(a: ActionEntry, descriptionChars: number) {
         action: a.action,
         ...(a.project ? { project: a.project } : {}),
         name: s.name,
+        ...(categoryOf(a) ? { category: categoryOf(a) } : {}),
         description: cut(s.description ?? "", descriptionChars),
         inputs,
         ...(output ? { output } : {}),
