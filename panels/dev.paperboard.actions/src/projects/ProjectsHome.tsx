@@ -26,7 +26,6 @@ import { editedText, type ProjectsState } from "./state";
 import type { ProjectSummary } from "../service";
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
-const flowsText = (n: number) => `${n} flow${n === 1 ? "" : "s"}`;
 
 export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (project: ProjectSummary) => void }) {
     const projects = props.projects;
@@ -118,7 +117,7 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                                         banner={<CanvasPreview preview={project.preview} />}
                                         title={project.name}
                                         subtitle={editedText(project.editedAt, now())}
-                                        description={project.loadError ?? flowsText(project.flowCount)}
+                                        description={project.loadError ?? undefined}
                                         badge={
                                             project.loadError
                                                 ? <PaperBadge variant="danger">Not loaded</PaperBadge>

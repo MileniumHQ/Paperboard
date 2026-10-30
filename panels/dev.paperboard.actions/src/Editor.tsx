@@ -16,7 +16,6 @@ import {
     PaperMenuBar,
     PaperMenuBarMenu,
     PaperSeparator,
-    PaperText,
     PaperToggle,
 } from "@mileniumhq/paperui";
 import ActionBlock from "./components/ActionBlock";
@@ -153,8 +152,8 @@ export default function Editor(props: {
                         </PaperMenuBarMenu>
                     </PaperMenuBar>
                 </PaperFlex>
-                <PaperFlex direction="row" align="center" justify="flex-end" gap="half" fullWidth>
-                    <PaperText size={2} color="text-subtle">{props.project().enabled ? "Flows on" : "Flows off"}</PaperText>
+                {/* the bar's own padding plus this one keeps the play button off the edge */}
+                <PaperFlex direction="row" align="center" justify="flex-end" gap="full" paddingX="half" fullWidth>
                     <PaperToggle
                         checked={props.project().enabled}
                         aria-label="Flows start on their events"
