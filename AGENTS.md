@@ -14,6 +14,7 @@ Paperboard is a dashboard for self-hostable programs. Panels are like the apps. 
 - **Nothing ships that is unfinished:** Don't write experimental code, write production-ready code.
 - **Don't touch .paperboard:** The user's .paperboard is theirs, ensure tests don't reach it. Use `PAPERBOARD_DIR`.
 - **Suicide prevention:** Don't `pkill -f`, because that could also kill your own shell.
+- **Always test.** Unless you're certain it'll work fine, always do a manual check to ensure the feature works and looks great.
 
 Fixes:
 
@@ -38,7 +39,7 @@ Browser mode:
 - It's a dev tool, not for being shipped to users.
 - `bun run dev:browser`
 - Use it for screenshots, testing, browser use in your agent (T3 Code), etc.
-- USE THE T3 PREVIEW IF AVAILABLE. Do not open the app in a random browser or window.
+- USE THE T3 PREVIEW IF AVAILABLE. If it's not available, use a headless browser (preferrably Helium). **How the UI looks must be held to the highest standard.**
 
 UI:
 
