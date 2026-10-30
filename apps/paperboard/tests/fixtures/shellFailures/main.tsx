@@ -55,6 +55,7 @@ const mount = () => render(() => (
             settings={settings.appSettings()}
             onChange={settings.handleAppSettingsChange}
             onShowTutorial={() => undefined}
+            computers={[]}
             failure={settings.settingsFailure()}
             onRetryLoad={() => void settings.retryLoadAppSettings()}
             onDismissFailure={settings.dismissSettingsFailure}

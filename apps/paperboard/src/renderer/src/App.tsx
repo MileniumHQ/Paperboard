@@ -63,6 +63,7 @@ import libraryIcon from "./assets/PanelLibrary.png";
 import styles from "./App.module.css";
 import iconStyles from "./components/computer/panelIcon.module.css";
 import { useAppSettings } from "./hooks/useAppSettings";
+import { START_ON_HOME, startTarget } from "./lib/startOn";
 import { useComputers } from "./hooks/useComputers";
 import { usePanels } from "./hooks/usePanels";
 
@@ -364,10 +365,15 @@ const App: Component = () => {
         // Load application-wide settings before anything depends on them
         await loadAppSettings();
 
-        // Launch always lands on Home, never on a panel: opening the
-        // last-used panel on boot made a misbehaving panel the first thing
-        // the user saw, with no deliberate action to blame. Home's widgets
-        // each fail inside their own tile.
+        // Launch lands on Home or the computer App Settings starts on, never
+        // on a panel: opening the last-used panel on boot made a misbehaving
+        // panel the first thing the user saw, with no deliberate action to
+        // blame. Home's widgets each fail inside their own tile.
+        if (computersLoaded()) {
+            const start = startTarget(appSettings().startOn, listedComputers());
+            if (start.missing) logToMain("error", `Paperboard starts on computer "${appSettings().startOn}", which isn't listed; opening Home.`);
+            if (start.computerId) handleRailSelect(start.computerId);
+        }
 
         // R1: the unsubscribe is kept and torn down. shell.onChanged's
         // contract returns an unsubscribe; discarding it invites every
@@ -462,6 +468,10 @@ const App: Component = () => {
             });
             await refreshComputers();
             await handleComputerSelect("local");
+            // Paperboard can't open on a computer it forgot
+            if (appSettings().startOn === compId) {
+                await handleAppSettingsChange({ ...appSettings(), startOn: START_ON_HOME });
+            }
             return { ok: true };
         } catch (err: any) {
             logToMain("error", "Failed to remove computer:", err);
@@ -659,6 +669,7 @@ const App: Component = () => {
                                     panelName={(panelId) => Object.values(panelsByComputer()).flat().find((p) => p.id === panelId)?.name || panelId}
                                     onChange={handleAppSettingsChange}
                                     onShowTutorial={() => setOpenTutorial("app")}
+                                    computers={listedComputers()}
                                     failure={settingsFailure()}
                                     onRetryLoad={() => void retryLoadAppSettings()}
                                     onDismissFailure={dismissSettingsFailure}
@@ -950,6 +961,7 @@ const App: Component = () => {
                             settings={appSettings()}
                             onChange={handleAppSettingsChange}
                             onShowTutorial={() => setOpenTutorial("app")}
+                            computers={listedComputers()}
                             failure={settingsFailure()}
                             onRetryLoad={() => void retryLoadAppSettings()}
                             onDismissFailure={dismissSettingsFailure}

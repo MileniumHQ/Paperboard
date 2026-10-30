@@ -48,7 +48,7 @@ render(() => (
     <PaperProvider fullWidth fullHeight>
         <TutorialDialog tutorial={openTutorial()} theme="light" onDone={() => setOpenTutorial(null)} />
         <SetupModal />
-        <AppSettings settings={APP_SETTINGS_DEFAULTS} onChange={() => undefined} onShowTutorial={() => undefined} />
+        <AppSettings settings={APP_SETTINGS_DEFAULTS} onChange={() => undefined} onShowTutorial={() => undefined} computers={[]} />
     </PaperProvider>
 ), root);
 

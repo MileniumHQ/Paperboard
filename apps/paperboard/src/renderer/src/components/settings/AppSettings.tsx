@@ -1,4 +1,4 @@
-import { createSignal, type JSX, Show } from "solid-js";
+import { For, createSignal, type JSX, Show } from "solid-js";
 import {
     PaperSettingList,
     PaperSettingItem,
@@ -17,6 +17,8 @@ import {
 } from "@mileniumhq/paperui";
 import { isBrowserShell, shellIpc } from "../../lib/shell";
 import type { SettingsFailure } from "../../hooks/useAppSettings";
+import { START_ON_HOME, startTarget } from "../../lib/startOn";
+import { computerIcon } from "../computer/computerIcon";
 import PanelPermissionSettings from "./PanelPermissionSettings";
 import styles from "./AppSettings.module.css";
 // Inlined at build time: the viewer always shows the exact files shipped
@@ -28,13 +30,46 @@ export interface AppSettingsData {
     darkMode: "system" | "light" | "dark";
     reducedMotion: boolean;
     runOnStartup: boolean;
+    /** where Paperboard opens: Home, or a computer's id */
+    startOn: string;
 }
 
 export const APP_SETTINGS_DEFAULTS: AppSettingsData = {
     darkMode: "system",
     reducedMotion: false,
     runOnStartup: false,
+    startOn: START_ON_HOME,
 };
+
+/** a computer Paperboard can open on */
+export interface StartComputer {
+    id: string;
+    name: string;
+    isLocal?: boolean;
+}
+
+const START_ON_NOTE = "Open Paperboard on Home or on a computer's panels.";
+const START_ON_MISSING = "That computer isn't listed anymore, so Paperboard opens Home.";
+
+// Home, then each computer the rail lists, the way the rail shows them. A
+// chosen computer that's gone still has a row, so the menu never shows its id.
+function StartOnItems(props: { computers: StartComputer[]; startOn: string }) {
+    return (
+        <>
+            <PaperSelectMenuItem value={START_ON_HOME} icon="home">Home</PaperSelectMenuItem>
+            <Show when={startTarget(props.startOn, props.computers).missing}>
+                <PaperSelectMenuItem value={props.startOn} icon="link_off">Removed computer</PaperSelectMenuItem>
+            </Show>
+            <For each={props.computers}>
+                {(comp) => (
+                    <PaperSelectMenuItem value={comp.id} icon={computerIcon(comp)}>
+                        {comp.name}
+                    </PaperSelectMenuItem>
+                )}
+            </For>
+        </>
+    );
+}
 
 export const APP_SETTINGS_ID = "app-settings";
 
@@ -61,6 +96,8 @@ export default function AppSettings(props: {
     onChange: (next: AppSettingsData) => void;
     /** reopens Paperboard's own tutorial */
     onShowTutorial: () => void;
+    /** the computers Paperboard can open on, besides Home */
+    computers: StartComputer[];
     /** a panel's name, for the permissions you've given panels */
     panelName?: (panelId: string) => string;
     /** the phone layout: grouped rows, the way phones lay out settings */
@@ -77,6 +114,8 @@ export default function AppSettings(props: {
         setLicense(kind);
         setLicenseOpen(true);
     };
+
+    const startOnMissing = () => startTarget(props.settings.startOn, props.computers).missing;
 
     const handleChange = (next: Record<string, any>) => {
         props.onChange({ ...props.settings, ...next });
@@ -128,6 +167,7 @@ export default function AppSettings(props: {
                 settings={props.settings}
                 onChange={handleChange}
                 onShowTutorial={props.onShowTutorial}
+                computers={props.computers}
                 onViewLicense={viewLicense}
                 licenseModal={licenseModal}
             />
@@ -177,6 +217,12 @@ export default function AppSettings(props: {
                         name="reducedMotion"
                         checked={props.settings.reducedMotion}
                     />
+                </PaperSettingItem>
+
+                <PaperSettingItem title="Start on" description={startOnMissing() ? START_ON_MISSING : START_ON_NOTE}>
+                    <PaperSelectMenu name="startOn" value={props.settings.startOn} fullWidth>
+                        <StartOnItems computers={props.computers} startOn={props.settings.startOn} />
+                    </PaperSelectMenu>
                 </PaperSettingItem>
 
                 <PaperSettingItem
@@ -271,6 +317,7 @@ function CompactSettings(props: {
     settings: AppSettingsData;
     onChange: (next: Record<string, any>) => void;
     onShowTutorial: () => void;
+    computers: StartComputer[];
     onViewLicense: (kind: LicenseKind) => void;
     licenseModal: JSX.Element;
     notice: JSX.Element;
@@ -319,6 +366,12 @@ function CompactSettings(props: {
                 <section class={styles.group} aria-labelledby="settings-general">
                     <h2 id="settings-general" class={styles.heading}>General</h2>
                     <div class={styles.card}>
+                        <div class={styles.row}>
+                            <span class={styles.label}>Start on</span>
+                            <PaperSelectMenu name="startOn" value={props.settings.startOn}>
+                                <StartOnItems computers={props.computers} startOn={props.settings.startOn} />
+                            </PaperSelectMenu>
+                        </div>
                         <ActionRow label="Show tutorial" onClick={props.onShowTutorial} chevron />
                     </div>
                 </section>
