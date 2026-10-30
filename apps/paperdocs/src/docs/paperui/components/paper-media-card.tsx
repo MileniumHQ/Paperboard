@@ -17,7 +17,7 @@ export default function PaperMediaCardDoc() {
             <PaperText preset="body">
                 PaperMediaCard presents an application tile with optional banner images, icons, descriptive text, and actions.
                 Reach for PaperMediaCard when building panel catalogs, store listings, game servers, or media dashboards.
-                The card supports interactive hover elevation, badge chips, and responsive card grids.
+                A clickable card outlines its border on hover. It supports badge chips and responsive card grids.
             </PaperText>
 
             <PaperText preset="subheader" id="overview">Overview</PaperText>
@@ -134,7 +134,7 @@ export function Example() {
 
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">
-                When onClick or href is passed, the card activates interactive hover styling and, unless effect is false, wraps itself in PaperEffect.
+                When onClick or href is passed, the card outlines its border on hover and, unless effect is false, wraps itself in PaperEffect.
                 Keyboard navigation triggers onClick when pressing Enter or Space.
             </PaperText>
 
