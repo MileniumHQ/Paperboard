@@ -134,6 +134,7 @@ export function Example() {
                 While open, focus is trapped inside the dialog and restored to the prior element upon dismissal.
                 Opening focuses the dialog, or the field marked <PaperCode>autofocus</PaperCode> when it holds one, on every open.
                 Once closed it fades out without taking input, so a press during the fade reaches the page underneath.
+                A modal opened while another is open stacks on top of it: only the top one answers Escape and Tab, and closing it hands them back to the one below.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>

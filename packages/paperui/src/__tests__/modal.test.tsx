@@ -31,6 +31,26 @@ describe("PaperModal - Accessibility & Focus Trapping Tests", () => {
         expect(handleClose).toHaveBeenCalledTimes(1);
     });
 
+    test("a modal opened over another takes Escape alone, then hands it back", async () => {
+        const closeBelow = vi.fn();
+        const [above, setAbove] = createSignal(true);
+        render(() => (
+            <>
+                <PaperModal open onClose={closeBelow} title="Below">
+                    <p>Below</p>
+                </PaperModal>
+                <PaperModal open={above()} onClose={() => setAbove(false)} title="Above">
+                    <p>Above</p>
+                </PaperModal>
+            </>
+        ));
+        await fireEvent.keyDown(window, { key: "Escape" });
+        expect(above()).toBe(false);
+        expect(closeBelow).not.toHaveBeenCalled();
+        await fireEvent.keyDown(window, { key: "Escape" });
+        expect(closeBelow).toHaveBeenCalledTimes(1);
+    });
+
     test("a concealed dialog stays mounted, hidden from the screen, and ignores Escape", async () => {
         const handleClose = vi.fn();
         const [concealed, setConcealed] = createSignal(false);

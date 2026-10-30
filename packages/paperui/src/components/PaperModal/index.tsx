@@ -37,6 +37,10 @@ export interface PaperModalProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>
     concealed?: boolean;
 }
 
+// open modals, newest last: only the top one answers the keyboard, so
+// Escape on a modal opened over another closes just that one
+const openModals: object[] = [];
+
 export function PaperModal(props: ParentProps<PaperModalProps>) {
     let modalRef: HTMLDivElement | undefined;
     const titleId = `paper-modal-title-${createUniqueId()}`;
@@ -96,6 +100,8 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
         if (!local.open) return;
 
         const previousActiveElement = document.activeElement as HTMLElement | null;
+        const layer = {};
+        openModals.push(layer);
 
         // the modal stays mounted, so a field's own autofocus fires once at
         // mount: the modal hands focus to it on every open instead
@@ -105,7 +111,7 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
         });
 
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (local.concealed) return;
+            if (local.concealed || openModals.at(-1) !== layer) return;
             if ((local.closeOnEsc ?? true) && e.key === "Escape") {
                 local.onClose?.();
                 return;
@@ -141,6 +147,7 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
         window.addEventListener("keydown", handleKeyDown);
         onCleanup(() => {
             window.removeEventListener("keydown", handleKeyDown);
+            openModals.splice(openModals.indexOf(layer), 1);
             cancelAnimationFrame(focusFrame);
             previousActiveElement?.focus?.();
         });
