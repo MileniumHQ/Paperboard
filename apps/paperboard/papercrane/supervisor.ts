@@ -418,12 +418,13 @@ export async function runSupervisor(procId: string): Promise<void> {
         try { if (fs.existsSync(metadataPath)) fs.unlinkSync(metadataPath); } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
         try { if (process.platform !== "win32" && fs.existsSync(socketPath)) fs.unlinkSync(socketPath); } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
 
-        // exit timers never hold the supervisor open: the inner force-exit
-        // is already unref'd; the outer close gets the same treatment
-        const exitTimer = setTimeout(() => {
-            server.close(() => process.exit(code));
-            setTimeout(() => process.exit(code), 200).unref();
-        }, 40);
+        // exit without server.close(): closing a unix socket server unlinks
+        // its path, which by then may be the socket of a supervisor started
+        // again under the same id (a shell restarted the moment it exited),
+        // leaving that one unreachable. The path is already unlinked above,
+        // so nothing new can connect here. The delay lets the exit frame
+        // reach the clients.
+        const exitTimer = setTimeout(() => process.exit(code), 40);
         unrefTimer(exitTimer);
     };
 
