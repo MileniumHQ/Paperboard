@@ -75,15 +75,23 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
     const hasBanner = () => Boolean(local.banner);
     const hasOverlappingIcon = () => hasBanner() && Boolean(local.icon);
 
+    // the footer holds the card's own controls (a button, a toggle): using
+    // one does just that, never also opening the card
+    const inFooter = (e: Event) =>
+        e.target instanceof Element && Boolean(e.target.closest(`.${styles.footer}`));
+
     const handleClick = (e: MouseEvent) => {
         if (local.disabled) {
             e.preventDefault();
             return;
         }
+        if (inFooter(e)) return;
         local.onClick?.(e);
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+        // a key pressed on a control inside the card belongs to that control
+        if (e.target !== e.currentTarget) return;
         if (isInteractive() && (e.key === "Enter" || e.key === " ")) {
             e.preventDefault();
             const target = e.currentTarget as HTMLElement | null;
