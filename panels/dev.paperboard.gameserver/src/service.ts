@@ -39,8 +39,8 @@ export interface ServerSummary extends Omit<StoredServer, "settings"> {
     icon: string | null;
     state: Pick<
         GameServerState,
-        "serverStatus" | "serverSoftware" | "serverVersion" | "serverPort" | "recoveryBlock"
-    >;
+        "serverStatus" | "serverSoftware" | "serverVersion" | "serverPort" | "recoveryBlock" | "maxPlayers"
+    > & { playerCount: number };
 }
 export interface ServersState extends Record<string, unknown> {
     servers: ServerSummary[];
@@ -92,6 +92,8 @@ function publish(changed?: ServerScope): void {
                 serverVersion: state.serverVersion,
                 serverPort: state.serverPort,
                 recoveryBlock: state.recoveryBlock,
+                maxPlayers: state.maxPlayers,
+                playerCount: state.onlinePlayers.length,
             },
         };
     });

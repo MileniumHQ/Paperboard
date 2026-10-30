@@ -139,6 +139,9 @@ export default function ServersHome(props: { state: ServersState }) {
                                             {(port) => (
                                                 <PaperText size={2} color="text-subtle">
                                                     Port {port()}
+                                                    <Show when={server.state.serverStatus === "online"}>
+                                                        {` · ${server.state.playerCount}${server.state.maxPlayers === null ? "" : `/${server.state.maxPlayers}`} ${server.state.playerCount === 1 && server.state.maxPlayers === null ? "player" : "players"}`}
+                                                    </Show>
                                                 </PaperText>
                                             )}
                                         </Show>
