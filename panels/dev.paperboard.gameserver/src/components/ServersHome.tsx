@@ -29,6 +29,8 @@ export default function ServersHome(props: { state: ServersState }) {
     const [name, setName] = createSignal("");
     // a new server starts by choosing its game, then gets its name
     const [game, setGame] = createSignal<string | null>(null);
+    // the name modal keeps its title while it fades out after Back
+    const [named, setNamed] = createSignal<string>(games[0].id);
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal("");
     const menu = useContextMenuState("below-right");
@@ -170,44 +172,56 @@ export default function ServersHome(props: { state: ServersState }) {
                 </PaperContextMenuItem>
             </PaperContextMenu>
             <PaperModal
-                open={dialog() !== null}
+                open={dialog() === "add"}
                 onClose={() => {
                     if (!busy()) setDialog(null);
                 }}
-                size={choosingGame() ? "full" : "medium"}
+                size="full"
+                title="Choose a game"
+            >
+                <GamePicker
+                    games={games}
+                    onPick={(id) => {
+                        setName("");
+                        setError("");
+                        setNamed(id);
+                        setGame(id);
+                    }}
+                />
+            </PaperModal>
+            {/* opens over the picker; Back returns to it */}
+            <PaperModal
+                open={dialog() !== null && !choosingGame()}
+                onClose={() => {
+                    if (busy()) return;
+                    if (dialog() === "add") setGame(null);
+                    else setDialog(null);
+                }}
                 title={
                     dialog() === "add"
-                        ? choosingGame()
-                            ? "Choose a game"
-                            : `New ${gameFor(game()!).name} server`
+                        ? `New ${gameFor(named()).name} server`
                         : dialog() === "rename"
                           ? "Rename server"
                           : `Remove ${target()?.name ?? "server"}?`
                 }
                 footer={
-                    choosingGame() ? undefined : (
-                        <>
-                            <PaperButton
-                                variant="text"
-                                disabled={busy()}
-                                onClick={() => (dialog() === "add" ? setGame(null) : setDialog(null))}
-                            >
-                                {dialog() === "add" ? "Back" : "Cancel"}
+                    <>
+                        <Show when={dialog() !== "add"}>
+                            <PaperButton variant="text" disabled={busy()} onClick={() => setDialog(null)}>
+                                Cancel
                             </PaperButton>
-                            <PaperButton
-                                disabled={busy() || (dialog() !== "remove" && !name().trim())}
-                                onClick={() => void submit()}
-                            >
-                                {busy()
-                                    ? "Saving…"
-                                    : dialog() === "add"
-                                      ? "Continue to setup"
-                                      : dialog() === "remove"
-                                        ? "Remove server"
-                                        : "Save name"}
-                            </PaperButton>
-                        </>
-                    )
+                        </Show>
+                        <PaperButton
+                            disabled={busy() || (dialog() !== "remove" && !name().trim())}
+                            onClick={() => void submit()}
+                        >
+                            {dialog() === "add"
+                                ? "Continue to setup"
+                                : dialog() === "remove"
+                                  ? "Remove server"
+                                  : "Save name"}
+                        </PaperButton>
+                    </>
                 }
             >
                 <Show when={error()}>
@@ -222,26 +236,24 @@ export default function ServersHome(props: { state: ServersState }) {
                     )}
                 </Show>
                 <Show
-                    when={!choosingGame()}
-                    fallback={<GamePicker games={games} onPick={setGame} />}
+                    when={dialog() !== "remove"}
+                    fallback={
+                        <PaperText>
+                            The server will stop and leave this list and Actions. Its files and
+                            backups will be kept.
+                        </PaperText>
+                    }
                 >
-                    <Show
-                        when={dialog() !== "remove"}
-                        fallback={
-                            <PaperText>
-                                The server will stop and leave this list and Actions. Its files and
-                                backups will be kept.
-                            </PaperText>
-                        }
-                    >
-                        <PaperInput
-                            fullWidth
-                            autofocus
-                            label="Server name"
-                            value={name()}
-                            onInput={(e) => setName(e.currentTarget.value)}
-                        />
-                    </Show>
+                    <PaperInput
+                        fullWidth
+                        autofocus
+                        label="Server name"
+                        value={name()}
+                        onInput={(e) => setName(e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" && name().trim() && !busy()) void submit();
+                        }}
+                    />
                 </Show>
             </PaperModal>
         </PaperFlex>

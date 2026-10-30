@@ -172,7 +172,7 @@ function InstallStep(props: InstallStepProps) {
     };
 
     createEffect(() => {
-        if (wizard?.currentStep() === 3 && !started) {
+        if (wizard?.currentStep() === 2 && !started) {
             started = true;
             startInstallation();
         }
@@ -191,7 +191,7 @@ function InstallStep(props: InstallStepProps) {
                     <PaperQuote variant="danger" title="Setup failed">{error()}</PaperQuote>
                     <PaperFlex gap="half">
                         <PaperButton onClick={() => void startInstallation()}>Retry setup</PaperButton>
-                        <PaperButton onClick={() => wizard?.setCurrentStep(1)}>Change software or version</PaperButton>
+                        <PaperButton onClick={() => { started = false; setError(""); wizard?.setCurrentStep(0); }}>Change software or version</PaperButton>
                     </PaperFlex>
                 </Show>
                 <InstallLoaders
@@ -272,25 +272,11 @@ export default function Setup(props: SetupProps) {
         <PaperWizard
             showProgress={false}
             hideBack={true}
-            finishLabel={saving() ? "Saving…" : "Finish Setup"}
+            finishLabel="Finish Setup"
             finishVariant="success"
             onComplete={handleFinishSetup}
         >
             <PaperWizardStep index={0}>
-                <PaperCenteredInterface>
-                    <PaperFlex direction="column" gap="half">
-                        <PaperText preset="title">Select Game</PaperText>
-                        <PaperText preset="body">Choose what game you want to run.</PaperText>
-                        <PaperSelector name="gameType" value="minecraftJava">
-                            <PaperSelectorItem value="minecraftJava">
-                                Minecraft: Java Edition
-                            </PaperSelectorItem>
-                        </PaperSelector>
-                    </PaperFlex>
-                </PaperCenteredInterface>
-            </PaperWizardStep>
-
-            <PaperWizardStep index={1}>
                 <PaperCenteredInterface size="large">
                     <PaperFlex direction="column" gap="half">
                         <PaperText preset="title">Server Software</PaperText>
@@ -329,7 +315,7 @@ export default function Setup(props: SetupProps) {
                 </PaperCenteredInterface>
             </PaperWizardStep>
 
-            <PaperWizardStep index={2} canProceed={Boolean(serverVersion())}>
+            <PaperWizardStep index={1} canProceed={Boolean(serverVersion())}>
                 <VersionStep
                     software={serverSoftware()}
                     selectedVersion={serverVersion()}
@@ -337,7 +323,7 @@ export default function Setup(props: SetupProps) {
                 />
             </PaperWizardStep>
 
-            <PaperWizardStep index={3}>
+            <PaperWizardStep index={2}>
                 <Show when={saveError()}>
                     <PaperQuote variant="danger" title="Could not finish setup">{saveError()} Try Finish Setup again.</PaperQuote>
                 </Show>

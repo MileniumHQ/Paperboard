@@ -26,8 +26,7 @@ export const terraria: GameDefinition = {
             options, control: { kind: "stdin" }, packages: [], widgets: ["status", "console"],
             actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, "read-game-options", "write-game-options", "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-save", "backup-server"],
             tabs: [
-                { id: "overview", label: "Overview", icon: "dashboard", owner: "game" },
-                { id: "console", label: "Console", icon: "terminal", owner: "game", variant: "fill" },
+                { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
                 { id: "worlds", label: "Worlds", icon: "public", owner: "game" },
                 { id: "options", label: "Options", icon: "tune", owner: "shared" },
                 { id: "versions", label: "Versions", icon: "deployed_code", owner: "game" },

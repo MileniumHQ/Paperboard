@@ -1,7 +1,8 @@
 import GameOptions from "./components/GameOptions";
-import { createEffect, createMemo, createSignal, onMount, onCleanup, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, onMount, onCleanup, untrack, For, Show } from "solid-js";
+import { tabIds } from "./lib/tabIds";
 import {
-    PaperPanel, PaperButton, PaperModal, PaperQuote, PaperLoader, PaperFlex, PaperText,
+    PaperPanel, PaperButton, PaperIcon, PaperQuote, PaperLoader, PaperFlex, PaperText,
     PaperMenu,
     PaperMenuItem,
     PaperMenuLabel,
@@ -30,6 +31,7 @@ export default function App() {
 
     const [gameId, setGameId] = createSignal(defaultGame.id);
     const features = createMemo(() => gameFor(gameId()).describe({ software: serverSoftware(), version: serverVersion(), settings: gameSettings() }));
+    const shownTabs = tabIds(() => features().tabs);
     const hasTab = (id: string) => features().tabs.some((tab) => tab.id === id);
     const tabContext = {
         active: activeTab,
@@ -55,13 +57,17 @@ export default function App() {
     const [servers, setServers] = createSignal<ServersState | null>(null);
     const [failure, setFailure] = createSignal("");
     const apply = (state: ServersState) => {
-        setServers(state);
+        // the server's game and setup state first: the page never renders
+        // the wrong game, or the wizard for a server that is set up
         if (selectedServerId) {
             const server = selectedServer(state);
             gameFor(server.game);
             setGameId(server.game);
-            setConfigured(server.configured);
+            // a wizard on screen stays until its Finish Setup, even when an
+            // install marks the server set up underneath it
+            setConfigured((shown) => (shown === false ? false : server.configured));
         }
+        setServers(state);
     };
     const load = async () => {
         try {
@@ -79,16 +85,26 @@ export default function App() {
 
     return (
         <Show when={!failure()} fallback={<PaperQuote variant="danger" title="Servers could not be loaded" role="alert">{failure()}<PaperButton onClick={() => openServer(null)}>Servers</PaperButton></PaperQuote>}>
-        <Show when={servers()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading servers" />}>
+        <Show when={servers()} fallback={<PaperLoader loaderStatus="indeterminate" delay={400} label="Loading servers" />}>
         <Show when={selectedServerId} fallback={<ServersHome state={servers()!} />}>
         <PaperFlex direction="column" fullWidth fullHeight>
             <PaperFlex direction="row" align="center" gap="half" padding="half">
-                <PaperButton variant="text" onClick={() => openServer(null)}>Back to Servers</PaperButton>
-                <PaperText>{selectedServer(servers()!).name}</PaperText>
+                <PaperButton icon variant="text" title="Back to Servers" aria-label="Back to Servers" onClick={() => openServer(null)}>
+                    <PaperIcon>arrow_back</PaperIcon>
+                </PaperButton>
+                <PaperText preset="title">{selectedServer(servers()!).name}</PaperText>
             </PaperFlex>
             <Show
                 when={configured()}
-                fallback={<ServersHome state={servers()!} />}
+                fallback={
+                    <PaperFlex direction="column" fullWidth fullHeight>
+                        {gameUI().setup({
+                            get initialSoftware() { return selectedServer(servers()!).state.serverSoftware; },
+                            get initialVersion() { return selectedServer(servers()!).state.serverVersion; },
+                            onComplete: () => setConfigured(true),
+                        })}
+                    </PaperFlex>
+                }
             >
                 <PaperPanel>
                     <PaperMenu
@@ -107,23 +123,18 @@ export default function App() {
                     </PaperMenu>
 
                     <PaperInterfaceGroup value={activeTab()}>
-                        <For each={features().tabs}>
-                            {(tab) => <PaperInterfaceItem value={tab.id} variant={tab.variant} width={tab.width}>
-                                {renderTab(tab.id, tab.owner)}
-                            </PaperInterfaceItem>}
+                        <For each={shownTabs()}>
+                            {(id) => {
+                                const tab = () => features().tabs.find((t) => t.id === id)!;
+                                const owner = untrack(() => tab().owner);
+                                return <PaperInterfaceItem value={id} variant={tab().variant} width={tab().width}>
+                                    {renderTab(id, owner)}
+                                </PaperInterfaceItem>;
+                            }}
                         </For>
                     </PaperInterfaceGroup>
                 </PaperPanel>
             </Show>
-            <PaperModal open={configured() === false} title="Set up server" size="large" noPadding onClose={() => openServer(null)}>
-                <PaperFlex direction="column" height="panel-height-large" fullWidth>
-                    {gameUI().setup({
-                        get initialSoftware() { return selectedServer(servers()!).state.serverSoftware; },
-                        get initialVersion() { return selectedServer(servers()!).state.serverVersion; },
-                        onComplete: () => setConfigured(true),
-                    })}
-                </PaperFlex>
-            </PaperModal>
         </PaperFlex>
         </Show>
         </Show>
