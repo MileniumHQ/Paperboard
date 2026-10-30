@@ -121,6 +121,12 @@ export function Example() {
                             <td>Dims the label and keeps its menu closed. Arrow keys skip it.</td>
                         </tr>
                         <tr>
+                            <td><PaperCode>size</PaperCode></td>
+                            <td><PaperCode>"tiny" | "small" | "medium" | "large"</PaperCode></td>
+                            <td><PaperCode>"small"</PaperCode></td>
+                            <td>The label's PaperButton size. Use tiny for a bar tucked under a document's title.</td>
+                        </tr>
+                        <tr>
                             <td><PaperCode>children</PaperCode></td>
                             <td><PaperCode>JSX.Element</PaperCode></td>
                             <td><PaperCode>undefined</PaperCode></td>

@@ -123,12 +123,18 @@ export function Example() {
                             <td><PaperCode>undefined</PaperCode></td>
                             <td>Actions placed in the bottom-right corner of the card.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>effect</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>true</PaperCode></td>
+                            <td>Whether a clickable card follows the pointer with PaperEffect. Turn it off for a grid of many cards, where the motion is noise.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">
-                When onClick or href is passed, the card wraps itself in PaperEffect and activates interactive hover styling.
+                When onClick or href is passed, the card activates interactive hover styling and, unless effect is false, wraps itself in PaperEffect.
                 Keyboard navigation triggers onClick when pressing Enter or Space.
             </PaperText>
 

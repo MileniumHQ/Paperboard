@@ -10,7 +10,7 @@ import {
     type JSX,
     type ParentProps,
 } from "solid-js";
-import { PaperButton } from "../PaperButton";
+import { PaperButton, type PaperButtonSize } from "../PaperButton";
 import { PaperContextMenu } from "../PaperContextMenu";
 
 interface MenuBarContextType {
@@ -157,6 +157,8 @@ export interface PaperMenuBarMenuProps
     /** The text on the bar. */
     label: JSX.Element | string;
     disabled?: boolean;
+    /** The label's size: small by default, tiny for a bar under a title. */
+    size?: PaperButtonSize;
     /** The dropdown: PaperContextMenuItem, PaperContextMenuSub, PaperSeparator. */
     children?: JSX.Element;
 }
@@ -167,6 +169,7 @@ export function PaperMenuBarMenu(props: PaperMenuBarMenuProps) {
     const [local, rest] = splitProps(props, [
         "label",
         "disabled",
+        "size",
         "class",
         "classList",
         "children",
@@ -207,7 +210,7 @@ export function PaperMenuBarMenu(props: PaperMenuBarMenuProps) {
                 ref={setTrigger}
                 id={`${id}-trigger`}
                 variant="text"
-                size="small"
+                size={local.size ?? "small"}
                 role="menuitem"
                 aria-haspopup="menu"
                 aria-expanded={isOpen()}
