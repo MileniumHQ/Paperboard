@@ -119,6 +119,24 @@ export function definePanelService<
         });
     };
 
+    let unsynced: Partial<TState> | null = null;
+    let syncing = false;
+    const syncState = () => {
+        const state = unsynced;
+        unsynced = null;
+        syncing = state !== null;
+        if (!state) return;
+        actionsApi
+            .emit(STATE_SYNC_EVENT, { state }, panelId)
+            .catch((err) => {
+                console.error(
+                    `[Service:${panelId}] Failed to sync state:`,
+                    err,
+                );
+            })
+            .finally(syncState);
+    };
+
     const setState = (
         patchOrUpdater:
             | Partial<TState>
@@ -129,7 +147,11 @@ export function definePanelService<
                 ? patchOrUpdater(currentState)
                 : patchOrUpdater;
         currentState = { ...currentState, ...patch };
-        emit(STATE_SYNC_EVENT, { state: patch });
+        // BOUNDED: one state sync in flight per service. Patches made while it
+        // travels merge into the next one, so a chatty service (a console
+        // printing hundreds of lines a second) cannot pile up daemon calls.
+        unsynced = unsynced ? { ...unsynced, ...patch } : patch;
+        if (!syncing) syncState();
     };
 
     const ctx: ServiceContext<TState> = {
