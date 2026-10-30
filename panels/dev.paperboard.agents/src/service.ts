@@ -43,6 +43,7 @@ const host: AppHost = {
         // other panels' actions: this service's scoped credential, as any panel's flows use
         actions: {
             list: () => actionsApi.list(),
+            listProjects: () => actionsApi.listProjects(),
             call: (panel, action, inputs, o) => actionsApi.call(panel, action, inputs, { timeoutMs: o.timeoutMs }),
         },
     },
