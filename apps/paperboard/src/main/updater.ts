@@ -3,7 +3,9 @@ import { app, BrowserWindow } from "electron";
 import { AppUpdateSession, getAppUpdateState, retainAppUpdateState } from "./appUpdateSession";
 import { ManualAppUpdater } from "./manualAppUpdater";
 import { isShellUrl } from "./communication/shellGuard";
-import { autoUpdater } from "electron-updater";
+import { AppImageUpdater, MacUpdater, NsisUpdater, type AppUpdater } from "electron-updater";
+import { ElectronAppAdapter } from "electron-updater/out/ElectronAppAdapter";
+import { electronDataDir } from "./electronData";
 import { is } from "@electron-toolkit/utils";
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { resolveRegistryUrl, withTimeout } from "../../papercrane/util";
@@ -175,22 +177,51 @@ export async function runUpdateOrchestrator(
 
 const appUpdaterLog = getLogger("electron-updater");
 
-let appUpdateSession: AppUpdateSession | null = null;
+// downloads go to <PAPERBOARD_DIR>/local/electron/paperboard-updater, not the
+// platform cache folder (electronData.ts)
+class PaperboardAppAdapter extends ElectronAppAdapter {
+    get baseCachePath(): string {
+        return electronDataDir();
+    }
+}
 
-function appUpdater(): AppUpdateSession {
-    if (appUpdateSession) return appUpdateSession;
-    autoUpdater.logger = {
+let autoUpdater: AppUpdater | null = null;
+
+// electron-updater's own autoUpdater, minus deb/rpm/pacman: those installs
+// use ManualAppUpdater
+function platformUpdater(): AppUpdater {
+    if (autoUpdater) return autoUpdater;
+    const adapter = new PaperboardAppAdapter();
+    const updater =
+        process.platform === "win32" ? new NsisUpdater(undefined, adapter)
+        : process.platform === "darwin" ? new MacUpdater(undefined, adapter)
+        : new AppImageUpdater(undefined, adapter);
+    updater.logger = {
         info: (msg: string) => appUpdaterLog.info(String(msg)),
         warn: (msg: string) => appUpdaterLog.warn(String(msg)),
         error: (msg: string) => appUpdaterLog.error(String(msg)),
         debug: (msg: string) => appUpdaterLog.debug(String(msg)),
     } as any;
-    autoUpdater.autoDownload = true;
-    autoUpdater.autoInstallOnAppQuit = true;
+    updater.autoDownload = true;
+    updater.autoInstallOnAppQuit = true;
+    autoUpdater = updater;
+    return updater;
+}
+
+/** Restarts into the downloaded update; throws when there is none to install. */
+export function quitAndInstallAppUpdate(): void {
+    if (!autoUpdater) throw new Error("no app update has been downloaded");
+    autoUpdater.quitAndInstall(false, true);
+}
+
+let appUpdateSession: AppUpdateSession | null = null;
+
+function appUpdater(): AppUpdateSession {
+    if (appUpdateSession) return appUpdateSession;
     const packageManaged = process.platform === "linux" && !process.env.APPIMAGE;
     const updater = packageManaged
         ? new ManualAppUpdater(app.getVersion(), "https://i.paperboard.dev/pb/latest-linux.yml")
-        : autoUpdater;
+        : platformUpdater();
     appUpdateSession = new AppUpdateSession(updater, (state) => {
         retainAppUpdateState(state);
         for (const window of BrowserWindow.getAllWindows()) {

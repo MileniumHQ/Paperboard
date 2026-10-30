@@ -9,6 +9,7 @@ import {
     nativeImage,
     session,
     powerMonitor,
+    dialog,
 } from "electron";
 import * as fs from "fs";
 import * as path from "path";
@@ -42,6 +43,7 @@ import { pollTrayCount } from "./trayCount";
 import icon from "../../resources/icon.png?asset";
 import { installScreenshotTool } from "./screenshotTool";
 import { installTextEditContextMenu } from "./contextMenu";
+import { relocateElectronData } from "./electronData";
 
 const log = logger;
 
@@ -83,6 +85,9 @@ function ensureDesktopTray(): void {
         onError: (err) => log.debug("[Tray] service count refresh failed:", err),
     });
 }
+
+// before the single-instance lock: it lives in userData
+const electronDataError = relocateElectronData(app);
 
 // `--browser`: no windows; the shell opens in the user's browser, served by
 // browserHost.ts. `--browser-port=<n>` pins the port (default: any free one).
@@ -371,6 +376,10 @@ function createUpdaterWindow(): BrowserWindow {
 }
 
 app.whenReady().then(async () => {
+    if (electronDataError) {
+        log.error("[Main]", electronDataError.message);
+        dialog.showErrorBox("Paperboard's app data", electronDataError.message);
+    }
     // the dev renderer server is a shell origin in development only
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
         allowDevShellOrigin(process.env["ELECTRON_RENDERER_URL"]);

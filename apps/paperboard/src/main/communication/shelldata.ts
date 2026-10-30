@@ -9,6 +9,7 @@ import { getLocalDir } from "../../../papercrane/paths";
 import { sanitizeId } from "../../../papercrane/storage";
 import { logger } from "../../../papercrane/logger";
 import { getAppUpdateState } from "../appUpdateSession";
+import { quitAndInstallAppUpdate } from "../updater";
 import { collectPackageUpdates } from "../packageUpdates";
 import { assertShellFrame, isRefusedFrame } from "./shellGuard";
 import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./shellHandlers";
@@ -189,8 +190,7 @@ export default function registerShellIpc(ipcMain: IpcMain) {
             return;
         }
         try {
-            const { autoUpdater } = require("electron-updater");
-            autoUpdater.quitAndInstall(false, true);
+            quitAndInstallAppUpdate();
         } catch (err: any) {
             logger.warn("[Shell] quit-and-install failed:", err?.message ?? err);
         }
