@@ -69,6 +69,84 @@ test("Bot Creator over the real daemon: the old bot becomes a project, old block
         expect(afterCreate.find((a) => a.action === `${id}/command:global:hello`)?.project).toBe(id);
         expect((await config.get<any>(BOT)).bots[0].commands.map((c: any) => c.name)).toEqual(["ping", "hello"]);
 
+        // what an agent asks for ("DM pxlkt a cookie recipe", "make /cookie
+        // and a flow for it") runs through the bot's project: Discord is a
+        // stand-in client, everything else is the real daemon
+        const sent: { to: string; content: string }[] = [];
+        const member = (id: string, username: string, displayName = username) => ({ id, displayName, user: { username, bot: false } });
+        const guild = (id: string, name: string, members: ReturnType<typeof member>[]) => ({
+            id, name, memberCount: members.length, ownerId: members[0].id, iconURL: () => null, createdAt: new Date(0),
+            channels: { cache: new Map([["300000000000000001", { id: "300000000000000001", name: "general", type: 0, parentId: null, position: 0 }]]) },
+            roles: { cache: new Map([["400000000000000001", { id: "400000000000000001", name: "Bakers", color: 0, position: 1, managed: false }]]) },
+            members: {
+                fetch: async ({ query }: { query: string }) =>
+                    new Map(members.filter((m) => m.user.username.startsWith(query) || m.displayName.startsWith(query)).map((m) => [m.id, m])),
+            },
+        });
+        const guilds = new Map([
+            ["200000000000000001", guild("200000000000000001", "Bakery", [member("500000000000000002", "pxlkt2"), member("500000000000000001", "pxlkt", "Pxl")])],
+            ["200000000000000002", guild("200000000000000002", "Lounge", [member("500000000000000001", "pxlkt", "Pxl")])],
+        ]);
+        const discord = {
+            guilds: { cache: guilds, fetch: async (gid: string) => guilds.get(gid) },
+            users: { fetch: async (to: string) => ({ send: async (payload: { content: string }) => (sent.push({ to, content: payload.content }), { id: "600000000000000001" }) }) },
+            channels: {
+                fetch: async () => ({
+                    messages: {
+                        fetch: async ({ limit }: { limit: number }) =>
+                            new Map([2, 1].slice(0, limit).map((n) => [`70000000000000000${n}`, {
+                                id: `70000000000000000${n}`, author: { id: "500000000000000001", username: "pxlkt" }, content: `message ${n}`,
+                                attachments: new Map(), createdAt: new Date(n * 1000),
+                            }])),
+                    },
+                }),
+            },
+        };
+        const { BotSession } = await import("../../../panels/dev.paperboard.botcreator/src/service");
+        const requireClient = BotSession.prototype.requireClient;
+        BotSession.prototype.requireClient = () => discord as any;
+        try {
+            const agentVisible = (await actionsApi.list(BOT)).filter((a) => a.project === id && a.schema?.hidden);
+            expect(agentVisible.map((a) => a.action).sort()).toEqual(
+                ["create-command", "delete-command", "find-member", "get-recent-messages", "get-server", "list-commands", "list-servers"].map((a) => `${id}/${a}`),
+            );
+            expect(await actionsApi.call(BOT, `${id}/list-servers`, {})).toEqual([
+                { id: "200000000000000001", name: "Bakery", memberCount: 2 },
+                { id: "200000000000000002", name: "Lounge", memberCount: 1 },
+            ]);
+            // the exact name first, listed once though they're in both servers
+            const found = await actionsApi.call<any[]>(BOT, `${id}/find-member`, { query: "@pxlkt" });
+            expect(found.map((m) => [m.userId, m.username, m.guildName])).toEqual([
+                ["500000000000000001", "pxlkt", "Bakery"],
+                ["500000000000000002", "pxlkt2", "Bakery"],
+            ]);
+            expect(await actionsApi.call(BOT, `${id}/find-member`, { query: "nobody" })).toEqual([]);
+            await expect(actionsApi.call(BOT, `${id}/find-member`, { query: " " })).rejects.toThrow(/whose name/);
+            expect(await actionsApi.call(BOT, `${id}/send-dm`, { user: found[0].userId, content: "Cookies: butter, sugar, flour, chips." })).toBe("600000000000000001");
+            expect(sent).toEqual([{ to: "500000000000000001", content: "Cookies: butter, sugar, flour, chips." }]);
+
+            const server = await actionsApi.call<any>(BOT, `${id}/get-server`, { guildId: "200000000000000001" });
+            expect(server.channels.map((c: any) => [c.id, c.name, c.kind])).toEqual([["300000000000000001", "general", "text"]]);
+            expect(server.roles).toEqual([{ id: "400000000000000001", name: "Bakers", managed: false }]);
+            await expect(actionsApi.call(BOT, `${id}/get-server`, {})).rejects.toThrow(/more than one server/);
+            const recent = await actionsApi.call<any[]>(BOT, `${id}/get-recent-messages`, { channel: "300000000000000001", count: 5 });
+            expect(recent.map((m) => m.content)).toEqual(["message 1", "message 2"]);
+            await expect(actionsApi.call(BOT, `${id}/get-recent-messages`, { channel: "300000000000000001", count: 0 })).rejects.toThrow(/from 1 to 50/);
+
+            // a command made for a flow says which event the flow starts from
+            const cookie = await actionsApi.call<any>(BOT, `${id}/create-command`, { name: "Cookie", description: "A cookie recipe", options: [{ name: "kind", description: "Which cookie", type: "string" }] });
+            expect(cookie).toMatchObject({ event: `${id}/command:global:cookie`, registered: false, triggerError: null, command: { name: "cookie", scope: "global" } });
+            const event = (await actionsApi.list(BOT)).find((a) => a.action === cookie.event);
+            expect(event?.schema?.eventOnly).toBe(true);
+            expect(Object.keys(event?.schema?.outputFields ?? {})).toContain("values.kind");
+            expect((await actionsApi.call<any[]>(BOT, `${id}/list-commands`, {})).map((c) => [c.name, c.event])).toContainEqual(["cookie", cookie.event]);
+            await expect(actionsApi.call(BOT, `${id}/create-command`, { name: "cookie", description: "again" })).rejects.toThrow(/already exists/);
+            expect((await actionsApi.call<any>(BOT, `${id}/delete-command`, { id: cookie.command.id })).event).toBe(cookie.event);
+            expect((await actionsApi.list(BOT)).find((a) => a.action === cookie.event)).toBeUndefined();
+        } finally {
+            BotSession.prototype.requireClient = requireClient;
+        }
+
         // a token that isn't one, or is a bot already here, is refused before
         // any login, and its vault entry doesn't stay behind
         await secretsApi.set("bot-token.b-junk", "not a token", BOT);

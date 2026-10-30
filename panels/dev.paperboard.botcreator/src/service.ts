@@ -17,6 +17,9 @@ import {
     buildSelectMenuComponent,
     MAX_MODAL_FIELDS,
     MAX_SELECT_OPTIONS,
+    MAX_FOUND_MEMBERS,
+    MAX_RECENT_MESSAGES,
+    findMembers,
     resolveGuild,
     resolveMember,
     type DiscordEmbedData,
@@ -532,7 +535,8 @@ export const actions = [
         id: "send-dm",
         name: "Send Direct Message",
         category: "Users",
-        description: "Sends a private direct message to a Discord user",
+        description:
+            "Sends a private direct message to a Discord user. Discord only lets a bot DM people who share a server with it, or who installed it",
         template: "Send DM {content} to {user}",
         inputs: {
             user: INPUTS.user,
@@ -2043,6 +2047,7 @@ async function registerBot(entry: BotEntry): Promise<void> {
     const project = await actionsApi.defineProject({ id: entry.stored.id, name: entry.stored.name, icon: "smart_toy" }, PANEL_ID);
     entry.project = project;
     for (const def of botActions) await project.register(bindToBot(def, entry.session));
+    for (const def of managementActions(entry)) await project.register(def);
     for (const command of entry.stored.commands) await project.register(commandTriggerDefinition(command));
     if (legacyBot === entry.stored.id) await registerLegacyForwarders(entry);
     entry.actionsError = null;
@@ -2189,6 +2194,179 @@ async function unregisterCommandTrigger(entry: BotEntry, command: SlashCommandDe
         console.error(`[DiscordService] event action removal failed for /${command.name}:`, err);
         return `Could not remove the trigger for /${command.name}: ${errorToMessage(err)}`;
     }
+}
+
+/** Stores a command, registers its event in the bot's project, and tells Discord. */
+async function createCommand(entry: BotEntry, input: any): Promise<CommandMutationResult> {
+    requireReadable();
+    const name = typeof input?.name === "string" ? normalizeCommandName(input.name) : "";
+    const description = typeof input?.description === "string" ? input.description.trim() : "";
+    const scope = typeof input?.scope === "string" && input.scope.trim() ? input.scope.trim() : GLOBAL_SCOPE;
+    const userInstall = Boolean(input?.userInstall);
+    const problem = describeCommandProblem({ name, description });
+    if (problem) throw new Error(problem);
+    if (scope !== GLOBAL_SCOPE && !SNOWFLAKE_PATTERN.test(scope)) {
+        throw new Error(`Unknown command scope "${scope}".`);
+    }
+    if (userInstall && scope !== GLOBAL_SCOPE) {
+        throw new Error(
+            "User apps are only available for global commands: Discord ignores installation contexts on server-scoped commands.",
+        );
+    }
+    const options = parseCommandOptions(input?.options);
+
+    const commands = entry.stored.commands;
+    if (commands.some((c) => c.scope === scope && c.name === name)) {
+        throw new Error(`A command named /${name} already exists in this scope.`);
+    }
+    if (commands.filter((c) => c.scope === scope).length >= MAX_COMMANDS_PER_SCOPE) {
+        throw new Error(`Discord allows at most ${MAX_COMMANDS_PER_SCOPE} commands per scope.`);
+    }
+
+    const definition: SlashCommandDefinition = { id: randomUUID(), name, description, scope, options, userInstall };
+    await setCommands(entry, [...commands, definition]);
+    const triggerError = await registerCommandTrigger(entry, definition);
+    const sync = await entry.session.syncAfterMutation();
+    return { command: definition, ...sync, triggerError };
+}
+
+/** Removes a stored command, its event, and its Discord definition. */
+async function deleteCommand(entry: BotEntry, rawId: unknown): Promise<CommandMutationResult> {
+    requireReadable();
+    const id = typeof rawId === "string" ? rawId.trim() : "";
+    if (!id) throw new Error("A command id is required.");
+    const target = entry.stored.commands.find((c) => c.id === id);
+    if (!target) throw new Error(`No command with id ${id} is stored.`);
+    const next = entry.stored.commands.filter((c) => c.id !== id);
+    // a scope with no commands left cannot be inferred from the list, so it
+    // is explicitly cleared on Discord
+    const scopesToClear = next.some((c) => c.scope === target.scope) ? [] : [target.scope];
+    await setCommands(entry, next);
+    const triggerError = await unregisterCommandTrigger(entry, target);
+    const sync = await entry.session.syncAfterMutation(scopesToClear);
+    return { command: target, ...sync, triggerError };
+}
+
+// ---------------------------------------------------------------------------
+// finding things and managing commands, for agents and programs
+// ---------------------------------------------------------------------------
+
+// Hidden from the Actions library (they return lists, not block-shaped
+// values) but in the bot's project for programs and the Agents panel: the
+// ids every other action takes, looked up by name, and the bot's commands.
+// A command made here is an event in the same project, ready for a flow.
+function managementActions(entry: BotEntry): ActionDefinition[] {
+    const client = () => entry.session.requireClient();
+    const commandEvent = (command: SlashCommandDefinition) => projectActionId(entry.stored.id, commandTriggerId(command));
+    const withEvent = (result: CommandMutationResult) => ({ ...result, event: commandEvent(result.command) });
+    return [
+        defineAction({
+            id: "list-servers",
+            name: "List Servers",
+            hidden: true,
+            category: "Bot",
+            description: "Every server this bot is in, with its id, name and member count",
+            template: "List servers",
+            inputs: {},
+            output: { type: "list<object>", label: "Servers" },
+            icon: "dns",
+            run: async () =>
+                [...client().guilds.cache.values()].map((guild) => ({ id: guild.id, name: guild.name, memberCount: guild.memberCount })),
+        }),
+        defineAction({
+            id: "get-server",
+            name: "Get Server",
+            hidden: true,
+            category: "Channels",
+            description: "One server's channels (id, name, kind, the category they're under) and roles (id, name), for the ids other actions take",
+            template: "Get server {guildId}",
+            inputs: { guildId: { ...INPUTS.guildId, description: "Optional when the bot is in one server" } },
+            output: { type: "object", label: "Server" },
+            icon: "tag",
+            run: async (_ctx, inputs: { guildId?: string }) => {
+                const guild = await resolveGuild(client(), inputs?.guildId);
+                const { id, name, memberCount, ownerId, channels, roles } = buildGuildDetail(guild);
+                return { id, name, memberCount, ownerId, channels, roles: roles.map(({ id, name, managed }) => ({ id, name, managed })) };
+            },
+        }),
+        defineAction({
+            id: "find-member",
+            name: "Find Member",
+            hidden: true,
+            category: "Members",
+            description:
+                "Finds people by the start of their username or nickname in the servers this bot is in (or one server), " +
+                `exact names first, at most ${MAX_FOUND_MEMBERS}. Each match's userId is what Send Direct Message and the member actions take. An empty list means nobody matched`,
+            template: "Find member {query}",
+            inputs: {
+                query: { type: "string", label: "Name", placeholder: "Name", required: true },
+                guildId: INPUTS.guildId,
+            },
+            output: { type: "list<object>", label: "Members" },
+            icon: "person_search",
+            run: async (_ctx, inputs: { query?: string; guildId?: string }) =>
+                findMembers(client(), String(inputs?.query ?? ""), inputs?.guildId),
+        }),
+        defineAction({
+            id: "get-recent-messages",
+            name: "Get Recent Messages",
+            hidden: true,
+            category: "Messages",
+            description: `A channel's latest messages, oldest first: id, author, authorId, content, attachment links and when it was sent. Count defaults to 20, at most ${MAX_RECENT_MESSAGES}`,
+            template: "Get recent messages in {channel}",
+            inputs: { channel: INPUTS.channel, count: INPUTS.count },
+            output: { type: "list<object>", label: "Messages" },
+            icon: "forum",
+            run: async (_ctx, inputs: { channel: string; count?: number }) =>
+                new MessageOps(client()).recent(inputs.channel, inputs.count as number),
+        }),
+        defineAction({
+            id: "list-commands",
+            name: "List Slash Commands",
+            hidden: true,
+            category: "Commands",
+            description: "This bot's slash commands: id, name, description, scope (\"global\" or a server id), options, and `event`, the action id a flow starts from when the command is used",
+            template: "List slash commands",
+            inputs: {},
+            output: { type: "list<object>", label: "Commands" },
+            icon: "terminal",
+            run: async () => entry.stored.commands.map((command) => ({ ...command, event: commandEvent(command) })),
+        }),
+        defineAction({
+            id: "create-command",
+            name: "Create Slash Command",
+            hidden: true,
+            category: "Commands",
+            description:
+                "Adds a slash command to this bot and registers it with Discord. `name` is lowercase, 1-32 characters; `description` 1-100. " +
+                "`scope` is a server id, or empty for every server. `options` is a list of { name, description, type, required } with type one of " +
+                "string, integer, number, boolean, user, channel, role, mentionable; required ones come first. `userInstall` (global only) lets people use it in DMs. " +
+                "Returns `event`, the action id to start a flow from: the flow answers the command with Respond to Interaction, using the event's interactionId",
+            template: "Create slash command {name}",
+            inputs: {
+                name: INPUTS.name,
+                description: { type: "string", label: "Description", placeholder: "Description", required: true },
+                scope: { type: "string", label: "Server ID", placeholder: "Every server" },
+                options: { type: "list<object>", label: "Options" },
+                userInstall: { type: "boolean", label: "Usable in DMs", default: false },
+            },
+            output: { type: "object", label: "Command" },
+            icon: "add",
+            run: async (_ctx, inputs) => withEvent(await createCommand(entry, inputs)),
+        }),
+        defineAction({
+            id: "delete-command",
+            name: "Delete Slash Command",
+            hidden: true,
+            category: "Commands",
+            description: "Removes one of this bot's slash commands, by the id List Slash Commands shows, from the bot and from Discord. Flows that start from it stop firing",
+            template: "Delete slash command {id}",
+            inputs: { id: { type: "string", label: "Command id", placeholder: "Command id", required: true } },
+            output: { type: "object", label: "Command" },
+            icon: "delete",
+            run: async (_ctx, inputs: { id?: string }) => withEvent(await deleteCommand(entry, inputs?.id)),
+        }),
+    ].map((def) => ({ ...def, category: resolveItemCategory(def.category, DISCORD_CATEGORIES) }));
 }
 
 // ---------------------------------------------------------------------------
@@ -2441,61 +2619,14 @@ export const internalActions = [
         "create-command",
         "Create Slash Command",
         "Panel UI only: stores a command and registers its trigger and Discord definition.",
-        async (input): Promise<CommandMutationResult> => {
-            requireReadable();
-            const entry = requireBot(input?.bot);
-            const name = typeof input?.name === "string" ? normalizeCommandName(input.name) : "";
-            const description = typeof input?.description === "string" ? input.description.trim() : "";
-            const scope = typeof input?.scope === "string" && input.scope ? input.scope : GLOBAL_SCOPE;
-            const userInstall = Boolean(input?.userInstall);
-            const problem = describeCommandProblem({ name, description });
-            if (problem) throw new Error(problem);
-            if (scope !== GLOBAL_SCOPE && !SNOWFLAKE_PATTERN.test(scope)) {
-                throw new Error(`Unknown command scope "${scope}".`);
-            }
-            if (userInstall && scope !== GLOBAL_SCOPE) {
-                throw new Error(
-                    "User apps are only available for global commands: Discord ignores installation contexts on server-scoped commands.",
-                );
-            }
-            const options = parseCommandOptions(input?.options);
-
-            const commands = entry.stored.commands;
-            if (commands.some((c) => c.scope === scope && c.name === name)) {
-                throw new Error(`A command named /${name} already exists in this scope.`);
-            }
-            if (commands.filter((c) => c.scope === scope).length >= MAX_COMMANDS_PER_SCOPE) {
-                throw new Error(`Discord allows at most ${MAX_COMMANDS_PER_SCOPE} commands per scope.`);
-            }
-
-            const definition: SlashCommandDefinition = { id: randomUUID(), name, description, scope, options, userInstall };
-            await setCommands(entry, [...commands, definition]);
-            const triggerError = await registerCommandTrigger(entry, definition);
-            const sync = await entry.session.syncAfterMutation();
-            return { command: definition, ...sync, triggerError };
-        },
+        (input) => createCommand(requireBot(input?.bot), input),
     ),
 
     internalAction(
         "delete-command",
         "Delete Slash Command",
         "Panel UI only: removes a stored command, its trigger, and its Discord definition.",
-        async (input): Promise<CommandMutationResult> => {
-            requireReadable();
-            const entry = requireBot(input?.bot);
-            const id = typeof input?.id === "string" ? input.id.trim() : "";
-            if (!id) throw new Error("A command id is required.");
-            const target = entry.stored.commands.find((c) => c.id === id);
-            if (!target) throw new Error(`No command with id ${id} is stored.`);
-            const next = entry.stored.commands.filter((c) => c.id !== id);
-            // a scope with no commands left cannot be inferred from the
-            // list, so it is explicitly cleared on Discord
-            const scopesToClear = next.some((c) => c.scope === target.scope) ? [] : [target.scope];
-            await setCommands(entry, next);
-            const triggerError = await unregisterCommandTrigger(entry, target);
-            const sync = await entry.session.syncAfterMutation(scopesToClear);
-            return { command: target, ...sync, triggerError };
-        },
+        (input) => deleteCommand(requireBot(input?.bot), input?.id),
     ),
 ];
 

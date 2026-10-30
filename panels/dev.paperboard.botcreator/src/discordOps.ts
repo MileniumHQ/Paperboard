@@ -609,6 +609,66 @@ export async function resolveGuild(
     );
 }
 
+/** The most messages Get Recent Messages reads at once: one Discord page. */
+export const MAX_RECENT_MESSAGES = 50;
+
+export interface RecentChannelMessage {
+    id: string;
+    authorId: string;
+    author: string;
+    content: string;
+    attachments: string[];
+    sentAt: string;
+}
+
+export function clampMessageLimit(limit: unknown): number {
+    const n = Number(limit);
+    if (limit === undefined || limit === null || limit === "") return 20;
+    if (!Number.isFinite(n) || n < 1) throw new Error(`Count is a number from 1 to ${MAX_RECENT_MESSAGES}`);
+    return Math.min(Math.floor(n), MAX_RECENT_MESSAGES);
+}
+
+export interface FoundMember {
+    userId: string;
+    username: string;
+    displayName: string;
+    bot: boolean;
+    guildId: string;
+    guildName: string;
+}
+
+/** The most members Find Member returns. */
+export const MAX_FOUND_MEMBERS = 25;
+
+// Discord's member search matches the start of a username or nickname. Each
+// server is one bounded gateway request; a person in several servers the bot
+// shares is listed once, under the first.
+export async function findMembers(bot: Client, query: string, guildId?: string): Promise<FoundMember[]> {
+    const q = query.trim().replace(/^@/, "");
+    if (!q) throw new Error("Say whose name to look for");
+    const guilds = guildId && guildId.trim() ? [await bot.guilds.fetch(guildId.trim())] : [...bot.guilds.cache.values()];
+    if (!guilds.length) throw new Error("This bot isn't in any server yet");
+    const found = new Map<string, FoundMember>();
+    for (const guild of guilds) {
+        const members = await guild.members.fetch({ query: q, limit: MAX_FOUND_MEMBERS });
+        for (const member of members.values()) {
+            if (found.has(member.id)) continue;
+            found.set(member.id, {
+                userId: member.id,
+                username: member.user.username,
+                displayName: member.displayName,
+                bot: member.user.bot,
+                guildId: guild.id,
+                guildName: guild.name,
+            });
+        }
+        if (found.size >= MAX_FOUND_MEMBERS) break;
+    }
+    // an exact name first, so "pxlkt" doesn't lose to "pxlkt2"
+    const exact = (m: FoundMember) => (m.username.toLowerCase() === q.toLowerCase() || m.displayName.toLowerCase() === q.toLowerCase() ? 0 : 1);
+    return [...found.values()].sort((a, b) => exact(a) - exact(b)).slice(0, MAX_FOUND_MEMBERS);
+}
+
 // Server-resolved member fetch: with a Server ID it is one call; without,
 // the bot's servers are searched in a bounded loop (guild count).
 export async function resolveMember(
@@ -779,6 +839,22 @@ export class MessageOps {
             ...(components.length > 0 ? { components } : {}),
         });
         return message.id;
+    }
+
+    /** The channel's latest messages, oldest first, each as plain fields. */
+    async recent(channelId: string, limit: number): Promise<RecentChannelMessage[]> {
+        const channel = await this.textChannel(channelId);
+        const fetched = await channel.messages.fetch({ limit: clampMessageLimit(limit) });
+        return [...fetched.values()]
+            .map((message: any) => ({
+                id: String(message.id),
+                authorId: String(message.author?.id ?? ""),
+                author: String(message.author?.username ?? ""),
+                content: String(message.content ?? ""),
+                attachments: [...(message.attachments?.values?.() ?? [])].map((a: any) => String(a.url)),
+                sentAt: message.createdAt ? message.createdAt.toISOString() : "",
+            }))
+            .sort((a, b) => a.sentAt.localeCompare(b.sentAt));
     }
 
     async dm(userId: string, payload: MessagePayloadInput): Promise<string> {
