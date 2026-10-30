@@ -15,6 +15,16 @@ describe("bundled game modules", () => {
         expect(saved.servers[0]!.game).toBe("minecraft");
     });
 
+    test("every registered game has its poster and banner committed", async () => {
+        for (const game of games) {
+            for (const url of Object.values(game.art)) {
+                const file = Bun.file(new URL(`../public${url}`, import.meta.url));
+                expect(await file.exists(), `${game.id}: ${url}`).toBe(true);
+                expect(file.type).toBe("image/webp");
+            }
+        }
+    });
+
     test("service resolution also refuses unknown game ids, including in a server scope", async () => {
         const { gameServiceFor, currentGameService } = await import("../src/games/service");
         const { inServer } = await import("../src/service/scope");

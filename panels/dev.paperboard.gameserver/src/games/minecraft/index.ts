@@ -1,5 +1,6 @@
 import semver from "semver";
 import type { GameDefinition, GameOptions, GameTab } from "../types";
+import { gameArt } from "../art";
 import { SOFTWARE, type ServerSoftwareType } from "../../software/catalog";
 import { CROSSPLAY } from "../../software/crossplay";
 import { MODPACK_LOADER } from "../../core/modpack";
@@ -17,6 +18,7 @@ const tab = (id: string, label: string, icon: string, group?: string, extra: Par
 export const minecraft: GameDefinition = {
     id: "minecraft",
     name: "Minecraft",
+    art: gameArt("minecraft"),
     softwareLabel: ({ software, version }) => `${SOFTWARE_NAMES[minecraftSoftware(software)]} ${version}`,
     describe({ software: raw, version }: GameOptions) {
         const software = minecraftSoftware(raw);

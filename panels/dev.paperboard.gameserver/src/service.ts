@@ -27,7 +27,7 @@ import { setRecoveryBlock } from "./service/recoveryState";
 import { handleProcessData, handleProcessExit, stopServerInstance } from "./service/lifecycle";
 import { customTypes } from "./games/minecraft/actions";
 import { currentGameService, gameServiceFor } from "./games/service";
-import { assertGameAction, defaultGame, gameFor } from "./games";
+import { assertGameAction, gameFor } from "./games";
 import { livePortDeps } from "./service/portDeps";
 export * from "./service/types";
 export * from "./games/minecraft/actions";
@@ -262,7 +262,7 @@ export const gameServerService = definePanelService({
             "read-server-config",
             ({ server }: any) => requireServer(server).server.settings,
         ),
-        management("add-server", ({ name }: any) =>
+        management("add-server", ({ name, game }: any) =>
             serial(async () => {
                 if (rootContext.state.serversError) throw new Error(rootContext.state.serversError);
                 if (saved.servers.length >= MAX_SERVERS)
@@ -271,7 +271,7 @@ export const gameServerService = definePanelService({
                 const server: StoredServer = {
                     id,
                     name: serverName(name),
-                    game: defaultGame.id,
+                    game: gameFor(game).id,
                     directory: `${saved.serversDirectory}/${id}`,
                     createdAt: Date.now(),
                     settings: {},

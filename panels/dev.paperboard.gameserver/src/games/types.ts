@@ -25,9 +25,17 @@ export interface GameFeatures {
     widgets: readonly string[];
     packages: readonly PackageRequirement[];
 }
+/** Art under public/assets/games/<id>/, fetched once by scripts/fetch-game-art.ts. */
+export interface GameArt {
+    /** Portrait (2:3) cover. */
+    poster: string;
+    /** Wide band, about 3:1. */
+    banner: string;
+}
 export interface GameDefinition {
     id: string;
     name: string;
+    art: GameArt;
     describe(options: GameOptions): GameFeatures;
     softwareLabel(options: GameOptions): string;
 }

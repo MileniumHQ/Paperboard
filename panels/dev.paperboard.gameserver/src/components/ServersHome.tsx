@@ -21,20 +21,25 @@ import {
 } from "@mileniumhq/paperui";
 import { serversBridge, openServer } from "../lib/api";
 import type { ServerSummary, ServersState } from "../service";
-import { gameFor } from "../games";
+import { gameFor, games } from "../games";
+import GamePicker from "./GamePicker";
 export default function ServersHome(props: { state: ServersState }) {
     const [dialog, setDialog] = createSignal<"add" | "rename" | "remove" | null>(null);
     const [target, setTarget] = createSignal<ServerSummary | null>(null);
     const [name, setName] = createSignal("");
+    // a new server starts by choosing its game, then gets its name
+    const [game, setGame] = createSignal<string | null>(null);
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal("");
     const menu = useContextMenuState("below-right");
     const ask = (kind: "add" | "rename" | "remove") => {
         menu.close();
         setName(kind === "rename" ? target()!.name : "");
+        setGame(null);
         setError("");
         setDialog(kind);
     };
+    const choosingGame = () => dialog() === "add" && game() === null;
     const submit = async () => {
         if (busy()) return;
         setBusy(true);
@@ -44,6 +49,7 @@ export default function ServersHome(props: { state: ServersState }) {
             if (kind === "add") {
                 const added = await serversBridge.call<{ id: string }>("add-server", {
                     name: name(),
+                    game: game(),
                 });
                 openServer(added.id);
             } else {
@@ -86,7 +92,7 @@ export default function ServersHome(props: { state: ServersState }) {
                         <PaperEmptyState
                             icon="dns"
                             title="No servers yet"
-                            description="Create a Minecraft server, choose its software and version, and invite your friends."
+                            description="Pick a game, set up your server, and invite your friends."
                         >
                             <PaperButton
                                 variant="primary"
@@ -168,35 +174,40 @@ export default function ServersHome(props: { state: ServersState }) {
                 onClose={() => {
                     if (!busy()) setDialog(null);
                 }}
+                size={choosingGame() ? "full" : "medium"}
                 title={
                     dialog() === "add"
-                        ? "New server"
+                        ? choosingGame()
+                            ? "Choose a game"
+                            : `New ${gameFor(game()!).name} server`
                         : dialog() === "rename"
                           ? "Rename server"
                           : `Remove ${target()?.name ?? "server"}?`
                 }
                 footer={
-                    <PaperFlex gap="half">
+                    <>
                         <PaperButton
                             variant="text"
                             disabled={busy()}
-                            onClick={() => setDialog(null)}
+                            onClick={() => (dialog() === "add" && game() ? setGame(null) : setDialog(null))}
                         >
-                            Cancel
+                            {dialog() === "add" && game() ? "Back" : "Cancel"}
                         </PaperButton>
-                        <PaperButton
-                            disabled={busy() || (dialog() !== "remove" && !name().trim())}
-                            onClick={() => void submit()}
-                        >
-                            {busy()
-                                ? "Saving…"
-                                : dialog() === "add"
-                                  ? "Continue to setup"
-                                  : dialog() === "remove"
-                                    ? "Remove server"
-                                    : "Save name"}
-                        </PaperButton>
-                    </PaperFlex>
+                        <Show when={!choosingGame()}>
+                            <PaperButton
+                                disabled={busy() || (dialog() !== "remove" && !name().trim())}
+                                onClick={() => void submit()}
+                            >
+                                {busy()
+                                    ? "Saving…"
+                                    : dialog() === "add"
+                                      ? "Continue to setup"
+                                      : dialog() === "remove"
+                                        ? "Remove server"
+                                        : "Save name"}
+                            </PaperButton>
+                        </Show>
+                    </>
                 }
             >
                 <Show when={error()}>
@@ -211,21 +222,26 @@ export default function ServersHome(props: { state: ServersState }) {
                     )}
                 </Show>
                 <Show
-                    when={dialog() !== "remove"}
-                    fallback={
-                        <PaperText>
-                            The server will stop and leave this list and Actions. Its files and
-                            backups will be kept.
-                        </PaperText>
-                    }
+                    when={!choosingGame()}
+                    fallback={<GamePicker games={games} onPick={setGame} />}
                 >
-                    <PaperInput
-                        fullWidth
-                        autofocus
-                        label="Server name"
-                        value={name()}
-                        onInput={(e) => setName(e.currentTarget.value)}
-                    />
+                    <Show
+                        when={dialog() !== "remove"}
+                        fallback={
+                            <PaperText>
+                                The server will stop and leave this list and Actions. Its files and
+                                backups will be kept.
+                            </PaperText>
+                        }
+                    >
+                        <PaperInput
+                            fullWidth
+                            autofocus
+                            label="Server name"
+                            value={name()}
+                            onInput={(e) => setName(e.currentTarget.value)}
+                        />
+                    </Show>
                 </Show>
             </PaperModal>
         </PaperFlex>
