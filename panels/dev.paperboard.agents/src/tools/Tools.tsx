@@ -144,10 +144,22 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
     return (
         <PaperFlex gap="full" role="region" aria-label="Tool servers">
             <PaperSectionHeader icon="dns" title="Tool servers" role="heading" aria-level={2} />
-            <PaperText size={2} color="text-muted">
-                MCP servers give {name()} more tools. They start when it next needs them. A server on this computer runs with your access; one inside {name()}'s computer stays in it.
-            </PaperText>
-            <For each={view().config.servers} fallback={<PaperText size={2} color="text-muted">No tool servers yet.</PaperText>}>
+            {/* in line with the section header's title and the servers' cards */}
+            <PaperFlex paddingX="threefourths">
+                <PaperText size={2} color="text-muted">
+                    MCP servers give {name()} more tools. They start when it next needs them. A server on this computer runs with your access; one inside {name()}'s computer stays in it.
+                </PaperText>
+            </PaperFlex>
+            <For
+                each={view().config.servers}
+                fallback={
+                    <PaperFlex paddingX="threefourths">
+                        <PaperText size={2} color="text-muted">
+                            No tool servers yet.
+                        </PaperText>
+                    </PaperFlex>
+                }
+            >
                 {(server) => {
                     const status = () => statusOf(server);
                     const restart = () => act(`restart:${server.name}`, status().phase === "running" ? "Server not restarted" : "Server not started", () => props.tools.restart(server.name));

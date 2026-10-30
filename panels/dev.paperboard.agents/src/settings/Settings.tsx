@@ -237,9 +237,12 @@ function ComputerSettings(props: { agent: Agent }) {
             <PaperSectionHeader icon="computer" title="Computer" role="heading" aria-level={2} />
             <Switch>
                 <Match when={c().phase === "unsupported"}>
-                    <PaperText size={2} color="text-muted">
-                        {c().error}
-                    </PaperText>
+                    {/* in line with the section header's title */}
+                    <PaperFlex paddingX="threefourths">
+                        <PaperText size={2} color="text-muted">
+                            {c().error}
+                        </PaperText>
+                    </PaperFlex>
                 </Match>
                 <Match when={!c().installed && c().phase !== "installing"}>
                     <PaperSettingList autoHeight>
@@ -382,19 +385,19 @@ function AutomationSettings(props: { agent: Agent }) {
         });
     };
     return (
-        <PaperFlex gap="full" role="region" aria-label="Automations">
-            <PaperSectionHeader icon="bolt" title="Automations" role="heading" aria-level={2} />
+        <PaperFlex gap="full" role="region" aria-label="Flows">
+            <PaperSectionHeader icon="bolt" title="Flows" role="heading" aria-level={2} />
             <PaperSettingList autoHeight>
                 <PaperSettingItem
-                    title="Instructions"
-                    description={`Added to what ${current().name} is told when a flow messages or asks it. A flow's own instructions replace these.`}
+                    title="Instructions for flows"
+                    description={`When a flow in Actions messages or asks ${current().name}, these are added to what it's told. A flow's own instructions replace them.`}
                 >
                     <PaperInput
                         name="automationInstructions"
-                        label="Instructions"
+                        label="Instructions for flows"
                         multiline
                         rows={4}
-                        placeholder="Keep answers to one sentence."
+                        placeholder="Reply with just the answer, so the flow can use it as it is."
                         value={text()}
                         maxLength={LIMITS.instructions}
                         onInput={(e) => setText(e.currentTarget.value)}
