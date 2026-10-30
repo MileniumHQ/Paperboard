@@ -12,12 +12,12 @@ test("Terraria config round trip retains unknown keys, replaces duplicates, vali
     try {
         const file = path.join(root, "serverconfig.txt");
         await fs.writeFile(file, "# Custom publisher setting\nnpcstream=42\npassword=old\nport=1\nport=2\n");
-        const settings = validateOptions({ maxplayers: 12, difficulty: "2", autocreate: "3", seed: "my seed", motd: "Friends", secure: true, language: "en-US" }, { world: "World One", port: 7780, custom: true });
+        const settings = validateOptions({ maxplayers: 12, difficulty: "2", autocreate: "3", seed: "my seed", motd: "Friends", secure: true }, { world: "World One", port: 7780, custom: true });
         await fs.writeFile(file, configText(root, settings, "private", await fs.readFile(file, "utf8")), { mode: 0o600 });
         const text = await fs.readFile(file, "utf8");
         expect(text).toContain("npcstream=42\n"); expect(text).toContain("port=7780\n"); expect(text.match(/^port=/gm)).toHaveLength(1);
         expect(text).toContain(`world=${path.join(root, "worlds/World One.wld")}\n`);
-        expect(text).toContain("secure=1\n"); expect(text).toContain("upnp=0\n"); expect(text).toContain("autocreate=3\n");
+        expect(text).toContain("secure=1\n"); expect(text).toContain("upnp=0\n"); expect(text).toContain("autocreate=3\n"); expect(text).toContain("language=en-US\n");
         expect(settings.custom).toBe(true);
         for (const bad of [{ maxplayers: 0 }, { difficulty: "4" }, { motd: "bad\npassword=x" }, { password: "x\0y" }, { secure: "yes" }]) expect(() => validateOptions(bad)).toThrow();
         for (const bad of ["../world", "bad.wld", "", "a/b"]) expect(() => worldName(bad)).toThrow();

@@ -11,7 +11,6 @@ export const options: readonly GameOption[] = [
     { id: "seed", label: "Seed", description: "Leave empty for a random world.", kind: "text", default: "", restartRequired: true, scope: "world" },
     { id: "motd", label: "Message of the day", kind: "text", default: "", restartRequired: false, scope: "overview" },
     { id: "secure", label: "Additional cheat protection", kind: "boolean", default: true, restartRequired: true },
-    { id: "language", label: "Console language", description: "English console output is required by this release’s readiness and save adapter.", kind: "select", choices: ["en-US"].map(value => ({ value, label: value })), default: "en-US", restartRequired: true },
 ];
 /** The options a new world is generated with, asked for in New World rather than Options. */
 export const WORLD_GENERATION: readonly string[] = options.filter(o => o.scope === "world").map(o => o.id);

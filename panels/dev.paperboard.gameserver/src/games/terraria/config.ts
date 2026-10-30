@@ -30,7 +30,8 @@ export function configText(root: string, settings: Record<string, unknown>, pass
     for (const field of options) if (field.kind !== "secret") values[field.id] = settings[field.id] ?? field.default;
     validateOptions(values);
     const world = worldName(settings.world ?? "World");
-    Object.assign(values, { world: path.join(root, "worlds", `${world}.wld`), worldpath: path.join(root, "worlds"), worldname: world, password: singleLine(password, "Password"), upnp: 0, banlist: path.join(root, "banlist.txt") });
+    // language: the readiness and save checks read the console's English output
+    Object.assign(values, { world: path.join(root, "worlds", `${world}.wld`), worldpath: path.join(root, "worlds"), worldname: world, password: singleLine(password, "Password"), upnp: 0, language: "en-US", banlist: path.join(root, "banlist.txt") });
     // Preserve unknown publisher settings and comments; replace all owned keys.
     const kept = existing.split(/\r?\n/).filter(line => !(line.includes("=") && Object.hasOwn(values, line.slice(0, line.indexOf("=")).trim().toLowerCase())));
     return [...kept.filter(Boolean), ...Object.entries(values).map(([k, v]) => `${k}=${typeof v === "boolean" ? Number(v) : singleLine(String(v), k)}`), ""].join("\n");
