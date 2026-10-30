@@ -67,3 +67,32 @@ describe("resubscribe", () => {
         expect(registers).toBe(n);
     });
 });
+
+describe("projects", () => {
+    test("a reconnect defines every project before replaying the actions in them", async () => {
+        const r = new TransportRegistry();
+        r.addAction("panel-a", "server1/send", () => "x");
+        r.addProject({ panelId: "panel-a", id: "server1", name: "Survival" });
+        const sent: string[] = [];
+        let defined = false;
+        await r.resubscribe(async (action, params) => {
+            if (action === "actions:project-define") {
+                await new Promise((res) => setTimeout(res, 5));
+                defined = true;
+            }
+            sent.push(`${action} ${String(params.project ?? params.action)} ${defined}`);
+        }, () => {});
+        expect(sent).toEqual(["actions:project-define server1 true", "actions:register server1/send true"]);
+    });
+
+    test("removing a project forgets its actions and keeps the panel's own", () => {
+        const r = new TransportRegistry();
+        r.addProject({ panelId: "panel-a", id: "server1", name: "Survival" });
+        r.addAction("panel-a", "server1/send", () => "x");
+        r.addAction("panel-a", "server10/send", () => "y");
+        r.addAction("panel-a", "create", () => "z");
+        r.removeProject("panel-a", "server1");
+        expect([...r.actionHandlers.keys()].sort()).toEqual(["panel-a:create", "panel-a:server10/send"]);
+        expect(r.registeredProjects.size).toBe(0);
+    });
+});

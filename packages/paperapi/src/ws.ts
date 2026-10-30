@@ -807,6 +807,18 @@ export class CraneTransport {
         await this.call("actions:unregister", { panelId, action: actionName });
     }
 
+    public async defineProject(panelId: string, project: { id: string; name: string; icon?: string }): Promise<void> {
+        await this.ensureConnected();
+        await this.call("actions:project-define", { panelId, project: project.id, name: project.name, icon: project.icon });
+        this.registry.addProject({ panelId, ...project });
+    }
+
+    public async removeProject(panelId: string, projectId: string): Promise<void> {
+        this.registry.removeProject(panelId, projectId);
+        await this.ensureConnected();
+        await this.call("actions:project-remove", { panelId, project: projectId });
+    }
+
     // replays attachments and registrations after reconnect
     private async resubscribe(): Promise<void> {
         // the daemon forgot this socket's subscriptions; re-announce the set

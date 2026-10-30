@@ -18,6 +18,42 @@ export const MAX_ACTIONS_PER_SOCKET = 1024;
 export const MAX_ACTIONS = 32_768;
 export const MAX_ACTION_SCHEMA_BYTES = 64 * 1024;
 
+// projects: a panel's named sets of actions (one per game server, per bot).
+// A project action is registered as "project/action", so it is its own
+// action everywhere (calls, events, flows) and never a parameter.
+export const MAX_PROJECTS_PER_SOCKET = 256;
+export const MAX_PROJECTS = 8192;
+export const PROJECT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+export const MAX_PROJECT_NAME = 128;
+
+export interface ActionProject {
+    panelId: string;
+    id: string;
+    name: string;
+    icon?: string;
+}
+
+interface RegisteredProject extends ActionProject {
+    ws: WebSocket;
+}
+
+/** The project an action id names: "server1/send" is server1's, "send" is the panel's own. */
+export function projectOfAction(action: string): string | undefined {
+    const slash = action.indexOf("/");
+    return slash === -1 ? undefined : action.slice(0, slash);
+}
+
+/** Why this action id can't be registered, or null when it can. */
+export function actionIdProblem(action: string): string | null {
+    const slash = action.indexOf("/");
+    if (slash === -1) return null;
+    const project = action.slice(0, slash);
+    const rest = action.slice(slash + 1);
+    if (!PROJECT_ID_PATTERN.test(project)) return `"${project}" is not a valid project id`;
+    if (!rest || rest.includes("/")) return `"${action}" must be "project/action", with one slash`;
+    return null;
+}
+
 export type PendingCallRefusal =
     | { cap: "global"; count: number }
     | { cap: "per-socket"; count: number };
@@ -50,6 +86,12 @@ export type RegistryResult =
     | { ok: true }
     | { ok: false; code: "CONFLICT"; owner: WebSocket };
 
+/** A refused project definition or project action: answered INVALID_PARAMS. */
+export class ProjectError extends Error {
+    readonly code = ErrorCode.INVALID_PARAMS;
+    name = "ProjectError";
+}
+
 export class ActionsRegistry {
     // ONE key space for every registrable thing: callable actions and event
     // actions share the `panelId:action` namespace, so a callable action and
@@ -62,6 +104,9 @@ export class ActionsRegistry {
     // per-caller outstanding call ids (teardown: handleSocketClose drops
     // the set together with pendingCalls entries)
     private socketPendingCalls = new Map<WebSocket, Set<string>>();
+    // projects keyed "panelId:projectId", owned by the socket that defined them
+    private projects = new Map<string, RegisteredProject>();
+    private socketProjects = new Map<WebSocket, Set<string>>();
 
     private actionKey(panelId: string, action: string): string {
         return `${panelId}:${action}`;
@@ -94,6 +139,7 @@ export class ActionsRegistry {
             );
             return { ok: false, code: "CONFLICT", owner: existing.ws };
         }
+        this.assertProjectOwned(panelId, actionName, ws);
         if (schema !== undefined && Buffer.byteLength(JSON.stringify(schema) ?? "", "utf8") > MAX_ACTION_SCHEMA_BYTES) {
             throw new LimitError(`An action schema may be at most ${MAX_ACTION_SCHEMA_BYTES} bytes`);
         }
@@ -128,6 +174,7 @@ export class ActionsRegistry {
                 return { ok: false, code: "CONFLICT", owner: existing.ws };
             }
         }
+        for (const actionName of actionNames) this.assertProjectOwned(panelId, actionName, ws);
         // the whole batch fits or none of it registers
         this.assertRoom(ws, actionNames.map((name) => this.actionKey(panelId, name)));
         for (const actionName of actionNames) {
@@ -168,6 +215,90 @@ export class ActionsRegistry {
         return { ok: true };
     }
 
+    // a project action may only be registered into a project this socket
+    // defined for this panel: removing the project then removes it too
+    private assertProjectOwned(panelId: string, actionName: string, ws: WebSocket): void {
+        const problem = actionIdProblem(actionName);
+        if (problem) throw new ProjectError(problem);
+        const project = projectOfAction(actionName);
+        if (project === undefined) return;
+        const owner = this.projects.get(this.actionKey(panelId, project));
+        if (!owner || owner.ws !== ws) {
+            throw new ProjectError(
+                `Project "${project}" is not defined for panel "${panelId}" on this connection; define it before registering "${actionName}"`,
+            );
+        }
+    }
+
+    /**
+     * Defines a project, or renames one this socket already owns. Its actions
+     * are registered afterwards as "project/action".
+     */
+    public defineProject(panelId: string, project: { id: string; name: string; icon?: string }, ws: WebSocket): RegistryResult {
+        if (!PROJECT_ID_PATTERN.test(project.id)) throw new ProjectError(`"${project.id}" is not a valid project id`);
+        const name = project.name.trim();
+        if (!name) throw new ProjectError(`Project "${project.id}" needs a name`);
+        if (name.length > MAX_PROJECT_NAME) throw new ProjectError(`A project name may be at most ${MAX_PROJECT_NAME} characters`);
+        const key = this.actionKey(panelId, project.id);
+        const existing = this.projects.get(key);
+        if (existing && existing.ws !== ws) {
+            logger.warn(`[Actions] Refused to define project "${project.id}" for panel "${panelId}": defined by another socket`);
+            return { ok: false, code: "CONFLICT", owner: existing.ws };
+        }
+        if (!existing) {
+            const owned = this.socketProjects.get(ws)?.size ?? 0;
+            if (owned >= MAX_PROJECTS_PER_SOCKET) {
+                throw new LimitError(`A connection may define at most ${MAX_PROJECTS_PER_SOCKET} projects`);
+            }
+            if (this.projects.size >= MAX_PROJECTS) {
+                throw new LimitError(`The project registry is full (${MAX_PROJECTS} projects)`);
+            }
+        }
+        this.projects.set(key, { panelId, id: project.id, name, ...(project.icon ? { icon: project.icon } : {}), ws });
+        let set = this.socketProjects.get(ws);
+        if (!set) {
+            set = new Set();
+            this.socketProjects.set(ws, set);
+        }
+        set.add(key);
+        logger.info(`[Actions] ${existing ? "Updated" : "Defined"} project "${project.id}" for panel "${panelId}"`);
+        return { ok: true };
+    }
+
+    /** Removes a project and every action registered into it. */
+    public removeProject(panelId: string, projectId: string, ws: WebSocket): RegistryResult {
+        const key = this.actionKey(panelId, projectId);
+        const existing = this.projects.get(key);
+        if (!existing) return { ok: true };
+        if (existing.ws !== ws) {
+            logger.warn(`[Actions] Refused to remove project "${projectId}" for panel "${panelId}": defined by another socket`);
+            return { ok: false, code: "CONFLICT", owner: existing.ws };
+        }
+        this.dropProject(key, existing);
+        logger.info(`[Actions] Removed project "${projectId}" for panel "${panelId}"`);
+        return { ok: true };
+    }
+
+    private dropProject(key: string, project: RegisteredProject): void {
+        this.projects.delete(key);
+        this.socketProjects.get(project.ws)?.delete(key);
+        const prefix = `${project.panelId}:${project.id}/`;
+        for (const [actionKey, entry] of this.actions) {
+            if (!actionKey.startsWith(prefix)) continue;
+            this.actions.delete(actionKey);
+            this.socketActions.get(entry.ws)?.delete(actionKey);
+        }
+    }
+
+    public listProjects(filterPanelId?: string): ActionProject[] {
+        const list: ActionProject[] = [];
+        for (const p of this.projects.values()) {
+            if (filterPanelId && p.panelId !== filterPanelId) continue;
+            list.push({ panelId: p.panelId, id: p.id, name: p.name, ...(p.icon ? { icon: p.icon } : {}) });
+        }
+        return list;
+    }
+
     public handleSocketClose(ws: WebSocket): boolean {
         let changed = false;
         const keys = this.socketActions.get(ws);
@@ -178,6 +309,12 @@ export class ActionsRegistry {
             this.socketActions.delete(ws);
             changed = true;
         }
+        const projectKeys = this.socketProjects.get(ws);
+        if (projectKeys && projectKeys.size > 0) {
+            for (const key of projectKeys) this.projects.delete(key);
+            changed = true;
+        }
+        this.socketProjects.delete(ws);
 
         // drop pending calls tied to this socket
         for (const [callId, pending] of this.pendingCalls.entries()) {
@@ -360,13 +497,15 @@ export class ActionsRegistry {
 
     public list(
         filterPanelId?: string,
-    ): { panelId: string; action: string; schema?: any }[] {
-        const list: { panelId: string; action: string; schema?: any }[] = [];
+    ): { panelId: string; action: string; project?: string; schema?: any }[] {
+        const list: { panelId: string; action: string; project?: string; schema?: any }[] = [];
         for (const entry of this.actions.values()) {
             if (!filterPanelId || entry.panelId === filterPanelId) {
+                const project = projectOfAction(entry.action);
                 list.push({
                     panelId: entry.panelId,
                     action: entry.action,
+                    ...(project !== undefined ? { project } : {}),
                     schema: entry.schema,
                 });
             }

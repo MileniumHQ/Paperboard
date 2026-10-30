@@ -97,6 +97,36 @@ export async function handleActions(action: string, id: unknown, params: any, ct
             reply(id, { success: true });
             return true;
         }
+        case "actions:project-define": {
+            const panelId = ownPanelId(params, action, ctx);
+            const projectId = assertStr(params?.project, "project", 64);
+            const name = assertStr(params?.name, "name", 128);
+            const icon = assertOptStr(params?.icon, "icon", 128);
+            const result = actionsRegistry.defineProject(panelId, { id: projectId, name, icon }, ws);
+            if (!result.ok) {
+                reply(id, null, `Project "${projectId}" for panel "${panelId}" is owned by another socket`, ErrorCode.CONFLICT);
+                return true;
+            }
+            broadcastEvent("actions:registry-updated", { type: "project:defined", panelId, project: projectId });
+            reply(id, { success: true });
+            return true;
+        }
+        case "actions:project-remove": {
+            const panelId = ownPanelId(params, action, ctx);
+            const projectId = assertStr(params?.project, "project", 64);
+            const result = actionsRegistry.removeProject(panelId, projectId, ws);
+            if (!result.ok) {
+                reply(id, null, `Project "${projectId}" for panel "${panelId}" is owned by another socket`, ErrorCode.CONFLICT);
+                return true;
+            }
+            broadcastEvent("actions:registry-updated", { type: "project:removed", panelId, project: projectId });
+            reply(id, { success: true });
+            return true;
+        }
+        case "actions:projects": {
+            reply(id, { projects: actionsRegistry.listProjects(assertOptStr(params?.panelId, "panelId", 128)) });
+            return true;
+        }
         case "actions:call":
         case "action:call": {
             const panelId = assertPanelId(params?.panelId);

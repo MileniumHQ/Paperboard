@@ -88,7 +88,32 @@ const result = await actionsApi.call<string>(
                     <tr>
                         <td><PaperCode>list</PaperCode></td>
                         <td><PaperCode>list(filterPanelId?): Promise&lt;ActionInfo[]&gt;</PaperCode></td>
-                        <td>Queries registered action schemas across active panels.</td>
+                        <td>Queries registered action schemas across active panels. A project's action carries its <PaperCode>project</PaperCode>.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>defineProject</PaperCode></td>
+                        <td><PaperCode>defineProject(project, panelId?): Promise&lt;ActionProjectHandle&gt;</PaperCode></td>
+                        <td>Defines (or renames) one of the panel's projects and returns a handle that registers, calls and fires that project's actions.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>project</PaperCode></td>
+                        <td><PaperCode>project(projectId, panelId?): ActionProjectHandle</PaperCode></td>
+                        <td>A handle for a project already defined, without a round trip.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>removeProject</PaperCode></td>
+                        <td><PaperCode>removeProject(projectId, panelId?): Promise&lt;void&gt;</PaperCode></td>
+                        <td>Removes a project and every action in it.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>listProjects</PaperCode></td>
+                        <td><PaperCode>listProjects(filterPanelId?): Promise&lt;ProjectInfo[]&gt;</PaperCode></td>
+                        <td>Every defined project: its panel, id, name and icon.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>projectActionId</PaperCode></td>
+                        <td><PaperCode>projectActionId(project, action): string</PaperCode></td>
+                        <td>The id a project's action is registered, called and fired under: <PaperCode>project/action</PaperCode>.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -137,6 +162,52 @@ await actionsApi.call("dev.example.runtime", "install", { version: "1.2.0" }, {
     run: async (ctx, inputs) => buildMenu(inputs),
 });`}
             </PaperCode>
+
+            <PaperText preset="subheader" id="projects">Projects</PaperText>
+            <PaperText preset="body">
+                A panel that runs several of one thing (game servers, bots) can keep each one's actions
+                in a project. A project's action is registered as project/action, so survival/send and
+                creative/send are two separate actions: flows, triggers and calls treat them as if the
+                projects shared nothing. Build them from one definition in your own code. The Actions
+                library shows a panel's global actions and one project's at a time, with a dropdown to
+                switch. A panel without projects needs none of this; bare action ids stay global.
+            </PaperText>
+            <PaperText preset="body">
+                Projects come and go while the panel runs. Removing one removes its actions, and so does
+                the panel's connection closing; a flow that uses them then fails with the reason. Only
+                the connection that defined a project can register into it.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { actionsApi, defineAction } from "@mileniumhq/paperapi";
+
+const sendMessage = (server: Server) => defineAction({
+    id: "send",
+    name: "Send Message",
+    description: \`Says something in \${server.name}'s chat\`,
+    inputs: { text: { type: "string", label: "Text", required: true } },
+    run: async (ctx, inputs) => server.say(inputs.text),
+});
+
+// a global action: not in any project
+await actionsApi.register(createServerAction);
+
+for (const server of servers) {
+    const project = await actionsApi.defineProject({ id: server.id, name: server.name, icon: "dns" });
+    await project.register(sendMessage(server)); // "<server.id>/send"
+}
+
+// renamed and deleted later, at any time
+await actionsApi.project(server.id).update({ name: "Survival (old)" });
+await actionsApi.removeProject(server.id);`}
+            </PaperCode>
+
+            <PaperText preset="subheader" id="hidden">Actions for programs</PaperText>
+            <PaperText preset="body">
+                Set hidden on an action that programs use but a person wouldn't place as a block, such as
+                one taking a whole flow as an object. The Actions library leaves it out; it stays listed
+                and callable, and the Agents panel offers it. Use internal instead for an action only the
+                panel itself may call.
+            </PaperText>
 
             <PaperText preset="subheader" id="deprecated">Retiring an action</PaperText>
             <PaperText preset="body">

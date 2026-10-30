@@ -128,6 +128,12 @@ export interface ActionSchema {
      */
     internal?: boolean;
     /**
+     * Left out of the Actions library, but listed, callable by any panel and
+     * offered to the Agents panel: actions too involved to be blocks (editing
+     * a flow), meant for programs and agents.
+     */
+    hidden?: boolean;
+    /**
      * The action is on its way out: it still runs, but the Actions library
      * stops offering it and every block already placed shows this message,
      * which says what to do instead and when the action goes away.
