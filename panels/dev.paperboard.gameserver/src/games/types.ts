@@ -18,7 +18,14 @@ export interface GameTab {
     variant?: "fill" | "full";
     width?: "full";
 }
-type OptionBase = { id: string; label: string; description?: string; restartRequired: boolean };
+type OptionBase = {
+    id: string;
+    label: string;
+    description?: string;
+    restartRequired: boolean;
+    /** "world": applies when a world is generated, so New World asks for it and Options leaves it out */
+    scope?: "world";
+};
 export type GameOption = OptionBase & (
     | { kind: "text"; default?: string }
     | { kind: "number"; min: number; max: number; default?: number }

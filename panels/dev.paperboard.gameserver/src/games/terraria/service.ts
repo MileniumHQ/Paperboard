@@ -12,6 +12,8 @@ import { terraria } from "./index";
 import { configText, singleLine, validateOptions, worldName } from "./config";
 import { releases, releaseFor, entrypoint } from "./catalog";
 import { install, recoverRelease } from "./install";
+import { discardUpload, importUpload, inspectUpload, listWorlds, trashWorld } from "./worldStore";
+import { WORLD_GENERATION } from "./index";
 const PROC = "terraria-server";
 type Context = ServiceContext<GameServerState>;
 const local = serverLocal(() => ({ busy: false, ready: false, password: "", prompts: 0, partialPrompt: false, logTimer: null as ReturnType<typeof setTimeout> | null, pending: [] as string[] }));
@@ -102,19 +104,25 @@ export const terrariaService: GameService = {
             await config.set({ ...previous, software: "vanilla", version, configured: true }, PANEL_ID);
             await generate(""); await loadOptions(ctx); return true;
         })),
-        action("terraria-worlds", "Terraria worlds", async () => {
-            const directory = path.join(await root(), "worlds"); await fs.mkdir(directory, { recursive: true });
-            return (await fs.readdir(directory, { withFileTypes: true })).filter(e => e.isFile() && e.name.endsWith(".wld")).map(e => e.name.slice(0, -4));
-        }),
-        action("terraria-world", "Select or create world", (ctx, { name, create, port }) => exclusive(ctx, async () => {
+        action("terraria-worlds", "Terraria worlds", async () => listWorlds(path.join(await root(), "worlds"), worldName((await settings()).world ?? "World"))),
+        action("terraria-world", "Select or create world", (ctx, { name, create, generation }) => exclusive(ctx, async () => {
             const nameChecked = worldName(name);
-            if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535)) throw new Error("Port must be 1–65535");
             const file = path.join(await root(), "worlds", `${nameChecked}.wld`);
             const exists = await fs.stat(file).then(s => s.isFile(), err => { if (err.code === "ENOENT") return false; throw err; });
             if (create ? exists : !exists) throw new Error(create ? "This world already exists; select it instead" : "The selected .wld world does not exist");
-            await config.set({ ...await settings(), world: nameChecked, ...(port === undefined ? {} : { port }) }, PANEL_ID);
+            let next = { ...await settings(), world: nameChecked };
+            if (create && generation !== undefined) {
+                // a new world's size, difficulty and seed; Terraria reads them on the start that creates it
+                if (!generation || typeof generation !== "object" || Object.keys(generation).some(k => !WORLD_GENERATION.includes(k))) throw new Error(`New world settings are ${WORLD_GENERATION.join(", ")}`);
+                next = { ...validateOptions(generation, next), world: nameChecked };
+            }
+            await config.set(next, PANEL_ID);
             await generate(""); await loadOptions(ctx); return true;
         })),
+        action("terraria-world-delete", "Delete world", (ctx, { name }) => exclusive(ctx, async () => { await trashWorld(await root(), name); return true; })),
+        action("terraria-world-inspect", "Read uploaded world", async (_ctx, { file }) => inspectUpload(await root(), file)),
+        action("terraria-world-import", "Add uploaded world", async (_ctx, { file, name }) => { await importUpload(await root(), file, name); return true; }),
+        action("terraria-world-discard", "Discard uploaded world", async (_ctx, { file }) => { await discardUpload(await root(), file); return true; }),
         action("terraria-save", "Save Terraria world", save),
     ]; },
     loadOptions,

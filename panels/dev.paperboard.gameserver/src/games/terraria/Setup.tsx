@@ -10,77 +10,46 @@ import {
     PaperWizard,
     PaperWizardStep,
     useWizard,
-    type LoaderStatus,
 } from "@mileniumhq/paperui";
 import InstallLoaders from "../../components/InstallLoaders";
-import { installProgress, serverBridge } from "../../lib/server";
+import { serverBridge } from "../../lib/server";
+import { createTerrariaInstall } from "./installRows";
 import { releases } from "./catalog";
 
 function InstallStep(props: { version: string }) {
     const wizard = useWizard();
-    const [error, setError] = createSignal("");
-    const [installed, setInstalled] = createSignal(false);
+    const install = createTerrariaInstall();
     let started = false;
     let disposed = false;
     onCleanup(() => { disposed = true; });
 
-    const install = async () => {
-        setError("");
-        setInstalled(false);
+    const run = async () => {
         wizard?.setOptionsShown(false);
         wizard?.setCanProceed(false);
-        try {
-            await serverBridge.call("terraria-install", { version: props.version }, { timeoutMs: null });
-            if (disposed) return;
-            setInstalled(true);
-            wizard?.setCanProceed(true);
-        } catch (err) {
-            if (disposed) return;
-            setError(err instanceof Error ? err.message : String(err));
-        } finally {
-            if (!disposed) wizard?.setOptionsShown(true);
-        }
+        const ok = await install.run(props.version);
+        if (disposed) return;
+        wizard?.setCanProceed(ok);
+        wizard?.setOptionsShown(true);
     };
 
     createEffect(() => {
         if (wizard?.currentStep() === 1 && !started) {
             started = true;
-            void install();
+            void run();
         }
     });
-
-    // the download reports its own progress; unpacking follows it
-    const stage = () => installProgress()?.stage;
-    const downloaded = () => installed() || stage() === "completed";
-    const downloadStatus = (): LoaderStatus =>
-        error() && !downloaded() ? "error" : downloaded() ? "success" : stage() ? "loading" : "waiting";
-    const setupStatus = (): LoaderStatus =>
-        error() && downloaded() ? "error" : installed() ? "success" : downloaded() ? "indeterminate" : "waiting";
 
     return (
         <PaperCenteredInterface>
             <PaperFlex direction="column" gap="full" center fullWidth>
-                <Show when={error()}>
-                    <PaperQuote variant="danger" title="Setup failed">{error()}</PaperQuote>
+                <Show when={install.error()}>
+                    <PaperQuote variant="danger" title="Setup failed">{install.error()}</PaperQuote>
                     <PaperFlex gap="half">
-                        <PaperButton onClick={() => void install()}>Retry setup</PaperButton>
-                        <PaperButton onClick={() => { started = false; setError(""); wizard?.setCurrentStep(0); }}>Change version</PaperButton>
+                        <PaperButton onClick={() => void run()}>Retry setup</PaperButton>
+                        <PaperButton onClick={() => { started = false; install.reset(); wizard?.setCurrentStep(0); }}>Change version</PaperButton>
                     </PaperFlex>
                 </Show>
-                <InstallLoaders
-                    items={[
-                        {
-                            label: `Downloading Terraria ${props.version}...`,
-                            percent: () => (downloaded() ? 100 : installProgress()?.percent ?? 0),
-                            status: downloadStatus,
-                        },
-                        {
-                            label: "Setting up server...",
-                            percent: () => (installed() ? 100 : 0),
-                            status: setupStatus,
-                        },
-                    ]}
-                />
+                <InstallLoaders items={install.rows(props.version)} />
             </PaperFlex>
         </PaperCenteredInterface>
     );
@@ -112,7 +81,7 @@ export default function TerrariaSetup(props: { onComplete(): void }) {
                     <PaperFlex direction="column" gap="half">
                         <PaperText preset="title">Choose Version</PaperText>
                         <PaperText preset="body">
-                            Select a release for your Terraria dedicated server. A small world is created on first start; set its size, difficulty and seed in Options before starting.
+                            Select a release for your Terraria dedicated server. A world is created on the first start; to choose its size, difficulty and seed, make one in Worlds first.
                         </PaperText>
                         <Show when={loadError()}>
                             <PaperQuote variant="danger" title="Terraria releases could not be read">{loadError()}</PaperQuote>

@@ -22,7 +22,7 @@ test("Terraria config round trip retains unknown keys, replaces duplicates, vali
         for (const bad of [{ maxplayers: 0 }, { difficulty: "4" }, { motd: "bad\npassword=x" }, { password: "x\0y" }, { secure: "yes" }]) expect(() => validateOptions(bad)).toThrow();
         for (const bad of ["../world", "bad.wld", "", "a/b"]) expect(() => worldName(bad)).toThrow();
         expect(configText(root, settings, "", text)).not.toContain("private");
-        expect(() => configText(root, { port: 70000 }, "")).toThrow("Invalid Terraria port");
+        expect(() => configText(root, { port: 70000 }, "")).toThrow("Port must be 1–65535");
     } finally { await fs.rm(root, { recursive: true }); }
 });
 test("Terraria host/capability metadata has no Minecraft operations or uncertified host routes", () => {
