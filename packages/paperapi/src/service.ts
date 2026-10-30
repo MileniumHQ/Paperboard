@@ -77,6 +77,8 @@ export interface DefinePanelServiceOptions<
      * a legacy source). It is absent for a whole-panel backup.
      */
     beforeBackup?: (ctx: ServiceContext<TState>, options: { sourceId?: string }) => void | Promise<void>;
+    /** Called before replacing data, while the service can still stop its owned processes. */
+    beforeRestore?: (ctx: ServiceContext<TState>, options: { sourceId?: string }) => void | Promise<void>;
 }
 
 export function definePanelService<
@@ -211,22 +213,23 @@ export function definePanelService<
     const ready = Promise.all(registrations).then(async () => {
         await options.onInit?.(ctx);
         if (typeof process !== "undefined" && typeof process.send === "function") {
-            const beforeBackup = options.beforeBackup;
-            if (beforeBackup) {
+            for (const operation of ["backup", "restore"] as const) {
+                const hook = operation === "backup" ? options.beforeBackup : options.beforeRestore;
+                if (!hook) continue;
                 // the daemon asks once per backup and waits for the answer
                 process.on("message", (message: any) => {
-                    if (message?.type !== "paperboard:before-backup" || typeof message.requestId !== "string") return;
-                    void (async () => beforeBackup(ctx, { sourceId: message.sourceId }))().then(
-                        () => process.send?.({ type: "paperboard:before-backup-done", requestId: message.requestId }),
+                    if (message?.type !== `paperboard:before-${operation}` || typeof message.requestId !== "string") return;
+                    void (async () => hook(ctx, { sourceId: message.sourceId }))().then(
+                        () => process.send?.({ type: `paperboard:before-${operation}-done`, requestId: message.requestId }),
                         (err) => process.send?.({
-                            type: "paperboard:before-backup-done",
+                            type: `paperboard:before-${operation}-done`,
                             requestId: message.requestId,
                             error: err instanceof Error ? err.message : String(err),
                         }),
                     );
                 });
             }
-            process.send({ type: "paperboard:service-ready", panelId, beforeBackup: Boolean(beforeBackup) });
+            process.send({ type: "paperboard:service-ready", panelId, beforeBackup: Boolean(options.beforeBackup), beforeRestore: Boolean(options.beforeRestore) });
         }
     });
     void ready.catch((err) => console.error(`[Service:${panelId}] initialization failed:`, err));

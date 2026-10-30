@@ -21,6 +21,7 @@ interface RunningService {
     startedAt: number;
     /** the service said, when it became ready, that it gets ready for backups */
     beforeBackup?: boolean;
+    beforeRestore?: boolean;
     /** the one backup it is getting ready for now */
     backupPrepare?: { requestId: string; settle: (error: Error | null) => void };
 }
@@ -128,7 +129,7 @@ export class PanelServicesManager {
         }, 20_000);
         entry.readyTimer.unref?.();
         child.on("message", (message: any) => {
-            if (message?.type === "paperboard:before-backup-done") {
+            if (["paperboard:before-backup-done", "paperboard:before-restore-done"].includes(message?.type)) {
                 const pending = entry.backupPrepare;
                 if (pending && message.requestId === pending.requestId) {
                     pending.settle(message.error ? new Error(String(message.error).slice(0, 500)) : null);
@@ -138,6 +139,7 @@ export class PanelServicesManager {
             if (message?.type !== "paperboard:service-ready" || message.panelId !== id || entry.stopped) return;
             clearTimeout(entry.readyTimer);
             entry.beforeBackup = message.beforeBackup === true;
+            entry.beforeRestore = message.beforeRestore === true;
             entry.state = "ready";
             resolveReady();
         });
@@ -170,10 +172,10 @@ export class PanelServicesManager {
      * out and stops writing. Resolves false when the service does not take
      * part, rejects when it failed or did not answer in time.
      */
-    public async prepareForBackup(id: string, sourceId?: string, timeoutMs = 150_000): Promise<boolean> {
+    public async prepareForBackup(id: string, sourceId?: string, timeoutMs = 300_000, operation: "backup" | "restore" = "backup"): Promise<boolean> {
         const entry = this.services.get(requirePanelId(id));
-        if (!entry || entry.stopped || entry.state !== "ready" || !entry.beforeBackup) return false;
-        if (entry.backupPrepare) throw new Error(`Service ${id} is already getting ready for a backup`);
+        if (!entry || entry.stopped || entry.state !== "ready" || !(operation === "backup" ? entry.beforeBackup : entry.beforeRestore)) return false;
+        if (entry.backupPrepare) throw new Error(`Service ${id} is already getting ready for a ${operation}`);
         const requestId = crypto.randomUUID();
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
@@ -186,9 +188,9 @@ export class PanelServicesManager {
                     else resolve();
                 };
                 entry.backupPrepare = { requestId, settle };
-                timer = setTimeout(() => settle(new Error(`Service ${id} did not get ready for the backup within ${Math.round(timeoutMs / 1000)} s`)), timeoutMs);
+                timer = setTimeout(() => settle(new Error(`Service ${id} did not get ready for the ${operation} within ${Math.round(timeoutMs / 1000)} s`)), timeoutMs);
                 timer.unref?.();
-                entry.process.send({ type: "paperboard:before-backup", requestId, sourceId }, (err) => { if (err) settle(err); });
+                entry.process.send({ type: `paperboard:before-${operation}`, requestId, sourceId }, (err) => { if (err) settle(err); });
             });
         } finally {
             clearTimeout(timer);
