@@ -54,7 +54,8 @@ const savingOn = (line: string) => /saving is (now enabled|already turned on)/i.
 // "Saved the game", "Saved the world"
 const flushed = (line: string) => /Saved the (game|world)/i.test(line);
 
-async function send(command: string, confirm: (line: string) => boolean, timeoutMs: number, what: string): Promise<void> {
+/** writes a console command and resolves once the server prints a line `confirm` accepts */
+export async function send(command: string, confirm: (line: string) => boolean, timeoutMs: number, what: string): Promise<void> {
     const wait = waitForLine(confirm, timeoutMs, what);
     try {
         await processApi.write(SERVER_PROC_ID, `${command}\n`);

@@ -25,15 +25,41 @@ const fileApiFake = {
     getPath: async (path: string) => inRoot(path),
 };
 
+// a running server holding its online players in memory: they are written to
+// disk when they leave and when it stops. The leave line comes first and the
+// save in the same tick after it, as in vanilla; save-all answers on a later
+// tick. Console output reaches the real line observer.
+const online = new Set<string>();
+const writePlayerFile = () => seed(`world/players/data/${UUID}.dat`, "saved on leave");
+const processApiFake = {
+    write: async (_id: string, line: string) => {
+        const kick = /^kick (\w+)/.exec(line);
+        if (kick && online.delete(kick[1])) {
+            setTimeout(() => {
+                observeSavingLine(`[12:00:00 INFO]: ${kick[1]} left the game`);
+                setTimeout(writePlayerFile, 5);
+            }, 1);
+        }
+        if (line.startsWith("save-all")) {
+            setTimeout(() => observeSavingLine("[12:00:01 INFO]: Saved the game"), 20);
+        }
+    },
+};
+const stopServer = () => {
+    for (const _name of online) writePlayerFile();
+    online.clear();
+};
+
 mock.module("../src/service/api", () => ({
     config: { get: async () => null, set: async () => true },
     files: fileApiFake,
     fileApi: fileApiFake,
     system: { getInfo: async () => ({ os: "linux" }) },
-    processApi: {},
+    processApi: processApiFake,
 }));
 
 const { deletePlayerData } = await import("../src/service/players");
+const { observeSavingLine } = await import("../src/games/minecraft/saving");
 
 const UUID = "0f3b2c1d-1111-4222-8333-444455556666";
 const OTHER = "9a8b7c6d-1111-4222-8333-444455556666";
@@ -43,10 +69,11 @@ function seed(path: string, content = "x") {
     fs.writeFileSync(inRoot(path), content);
 }
 
-function ctxWith(name: string) {
+function ctxWith(name: string, serverStatus = "offline") {
     let state: any = {
+        serverStatus,
         seenPlayers: [name],
-        onlinePlayers: [],
+        onlinePlayers: online.has("Steve") ? [name] : [],
         playerStats: { [name]: {} },
         playerPlaytime: { [name]: 10 },
         playerPositions: { [name]: { x: 0, y: 0, z: 0, dimension: "minecraft:overworld" } },
@@ -105,6 +132,30 @@ describe("deletePlayerData", () => {
 
         expect(exists(`old/playerdata/${UUID}.dat`)).toBe(false);
         expect(exists(`old/stats/${UUID}.json`)).toBe(false);
+    });
+
+    it("kicks an online player and waits for the server to save them before deleting", async () => {
+        fs.writeFileSync(inRoot("server.properties"), "level-name=world\n");
+        seed(`world/players/data/${UUID}.dat`);
+        seed("usercache.json", "[]");
+        online.add("Steve");
+
+        await deletePlayerData(ctxWith("steve", "online"), "Steve", UUID);
+        // whatever the server still held is written when it stops
+        stopServer();
+
+        expect(online.size).toBe(0);
+        expect(exists(`world/players/data/${UUID}.dat`)).toBe(false);
+    });
+
+    it("refuses while the server is stopping instead of racing its saves", async () => {
+        fs.writeFileSync(inRoot("server.properties"), "level-name=world\n");
+        seed(`world/players/data/${UUID}.dat`);
+
+        await expect(deletePlayerData(ctxWith("steve", "stopping"), "Steve", UUID)).rejects.toThrow(
+            "Wait until the server has finished starting or stopping",
+        );
+        expect(exists(`world/players/data/${UUID}.dat`)).toBe(true);
     });
 
     it("fails loudly on a damaged usercache instead of overwriting it", async () => {

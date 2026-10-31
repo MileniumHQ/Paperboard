@@ -29,6 +29,7 @@ import { resolveLevelName } from "./worlds";
 import { makeTrashRemoveDeps } from "./trashDeps";
 import { PANEL_ID } from "./types";
 import { TRIGGER_IDS } from "./contract";
+import { send } from "../games/minecraft/saving";
 
 const local = serverLocal(() => ({ lastJoinAt: new Map<string, number>(), pendingStatFields: [] as { player: string; field: keyof PlayerStatData }[], recentNames: [] as string[], onNamesChanged: null as (() => void) | null, pendingPositionQueries: [] as PendingPositionQuery[] }));
 
@@ -358,6 +359,7 @@ export async function deletePlayerData(
         }
         safeUuid = resolved;
     }
+    await disconnectBeforeDelete(ctx, safeName);
     const level = await resolveLevelName();
     // both layouts: 26.x worlds nest player files under players/, older
     // ones keep them at the world root, and an upgraded server can hold both
@@ -378,9 +380,30 @@ export async function deletePlayerData(
     forgetPlayerData(ctx, safeName);
 }
 
-// usercache.json is what lists a player who has only ever joined; leaving
-// the entry would keep a deleted player on the roster. ops, whitelist and
-// bans are the owner's settings and stay.
+const DISCONNECT_TIMEOUT_MS = 15_000;
+
+// A running server writes a player's files when they leave, so an online
+// player is kicked first and the delete waits until the server has written
+// them out: deleting earlier hands the files straight back. The leave line
+// is printed before that save in the same tick, so a save-all answered
+// after it (commands run on a later tick) is the point the files are done.
+async function disconnectBeforeDelete(ctx: ServiceContext<GameServerState>, name: string): Promise<void> {
+    const status = ctx.state.serverStatus;
+    if (status === "offline") return;
+    if (status !== "online") {
+        throw new Error("Wait until the server has finished starting or stopping, then delete the player's data");
+    }
+    const key = normalizePlayerKey(name);
+    if (!ctx.state.onlinePlayers.includes(key)) return;
+    const leftLine = new RegExp(`\\b${name}\\s+left the game`, "i");
+    await send(`kick ${name} Your player data was deleted`, (line) => leftLine.test(line), DISCONNECT_TIMEOUT_MS, `that ${name} left`);
+    await send("save-all", (line) => /Saved the (game|world)/i.test(line), DISCONNECT_TIMEOUT_MS, "that the world is saved");
+}
+
+// usercache.json remembers the player's name; it goes with their data. A
+// running server keeps its own copy and may write the entry back, which is
+// why the roster lists players by their data and the server's lists, never
+// by usercache. ops, whitelist and bans are the owner's settings and stay.
 async function forgetCachedProfile(uuid: string): Promise<void> {
     const content = await fileApi.read("usercache.json", PANEL_ID);
     if (!content) return;
