@@ -17,6 +17,7 @@
         "update:ollama": "bun scripts/update-ollama.ts",
         "update:helium": "bun scripts/update-helium.ts",
         "update:steamcmd": "bun scripts/update-steamcmd.ts",
+        "update:dotnet": "bun scripts/update-dotnet.ts",
         "update:proton": "bun scripts/update-proton.ts"
     },
     "devDependencies": {

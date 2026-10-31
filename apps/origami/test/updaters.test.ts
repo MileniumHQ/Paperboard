@@ -1,4 +1,5 @@
 import { STEAMCMD_BUILDS, buildSteamcmdRecord, buildLatestSteamcmdRecord } from "../scripts/update-steamcmd";
+import { RIDS, runtimeFiles, buildDotnetRecord, buildLatestDotnetRecord, type DotnetReleases } from "../scripts/update-dotnet";
 import { buildProtonRecord, buildLatestProtonRecord } from "../scripts/update-proton";
 import { describe, it, expect } from "bun:test";
 import {
@@ -322,6 +323,64 @@ describe("update-steamcmd", () => {
     it("hashes fetched bytes and refuses HTTP errors", async () => {
         await expect(buildLatestSteamcmdRecord((async () => new Response("changed")) as unknown as typeof fetch)).rejects.toThrow(/reviewed pin/);
         await expect(buildLatestSteamcmdRecord((async () => new Response("missing", { status: 404 })) as unknown as typeof fetch)).rejects.toThrow(/404/);
+    });
+});
+
+// .NET archives are checked against Microsoft's SHA-512 before their SHA-256
+// is recorded; the fetch test proves the bytes are hashed, not the metadata trusted.
+describe("update-dotnet", () => {
+    const version = "8.0.33";
+    const body = (rid: string) => `runtime ${rid}`;
+    const sha512 = (text: string) => crypto.createHash("sha512").update(text).digest("hex");
+    const meta = (): DotnetReleases => ({
+        "channel-version": "8.0",
+        "latest-runtime": version,
+        releases: [{
+            "release-version": version,
+            runtime: {
+                version,
+                files: Object.values(RIDS).map((rid) => {
+                    const ext = rid!.startsWith("win-") ? "zip" : "tar.gz";
+                    return { name: `dotnet-runtime-${rid}.${ext}`, rid, url: `https://builds.dotnet.microsoft.com/dotnet/Runtime/${version}/dotnet-runtime-${version}-${rid}.${ext}`, hash: sha512(body(rid!)) };
+                }),
+            },
+        }],
+    });
+    const fetchFrom = (bytes: (url: string) => string, metadata = meta()) =>
+        (async (input: string | URL) => {
+            const url = String(input);
+            if (url.endsWith("/releases.json")) return Response.json(metadata);
+            return new Response(bytes(url));
+        }) as unknown as typeof fetch;
+    const ridOf = (url: string) => /dotnet-runtime-[\d.]+-(.+)\.(?:tar\.gz|zip)$/.exec(url)![1]!;
+
+    it("records verified archives with the host, fxr and shared framework under bin/", async () => {
+        const record = await buildLatestDotnetRecord("8.0", fetchFrom((url) => body(ridOf(url))));
+        assertValidRecord(record);
+        expect(record.name).toBe("dotnet-8");
+        expect(record.version).toBe(version);
+        expect(Object.keys(record.platforms).sort()).toEqual(["linux-arm64", "linux-x64", "macos-arm64", "macos-x64", "windows-x64"]);
+        const linux = record.platforms["linux-x64"]!;
+        expect(linux.sha256).toBe(crypto.createHash("sha256").update(body("linux-x64")).digest("hex"));
+        expect(linux.recipe).toEqual({ unpack: "tar", take: { "bin/dotnet": "dotnet", "bin/host": "host", "bin/shared": "shared", "LICENSE.txt": "LICENSE.txt", "ThirdPartyNotices.txt": "ThirdPartyNotices.txt" } });
+        expect(record.platforms["windows-x64"]!.recipe!.take["bin/dotnet.exe"]).toBe("dotnet.exe");
+        expect(record.platforms["windows-x64"]!.recipe!.unpack).toBe("zip");
+    });
+    it("refuses bytes that do not match Microsoft's SHA-512", async () => {
+        await expect(buildLatestDotnetRecord("8.0", fetchFrom(() => "tampered"))).rejects.toThrow(/SHA-512 differs/);
+    });
+    it("refuses missing platforms, foreign hosts and other channels", () => {
+        const missing = meta();
+        missing.releases[0]!.runtime!.files = missing.releases[0]!.runtime!.files.filter((f) => f.rid !== "osx-arm64");
+        expect(() => runtimeFiles(missing)).toThrow(/no osx-arm64 runtime archive/);
+        const foreign = meta();
+        foreign.releases[0]!.runtime!.files[0]!.url = "https://example.com/dotnet-runtime-8.0.33-linux-x64.tar.gz";
+        expect(() => runtimeFiles(foreign)).toThrow(/unexpected/);
+        expect(() => buildDotnetRecord("8.0", version, runtimeFiles(meta()).files, {})).toThrow(/download missing/);
+    });
+    it("refuses metadata for another channel and HTTP errors", async () => {
+        await expect(buildLatestDotnetRecord("8.0", fetchFrom(() => "", { ...meta(), "channel-version": "9.0" }))).rejects.toThrow(/metadata is for 9.0/);
+        await expect(buildLatestDotnetRecord("8.0", (async () => new Response("gone", { status: 404 })) as unknown as typeof fetch)).rejects.toThrow(/404/);
     });
 });
 

@@ -60,6 +60,9 @@ bun run update:helium
 # pinned Valve SteamCMD bootstraps (all three x64 platforms)
 bun run update:steamcmd
 
+# latest .NET runtime of each published channel (dotnet-8)
+bun run update:dotnet
+
 # latest stable standalone GE-Proton (Linux x64 and arm64)
 bun run update:proton
 
@@ -74,6 +77,8 @@ Every platform entry carries a `sha256` from the upstream authority (Adoptium's 
 A package Paperboard does not host carries a `recipe` instead of a `layout`: data the daemon runs on the user's computer after checking the download, never a script. `unpack` is one of `zip`, `tar`, `tar.xz` (needs the system's `xz`) or `dmg` (macOS only; mounted read-only, copied out with `ditto`), and `take` maps package paths to paths in the unpacked tree, for example `{ "unpack": "dmg", "take": { "bin/Helium.app": "Helium.app" } }`. The release signature covers the recipe, so daemons from before recipes refuse such an entry instead of installing it unpacked. See `apps/paperboard/papercrane/packageRecipe.ts`.
 
 SteamCMD uses Valve's CDN bootstraps, with SHA-256 pins reviewed in `scripts/update-steamcmd.ts` because Valve publishes no checksums. The updater downloads all three and refuses the entire record if any pin changes. Its version, `2020.04.02`, is the newest pinned bootstrap date, not the runtime version. Recipes preserve the archive-root files under `bin/`. Only Linux, macOS and Windows x64 are advertised; Valve supplies no Linux/Windows arm64 bootstrap, and the x86-only macOS build does not establish Rosetta availability on an arm64 host. Linux SteamCMD is 32-bit and requires the host's 32-bit libc (`lib32-glibc` or `libc6-i386`). SteamCMD self-updates into its own directory: the Game Server consumer must copy and run the bootstrap from a mutable workspace, never the installed package directory.
+
+`dotnet-<major>` is Microsoft's portable .NET runtime from `builds.dotnet.microsoft.com`, for game servers built on .NET (tModLoader pins 8.0 with roll-forward disabled). The updater reads the channel's `releases.json`, takes its latest runtime, downloads each archive and refuses the whole record if any SHA-512 differs from Microsoft's metadata; the recorded SHA-256 is computed from those verified bytes. Each recipe keeps `dotnet`, `host/` and `shared/` together under `bin/`, since the host finds `host/fxr` beside itself, plus the license files at the package root. Linux and macOS x64/arm64 and Windows x64 are published; Windows arm64 has no certified consumer. The archives contain no symlinks.
 
 `proton` tracks `GloriousEggroll/proton-ge-custom`, the standalone GE-Proton build usable without the Steam client (Valve's Proton ships through Steam). Its version is the stable `GE-ProtonX-Y` tag. Only Linux x64 and arm64 are supported; each recipe takes the release's top-level `GE-ProtonX-Y-<arch>` directory into `bin/`, preserving its relative links and executable modes. GitHub's SHA-256 asset digest is authoritative. The updater downloads and validates each matching `.sha512sum` file's checksum syntax and archive name, but cannot cross-check that SHA-512 against a SHA-256 without downloading the large archive. Installation checks the actual download against the recorded SHA-256. Missing assets, digests or checksum companions, drafts, prereleases and unexpected tags fail the entire record.
 
