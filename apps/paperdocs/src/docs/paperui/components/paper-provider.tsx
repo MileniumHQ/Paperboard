@@ -91,6 +91,11 @@ export function App() {
                 Child components consume theme context using the usePaper hook.
                 Calling setTheme switches the theme reactively across all descendant surfaces.
             </PaperText>
+            <PaperText preset="body">
+                Icons are ligatures in the icon font, so a fresh document stays transparent until that font has loaded and then appears whole, instead of showing blank icons whose rows jump when the glyphs arrive.
+                The content is still mounted and focusable while it waits, so autofocus on mount works.
+                A font that fails to load shows the content anyway and throws the failure.
+            </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
             <PaperText preset="body">

@@ -36,6 +36,19 @@ export function usePaper() {
     return useContext(PaperContext);
 }
 
+function iconFontFamily(): string {
+    const family = getComputedStyle(document.documentElement).getPropertyValue("--paper-icon-font-family").trim();
+    if (!family) throw new Error("--paper-icon-font-family is not set: import @mileniumhq/paperui/style.css");
+    return family;
+}
+
+// true when there is nothing to wait for: no document (server render), no
+// font loading API (jsdom), or the font already loaded in this document
+function iconFontReady(): boolean {
+    if (typeof document === "undefined" || !document.fonts) return true;
+    return document.fonts.check(`1em ${iconFontFamily()}`);
+}
+
 export function PaperProvider(props: ParentProps<PaperProviderProps>) {
     const [local, rest] = splitProps(props, [
         "theme",
@@ -132,6 +145,21 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
 
     const isUnselectable = () => Boolean(local.unselectable || local.noSelect);
 
+    // icons are ligatures in the icon font: painted before it loads, every
+    // icon is blank and its row jumps when the font lands. A fresh document
+    // (a panel opening, or reloading for another page) holds its first paint
+    // until the font is ready, so it appears whole.
+    const [iconsReady, setIconsReady] = createSignal(iconFontReady());
+    if (!iconsReady()) {
+        document.fonts.load(`1em ${iconFontFamily()}`).then(
+            () => setIconsReady(true),
+            (err) => {
+                setIconsReady(true);
+                throw new Error(`PaperUI's icon font failed to load: ${err instanceof Error ? err.message : String(err)}`);
+            },
+        );
+    }
+
     const className = () =>
         [
             "paperui-root",
@@ -140,6 +168,7 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
             local.fullHeight ? "fullHeight" : "",
             local.scrollable ? "scrollable" : "",
             isUnselectable() ? "unselectable" : "",
+            iconsReady() ? "" : "iconsPending",
             local.class,
         ]
             .filter(Boolean)

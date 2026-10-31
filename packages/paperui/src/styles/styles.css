@@ -112,6 +112,13 @@ body[data-unselectable="true"],
     user-select: text;
 }
 
+/* PaperProvider holds a fresh document's first paint until the icon font
+ * is ready, so icons never paint blank and shift their rows. Opacity, not
+ * visibility: content stays focusable, so autofocus on mount still lands. */
+.paperui-root.iconsPending {
+    opacity: 0;
+}
+
 .paperui-root.fullScreen {
     width: 100vw;
     height: 100vh;
