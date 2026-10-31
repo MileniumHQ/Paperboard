@@ -36,21 +36,25 @@ test("Actions projects over the real daemon: the old canvas becomes a project, f
         await actionsService.ready;
 
         // it became the project "My flows", and canvas.json stayed as it was
-        const listed = await actionsApi.call<any[]>(ACTIONS, "list-projects");
-        expect(listed.map((p) => [p.name, p.enabled, p.flowCount])).toEqual([["My flows", true, 1]]);
-        const mine = listed[0].id as string;
+        const listed = await actionsApi.listProjects(ACTIONS);
+        expect(listed.map((p) => p.name)).toEqual(["My flows"]);
+        const mine = listed[0].id;
         expect(await config.get(ACTIONS, "canvas.json")).toEqual(legacy);
         expect((await config.get<any>(ACTIONS, `projects/${mine}.json`)).flows).toEqual([commands[0]]);
         expect((await config.get<any>(ACTIONS, "projects.json")).projects.map((p: any) => p.name)).toEqual(["My flows"]);
 
-        // the project is an Actions API project; its program-facing actions
-        // are hidden from the Library, its window plumbing is internal
+        // the project is an Actions API project; the program-facing flow and
+        // project API is switched off, its window plumbing and project
+        // management are internal: the Actions panel's own UI only
         expect((await actionsApi.listProjects(ACTIONS)).map((p) => [p.id, p.name])).toEqual([[mine, "My flows"]]);
         const own = await actionsApi.list(ACTIONS);
-        const addFlow = own.find((a) => a.action === `${mine}/add-flow`)!;
-        expect(addFlow.project).toBe(mine);
-        expect(addFlow.schema?.hidden).toBe(true);
+        for (const off of [`${mine}/list-flows`, `${mine}/get-flow`, `${mine}/add-flow`, `${mine}/remove-flow`, `${mine}/run-flow`, "list-blocks", "list-projects"]) {
+            expect(own.find((a) => a.action === off)).toBeUndefined();
+        }
         expect(own.find((a) => a.action === `${mine}/save-canvas`)!.schema?.internal).toBe(true);
+        for (const ui of ["create-project", "update-project", "duplicate-project", "delete-project"]) {
+            expect(own.find((a) => a.action === ui)!.schema?.internal).toBe(true);
+        }
 
         const starts: string[] = [];
         offs.push(actionsApi.onTrigger(ACTIONS, "flow-start", (data: any) => starts.push(data.triggerBlockId)));
@@ -124,39 +128,19 @@ test("Actions projects over the real daemon: the old canvas becomes a project, f
         expect(announced).toEqual([{ revision: saved.revision, clientId: "window-one", project: mine }]);
         await emit("on-message", ["first", "second"]);
 
-        // a second project: a program builds a flow in it, placed clear of the others
+        // another panel can't manage Actions projects: the daemon refuses it
+        bot!.send(JSON.stringify({ id: ++request, action: "actions:call", params: { token: auth.issuePanelToken("dev.paperboard.botcreator"), panelId: ACTIONS, action: "create-project", args: [{ name: "Not mine" }] } }));
+        const [refused] = await once(bot!, "message");
+        expect(JSON.parse(String(refused)).error).toBeTruthy();
+        expect((await actionsApi.listProjects(ACTIONS)).map((p) => p.id)).toEqual([mine]);
+
+        // a second project, made and filled by the Actions panel's own UI
         const other = await actionsApi.call<any>(ACTIONS, "create-project", { name: "Discord bot" });
         expect(other.name).toBe("Discord bot");
-        const projectAdd = (flow: unknown) => actionsApi.call<any>(ACTIONS, `${other.id}/add-flow`, { flow });
-        const one = await projectAdd({
-            trigger: { panel: "dev.paperboard.botcreator", action: "on-message" },
-            steps: [{ panel: "builtin.logic", action: "log-console", values: { message: "got {{content}}" } }],
-        });
-        const two = await projectAdd({
-            trigger: { panel: "builtin.logic", action: "on-play" },
-            steps: [
-                { panel: "builtin.logic", action: "math-calculate", values: { expression: "2 + 3" }, ref: "sum" },
-                { panel: "builtin.logic", action: "log-console", values: { message: "sum is {{sum}}" } },
-            ],
-        });
-        expect(one.position).not.toEqual(two.position);
-        // the built-in blocks a program names in a flow, with their inputs
-        const blocks = await actionsApi.call<any[]>(ACTIONS, "list-blocks");
-        const block = (action: string) => blocks.find((b) => b.panel === "builtin.logic" && b.action === action);
-        expect(block("on-play")).toMatchObject({ event: true });
-        expect(block("if")).toMatchObject({ holds: "steps", inputs: { left: { type: "string", required: true }, operator: { options: expect.arrayContaining(["==", "includes"]) } } });
-        expect(block("if-else")?.holds).toBe("steps and else");
-        expect(block("math-calculate")?.inputs.expression).toBeDefined();
-        expect((await actionsApi.list(ACTIONS)).find((a) => a.action === "list-blocks")?.schema?.hidden).toBe(true);
-        const run = await actionsApi.call<any>(ACTIONS, `${other.id}/run-flow`, { flowId: two.flowId });
-        expect(run.status).toBe("passed");
-        const view = await actionsApi.call<any>(ACTIONS, `${other.id}/get-flow`, { flowId: two.flowId });
-        expect(view.steps[1].values.message).toBe(`sum is {{${view.steps[0].id}:${view.steps[0].result}}}`);
-        await expect(projectAdd({ trigger: { panel: "builtin.logic", action: "on-play" }, steps: [{ panel: "dev.nowhere", action: "x" }] }))
-            .rejects.toThrow('dev.nowhere has no action "x"');
+        await save(other.id, { flows: [{ ...flows[0], id: "third" }], notes: [], functions: [] });
 
         // both projects answer the same event
-        await emit("on-message", ["first", "second", one.flowId]);
+        await emit("on-message", ["first", "second", "third"]);
         // switched off, a project's flows stop starting on events
         await actionsApi.call(ACTIONS, "update-project", { project: other.id, enabled: false });
         await emit("on-message", ["first", "second"]);
@@ -164,7 +148,7 @@ test("Actions projects over the real daemon: the old canvas becomes a project, f
         // deleted, the project and every action in it are gone
         await actionsApi.call(ACTIONS, "delete-project", { project: other.id });
         expect((await actionsApi.listProjects(ACTIONS)).map((p) => p.id)).toEqual([mine]);
-        await expect(actionsApi.call(ACTIONS, `${other.id}/list-flows`)).rejects.toThrow("not registered");
+        await expect(actionsApi.call(ACTIONS, `${other.id}/get-canvas`)).rejects.toThrow("not registered");
         expect((await config.get<any>(ACTIONS, "projects.json")).projects.map((p: any) => p.id)).toEqual([mine]);
 
         // a new project is a draft: nothing of it is written until it has a flow
@@ -180,7 +164,6 @@ test("Actions projects over the real daemon: the old canvas becomes a project, f
         await save(scratch.id, { flows: [{ ...flows[0], id: "scratch" }], notes: [{ id: "idea", pos: { x: 0, y: 0 }, text: "an idea" }], functions: [] });
         expect(await kept()).toEqual([[mine, "My flows"], [scratch.id, "Scratch pad"]]);
         expect((await canvasOf(scratch.id)).flows.map((f: any) => f.id)).toEqual(["scratch"]);
-        expect((await actionsApi.call<any[]>(ACTIONS, "list-projects")).find((p) => p.id === scratch.id).draft).toBe(false);
         // leaving a project discards it only while it is a draft
         await actionsApi.call(ACTIONS, "delete-project", { project: scratch.id, onlyDraft: true });
         expect((await actionsApi.listProjects(ACTIONS)).map((p) => p.id)).toEqual([mine, scratch.id]);

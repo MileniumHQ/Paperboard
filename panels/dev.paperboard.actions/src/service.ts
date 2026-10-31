@@ -869,137 +869,142 @@ function projectActions(project: Project): ActionDefinition[] {
                 return runTestFlow(serviceCtx, project, inputs);
             },
         }),
-        defineAction({
-            id: "list-flows",
-            name: "List Flows",
-            hidden: true,
-            description: "Every flow in this project: its id, what it's called, its trigger, how many steps it has, and whether it starts by hand",
-            template: "List flows",
-            inputs: {},
-            output: { type: "list<object>", label: "Flows" },
-            icon: "list",
-            run: async () => {
-                await ready();
-                requireLoaded(project);
-                return flowSummaries(project);
-            },
-        }),
-        defineAction({
-            id: "get-flow",
-            name: "Get Flow",
-            hidden: true,
-            description: "One flow of this project, step by step: each step's panel, action, input values and id",
-            template: "Get flow {flowId}",
-            inputs: { flowId: { type: "string", label: "Flow id", required: true } },
-            output: { type: "object", label: "Flow" },
-            icon: "account_tree",
-            run: async (_ctx: unknown, inputs: { flowId?: string }) => {
-                await ready();
-                return viewFlow(requireFlow(project, inputs?.flowId));
-            },
-        }),
-        defineAction({
-            id: "add-flow",
-            name: "Add Flow",
-            hidden: true,
-            description:
-                "Adds a flow to this project's canvas, placed clear of every other flow. " +
-                "`flow` is { trigger: { panel, action, values? }, steps: [{ panel, action, values?, ref?, name?, steps?, else? }] }. " +
-                "The trigger is an event action (\"builtin.logic\" \"on-play\" starts by hand). Containers (\"builtin.logic\" repeat, if, if-else) take steps, and if-else takes else; list-blocks lists every built-in block. " +
-                "A value reads an earlier step's result as {{ref}} and a trigger's field as {{field}}. A step can be any registered action that isn't an event.",
-            template: "Add flow {flow}",
-            inputs: { flow: { type: "object", label: "Flow", required: true } },
-            output: { type: "object", label: "Added flow" },
-            icon: "add_box",
-            run: async (_ctx: unknown, inputs: { flow?: unknown }) => {
-                await ready();
-                requireLoaded(project);
-                const lookup = await schemaLookup();
-                let added: CanvasBlock | undefined;
-                await editCanvas(project, (canvas) => {
-                    const draft = buildFlow(inputs?.flow, lookup, () => `block_${crypto.randomUUID()}`, { x: 0, y: 0 });
-                    const rect = flowRect(draft);
-                    added = { ...draft, pos: placeFlow(canvasRects(canvas.flows, canvas.notes), rect) };
-                    return { ...canvas, flows: [...canvas.flows, added] };
-                });
-                return { flowId: added!.id, label: flowLabels(project.flows).get(added!.id), position: added!.pos };
-            },
-        }),
-        defineAction({
-            id: "remove-flow",
-            name: "Remove Flow",
-            hidden: true,
-            description: "Removes one flow, with all its steps, from this project's canvas",
-            template: "Remove flow {flowId}",
-            inputs: { flowId: { type: "string", label: "Flow id", required: true } },
-            output: { type: "object", label: "Removed" },
-            icon: "delete",
-            run: async (_ctx: unknown, inputs: { flowId?: string }) => {
-                await ready();
-                const flow = requireFlow(project, inputs?.flowId);
-                await editCanvas(project, (canvas) => ({ ...canvas, flows: canvas.flows.filter((b) => b.id !== flow.id) }));
-                return { removed: flow.id };
-            },
-        }),
-        defineAction({
-            id: "run-flow",
-            name: "Run Flow",
-            hidden: true,
-            description: "Runs one flow of this project that starts by hand (On Play) and returns how it went",
-            template: "Run flow {flowId}",
-            inputs: { flowId: { type: "string", label: "Flow id", required: true } },
-            output: { type: "object", label: "Run result" },
-            icon: "play_arrow",
-            run: async (_ctx: unknown, inputs: { flowId?: string }) => {
-                await ready();
-                const flow = requireFlow(project, inputs?.flowId);
-                if (!isManualFlow(flow)) throw new Error("Only a flow that starts by hand (On Play) can be run; the others start on their events");
-                if (!serviceCtx) throw new Error("The Actions service is not initialized");
-                const log = await executeFlowGated(serviceCtx, project, flow, {});
-                return { status: log.status === "success" ? "passed" : "failed", message: log.message, steps: log.steps };
-            },
-        }),
+        // The program-facing flow API (list, get, add, remove and run flows) is switched off by the owner: other
+        // panels and the agent no longer edit or run flows. Kept here to bring back.
+        // defineAction({
+            // id: "list-flows",
+            // name: "List Flows",
+            // hidden: true,
+            // description: "Every flow in this project: its id, what it's called, its trigger, how many steps it has, and whether it starts by hand",
+            // template: "List flows",
+            // inputs: {},
+            // output: { type: "list<object>", label: "Flows" },
+            // icon: "list",
+            // run: async () => {
+                // await ready();
+                // requireLoaded(project);
+                // return flowSummaries(project);
+            // },
+        // }),
+        // defineAction({
+            // id: "get-flow",
+            // name: "Get Flow",
+            // hidden: true,
+            // description: "One flow of this project, step by step: each step's panel, action, input values and id",
+            // template: "Get flow {flowId}",
+            // inputs: { flowId: { type: "string", label: "Flow id", required: true } },
+            // output: { type: "object", label: "Flow" },
+            // icon: "account_tree",
+            // run: async (_ctx: unknown, inputs: { flowId?: string }) => {
+                // await ready();
+                // return viewFlow(requireFlow(project, inputs?.flowId));
+            // },
+        // }),
+        // defineAction({
+            // id: "add-flow",
+            // name: "Add Flow",
+            // hidden: true,
+            // description:
+                // "Adds a flow to this project's canvas, placed clear of every other flow. " +
+                // "`flow` is { trigger: { panel, action, values? }, steps: [{ panel, action, values?, ref?, name?, steps?, else? }] }. " +
+                // "The trigger is an event action (\"builtin.logic\" \"on-play\" starts by hand). Containers (\"builtin.logic\" repeat, if, if-else) take steps, and if-else takes else; list-blocks lists every built-in block. " +
+                // "A value reads an earlier step's result as {{ref}} and a trigger's field as {{field}}. A step can be any registered action that isn't an event.",
+            // template: "Add flow {flow}",
+            // inputs: { flow: { type: "object", label: "Flow", required: true } },
+            // output: { type: "object", label: "Added flow" },
+            // icon: "add_box",
+            // run: async (_ctx: unknown, inputs: { flow?: unknown }) => {
+                // await ready();
+                // requireLoaded(project);
+                // const lookup = await schemaLookup();
+                // let added: CanvasBlock | undefined;
+                // await editCanvas(project, (canvas) => {
+                    // const draft = buildFlow(inputs?.flow, lookup, () => `block_${crypto.randomUUID()}`, { x: 0, y: 0 });
+                    // const rect = flowRect(draft);
+                    // added = { ...draft, pos: placeFlow(canvasRects(canvas.flows, canvas.notes), rect) };
+                    // return { ...canvas, flows: [...canvas.flows, added] };
+                // });
+                // return { flowId: added!.id, label: flowLabels(project.flows).get(added!.id), position: added!.pos };
+            // },
+        // }),
+        // defineAction({
+            // id: "remove-flow",
+            // name: "Remove Flow",
+            // hidden: true,
+            // description: "Removes one flow, with all its steps, from this project's canvas",
+            // template: "Remove flow {flowId}",
+            // inputs: { flowId: { type: "string", label: "Flow id", required: true } },
+            // output: { type: "object", label: "Removed" },
+            // icon: "delete",
+            // run: async (_ctx: unknown, inputs: { flowId?: string }) => {
+                // await ready();
+                // const flow = requireFlow(project, inputs?.flowId);
+                // await editCanvas(project, (canvas) => ({ ...canvas, flows: canvas.flows.filter((b) => b.id !== flow.id) }));
+                // return { removed: flow.id };
+            // },
+        // }),
+        // defineAction({
+            // id: "run-flow",
+            // name: "Run Flow",
+            // hidden: true,
+            // description: "Runs one flow of this project that starts by hand (On Play) and returns how it went",
+            // template: "Run flow {flowId}",
+            // inputs: { flowId: { type: "string", label: "Flow id", required: true } },
+            // output: { type: "object", label: "Run result" },
+            // icon: "play_arrow",
+            // run: async (_ctx: unknown, inputs: { flowId?: string }) => {
+                // await ready();
+                // const flow = requireFlow(project, inputs?.flowId);
+                // if (!isManualFlow(flow)) throw new Error("Only a flow that starts by hand (On Play) can be run; the others start on their events");
+                // if (!serviceCtx) throw new Error("The Actions service is not initialized");
+                // const log = await executeFlowGated(serviceCtx, project, flow, {});
+                // return { status: log.status === "success" ? "passed" : "failed", message: log.message, steps: log.steps };
+            // },
+        // }),
     ];
 }
 
 export const actions = [
-    defineAction({
-        id: "list-blocks",
-        name: "List Built-in Blocks",
-        hidden: true,
-        description:
-            "The blocks every flow can use besides panels' actions: On Play, Wait, Repeat, If, If/Else, variables, text, math, dates, web requests and more, " +
-            "each with its panel, action and inputs, to name in add-flow. Blocks that hold steps say so",
-        template: "List built-in blocks",
-        inputs: {},
-        output: { type: "list<object>", label: "Blocks" },
-        icon: "widgets",
-        run: () => builtinBlocks(),
-    }),
+    // The program-facing project API (list built-in blocks, list projects) is switched off by the owner, like
+    // each project's flow API above. Kept here to bring back.
+    // defineAction({
+        // id: "list-blocks",
+        // name: "List Built-in Blocks",
+        // hidden: true,
+        // description:
+            // "The blocks every flow can use besides panels' actions: On Play, Wait, Repeat, If, If/Else, variables, text, math, dates, web requests and more, " +
+            // "each with its panel, action and inputs, to name in add-flow. Blocks that hold steps say so",
+        // template: "List built-in blocks",
+        // inputs: {},
+        // output: { type: "list<object>", label: "Blocks" },
+        // icon: "widgets",
+        // run: () => builtinBlocks(),
+    // }),
 
-    defineAction({
-        id: "list-projects",
-        name: "List Projects",
-        hidden: true,
-        description: "Every Actions project: its id, name, whether its flows run, and how many flows it has",
-        template: "List projects",
-        inputs: {},
-        output: { type: "list<object>", label: "Projects" },
-        icon: "folder",
-        run: async () => {
-            await actionsService.ready;
-            requireProjects();
-            return [...projects.values()].map((p) => {
-                const { preview: _preview, ...rest } = summary(p);
-                return rest;
-            });
-        },
-    }),
+    // defineAction({
+        // id: "list-projects",
+        // name: "List Projects",
+        // hidden: true,
+        // description: "Every Actions project: its id, name, whether its flows run, and how many flows it has",
+        // template: "List projects",
+        // inputs: {},
+        // output: { type: "list<object>", label: "Projects" },
+        // icon: "folder",
+        // run: async () => {
+            // await actionsService.ready;
+            // requireProjects();
+            // return [...projects.values()].map((p) => {
+                // const { preview: _preview, ...rest } = summary(p);
+                // return rest;
+            // });
+        // },
+    // }),
 
     defineAction({
         id: "create-project",
         name: "Create Project",
-        hidden: true,
+        // the Actions panel's own UI; other panels can't call it
+        internal: true,
         description: "Creates an empty Actions project and returns its id. It is kept once it has a flow; one left empty is gone when Actions restarts",
         template: "Create project {name}",
         inputs: { name: { type: "string", label: "Name", maxLength: 128 } },
@@ -1014,7 +1019,8 @@ export const actions = [
     defineAction({
         id: "update-project",
         name: "Update Project",
-        hidden: true,
+        // the Actions panel's own UI; other panels can't call it
+        internal: true,
         description: "Renames a project, or turns its flows on or off (off: they no longer start on their events)",
         template: "Update project {project}",
         inputs: {
@@ -1033,7 +1039,8 @@ export const actions = [
     defineAction({
         id: "duplicate-project",
         name: "Duplicate Project",
-        hidden: true,
+        // the Actions panel's own UI; other panels can't call it
+        internal: true,
         description: "Makes a copy of a project, named \"Copy of ...\", and returns it",
         template: "Duplicate project {project}",
         inputs: { project: { type: "string", label: "Project id", required: true } },
@@ -1048,7 +1055,8 @@ export const actions = [
     defineAction({
         id: "delete-project",
         name: "Delete Project",
-        hidden: true,
+        // the Actions panel's own UI; other panels can't call it
+        internal: true,
         description: "Deletes a project and every flow in it. This can't be undone. With onlyDraft, only a project not kept yet (no flows saved) is deleted",
         template: "Delete project {project}",
         inputs: {
