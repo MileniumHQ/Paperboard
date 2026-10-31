@@ -1,6 +1,7 @@
 import { STEAMCMD_BUILDS, buildSteamcmdRecord, buildLatestSteamcmdRecord } from "../scripts/update-steamcmd";
 import { RIDS, runtimeFiles, buildDotnetRecord, buildLatestDotnetRecord, type DotnetReleases } from "../scripts/update-dotnet";
 import { buildProtonRecord, buildLatestProtonRecord } from "../scripts/update-proton";
+import { buildOpencodeRecord, buildLatestOpencodeRecord, newestV2Release } from "../scripts/update-opencode";
 import { describe, it, expect } from "bun:test";
 import {
     buildJavaRecord,
@@ -16,11 +17,14 @@ import {
 } from "../scripts/update-ollama";
 import { buildHeliumRecord, buildLatestHeliumRecord, REPOS, type HeliumRepo } from "../scripts/update-helium";
 import { recipeDigest } from "../../paperboard/papercrane/packageRecipe";
-import { assertValidRecord } from "../scripts/lib/records";
+import { assertValidRecord, PLATFORM_KEYS, type PlatformKey } from "../scripts/lib/records";
 import { writeRecords } from "../scripts/lib/cli";
 import { putRecord, wranglerPutArgs } from "../scripts/lib/kv";
 import type { PackageRecord } from "../scripts/lib/records";
 import * as crypto from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { releaseMessage, verifyRelease } from "../../paperboard/papercrane/releaseSignature";
 
 // a throwaway release key: writes are signed with it and checked against it
@@ -422,5 +426,107 @@ describe("update-proton", () => {
         }) as unknown as typeof fetch;
         expect((await buildLatestProtonRecord(fetchFn)).name).toBe("proton");
         expect(calls).toHaveLength(3);
+    });
+});
+
+function opencodeRelease(tag = "v2.2.5", overrides: Partial<GithubRelease> = {}, digestFor = (i: number) => `sha256:${sha(String(i))}`): GithubRelease {
+    const files = [
+        "opencode-linux-x64-baseline.tar.gz",
+        "opencode-linux-arm64.tar.gz",
+        "opencode-darwin-x64-baseline.zip",
+        "opencode-darwin-arm64.zip",
+        "opencode-windows-x64-baseline.zip",
+        "opencode-windows-arm64.zip",
+        // builds that must never be picked
+        "opencode-linux-x64.tar.gz",
+        "opencode-linux-x64-musl.tar.gz",
+        "opencode-linux-arm64-musl.tar.gz",
+        "opencode-desktop-linux-amd64.deb",
+    ];
+    return {
+        tag_name: tag,
+        assets: [
+            ...files.map((name, i) => ({
+                name,
+                size: 100 + i,
+                digest: i < 6 ? digestFor(i) : `sha256:${sha("f")}`,
+                browser_download_url: `https://github.com/anomalyco/opencode/releases/download/${tag}/${name}`,
+            })),
+            { name: "SHA256SUMS", browser_download_url: `https://github.com/anomalyco/opencode/releases/download/${tag}/SHA256SUMS` },
+        ],
+        ...overrides,
+    };
+}
+const opencodeSums = [
+    "opencode-linux-x64-baseline.tar.gz",
+    "opencode-linux-arm64.tar.gz",
+    "opencode-darwin-x64-baseline.zip",
+    "opencode-darwin-arm64.zip",
+    "opencode-windows-x64-baseline.zip",
+    "opencode-windows-arm64.zip",
+]
+    .map((name, i) => `${sha(String(i))}  ${name}`)
+    .join("\n");
+
+describe("update-opencode", () => {
+    it("takes the baseline x64 and glibc builds, each archive root being bin/", () => {
+        const record = buildOpencodeRecord(opencodeRelease(), opencodeSums);
+        assertValidRecord(record);
+        expect(record).toMatchObject({ name: "opencode", version: "2.2.5" });
+        expect(Object.keys(record.platforms)).toEqual([...PLATFORM_KEYS]);
+        expect(record.platforms["linux-x64"]).toMatchObject({ layout: "bin", sha256: sha("0"), url: expect.stringContaining("opencode-linux-x64-baseline.tar.gz") });
+        expect(record.platforms["macos-x64"]?.url).toContain("opencode-darwin-x64-baseline.zip");
+        expect(record.platforms["windows-x64"]?.url).toContain("opencode-windows-x64-baseline.zip");
+        expect(record.platforms["windows-arm64"]).toMatchObject({ layout: "bin", sha256: sha("5") });
+        expect(JSON.stringify(record)).not.toContain("musl");
+        expect(JSON.stringify(record)).not.toContain("desktop");
+    });
+
+    it("refuses when GitHub's digest and SHA256SUMS disagree, or the file is not listed", () => {
+        expect(() => buildOpencodeRecord(opencodeRelease(), opencodeSums.replace(sha("3"), sha("9")))).toThrow(/darwin-arm64.zip digest disagrees/);
+        expect(() => buildOpencodeRecord(opencodeRelease(), opencodeSums.split("\n").slice(1).join("\n"))).toThrow(/linux-x64-baseline.tar.gz is not in SHA256SUMS/);
+    });
+
+    it("refuses an asset without a digest or a missing asset instead of publishing a partial record", () => {
+        const noDigest = opencodeRelease("v2.2.5", {}, (i) => (i === 4 ? null : `sha256:${sha(String(i))}`) as string);
+        expect(() => buildOpencodeRecord(noDigest, opencodeSums)).toThrow(/windows-x64-baseline.zip has no sha256/);
+        const missing = opencodeRelease();
+        missing.assets = missing.assets.filter((a) => a.name !== "opencode-linux-arm64.tar.gz");
+        expect(() => buildOpencodeRecord(missing, opencodeSums)).toThrow(/opencode-linux-arm64.tar.gz missing/);
+    });
+
+    it("refuses prereleases, drafts, and tags outside the 2.x line", () => {
+        expect(() => buildOpencodeRecord(opencodeRelease("v2.2.5", { prerelease: true }), opencodeSums)).toThrow(/not a stable/);
+        expect(() => buildOpencodeRecord(opencodeRelease("v2.2.5", { draft: true }), opencodeSums)).toThrow(/not a stable/);
+        for (const tag of ["v1.19.5", "v2.3.0-beta.1", "process-daemon-v0.4.0", "v3.0.0"]) {
+            expect(() => buildOpencodeRecord(opencodeRelease(tag), opencodeSums)).toThrow(/unexpected release tag/);
+        }
+    });
+
+    it("picks the newest stable v2.x release, whatever GitHub's latest or the list order says", () => {
+        const pick = newestV2Release([
+            opencodeRelease("process-daemon-v0.4.0"),
+            opencodeRelease("v2.10.0", { prerelease: true }),
+            opencodeRelease("v2.9.0", { draft: true }),
+            opencodeRelease("v2.3.9"),
+            opencodeRelease("v2.10.1"),
+            opencodeRelease("v1.19.5"),
+            opencodeRelease("v2.4.0"),
+        ]);
+        expect(pick.tag_name).toBe("v2.10.1");
+        expect(() => newestV2Release([opencodeRelease("v1.19.5")])).toThrow(/no stable v2.x release/);
+    });
+
+    it("lists releases, picks the 2.x one and fetches its checksum file", async () => {
+        const calls: string[] = [];
+        const fetchFn = (async (url: string) => {
+            calls.push(String(url));
+            return String(url).endsWith("SHA256SUMS") ? new Response(opencodeSums) : Response.json([opencodeRelease("v1.19.5"), opencodeRelease("v2.2.5")]);
+        }) as unknown as typeof fetch;
+        expect((await buildLatestOpencodeRecord(fetchFn)).version).toBe("2.2.5");
+        expect(calls[0]).toContain("/releases?per_page=30");
+        expect(calls[1]).toContain("/v2.2.5/SHA256SUMS");
+        const noSums = (async () => Response.json([{ ...opencodeRelease("v2.2.5"), assets: [] }])) as unknown as typeof fetch;
+        await expect(buildLatestOpencodeRecord(noSums)).rejects.toThrow(/SHA256SUMS missing/);
     });
 });
