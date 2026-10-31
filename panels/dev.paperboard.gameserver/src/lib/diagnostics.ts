@@ -9,10 +9,9 @@ export { coreCheckLogForIssues as checkLogForIssues };
 
 export const [activeIssue, setActiveIssue] = createSignal<ServerIssue | null>(null);
 
-export function clearActiveIssue() {
-    serverBridge.call(ACTION_IDS.clearActiveIssue).catch((err) =>
-        console.debug("[diagnostics] clearActiveIssue failed:", String(err)),
-    );
+/** Rejects when the service kept the issue; the modal showing it says why. */
+export function clearActiveIssue(): Promise<unknown> {
+    return serverBridge.call(ACTION_IDS.clearActiveIssue);
 }
 
 export async function killConflictingProcess(port: string = serverPort()): Promise<boolean> {

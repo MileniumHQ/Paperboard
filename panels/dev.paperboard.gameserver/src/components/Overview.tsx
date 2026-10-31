@@ -32,6 +32,7 @@ export default function Overview(props: {
 }) {
     const [motdOpen, setMotdOpen] = createSignal(false);
     const [restriction, setRestriction] = createSignal<JoinRestriction>(null);
+    const [whitelistError, setWhitelistError] = createSignal("");
 
     // the whitelist can lock everyone but operators out, and 26.3 turns it
     // on for new servers; say so where people look when friends can't join
@@ -44,10 +45,11 @@ export default function Overview(props: {
             ]);
             const on = (properties ? parseProperties(properties)["white-list"] : undefined) ?? whitelistDefault();
             setRestriction(joinRestriction(on === "true", countJsonEntries(whitelist), countJsonEntries(ops)));
+            setWhitelistError("");
         } catch (err) {
-            // unreadable files make no claim either way
-            console.debug("[overview] whitelist check failed:", String(err));
+            // unreadable files make no claim either way, and say so
             setRestriction(null);
+            setWhitelistError(errorMessage(err));
         }
     };
     createEffect(
@@ -154,6 +156,12 @@ export default function Overview(props: {
                         {error().message}
                     </PaperQuote>
                 )}
+            </Show>
+
+            <Show when={whitelistError()}>
+                <PaperQuote variant="danger" icon="warning" title="Whitelist not checked" onDismiss={() => setWhitelistError("")}>
+                    {whitelistError()}
+                </PaperQuote>
             </Show>
 
             <Show when={restriction()}>

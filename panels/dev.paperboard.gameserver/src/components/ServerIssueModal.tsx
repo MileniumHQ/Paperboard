@@ -13,7 +13,7 @@ import { activeIssue, clearActiveIssue, killConflictingProcess, resetWorldFiles,
 import { serverPort, startServer } from "../lib/server";
 
 const ServerIssueModal: Component = () => {
-    const [actionError, setActionError] = createSignal("");
+    const [actionError, setActionError] = createSignal<{ title: string; message: string } | null>(null);
     // the last issue stays on the modal while it closes, so it animates out instead of vanishing
     const shownIssue = createMemo<ServerIssue | null>((prev) => activeIssue() ?? prev, null);
 
@@ -36,7 +36,7 @@ const ServerIssueModal: Component = () => {
     };
 
     const handleActionClick = async (action: any) => {
-        setActionError("");
+        setActionError(null);
         try {
             if (typeof action.action === "function") {
                 await action.action();
@@ -48,46 +48,54 @@ const ServerIssueModal: Component = () => {
                 // rendered so the user can decide between retry and manual
                 // recovery. The issue stays visibly open either way.
                 if (!ok) {
-                    setActionError(
-                        "Killing the process on that port did not complete. Nothing was shut down. You can retry, or fix the port conflict manually.",
-                    );
+                    setActionError({
+                        title: "Repair failed",
+                        message: "Killing the process on that port did not complete. Nothing was shut down. You can retry, or fix the port conflict manually.",
+                    });
                     return;
                 }
-                clearActiveIssue();
+                await clearActiveIssue();
                 setTimeout(() => startServer(), 600);
             } else if (action.actionKey === "acceptEula") {
                 await fileApi.write("eula.txt", "eula=true\n", PANEL_ID);
-                clearActiveIssue();
+                await clearActiveIssue();
                 setTimeout(() => startServer(), 400);
             } else if (action.actionKey === "resetWorldAndStart") {
                 const ok = await resetWorldFiles();
                 if (!ok) {
-                    setActionError(
-                        "Resetting stopped partway: the world files are exactly where they started, or staged in a '.trash-*' folder in your server directory and recoverable there. You can retry.",
-                    );
+                    setActionError({
+                        title: "Repair failed",
+                        message: "Resetting stopped partway: the world files are exactly where they started, or staged in a '.trash-*' folder in your server directory and recoverable there. You can retry.",
+                    });
                     return;
                 }
-                clearActiveIssue();
+                await clearActiveIssue();
                 setTimeout(() => startServer(), 500);
             } else {
-                clearActiveIssue();
+                await clearActiveIssue();
             }
         } catch (err) {
             // a repair action that throws must not become an unhandled
             // rejection — the issue stays open and the reason is shown
-            setActionError(humanizeRepairError(err));
+            setActionError({ title: "Repair failed", message: humanizeRepairError(err) });
         }
+    };
+
+    // a dismissal the service refused leaves the issue open, saying why
+    const dismiss = () => {
+        setActionError(null);
+        clearActiveIssue().catch((err) => setActionError({ title: "Issue not dismissed", message: err instanceof Error ? err.message : String(err) }));
     };
 
     return (
         <PaperModal
             open={activeIssue() !== null}
-            onClose={clearActiveIssue}
+            onClose={dismiss}
             title={shownIssue()?.title}
             size="small"
             footer={
                 <>
-                    <PaperButton onClick={clearActiveIssue}>
+                    <PaperButton onClick={dismiss}>
                         Dismiss
                     </PaperButton>
                     <For each={shownIssue()?.actions}>
@@ -109,8 +117,8 @@ const ServerIssueModal: Component = () => {
                 <PaperText preset="body">{shownIssue()?.description}</PaperText>
                 <Show when={actionError()}>
                     {(error) => (
-                        <PaperQuote variant="danger" icon="warning" title="Repair failed">
-                            {error()}
+                        <PaperQuote variant="danger" icon="warning" title={error().title}>
+                            {error().message}
                         </PaperQuote>
                     )}
                 </Show>

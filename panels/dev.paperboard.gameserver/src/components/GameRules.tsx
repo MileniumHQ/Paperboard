@@ -15,6 +15,7 @@ import { gamerulesFor } from "../core/gamerules";
 import { ACTION_IDS } from "../service/contract";
 import { humanizeIdentifier } from "../core/format";
 import { PaperPageHeader } from "@mileniumhq/paperui";
+import { errorMessage } from "../lib/failure";
 
 const WIKI_URL = "https://minecraft.wiki/w/Game_rule";
 
@@ -48,6 +49,8 @@ function RuleControl(props: {
 
 export default function GameRules() {
     const [search, setSearch] = createSignal("");
+    const [syncError, setSyncError] = createSignal("");
+    const [ruleError, setRuleError] = createSignal<{ title: string; message: string } | null>(null);
 
     const isOnline = () => serverStatus() === "online";
 
@@ -61,16 +64,18 @@ export default function GameRules() {
             .call(ACTION_IDS.queryGamerules, {
                 names: availableGamerules().map((rule) => rule.name),
             })
-            .catch((err) => console.error("[gamerules] server sync failed:", String(err)));
+            .then(() => setSyncError(""))
+            .catch((err) => setSyncError(errorMessage(err)));
     });
 
     // the service owns the console and the config: online edits go live,
     // offline edits persist and re-apply at next start — nothing is
     // silently discarded
     const updateRule = (name: string, value: string) => {
+        setRuleError(null);
         serverBridge
             .call(ACTION_IDS.setGamerule, { name, value })
-            .catch((err) => console.error(`[gamerules] set ${name} failed:`, String(err)));
+            .catch((err) => setRuleError({ title: `${humanizeIdentifier(name)} not changed`, message: errorMessage(err) }));
     };
 
     const visibleGamerules = () => {
@@ -87,6 +92,18 @@ export default function GameRules() {
     return (
         <>
                     <PaperPageHeader icon="list_alt_check" title="Game Rules" />
+                    <Show when={syncError()}>
+                        <PaperQuote variant="danger" icon="warning" title="Game rules not read from the server" onDismiss={() => setSyncError("")}>
+                            {syncError()}
+                        </PaperQuote>
+                    </Show>
+                    <Show when={ruleError()}>
+                        {(error) => (
+                            <PaperQuote variant="danger" icon="warning" title={error().title} onDismiss={() => setRuleError(null)}>
+                                {error().message}
+                            </PaperQuote>
+                        )}
+                    </Show>
                     <PaperCard>
                         <PaperFlex padding="full">
                             <PaperInput

@@ -65,7 +65,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                 setSelectedVersion(saved.version);
             }
         } catch (err) {
-            console.debug("[Versions] saved config unreadable:", String(err));
+            setError({ title: "Couldn't read the installed version", message: errorMessage(err) });
         }
     });
 
@@ -91,9 +91,10 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
         try {
             // count the OLD software's jars before the switch changes which
             // folder is active — that is what the uninstall prompt is about
+            // nothing has changed yet when this fails, so the switch stops here
             const previousCount = await listInstalledPlugins()
                 .then((r) => r.plugins.length)
-                .catch(() => 0);
+                .catch((err) => { throw new Error(`The installed add-ons could not be counted before switching: ${errorMessage(err)}`); });
 
             const outcome = await install.run(software(), selectedVersion());
 

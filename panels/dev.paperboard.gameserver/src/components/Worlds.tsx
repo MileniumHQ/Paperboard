@@ -27,7 +27,7 @@ import {
 } from "@mileniumhq/paperui";
 import { fileApi } from "../lib/api";
 import { FieldControl } from "./PropertyFieldControl";
-import { readServerProperties, writeServerProperties } from "../lib/properties";
+import { readServerPropertiesStrict, writeServerProperties } from "../lib/properties";
 import {
     deleteActiveWorldDirs,
     discardWorldTransfer,
@@ -97,7 +97,14 @@ export default function Worlds() {
 
     onMount(async () => {
         await refresh();
-        const props = await readServerProperties();
+        let props: Record<string, string>;
+        try {
+            props = await readServerPropertiesStrict();
+        } catch (err) {
+            // New World is never filled with defaults over unreadable settings
+            setActionError({ title: "Couldn't read server.properties", message: errorMessage(err) });
+            return;
+        }
         const next: Record<string, string> = {};
         for (const field of WORLD_CREATE_FIELDS) {
             const raw = props[field.key] ?? field.defaultValue;
