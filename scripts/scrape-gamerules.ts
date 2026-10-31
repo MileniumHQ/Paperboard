@@ -8,6 +8,7 @@
 
 import { writeFileSync } from "fs";
 import { join } from "path";
+import { GAMERULE_LEGACY_ALIASES } from "../panels/dev.paperboard.gameserver/src/lib/versionProfile";
 
 const API_URL = "https://minecraft.wiki/api.php";
 const USER_AGENT = "PaperboardDevUtils/1.0 (gamerules generator)";
@@ -63,6 +64,18 @@ function stripMarkup(text: string): string {
 
 // ─── Game rule list parsing ─────────────────────────────────────────────────
 
+// Rules the wiki describes together in one spanning cell
+const SHARED_DESCRIPTIONS: Record<string, string> = {
+    spawn_mobs:
+        "Whether mobs should spawn naturally, or via global spawning logic, such as for cats, phantoms, patrols, wandering traders, zombie sieges, or creaking hearts. Does not affect player-specific and other special spawning attempts, like commands, monster spawners, raids, spawn eggs, or iron golems.",
+    spawn_monsters: "Whether monsters can spawn naturally.",
+    spawn_patrols: "Whether patrols can spawn.",
+    spawn_phantoms: "Whether phantoms can spawn in the nighttime.",
+    spawn_wandering_traders: "Whether wandering traders can spawn.",
+    spawn_wardens: "Whether wardens can spawn.",
+    spawner_blocks_work: "Enable or disable monster spawner blocks.",
+};
+
 function parseRuleList(wikitext: string): GameruleEntry[] {
     const listStart = wikitext.indexOf("== List of game rules ==");
     const historyStart = wikitext.indexOf("== History ==");
@@ -104,6 +117,29 @@ function parseRuleList(wikitext: string): GameruleEntry[] {
 
     const stripStylePrefix = (cell: string) => cell.replace(/^style\s*=\s*"[^"]*"\s*\|\s*/i, "");
 
+    // A `rowspan="N"` cell belongs to the next N-1 rows too, which leave
+    // that column out. The shared cell is a group explanation rather than a
+    // description of any one rule, so spanned descriptions come from
+    // SHARED_DESCRIPTIONS instead.
+    let span: { index: number; rows: number } | null = null;
+    const spanned = new Set<Row>();
+    for (const row of rows) {
+        if (span && span.rows > 0) {
+            row.lines.splice(span.index, 0, "");
+            spanned.add(row);
+            span.rows -= 1;
+            continue;
+        }
+        span = null;
+        row.lines.forEach((cell, index) => {
+            const match = cell.match(/^rowspan\s*=\s*"?(\d+)"?\s*\|\s*/i);
+            if (!match) return;
+            row.lines[index] = cell.slice(match[0].length);
+            span = { index, rows: Number(match[1]) - 1 };
+            spanned.add(row);
+        });
+    }
+
     // A cell can carry both editions: "{{cd|3}}{{only|je}}<br/>{{cd|1}}{{only|be}}".
     // Keep the Java Edition part; stripping both merged them into "3 1".
     const javaPart = (cell: string): string => {
@@ -131,10 +167,16 @@ function parseRuleList(wikitext: string): GameruleEntry[] {
         // server refuses the rule unless that experiment is enabled
         const experiment = jeSegment.match(/\{\{onlyExperimental\|([^}|]+)\}\}/i)?.[1]?.trim();
 
+        let description = cleaned[1] ?? "";
+        if (spanned.has(row)) {
+            description = SHARED_DESCRIPTIONS[name];
+            if (!description) throw new Error(`${name} shares a description cell; add it to SHARED_DESCRIPTIONS`);
+        }
+
         entries.push({
             name,
             category: row.cat,
-            description: cleaned[1] ?? "",
+            description,
             defaultValue: cleaned[2] ?? "",
             valueType: /^bool/i.test(cleaned[3] ?? "") ? "boolean" : /int/i.test(cleaned[3] ?? "") ? "number" : "string",
             ...(experiment ? { experiment } : {}),
@@ -234,13 +276,12 @@ function applyHistory(entries: GameruleEntry[], rawEvents: HistoryEvent[]) {
         );
 
         for (const b of bulletNames) {
-            const entry = byCanonical.get(b.toLowerCase()) ?? byCanonical.get(camelToSnake(b));
+            const entry = lookup(byCanonical, b);
             if (entry && !entry.addedIn) entry.addedIn = ver;
         }
 
         for (const { verb, name } of inlineNames) {
-            const entry =
-                byCanonical.get(name.toLowerCase()) ?? byCanonical.get(camelToSnake(name)) ?? byCanonical.get(snakeToCamel(name.toLowerCase()));
+            const entry = lookup(byCanonical, name);
             if (!entry) continue;
 
             if (verb === "added") {
@@ -248,6 +289,26 @@ function applyHistory(entries: GameruleEntry[], rawEvents: HistoryEvent[]) {
             }
         }
     }
+}
+
+// Legacy rules that were booleans before becoming a number rule: the old
+// rule's history is not the new one's, since a server that only has the
+// boolean can't take the number
+const CHANGED_TYPE = new Set(["doFireTick", "allowFireTicksAwayFromPlayer"]);
+
+// History lines name a rule by whatever it was called at the time, and
+// several renames are irregular (enableCommandBlocks -> command_blocks_work,
+// disableRaids -> raids), so the panel's explicit alias table maps the old
+// names before falling back to case conversion.
+function lookup(byCanonical: Map<string, GameruleEntry>, name: string): GameruleEntry | undefined {
+    if (CHANGED_TYPE.has(name)) return undefined;
+    const alias = GAMERULE_LEGACY_ALIASES[name];
+    return (
+        (alias ? byCanonical.get(alias) : undefined) ??
+        byCanonical.get(name.toLowerCase()) ??
+        byCanonical.get(camelToSnake(name)) ??
+        byCanonical.get(snakeToCamel(name.toLowerCase()))
+    );
 }
 
 function camelToSnake(s: string): string {

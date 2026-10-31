@@ -67,6 +67,21 @@ describe("which rules a server accepts", () => {
         expect(gamerulesFor("26.3")).toHaveLength(58);
         expect(GAMERULES).toHaveLength(59);
     });
+
+    test("1.21.4 is not asked for rules added after it", () => {
+        // a real 1.21.4 answered all 49 queries; the scraper had missed the
+        // history of renamed rules, so command_blocks_work and
+        // spawner_blocks_work (1.21.9) were sent and refused
+        const names = gamerulesFor("1.21.4").map((rule) => rule.name);
+        expect(names).not.toContain("command_blocks_work");
+        expect(names).not.toContain("spawner_blocks_work");
+        expect(names).toContain("raids");
+        expect(names).toHaveLength(49);
+    });
+
+    test("every rule knows the release that added it", () => {
+        for (const rule of GAMERULES) expect(rule.addedIn, rule.name).toBeTruthy();
+    });
 });
 
 test("generated defaults are Java Edition values only", () => {

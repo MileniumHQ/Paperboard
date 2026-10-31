@@ -152,7 +152,7 @@ const ANCIENT_LEVEL_TYPES: LevelTypeOption[] = [
 // Explicit rather than derived: several renames are irregular
 // (doDaylightCycle -> advance_time, doMobSpawning -> spawn_mobs, ...), and
 // the reverse lookup has to be exact to merge readouts onto the right rule.
-const GAMERULE_LEGACY_ALIASES: Record<string, string> = {
+export const GAMERULE_LEGACY_ALIASES: Record<string, string> = {
     announceAdvancements: "show_advancement_messages",
     commandBlocksEnabled: "command_blocks_work",
     // 25w35a..1.21.9 dev builds called it enableCommandBlocks before the

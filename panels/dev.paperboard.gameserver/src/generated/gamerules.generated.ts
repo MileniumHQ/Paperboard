@@ -1,5 +1,5 @@
 // GENERATED FILE — do not edit by hand.
-// Source: minecraft.wiki /w/Game_rule (scraped 2026-10-08)
+// Source: minecraft.wiki /w/Game_rule (scraped 2026-10-31)
 // Regenerate with: bun run Paperboard/scripts/scrape-gamerules.ts
 
 export interface GameruleEntry {
@@ -44,6 +44,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether advancements should be announced in chat.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.12",
     },
     {
         name: "show_death_messages",
@@ -59,6 +60,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether blocks should have drops.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.4.2",
     },
     {
         name: "block_explosion_drop_decay",
@@ -74,6 +76,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether entities that are not mobs should have drops.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.8.1",
     },
     {
         name: "mob_drops",
@@ -81,6 +84,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether mobs should drop items and experience orbs.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.4.2",
     },
     {
         name: "mob_explosion_drop_decay",
@@ -112,6 +116,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether command blocks should be enabled in-game.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.21.9",
     },
     {
         name: "global_sound_events",
@@ -135,7 +140,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "The maximum number of forks (contexts) that can be created during one tick. Applies to command blocks and functions.",
         defaultValue: "65536",
         valueType: "number" as const,
-        addedIn: "1.21.11",
+        addedIn: "1.20.3",
     },
     {
         name: "max_command_sequence_length",
@@ -143,7 +148,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "The maximum length of a chain of commands that can be executed during one tick from one execution source. Applies to command blocks and functions.",
         defaultValue: "65536",
         valueType: "number" as const,
-        addedIn: "1.21.11",
+        addedIn: "1.12",
     },
     {
         name: "max_minecart_speed",
@@ -151,6 +156,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "The maximum speed a minecart may reach.",
         defaultValue: "8",
         valueType: "number" as const,
+        addedIn: "1.21.2",
         experiment: "Minecart Improvements",
     },
     {
@@ -199,6 +205,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether raids are enabled.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.14.3",
     },
     {
         name: "universal_anger",
@@ -230,6 +237,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether the server should check player speed when the player is wearing elytra. Often helps with jittering due to lag in multiplayer.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.9",
     },
     {
         name: "ender_pearls_vanish_on_death",
@@ -277,6 +285,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Players respawn immediately without showing the death screen.",
         defaultValue: "false",
         valueType: "boolean" as const,
+        addedIn: "1.15",
     },
     {
         name: "keep_inventory",
@@ -292,6 +301,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether players can craft only those recipes that they have unlocked.",
         defaultValue: "false",
         valueType: "boolean" as const,
+        addedIn: "1.12",
     },
     {
         name: "locator_bar",
@@ -307,6 +317,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether the player can regenerate health naturally if their hunger is full enough (doesn't affect external healing, such as golden apples, the Regeneration effect, etc.).",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.6.1",
     },
     {
         name: "player_movement_check",
@@ -314,11 +325,12 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether the server should check player speed.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.21.2",
     },
     {
         name: "players_nether_portal_creative_delay",
         category: "Player",
-        description: "Controls the time that a creative player needs to stand in a nether portal before changing dimensions.",
+        description: "Controls the time that a creative player needs to stand in a Nether portal before changing dimensions.",
         defaultValue: "0",
         valueType: "number" as const,
         addedIn: "1.20.3",
@@ -326,7 +338,7 @@ export const GAMERULES: GameruleEntry[] = [
     {
         name: "players_nether_portal_default_delay",
         category: "Player",
-        description: "Controls the time that a non-creative player needs to stand in a nether portal before changing dimensions.",
+        description: "Controls the time that a non-creative player needs to stand in a Nether portal before changing dimensions.",
         defaultValue: "80",
         valueType: "number" as const,
         addedIn: "1.20.3",
@@ -353,7 +365,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "The number of blocks outward from the world spawn coordinates that a player spawns in when first joining a server or when dying without a personal spawnpoint. Has no effect on servers where the default game mode is Adventure.",
         defaultValue: "10",
         valueType: "number" as const,
-        addedIn: "1.21.11",
+        addedIn: "1.9",
     },
     {
         name: "spectators_generate_chunks",
@@ -369,6 +381,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether mobs should spawn naturally, or via global spawning logic, such as for cats, phantoms, patrols, wandering traders, zombie sieges, or creaking hearts. Does not affect player-specific and other special spawning attempts, like commands, monster spawners, raids, spawn eggs, or iron golems.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.4.2",
     },
     {
         name: "spawn_monsters",
@@ -384,6 +397,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether patrols can spawn.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.15.2",
     },
     {
         name: "spawn_phantoms",
@@ -391,6 +405,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether phantoms can spawn in the nighttime.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.15",
     },
     {
         name: "spawn_wandering_traders",
@@ -398,6 +413,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether wandering traders can spawn.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.15.2",
     },
     {
         name: "spawn_wardens",
@@ -405,6 +421,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether wardens can spawn.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.19",
     },
     {
         name: "spawner_blocks_work",
@@ -412,6 +429,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Enable or disable monster spawner blocks.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.21.9",
     },
     {
         name: "advance_time",
@@ -419,6 +437,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether the daylight cycle and moon phases progress.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.6.1",
     },
     {
         name: "advance_weather",
@@ -426,6 +445,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether the weather can change naturally. The command can still change weather.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.11",
     },
     {
         name: "lava_source_conversion",
@@ -441,7 +461,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "The maximum number of snow layers that can be accumulated on each block.",
         defaultValue: "1",
         valueType: "number" as const,
-        addedIn: "1.21.11",
+        addedIn: "1.19.3",
     },
     {
         name: "random_tick_speed",
@@ -457,6 +477,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "Whether vines can spread to other blocks. Cave vines, weeping vines, and twisting vines are not affected.",
         defaultValue: "true",
         valueType: "boolean" as const,
+        addedIn: "1.19.4",
     },
     {
         name: "water_source_conversion",
