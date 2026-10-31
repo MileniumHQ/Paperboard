@@ -31,7 +31,7 @@ interface Player {
     banned: boolean;
 }
 
-function PalworldAvatar(props: { name: string; size: "medium" | "xlarge" }) {
+export function PalworldAvatar(props: { name: string; size: "small" | "medium" | "xlarge" }) {
     return <PaperAvatar size={props.size} shape="square" alt={props.name} fallbackIcon="person" />;
 }
 

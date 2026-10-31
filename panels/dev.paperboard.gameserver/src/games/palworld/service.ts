@@ -5,7 +5,8 @@ import { config, files, processApi, type ServiceContext } from "../../service/ap
 import { fileApi as rawFiles, defineAction, secretsApi } from "@mileniumhq/paperapi";
 import { currentServer, serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
-import { appendCapped, PANEL_ID, type GameServerState } from "../../service/types";
+import { appendCapped, PANEL_ID, type ChatMessage, type GameServerState } from "../../service/types";
+import { chatId } from "../../lib/logs";
 import { startServerInstance, stopServerInstance } from "../../service/lifecycle";
 import { ACTION_IDS, TRIGGER_IDS } from "../../service/contract";
 import { validateOptions } from "../options";
@@ -15,6 +16,7 @@ import { palworld, options, PALWORLD_APP_ID } from "./index";
 import { decode, encode, parseOptionSettings, writeOptionSettings, type IniEntry } from "./ini";
 import { PalworldRest, type PalworldPlayer } from "./rest";
 import { PalworldRoster, userId } from "./roster";
+import { parseChat } from "./chat";
 
 const PROC = "palworld-server";
 const DEFAULT_PORT = 8211;
@@ -30,6 +32,8 @@ const local = serverLocal(() => ({
     roster: null as PalworldRoster | null,
     poll: null as ReturnType<typeof setInterval> | null,
     online: [] as PalworldPlayer[],
+    // the first answer after reattaching lists who was already there; they did not just join
+    baseline: false,
     pollError: "",
     secrets: [] as string[],
     pending: [] as string[],
@@ -142,6 +146,12 @@ function report(ctx: Context, what: string, err: unknown) {
 }
 function roster() { const r = local().roster; if (!r) throw new Error("Palworld's player list is not ready"); return r; }
 
+function chat(ctx: Context, message: Omit<ChatMessage, "id" | "timestamp">) {
+    const entry = { ...message, id: chatId(), timestamp: new Date().toTimeString().slice(0, 8) };
+    ctx.setState((prev) => ({ chatMessages: appendCapped(prev.chatMessages, entry) }));
+    return entry;
+}
+
 /** Asks the server who is online; joins and leaves are the difference from the last answer. */
 async function pollPlayers(ctx: Context) {
     if (ctx.state.serverStatus !== "online") return;
@@ -163,8 +173,17 @@ async function pollPlayers(ctx: Context) {
         onlinePlayers: players.map((p) => p.name),
         seenPlayers: players.reduce((seen, p) => (seen.includes(p.name) ? seen : appendCapped(seen, p.name)), prev.seenPlayers),
     }));
-    for (const [id, p] of now) if (!before.has(id)) ctx.emitTrigger(TRIGGER_IDS.playerJoined, p.name);
-    for (const [id, p] of before) if (!now.has(id)) ctx.emitTrigger(TRIGGER_IDS.playerLeft, p.name);
+    if (local().baseline) local().baseline = false;
+    else {
+        for (const [id, p] of now) if (!before.has(id)) {
+            chat(ctx, { event: "join", sender: p.name, text: `${p.name} joined the game` });
+            ctx.emitTrigger(TRIGGER_IDS.playerJoined, p.name);
+        }
+        for (const [id, p] of before) if (!now.has(id)) {
+            chat(ctx, { event: "leave", sender: p.name, text: `${p.name} left the game` });
+            ctx.emitTrigger(TRIGGER_IDS.playerLeft, p.name);
+        }
+    }
     roster().remember(players).catch((err) => report(ctx, "Could not record Palworld's players", err));
 }
 function startPolling(ctx: Context) {
@@ -180,6 +199,7 @@ function stopPolling() {
     local().poll = null;
     local().online = [];
     local().pollError = "";
+    local().baseline = false;
 }
 
 /** The world Palworld runs: GameUserSettings.ini names its folder under SaveGames/0. */
@@ -326,6 +346,7 @@ export const palworldService: GameService = {
             if (!password) throw new Error("Palworld is running without the admin password Paperboard set; stop it from the computer and start it again here");
             local().rest = new PalworldRest(Number(saved.restPort ?? DEFAULT_REST_PORT), password);
             local().secrets = [password, (await secretsApi.get(joinKey(), PANEL_ID)).value ?? ""].filter(Boolean);
+            local().baseline = true;
             startPolling(ctx);
             void rest().metrics()
                 .then((metrics) => ctx.setState({ maxPlayers: metrics.maxplayernum }))
@@ -402,8 +423,9 @@ export const palworldService: GameService = {
     async sendChat(ctx, message) {
         const line = singleLine(message, "Message");
         await rest().announce(line);
-        // Palworld does not log announcements; the console shows what went out
+        // Palworld does not log announcements; the console and chat show what went out
         ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "info", content: `[Announcement] ${line}` }) }));
+        chat(ctx, { event: "server", content: line, text: `<Server> ${line}` });
     },
     observeLine(ctx, raw) {
         let line = raw.replace(/\r/g, "");
@@ -416,6 +438,10 @@ export const palworldService: GameService = {
             if (saved.version !== version) await config.set({ ...saved, version }, PANEL_ID);
             ctx.setState({ serverVersion: version });
         })().catch((err) => report(ctx, "Could not record Palworld's version", err));
+        try {
+            const said = parseChat(line, local().online.map((p) => p.name));
+            if (said) ctx.emitTrigger(TRIGGER_IDS.chatMessage, chat(ctx, { sender: said.sender, content: said.content, text: `<${said.sender}> ${said.content}` }));
+        } catch (err) { report(ctx, "Could not read a chat message", err); }
         local().pending = [...local().pending, line].slice(-1000);
         if (!local().logTimer) local().logTimer = setTimeout(() => {
             local().logTimer = null;

@@ -22,7 +22,9 @@ function assert(value: unknown, message: string): asserts value { if (!value) th
 // started by the daemon. It reads PalWorldSettings.ini through install/Pal/Saved
 // the way the game does, prints the game's startup lines, writes Level.sav on
 // save and shutdown, and answers the REST API only with the admin password
-// from the ini. What it was asked is written to requests.log beside it.
+// from the ini. What it was asked is written to requests.log beside it. Lines
+// appended to say.txt are printed as the server prints them, which is how a
+// player's chat reaches stdout (the Text format, from PalServer's own strings).
 const FAKE = `import fs from "node:fs"; import path from "node:path";
 const saved = path.join(process.cwd(), "Pal", "Saved");
 const ini = fs.readFileSync(path.join(saved, "Config/LinuxServer/PalWorldSettings.ini"), "utf8");
@@ -65,7 +67,13 @@ Bun.serve({ port: restPort, hostname: "0.0.0.0", async fetch(req) {
 } });
 console.log("REST API started on port " + restPort);
 console.log("Running Palworld dedicated server on :" + port);
-setInterval(() => {}, 1000);
+const sayFile = path.join(process.cwd(), "say.txt");
+let said = 0;
+setInterval(() => {
+  if (!fs.existsSync(sayFile)) return;
+  const lines = fs.readFileSync(sayFile, "utf8").split("\\n").filter(Boolean);
+  for (; said < lines.length; said++) { console.log(lines[said]); console.log(""); }
+}, 50);
 `;
 
 const DEFAULT_INI = `; sample
@@ -151,6 +159,7 @@ test("Palworld through daemon: REST control with a vaulted admin password, optio
 
         fs.writeFileSync(path.join(install, "players.json"), JSON.stringify([{ name: "Pal Tamer", accountName: "tamer", playerId: "AF00", userId: "steam_76561190000000001", ip: "10.0.0.2", ping: 12.5, level: 7 }]));
         await until(async () => (await state()).onlinePlayers.includes("Pal Tamer"), "player poll", 15_000);
+        assert((await state()).chatMessages.some(m => m.event === "join" && m.sender === "Pal Tamer"), "A player joining did not reach the chat");
         const polled = (await state()).serverEntries;
         assert(polled.some(e => String(e.content).includes("Running Palworld")) && !polled.some(e => String(e.content).includes("REST accessed endpoint") || !String(e.content).trim()), "REST call lines or their blank lines reached the console");
         const roster = await call<any>("palworld-players");
@@ -158,6 +167,17 @@ test("Palworld through daemon: REST control with a vaulted admin password, optio
         // a restarted panel service finds the running server and talks to it again
         await services.stopService(PANEL); services.startService(PANEL); await services.waitUntilReady(PANEL);
         await until(async () => { const s = await state(); return s.serverStatus === "online" && s.maxPlayers === 32 && s.onlinePlayers.includes("Pal Tamer"); }, "reattach to the running server", 15_000);
+        // the roster found by the first answer after reattaching is not a crowd that just joined
+        assert(!(await state()).chatMessages.some(m => m.event === "join"), "Players already online were announced as joining after a reattach");
+        const say = (line: string) => fs.appendFileSync(path.join(install, "say.txt"), line + "\n");
+        say("[2026-10-31 13:00:00] [CHAT] <Pal Tamer> catching a Lamball");
+        say(`[2026-10-31 13:00:01] [CHAT] <Pal Tamer> the password is ${admin}`);
+        say("[2026-10-31 13:00:02] [CHAT] no angle brackets here");
+        await until(async () => (await state()).chatMessages.some(m => m.sender === "Pal Tamer" && m.content === "catching a Lamball"), "player chat from the server's stdout");
+        await until(async () => (await state()).serverEntries.some(e => String(e.content).includes("Could not read a chat message")), "a chat line that cannot be read is reported");
+        const chatted = (await state()).chatMessages;
+        assert(chatted.some(m => m.content === "the password is [redacted]") && !JSON.stringify(chatted).includes(admin), "The admin password reached the chat");
+        assert(chatted.find(m => m.content === "catching a Lamball")?.text === "<Pal Tamer> catching a Lamball", "The chat line is not shown as the game prints it");
         await call("palworld-kick", { userId: "steam_76561190000000001" });
         await call("palworld-ban", { userId: "steam_76561190000000001" });
         assert((await call<any>("palworld-players")).bans.includes("steam_76561190000000001"), "Ban not on the ban list");
@@ -166,6 +186,9 @@ test("Palworld through daemon: REST control with a vaulted admin password, optio
         await refuses("palworld-kick", { userId: "../etc" }, /user id/, "An unsafe user id was accepted");
         await call("say-chat", { message: "Hello Pals" });
         await until(async () => (await state()).serverEntries.some(e => e.content === "[Announcement] Hello Pals"), "the announcement in the console");
+        assert((await state()).chatMessages.some(m => m.event === "server" && m.content === "Hello Pals"), "An announcement did not appear in the chat");
+        fs.writeFileSync(path.join(install, "players.json"), "[]");
+        await until(async () => (await state()).chatMessages.some(m => m.event === "leave" && m.sender === "Pal Tamer"), "a player leaving in the chat");
         assert(requests().includes('kick {"userid":"steam_76561190000000001"}') && requests().includes('announce {"message":"Hello Pals"}'), `REST calls not made:\n${requests()}`);
 
         await call("save-world");

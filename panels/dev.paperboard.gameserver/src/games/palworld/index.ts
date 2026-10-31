@@ -84,6 +84,7 @@ export const palworld: GameDefinition = {
             actions: [A.startServer, A.stopServer, A.restartServer, A.loadConfig, A.sayChat, A.saveWorld, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, "palworld-install", "palworld-info", "palworld-players", "palworld-kick", "palworld-ban", "palworld-unban", "backup-server"],
             tabs: [
                 { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
+                { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },
                 { id: "players", label: "Players", icon: "group", group: "Play", owner: "game", variant: "fill", width: "full" },
                 { id: "versions", label: "Updates", icon: "update", group: "Software", owner: "game" },
                 { id: "options", label: "Options", icon: "tune", group: "Server", owner: "shared" },
