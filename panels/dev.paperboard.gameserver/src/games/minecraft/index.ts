@@ -63,6 +63,7 @@ export const minecraft: GameDefinition = {
         return {
             options: minecraftOptions(version),
             optionsWhileRunning: "next-start",
+            backupWhileRunning: "quiesce",
             control: { kind: "stdin" },
             tabs,
             actions: [...Object.values(ACTION_IDS), ...Object.values(TRIGGER_IDS)].filter((id) => !unavailable.has(id)),

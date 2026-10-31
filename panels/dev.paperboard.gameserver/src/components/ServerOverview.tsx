@@ -47,6 +47,8 @@ export default function ServerOverview(props: {
     actions?: JSX.Element;
     /** notices between the controls and the console */
     children?: JSX.Element;
+    /** false for a game with no console commands: the console only shows its output */
+    commands?: boolean;
 }) {
     onMount(() => {
         void loadServerConfig();
@@ -153,6 +155,7 @@ export default function ServerOverview(props: {
                 <PaperConsole
                     entries={serverEntries()}
                     onCommand={runCommand}
+                    showInput={props.commands !== false}
                     placeholder="Enter command..."
                     prompt="chevron_right"
                 />

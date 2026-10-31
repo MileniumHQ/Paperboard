@@ -48,7 +48,7 @@ export const terraria: GameDefinition = {
         // the runtime of the installed release; before setup, the newest
         const runtime = (tmodloaderReleases.find(r => r.version === version) ?? tmodloaderReleases[0]).runtime;
         return {
-            options, optionsWhileRunning: "locked", control: { kind: "stdin" }, widgets: ["status", "console"],
+            options, optionsWhileRunning: "locked", backupWhileRunning: "offline", control: { kind: "stdin" }, widgets: ["status", "console"],
             packages: modded ? [{ id: runtime, purpose: ".NET runtime for tModLoader" }] : [],
             actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", A.saveWorld, "terraria-motd", "terraria-players", "terraria-kick", "terraria-ban", "terraria-unban", "backup-server", ...(modded ? MOD_ACTIONS : [])],
             tabs: [

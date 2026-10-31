@@ -5,7 +5,8 @@ import { packages as packageApi } from "../../service/api";
 import { PANEL_ID } from "../../service/types";
 import { runInstallerProcess, stopLeftoverInstaller, type InstallerRun } from "../../service/installerProcess";
 
-// SteamCMD, shared by every server of the panel. Origami's `steamcmd` package
+// SteamCMD, shared by every server of the panel: Workshop items and whole
+// dedicated servers (`installApp`). Origami's `steamcmd` package
 // is Valve's bootstrap; SteamCMD updates itself into its own folder, so it is
 // copied into a workspace the panel owns and run from there, never from the
 // package store. Its HOME is the workspace too, keeping it away from the
@@ -15,6 +16,8 @@ export const STEAMCMD_PROC_ID = "steamcmd";
 const PACKAGE = "steamcmd";
 /** a first run downloads SteamCMD's own update before the item */
 const TIMEOUT_MS = 30 * 60_000;
+/** a dedicated server is gigabytes; a slow connection takes hours */
+const APP_TIMEOUT_MS = 6 * 60 * 60_000;
 const ID = /^[1-9]\d{0,19}$/;
 
 let queue: Promise<unknown> = Promise.resolve();
@@ -113,6 +116,82 @@ export function downloadWorkshopItems(appId: number, ids: readonly string[], opt
             throw new Error(`Steam Workshop download failed${result.exitCode !== 0 ? ` (SteamCMD exited with ${result.exitCode})` : ""}. ${problems.join("; ")}${tail ? `\n${tail}` : ""}`);
         }
         return folders;
+    });
+}
+
+/** SteamCMD's progress through an app download: "Update state (0x61) downloading, progress: 12.34 (…)". */
+export function parseAppProgress(line: string): { stage: "downloading" | "verifying" | "preallocating"; percent: number } | null {
+    const match = /Update state \(0x[0-9a-f]+\) (downloading|verifying install|verifying update|preallocating|reconfiguring|committing)[^,]*, progress: ([\d.]+)/i.exec(line.replace(ANSI, ""));
+    if (!match) return null;
+    const state = match[1]!.toLowerCase();
+    const stage = state.startsWith("verifying") ? "verifying" : state === "preallocating" ? "preallocating" : "downloading";
+    return { stage, percent: Math.max(0, Math.min(100, Number(match[2]))) };
+}
+
+/** Did SteamCMD confirm the app installed? Its exit code alone does not say. */
+export function parseAppResult(lines: readonly string[], appId: number): { ok: true } | { ok: false; reason: string } | null {
+    for (const raw of [...lines].reverse()) {
+        const line = raw.replace(ANSI, "");
+        if (new RegExp(`Success! App '${appId}' (fully installed|already up to date)`).test(line)) return { ok: true };
+        const error = new RegExp(`ERROR! Failed to install app '${appId}' \\(([^)]*)\\)|Error! App '${appId}' state is (0x[0-9a-f]+)[^\\n]*`, "i").exec(line);
+        if (error) return { ok: false, reason: error[1] ?? `state ${error[2]}` };
+    }
+    return null;
+}
+
+/** The build SteamCMD installed, from the app manifest it leaves in the folder; null before any install. */
+export async function installedBuild(appId: number, dir: string): Promise<string | null> {
+    let text: string;
+    try { text = await fs.readFile(path.join(dir, "steamapps", `appmanifest_${appId}.acf`), "utf8"); }
+    catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") return null; throw err; }
+    const build = /"buildid"\s+"(\d+)"/.exec(text)?.[1];
+    if (!build) throw new Error(`Steam's app manifest for ${appId} names no build`);
+    return build;
+}
+
+/**
+ * Installs or updates a Steam dedicated server anonymously into `dir` and
+ * returns the build installed. Only SteamCMD's own success line counts; a
+ * download it does not confirm fails, quoting its last lines.
+ */
+export function installApp(appId: number, dir: string, options: { onProgress?: (progress: { stage: string; percent: number }) => void; onLine?: (line: string) => void; runner?: Runner; workspace?: string } = {}): Promise<string> {
+    if (!Number.isInteger(appId) || appId <= 0) throw new Error(`Not a Steam app id: ${appId}`);
+    if (!path.isAbsolute(dir)) throw new Error("A Steam app installs into an absolute folder");
+    return serialized(async () => {
+        const { command, home } = await prepare(options.workspace);
+        await fs.mkdir(dir, { recursive: true });
+        if (!options.runner) await stopLeftoverInstaller(undefined, undefined, undefined, STEAMCMD_PROC_ID);
+        const run = options.runner ?? ((r: InstallerRun) => runInstallerProcess(r));
+        const attempt = async () => {
+            const lines: string[] = [];
+            const result = await run({
+                id: STEAMCMD_PROC_ID,
+                command,
+                args: ["+force_install_dir", dir, "+login", "anonymous", "+app_update", String(appId), "validate", "+quit"],
+                cwd: path.dirname(command),
+                env: { HOME: home },
+                timeoutMs: APP_TIMEOUT_MS,
+                onLine: line => {
+                    lines.push(line);
+                    const progress = parseAppProgress(line);
+                    if (progress) options.onProgress?.(progress);
+                    options.onLine?.(line.replace(ANSI, ""));
+                },
+            });
+            return { result, outcome: parseAppResult(lines, appId) };
+        };
+        let { result, outcome } = await attempt();
+        // a SteamCMD that has never fetched the app's configuration answers
+        // its first app_update with "Missing configuration"; the second run has it
+        if (outcome && !outcome.ok && outcome.reason === "Missing configuration") ({ result, outcome } = await attempt());
+        if (!outcome?.ok || result.exitCode !== 0) {
+            const reason = outcome && !outcome.ok ? outcome.reason : "SteamCMD did not confirm the install";
+            const tail = result.tail.map(l => l.replace(ANSI, "")).slice(-8).join("\n");
+            throw new Error(`Steam download of app ${appId} failed: ${reason}${result.exitCode !== 0 ? ` (SteamCMD exited with ${result.exitCode})` : ""}${tail ? `\n${tail}` : ""}`);
+        }
+        const build = await installedBuild(appId, dir);
+        if (!build) throw new Error(`SteamCMD reported app ${appId} installed but left no app manifest`);
+        return build;
     });
 }
 

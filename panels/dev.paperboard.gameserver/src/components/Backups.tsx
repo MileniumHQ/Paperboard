@@ -49,7 +49,7 @@ function sizeText(bytes: number): string {
 
 const dateText = (iso: string) => new Date(iso).toLocaleString();
 
-export default function Backups(props: { active: boolean }) {
+export default function Backups(props: { active: boolean; whileRunning: "quiesce" | "offline" }) {
     if (!selectedServerId) throw new Error("Choose a server before opening backups");
     const backupsApi = backupApi.forSource(PANEL_ID, selectedServerId);
     const [status, setStatus] = createSignal<BackupStatus | null>(null);
@@ -203,7 +203,9 @@ export default function Backups(props: { active: boolean }) {
                 </PaperSettingItem>
                 <PaperSettingItem
                     title="Routine Backups"
-                    description="Backs up the server on a schedule, even with Paperboard closed. Minecraft pauses saving during the copy; offline-only games save, stop and restart if running."
+                    description={`Backs up the server on a schedule, even with Paperboard closed. ${props.whileRunning === "quiesce"
+                        ? "A running server keeps going; saving pauses during the copy."
+                        : "A running server is saved, stopped for the copy and started again."}`}
                 >
                     <PaperToggle
                         checked={schedule() !== null}

@@ -19,6 +19,7 @@ import type { GameFeatures, GameOption, GameTab, OptionSection } from "../games"
 import { serverBridge, serverStatus } from "../lib/server";
 import { errorMessage } from "../lib/failure";
 import { ACTION_IDS } from "../service/contract";
+import { fitsNumber } from "../games/options";
 
 /**
  * One option's control. Toggles and menus report a change at once; text,
@@ -46,12 +47,13 @@ export function GameOptionControl(props: {
         case "number": {
             const [draft, setDraft] = createSignal<string | null>(null);
             const shown = () => draft() ?? String(props.value ?? "");
-            const valid = (raw: string) => raw.trim() !== "" && Number.isInteger(Number(raw)) && Number(raw) >= field.min && Number(raw) <= field.max;
+            const valid = (raw: string) => raw.trim() !== "" && fitsNumber(field, Number(raw));
             return (
                 <PaperInput
                     type="number"
                     min={field.min}
                     max={field.max}
+                    step={field.step ?? 1}
                     value={shown()}
                     invalid={!valid(shown())}
                     disabled={props.disabled}

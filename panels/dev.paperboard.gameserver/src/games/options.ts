@@ -1,11 +1,29 @@
 import type { GameOption } from "./types";
 
+type NumberOption = Extract<GameOption, { kind: "number" | "slider" }>;
+const stepOf = (field: NumberOption) => (field.kind === "number" ? field.step ?? 1 : 1);
+
+/** Whether a value is in the option's range and on its step; the options screen checks typing with it too. */
+export function fitsNumber(field: NumberOption, value: unknown): boolean {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < field.min || value > field.max) return false;
+    const steps = (value - field.min) / stepOf(field);
+    return Math.abs(steps - Math.round(steps)) < 1e-6;
+}
+
+/** What a number option takes, as its refusal says it. */
+export function numberRule(field: NumberOption): string {
+    const step = stepOf(field);
+    return step === 1
+        ? `${field.label} must be a whole number from ${field.min} to ${field.max}`
+        : `${field.label} must be a number from ${field.min} to ${field.max} in steps of ${step}`;
+}
+
 /** An option's value is rejected unless it fits the option; every game's service checks edits through here. */
 export function validateOptionValue(field: GameOption, value: unknown): void {
     switch (field.kind) {
         case "number":
         case "slider":
-            if (!Number.isInteger(value) || Number(value) < field.min || Number(value) > field.max) throw new Error(`${field.label} must be a whole number from ${field.min} to ${field.max}`);
+            if (!fitsNumber(field, value)) throw new Error(numberRule(field));
             return;
         case "boolean":
             if (typeof value !== "boolean") throw new Error(`${field.label} must be on or off`);

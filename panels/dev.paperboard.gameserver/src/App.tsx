@@ -48,7 +48,7 @@ export default function App() {
         switch (id) {
             case "files": return <Files reveal={filesReveal()} />;
             case "logs": return <Logs />;
-            case "backups": return <Backups active={activeTab() === id} />;
+            case "backups": return <Backups active={activeTab() === id} whileRunning={features().backupWhileRunning} />;
             default: {
                 // any other shared tab lists the game's options placed on it
                 if (!features().options.some((option) => (option.tab ?? "options") === id)) throw new Error(`Shared tab has no renderer: ${id}`);

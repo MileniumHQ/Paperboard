@@ -210,7 +210,8 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
             directory: server.directory,
             config: ["servers", { id: server.id }, "settings"],
             processes: game.processIds.map((id) => scope.legacy ? id : `${server.id}-${id}`),
-            ...(scope.legacy ? { legacy: true, exclude: [saved.serversDirectory] } : {}),
+            ...(scope.legacy ? { legacy: true } : {}),
+            ...(scope.legacy || game.backupExclude ? { exclude: [...(scope.legacy ? [saved.serversDirectory] : []), ...(game.backupExclude ?? [])] } : {}),
         });
         scope.project = await actionsApi.defineProject(
             { id: server.id, name: server.name, icon: gameFor(server.game).icon },

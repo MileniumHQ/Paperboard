@@ -40,7 +40,8 @@ export interface OptionSection {
 }
 export type GameOption = OptionBase & (
     | { kind: "text"; maxLength?: number; default?: string }
-    | { kind: "number"; min: number; max: number; default?: number }
+    /** `step` below 1 allows decimals in that step, as a 0.1 multiplier; whole numbers otherwise. */
+    | { kind: "number"; min: number; max: number; step?: number; default?: number }
     /** A whole number picked on a range, shown with its unit ("10 chunks"); marks are the ticks under it. */
     | { kind: "slider"; min: number; max: number; unit: string; marks?: readonly number[]; default?: number }
     | { kind: "boolean"; default?: boolean }
@@ -56,6 +57,12 @@ export interface GameFeatures {
      * server next starts.
      */
     optionsWhileRunning: "locked" | "next-start";
+    /**
+     * What a backup does to a running server, matching its service's backup
+     * mode. "quiesce": it keeps running with saving paused for the copy.
+     * "offline": it is saved, stopped for the copy and started again.
+     */
+    backupWhileRunning: "quiesce" | "offline";
     control: Control;
     tabs: readonly GameTab[];
     actions: readonly string[];
