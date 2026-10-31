@@ -38,7 +38,7 @@ export interface GameService {
     /** Writes the running world to disk and resolves once the game confirms it; refuses when offline. */
     saveWorld(ctx: Context): Promise<void>;
     stopEntry: string;
-    stop(): Promise<void>;
+    stop(ctx: Context): Promise<void>;
     /** Checks a console command and gives what is sent: the stdin write, or for "rcon" the line itself. */
     commandLine(command: string): string;
     /** Runs a console command when the game's control is "rcon", as commandLine gave it. */

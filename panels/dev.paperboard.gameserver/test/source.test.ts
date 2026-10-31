@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import net from "node:net";
 import { decodePackets, encodePacket, SourceRcon } from "../src/games/source/rcon";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { consoleLine, isErrorLine, linePlayer, parseLogLine, parseStatus, steamId } from "../src/games/source/log";
+import { SourceRoster } from "../src/games/source/roster";
+import { connectedMs } from "../src/games/source/service";
 
 // lines as the Team Fortress 2 dedicated server (build 11191711) printed them
 const STATUS = `hostname: Probe
@@ -30,11 +35,46 @@ describe("Source log lines", () => {
         expect(parseLogLine('L 10/31/2026 - 09:16:56: "Old<5><[U:1:9]><Red>" changed name to "New"')).toMatchObject({ kind: "renamed", name: "New" });
         expect(parseLogLine('L 10/31/2026 - 09:18:19: Started map "ctf_2fort" (CRC "a70bdd508912c2098fdcdfc9e2a53147")')).toEqual({ kind: "map", map: "ctf_2fort" });
         expect(parseLogLine('L 10/31/2026 - 09:35:51: "IvanTheSpaceBiker<2><BOT><Unassigned>" joined team "Red"')).toMatchObject({ kind: "team", team: "Red", player: { userId: 2 } });
-        expect(parseLogLine('L 10/31/2026 - 09:18:21: "WITCH<2><BOT><Blue>" changed role to "medic"')).toBeNull();
         expect(parseLogLine("Console: hello from rcon")).toBeNull();
-        expect(linePlayer('L 10/31/2026 - 12:28:19: "Soulless<7><BOT><Red>" triggered "kill assist" against "ZAWMBEEZ<4><BOT><Blue>"')).toEqual({ name: "Soulless", userId: 7, steamId: "BOT", team: "Red" });
+        expect(linePlayer('L 10/31/2026 - 12:28:19: "Soulless<7><BOT><Red>" triggered "kill assist" against "ZAWMBEEZ<4><BOT><Blue>" (assister_position "243 79 344")')).toEqual({ name: "Soulless", userId: 7, steamId: "BOT", team: "Red" });
         expect(consoleLine('L 10/31/2026 - 12:28:19: "Soulless<7><BOT><Red>" triggered "kill assist"')).toBe('[12:28:19] "Soulless<7><BOT><Red>" triggered "kill assist"');
         expect(consoleLine("Server is hibernating")).toBe("Server is hibernating");
+    });
+
+    test("classes, kills, deaths, assists and dominations are read as the real server logs them", () => {
+        const bot = (name: string, userId: number, team: string) => ({ name, userId, steamId: "BOT", team });
+        expect(parseLogLine('L 10/31/2026 - 09:35:51: "IvanTheSpaceBiker<2><BOT><Red>" changed role to "medic"')).toEqual({ kind: "role", player: bot("IvanTheSpaceBiker", 2, "Red"), role: "medic" });
+        expect(parseLogLine('L 10/31/2026 - 11:58:02: "The Freeman<6><BOT><Red>" killed "ZAWMBEEZ<4><BOT><Blue>" with "tf_projectile_rocket" (attacker_position "71 6 -24") (victim_position "307 -603 7")'))
+            .toEqual({ kind: "kill", player: bot("The Freeman", 6, "Red"), victim: bot("ZAWMBEEZ", 4, "Blue") });
+        expect(parseLogLine('L 10/31/2026 - 11:58:02: "Pyro \"Main\"<6><[U:1:7]><Red>" killed "say "hi" <x><4><BOT><Blue>" with "flamethrower" (customkill "burning") (attacker_position "1 2 3") (victim_position "4 5 6")'))
+            .toEqual({ kind: "kill", player: { name: 'Pyro \"Main\"', userId: 6, steamId: "[U:1:7]", team: "Red" }, victim: bot('say "hi" <x>', 4, "Blue") });
+        expect(parseLogLine('L 10/31/2026 - 12:28:19: "DeadHead<3><BOT><Blue>" triggered "kill assist" against "10001011101<2><BOT><Red>" (assister_position "243 79 344") (attacker_position "232 67 344") (victim_position "-30 -131 296")'))
+            .toEqual({ kind: "assist", player: bot("DeadHead", 3, "Blue"), victim: bot("10001011101", 2, "Red") });
+        expect(parseLogLine('L 10/31/2026 - 12:30:00: "DeadHead<3><BOT><Blue>" triggered "domination" against "Soulless<7><BOT><Red>"')).toMatchObject({ kind: "domination", victim: { userId: 7 } });
+        expect(parseLogLine('L 10/31/2026 - 12:30:00: "Soulless<7><BOT><Red>" committed suicide with "world" (attacker_position "-1077 -1858 -163")')).toEqual({ kind: "suicide", player: bot("Soulless", 7, "Red") });
+        // a medic's death is not a kill of its own; the kill line beside it counts
+        expect(parseLogLine('L 10/31/2026 - 12:30:00: "Soulless<7><BOT><Blue>" triggered "medic_death" against "10001011101<2><BOT><Red>" (healing "552") (ubercharge "0")')).toBeNull();
+    });
+
+    test("a status row's connected time is read in hours, minutes and seconds", () => {
+        expect(connectedMs("01:02")).toBe(62_000);
+        expect(connectedMs("1:02:03")).toBe(3_723_000);
+        expect(connectedMs("")).toBe(0);
+    });
+
+    test("a player's stats add up across visits and survive a later visit's record", async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "source-roster-"));
+        try {
+            const roster = new SourceRoster(dir);
+            await roster.remember("[U:1:7]", "Scout Main", 1000);
+            await roster.addStats(new Map([["[U:1:7]", { kills: 3, deaths: 1, playtime: 60_000 }]]));
+            await roster.addStats(new Map([["[U:1:7]", { kills: 2, assists: 4, playtime: 30_000 }]]));
+            await roster.remember("[U:1:7]", "Scout Main", 2000);
+            expect(await roster.seen()).toEqual([{ steamId: "[U:1:7]", name: "Scout Main", lastSeen: 2000, kills: 5, deaths: 1, assists: 4, playtime: 90_000 }]);
+            await expect(roster.addStats(new Map([["[U:1:8]", { kills: 1 }]]))).rejects.toThrow(/not been seen/);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     test("a status reply lists bots and players, quoted names included", () => {

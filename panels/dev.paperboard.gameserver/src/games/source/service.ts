@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-import { config, files, processApi, type ServiceContext } from "../../service/api";
+import { config, files, packages as packageApi, processApi, type ServiceContext } from "../../service/api";
 import { defineAction, secretsApi } from "@mileniumhq/paperapi";
 import { currentServer, serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
@@ -12,11 +12,13 @@ import { validateOptions } from "../options";
 import { installApp, installedBuild, steamClientLibrary } from "../steam/steamcmd";
 import type { GameDefinition } from "../types";
 import type { GameService } from "../serviceTypes";
-import { sourceActions, type SourceGameSpec } from "./index";
+import { addonStageDir } from "../../core/addonUpload";
+import { SOURCEMOD_PACKAGES, sourceActions, type SourceGameSpec, type SourceModView } from "./index";
+import { linkFolder, pluginFile, SourceMod, unlinkFolder } from "./sourcemod";
 import { cvarValue, mapName, optionValue, secretsCfg, serverCfg } from "./config";
 import { consoleLine, isErrorLine, linePlayer, parseLogLine, parseStatus, steamId, type SourceLogEvent } from "./log";
 import { SourceRcon, RconError } from "./rcon";
-import { bannedUserCfg, SourceRoster } from "./roster";
+import { bannedUserCfg, noStats, SourceRoster, type SourceStats } from "./roster";
 
 type Context = ServiceContext<GameServerState>;
 
@@ -27,11 +29,24 @@ export interface SourceOnline {
     /** "[U:1:…]", or "BOT" */
     steamId: string;
     team: string;
+    /** "medic", once they have picked a class */
+    role?: string;
     since: number;
+    /** what they have done since they joined */
+    stats: SourceStats;
 }
 
 const DEFAULT_CLIENT_PORT = 27005;
 const STDBUF = ["/usr/bin/stdbuf", "/bin/stdbuf"];
+/** how long stats gather before they are written to the roster */
+const STATS_FLUSH_MS = 15_000;
+
+/** A `status` row's connected time ("01:02", "1:02:03") in milliseconds. */
+export function connectedMs(text: string): number {
+    const parts = text.split(":").map(Number);
+    if (parts.length < 2 || parts.length > 3 || parts.some((n) => !Number.isInteger(n) || n < 0)) return 0;
+    return parts.reduce((total, n) => total * 60 + n, 0) * 1000;
+}
 
 export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameService {
     const ids = sourceActions(spec.id);
@@ -46,6 +61,14 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         secrets: [] as string[],
         pending: [] as string[],
         logTimer: null as ReturnType<typeof setTimeout> | null,
+        /** stats not yet in the roster, by Steam id */
+        unsaved: new Map<string, Partial<SourceStats>>(),
+        /** when each online player's time was last added to their playtime, by user id */
+        counted: new Map<number, number>(),
+        statsTimer: null as ReturnType<typeof setTimeout> | null,
+        /** SourceMod loaded with the running server */
+        modsActive: false,
+        modsBusy: false,
     }));
 
     // Layout: install/ is SteamCMD's folder, left out of backups; Paperboard's
@@ -106,26 +129,55 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
 
     /** Points the game's logs folder at logs/ in the server folder, where Logs reads them and backups keep them. */
     async function linkLogs() {
-        const target = path.join(await root(), "logs");
-        const link = path.join(await gameDir(), "logs");
-        await fs.mkdir(target, { recursive: true });
-        const stat = await fs.lstat(link).catch((err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return null; throw err; });
-        if (stat?.isSymbolicLink()) {
-            if (path.resolve(path.dirname(link), await fs.readlink(link)) === target) return;
-            await fs.unlink(link);
-        } else if (stat?.isDirectory()) {
-            for (const entry of await fs.readdir(link)) await fs.rename(path.join(link, entry), path.join(target, entry));
-            await fs.rmdir(link);
-        } else if (stat) throw new Error(`${spec.gameDir}/logs is a file; remove it in Files`);
-        await fs.symlink(path.relative(path.dirname(link), target), link, "dir");
+        await linkFolder(path.join(await gameDir(), "logs"), path.join(await root(), "logs"));
     }
 
-    /** System libraries the server needs that this computer lacks, as ldd reports them. */
-    async function missingLibraries(install: string): Promise<string[]> {
+    // SourceMod: its folders live in the server folder and are linked into
+    // the game's while it is on (games/source/sourcemod.ts)
+    const mods = async () => new SourceMod(await root());
+    const modsOn = async () => !!spec.sourcemod && (await settings()).sourcemod === true;
+    function supportsMods() { if (!spec.sourcemod) throw new Error(`SourceMod does not run on ${spec.name}`); }
+    async function modsView(ctx: Context): Promise<SourceModView> {
+        supportsMods();
+        const on = await modsOn();
+        return { on, active: local().modsActive && ctx.state.serverStatus === "online", plugins: on || (await (await mods()).installed()) ? await (await mods()).list() : [] };
+    }
+    async function modChange(ctx: Context, work: (sm: SourceMod) => Promise<void>): Promise<SourceModView> {
+        supportsMods();
+        if (local().modsBusy) throw new Error("Wait for the current SourceMod change to finish");
+        local().modsBusy = true;
+        try { await work(await mods()); } finally { local().modsBusy = false; }
+        return modsView(ctx);
+    }
+    /** A console command for SourceMod on the running server, when it loaded there. */
+    async function smLive(ctx: Context, command: string): Promise<string | null> {
+        if (!local().modsActive || ctx.state.serverStatus !== "online") return null;
+        return rcon().exec(command);
+    }
+    async function loadPlugin(ctx: Context, file: string) {
+        const reply = await smLive(ctx, `sm plugins load ${file}`);
+        if (reply !== null && !/Loaded plugin|already loaded/i.test(reply)) throw new Error(`SourceMod did not load ${file}: ${reply.replace(/^\[SM\]\s*/, "").trim()}`);
+    }
+    /** Links SourceMod's folders into the game's while it is on, and takes them out while it is off. */
+    async function placeMods() {
+        const links = [path.join(await gameDir(), "addons"), path.join(await cfgDir(), "sourcemod")] as const;
+        if (!(await modsOn())) {
+            for (const link of links) await unlinkFolder(link);
+            return false;
+        }
+        const sm = await mods();
+        if (!(await sm.installed())) throw new Error("SourceMod is on, but its files are missing from the server folder. Turn it off and on again in Mods to reinstall it.");
+        await linkFolder(links[0], sm.addons);
+        await linkFolder(links[1], sm.cfg);
+        return true;
+    }
+
+    /** System libraries the server needs that these folders and the computer lack, as ldd reports them. */
+    async function missingLibraries(install: string, folders: readonly string[]): Promise<string[]> {
         const libraries = path.join(install, spec.libraryDir);
         const targets = [path.join(install, spec.executable), ...(await fs.readdir(libraries)).filter((f) => f.endsWith(".so")).map((f) => path.join(libraries, f))];
         let output = "";
-        const result = await processApi.run({ command: "ldd", args: targets, env: { LD_LIBRARY_PATH: libraries }, onStdout: (data) => { output += data; } });
+        const result = await processApi.run({ command: "ldd", args: targets, env: { LD_LIBRARY_PATH: folders.join(":") }, onStdout: (data) => { output += data; } });
         if (result.exitCode !== 0 && !output) throw new Error(`Could not check ${spec.name}'s libraries: ldd exited with ${result.exitCode}`);
         const missing = new Set<string>();
         for (const line of output.split("\n")) {
@@ -133,6 +185,24 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             if (name && !name.endsWith("_srv.so")) missing.add(name);
         }
         return [...missing].sort();
+    }
+
+    /** The folders the server loads libraries from: its own, then Origami's for what the computer lacks. */
+    async function libraryPath(install: string): Promise<string[]> {
+        const folders = [path.join(install, spec.libraryDir)];
+        const missing = await missingLibraries(install, folders);
+        const supplied = missing.filter((name) => spec.libraryPackages?.[name]);
+        if (supplied.length === 0) return checked(missing, folders);
+        for (const name of supplied) {
+            const { id } = spec.libraryPackages![name]!;
+            if (!(await packageApi.isInstalled(id))) await packageApi.download(id);
+            folders.push(path.join(await packageApi.getPath(id), "bin"));
+        }
+        return checked(await missingLibraries(install, folders), folders);
+    }
+    function checked(missing: string[], folders: string[]): string[] {
+        if (missing.length > 0) throw new Error(`${spec.name}'s server needs ${missing.join(", ")}, which this computer doesn't have. Install ${missing.length === 1 ? "it" : "them"} with your system's package manager, then start again.`);
+        return folders;
     }
 
     function setOnline(ctx: Context) {
@@ -155,7 +225,9 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             case "map": ctx.setState({ serverLevel: event.map }); return;
             case "connected": {
                 const p = event.player;
-                online.set(p.userId, { userId: p.userId, name: p.name, steamId: p.steamId, team: p.team, since: Date.now() });
+                const now = Date.now();
+                online.set(p.userId, { userId: p.userId, name: p.name, steamId: p.steamId, team: p.team, since: now, stats: noStats() });
+                local().counted.set(p.userId, now);
                 setOnline(ctx);
                 if (isPlayer(p.steamId)) {
                     chat(ctx, { event: "join", sender: p.name, text: `${p.name} joined the game` });
@@ -167,13 +239,16 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             case "disconnected": {
                 const p = event.player;
                 const known = online.get(p.userId);
+                if (known) countPlaytime(known);
                 online.delete(p.userId);
+                local().counted.delete(p.userId);
                 setOnline(ctx);
                 const name = p.name || known?.name || "";
                 if (isPlayer(p.steamId) && name) {
                     chat(ctx, { event: "leave", sender: name, text: `${name} left the game` });
                     ctx.emitTrigger(TRIGGER_IDS.playerLeft, name);
                     roster().remember(p.steamId, name).catch((err) => report(ctx, `Could not record ${name} leaving`, err));
+                    saveStats().catch((err) => report(ctx, `Could not save ${name}'s stats`, err));
                 }
                 return;
             }
@@ -189,6 +264,19 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (known) known.team = event.team;
                 return;
             }
+            case "role": {
+                const known = online.get(event.player.userId);
+                if (known) known.role = event.role;
+                return;
+            }
+            // a kill by the world or a sentry's owner names the victim as both
+            case "kill":
+                if (event.player.userId !== event.victim.userId) bump(ctx, event.player.userId, "kills");
+                bump(ctx, event.victim.userId, "deaths");
+                return;
+            case "suicide": bump(ctx, event.player.userId, "deaths"); return;
+            case "assist": bump(ctx, event.player.userId, "assists"); return;
+            case "domination": bump(ctx, event.player.userId, "dominations"); return;
             case "say": {
                 const p = event.player;
                 if (p.steamId === "Console") { chat(ctx, { event: "server", content: event.text, text: `<Server> ${event.text}` }); return; }
@@ -200,12 +288,56 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         }
     }
 
+    /** Counts one stat for an online player; a person's goes to the roster soon after. */
+    function bump(ctx: Context, userId: number, key: Exclude<keyof SourceStats, "playtime">) {
+        const player = local().online.get(userId);
+        if (!player) return;
+        player.stats[key] += 1;
+        if (!isPlayer(player.steamId)) return;
+        unsaved(player.steamId)[key] = (unsaved(player.steamId)[key] ?? 0) + 1;
+        if (!local().statsTimer) local().statsTimer = setTimeout(() => {
+            local().statsTimer = null;
+            saveStats().catch((err) => report(ctx, "Could not save players' stats", err));
+        }, STATS_FLUSH_MS);
+    }
+    function unsaved(steamId: string): Partial<SourceStats> {
+        const stats = local().unsaved.get(steamId) ?? {};
+        local().unsaved.set(steamId, stats);
+        return stats;
+    }
+    /** Adds the time since it was last counted to a person's playtime. */
+    function countPlaytime(player: SourceOnline, now = Date.now()) {
+        const from = local().counted.get(player.userId) ?? now;
+        local().counted.set(player.userId, now);
+        if (!isPlayer(player.steamId) || now <= from) return;
+        player.stats.playtime += now - from;
+        unsaved(player.steamId).playtime = (unsaved(player.steamId).playtime ?? 0) + now - from;
+    }
+    /** Writes what has gathered, with everyone's time on so far, to the roster. */
+    async function saveStats() {
+        if (local().statsTimer) clearTimeout(local().statsTimer!);
+        local().statsTimer = null;
+        const now = Date.now();
+        for (const player of local().online.values()) countPlaytime(player, now);
+        const stats = local().unsaved;
+        local().unsaved = new Map();
+        await roster().addStats(stats);
+    }
+
     /** Learns who is on, which map and the player cap from `status`: on start and when reattaching. */
     async function readStatus(ctx: Context) {
         const status = parseStatus(await rcon().exec("status"));
         const online = local().online;
+        const now = Date.now();
+        const before = new Map(online);
         online.clear();
-        for (const p of status.players) online.set(p.userId, { userId: p.userId, name: p.name, steamId: p.steamId, team: "", since: Date.now() });
+        for (const p of status.players) {
+            const known = before.get(p.userId);
+            online.set(p.userId, known?.steamId === p.steamId ? known : { userId: p.userId, name: p.name, steamId: p.steamId, team: "", since: now - connectedMs(p.connected), stats: noStats() });
+            if (!local().counted.has(p.userId)) local().counted.set(p.userId, now);
+            if (isPlayer(p.steamId) && !known) await roster().remember(p.steamId, p.name);
+        }
+        for (const id of [...local().counted.keys()]) if (!online.has(id)) local().counted.delete(id);
         ctx.setState({ maxPlayers: status.maxPlayers, serverLevel: status.map });
         const saved = await settings();
         if (status.version && saved.version !== status.version) await config.set({ ...saved, version: status.version }, PANEL_ID);
@@ -286,7 +418,10 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 await loadOptions(ctx);
                 return true;
             })),
-            action(ids.players, `${spec.name} players`, async () => ({ seen: await roster().seen(), bans: await roster().bans(), online: [...local().online.values()] })),
+            action(ids.players, `${spec.name} players`, async () => {
+                await saveStats();
+                return { seen: await roster().seen(), bans: await roster().bans(), online: [...local().online.values()], admins: (await modsOn()) ? await (await mods()).admins() : null };
+            }),
             action(ids.kick, "Kick player", async (ctx, { userId }) => {
                 if (!online(ctx)) throw new Error(`${spec.name} is not running`);
                 const player = local().online.get(Number(userId));
@@ -309,6 +444,58 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (await exists(await installDir())) await writeConfigs();
                 return true;
             }),
+            action(ids.sourcemod, "SourceMod", (ctx) => modsView(ctx)),
+            action(ids.sourcemodSet, "Turn SourceMod on or off", (ctx, { on }) => modChange(ctx, async (sm) => {
+                if (typeof on !== "boolean") throw new Error("Choose on or off");
+                if (on && !(await sm.installed())) {
+                    const [metamod, sourcemod] = await Promise.all(SOURCEMOD_PACKAGES.map(async ({ id }) => {
+                        if (!(await packageApi.isInstalled(id))) await packageApi.download(id);
+                        return path.join(await packageApi.getPath(id), "bin");
+                    }));
+                    await sm.install(metamod!, sourcemod!);
+                }
+                await config.set({ ...(await settings()), sourcemod: on }, PANEL_ID);
+                // a running server keeps what it started with until it restarts
+                if (ctx.state.serverStatus === "offline") await placeMods();
+            })),
+            action(ids.plugin, "Turn a plugin on or off", (ctx, { file, on }) => modChange(ctx, async (sm) => {
+                if (typeof on !== "boolean") throw new Error("Choose on or off");
+                const name = pluginFile(file);
+                if (!(await sm.setEnabled(name, on))) return;
+                if (on) await loadPlugin(ctx, name);
+                else await smLive(ctx, `sm plugins unload ${name}`);
+            })),
+            action(ids.pluginRemove, "Remove a plugin", (ctx, { file }) => modChange(ctx, async (sm) => {
+                const name = pluginFile(file);
+                await smLive(ctx, `sm plugins unload ${name}`);
+                await sm.remove(name);
+            })),
+            action(ids.pluginUpload, "Add uploaded plugins", async (ctx, { stage }) => {
+                const dir = path.join(await root(), addonStageDir(stage));
+                let added: string[] = [];
+                try {
+                    const view = await modChange(ctx, async (sm) => {
+                        if (!(await modsOn())) throw new Error("Turn SourceMod on before adding plugins");
+                        added = await sm.upload(dir);
+                        const enabled = new Set((await sm.list()).filter((p) => p.enabled).map((p) => p.file));
+                        // a plugin of the same name that was running is replaced by the new one
+                        for (const name of added) {
+                            await smLive(ctx, `sm plugins unload ${name}`);
+                            if (enabled.has(name)) await loadPlugin(ctx, name);
+                        }
+                    });
+                    return { added, view };
+                } finally { await fs.rm(dir, { recursive: true, force: true }); }
+            }),
+            action(ACTION_IDS.discardAddonUpload, "Discard upload", async (_ctx, { stage }) => { await fs.rm(path.join(await root(), addonStageDir(stage)), { recursive: true, force: true }); return true; }),
+            action(ids.admin, "Make a player a SourceMod admin", (ctx, { steamId: raw, admin }) => modChange(ctx, async (sm) => {
+                if (typeof admin !== "boolean") throw new Error("Choose admin or not");
+                if (!(await modsOn())) throw new Error("Turn SourceMod on in Mods first");
+                const id = steamId(raw);
+                if (!isPlayer(id)) throw new Error("Only a Steam player can be an admin");
+                await sm.setAdmin(id, admin);
+                await smLive(ctx, "sm_reloadadmins");
+            })),
             action(ids.maps, `${spec.name} maps`, async () => {
                 const dir = path.join(await gameDir(), "maps");
                 let entries: string[];
@@ -336,14 +523,21 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (!password) throw new Error(`${spec.name} is running without the RCON password Paperboard set; stop it from the computer and start it again here`);
                 local().rcon = new SourceRcon(Number(saved.port ?? spec.defaultPort), password, spec.name);
                 local().secrets = [password, (await secretsApi.get(secretKey("join-password"), PANEL_ID)).value ?? "", (await secretsApi.get(secretKey("login-token"), PANEL_ID)).value ?? ""].filter(Boolean);
+                // the links are what the server started with: placeMods makes them only at a start
+                local().modsActive = (await modsOn()) && (await fs.lstat(path.join(await gameDir(), "addons")).then((s) => s.isSymbolicLink(), () => false));
                 await readStatus(ctx).catch((err) => report(ctx, `Could not read who is on ${spec.name}`, err));
             } else await removeSecrets().catch((err) => report(ctx, `Could not remove ${spec.name}'s start passwords`, err));
         },
         async beforeRemove() { if (local().busy) throw new Error(`Wait for ${spec.name}'s current operation`); },
         async dispose() {
+            if (local().statsTimer) clearTimeout(local().statsTimer!);
+            local().statsTimer = null;
+            local().unsaved.clear();
+            local().counted.clear();
             local().rcon?.close();
             local().rcon = null;
             local().online.clear();
+            local().modsActive = false;
             if (local().logTimer) clearTimeout(local().logTimer!);
             local().logTimer = null;
         },
@@ -357,8 +551,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             await fs.access(executable, fs.constants.X_OK);
             const stdbuf = (await Promise.all(STDBUF.map(async (p) => ((await exists(p)) ? p : null)))).find(Boolean);
             if (!stdbuf) throw new Error(`${spec.name}'s console needs stdbuf from coreutils, which this computer doesn't have`);
-            const missing = await missingLibraries(install);
-            if (missing.length > 0) throw new Error(`${spec.name}'s server needs ${missing.join(", ")}, which this computer doesn't have. Install it with your system's package manager (on Arch the package is libcurl-gnutls; on Debian and Ubuntu, libcurl3t64-gnutls or libcurl3-gnutls), then start again.`);
+            const libraries = await libraryPath(install);
             const map = mapName(optionValue(options.find((o) => o.id === "map")!, saved));
             if (!(await exists(path.join(await gameDir(), "maps", `${map}.bsp`)))) throw new Error(`The starting map ${map} is not installed; choose another on the Overview`);
 
@@ -376,6 +569,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             const join = (await secretsApi.get(secretKey("join-password"), PANEL_ID)).value ?? "";
             const token = (await secretsApi.get(secretKey("login-token"), PANEL_ID)).value ?? "";
             await linkLogs();
+            const modsActive = await placeMods();
             await writeConfigs();
             await fs.writeFile(await secretsFile(), secretsCfg({ rcon: rconPassword, join, token }), { mode: 0o600 });
             await fs.chmod(await secretsFile(), 0o600);
@@ -385,6 +579,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             local().rcon = new SourceRcon(port, rconPassword, spec.name);
             local().secrets = [rconPassword, join, token].filter(Boolean);
             local().online.clear();
+            local().modsActive = modsActive;
             const internet = optionValue(options.find((o) => o.id === "internet")!, saved) !== false;
             return {
                 message: `Starting ${spec.name}${saved.build ? ` build ${saved.build}` : ""}…`,
@@ -393,7 +588,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                     executable: stdbuf,
                     args: ["-oL", "-eL", executable, "-game", spec.gameDir, "-console", "-ip", "0.0.0.0", "-port", String(port), "+clientport", String(Number(saved.clientPort ?? DEFAULT_CLIENT_PORT)), "-nohltv", "+maxplayers", String(Number(optionValue(options.find((o) => o.id === "maxplayers")!, saved))), "+sv_lan", internet ? "0" : "1", "+exec", "paperboard_secrets.cfg", "+map", map],
                     cwd: install,
-                    env: { HOME: home, XDG_DATA_HOME: home, LD_LIBRARY_PATH: path.join(install, spec.libraryDir) },
+                    env: { HOME: home, XDG_DATA_HOME: home, LD_LIBRARY_PATH: libraries.join(":") },
                 },
             };
         },
@@ -410,7 +605,9 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         } },
         async saveWorld() { throw new Error(`${spec.name} keeps no world to save`); },
         stopTimeoutMs: 30_000, stopEntry: "quit",
-        async stop() {
+        async stop(ctx) {
+            // the server logs no one leaving as it quits
+            await saveStats().catch((err) => report(ctx, "Could not save players' stats", err));
             try { await rcon().exec("quit"); }
             catch (err) {
                 // the server closes the connection as it quits

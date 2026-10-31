@@ -170,7 +170,7 @@ export async function stopServerInstance(
                 content: currentGameService().stopEntry,
             }),
         });
-        try { await currentGameService().stop(); }
+        try { await currentGameService().stop(ctx); }
         catch (err) { ctx.setState({ serverStatus: "online" }); throw err; }
 
         scheduleStopForceKill(ctx, currentGameService().stopTimeoutMs);
@@ -196,7 +196,7 @@ export async function restartServerInstance(
             },
         ),
     });
-    try { await currentGameService().stop(); }
+    try { await currentGameService().stop(ctx); }
     catch (err) { local().isRestarting = false; ctx.setState({ serverStatus: "online" }); throw err; }
 
     scheduleStopForceKill(ctx, currentGameService().stopTimeoutMs);

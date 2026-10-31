@@ -22,7 +22,8 @@ function assert(value: unknown, message: string): asserts value { if (!value) th
 // with the password from paperboard_secrets.cfg, prints HL log lines for joins,
 // leaves, chat and maps, and echoes every RCON command to its console as
 // sv_rcon_log does. control.jsonl beside it makes players join and talk;
-// requests.log records what it was asked.
+// requests.log records what it was asked. SourceMod's console commands answer
+// as SourceMod's do, from the plugins found through tf/addons.
 const FAKE = `import fs from "node:fs"; import net from "node:net"; import path from "node:path";
 const arg = (flag) => process.argv[process.argv.indexOf(flag) + 1];
 const cfg = (name) => fs.readFileSync(path.join("tf/cfg", name), "utf8");
@@ -36,7 +37,7 @@ const server = cfg("server.cfg");
 let hostname = cvar(server, "hostname");
 let map = arg("+map");
 const max = Number(arg("+maxplayers"));
-log("start " + process.argv.slice(2).join(" ") + " | join=" + cvar(secrets, "sv_password") + " quota=" + cvar(server, "tf_bot_quota") + " bans=" + cfg("banned_user.cfg").trim().split("\\n").filter((l) => l.startsWith("banid")).join(","));
+log("start " + process.argv.slice(2).join(" ") + " | join=" + cvar(secrets, "sv_password") + " quota=" + cvar(server, "tf_bot_quota") + " bans=" + cfg("banned_user.cfg").trim().split("\\n").filter((l) => l.startsWith("banid")).join(",") + " ld=" + process.env.LD_LIBRARY_PATH + " mods=" + fs.existsSync("tf/addons/metamod_x64.vdf") + "," + !fs.existsSync("tf/addons/metamod.vdf") + "," + fs.existsSync("tf/cfg/sourcemod/sourcemod.cfg"));
 const players = new Map([[2, { name: "Mega Baboon", steamId: "BOT" }], [3, { name: "Kill Me", steamId: "BOT" }]]);
 let next = 4;
 const leave = (id, reason) => { const p = players.get(id); players.delete(id); L('"' + p.name + "<" + id + "><" + p.steamId + '><Red>" disconnected (reason "' + reason + '")'); };
@@ -49,6 +50,9 @@ function run(command) {
   if (name === "kickid") { const id = Number(rest[0]); if (!players.has(id)) return 'userid "' + id + '" not found\\n'; leave(id, rest.slice(1).join(" ")); return ""; }
   if (name === "banid") { for (const [id, p] of players) if (p.steamId === rest[1]) leave(id, "Banned by server"); return ""; }
   if (name === "changelevel") { map = rest[0]; L('Started map "' + map + '" (CRC "a70bdd508912c2098fdcdfc9e2a53147")'); return ""; }
+  if (command.startsWith("sm plugins load ")) return fs.existsSync("tf/addons/sourcemod/plugins/" + rest[2]) ? "[SM] Loaded plugin " + rest[2] + " successfully.\\n" : "[SM] Plugin " + rest[2] + " failed to load: Unable to open file.\\n";
+  if (command.startsWith("sm plugins unload ")) return "[SM] Plugin " + rest[2] + " unloaded successfully.\\n";
+  if (name === "sm_reloadadmins") return "[SM] Admin cache has been refreshed.\\n";
   if (name === "hostname") hostname = rest.join(" ").replace(/^"|"$/g, "");
   return "";
 }
@@ -83,6 +87,7 @@ setInterval(() => {
   for (const line of lines.slice(handled)) {
     const c = JSON.parse(line);
     if (c.join) { const id = next++; players.set(id, c.join); L('"' + c.join.name + "<" + id + "><" + c.join.steamId + '><>" connected, address "127.0.0.1:27005"'); L('"' + c.join.name + "<" + id + "><" + c.join.steamId + '><>" entered the game'); }
+    if (c.log) L(c.log);
     if (c.say) { const [id, p] = [...players].find(([, p]) => p.name === c.say.name); L('"' + p.name + "<" + id + "><" + p.steamId + '><Red>" ' + (c.say.team ? "say_team" : "say") + ' "' + c.say.text + '"'); }
   }
   handled = lines.length;
@@ -142,6 +147,19 @@ test("Team Fortress 2 through daemon: RCON control with a vaulted password, cfgs
         const compiled = Bun.spawnSync([bun, "build", path.join(root, "fake-srcds.ts"), "--compile", "--outfile", path.join(install, "srcds_linux64")]);
         if (compiled.exitCode) throw new Error(compiled.stderr.toString());
         for (const map of ["ctf_2fort", "cp_badlands", "background01"]) fs.writeFileSync(path.join(install, "tf/maps", `${map}.bsp`), "VBSP");
+        // replay_srv.so links libcurl-gnutls.so.4, which Arch lacks: Origami's package supplies it
+        const stubs = path.join(root, "stubs");
+        fs.mkdirSync(stubs);
+        fs.writeFileSync(path.join(stubs, "curl.c"), "int curl_global_init(long flags) { return (int)flags; }\nvoid curl_global_cleanup(void) {}\n");
+        fs.writeFileSync(path.join(stubs, "replay.c"), "int curl_global_init(long flags);\nint replay_start(void) { return curl_global_init(0); }\n");
+        for (const args of [["-shared", "-fPIC", "-Wl,-soname,libcurl-gnutls.so.4", "-o", path.join(stubs, "libcurl-gnutls.so.4"), path.join(stubs, "curl.c")], ["-shared", "-fPIC", "-o", path.join(install, "bin/linux64/replay_srv.so"), path.join(stubs, "replay.c"), "-L", stubs, "-l:libcurl-gnutls.so.4"]]) {
+            const cc = Bun.spawnSync(["cc", ...args]);
+            if (cc.exitCode) throw new Error(cc.stderr.toString());
+        }
+        const curlPackage = path.join(root, "packages", "libcurl-gnutls", "bin");
+        fs.mkdirSync(curlPackage, { recursive: true });
+        fs.copyFileSync(path.join(stubs, "libcurl-gnutls.so.4"), path.join(curlPackage, "libcurl-gnutls.so.4"));
+        const systemCurl = Bun.spawnSync(["/bin/sh", "-c", "ldconfig -p | grep -q 'libcurl-gnutls.so.4 (.*x86-64'"]).exitCode === 0;
         fs.writeFileSync(path.join(install, "steamapps/appmanifest_232250.acf"), `"AppState"\n{\n\t"buildid"\t\t"11191711"\n}\n`);
         const steam = await fileApi.getPath(".steam/steamcmd", PANEL);
         fs.mkdirSync(path.join(steam, "linux64"), { recursive: true });
@@ -171,13 +189,49 @@ test("Team Fortress 2 through daemon: RCON control with a vaulted password, cfgs
         await call("team-fortress-2-ban", { steamId: "[U:1:42]" });
         await refuses("team-fortress-2-ban", { steamId: "[U:1:42]; quit" }, /Steam id/, "An unsafe Steam id was accepted");
 
+        // SourceMod: copied from its Origami packages into the server folder, linked into the game's
+        const smPackages = path.join(root, "packages");
+        const packageFile = (id: string, file: string, content: string) => { fs.mkdirSync(path.dirname(path.join(smPackages, id, "bin", file)), { recursive: true }); fs.writeFileSync(path.join(smPackages, id, "bin", file), content); };
+        packageFile("metamod-source", "addons/metamod.vdf", '"Plugin"\n{\n\t"file"\t"addons/metamod/bin/server"\n}\n');
+        packageFile("metamod-source", "addons/metamod_x64.vdf", '"Plugin"\n{\n\t"file"\t"addons/metamod/bin/linux64/server"\n}\n');
+        packageFile("metamod-source", "addons/metamod/bin/linux64/server.so", "mms");
+        packageFile("sourcemod", "addons/sourcemod/bin/x64/sourcemod.2.tf2.so", "sm");
+        const smx = Buffer.concat([Buffer.from([0x46, 0x46, 0x50, 0x53]), Buffer.alloc(16)]);
+        for (const plugin of ["basechat", "admin-flatfile"]) packageFile("sourcemod", `addons/sourcemod/plugins/${plugin}.smx`, smx.toString("latin1"));
+        packageFile("sourcemod", "addons/sourcemod/plugins/disabled/rockthevote.smx", "FFPS");
+        packageFile("sourcemod", "addons/sourcemod/configs/admins_simple.ini", '// "STEAM_0:1:16" "bce"\n"!127.0.0.1" "99:z"\n');
+        packageFile("sourcemod", "cfg/sourcemod/sourcemod.cfg", "sm_show_activity 13\n");
+        let mods = await call<any>("team-fortress-2-sourcemod");
+        assert(mods.on === false && mods.plugins.length === 0, `SourceMod was on before it was turned on: ${JSON.stringify(mods)}`);
+        mods = await call<any>("team-fortress-2-sourcemod-set", { on: true });
+        const plugin = (file: string) => mods.plugins.find((p: any) => p.file === file);
+        assert(mods.on && plugin("basechat.smx")?.enabled === true && plugin("rockthevote.smx")?.enabled === false && plugin("rockthevote.smx")?.title === "Rock the Vote", `SourceMod's plugins not listed: ${JSON.stringify(mods)}`);
+        assert(fs.readlinkSync(path.join(install, "tf/addons")) && fs.realpathSync(path.join(install, "tf/addons")) === fs.realpathSync(path.join(directory, "addons")) && fs.realpathSync(path.join(install, "tf/cfg/sourcemod")) === fs.realpathSync(path.join(directory, "cfg/sourcemod")), "SourceMod's folders were not linked into the game's");
+        // an upload with anything but compiled plugins adds nothing
+        const stage = (files: Record<string, Buffer | string>) => { const id = crypto.randomUUID(); const dir = path.join(directory, ".paperboard-transfer", `addon-${id}`); fs.mkdirSync(dir, { recursive: true }); for (const [name, content] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), content); return { id, dir }; };
+        const bad = stage({ "good.smx": smx, "good.sp": "public Plugin myinfo;" });
+        await refuses("team-fortress-2-plugin-upload", { stage: bad.id }, /compiled \.smx/, "SourcePawn source was taken as a plugin");
+        assert(!fs.existsSync(bad.dir) && !fs.existsSync(path.join(directory, "addons/sourcemod/plugins/good.smx")), "A refused upload added files or stayed staged");
+        await refuses("team-fortress-2-plugin-upload", { stage: stage({ "fake.smx": "MZ" }).id }, /not a compiled SourceMod plugin/, "A file that is not a plugin was added");
+        const uploaded = await call<any>("team-fortress-2-plugin-upload", { stage: stage({ "rtd.smx": smx }).id });
+        assert(JSON.stringify(uploaded.added) === '["rtd.smx"]' && uploaded.view.plugins.find((p: any) => p.file === "rtd.smx")?.bundled === false, `The upload was not added: ${JSON.stringify(uploaded)}`);
+        await refuses("team-fortress-2-plugin-remove", { file: "basechat.smx" }, /turn it off instead/, "A plugin SourceMod ships was deleted");
+        await refuses("team-fortress-2-plugin", { file: "../../../server.cfg", on: false }, /\.smx file name/, "A path left the plugins folder");
+        await call("team-fortress-2-admin", { steamId: "[U:1:7]", admin: true });
+        const adminsFile = () => fs.readFileSync(path.join(directory, "addons/sourcemod/configs/admins_simple.ini"), "utf8");
+        assert(adminsFile().startsWith('// "STEAM_0:1:16" "bce"\n"!127.0.0.1" "99:z"\n') && adminsFile().includes('"[U:1:7]" "99:z"'), `The admin was not added beside the file's own lines:\n${adminsFile()}`);
+        assert(JSON.stringify((await call<any>("team-fortress-2-players")).admins) === '["!127.0.0.1","[U:1:7]"]', "Players does not show the admin");
+
         await call("start-server");
         await until(async () => { const s = await state(); if (s.serverStatus === "offline") throw new Error("Team Fortress 2 stopped before readiness:\n" + s.serverEntries.map(e => e.content).slice(-25).join("\n")); return s.serverStatus === "online"; }, "Team Fortress 2 readiness", 30_000);
         const rcon = (await secretsApi.get(`${first.id}-team-fortress-2-rcon-password`, PANEL)).value;
         assert(rcon && rcon.length >= 20, "No RCON password was made");
         const requests = () => fs.readFileSync(path.join(install, "requests.log"), "utf8");
         assert(requests().includes(`-ip 0.0.0.0 -port ${port}`) && requests().includes("+maxplayers 24 +sv_lan 1") && requests().includes("+map cp_badlands") && requests().includes("join=join-secret quota=4 bans=banid 0 [U:1:42]"), `Launch did not carry the options, secrets and bans:\n${requests()}`);
+        const ld = /ld=(\S*)/.exec(requests())?.[1]?.split(":") ?? [];
+        assert(ld[0] === path.join(install, "bin/linux64") && ld.includes(curlPackage) !== systemCurl, `The server's library path ${systemCurl ? "took Origami's libcurl over the computer's" : "lacks Origami's libcurl"}: ${ld.join(":")}`);
         assert(!fs.existsSync(path.join(install, "tf/cfg/paperboard_secrets.cfg")), "The start passwords stayed on disk after the server was ready");
+        assert(requests().includes("mods=true,true,true"), `The server started without SourceMod's folders:\n${requests()}`);
         let online = await state();
         assert(online.maxPlayers === 24 && online.serverLevel === "cp_badlands" && online.onlinePlayers.length === 0, `Server facts not read: ${online.maxPlayers} ${online.serverLevel} ${online.onlinePlayers}`);
 
@@ -192,6 +246,22 @@ test("Team Fortress 2 through daemon: RCON control with a vaulted password, cfgs
         await until(async () => requests().includes("rcon mp_restartgame 1"), "a console command over RCON");
         const roster = await call<any>("team-fortress-2-players");
         assert(roster.seen.some((p: any) => p.steamId === "[U:1:7]" && p.name === "Scout Main") && roster.online.filter((p: any) => p.steamId === "BOT").length === 2, `Roster not recorded: ${JSON.stringify(roster)}`);
+
+        // classes and kills come from the game log; a person's add up in the roster, a bot's stay with the bot
+        control({ log: '"Scout Main<4><[U:1:7]><Red>" changed role to "scout"' });
+        control({ log: '"Scout Main<4><[U:1:7]><Red>" killed "Mega Baboon<2><BOT><Blue>" with "scattergun" (attacker_position "1 2 3") (victim_position "4 5 6")' });
+        control({ log: '"Kill Me<3><BOT><Blue>" triggered "kill assist" against "Scout Main<4><[U:1:7]><Red>" (assister_position "1 2 3") (attacker_position "4 5 6") (victim_position "7 8 9")' });
+        control({ log: '"Mega Baboon<2><BOT><Blue>" killed "Scout Main<4><[U:1:7]><Red>" with "minigun" (attacker_position "1 2 3") (victim_position "4 5 6")' });
+        control({ log: '"Scout Main<4><[U:1:7]><Red>" committed suicide with "world" (attacker_position "1 2 3")' });
+        await until(async () => requests() && (await call<any>("team-fortress-2-players")).seen.some((p: any) => p.deaths === 2), "stats from the game log", 15_000);
+        const stats = await call<any>("team-fortress-2-players");
+        const scoutTotals = stats.seen.find((p: any) => p.steamId === "[U:1:7]");
+        const bot = (name: string) => stats.online.find((p: any) => p.name === name)?.stats;
+        assert(scoutTotals.kills === 1 && scoutTotals.deaths === 2 && !scoutTotals.assists && scoutTotals.playtime > 0, `A person's totals are wrong: ${JSON.stringify(scoutTotals)}`);
+        assert(stats.online.find((p: any) => p.steamId === "[U:1:7]")?.role === "scout", `The class was not read: ${JSON.stringify(stats.online)}`);
+        assert(bot("Mega Baboon")?.kills === 1 && bot("Mega Baboon")?.deaths === 1 && bot("Kill Me")?.assists === 1, `A bot's stats are wrong: ${JSON.stringify(stats.online)}`);
+        const disk = JSON.parse(fs.readFileSync(path.join(directory, "players.json"), "utf8")).find((p: any) => p.steamId === "[U:1:7]");
+        assert(disk.kills === 1 && disk.deaths === 2, `Stats did not reach players.json: ${JSON.stringify(disk)}`);
 
         // a live option goes over RCON; the new password never reaches the console
         await call("write-game-options", { patch: { hostname: "Live TF2", password: "new-secret" } });
@@ -217,12 +287,27 @@ test("Team Fortress 2 through daemon: RCON control with a vaulted password, cfgs
         assert((await call<any>("team-fortress-2-change-map", { map: "ctf_2fort" })).now === true, "A running server's map change did not apply now");
         await until(async () => (await state()).serverLevel === "ctf_2fort", "the new map");
 
+        // SourceMod loaded with the server, so plugin and admin changes reach it at once
+        mods = await call<any>("team-fortress-2-plugin", { file: "rockthevote.smx", on: true });
+        assert(mods.active && plugin("rockthevote.smx")?.enabled && requests().includes("rcon sm plugins load rockthevote.smx"), `A plugin turned on did not load:\n${requests()}`);
+        await call("team-fortress-2-plugin", { file: "basechat.smx", on: false });
+        assert(requests().includes("rcon sm plugins unload basechat.smx") && fs.existsSync(path.join(directory, "addons/sourcemod/plugins/disabled/basechat.smx")), "A plugin turned off kept running");
+        await call("team-fortress-2-plugin-remove", { file: "rtd.smx" });
+        assert(requests().includes("rcon sm plugins unload rtd.smx") && !fs.existsSync(path.join(directory, "addons/sourcemod/plugins/rtd.smx")), "A removed plugin stayed");
+        await call("team-fortress-2-admin", { steamId: "[U:1:7]", admin: false });
+        assert(requests().includes("rcon sm_reloadadmins") && !adminsFile().includes("[U:1:7]") && adminsFile().includes('"!127.0.0.1" "99:z"'), `Admins did not reload:\n${adminsFile()}`);
+        // turned off while running, SourceMod stays until the server restarts
+        mods = await call<any>("team-fortress-2-sourcemod-set", { on: false });
+        assert(!mods.on && mods.active && fs.lstatSync(path.join(install, "tf/addons")).isSymbolicLink(), "SourceMod was pulled from the running server");
+
         await refuses("write-server-file", { path: "install/tf/cfg/server.cfg", content: "rcon_password x" }, /managed by Updates/, "The install was writable through Files");
         await call("stop-server");
         await until(async () => !(await processApi.exists(proc)), "graceful shutdown", 30_000);
         await until(async () => (await state()).serverStatus === "offline", "offline state");
         assert(requests().includes("rcon quit"), "The server was not asked to quit");
         assert(fs.readFileSync(path.join(install, "tf/cfg/banned_user.cfg"), "utf8").includes("banid 0 [U:1:7]"), "The ban list did not reach banned_user.cfg");
+        await call("team-fortress-2-sourcemod-set", { on: false });
+        assert(!fs.existsSync(path.join(install, "tf/addons")) && !fs.existsSync(path.join(install, "tf/cfg/sourcemod")) && fs.existsSync(path.join(directory, "addons/sourcemod/configs/admins_simple.ini")), "SourceMod off did not unlink it, or took the user's files");
         console.log("Source wire: RCON readiness and commands, vaulted passwords, cfgs, log-read players and chat, reattach, kick/ban/unban, map changes, graceful quit");
     } finally {
         await services.stopService(PANEL);

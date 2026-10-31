@@ -1,8 +1,20 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-/** A player Paperboard has seen on the server, keyed by Steam id. */
-export interface SourceSeen {
+/** What a player has done on the server, read from its game log. */
+export interface SourceStats {
+    kills: number;
+    deaths: number;
+    assists: number;
+    dominations: number;
+    /** milliseconds on the server */
+    playtime: number;
+}
+export const STAT_KEYS = ["kills", "deaths", "assists", "dominations", "playtime"] as const satisfies readonly (keyof SourceStats)[];
+export const noStats = (): SourceStats => ({ kills: 0, deaths: 0, assists: 0, dominations: 0, playtime: 0 });
+
+/** A player Paperboard has seen on the server, keyed by Steam id, with their totals across visits. */
+export interface SourceSeen extends Partial<SourceStats> {
     steamId: string;
     name: string;
     lastSeen: number;
@@ -49,8 +61,24 @@ export class SourceRoster {
     remember(steamId: string, name: string, now = Date.now()): Promise<void> {
         return this.serial(async () => {
             const byId = new Map((await this.seen()).map((p) => [p.steamId, p]));
-            byId.set(steamId, { steamId, name: name || byId.get(steamId)?.name || steamId, lastSeen: now });
+            const known = byId.get(steamId);
+            byId.set(steamId, { ...known, steamId, name: name || known?.name || steamId, lastSeen: now });
             await fs.writeFile(this.seenFile, JSON.stringify([...byId.values()], null, 2));
+        });
+    }
+
+    /** Adds to the totals of players already seen; a Steam id it has not seen is refused. */
+    addStats(added: ReadonlyMap<string, Partial<SourceStats>>): Promise<void> {
+        return this.serial(async () => {
+            if (added.size === 0) return;
+            const seen = await this.seen();
+            const byId = new Map(seen.map((p) => [p.steamId, p]));
+            for (const [steamId, stats] of added) {
+                const player = byId.get(steamId);
+                if (!player) throw new Error(`${steamId} has not been seen on this server`);
+                for (const key of STAT_KEYS) if (stats[key]) player[key] = (player[key] ?? 0) + stats[key]!;
+            }
+            await fs.writeFile(this.seenFile, JSON.stringify(seen, null, 2));
         });
     }
 

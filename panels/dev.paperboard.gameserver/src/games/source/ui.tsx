@@ -7,11 +7,12 @@ import SteamVersions from "../steam/SteamVersions";
 import { sourceActions, type SourceGameSpec } from "./index";
 import SourceOverview from "./Overview";
 import SourcePlayers from "./Players";
+import SourceMods from "./Mods";
 
 export function sourceUI(spec: SourceGameSpec, game: GameDefinition): GameUI {
     const ids = sourceActions(spec.id);
     return {
-        create() {
+        create(ctx) {
             return {
                 setup: (props) => <SteamSetup name={spec.name} infoAction={ids.info} installAction={ids.install} onComplete={props.onComplete} />,
                 tab(id) {
@@ -20,6 +21,7 @@ export function sourceUI(spec: SourceGameSpec, game: GameDefinition): GameUI {
                         case "chat": return <Chat avatar={(name) => <PaperAvatar size="small" shape="square" alt={name} fallbackIcon="person" />} />;
                         case "players": return <SourcePlayers spec={spec} />;
                         case "versions": return <SteamVersions name={spec.name} infoAction={ids.info} installAction={ids.install} />;
+                        case "mods": return <SourceMods spec={spec} active={ctx.active() === id} />;
                         default: throw new Error(`${spec.name} tab has no renderer: ${id}`);
                     }
                 },

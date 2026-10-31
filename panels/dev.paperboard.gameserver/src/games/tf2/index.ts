@@ -30,8 +30,12 @@ export const TF2: SourceGameSpec = {
     gameDir: "tf",
     executable: "srcds_linux64",
     libraryDir: "bin/linux64",
+    // replay_srv.so links it; Debian and Ubuntu have it, Arch and Fedora don't
+    libraryPackages: { "libcurl-gnutls.so.4": { id: "libcurl-gnutls", purpose: "The curl library Team Fortress 2's Linux server links, on computers without it" } },
+    sourcemod: true,
     defaultPort: 27015,
     options,
+    roleNames: { heavyweapons: "Heavy" },
     mapModes: {
         arena: "Arena", cp: "Control Point", cppl: "Control Point and Payload", ctf: "Capture the Flag", koth: "King of the Hill",
         mvm: "Mann vs. Machine", pass: "PASS Time", pd: "Player Destruction", pl: "Payload", plr: "Payload Race", rd: "Robot Destruction",
