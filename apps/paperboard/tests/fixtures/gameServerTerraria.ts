@@ -138,8 +138,12 @@ for await (const line of console) { fs.appendFileSync(path.join(path.dirname(con
             assert(other.serverStatus === "online", "Backup or restore stopped another server");
             assert(other.serverPort !== (await state()).serverPort, "Servers share a port");
             await call("run-command", { command: "isolation-first" });
+            await until(async () => fs.readFileSync(path.join(directory, "worlds/commands.txt"), "utf8").split("\n").includes("isolation-first"), "command at the first server");
             const otherDirectory = await fileApi.getPath(second.directory, PANEL);
-            assert(!fs.existsSync(path.join(otherDirectory, "worlds/commands.txt")), "Command reached the wrong server");
+            // the panel sends every server its own `playing` for the roster, so
+            // only the command sent to the first one tells the servers apart
+            const otherCommands = path.join(otherDirectory, "worlds/commands.txt");
+            assert(!(fs.existsSync(otherCommands) && fs.readFileSync(otherCommands, "utf8").split("\n").includes("isolation-first")), "Command reached the wrong server");
             await actionsApi.call(PANEL, "remove-server", { server: second.id });
             assert(fs.existsSync(path.join(otherDirectory, "worlds/World.wld")), "Removing a server deleted its world");
         }
