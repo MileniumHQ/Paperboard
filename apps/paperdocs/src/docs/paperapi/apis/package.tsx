@@ -39,6 +39,18 @@ export default function PackageApiDoc() {
             </PaperText>
 
             <PaperText preset="body">
+                The opencode, codex and claude-code packages supply the Agents
+                panel's command line tools, with the executable under bin/
+                (bin/opencode, bin/codex, bin/claude; .exe on Windows). They
+                are the vendors' own unmodified builds, downloaded from the
+                vendors' release hosts and checked against a signed sha256.
+                Linux builds for opencode and claude-code need glibc, and
+                opencode's x64 build is the baseline one that runs without
+                AVX2. Installing a package does not sign anyone in; each tool
+                keeps its own credentials.
+            </PaperText>
+
+            <PaperText preset="body">
                 Tar packages preserve relative symbolic links, including chains
                 and links to later archive members. The daemon checks their full
                 targets before extraction and after recipe moves. Absolute or

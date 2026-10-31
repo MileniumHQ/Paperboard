@@ -45,7 +45,7 @@ Panels are published by the operator, not by a worker route: `bun run publish` i
 
 ## Package records
 
-Package records (`java-<N>`, `ollama`, `helium`, `steamcmd`, `proton`) are written by operator scripts, never by a worker route. They write straight to the production `PACKAGES` namespace through wrangler, so sign in first with `bunx wrangler login`.
+Package records (`java-<N>`, `ollama`, `helium`, `steamcmd`, `proton`, `opencode`, `codex`, `claude-code`) are written by operator scripts, never by a worker route. They write straight to the production `PACKAGES` namespace through wrangler, so sign in first with `bunx wrangler login`.
 
 ```bash
 # every Adoptium feature release (or name them: -- 21 25)
@@ -66,6 +66,15 @@ bun run update:dotnet
 # latest stable standalone GE-Proton (Linux x64 and arm64)
 bun run update:proton
 
+# newest stable OpenCode 2.x release
+bun run update:opencode
+
+# latest stable Codex release (downloads every archive to check its contents)
+bun run update:codex
+
+# Claude Code from Anthropic's stable channel (or --channel latest); needs gpg
+bun run update:claude-code
+
 # print the records without writing
 bun run update:ollama -- --dry-run
 bun run update:steamcmd -- --dry-run
@@ -81,6 +90,14 @@ SteamCMD uses Valve's CDN bootstraps, with SHA-256 pins reviewed in `scripts/upd
 `dotnet-<major>` is Microsoft's portable .NET runtime from `builds.dotnet.microsoft.com`, for game servers built on .NET (tModLoader pins 8.0 with roll-forward disabled). The updater reads the channel's `releases.json`, takes its latest runtime, downloads each archive and refuses the whole record if any SHA-512 differs from Microsoft's metadata; the recorded SHA-256 is computed from those verified bytes. Each recipe keeps `dotnet`, `host/` and `shared/` together under `bin/`, since the host finds `host/fxr` beside itself, plus the license files at the package root. Linux and macOS x64/arm64 and Windows x64 are published; Windows arm64 has no certified consumer. The archives contain no symlinks.
 
 `proton` tracks `GloriousEggroll/proton-ge-custom`, the standalone GE-Proton build usable without the Steam client (Valve's Proton ships through Steam). Its version is the stable `GE-ProtonX-Y` tag. Only Linux x64 and arm64 are supported; each recipe takes the release's top-level `GE-ProtonX-Y-<arch>` directory into `bin/`, preserving its relative links and executable modes. GitHub's SHA-256 asset digest is authoritative. The updater downloads and validates each matching `.sha512sum` file's checksum syntax and archive name, but cannot cross-check that SHA-512 against a SHA-256 without downloading the large archive. Installation checks the actual download against the recorded SHA-256. Missing assets, digests or checksum companions, drafts, prereleases and unexpected tags fail the entire record.
+
+The Agents panel's three CLIs are packages too, none of them hosted by Paperboard; each platform entry points at the vendor's own download and carries the recipe or layout that installs it. Every platform of each record must resolve, or nothing is written.
+
+`opencode` tracks the 2.x line of `anomalyco/opencode`. GitHub's `/releases/latest` still points at the old 1.x line, so the updater lists the recent releases and takes the newest stable `v2.x.y` tag. Each archive holds a single `opencode` (`opencode.exe`) at its root, so the entry uses `layout: "bin"`. x64 ships the `-baseline` build on every OS, which runs on CPUs without AVX2; the `-musl` builds do not run on glibc and are never used, so Alpine is unsupported. GitHub's SHA-256 asset digest must agree with the release's `SHA256SUMS`.
+
+`codex` tracks `openai/codex` (`rust-vX.Y.Z` tags) and installs `codex-package-<triple>.tar.gz`. Only the `.tar.gz` files are listed in the release's `codex-package_SHA256SUMS`, which GitHub's digest must agree with. The Linux builds are static musl and run on any distribution. The recipe takes `bin/`, `codex-package.json` and `codex-path/`, plus what each OS adds under `codex-resources/`: `bwrap` on Linux, the two Windows sandbox helpers on Windows, nothing on macOS. It leaves out `codex-resources/voice/` (about 50 MB). Because a recipe that names a missing path would only fail on a user's computer, the updater downloads all six archives, checks each against its digest, lists it with `tar -t`, and refuses the record if any `take` source is absent. Nothing in an archive is extracted or run.
+
+`claude-code` installs Anthropic's per-platform npm packages (`@anthropic-ai/claude-code-<platform>`, plain tarballs without install scripts) holding the unmodified binary and its `LICENSE.md`. The version is read from `downloads.claude.ai/claude-code-releases/stable`. The updater requires Anthropic's `manifest.json` to verify against its detached GPG signature, using the key at `downloads.claude.ai/keys` in a throwaway keyring and only if the signing key's primary fingerprint is the one pinned in `scripts/update-claude-code.ts`, so `gpg` must be installed. It then downloads each tarball and requires its sha512 and sha1 to match the registry's `dist.integrity` and `dist.shasum`, and the sha256 of the binary inside it to match the signed manifest. The recorded SHA-256 is the tarball's own. Linux is glibc only: Anthropic publishes separate musl builds, but a record has no libc dimension.
 
 **Publication blocker:** real GE-Proton11-11 extraction currently loses symlink chains in the daemon's tar dependency (9 links on x64, 1 on arm64). Do not publish `proton` until extraction preserves these chains with resolved-target safety checks; disabling tar path protections is not a safe workaround. SteamCMD extraction passed on all three bootstrap archives.
 
