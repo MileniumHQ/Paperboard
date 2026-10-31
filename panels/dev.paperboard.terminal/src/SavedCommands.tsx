@@ -75,7 +75,7 @@ export default function SavedCommandsModal(props: {
     return (
         <PaperModal open={props.open} onClose={props.onClose} title="Saved commands" size="medium">
             <PaperFlex direction="column" gap="full" fullWidth>
-                <PaperText color="text-subtle">
+                <PaperText preset="text">
                     Run these from here, or pin one to Home with the Pinned command widget.
                 </PaperText>
                 <Show when={props.loadError}>
@@ -99,12 +99,12 @@ export default function SavedCommandsModal(props: {
                                     <PaperCard surface="element" borderless paddingX="full" paddingY="half">
                                         <PaperFlex direction="row" align="center" gap="half" fullWidth>
                                             <PaperFlex direction="column" flex minWidth={0}>
-                                                <PaperText truncate weight={600}>{saved.label}</PaperText>
-                                                <PaperText truncate family="code" color="text-subtle" title={saved.command}>
+                                                <PaperText preset="label" truncate>{saved.label}</PaperText>
+                                                <PaperText preset="hint" truncate family="code" title={saved.command}>
                                                     {saved.command}
                                                 </PaperText>
                                             </PaperFlex>
-                                            <PaperText truncate color={TONE_COLOR[status().tone]} title={status().detail}>
+                                            <PaperText preset="hint" truncate color={TONE_COLOR[status().tone]} title={status().detail}>
                                                 {status().text}
                                             </PaperText>
                                             <PaperButton
@@ -156,7 +156,7 @@ export default function SavedCommandsModal(props: {
                         </PaperButton>
                     </PaperFlex>
                     <Show when={full()}>
-                        <PaperText color="text-subtle">
+                        <PaperText preset="hint">
                             Terminal keeps {MAX_SAVED_COMMANDS} saved commands at most. Remove one to save another.
                         </PaperText>
                     </Show>
