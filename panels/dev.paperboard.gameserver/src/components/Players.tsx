@@ -14,6 +14,8 @@ import {
     PaperPageHeader,
     PaperSelectMenu,
     PaperSelectMenuItem,
+    PaperSelector,
+    PaperSelectorItem,
     PaperSeparator,
     PaperSettingItem,
     PaperSettingList,
@@ -36,7 +38,7 @@ import {
 } from "../lib/server";
 import { ACTION_IDS, type ActionId } from "../service/contract";
 import { JAVA_NAME_PATTERN, PLAYER_NAME_PATTERN } from "../core/players";
-import { gamertagOf, isFloodgateUuid, type BedrockNaming } from "../core/bedrock";
+import { bedrockPlayerName, gamertagOf, isFloodgateUuid, type BedrockNaming } from "../core/bedrock";
 import PlayerHead from "./PlayerHead";
 import PlayerRoster, { statusColor } from "./PlayerRoster";
 
@@ -122,6 +124,7 @@ export default function Players() {
     const [whitelistOpen, setWhitelistOpen] = createSignal(false);
     const [whitelistName, setWhitelistName] = createSignal("");
     const [whitelistError, setWhitelistError] = createSignal("");
+    const [whitelistEdition, setWhitelistEdition] = createSignal<"java" | "bedrock">("java");
     const [feedback, setFeedback] = createSignal("");
     const [sortBy, setSortBy] = createSignal<SortKey>("playtime");
     // how Floodgate names Bedrock players; null without crossplay
@@ -406,18 +409,24 @@ export default function Players() {
         callPlayerAction(ACTION_IDS.killPlayer, playerName);
 
     // whitelist a name that may not be on the roster yet (a player who has
-    // not joined). The service validates the name again; this pattern check
-    // is only so the field can explain itself before the round trip.
+    // not joined). A gamertag becomes the name Floodgate gives it here. The
+    // service validates the name again; these checks are only so the field
+    // can explain itself before the round trip.
     const whitelistNewPlayer = async () => {
-        const name = whitelistName().trim();
+        const typed = whitelistName().trim();
+        if (!typed) return;
         const naming = bedrock();
-        const isBedrockName = gamertagOf(name, naming) !== null && PLAYER_NAME_PATTERN.test(name);
-        if (!isBedrockName && !JAVA_NAME_PATTERN.test(name)) {
-            setWhitelistError(
-                naming
-                    ? `Java names are 1–16 letters, numbers, or underscores. Bedrock names start with "${naming.prefix}".`
-                    : "Names are 1–16 letters, numbers, or underscores.",
-            );
+        let name = typed;
+        if (naming && whitelistEdition() === "bedrock") {
+            // a pasted Floodgate name already carries the prefix
+            const gamertag = typed.startsWith(naming.prefix) ? typed.slice(naming.prefix.length) : typed;
+            name = bedrockPlayerName(gamertag, naming);
+            if (!gamertag || !PLAYER_NAME_PATTERN.test(name)) {
+                setWhitelistError("Gamertags are letters, numbers and spaces.");
+                return;
+            }
+        } else if (!JAVA_NAME_PATTERN.test(name)) {
+            setWhitelistError("Usernames are 1–16 letters, numbers or underscores.");
             return;
         }
         try {
@@ -504,7 +513,6 @@ export default function Players() {
             <PaperPageHeader
                 icon="group"
                 title="Players"
-                subtitle={bedrock() ? `Bedrock players' names start with "${bedrock()!.prefix}", like ${bedrock()!.prefix}Steve` : undefined}
             >
                 <PaperFlex direction="row" gap="half" align="center">
                     <PaperFlex minWidth="field">
@@ -526,7 +534,9 @@ export default function Players() {
                         variant="primary"
                         disabled={!canEditLists()}
                         onClick={() => {
+                            setWhitelistName("");
                             setWhitelistError("");
+                            setWhitelistEdition("java");
                             setWhitelistOpen(true);
                         }}
                     >
@@ -632,7 +642,7 @@ export default function Players() {
             <PaperModal
                 open={whitelistOpen()}
                 onClose={() => setWhitelistOpen(false)}
-                title="Whitelist Player"
+                title="Add to whitelist"
                 size="small"
                 footer={
                     <>
@@ -641,47 +651,60 @@ export default function Players() {
                         </PaperButton>
                         <PaperButton
                             variant="primary"
-                            disabled={!canEditLists()}
+                            disabled={!canEditLists() || !whitelistName().trim()}
                             onClick={() => void whitelistNewPlayer()}
                         >
-                            Whitelist
+                            Add
                         </PaperButton>
                     </>
                 }
             >
-                <PaperFlex direction="column" gap="half" fullWidth>
-                    <PaperText preset="body">
-                        Adds a player to the server whitelist. They do not need to
-                        have joined before.
-                    </PaperText>
+                <PaperFlex direction="column" gap="full" fullWidth>
                     <Show when={bedrock()}>
-                        {(naming) => (
-                            <PaperText preset="body" color="text-subtle">
-                                For a Bedrock player, type their gamertag after "{naming().prefix}"
-                                {naming().replaceSpaces ? ", with underscores for spaces" : ""}. Floodgate
-                                finds their Xbox account through GeyserMC, which knows a gamertag once
-                                its player has joined any Geyser server.
+                        <PaperSelector
+                            name="whitelistEdition"
+                            value={whitelistEdition()}
+                            onValueChange={(value) => {
+                                setWhitelistEdition(value === "bedrock" ? "bedrock" : "java");
+                                setWhitelistError("");
+                            }}
+                            horizontal
+                        >
+                            <PaperSelectorItem value="java" icon="computer">Java</PaperSelectorItem>
+                            <PaperSelectorItem value="bedrock" icon="sports_esports">Bedrock</PaperSelectorItem>
+                        </PaperSelector>
+                    </Show>
+                    <PaperFlex direction="column" gap="half" fullWidth>
+                        <PaperInput
+                            fullWidth
+                            autofocus
+                            icon="person"
+                            label={whitelistEdition() === "bedrock" ? "Gamertag" : "Username"}
+                            invalid={!!whitelistError()}
+                            value={whitelistName()}
+                            onInput={(e) => {
+                                setWhitelistName(e.currentTarget.value);
+                                setWhitelistError("");
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") void whitelistNewPlayer();
+                            }}
+                        />
+                        <Show
+                            when={whitelistError()}
+                            fallback={
+                                <PaperText size={2} color="text-subtle">
+                                    {whitelistEdition() === "bedrock"
+                                        ? "Works once they have joined any Geyser server."
+                                        : "They don't need to have joined before."}
+                                </PaperText>
+                            }
+                        >
+                            <PaperText size={2} color="danger">
+                                {whitelistError()}
                             </PaperText>
-                        )}
-                    </Show>
-                    <PaperInput
-                        fullWidth
-                        icon="person_add"
-                        label="Player name"
-                        value={whitelistName()}
-                        onInput={(e) => {
-                            setWhitelistName(e.currentTarget.value);
-                            setWhitelistError("");
-                        }}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter") void whitelistNewPlayer();
-                        }}
-                    />
-                    <Show when={whitelistError()}>
-                        <PaperText size={2} color="danger">
-                            {whitelistError()}
-                        </PaperText>
-                    </Show>
+                        </Show>
+                    </PaperFlex>
                 </PaperFlex>
             </PaperModal>
         </>
@@ -724,18 +747,24 @@ function PlayerInspector(props: {
         const s = summary();
         return s ? formatDistance(s.distanceCm) : "–";
     };
-    const healthValue = () =>
-        stats()?.health !== undefined ? stats()!.health : "–";
-    const healthMeter = () =>
-        stats()?.health !== undefined
-            ? { value: stats()!.health!, max: 20, variant: "danger" as const }
-            : undefined;
-    const foodValue = () =>
-        stats()?.food !== undefined ? stats()!.food : "–";
-    const foodMeter = () =>
-        stats()?.food !== undefined
-            ? { value: stats()!.food!, max: 20, variant: "warning" as const }
-            : undefined;
+    // health is fractional (19.62 after a scratch); the hearts bar rounds
+    // it up to the next half heart, so the number does too
+    const health = () => {
+        const value = stats()?.health;
+        return value === undefined ? undefined : Math.ceil(value);
+    };
+    const food = () => {
+        const value = stats()?.food;
+        return value === undefined ? undefined : Math.round(value);
+    };
+    const healthMeter = () => {
+        const value = health();
+        return value === undefined ? undefined : { value, max: 20, variant: "danger" as const };
+    };
+    const foodMeter = () => {
+        const value = food();
+        return value === undefined ? undefined : { value, max: 20, variant: "warning" as const };
+    };
 
     return (
         <Show
@@ -855,14 +884,14 @@ function PlayerInspector(props: {
                         <PaperStatTile
                             icon="favorite"
                             label="Health"
-                            value={healthValue()}
+                            value={health() ?? "–"}
                             tone="danger"
                             meter={healthMeter()}
                         />
                         <PaperStatTile
                             icon="restaurant"
                             label="Food"
-                            value={foodValue()}
+                            value={food() ?? "–"}
                             tone="warning"
                             meter={foodMeter()}
                         />
@@ -873,6 +902,12 @@ function PlayerInspector(props: {
                                 stats()?.xpLevel !== undefined
                                     ? `Level ${stats()!.xpLevel}`
                                     : "–"
+                            }
+                            tone="success"
+                            meter={
+                                stats()?.xpProgress !== undefined
+                                    ? { value: Math.round(stats()!.xpProgress! * 100), max: 100 }
+                                    : undefined
                             }
                         />
                         <PaperStatTile
