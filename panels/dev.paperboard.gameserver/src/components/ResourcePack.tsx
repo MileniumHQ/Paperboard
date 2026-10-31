@@ -177,8 +177,7 @@ export default function ResourcePack(props: { active: boolean }) {
                                 }}
                             />
                             <PaperText size={2} color="text-subtle">
-                                Paperboard downloads the pack once to work out its sha1, so players can verify what they get. The link must be
-                                a direct download of a .zip.
+                                The link must be a direct download of a .zip.
                             </PaperText>
                             <Show when={customError()}>
                                 <PaperQuote variant="danger" icon="warning" title="Resource pack not set">
