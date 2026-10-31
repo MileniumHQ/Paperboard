@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
+import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import {
     PaperButton,
     PaperCenteredInterface,
@@ -14,10 +14,11 @@ import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { createSteamInstall, type SteamInstallInfo } from "./installRows";
 
-function InstallStep(props: { name: string; installAction: string }) {
+function InstallStep(props: { name: string; infoAction: string; installAction: string }) {
     const wizard = useWizard();
     const install = createSteamInstall(props.installAction);
-    let started = false;
+    const [done, setDone] = createSignal(false);
+    const [blocked, setBlocked] = createSignal<{ title: string; reason: string } | null>(null);
     let disposed = false;
     onCleanup(() => { disposed = true; });
 
@@ -26,72 +27,60 @@ function InstallStep(props: { name: string; installAction: string }) {
         wizard?.setCanProceed(false);
         const ok = await install.run();
         if (disposed) return;
+        setDone(ok);
         wizard?.setCanProceed(ok);
         wizard?.setOptionsShown(true);
     };
 
-    createEffect(() => {
-        if (wizard?.currentStep() === 1 && !started) {
-            started = true;
-            void run();
+    // the host is checked first, so an unsupported computer is told why instead of downloading
+    onMount(async () => {
+        wizard?.setOptionsShown(false);
+        let info: SteamInstallInfo;
+        try {
+            info = await serverBridge.call<SteamInstallInfo>(props.infoAction);
+        } catch (err) {
+            if (!disposed) setBlocked({ title: `${props.name} could not be checked`, reason: errorMessage(err) });
+            return;
         }
+        if (disposed) return;
+        if (!info.host.supported) setBlocked({ title: `This computer can't run ${props.name} yet`, reason: info.host.reason ?? "" });
+        else void run();
     });
 
     return (
         <PaperCenteredInterface>
-            <PaperFlex direction="column" gap="full" center fullWidth>
-                <Show when={install.error()}>
-                    <PaperQuote variant="danger" title="Setup failed">{install.error()}</PaperQuote>
-                    <PaperButton onClick={() => void run()}>Retry setup</PaperButton>
-                </Show>
-                <InstallLoaders items={install.rows(props.name)} />
-            </PaperFlex>
+            <Show
+                when={!blocked()}
+                fallback={<PaperQuote variant="warning" title={blocked()!.title}>{blocked()!.reason}</PaperQuote>}
+            >
+                <PaperFlex direction="column" gap="full" center fullWidth>
+                    <PaperText preset="title">{done() ? `${props.name} is ready` : "Setting things up..."}</PaperText>
+                    <Show when={install.error()}>
+                        <PaperQuote variant="danger" title="Setup failed">{install.error()}</PaperQuote>
+                        <PaperButton onClick={() => void run()}>Retry setup</PaperButton>
+                    </Show>
+                    <InstallLoaders items={install.rows(props.name)} />
+                </PaperFlex>
+            </Show>
         </PaperCenteredInterface>
     );
 }
 
 /**
- * Setup for a game whose dedicated server comes from Steam: what will be
- * downloaded, then the download. Steam always serves the current build, so
- * there is no version to pick.
+ * Setup for a game whose dedicated server comes from Steam: the download
+ * starts at once. Steam always serves the current build, so there is no
+ * version to pick.
  */
 export default function SteamSetup(props: {
     name: string;
-    /** what the server needs and what to expect, under the title */
-    description: string;
     infoAction: string;
     installAction: string;
     onComplete(): void;
 }) {
-    const [info, setInfo] = createSignal<SteamInstallInfo | null>(null);
-    const [loadError, setLoadError] = createSignal("");
-    onMount(async () => {
-        try {
-            setInfo(await serverBridge.call<SteamInstallInfo>(props.infoAction));
-        } catch (err) {
-            setLoadError(errorMessage(err));
-        }
-    });
-
     return (
         <PaperWizard showProgress={false} hideBack={true} finishLabel="Finish Setup" finishVariant="success" onComplete={props.onComplete}>
-            <PaperWizardStep index={0} canProceed={info()?.host.supported === true}>
-                <PaperCenteredInterface size="large">
-                    <PaperFlex direction="column" gap="half">
-                        <PaperText preset="title">{props.name} Dedicated Server</PaperText>
-                        <PaperText preset="body">{props.description}</PaperText>
-                        <Show when={loadError()}>
-                            <PaperQuote variant="danger" title={`${props.name} could not be checked`}>{loadError()}</PaperQuote>
-                        </Show>
-                        <Show when={info() && !info()!.host.supported}>
-                            <PaperQuote variant="warning" title={`This computer can't run ${props.name} yet`}>{info()!.host.reason}</PaperQuote>
-                        </Show>
-                    </PaperFlex>
-                </PaperCenteredInterface>
-            </PaperWizardStep>
-
-            <PaperWizardStep index={1}>
-                <InstallStep name={props.name} installAction={props.installAction} />
+            <PaperWizardStep index={0}>
+                <InstallStep name={props.name} infoAction={props.infoAction} installAction={props.installAction} />
             </PaperWizardStep>
         </PaperWizard>
     );

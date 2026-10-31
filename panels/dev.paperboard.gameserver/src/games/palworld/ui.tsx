@@ -13,7 +13,6 @@ export const palworldUI: GameUI = {
             setup: (props) => (
                 <SteamSetup
                     name="Palworld"
-                    description="Paperboard downloads the Palworld dedicated server from Steam, about 5 GB. Palworld recommends 16 GB of memory for a server, and players join on UDP port 8211."
                     infoAction={INFO}
                     installAction={INSTALL}
                     onComplete={props.onComplete}
