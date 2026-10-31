@@ -53,6 +53,7 @@ export const actionsApi = {
         if (service.refuse[id]) throw new Error(service.refuse[id]);
         if (id === UI_ACTION_IDS.openApp) return { url: service.appUrl(input!.name!), title: service.apps.find((a) => a.name === input!.name)!.title };
         if (id === UI_ACTION_IDS.deleteApp) service.apps = service.apps.filter((a) => a.name !== input!.name);
+        if (id === TOOLS_ACTION_IDS.remove) service.tools.config.servers = service.tools.config.servers.filter((s) => s.name !== input!.name);
         return structuredClone(answers[id]?.() ?? {});
     },
 };

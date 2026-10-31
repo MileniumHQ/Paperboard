@@ -61,6 +61,8 @@ describe("panel behavior", () => {
             expect(c.eraseRefusalInModal, "a refused erase must say why where the person is looking").toBe(true);
             expect(c.removeStillAsking, "a refused removal keeps its confirmation open").toBe(true);
             expect(c.removeRefusalInModal, "a refused removal must say why where the person is looking").toBe(true);
+            expect(c.emptyOffersAdd, "no tool servers offers adding one inside the empty state").toBe(true);
+            expect(c.addButtons, "adding a server is offered once").toBe(1);
 
             expect(c.routineScheduleColor, "a routine's schedule must be in the hint colour").toBe(c.subtleColor);
             expect(c.routineTextColor, "the routine itself stays in the text colour").not.toBe(c.subtleColor);

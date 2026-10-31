@@ -193,6 +193,16 @@ async function run() {
     button(confirmRemove, "Keep it")?.click();
     await sleep(300);
 
+    // removing the last one: the empty state offers the way to add one, once
+    delete service.refuse[TOOLS_ACTION_IDS.remove];
+    button(document, "Remove")!.click();
+    await sleep(300);
+    button(dialogTitled("Remove notes?")!, "Remove")!.click();
+    await sleep(300);
+    const empty = [...document.querySelectorAll<HTMLElement>("*")].find((el) => el.children.length === 0 && el.textContent === "No tool servers yet")?.parentElement;
+    c.emptyOffersAdd = Boolean(empty && button(empty, "Add a server"));
+    c.addButtons = [...document.querySelectorAll("button")].filter((b) => b.textContent?.trim().endsWith("Add a server")).length;
+
     // a routine's schedule reads quieter than what it does
     await page("routines");
     const what = [...document.querySelectorAll<HTMLElement>("*")].find((el) => el.children.length === 0 && el.textContent === "Text a flag fact");

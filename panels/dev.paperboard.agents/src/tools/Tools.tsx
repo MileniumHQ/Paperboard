@@ -140,6 +140,11 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
     };
     const statusOf = (s: ServerSpec): ServerStatus => view().status.find((x) => x.name === s.name) ?? { name: s.name, phase: "stopped", error: null, tools: 0 };
     const where = (s: ServerSpec) => (s.transport === "http" ? "This computer, over the web" : "This computer");
+    const addButton = () => (
+        <PaperButton variant="primary" disabled={busy() !== null || locked() || view().config.servers.length >= TOOL_LIMITS.servers} onClick={() => setForm(blankForm())}>
+            <PaperIcon>add</PaperIcon> Add a server
+        </PaperButton>
+    );
 
     return (
         <PaperFlex gap="full" role="region" aria-label="Tool servers">
@@ -149,7 +154,11 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
             </PaperText>
             <For
                 each={view().config.servers}
-                fallback={<PaperEmptyState icon="dns" title="No tool servers yet" />}
+                fallback={
+                    <PaperEmptyState icon="dns" title="No tool servers yet">
+                        {addButton()}
+                    </PaperEmptyState>
+                }
             >
                 {(server) => {
                     const status = () => statusOf(server);
@@ -224,11 +233,11 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
                     );
                 }}
             </For>
-            <PaperFlex direction="row">
-                <PaperButton variant="primary" disabled={busy() !== null || locked() || view().config.servers.length >= TOOL_LIMITS.servers} onClick={() => setForm(blankForm())}>
-                    <PaperIcon>add</PaperIcon> Add a server
-                </PaperButton>
-            </PaperFlex>
+            <Show when={view().config.servers.length > 0}>
+                <PaperFlex direction="row">
+                    {addButton()}
+                </PaperFlex>
+            </Show>
             <Show when={error()}>
                 {(shown) => (
                     <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
