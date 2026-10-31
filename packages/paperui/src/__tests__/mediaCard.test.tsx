@@ -24,6 +24,48 @@ describe("PaperMediaCard footer controls", () => {
     });
 });
 
+describe("PaperMediaCard click area", () => {
+    it("the footer row opens the card everywhere but on its controls", () => {
+        const opened: string[] = [];
+        const { getByText, getByRole } = render(() => (
+            <PaperMediaCard
+                title="Server"
+                onClick={() => opened.push("card")}
+                footerLeft={<span>12 players</span>}
+                footerRight={
+                    <div role="switch" aria-checked="false" tabIndex={0} onClick={() => opened.push("toggle")}>
+                        <span>Enabled</span>
+                    </div>
+                }
+            />
+        ));
+        fireEvent.click(getByText("12 players"));
+        expect(opened).toEqual(["card"]);
+        fireEvent.click(getByText("12 players").parentElement!.parentElement!);
+        expect(opened).toEqual(["card", "card"]);
+        // a click inside a control, even on its inner text, is the control's
+        fireEvent.click(getByText("Enabled"));
+        expect(opened).toEqual(["card", "card", "toggle"]);
+        fireEvent.click(getByRole("switch"));
+        expect(opened).toEqual(["card", "card", "toggle", "toggle"]);
+    });
+
+    it("a control in the card's content does its own thing too", () => {
+        const opened: string[] = [];
+        const { getByText } = render(() => (
+            <PaperMediaCard title="Pack" onClick={() => opened.push("card")} description="A pack">
+                <input aria-label="Name" />
+                <button onClick={() => opened.push("remove")}>Remove</button>
+            </PaperMediaCard>
+        ));
+        fireEvent.click(getByText("Remove"));
+        fireEvent.click(document.querySelector("input")!);
+        expect(opened).toEqual(["remove"]);
+        fireEvent.click(getByText("A pack"));
+        expect(opened).toEqual(["remove", "card"]);
+    });
+});
+
 describe("PaperMediaCard poster", () => {
     it("portrait art takes the icon's place, beside the title under a banner", () => {
         const { container, getByText } = render(() => (

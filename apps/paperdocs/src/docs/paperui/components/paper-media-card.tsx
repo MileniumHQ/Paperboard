@@ -142,6 +142,7 @@ export function Example() {
             <PaperText preset="body">
                 When onClick or href is passed, the card outlines its border on hover and, unless effect is false, wraps itself in PaperEffect.
                 Keyboard navigation triggers onClick when pressing Enter or Space.
+                The whole card is the click target, footer row included; a click on a control inside it (a button, toggle, field or link) only does what that control does.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>

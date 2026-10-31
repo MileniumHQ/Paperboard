@@ -48,6 +48,21 @@ export interface PaperMediaCardProps
     onClick?: (e: MouseEvent) => void;
 }
 
+const CONTROLS = [
+    "a[href]",
+    "button",
+    "input",
+    "select",
+    "textarea",
+    "label",
+    "summary",
+    "[contenteditable]",
+    "[tabindex]",
+    ...["button", "link", "switch", "checkbox", "radio", "tab", "menuitem", "option", "slider", "textbox", "combobox"].map(
+        (role) => `[role="${role}"]`,
+    ),
+].join(",");
+
 export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
     const [local, rest] = splitProps(props, [
         "banner",
@@ -85,17 +100,20 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
     const hasOverlappingIcon = () => hasBanner() && !local.poster && Boolean(local.icon);
     const hasOverlappingPoster = () => hasBanner() && Boolean(local.poster);
 
-    // the footer holds the card's own controls (a button, a toggle): using
-    // one does just that, never also opening the card
-    const inFooter = (e: Event) =>
-        e.target instanceof Element && Boolean(e.target.closest(`.${styles.footer}`));
+    // the whole card opens it, footer row included; a control inside it (a
+    // button, a toggle, a field, a link) only does its own thing
+    const onControl = (e: Event) => {
+        if (!(e.target instanceof Element) || !(e.currentTarget instanceof Element)) return false;
+        const control = e.target.closest(CONTROLS);
+        return Boolean(control && control !== e.currentTarget && e.currentTarget.contains(control));
+    };
 
     const handleClick = (e: MouseEvent) => {
         if (local.disabled) {
             e.preventDefault();
             return;
         }
-        if (inFooter(e)) return;
+        if (onControl(e)) return;
         local.onClick?.(e);
     };
 
