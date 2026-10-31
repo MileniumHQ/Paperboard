@@ -19,6 +19,7 @@
         "update:steamcmd": "bun scripts/update-steamcmd.ts",
         "update:dotnet": "bun scripts/update-dotnet.ts",
         "update:proton": "bun scripts/update-proton.ts",
+        "update:codex": "bun scripts/update-codex.ts",
         "update:opencode": "bun scripts/update-opencode.ts"
 
     },

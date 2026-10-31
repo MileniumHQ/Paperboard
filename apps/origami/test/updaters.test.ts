@@ -2,6 +2,7 @@ import { STEAMCMD_BUILDS, buildSteamcmdRecord, buildLatestSteamcmdRecord } from 
 import { RIDS, runtimeFiles, buildDotnetRecord, buildLatestDotnetRecord, type DotnetReleases } from "../scripts/update-dotnet";
 import { buildProtonRecord, buildLatestProtonRecord } from "../scripts/update-proton";
 import { buildOpencodeRecord, buildLatestOpencodeRecord, newestV2Release } from "../scripts/update-opencode";
+import { TARGETS, buildCodexRecord, buildLatestCodexRecord, inspectArchive, type ArchiveListings } from "../scripts/update-codex";
 import { describe, it, expect } from "bun:test";
 import {
     buildJavaRecord,
@@ -528,5 +529,127 @@ describe("update-opencode", () => {
         expect(calls[1]).toContain("/v2.2.5/SHA256SUMS");
         const noSums = (async () => Response.json([{ ...opencodeRelease("v2.2.5"), assets: [] }])) as unknown as typeof fetch;
         await expect(buildLatestOpencodeRecord(noSums)).rejects.toThrow(/SHA256SUMS missing/);
+    });
+});
+
+const CODEX_TAG = "rust-v0.166.0";
+const codexFile = (key: PlatformKey) => `codex-package-${TARGETS[key].triple}.tar.gz`;
+function codexRelease(overrides: Partial<GithubRelease> = {}, digestFor = (i: number) => `sha256:${sha(String(i))}`): GithubRelease {
+    return {
+        tag_name: CODEX_TAG,
+        assets: [
+            ...PLATFORM_KEYS.map((key, i) => ({
+                name: codexFile(key),
+                size: 100 + i,
+                digest: digestFor(i),
+                browser_download_url: `https://github.com/openai/codex/releases/download/${CODEX_TAG}/${codexFile(key)}`,
+            })),
+            // the same package in a format SHA256SUMS does not list
+            { name: "codex-package-x86_64-unknown-linux-musl.tar.zst", digest: `sha256:${sha("e")}`, browser_download_url: "https://github.com/openai/codex/releases/download/x.tar.zst" },
+            { name: "codex-package_SHA256SUMS", browser_download_url: `https://github.com/openai/codex/releases/download/${CODEX_TAG}/codex-package_SHA256SUMS` },
+        ],
+        ...overrides,
+    };
+}
+const codexSums = PLATFORM_KEYS.map((key, i) => `${sha(String(i))}  ${codexFile(key)}`).join("\n");
+
+// what each real 0.166.0 archive holds, listed with tar -t
+function codexListings(): ArchiveListings {
+    const exe = (key: PlatformKey) => (key.startsWith("windows-") ? ".exe" : "");
+    return Object.fromEntries(
+        PLATFORM_KEYS.map((key) => {
+            const e = exe(key);
+            const members = [
+                "bin/", `bin/codex${e}`, `bin/codex-code-mode-host${e}`, `bin/codex-exec-server${e}`, "codex-package.json",
+                "codex-path/", `codex-path/rg${e}`, "codex-resources/", "codex-resources/voice/", "codex-resources/voice/NOTICE.md", `codex-resources/voice/bin/codex-voice-host${e}`,
+            ];
+            if (key.startsWith("linux-")) members.push("codex-resources/bwrap");
+            if (key.startsWith("windows-")) members.push("codex-resources/codex-command-runner.exe", "codex-resources/codex-windows-sandbox-setup.exe");
+            return [key, members];
+        }),
+    ) as ArchiveListings;
+}
+
+describe("update-codex", () => {
+    it("takes the package without voice/, plus the sandbox helpers that exist for each OS", () => {
+        const record = buildCodexRecord(codexRelease(), codexSums, codexListings());
+        assertValidRecord(record);
+        expect(record).toMatchObject({ name: "codex", version: "0.166.0" });
+        expect(Object.keys(record.platforms)).toEqual([...PLATFORM_KEYS]);
+        expect(record.platforms["linux-x64"]).toMatchObject({
+            url: expect.stringContaining("codex-package-x86_64-unknown-linux-musl.tar.gz"),
+            sha256: sha("0"),
+            recipe: { unpack: "tar", take: { bin: "bin", "codex-package.json": "codex-package.json", "codex-path": "codex-path", "codex-resources/bwrap": "codex-resources/bwrap" } },
+        });
+        // macOS has nothing in codex-resources besides voice/
+        expect(record.platforms["macos-arm64"]?.recipe?.take).toEqual({ bin: "bin", "codex-package.json": "codex-package.json", "codex-path": "codex-path" });
+        expect(Object.keys(record.platforms["windows-arm64"]!.recipe!.take).sort()).toEqual([
+            "bin", "codex-package.json", "codex-path", "codex-resources/codex-command-runner.exe", "codex-resources/codex-windows-sandbox-setup.exe",
+        ]);
+        expect(JSON.stringify(record)).not.toContain("voice");
+        expect(JSON.stringify(record)).not.toContain(".zst");
+        for (const dl of Object.values(record.platforms)) expect(dl!.layout).toBeUndefined();
+    });
+
+    it("refuses a take source that is missing from the archive's listing", () => {
+        const listings = codexListings();
+        listings["linux-arm64"] = listings["linux-arm64"].filter((p) => p !== "codex-resources/bwrap");
+        expect(() => buildCodexRecord(codexRelease(), codexSums, listings)).toThrow(/aarch64-unknown-linux-musl.tar.gz: codex-resources\/bwrap is not in the archive/);
+        const noExe = codexListings();
+        noExe["windows-x64"] = noExe["windows-x64"].filter((p) => !p.startsWith("bin/"));
+        expect(() => buildCodexRecord(codexRelease(), codexSums, noExe)).toThrow(/bin is not in the archive/);
+        const empty = codexListings();
+        empty["macos-x64"] = [];
+        expect(() => buildCodexRecord(codexRelease(), codexSums, empty)).toThrow(/no archive listing/);
+    });
+
+    it("refuses when GitHub's digest and codex-package_SHA256SUMS disagree, or either is missing", () => {
+        expect(() => buildCodexRecord(codexRelease(), codexSums.replace(sha("2"), sha("9")), codexListings())).toThrow(/digest disagrees/);
+        expect(() => buildCodexRecord(codexRelease(), codexSums.split("\n").slice(1).join("\n"), codexListings())).toThrow(/is not in codex-package_SHA256SUMS/);
+        const r = codexRelease({}, (i) => (i === 3 ? null : `sha256:${sha(String(i))}`) as string);
+        expect(() => buildCodexRecord(r, codexSums, codexListings())).toThrow(/aarch64-apple-darwin.tar.gz has no sha256/);
+    });
+
+    it("refuses prereleases, drafts and tags that are not rust-vX.Y.Z", () => {
+        expect(() => buildCodexRecord(codexRelease({ prerelease: true }), codexSums, codexListings())).toThrow(/not a stable/);
+        expect(() => buildCodexRecord(codexRelease({ draft: true }), codexSums, codexListings())).toThrow(/not a stable/);
+        for (const tag of ["rust-v0.167.0-alpha.1", "v0.166.0", "rust-v0.166"]) {
+            expect(() => buildCodexRecord(codexRelease({ tag_name: tag }), codexSums, codexListings())).toThrow(/unexpected release tag/);
+        }
+    });
+
+    it("fetches the release and its checksum file, and lists every archive through the injected inspector", async () => {
+        const fetchFn = (async (url: string) =>
+            String(url).endsWith("codex-package_SHA256SUMS") ? new Response(codexSums) : Response.json(codexRelease())) as unknown as typeof fetch;
+        const inspected: string[] = [];
+        const listings = codexListings();
+        const record = await buildLatestCodexRecord(fetchFn, async (d) => {
+            inspected.push(`${d.key} ${d.sha256}`);
+            return listings[d.key];
+        });
+        expect(record.version).toBe("0.166.0");
+        expect(inspected.sort()).toEqual(PLATFORM_KEYS.map((key, i) => `${key} ${sha(String(i))}`).sort());
+        await expect(buildLatestCodexRecord(fetchFn, async () => ["bin/"])).rejects.toThrow(/is not in the archive/);
+        const noSums = (async () => Response.json({ ...codexRelease(), assets: [] })) as unknown as typeof fetch;
+        await expect(buildLatestCodexRecord(noSums, async () => [])).rejects.toThrow(/codex-package_SHA256SUMS missing/);
+    });
+
+    it("lists a real tar.gz it downloaded and refuses bytes that do not hash to the digest", async () => {
+        const dir = mkdtempSync(path.join(tmpdir(), "origami-test-"));
+        try {
+            mkdirSync(path.join(dir, "src", "bin"), { recursive: true });
+            writeFileSync(path.join(dir, "src", "bin", "codex"), "codex");
+            writeFileSync(path.join(dir, "src", "codex-package.json"), "{}");
+            const archive = path.join(dir, "a.tar.gz");
+            expect(Bun.spawnSync(["tar", "-czf", archive, "-C", path.join(dir, "src"), "bin", "codex-package.json"]).exitCode).toBe(0);
+            const bytes = await Bun.file(archive).bytes();
+            const fetchFn = (async () => new Response(bytes)) as unknown as typeof fetch;
+            const download = { key: "linux-x64" as const, file: "a.tar.gz", url: "https://x.test/a.tar.gz", sha256: crypto.createHash("sha256").update(bytes).digest("hex") };
+            expect((await inspectArchive(fetchFn)(download)).sort()).toEqual(["bin/", "bin/codex", "codex-package.json"]);
+            await expect(inspectArchive(fetchFn)({ ...download, sha256: sha("0") })).rejects.toThrow(/hash to .*, not the published/);
+            await expect(inspectArchive((async () => new Response("gone", { status: 404 })) as unknown as typeof fetch)(download)).rejects.toThrow(/404/);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 });
