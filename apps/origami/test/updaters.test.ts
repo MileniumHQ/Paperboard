@@ -3,6 +3,18 @@ import { RIDS, runtimeFiles, buildDotnetRecord, buildLatestDotnetRecord, type Do
 import { buildProtonRecord, buildLatestProtonRecord } from "../scripts/update-proton";
 import { buildOpencodeRecord, buildLatestOpencodeRecord, newestV2Release } from "../scripts/update-opencode";
 import { TARGETS, buildCodexRecord, buildLatestCodexRecord, inspectArchive, type ArchiveListings } from "../scripts/update-codex";
+import {
+    CLAUDE_PLATFORM,
+    SIGNING_FINGERPRINT,
+    buildClaudeCodeRecord,
+    buildLatestClaudeCodeRecord,
+    gpgVerify,
+    inspectTarball,
+    type ClaudeCodeIo,
+    type ClaudeManifest,
+    type NpmPackument,
+    type TarballFacts,
+} from "../scripts/update-claude-code";
 import { describe, it, expect } from "bun:test";
 import {
     buildJavaRecord,
@@ -650,6 +662,250 @@ describe("update-codex", () => {
             await expect(inspectArchive((async () => new Response("gone", { status: 404 })) as unknown as typeof fetch)(download)).rejects.toThrow(/404/);
         } finally {
             rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+// Claude Code: canned Anthropic manifest, npm packuments and tarball facts for 2.1.309.
+const CLAUDE_VERSION = "2.1.309";
+const claudeBinary = (key: PlatformKey) => (key.startsWith("windows-") ? "claude.exe" : "claude");
+const claudeKeyIndex = (key: PlatformKey) => PLATFORM_KEYS.indexOf(key) + 1;
+
+function claudeManifest(): ClaudeManifest {
+    return {
+        version: CLAUDE_VERSION,
+        platforms: {
+            ...Object.fromEntries(PLATFORM_KEYS.map((key) => [CLAUDE_PLATFORM[key], { binary: claudeBinary(key), checksum: sha(String(claudeKeyIndex(key))) }])),
+            "linux-x64-musl": { binary: "claude", checksum: sha("f") },
+        },
+    };
+}
+function claudeFacts(key: PlatformKey): TarballFacts {
+    return {
+        size: 1000 + claudeKeyIndex(key),
+        sha1: String(claudeKeyIndex(key)).repeat(40),
+        sha256: sha(String.fromCharCode(96 + claudeKeyIndex(key))),
+        sha512: Buffer.from(`sha512 of ${key}`).toString("base64"),
+        members: ["package/", `package/${claudeBinary(key)}`, "package/LICENSE.md", "package/README.md", "package/package.json"],
+        binarySha256: sha(String(claudeKeyIndex(key))),
+    };
+}
+function claudePackument(key: PlatformKey): NpmPackument {
+    const claude = CLAUDE_PLATFORM[key];
+    return {
+        name: `@anthropic-ai/claude-code-${claude}`,
+        version: CLAUDE_VERSION,
+        dist: {
+            tarball: `https://registry.npmjs.org/@anthropic-ai/claude-code-${claude}/-/claude-code-${claude}-${CLAUDE_VERSION}.tgz`,
+            integrity: `sha512-${claudeFacts(key).sha512}`,
+            shasum: claudeFacts(key).sha1,
+        },
+    };
+}
+
+interface FakeClaude {
+    channel?: string;
+    manifest?: ClaudeManifest;
+    fingerprint?: string;
+    packument?: (key: PlatformKey) => NpmPackument;
+    facts?: (key: PlatformKey) => TarballFacts;
+}
+function fakeClaudeIo(f: FakeClaude = {}): ClaudeCodeIo {
+    const packument = f.packument ?? claudePackument;
+    const facts = f.facts ?? claudeFacts;
+    const keyOfPackage = (url: string) => PLATFORM_KEYS.find((key) => url.includes(`claude-code-${CLAUDE_PLATFORM[key]}/`))!;
+    return {
+        text: async (url) => (url.endsWith("/stable") || url.endsWith("/latest") ? (f.channel ?? CLAUDE_VERSION) : "PUBLIC KEY"),
+        json: async <T>(url: string) => packument(keyOfPackage(url)) as T,
+        bytes: async (url) => new TextEncoder().encode(url.endsWith(".sig") ? "signature" : JSON.stringify(f.manifest ?? claudeManifest())),
+        verifySignature: async () => f.fingerprint ?? SIGNING_FINGERPRINT,
+        inspectTarball: async (url) => facts(keyOfPackage(url)),
+    };
+}
+
+describe("update-claude-code", () => {
+    it("builds the record from the signed manifest and the npm tarballs, sha256 being the tarball's", async () => {
+        const record = await buildLatestClaudeCodeRecord("stable", fakeClaudeIo());
+        assertValidRecord(record);
+        expect(record).toMatchObject({ name: "claude-code", version: CLAUDE_VERSION });
+        expect(Object.keys(record.platforms)).toEqual([...PLATFORM_KEYS]);
+        expect(record.platforms["linux-x64"]).toEqual({
+            url: "https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.309.tgz",
+            sha256: claudeFacts("linux-x64").sha256,
+            size: claudeFacts("linux-x64").size,
+            recipe: { unpack: "tar", take: { "bin/claude": "package/claude", "LICENSE.md": "package/LICENSE.md" } },
+        });
+        // darwin and win32 are Anthropic's names for macos and windows
+        expect(record.platforms["macos-arm64"]?.url).toContain("claude-code-darwin-arm64-2.1.309.tgz");
+        expect(record.platforms["windows-x64"]?.recipe).toEqual({ unpack: "tar", take: { "bin/claude.exe": "package/claude.exe", "LICENSE.md": "package/LICENSE.md" } });
+        expect(JSON.stringify(record)).not.toContain("musl");
+    });
+
+    it("reads the version from the chosen channel", async () => {
+        const reads: string[] = [];
+        const io = fakeClaudeIo();
+        const text = io.text;
+        io.text = async (url) => (reads.push(url), text(url));
+        await buildLatestClaudeCodeRecord("latest", io);
+        expect(reads[0]).toBe("https://downloads.claude.ai/claude-code-releases/latest");
+    });
+
+    it("refuses a manifest signed by any key but the pinned one", async () => {
+        const other = "0123456789ABCDEF0123456789ABCDEF01234567";
+        await expect(buildLatestClaudeCodeRecord("stable", fakeClaudeIo({ fingerprint: other }))).rejects.toThrow(/signed by 0123456789ABCDEF0123456789ABCDEF01234567, not Anthropic's pinned key/);
+        // the comparison ignores spacing and case, never the digits
+        const spaced = SIGNING_FINGERPRINT.toLowerCase().replace(/(.{4})/g, "$1 ");
+        expect((await buildLatestClaudeCodeRecord("stable", fakeClaudeIo({ fingerprint: spaced }))).version).toBe(CLAUDE_VERSION);
+    });
+
+    it("refuses a signature that fails to verify", async () => {
+        const io = fakeClaudeIo();
+        io.verifySignature = async () => {
+            throw new Error("the manifest signature does not verify (BADSIG)");
+        };
+        await expect(buildLatestClaudeCodeRecord("stable", io)).rejects.toThrow(/BADSIG/);
+    });
+
+    it("refuses a tarball whose sha512 or sha1 differs from the registry's", async () => {
+        const wrongIntegrity = (key: PlatformKey) => (key === "macos-x64" ? { ...claudePackument(key), dist: { ...claudePackument(key).dist, integrity: `sha512-${Buffer.from("other").toString("base64")}` } } : claudePackument(key));
+        await expect(buildLatestClaudeCodeRecord("stable", fakeClaudeIo({ packument: wrongIntegrity }))).rejects.toThrow(/darwin-x64: tarball sha512 differs/);
+        const wrongShasum = (key: PlatformKey) => (key === "linux-arm64" ? { ...claudePackument(key), dist: { ...claudePackument(key).dist, shasum: "a".repeat(40) } } : claudePackument(key));
+        await expect(buildLatestClaudeCodeRecord("stable", fakeClaudeIo({ packument: wrongShasum }))).rejects.toThrow(/linux-arm64: tarball sha1 differs/);
+        const noIntegrity = (key: PlatformKey) => ({ ...claudePackument(key), dist: { ...claudePackument(key).dist, integrity: undefined } });
+        await expect(buildLatestClaudeCodeRecord("stable", fakeClaudeIo({ packument: noIntegrity }))).rejects.toThrow(/no sha512 integrity/);
+    });
+
+    it("refuses a binary inside the tarball that differs from the signed manifest", async () => {
+        const tampered = (key: PlatformKey) => (key === "windows-arm64" ? { ...claudeFacts(key), binarySha256: sha("9") } : claudeFacts(key));
+        await expect(buildLatestClaudeCodeRecord("stable", fakeClaudeIo({ facts: tampered }))).rejects.toThrow(/win32-arm64: the binary inside the tarball differs from the signed manifest/);
+    });
+
+    it("refuses a platform missing from the manifest, or a tarball missing a member the recipe takes", async () => {
+        const manifest = claudeManifest();
+        delete manifest.platforms!["darwin-arm64"];
+        await expect(buildLatestClaudeCodeRecord("stable", fakeClaudeIo({ manifest }))).rejects.toThrow(/darwin-arm64: not in the signed manifest/);
+        const noLicense = (key: PlatformKey) => ({ ...claudeFacts(key), members: claudeFacts(key).members.filter((m) => m !== "package/LICENSE.md") });
+        await expect(buildLatestClaudeCodeRecord("stable", fakeClaudeIo({ facts: noLicense }))).rejects.toThrow(/package\/LICENSE.md is not in the tarball/);
+        const wrongBinary = claudeManifest();
+        wrongBinary.platforms!["win32-x64"]!.binary = "claude";
+        await expect(buildLatestClaudeCodeRecord("stable", fakeClaudeIo({ manifest: wrongBinary }))).rejects.toThrow(/manifest names the binary "claude", expected claude.exe/);
+    });
+
+    it("refuses a manifest or registry answer for another version or package", async () => {
+        await expect(buildLatestClaudeCodeRecord("stable", fakeClaudeIo({ manifest: { ...claudeManifest(), version: "2.1.310" } }))).rejects.toThrow(/manifest is for "2.1.310"/);
+        const otherVersion = (key: PlatformKey) => ({ ...claudePackument(key), version: "2.1.310" });
+        await expect(buildLatestClaudeCodeRecord("stable", fakeClaudeIo({ packument: otherVersion }))).rejects.toThrow(/registry answered for version "2.1.310"/);
+        const otherPackage = (key: PlatformKey) => ({ ...claudePackument(key), name: "@anthropic-ai/claude-code" });
+        await expect(buildLatestClaudeCodeRecord("stable", fakeClaudeIo({ packument: otherPackage }))).rejects.toThrow(/registry answered for "@anthropic-ai\/claude-code"/);
+    });
+
+    it("refuses a channel that does not name a plain version", async () => {
+        for (const channel of ["2.1", "v2.1.309", "2.1.309-beta", "<html>", ""]) {
+            await expect(buildLatestClaudeCodeRecord("stable", fakeClaudeIo({ channel }))).rejects.toThrow(/unexpected version/);
+        }
+        expect(() => buildClaudeCodeRecord("latest", claudeManifest(), {} as never, {} as never)).toThrow(/unexpected version/);
+    });
+
+    it("hashes a real tarball and its binary, and lists what it holds", async () => {
+        const dir = mkdtempSync(path.join(tmpdir(), "origami-test-"));
+        try {
+            mkdirSync(path.join(dir, "src", "package"), { recursive: true });
+            writeFileSync(path.join(dir, "src", "package", "claude"), "the binary");
+            writeFileSync(path.join(dir, "src", "package", "LICENSE.md"), "licence");
+            const archive = path.join(dir, "a.tgz");
+            expect(Bun.spawnSync(["tar", "-czf", archive, "-C", path.join(dir, "src"), "package"]).exitCode).toBe(0);
+            const bytes = await Bun.file(archive).bytes();
+            const fetchFn = (async () => new Response(bytes)) as unknown as typeof fetch;
+            const facts = await inspectTarball(fetchFn)("https://x.test/a.tgz", "package/claude");
+            const h = (alg: string, enc: "hex" | "base64") => crypto.createHash(alg).update(bytes).digest(enc);
+            expect(facts).toMatchObject({
+                size: bytes.byteLength,
+                sha1: h("sha1", "hex"),
+                sha256: h("sha256", "hex"),
+                sha512: h("sha512", "base64"),
+                binarySha256: crypto.createHash("sha256").update("the binary").digest("hex"),
+            });
+            expect(facts.members.sort()).toEqual(["package/", "package/LICENSE.md", "package/claude"]);
+            await expect(inspectTarball(fetchFn)("https://x.test/a.tgz", "package/claude.exe")).rejects.toThrow(/package\/claude.exe is not in/);
+            await expect(inspectTarball((async () => new Response("gone", { status: 404 })) as unknown as typeof fetch)("https://x.test/a.tgz", "package/claude")).rejects.toThrow(/404/);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+// the real gpg binary, against a throwaway key: the status-line parsing is the trust boundary
+describe("update-claude-code signature check", () => {
+    const manifest = new TextEncoder().encode('{"version":"2.1.309"}');
+    async function signer() {
+        const home = mkdtempSync(path.join(tmpdir(), "origami-gpg-test-"));
+        const env = { ...process.env, GNUPGHOME: home };
+        const gpg = (args: string[], input?: Uint8Array) => Bun.spawnSync(["gpg", "--batch", "--no-tty", ...args], { env, stdin: input });
+        expect(gpg(["--passphrase", "", "--quick-generate-key", "Test Signer <test@example.com>", "ed25519", "sign", "never"]).exitCode).toBe(0);
+        const publicKey = gpg(["--armor", "--export"]).stdout.toString();
+        const fingerprint = /fpr:+([A-F0-9]{40}):/.exec(gpg(["--with-colons", "--list-keys"]).stdout.toString())![1]!;
+        const sign = (data: Uint8Array) => new Uint8Array(gpg(["--detach-sign", "--output", "-"], data).stdout);
+        const done = () => {
+            Bun.spawnSync(["gpgconf", "--kill", "gpg-agent"], { env });
+            rmSync(home, { recursive: true, force: true });
+        };
+        return { publicKey, fingerprint, sign, done };
+    }
+
+    it("returns the primary fingerprint of a valid signature", async () => {
+        const s = await signer();
+        try {
+            expect(await gpgVerify(manifest, s.sign(manifest), s.publicKey)).toBe(s.fingerprint);
+        } finally {
+            s.done();
+        }
+    });
+
+    it("says so when gpg is not installed instead of falling back", async () => {
+        const savedPath = process.env.PATH;
+        process.env.PATH = "/nonexistent";
+        try {
+            await expect(gpgVerify(manifest, manifest, "key")).rejects.toThrow(/gpg is not installed/);
+        } finally {
+            process.env.PATH = savedPath;
+        }
+    });
+
+    it("refuses a manifest that was changed after signing, a foreign key, and garbage", async () => {
+        const s = await signer();
+        const other = await signer();
+        try {
+            const signature = s.sign(manifest);
+            await expect(gpgVerify(new TextEncoder().encode('{"version":"9.9.9"}'), signature, s.publicKey)).rejects.toThrow(/does not verify/);
+            // signed by a key the imported key block does not contain
+            await expect(gpgVerify(manifest, other.sign(manifest), s.publicKey)).rejects.toThrow(/does not verify/);
+            await expect(gpgVerify(manifest, new TextEncoder().encode("not a signature"), s.publicKey)).rejects.toThrow();
+            await expect(gpgVerify(manifest, signature, "not a key")).rejects.toThrow(/could not import/);
+        } finally {
+            s.done();
+            other.done();
+        }
+    });
+});
+
+describe("new package records through the signed-record path", () => {
+    it("signs every platform of opencode, codex and claude-code, the recipe included where there is one", async () => {
+        const records = [
+            buildOpencodeRecord(opencodeRelease(), opencodeSums),
+            buildCodexRecord(codexRelease(), codexSums, codexListings()),
+            await buildLatestClaudeCodeRecord("stable", fakeClaudeIo()),
+        ];
+        for (const record of records) {
+            let written: PackageRecord | null = null;
+            await putRecord(record, keys.privateKey, async (_command, args) => {
+                written = JSON.parse(args[5]!);
+                return { stdout: "", stderr: "" };
+            }, PUBLIC);
+            expect(Object.keys(written!.platforms)).toEqual([...PLATFORM_KEYS]);
+            for (const [platform, entry] of Object.entries(written!.platforms)) {
+                const msg = releaseMessage.package(record.name, record.version, platform, entry!.sha256, entry!.recipe && recipeDigest(entry!.recipe));
+                expect(verifyRelease(msg, entry!.signature, PUBLIC)).toBe(true);
+            }
         }
     });
 });

@@ -20,8 +20,8 @@
         "update:dotnet": "bun scripts/update-dotnet.ts",
         "update:proton": "bun scripts/update-proton.ts",
         "update:codex": "bun scripts/update-codex.ts",
+        "update:claude-code": "bun scripts/update-claude-code.ts",
         "update:opencode": "bun scripts/update-opencode.ts"
-
     },
     "devDependencies": {
         "@cloudflare/workers-types": "^5.20261005.1",
