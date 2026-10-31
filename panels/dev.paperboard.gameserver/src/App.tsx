@@ -1,5 +1,5 @@
 import GameOptions from "./components/GameOptions";
-import { createEffect, createMemo, createSignal, onMount, onCleanup, untrack, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, onMount, onCleanup, untrack, For, Index, Show } from "solid-js";
 import { tabIds } from "./lib/tabIds";
 import {
     PaperPanel, PaperButton, PaperIcon, PaperQuote, PaperLoader, PaperFlex, PaperText,
@@ -14,7 +14,7 @@ import { loadServerConfig } from "./lib/server";
 import type { ServersState } from "./service";
 import ServersHome from "./components/ServersHome";
 import { serverSoftware, serverVersion, gameSettings } from "./lib/server";
-import { defaultGame, gameFor } from "./games";
+import { gameFor } from "./games";
 import { gameUIFor } from "./games/ui";
 import Files from "./components/Files";
 import Backups from "./components/Backups";
@@ -32,9 +32,19 @@ export default function App() {
     // set when a plugin's Configure button asks the Files tab to open its settings
     const [filesReveal, setFilesReveal] = createSignal<PaperFileReveal | null>(null);
 
-    const [gameId, setGameId] = createSignal(defaultGame.id);
-    const features = createMemo(() => gameFor(gameId()).describe({ software: serverSoftware(), version: serverVersion(), settings: gameSettings() }));
-    const shownTabs = tabIds(() => features().tabs);
+    // unknown until apply() reads the server's game: the state bridge can
+    // hydrate first, and another game's describe() refuses this server's software
+    const [gameId, setGameId] = createSignal<string | null>(null);
+    const described = createMemo(() => {
+        const id = gameId();
+        return id ? gameFor(id).describe({ software: serverSoftware(), version: serverVersion(), settings: gameSettings() }) : null;
+    });
+    const features = () => {
+        const shown = described();
+        if (!shown) throw new Error("The server's game is not known yet");
+        return shown;
+    };
+    const shownTabs = tabIds(() => described()?.tabs ?? []);
     const hasTab = (id: string) => features().tabs.some((tab) => tab.id === id);
     const tabContext = {
         active: activeTab,
@@ -42,9 +52,12 @@ export default function App() {
         openTab: setActiveTab,
         revealFiles: (reveal: PaperFileReveal) => { setActiveTab("files"); setFilesReveal({ ...reveal }); },
     };
-    const gameUI = createMemo(() => gameUIFor(gameId()).create(tabContext));
+    const gameUI = createMemo(() => {
+        const id = gameId();
+        return id ? gameUIFor(id).create(tabContext) : null;
+    });
     const renderTab = (id: string, owner: "shared" | "game") => {
-        if (owner === "game") return gameUI().tab(id);
+        if (owner === "game") return gameUI()!.tab(id);
         switch (id) {
             case "files": return <Files reveal={filesReveal()} />;
             case "logs": return <Logs />;
@@ -57,7 +70,7 @@ export default function App() {
         }
     };
     createEffect(() => {
-        if (!hasTab(activeTab())) setActiveTab("overview");
+        if (described() && !hasTab(activeTab())) setActiveTab("overview");
     });
 
     const [servers, setServers] = createSignal<ServersState | null>(null);
@@ -109,7 +122,7 @@ export default function App() {
                             <PaperText preset="title">{selectedServer(servers()!).name}</PaperText>
                         </PaperFlex>
                         <PaperFlex direction="column" fullWidth fullHeight>
-                            {gameUI().setup({
+                            {gameUI()!.setup({
                                 get initialSoftware() { return selectedServer(servers()!).state.serverSoftware; },
                                 get initialVersion() { return selectedServer(servers()!).state.serverVersion; },
                                 onComplete: () => setConfigured(true),
@@ -131,14 +144,15 @@ export default function App() {
                             All servers
                         </PaperMenuItem>
                         <PaperMenuLabel>{selectedServer(servers()!).name}</PaperMenuLabel>
-                        <For each={features().tabs}>
+                        {/* by position: describe() makes new tab objects whenever the state changes */}
+                        <Index each={features().tabs}>
                             {(tab, index) => <>
-                                <Show when={tab.group && tab.group !== features().tabs[index() - 1]?.group}>
-                                    <PaperMenuLabel>{tab.group}</PaperMenuLabel>
+                                <Show when={tab().group && tab().group !== features().tabs[index - 1]?.group}>
+                                    <PaperMenuLabel>{tab().group}</PaperMenuLabel>
                                 </Show>
-                                <PaperMenuItem value={tab.id} icon={tab.icon}>{tab.label}</PaperMenuItem>
+                                <PaperMenuItem value={tab().id} icon={tab().icon}>{tab().label}</PaperMenuItem>
                             </>}
-                        </For>
+                        </Index>
                     </PaperMenu>
 
                     <PaperInterfaceGroup value={activeTab()}>
@@ -147,7 +161,8 @@ export default function App() {
                                 const tab = () => features().tabs.find((t) => t.id === id)!;
                                 const owner = untrack(() => tab().owner);
                                 return <PaperInterfaceItem value={id} variant={tab().variant} width={tab().width}>
-                                    {renderTab(id, owner)}
+                                    {/* made once; its props follow the features, so a state change never remounts the tab */}
+                                    {untrack(() => renderTab(id, owner))}
                                 </PaperInterfaceItem>;
                             }}
                         </For>
