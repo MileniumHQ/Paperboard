@@ -1,15 +1,21 @@
-// The panel's head cache, over the panel's bridge (see headCache.ts).
+// Player heads over the panel's bridge. The service resolves and composites
+// the skin (the browser cannot: the profile endpoints send no CORS headers)
+// and asks again every time, so nothing here is kept either.
 import { serverBridge } from "./server";
 import { ACTION_IDS } from "../service/contract";
-import { createHeadLoader } from "./headCache";
 
-const heads = createHeadLoader((request) =>
+export interface HeadRequest {
+    name: string;
+    uuid?: string;
+    size?: number;
+}
+
+/** A layered head data URL, or null when the player has none. */
+export type HeadFetch = (request: HeadRequest) => Promise<string | null | undefined>;
+
+export const loadHead: HeadFetch = (request) =>
     serverBridge.call<string | null>(ACTION_IDS.getPlayerSkin, {
         player: request.name,
         uuid: request.uuid,
         size: request.size,
-    }),
-);
-
-export const peekHead = heads.peekHead;
-export const loadHead = heads.loadHead;
+    });

@@ -1,10 +1,8 @@
 import type { PaperAvatarSize } from "@mileniumhq/paperui";
-import { loadHead, peekHead } from "../lib/skins";
+import { loadHead } from "../lib/skins";
 import HeadAvatar from "./HeadAvatar";
 
-const panelHeads = { loadHead, peekHead };
-
-/** A Minecraft player head from the panel's head cache. */
+/** A Minecraft player head, over the panel's bridge. */
 export default function PlayerHead(props: {
     name: string;
     uuid?: string;
@@ -13,5 +11,5 @@ export default function PlayerHead(props: {
     alt?: string;
     class?: string;
 }) {
-    return <HeadAvatar {...props} loader={panelHeads} />;
+    return <HeadAvatar {...props} loadHead={loadHead} />;
 }

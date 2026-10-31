@@ -29,7 +29,6 @@ import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadine
 import { currentGameService, gameServiceFor } from "./games/service";
 import { assertGameAction, gameFor, games } from "./games";
 import { livePortDeps } from "./service/portDeps";
-import { configureHeadStore } from "./service/skins";
 export * from "./service/types";
 export * from "./games/minecraft/actions";
 export { LEGACY_DEPRECATION };
@@ -188,6 +187,18 @@ function createScope(server: StoredServer): ServerScope {
     entries.set(server.id, scope);
     return scope;
 }
+// Player heads were kept on disk beside the servers until they were looked
+// up fresh each time; the stale copies go. Never a server's own folder.
+async function removeOldHeadStore(): Promise<void> {
+    const dir = `${saved.serversDirectory}/player-heads`;
+    if (saved.servers.some((server) => server.directory === dir)) return;
+    try {
+        await nodeFs.rm(await fileApi.getPath(dir, PANEL_ID), { recursive: true, force: true });
+    } catch (err) {
+        console.error("[gameserver] the old player head cache could not be removed:", err);
+    }
+}
+
 async function initialize(scope: ServerScope): Promise<ServerScope> {
     const { server } = scope;
     const game = gameServiceFor(server.game);
@@ -373,10 +384,7 @@ export const gameServerService = definePanelService({
             // No file operations or data moves: installed records and all config
             // keys become settings of the migrated server in one atomic write.
             await config.set(saved, PANEL_ID);
-            // beside the servers, so no server's files or backups carry it
-            await configureHeadStore(
-                await fileApi.getPath(`${saved.serversDirectory}/player-heads`, PANEL_ID),
-            ).catch((err) => console.error("[gameserver] player head cache unavailable:", err));
+            await removeOldHeadStore();
             const scopes = saved.servers.map(createScope);
             for (const scope of scopes) {
                 try {

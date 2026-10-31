@@ -17,7 +17,7 @@ import {
 import { ACTION_IDS, PANEL_ID } from "../service/contract";
 import { getStatusBadge } from "../core/statusBadge";
 import { SOFTWARE_NAMES } from "../lib/software";
-import { createHeadLoader } from "../lib/headCache";
+import type { HeadFetch } from "../lib/skins";
 import HeadAvatar from "../components/HeadAvatar";
 import { MotdPreview } from "../components/MotdPreview";
 import { useWidgetServer, type ServerView, type WidgetServer } from "./connection";
@@ -273,9 +273,8 @@ export function PlayersWidget(props: Props) {
     const server = useWidgetServer(props.widget);
     askForCap(server);
     const nameOf = useNameCasing(server);
-    const heads = createHeadLoader((request) =>
-        server.call<string | null>(ACTION_IDS.getPlayerSkin, { player: request.name, size: request.size }),
-    );
+    const loadHead: HeadFetch = (request) =>
+        server.call<string | null>(ACTION_IDS.getPlayerSkin, { player: request.name, size: request.size });
 
     return (
         <Connected server={server} widget={props.widget} title="Players" icon="group" short={false}>
@@ -287,7 +286,7 @@ export function PlayersWidget(props: Props) {
                         id: key,
                         label: (
                             <span class={styles.player}>
-                                <HeadAvatar name={nameOf(key)} loader={heads} size="small" alt="" class={styles.head} />
+                                <HeadAvatar name={nameOf(key)} loadHead={loadHead} size="small" alt="" class={styles.head} />
                                 <span class={styles.playerName}>{nameOf(key)}</span>
                             </span>
                         ),
