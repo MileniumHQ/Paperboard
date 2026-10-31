@@ -23,6 +23,9 @@ import type { PaperFileReveal } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 
+// the menu entry that leaves the server for the home screen
+const HOME_ENTRY = "home";
+
 export default function App() {
     const [configured, setConfigured] = createSignal<boolean | null>(null);
     const [activeTab, setActiveTab] = createSignal("overview");
@@ -87,22 +90,24 @@ export default function App() {
         <Show when={!failure()} fallback={<PaperQuote variant="danger" title="Servers could not be loaded" role="alert">{failure()}<PaperButton onClick={() => openServer(null)}>Servers</PaperButton></PaperQuote>}>
         <Show when={servers()} fallback={<PaperLoader loaderStatus="indeterminate" delay={400} label="Loading servers" />}>
         <Show when={selectedServerId} fallback={<ServersHome state={servers()!} />}>
-        <PaperFlex direction="column" fullWidth fullHeight>
-            <PaperFlex direction="row" align="center" gap="half" padding="half">
-                <PaperButton icon variant="text" title="Back to Servers" aria-label="Back to Servers" onClick={() => openServer(null)}>
-                    <PaperIcon>arrow_back</PaperIcon>
-                </PaperButton>
-                <PaperText preset="title">{selectedServer(servers()!).name}</PaperText>
-            </PaperFlex>
             <Show
                 when={configured()}
                 fallback={
+                    // the wizard has no menu, so it keeps a way back to the servers
                     <PaperFlex direction="column" fullWidth fullHeight>
-                        {gameUI().setup({
-                            get initialSoftware() { return selectedServer(servers()!).state.serverSoftware; },
-                            get initialVersion() { return selectedServer(servers()!).state.serverVersion; },
-                            onComplete: () => setConfigured(true),
-                        })}
+                        <PaperFlex direction="row" align="center" gap="half" padding="half">
+                            <PaperButton icon variant="text" title="Back to Servers" aria-label="Back to Servers" onClick={() => openServer(null)}>
+                                <PaperIcon>arrow_back</PaperIcon>
+                            </PaperButton>
+                            <PaperText preset="title">{selectedServer(servers()!).name}</PaperText>
+                        </PaperFlex>
+                        <PaperFlex direction="column" fullWidth fullHeight>
+                            {gameUI().setup({
+                                get initialSoftware() { return selectedServer(servers()!).state.serverSoftware; },
+                                get initialVersion() { return selectedServer(servers()!).state.serverVersion; },
+                                onComplete: () => setConfigured(true),
+                            })}
+                        </PaperFlex>
                     </PaperFlex>
                 }
             >
@@ -110,8 +115,15 @@ export default function App() {
                     <PaperMenu
                         name="serverMenu"
                         value={activeTab()}
-                        onValueChange={(val) => setActiveTab(String(val))}
+                        onValueChange={(val) => {
+                            if (val === HOME_ENTRY) openServer(null);
+                            else setActiveTab(String(val));
+                        }}
                     >
+                        <PaperMenuItem value={HOME_ENTRY} icon="arrow_back">
+                            All servers
+                        </PaperMenuItem>
+                        <PaperMenuLabel>{selectedServer(servers()!).name}</PaperMenuLabel>
                         <For each={features().tabs}>
                             {(tab, index) => <>
                                 <Show when={tab.group && tab.group !== features().tabs[index() - 1]?.group}>
@@ -135,7 +147,6 @@ export default function App() {
                     </PaperInterfaceGroup>
                 </PaperPanel>
             </Show>
-        </PaperFlex>
         </Show>
         </Show>
         </Show>

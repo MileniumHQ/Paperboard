@@ -43,7 +43,7 @@ export const terraria: GameDefinition = {
         if (software !== "vanilla") throw new Error(`Unsupported Terraria software: ${software}`);
         return {
             options, control: { kind: "stdin" }, packages: [], widgets: ["status", "console"],
-            actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, "read-game-options", "write-game-options", "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", "terraria-save", "terraria-motd", "terraria-invite", "terraria-players", "terraria-kick", "terraria-ban", "terraria-unban", "backup-server"],
+            actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, "read-game-options", "write-game-options", "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", "terraria-save", "terraria-motd", "terraria-players", "terraria-kick", "terraria-ban", "terraria-unban", "backup-server"],
             tabs: [
                 { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
                 { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },

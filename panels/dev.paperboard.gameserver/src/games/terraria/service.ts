@@ -203,8 +203,6 @@ export const terrariaService: GameService = {
         action("terraria-world-import", "Add uploaded world", async (_ctx, { file, name }) => { await importUpload(await root(), file, name); return true; }),
         action("terraria-world-discard", "Discard uploaded world", async (_ctx, { file }) => { await discardUpload(await root(), file); return true; }),
         action("terraria-save", "Save Terraria world", save),
-        // the join password, for the invite players copy from the Overview
-        action("terraria-invite", "Join password", async () => ({ password: (await secretsApi.get(secretKey(), PANEL_ID)).value ?? null })),
         action("terraria-players", "Terraria players", async () => ({ seen: await store().seen(), bans: await store().bans() })),
         action("terraria-kick", "Kick player", async (ctx, { name }) => {
             const online = onlineName(ctx, playerName(name));
