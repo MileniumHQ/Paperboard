@@ -59,6 +59,10 @@ export default function App() {
 
     const [servers, setServers] = createSignal<ServersState | null>(null);
     const [failure, setFailure] = createSignal("");
+    const fail = (what: string, err: unknown) => {
+        console.error(`[App] ${what} failed:`, err);
+        setFailure(err instanceof Error ? err.message : String(err));
+    };
     const apply = (state: ServersState) => {
         // the server's game and setup state first: the page never renders
         // the wrong game, or the wizard for a server that is set up
@@ -76,11 +80,11 @@ export default function App() {
         try {
             apply(await serversBridge.refreshState());
             if (selectedServerId) await loadServerConfig();
-        } catch (err) { setFailure(err instanceof Error ? err.message : String(err)); }
+        } catch (err) { fail("loading the servers", err); }
     };
     onMount(() => {
         const off = serversBridge.onStateChange((_patch, full) => {
-            try { apply(full); } catch (err) { setFailure(err instanceof Error ? err.message : String(err)); }
+            try { apply(full); } catch (err) { fail("applying the servers' state", err); }
         });
         onCleanup(off);
         void load();
