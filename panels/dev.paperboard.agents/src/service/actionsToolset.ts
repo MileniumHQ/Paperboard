@@ -3,19 +3,18 @@
 // and a line naming the panels. `list_actions` lists what one panel offers,
 // each action with its inputs, and its projects; a project's actions, or one
 // action's whole description, on request. `run_action` runs one by panel and
-// action id. Actions hidden from the Actions library (made for programs,
-// like Actions' own flow editing) are offered like any other.
+// action id. Actions hidden from the Actions library (made for programs)
+// are offered like any other. Flows are the user's to build in the Actions
+// panel: its flow API is switched off.
 //
 // Authority: this is the panel service's own scoped credential calling the
 // daemon's action registry, exactly as any panel's flows do. The daemon lists
 // every registered action and refuses another panel's `internal` ones
 // (papercrane/actions.ts, ActionsRegistry.call); this module hides the same
-// set up front and refuses it again at run time, plus every action of the
-// panels in WITHHELD_PANELS. Its own panel's actions are listed, marked
-// `flowOnly`, so it can build a flow around itself (a Discord DM texts the
-// agent, its reply goes back), but never run: the agent texting itself is a
-// loop, not a tool. Events are listed, with the fields they carry, because
-// they're what a flow starts from, but never run either: they aren't callable.
+// set up front and refuses it again at run time, plus its own panel's actions
+// (the agent has no business rewriting itself) and every action of the panels
+// in WITHHELD_PANELS. Events are listed, with the fields they carry, because
+// they're what a flow starts from, but never run: they aren't callable.
 
 import { PANEL_ID } from "../contract";
 import type { ToolResult } from "./computerMcp";
@@ -88,7 +87,6 @@ export const ACTION_TOOLS: ToolSpec[] = [
         description:
             "What one Paperboard panel can do (start a game server, post to Discord, ...): every action it offers, with the inputs each takes, " +
             "its events (`event: true`, with the `fields` a flow started by one reads), and its projects (a server, a bot, ...). " +
-            "Your own panel's actions are `flowOnly`: place them in a flow, never run them. " +
             "Name a `project` to list that project's actions (\"project/action\"), " +
             `or an \`action\` to see its whole description; a list cuts descriptions at ${MAX_DESCRIPTION} characters.`,
         inputSchema: {
@@ -103,7 +101,7 @@ export const ACTION_TOOLS: ToolSpec[] = [
     },
     {
         name: "run_action",
-        description: "Run one action listed by `list_actions`, with its inputs as an object. Events and flowOnly actions can't be run. Returns the action's output or its error.",
+        description: "Run one action listed by `list_actions`, with its inputs as an object. Events can't be run. Returns the action's output or its error.",
         inputSchema: {
             type: "object",
             properties: {
@@ -117,10 +115,10 @@ export const ACTION_TOOLS: ToolSpec[] = [
     },
 ];
 
-/** Is this one the agent may find? Events and its own panel's actions among them are listed but never run. */
+/** Is this one the agent may find? Events among them are listed but never run. */
 export function offered(a: ActionEntry): boolean {
     const s = a.schema;
-    if (WITHHELD_PANELS.has(a.panelId)) return false;
+    if (a.panelId === PANEL_ID || WITHHELD_PANELS.has(a.panelId)) return false;
     // no schema: plumbing registered by name (state, reload), not something with a documented purpose
     if (!s) return false;
     if (s.internal === true || s.deprecated) return false;
@@ -128,7 +126,6 @@ export function offered(a: ActionEntry): boolean {
 }
 
 const isEvent = (a: ActionEntry) => a.schema?.eventOnly === true;
-const isFlowOnly = (a: ActionEntry) => a.panelId === PANEL_ID;
 
 export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
     const now = deps.now ?? Date.now;
@@ -153,11 +150,10 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
                 return "Other Paperboard panels' actions: the list isn't available right now (" + message(e) + ").";
             }
             const named = panels.slice(0, MAX_PANEL_NAMES).join(", ") + (panels.length > MAX_PANEL_NAMES ? `, and ${panels.length - MAX_PANEL_NAMES} more` : "");
-            if (!panels.length) return "No Paperboard panel offers actions right now.";
+            if (!panels.length) return "Other Paperboard panels offer no actions right now.";
             return (
-                `**Panels:** ${named} can do things for you. See what one offers with \`list_actions\`, then \`run_action\`. Never run one the user wouldn't expect, and say what you did. ` +
-                "To make something happen on its own (when a message arrives, when someone joins), build a flow in an Actions project: its trigger is an event from `list_actions`." +
-                (panels.includes(PANEL_ID) ? ` ${PANEL_ID} is you: its actions go in flows, to bring you messages from elsewhere.` : "")
+                `**Other panels:** ${named} can do things for you. See what one offers with \`list_actions\`, then \`run_action\`. Never run one the user wouldn't expect, and say what you did. ` +
+                "To make something happen on its own (when a message arrives, when someone joins), the user builds a flow in the Actions panel; you can't make or edit flows. Its trigger is an event from `list_actions`."
             );
         },
         call: async (name, args) => {
@@ -220,7 +216,6 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
         const target = (await listed(true)).find((a) => a.panelId === panel && a.action === action);
         if (!target) return fault(`${panel}:${action} isn't an action you can run. See list_actions.`);
         if (isEvent(target)) return fault(`${panel}:${action} is an event: it starts flows and can't be run. Use it as a flow's trigger.`);
-        if (isFlowOnly(target)) return fault(`${panel}:${action} is your own panel's: place it in a flow, it can't be run from here.`);
         const seconds = Number(args.timeout_seconds);
         const timeoutMs = Number.isFinite(seconds) && seconds >= 1 ? Math.min(seconds * 1000, MAX_CALL_MS) : DEFAULT_CALL_MS;
         const result = await deps.host.call(panel, action, inputs, { timeoutMs });
@@ -259,7 +254,7 @@ function describe(a: ActionEntry, descriptionChars: number) {
         ...(a.project ? { project: a.project } : {}),
         name: s.name,
         ...(categoryOf(a) ? { category: categoryOf(a) } : {}),
-        ...(isEvent(a) ? { event: true } : isFlowOnly(a) ? { flowOnly: true } : {}),
+        ...(isEvent(a) ? { event: true } : {}),
         description: cut(s.description ?? "", descriptionChars),
         inputs,
         ...(output && !isEvent(a) ? { output } : {}),
