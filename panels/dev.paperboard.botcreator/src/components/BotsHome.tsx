@@ -30,6 +30,7 @@ import { DEFAULT_DISCORD_AVATAR, errorToMessage } from "../types";
 export function botStatusText(bot: BotSummary): string {
     if (bot.connected) return `${bot.guildCount} ${bot.guildCount === 1 ? "server" : "servers"}`;
     if (!bot.hasToken) return "Needs a token";
+    if (bot.connecting) return "Connecting…";
     return bot.enabled ? "Offline" : "Off";
 }
 

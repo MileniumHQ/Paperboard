@@ -270,3 +270,32 @@ describe("two bots", () => {
         expect(secondEmitted).toEqual([]);
     });
 });
+
+describe("bot logging in", () => {
+    it("is connecting until Discord answers, then connected", async () => {
+        let answer!: () => void;
+        const slowFactory = () =>
+            ({
+                login: () => new Promise<void>((r) => (answer = r)),
+                destroy: async () => {},
+                on: () => {},
+                application: { commands: { set: async () => {} } },
+            }) as unknown as Client;
+        const ctx = serviceCtx([]);
+        const started = ctx.start("token", slowFactory);
+        await new Promise((r) => setTimeout(r, 0));
+        expect(ctx.connecting()).toBe(true);
+        answer();
+        await started;
+        expect(ctx.connecting()).toBe(false);
+    });
+
+    it("stops connecting when stopped mid-login", async () => {
+        const ctx = serviceCtx([]);
+        void ctx.start("token", () => ({ login: () => new Promise(() => {}), destroy: async () => {}, on: () => {} }) as unknown as Client);
+        await new Promise((r) => setTimeout(r, 0));
+        expect(ctx.connecting()).toBe(true);
+        await ctx.stop();
+        expect(ctx.connecting()).toBe(false);
+    });
+});

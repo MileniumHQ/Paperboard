@@ -168,8 +168,8 @@ export default function Overview(props: OverviewProps) {
                                             @{tag()}
                                         </PaperText>
                                     </Show>
-                                    <PaperBadge variant={connected() ? "success" : props.bot().enabled ? "danger" : "monochrome"}>
-                                        {connected() ? "Online" : "Offline"}
+                                    <PaperBadge variant={connected() ? "success" : props.bot().connecting ? "warning" : props.bot().enabled ? "danger" : "monochrome"}>
+                                        {connected() ? "Online" : props.bot().connecting ? "Connecting" : "Offline"}
                                     </PaperBadge>
                                 </PaperFlex>
 

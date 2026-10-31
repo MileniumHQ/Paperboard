@@ -46,6 +46,8 @@ export interface BotSummary {
     applicationId: string;
     enabled: boolean;
     connected: boolean;
+    /** logging in to Discord, not connected yet */
+    connecting: boolean;
     /** a token is in the vault; without one the bot can't connect */
     hasToken: boolean;
     lastError: string | null;

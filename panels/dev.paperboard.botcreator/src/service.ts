@@ -2358,6 +2358,7 @@ function summary(entry: BotEntry): BotSummary {
         applicationId: stored.applicationId,
         enabled: stored.enabled,
         connected,
+        connecting: session.connecting(),
         hasToken: entry.hasToken,
         lastError: entry.actionsError ?? session.status().error ?? null,
         guildCount: connected ? session.client?.guilds?.cache?.size ?? 0 : 0,
@@ -3042,6 +3043,16 @@ const botChoices = () =>
         .sort((a, b) => a.stored.createdAt - b.stored.createdAt)
         .map((entry) => ({ value: entry.stored.id, label: entry.stored.name }));
 
+/**
+ * Starts each bot without waiting for it. Logging in to Discord (and syncing commands after) can stall for minutes on a
+ * rate limit; the service is ready before then, and a bot still connecting says so on its card.
+ */
+export function startBots<T>(entries: Iterable<T>, start: (entry: T) => Promise<void>): void {
+    for (const entry of entries) {
+        start(entry).catch((err) => console.error("[DiscordService] starting a bot failed:", errorToMessage(err)));
+    }
+}
+
 export const botService = definePanelService({
     id: PANEL_ID,
     state: { bots: [], botsError: null } as BotsServiceState,
@@ -3061,8 +3072,8 @@ export const botService = definePanelService({
             console.error("[DiscordService] reading the saved bots failed:", botsError);
         }
         publish();
-        await Promise.all([...bots.values()].map(startEntry));
-        console.log(`[DiscordService] Ready with ${bots.size} bot(s).`);
+        startBots(bots.values(), startEntry);
+        console.log(`[DiscordService] Ready with ${bots.size} bot(s); connecting them to Discord.`);
     },
 });
 

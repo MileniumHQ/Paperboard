@@ -154,6 +154,8 @@ export class BotSession {
     // attempt's outcome must never overwrite a winner's
     private connectSequence = 0;
     private connectionStatus: ConnectionStatus = { connected: false };
+    // the newest start() is still logging in to Discord
+    private loggingIn = false;
     // proof-of-loop evidence: the last messages the session received, capped
     // so a busy server can never grow this without bound. A new session
     // starts empty; disconnecting keeps the last evidence beside
@@ -179,6 +181,11 @@ export class BotSession {
 
     status(): ConnectionStatus {
         return { ...this.connectionStatus };
+    }
+
+    /** Logging in to Discord, which a rate limit can stretch to minutes. */
+    connecting(): boolean {
+        return this.loggingIn;
     }
 
     connected(): boolean {
@@ -372,6 +379,7 @@ export class BotSession {
     private async release(): Promise<void> {
         const bot = this.client;
         this.client = null;
+        this.loggingIn = false;
         // a stopped session has no answerable interactions, no uptime, no
         // sync state — anything else would let the health page describe a
         // bot that is not running
@@ -424,10 +432,16 @@ export class BotSession {
             });
         this.client = bot;
         this.connectionStatus = { connected: false };
+        this.loggingIn = true;
+        this.host.changed();
         this.attachListeners(bot);
 
         try {
-            await bot.login(token);
+            try {
+                await bot.login(token);
+            } finally {
+                if (attempt === this.connectSequence) this.loggingIn = false;
+            }
             // a newer start or a stop won the race: it already let go of our
             // client — destroy is idempotent-safe here, and session state
             // stays the winner's
