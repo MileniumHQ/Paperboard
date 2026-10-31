@@ -139,6 +139,21 @@ export function parseAppResult(lines: readonly string[], appId: number): { ok: t
     return null;
 }
 
+/**
+ * SteamCMD's 64-bit Steam client library. Dedicated servers that log in to
+ * Steam load it from ~/.steam/sdk64; they do not ship it themselves.
+ */
+export async function steamClientLibrary(own?: string): Promise<string> {
+    if (process.platform !== "linux") throw new Error(`Steam's client library is copied for Linux servers, not ${process.platform}`);
+    const { command } = await prepare(own);
+    const library = path.join(path.dirname(command), "linux64", "steamclient.so");
+    await fs.access(library).catch((err: NodeJS.ErrnoException) => {
+        if (err.code === "ENOENT") throw new Error("SteamCMD has not unpacked its Steam client library yet; install the server again in Updates");
+        throw err;
+    });
+    return library;
+}
+
 /** The build SteamCMD installed, from the app manifest it leaves in the folder; null before any install. */
 export async function installedBuild(appId: number, dir: string): Promise<string | null> {
     let text: string;

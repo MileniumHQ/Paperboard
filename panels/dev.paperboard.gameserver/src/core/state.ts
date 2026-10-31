@@ -48,6 +48,7 @@ export interface StateSetters {
     setLocalIp: (v: string) => void;
     setServerPort: (v: string) => void;
     setServerMotd: (v: string) => void;
+    setServerLevel: (v: string | null) => void;
     setServerSoftware: (v: string) => void;
     setGameSettings?: (v: Readonly<Record<string, unknown>>) => void;
     setServerVersion: (v: string) => void;
@@ -79,6 +80,7 @@ export function applyStatePatch(
         { key: "localIp", apply: (v) => setters.setLocalIp(v as string) },
         { key: "serverPort", apply: (v) => setters.setServerPort(v as string) },
         { key: "serverMotd", apply: (v) => setters.setServerMotd(v as string) },
+        { key: "serverLevel", apply: (v) => setters.setServerLevel((v as string | null) ?? null) },
         {
             key: "serverSoftware",
             apply: (v) => setters.setServerSoftware(v as ServerSoftwareType),

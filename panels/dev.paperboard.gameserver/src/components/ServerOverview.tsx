@@ -51,6 +51,8 @@ export default function ServerOverview(props: {
     children?: JSX.Element;
     /** what the console line does; console commands when left out */
     control?: Control;
+    /** false for a game that keeps no world, which has no Save world */
+    world?: boolean;
 }) {
     onMount(() => {
         void loadServerConfig();
@@ -118,10 +120,12 @@ export default function ServerOverview(props: {
                             <PaperIcon>restart_alt</PaperIcon>
                             Restart
                         </PaperButton>
-                        <PaperButton onClick={() => void save()} disabled={saving()}>
-                            <PaperIcon>save</PaperIcon>
-                            {saving() ? "Saving..." : "Save world"}
-                        </PaperButton>
+                        <Show when={props.world !== false}>
+                            <PaperButton onClick={() => void save()} disabled={saving()}>
+                                <PaperIcon>save</PaperIcon>
+                                {saving() ? "Saving..." : "Save world"}
+                            </PaperButton>
+                        </Show>
                         {props.actions}
                     </Show>
                 </PaperFlex>

@@ -46,6 +46,8 @@ export const [chatMessages, setChatMessages] = createSignal<ChatMessage[]>([]);
 export const [localIp, setLocalIp] = createSignal("127.0.0.1");
 export const [serverPort, setServerPort] = createSignal("25565");
 export const [serverMotd, setServerMotd] = createSignal(DEFAULT_MOTD);
+/** The map the running server plays, for games that change maps while running. */
+export const [serverLevel, setServerLevel] = createSignal<string | null>(null);
 export const [serverSoftware, setServerSoftware] = createSignal<string>("paper");
 export const [gameSettings, setGameSettings] = createSignal<Readonly<Record<string, unknown>>>({});
 export const [serverVersion, setServerVersion] = createSignal("");
@@ -74,6 +76,7 @@ function currentSetters() {
         setLocalIp,
         setServerPort,
         setServerMotd,
+        setServerLevel,
         setServerSoftware,
         setGameSettings,
         setServerVersion,

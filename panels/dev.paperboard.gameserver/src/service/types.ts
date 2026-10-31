@@ -39,6 +39,9 @@ export interface GameServerState {
     // the running server's player cap, from its `list` answer; null while
     // offline or until it has answered
     maxPlayers: number | null;
+    // the map the running server plays, for games that change maps while
+    // running; null while offline or for games without maps
+    serverLevel: string | null;
     seenPlayers: string[];
     playerStats: Record<string, PlayerStatData>;
     playerPlaytime: Record<string, number>;

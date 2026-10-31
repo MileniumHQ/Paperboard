@@ -67,7 +67,7 @@ export default function SteamVersions(props: { name: string; infoAction: string;
                 <PaperFlex direction="column" gap="half" padding="full">
                     <PaperText size={3} weight={700}>{props.name} dedicated server</PaperText>
                     <PaperText preset="body" color="text-subtle">
-                        Steam serves the newest release. Updating downloads only what changed, and keeps worlds and options.
+                        Steam serves the newest release. Updating downloads only what changed and keeps your options and saved data.
                     </PaperText>
                     <PaperTable>
                         <tbody>

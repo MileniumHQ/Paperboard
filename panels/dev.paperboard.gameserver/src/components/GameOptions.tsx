@@ -93,7 +93,7 @@ export function GameOptionControl(props: {
                 <PaperFlex direction="row" gap="half" align="center">
                     <PaperInput
                         type="password"
-                        placeholder={props.secretStored ? "Password set" : "No password"}
+                        placeholder={secretPlaceholder(field.noun ?? "password", props.secretStored)}
                         disabled={props.disabled}
                         onBlur={(e) => {
                             const value = e.currentTarget.value;
@@ -286,4 +286,8 @@ export default function GameOptions(props: {
             </Show>
         </>
     );
+}
+
+function secretPlaceholder(noun: string, stored: boolean | undefined): string {
+    return stored ? `${noun[0]!.toUpperCase()}${noun.slice(1)} set` : `No ${noun}`;
 }

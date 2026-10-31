@@ -39,7 +39,10 @@ export interface GameService {
     saveWorld(ctx: Context): Promise<void>;
     stopEntry: string;
     stop(): Promise<void>;
+    /** Checks a console command and gives what is sent: the stdin write, or for "rcon" the line itself. */
     commandLine(command: string): string;
+    /** Runs a console command when the game's control is "rcon", as commandLine gave it. */
+    sendCommand?(ctx: Context, command: string): Promise<void>;
     sendChat?(ctx: Context, message: string): Promise<void>;
     observePartialLine?(ctx: Context, line: string): void;
     observeLine(ctx: Context, line: string, final?: boolean): void;

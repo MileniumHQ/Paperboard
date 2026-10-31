@@ -6,10 +6,12 @@ export interface GameOptions {
 }
 /**
  * What the console line under a running server does. "stdin": console
- * commands. "broadcast": the game has no console; the line is a message to
- * everyone on the server. "none": the console only shows output.
+ * commands, written to the server's input. "rcon": console commands, sent
+ * by the game service over its remote console. "broadcast": the game has no
+ * console; the line is a message to everyone on the server. "none": the
+ * console only shows output.
  */
-export type Control = { kind: "none" } | { kind: "stdin" } | { kind: "broadcast" };
+export type Control = { kind: "none" } | { kind: "stdin" } | { kind: "rcon" } | { kind: "broadcast" };
 export interface PackageRequirement {
     id: string;
     purpose: string;
@@ -51,7 +53,8 @@ export type GameOption = OptionBase & (
     | { kind: "slider"; min: number; max: number; unit: string; marks?: readonly number[]; default?: number }
     | { kind: "boolean"; default?: boolean }
     | { kind: "select"; choices: readonly { value: string; label: string }[]; default?: string }
-    | { kind: "secret" }
+    /** noun: what the secret is, for its empty and set field ("token"); a password otherwise */
+    | { kind: "secret"; noun?: string }
 );
 export interface GameFeatures {
     options: readonly GameOption[];

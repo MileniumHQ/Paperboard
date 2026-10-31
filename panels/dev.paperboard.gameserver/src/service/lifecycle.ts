@@ -212,8 +212,10 @@ export async function sendServerCommand(
     // the last line of defense for raw-command callers too, matching
     // sendChatMessage's discipline one action over.
     const game = currentGameService();
-    if (currentGame().describe({ software: ctx.state.serverSoftware, version: ctx.state.serverVersion, settings: ctx.state.gameSettings }).control.kind !== "stdin")
+    const control = currentGame().describe({ software: ctx.state.serverSoftware, version: ctx.state.serverVersion, settings: ctx.state.gameSettings }).control.kind;
+    if (control !== "stdin" && control !== "rcon")
         throw new Error("This game does not support console commands");
+    if (control === "rcon" && !game.sendCommand) throw new Error(`${currentGame().name} declares a remote console but has no way to send to it`);
     const line = game.commandLine(cmd);
     const trimmed = cmd.trim();
     if (!trimmed) return;
@@ -234,7 +236,8 @@ export async function sendServerCommand(
         ctx.state.serverStatus === "online" ||
         ctx.state.serverStatus === "starting"
     ) {
-        await processApi.write(primaryProcessId(), line);
+        if (control === "rcon") await game.sendCommand!(ctx, line);
+        else await processApi.write(primaryProcessId(), line);
     } else {
         ctx.setState({
             serverEntries: appendCapped(ctx.state.serverEntries, {
@@ -281,6 +284,7 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>): void {
             serverStatus: "offline",
             onlinePlayers: [],
             maxPlayers: null,
+            serverLevel: null,
             serverEntries: appendCapped(ctx.state.serverEntries, {
                 type: "info",
                 content: "[Server] Restarting instance...",
@@ -292,6 +296,7 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>): void {
             serverStatus: "offline",
             onlinePlayers: [],
             maxPlayers: null,
+            serverLevel: null,
             serverEntries: appendCapped(ctx.state.serverEntries, {
                 type: "warn",
                 content: "[Server] Process stopped.",
@@ -316,6 +321,7 @@ function watchForceKill(ctx: ServiceContext<GameServerState>): void {
                 ctx.setState({
                     serverStatus: "offline",
                     maxPlayers: null,
+                    serverLevel: null,
                     serverEntries: appendCapped(ctx.state.serverEntries, {
                         type: "warn",
                         content: "[Server] Process stopped.",
