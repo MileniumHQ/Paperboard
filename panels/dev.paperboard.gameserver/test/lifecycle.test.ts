@@ -325,13 +325,23 @@ describe("poll chatter stays out of the console", () => {
         const ctx = makeCtx({ serverStatus: "online" });
         handleProcessData(
             ctx,
-            "[12:00:05] [Server thread/INFO]: Steve has the following entity data: 20.0\n",
+            "[12:00:05] [Server thread/INFO]: Health on Steve after scale factor of 100.00 is 2000\n",
         );
         handleProcessData(
             ctx,
             "[12:00:05] [Server thread/INFO]: Steve has the following entity data: [12.5, 64.0, -3.0]\n",
         );
         expect(ctx.state.serverEntries).toEqual([]);
+    });
+
+    it("an unscaled data get is someone's own command and shows", () => {
+        // the panel asks for stats with a scale; a bare reply was typed
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessData(
+            ctx,
+            "[12:00:05] [Server thread/INFO]: Steve has the following entity data: 20.0\n",
+        );
+        expect(ctx.state.serverEntries.length).toBe(1);
     });
 
     it("gamerule readouts converge state without appending", () => {

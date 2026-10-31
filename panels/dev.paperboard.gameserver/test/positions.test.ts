@@ -5,7 +5,7 @@ import { describe, test, expect } from "bun:test";
 import {
     extractDimension,
     extractPosition,
-    extractStatValue,
+    extractStatReply,
 } from "../src/core/players";
 
 describe("extractPosition", () => {
@@ -41,10 +41,10 @@ describe("extractDimension", () => {
     });
 });
 
-describe("extractStatValue handoff", () => {
-    test("stat parser does not match vectors or dimensions", () => {
-        expect(extractStatValue("[1.0d, 2.0d, 3.0d]")).toBeUndefined();
-        expect(extractStatValue('"minecraft:overworld"')).toBeUndefined();
-        expect(extractStatValue("has the following entity data: 20")).toBe(20);
+describe("extractStatReply handoff", () => {
+    test("stat parser does not match position or dimension replies", () => {
+        expect(extractStatReply("Steve has the following entity data: [1.0d, 2.0d, 3.0d]")).toBeUndefined();
+        expect(extractStatReply('Steve has the following entity data: "minecraft:overworld"')).toBeUndefined();
+        expect(extractStatReply("Steve has the following entity data: 20.0f")).toBeUndefined();
     });
 });

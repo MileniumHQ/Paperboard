@@ -5,7 +5,7 @@ import { parseChatMessage, parseLogLine } from "../../lib/logs";
 import { parseGameruleValue } from "../../core/gamerules";
 import { resolveVersionProfile } from "../../lib/versionProfile";
 import { trackPlayerActivity, handleStatResponse, handlePositionResponse, queryOnlinePlayers } from "../../service/players";
-import { assertSingleLine, extractStatValue, extractPosition, extractDimension, isPlayerListResponse } from "../../core/players";
+import { assertSingleLine, isStatQueryReply, extractPosition, extractDimension, isPlayerListResponse } from "../../core/players";
 import { checkLogForIssues } from "../../service/diagnostics";
 import { onServerOnline } from "../../service/gamerules";
 import { applyPendingRuntimeProperties } from "../../service/runtimeProperties";
@@ -124,7 +124,7 @@ export function observeLine(ctx: ServiceContext<GameServerState>, line: string, 
         positionConsumed ||
         gameruleConsumed ||
         isPlayerListResponse(clean) ||
-        extractStatValue(clean) !== undefined ||
+        isStatQueryReply(clean) ||
         extractPosition(clean) !== undefined ||
         extractDimension(clean) !== undefined;
 

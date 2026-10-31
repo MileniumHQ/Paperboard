@@ -36,12 +36,50 @@ export interface PlayerStatData {
     xpProgress?: number;
 }
 
-export const STAT_QUERIES: { field: keyof PlayerStatData; path: string }[] = [
-    { field: "health", path: "Health" },
-    { field: "food", path: "foodLevel" },
-    { field: "xpLevel", path: "XpLevel" },
-    { field: "xpProgress", path: "XpP" },
+// Each stat is read with a scale (`data get entity <name> <path> <scale>`)
+// because that form's reply names both the path and the player, so a reply
+// can never land on the wrong stat or the wrong player, whatever order the
+// server answers in or whichever queries it never answers. The scale keeps
+// the fraction the integer reply would otherwise floor away.
+export const STAT_QUERIES: { field: keyof PlayerStatData; path: string; scale: number }[] = [
+    { field: "health", path: "Health", scale: 100 },
+    { field: "food", path: "foodLevel", scale: 1 },
+    { field: "xpLevel", path: "XpLevel", scale: 1 },
+    { field: "xpProgress", path: "XpP", scale: 10000 },
 ];
+
+export interface StatReply {
+    path: string;
+    scale: number;
+    /** the entity's display name: the player name, plus any team prefix or suffix */
+    entity: string;
+    value: number;
+}
+
+// "<path> on <entity> after scale factor of <scale> is <int>", after the
+// log prefix's brackets only, so a chat line ("... <Steve> Health on ...")
+// can never pass for one
+const STAT_REPLY_RE = /^(?:\[[^\]]*\][\s:]*)*(?:System chat:\s*)?([A-Za-z_]+) on (.+) after scale factor of (\d+(?:\.\d+)?) is (-?\d+)\s*$/;
+
+export function extractStatReply(clean: string): StatReply | undefined {
+    const match = clean.trim().match(STAT_REPLY_RE);
+    if (!match) return undefined;
+    const scale = Number(match[3]);
+    if (!(scale > 0)) return undefined;
+    return { path: match[1], scale, entity: match[2].trim(), value: Number(match[4]) / scale };
+}
+
+/** a reply to one of the panel's own stat queries, by its shape: it stays out of the console even when it comes too late to be read */
+export function isStatQueryReply(clean: string): boolean {
+    const reply = extractStatReply(clean);
+    return !!reply && STAT_QUERIES.some((q) => q.path === reply.path && q.scale === reply.scale);
+}
+
+/** whether `player` (a lowercased key) is the player a display name names, ignoring team decoration */
+export function displayNameNames(entity: string, player: string): boolean {
+    const tokens = entity.match(/[a-zA-Z0-9_.+-]+/g) ?? [];
+    return tokens.some((token) => token.toLowerCase() === player);
+}
 
 export function normalizePlayerKey(name: string): string {
     return name.toLowerCase();
@@ -88,12 +126,6 @@ export function extractListCounts(clean: string): { online: number; max: number 
     return { online: Number(match[1]), max: Number(match[2]) };
 }
 
-export function extractStatValue(clean: string): number | undefined {
-    const match = clean.match(/has the following entity data:\s*(-?\d+(?:\.\d+)?)/i);
-    if (!match) return undefined;
-    return Number(match[1]);
-}
-
 export interface PlayerPosition {
     x: number;
     y: number;
@@ -119,6 +151,11 @@ export function extractPosition(
 }
 
 // `data get entity <name> Dimension` → "... entity data: \"minecraft:overworld\""
+/** whom a `data get entity` reply is about: its display name, after the log prefix */
+export function extractEntityDataSubject(clean: string): string | undefined {
+    return clean.trim().match(/^(?:\[[^\]]*\][\s:]*)*(?:System chat:\s*)?(.+?) has the following entity data:/)?.[1].trim();
+}
+
 export function extractDimension(clean: string): string | undefined {
     return clean.match(/has the following entity data:\s*"([^"]+)"/i)?.[1];
 }

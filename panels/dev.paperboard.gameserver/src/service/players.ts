@@ -14,12 +14,14 @@ import {
     assertPlayerName,
     consoleTimeToSeconds,
     extractDimension,
+    extractEntityDataSubject,
     extractJoinedName,
     extractLeftName,
     extractListedNames,
     extractListCounts,
     extractPosition,
-    extractStatValue,
+    extractStatReply,
+    displayNameNames,
     normalizePlayerKey,
     type PlayerPosition,
 } from "../core/players";
@@ -31,7 +33,7 @@ import { PANEL_ID } from "./types";
 import { TRIGGER_IDS } from "./contract";
 import { send } from "../games/minecraft/saving";
 
-const local = serverLocal(() => ({ lastJoinAt: new Map<string, number>(), pendingStatFields: [] as { player: string; field: keyof PlayerStatData }[], recentNames: [] as string[], onNamesChanged: null as (() => void) | null, pendingPositionQueries: [] as PendingPositionQuery[] }));
+const local = serverLocal(() => ({ lastJoinAt: new Map<string, number>(), pendingStats: [] as PendingStatQuery[], recentNames: [] as string[], onNamesChanged: null as (() => void) | null, pendingPositionQueries: [] as PendingPositionQuery[] }));
 
 export { usernameFromUuid } from "./playerStats";
 
@@ -181,15 +183,19 @@ export function handleStatResponse(
     ctx: ServiceContext<GameServerState>,
     clean: string,
 ): boolean {
-    const value = extractStatValue(clean);
-    if (value === undefined) return false;
-    const pending = local().pendingStatFields.shift();
-    if (!pending) return true;
+    const reply = extractStatReply(clean);
+    if (!reply) return false;
+    const pending = local().pendingStats;
+    // the reply names its player inside any team prefix or suffix
+    const query = pending.find((p) => p.path === reply.path && displayNameNames(reply.entity, p.player));
+    // not one of ours (someone typed it), so the console shows it
+    if (!query) return false;
+    pending.splice(pending.indexOf(query), 1);
     ctx.setState((prev) => {
         const stats = { ...prev.playerStats };
-        const data = { ...(stats[pending.player] ?? {}) };
-        data[pending.field] = value;
-        stats[pending.player] = data;
+        const data = { ...(stats[query.player] ?? {}) };
+        data[query.field] = reply.value;
+        stats[query.player] = data;
         return { playerStats: capEntries(stats) };
     });
     return true;
@@ -209,21 +215,22 @@ export function queryPlayerStats(
     // boundary: the name reaches `data get entity` raw — UI checks don't count
     const safe = assertPlayerName(name);
     const key = normalizePlayerKey(safe);
-    local().pendingStatFields = local().pendingStatFields.filter((p) => p.player !== key);
-    for (const { field, path } of STAT_QUERIES) {
-        local().pendingStatFields.push({ player: key, field });
-        writeServerLineBestEffort(`data get entity ${safe} ${path}\n`);
+    const pending = local().pendingStats.filter((p) => p.player !== key);
+    for (const { field, path, scale } of STAT_QUERIES) {
+        pending.push({ player: key, field, path });
+        writeServerLineBestEffort(`data get entity ${safe} ${path} ${scale}\n`);
     }
-    // bounded: bursts of stat queries from many players evict oldest first
-    while (local().pendingStatFields.length > MAX_BUFFERED_ENTRIES) {
-        local().pendingStatFields.shift();
-    }
+    // bounded: queries the server never answers (a player who just left)
+    // would otherwise pile up; the oldest go first
+    local().pendingStats = pending.slice(-MAX_BUFFERED_ENTRIES);
 }
 
+type PendingStatQuery = { player: string; field: keyof PlayerStatData; path: string };
+
 // ─── Map positions ───────────────────────────────────────────────────
-// `data get entity <name> Pos` / `Dimension`, matched to responses in the
-// same FIFO order the commands were written. Results land in state so the
-// map updates through the normal bridge sync.
+// `data get entity <name> Pos` / `Dimension`, matched to the replies by the
+// player each one names. Results land in state so the map updates through
+// the normal bridge sync.
 type PendingPositionQuery = { player: string; kind: "pos" | "dim" };
 
 export function queryPlayerPositions(ctx: ServiceContext<GameServerState>): void {
@@ -269,44 +276,24 @@ export function handlePositionResponse(
     ctx: ServiceContext<GameServerState>,
     clean: string,
 ): boolean {
-    const pending = local().pendingPositionQueries[0];
+    const pos = extractPosition(clean);
+    const dimension = pos ? undefined : extractDimension(clean);
+    if (!pos && !dimension) return false;
+    // the reply names its player, so a query the server never answered
+    // (a player who just left) cannot hand one player's spot to another
+    const subject = extractEntityDataSubject(clean);
+    if (!subject) return false;
+    const kind = pos ? "pos" : "dim";
+    const queue = local().pendingPositionQueries;
+    const pending = queue.find((p) => p.kind === kind && displayNameNames(subject, p.player));
     if (!pending) return false;
-
-    if (pending.kind === "pos") {
-        const pos = extractPosition(clean);
-        if (!pos) return false;
-        local().pendingPositionQueries.shift();
-        ctx.setState((prev) => {
-            const existing = prev.playerPositions[pending.player];
-            return {
-                playerPositions: {
-                    ...prev.playerPositions,
-                    [pending.player]: {
-                        ...pos,
-                        dimension: existing?.dimension ?? "minecraft:overworld",
-                    },
-                },
-            };
-        });
-        return true;
-    }
-
-    const dimension = extractDimension(clean);
-    if (!dimension) return false;
-    local().pendingPositionQueries.shift();
+    queue.splice(queue.indexOf(pending), 1);
     ctx.setState((prev) => {
         const existing = prev.playerPositions[pending.player];
-        return {
-            playerPositions: {
-                ...prev.playerPositions,
-                [pending.player]: {
-                    x: existing?.x ?? 0,
-                    y: existing?.y ?? 0,
-                    z: existing?.z ?? 0,
-                    dimension,
-                },
-            },
-        };
+        const next: PlayerPosition = pos
+            ? { ...pos, dimension: existing?.dimension ?? "minecraft:overworld" }
+            : { x: existing?.x ?? 0, y: existing?.y ?? 0, z: existing?.z ?? 0, dimension: dimension! };
+        return { playerPositions: { ...prev.playerPositions, [pending.player]: next } };
     });
     return true;
 }
