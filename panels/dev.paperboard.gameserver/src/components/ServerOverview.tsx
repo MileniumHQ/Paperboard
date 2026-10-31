@@ -1,4 +1,4 @@
-import { onMount, Show, type JSX } from "solid-js";
+import { createSignal, onMount, Show, type JSX } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -25,14 +25,16 @@ import {
     stopServer,
     restartServer,
     sendServerCommand,
+    saveWorld,
     getStatusBadge,
 } from "../lib/server";
 import ServerIssueModal from "./ServerIssueModal";
 import RecoveryNotice from "./RecoveryNotice";
+import { errorMessage } from "../lib/failure";
 
 /**
- * Every game's Overview: the address card, the power controls and the
- * console. A game fills in its own avatar, the line under the address,
+ * Every game's Overview: the address card, the power controls, Save world
+ * and the console. A game fills in its own avatar, the line under the address,
  * extra buttons for a running server and its notices.
  */
 export default function ServerOverview(props: {
@@ -50,6 +52,25 @@ export default function ServerOverview(props: {
         void loadServerConfig();
         void initServerListeners();
     });
+
+    const [saving, setSaving] = createSignal(false);
+    const [saveError, setSaveError] = createSignal("");
+    const [commandError, setCommandError] = createSignal("");
+    const save = async () => {
+        setSaving(true);
+        setSaveError("");
+        try {
+            await saveWorld();
+        } catch (err) {
+            setSaveError(errorMessage(err));
+        } finally {
+            setSaving(false);
+        }
+    };
+    const runCommand = (command: string) => {
+        setCommandError("");
+        sendServerCommand(command).catch((err) => setCommandError(errorMessage(err)));
+    };
 
     const badge = () => getStatusBadge(serverStatus());
     const address = () => `${localIp()}:${serverPort()}`;
@@ -91,6 +112,10 @@ export default function ServerOverview(props: {
                             <PaperIcon>restart_alt</PaperIcon>
                             Restart
                         </PaperButton>
+                        <PaperButton onClick={() => void save()} disabled={saving()}>
+                            <PaperIcon>save</PaperIcon>
+                            {saving() ? "Saving..." : "Save world"}
+                        </PaperButton>
                         {props.actions}
                     </Show>
                 </PaperFlex>
@@ -108,6 +133,18 @@ export default function ServerOverview(props: {
                 </PaperQuote>
             </Show>
 
+            <Show when={saveError()}>
+                <PaperQuote variant="danger" icon="warning" title="World not saved" onDismiss={() => setSaveError("")}>
+                    {saveError()}
+                </PaperQuote>
+            </Show>
+
+            <Show when={commandError()}>
+                <PaperQuote variant="danger" icon="warning" title="Command not run" onDismiss={() => setCommandError("")}>
+                    {commandError()}
+                </PaperQuote>
+            </Show>
+
             {props.children}
 
             <PaperSeparator />
@@ -115,7 +152,7 @@ export default function ServerOverview(props: {
             <PaperCard grow minHeight={0} padding="full">
                 <PaperConsole
                     entries={serverEntries()}
-                    onCommand={sendServerCommand}
+                    onCommand={runCommand}
                     placeholder="Enter command..."
                     prompt="chevron_right"
                 />

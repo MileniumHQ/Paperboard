@@ -1,7 +1,6 @@
 import {
     config,
     files as fileApi,
-    system,
     type ServiceContext,
 } from "../../service/api";
 import { parseProperties, extractServerPort } from "../../core/properties";
@@ -24,12 +23,6 @@ export async function loadConfigAndProperties(
         }
         if (saved?.version) patch.serverVersion = saved.version;
         if (typeof saved?.ramGB === "number") patch.ramAllocation = saved.ramGB;
-
-        try {
-            patch.localIp = await system.getLocalIP();
-        } catch (err) {
-            console.debug("[Service:Config] local IP lookup failed:", String(err));
-        }
 
         const propertiesContent = await fileApi.read("server.properties", PANEL_ID);
         if (propertiesContent) {

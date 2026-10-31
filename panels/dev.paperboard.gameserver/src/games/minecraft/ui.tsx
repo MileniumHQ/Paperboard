@@ -5,13 +5,11 @@ import Setup from "../../components/Setup";
 import Overview from "../../components/Overview";
 import Chat from "../../components/Chat";
 import PlayerHead from "../../components/PlayerHead";
-import Options from "../../components/Options";
 import GameRules from "../../components/GameRules";
 import Players from "../../components/Players";
 import Plugins from "../../components/Plugins";
 import Worlds from "../../components/Worlds";
 import MapView from "../../components/Map";
-import Advanced from "../../components/Advanced";
 import Versions from "../../components/Versions";
 import Loader from "../../components/Loader";
 import Datapacks from "../../components/Datapacks";
@@ -30,12 +28,10 @@ export const minecraftUI: GameUI = {
                 switch (id) {
                     case "overview": return <Overview active={ctx.active() === id} hasPlayersTab={ctx.hasTab("players")} onOpenTab={ctx.openTab} />;
                     case "chat": return <Chat avatar={(name) => <PlayerHead name={name} alt={name} size="small" />} />;
-                    case "options": return <Options />;
                     case "gamerules": return <GameRules />;
                     case "players": return <Players />;
                     case "worlds": return <Worlds />;
                     case "map": return <MapView />;
-                    case "advanced": return <Advanced />;
                     case "versions": return <Versions onRequestPluginUpdate={requestPluginUpdate} />;
                     case "loader": return <Loader active={ctx.active() === id} />;
                     case "plugins": return <Plugins updateRequest={pluginUpdateRequest()} onConfigure={ctx.revealFiles} />;

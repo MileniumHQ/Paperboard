@@ -1,25 +1,12 @@
 import path from "node:path";
 import { options } from "./index";
+import { validateOptions as validateShared } from "../options";
 export function singleLine(value: unknown, label: string): string {
     if (typeof value !== "string" || /[\r\n\0]/.test(value)) throw new Error(`${label} must be a single line`);
     return value;
 }
 export function validateOptions(input: Record<string, unknown>, previous: Record<string, unknown> = {}): Record<string, unknown> {
-    const next = { ...previous };
-    for (const [id, value] of Object.entries(input)) {
-        const field = options.find(f => f.id === id);
-        if (!field) throw new Error(`Unknown Terraria option: ${id}`);
-        if (field.kind === "number") {
-            if (!Number.isInteger(value) || Number(value) < field.min || Number(value) > field.max) throw new Error(`${field.label} must be ${field.min}–${field.max}`);
-        } else if (field.kind === "boolean") {
-            if (typeof value !== "boolean") throw new Error(`${field.label} must be a boolean`);
-        } else {
-            singleLine(value, field.label);
-            if (field.kind === "select" && !field.choices.some(c => c.value === value)) throw new Error(`Invalid ${field.label}`);
-        }
-        if (field.kind !== "secret") next[id] = value;
-    }
-    return next;
+    return validateShared(options, "Terraria", input, previous);
 }
 export function worldName(value: unknown): string {
     if (typeof value !== "string" || !/^[\p{L}\p{N} _-]{1,80}$/u.test(value)) throw new Error("World name must be 1–80 letters, numbers, spaces, underscores or hyphens");

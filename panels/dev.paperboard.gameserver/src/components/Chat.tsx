@@ -14,7 +14,9 @@ import {
     PaperInput,
     PaperButton,
     PaperIcon,
+    PaperQuote,
 } from "@mileniumhq/paperui";
+import { errorMessage } from "../lib/failure";
 import {
     chatMessages,
     sendChatMessage,
@@ -53,6 +55,7 @@ function MessageContent(props: { message: ChatMessage; avatar: (name: string) =>
 export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
     let scrollRef: HTMLDivElement | undefined;
     const [inputVal, setInputVal] = createSignal("");
+    const [sendError, setSendError] = createSignal("");
 
     onMount(() => initServerListeners());
 
@@ -68,8 +71,13 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
         e.preventDefault();
         const text = inputVal().trim();
         if (!text) return;
-        sendChatMessage(text);
+        setSendError("");
         setInputVal("");
+        // a message that did not go out comes back to the field, with why
+        sendChatMessage(text).catch((err) => {
+            setInputVal(text);
+            setSendError(errorMessage(err));
+        });
         setTimeout(scrollToBottom, 0);
     };
 
@@ -105,6 +113,12 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
                     </Show>
                 </PaperFlex>
             </PaperCard>
+
+            <Show when={sendError()}>
+                <PaperQuote variant="danger" icon="warning" title="Message not sent" onDismiss={() => setSendError("")}>
+                    {sendError()}
+                </PaperQuote>
+            </Show>
 
             <form onSubmit={handleSend}>
                 <PaperFlex direction="row" gap="half" align="center" fullWidth>

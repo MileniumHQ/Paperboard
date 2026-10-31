@@ -33,6 +33,8 @@ export interface GameService {
     prepareLaunch(ctx: Context): Promise<PreparedLaunch>;
     isMutating(): boolean;
     assertFileAccess?(ctx: Context, path: unknown, write: boolean): Promise<void>;
+    /** Writes the running world to disk and resolves once the game confirms it; refuses when offline. */
+    saveWorld(ctx: Context): Promise<void>;
     stopEntry: string;
     stop(): Promise<void>;
     commandLine(command: string): string;

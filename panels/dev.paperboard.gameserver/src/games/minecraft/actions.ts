@@ -48,6 +48,7 @@ import { getHeadDataUrl } from "../../service/skins";
 import { listLogFiles, readLogFile } from "../../service/logs";
 import { queryGamerules, setGamerule } from "../../service/gamerules";
 import { applyRuntimeProperties } from "../../service/runtimeProperties";
+import { readGameOptions, writeGameOptions } from "./gameOptions";
 import { installServerSoftware, isInstallRunning, withInstallLock } from "./softwareInstall";
 import { settleInterruptedWork } from "../../service/recovery";
 import { readLoaderSettings, writeLoaderSetting } from "../../service/loaderSettings";
@@ -1621,6 +1622,34 @@ export const panelActions: ActionDefinition[] = [
         },
     }),
 
+    defineAction({
+        id: ACTION_IDS.readGameOptions,
+        name: "Read Options",
+        category: "Server",
+        description: "Reads the server's options for the Options and Advanced tabs",
+        internal: true,
+        template: "Read options",
+        inputs: {},
+        output: { type: "object", label: "Options" },
+        quick: false,
+        icon: "tune",
+        run: (ctx: ServiceContext<GameServerState>) => readGameOptions(ctx),
+    }),
+    defineAction({
+        id: ACTION_IDS.writeGameOptions,
+        name: "Save Options",
+        category: "Server",
+        description: "Saves options from the Options and Advanced tabs",
+        internal: true,
+        template: "Save options",
+        inputs: {
+            patch: { type: "object", label: "Patch" },
+        },
+        output: { type: "object", label: "Options" },
+        quick: false,
+        icon: "tune",
+        run: (ctx: ServiceContext<GameServerState>, inputs: { patch?: unknown }) => writeGameOptions(ctx, inputs?.patch),
+    }),
     defineAction({
         id: ACTION_IDS.applyRuntimeProperties,
         name: "Apply Runtime Properties",

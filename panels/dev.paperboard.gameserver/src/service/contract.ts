@@ -11,6 +11,9 @@ export const PANEL_ID = "dev.paperboard.gameserver";
 
 export const ACTION_IDS = {
     runCommand: "run-command",
+    saveWorld: "save-world",
+    readGameOptions: "read-game-options",
+    writeGameOptions: "write-game-options",
     startServer: "start-server",
     stopServer: "stop-server",
     restartServer: "restart-server",

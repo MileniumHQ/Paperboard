@@ -103,6 +103,12 @@ export async function withSavingPaused<T>(ctx: ServiceContext<GameServerState>, 
     }
 }
 
+/** Save world: everything in memory is written out, confirmed by the server's "Saved the game". */
+export async function saveWorld(ctx: ServiceContext<GameServerState>): Promise<void> {
+    if (ctx.state.serverStatus !== "online") throw new Error("Start the server before saving");
+    await send("save-all flush", flushed, FLUSH_TIMEOUT_MS, "that the world is saved");
+}
+
 /** the marker first, so a pause is never left without one */
 async function pauseSaving(): Promise<void> {
     await fileApi.write(PAUSED_MARKER, new Date().toISOString(), PANEL_ID);

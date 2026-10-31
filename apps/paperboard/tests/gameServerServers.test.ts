@@ -384,7 +384,7 @@ test("persisted servers restart and recover paused saving through the daemon", a
         for (const server of servers) await fileApi.write(`${server.directory}/world/level.dat`, server.id, PANEL);
         const first = servers[0]!;
         const marker = `${first.directory}/.paperboard-saving-paused`;
-        const child = `console.log('[Server thread/INFO]: Done (0.1s)!'); for await (const line of console) { if (line === 'save-on') console.log('[Server thread/INFO]: Automatic saving is now enabled'); }`;
+        const child = `console.log('[Server thread/INFO]: Done (0.1s)!'); for await (const line of console) { if (line === 'save-on') console.log('[Server thread/INFO]: Automatic saving is now enabled'); if (line === 'save-all flush') console.log('[Server thread/INFO]: Saved the game'); if (line.startsWith('difficulty ')) console.log('[Server thread/INFO]: The difficulty has been set to ' + line.slice(11)); }`;
         await processApi.start({ id: "survival-mc-server", command: bunExecutable, args: ["-e", child], cwd: await fileApi.getPath(first.directory, PANEL) });
         services.init((wss.address() as any).port, undefined, auth);
         await services.waitUntilReady(PANEL);
@@ -401,6 +401,24 @@ test("persisted servers restart and recover paused saving through the daemon", a
         }
         expect(serverStateOf(state, first.id).serverStatus).toBe("online");
         expect(await fileApi.exists(marker, PANEL)).toBe(false);
+
+        // Save world crosses the bridge, the daemon's stdin and the server's
+        // own confirmation; an offline server refuses it out loud.
+        await expect(actionsApi.call(PANEL, "survival/save-world")).resolves.toBe(true);
+        await expect(actionsApi.call(PANEL, "creative/save-world")).rejects.toThrow("Start the server before saving");
+
+        // Options and Advanced through the shared contract: a live option
+        // reaches the running server's console, every edit lands in
+        // server.properties or the server's settings, a bad value is refused.
+        const options = await actionsApi.call<any>(PANEL, "survival/write-game-options", { patch: { difficulty: "hard", "view-distance": 24 } });
+        expect(options).toMatchObject({ difficulty: "hard", "view-distance": 24, pvp: true });
+        expect(await fileApi.read(`${first.directory}/server.properties`, PANEL)).toContain("view-distance=24");
+        await until(async () => serverStateOf(await actionsApi.call<any>(PANEL, "list-servers"), first.id).serverEntries.some((e) => e.content.includes("The difficulty has been set to hard")));
+        await actionsApi.call(PANEL, "survival/write-game-options", { patch: { ramGB: 5 } });
+        expect(serverStateOf(await actionsApi.call<any>(PANEL, "list-servers"), first.id).ramAllocation).toBe(5);
+        expect(await actionsApi.call<any>(PANEL, "survival/read-game-options")).toMatchObject({ ramGB: 5, difficulty: "hard" });
+        await expect(actionsApi.call(PANEL, "survival/write-game-options", { patch: { "view-distance": 99 } })).rejects.toThrow("Render Distance must be a whole number from 2 to 32");
+        await expect(actionsApi.call(PANEL, "survival/write-game-options", { patch: { motd: "hi" } })).rejects.toThrow("Unknown Minecraft option: motd");
 
         // The first server refuses preparation while stopping. It must not
         // prevent a backup of the second, offline server through SDK + IPC.

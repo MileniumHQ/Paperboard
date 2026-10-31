@@ -31,20 +31,31 @@ type OptionBase = {
     scope?: "world" | "overview";
     /** Options sharing a section are listed together under its title, after the unsectioned ones. */
     section?: OptionSection;
+    /** The shared options tab that lists it, such as "advanced"; "options" when unset. */
+    tab?: string;
 };
 export interface OptionSection {
     title: string;
     description?: string;
 }
 export type GameOption = OptionBase & (
-    | { kind: "text"; default?: string }
+    | { kind: "text"; maxLength?: number; default?: string }
     | { kind: "number"; min: number; max: number; default?: number }
+    /** A whole number picked on a range, shown with its unit ("10 chunks"); marks are the ticks under it. */
+    | { kind: "slider"; min: number; max: number; unit: string; marks?: readonly number[]; default?: number }
     | { kind: "boolean"; default?: boolean }
     | { kind: "select"; choices: readonly { value: string; label: string }[]; default?: string }
     | { kind: "secret" }
 );
 export interface GameFeatures {
     options: readonly GameOption[];
+    /**
+     * What a running server does with an option edit. "locked": options are
+     * edited while it is stopped. "next-start": edits are saved at once; an
+     * option with restartRequired false applies at once, the rest when the
+     * server next starts.
+     */
+    optionsWhileRunning: "locked" | "next-start";
     control: Control;
     tabs: readonly GameTab[];
     actions: readonly string[];

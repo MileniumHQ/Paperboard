@@ -1,10 +1,13 @@
 import { createSignal, onMount, For, Show } from "solid-js";
 import {
     PaperButton,
+    PaperCard,
+    PaperEmptyState,
     PaperFlex,
     PaperInput,
     PaperPageHeader,
     PaperQuote,
+    PaperRange,
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperSettingItem,
@@ -12,9 +15,10 @@ import {
     PaperText,
     PaperToggle,
 } from "@mileniumhq/paperui";
-import type { GameOption, OptionSection } from "../games";
+import type { GameFeatures, GameOption, GameTab, OptionSection } from "../games";
 import { serverBridge, serverStatus } from "../lib/server";
 import { errorMessage } from "../lib/failure";
+import { ACTION_IDS } from "../service/contract";
 
 /**
  * One option's control. Toggles and menus report a change at once; text,
@@ -60,6 +64,28 @@ export function GameOptionControl(props: {
                 />
             );
         }
+        case "slider": {
+            // the value under the thumb while dragging; reported when the drag ends
+            const [draft, setDraft] = createSignal<number | null>(null);
+            return (
+                <PaperFlex width="field-wide">
+                    <PaperRange
+                        aria-label={field.label}
+                        min={field.min}
+                        max={field.max}
+                        marks={field.marks ? [...field.marks] : undefined}
+                        value={draft() ?? Number(props.value ?? field.min)}
+                        formatValue={(value) => `${value} ${field.unit}`}
+                        disabled={props.disabled}
+                        onInput={setDraft}
+                        onChange={(value) => {
+                            setDraft(null);
+                            if (value !== props.value) props.onChange(value);
+                        }}
+                    />
+                </PaperFlex>
+            );
+        }
         case "secret":
             return (
                 <PaperFlex direction="row" gap="half" align="center">
@@ -83,6 +109,7 @@ export function GameOptionControl(props: {
             return (
                 <PaperInput
                     value={String(props.value ?? "")}
+                    maxLength={field.kind === "text" ? field.maxLength : undefined}
                     disabled={props.disabled}
                     onBlur={(e) => {
                         if (e.currentTarget.value !== String(props.value ?? "")) props.onChange(e.currentTarget.value);
@@ -92,13 +119,32 @@ export function GameOptionControl(props: {
     }
 }
 
-/** A game's own options, stored by its service. Options with a scope are edited where it names instead. */
-export default function GameOptions(props: { fields: readonly GameOption[] }) {
+/** Lists over this many options get a search field. */
+const SEARCH_FROM = 12;
+
+/**
+ * A shared options tab: the game's options listed on this tab, stored by its
+ * service. Options with a scope are edited where it names instead.
+ */
+export default function GameOptions(props: {
+    tab: GameTab;
+    fields: readonly GameOption[];
+    whileRunning: GameFeatures["optionsWhileRunning"];
+}) {
     const [values, setValues] = createSignal<Record<string, unknown> | null>(null);
     const [loadError, setLoadError] = createSignal("");
     const [saveError, setSaveError] = createSignal("");
     const [saving, setSaving] = createSignal(false);
-    const fields = () => props.fields.filter((field) => !field.scope);
+    const [search, setSearch] = createSignal("");
+    const listed = () => props.fields.filter((field) => !field.scope && (field.tab ?? "options") === props.tab.id);
+    const fields = () => {
+        const query = search().toLowerCase().trim();
+        if (!query) return listed();
+        return listed().filter((field) =>
+            field.label.toLowerCase().includes(query) ||
+            (field.description ?? "").toLowerCase().includes(query) ||
+            field.id.toLowerCase().includes(query));
+    };
     // unsectioned options first, then each section in the order it first appears
     const groups = () => {
         const list: { section?: OptionSection; fields: GameOption[] }[] = [{ fields: [] }];
@@ -110,11 +156,20 @@ export default function GameOptions(props: { fields: readonly GameOption[] }) {
         return list.filter((g) => g.fields.length > 0);
     };
     const online = () => serverStatus() !== "offline";
+    const locked = () => online() && props.whileRunning === "locked";
+    // what a running server takes at once, named in the notice
+    const live = () => listed().filter((field) => !field.restartRequired).map((field) => field.label);
+    const liveNotice = () => {
+        const names = live();
+        if (names.length === 0) return "Changes apply the next time the server starts.";
+        const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+        return `${list} ${names.length === 1 ? "applies" : "apply"} now. Other changes apply the next time the server starts.`;
+    };
 
     const load = async () => {
         setLoadError("");
         try {
-            setValues(await serverBridge.call<Record<string, unknown>>("read-game-options"));
+            setValues(await serverBridge.call<Record<string, unknown>>(ACTION_IDS.readGameOptions));
         } catch (err) {
             setLoadError(errorMessage(err));
         }
@@ -127,7 +182,7 @@ export default function GameOptions(props: { fields: readonly GameOption[] }) {
         setSaving(true);
         setSaveError("");
         try {
-            setValues(await serverBridge.call<Record<string, unknown>>("write-game-options", { patch: { [id]: next } }));
+            setValues(await serverBridge.call<Record<string, unknown>>(ACTION_IDS.writeGameOptions, { patch: { [id]: next } }));
         } catch (err) {
             setSaveError(errorMessage(err));
         } finally {
@@ -137,7 +192,18 @@ export default function GameOptions(props: { fields: readonly GameOption[] }) {
 
     return (
         <>
-            <PaperPageHeader icon="tune" title="Options" />
+            <PaperPageHeader icon={props.tab.icon} title={props.tab.label} />
+            <Show when={listed().length > SEARCH_FROM}>
+                <PaperCard padding="full">
+                    <PaperInput
+                        fullWidth
+                        icon="search"
+                        placeholder={`Search ${props.tab.label.toLowerCase()}...`}
+                        value={search()}
+                        onInput={(e) => setSearch(e.currentTarget.value)}
+                    />
+                </PaperCard>
+            </Show>
             <Show
                 when={online()}
                 fallback={
@@ -146,9 +212,18 @@ export default function GameOptions(props: { fields: readonly GameOption[] }) {
                     </PaperQuote>
                 }
             >
-                <PaperQuote variant="warning" icon="warning" title="Server running">
-                    Stop the server to change its options.
-                </PaperQuote>
+                <Show
+                    when={locked()}
+                    fallback={
+                        <PaperQuote variant="warning" icon="info" title="When changes apply">
+                            {liveNotice()}
+                        </PaperQuote>
+                    }
+                >
+                    <PaperQuote variant="warning" icon="warning" title="Server running">
+                        Stop the server to change its options.
+                    </PaperQuote>
+                </Show>
             </Show>
             <Show when={loadError()}>
                 <PaperQuote variant="danger" icon="warning" title="Couldn't read the options">
@@ -159,7 +234,7 @@ export default function GameOptions(props: { fields: readonly GameOption[] }) {
                 </PaperQuote>
             </Show>
             <Show when={saveError()}>
-                <PaperQuote variant="danger" icon="warning" title="Options not saved">
+                <PaperQuote variant="danger" icon="warning" title="Options not saved" onDismiss={() => setSaveError("")}>
                     {saveError()}
                 </PaperQuote>
             </Show>
@@ -171,39 +246,41 @@ export default function GameOptions(props: { fields: readonly GameOption[] }) {
                     </Show>
                 }
             >
-                <PaperFlex direction="column" gap="full" fullWidth>
-                    <For each={groups()}>
-                        {(group) => (
-                            <PaperFlex direction="column" gap="half" fullWidth>
-                                <Show when={group.section}>
-                                    {(section) => (
-                                        <PaperFlex direction="column" gap="onefourth">
-                                            <PaperText size={2} weight={700} color="text-subtle">{section().title}</PaperText>
-                                            <Show when={section().description}>
-                                                <PaperText size={2} color="text-subtle">{section().description}</PaperText>
-                                            </Show>
-                                        </PaperFlex>
-                                    )}
-                                </Show>
-                                <PaperSettingList autoHeight>
-                                    <For each={group.fields}>
-                                        {(field) => (
-                                            <PaperSettingItem title={field.label} description={field.description}>
-                                                <GameOptionControl
-                                                    field={field}
-                                                    value={value(field)}
-                                                    secretStored={Boolean(values()?.[field.id])}
-                                                    disabled={online() || saving()}
-                                                    onChange={(next) => void save(field.id, next)}
-                                                />
-                                            </PaperSettingItem>
+                <Show when={groups().length > 0} fallback={<PaperEmptyState icon="search" title="No settings match your search." />}>
+                    <PaperFlex direction="column" gap="full" fullWidth>
+                        <For each={groups()}>
+                            {(group) => (
+                                <PaperFlex direction="column" gap="half" fullWidth>
+                                    <Show when={group.section}>
+                                        {(section) => (
+                                            <PaperFlex direction="column" gap="onefourth">
+                                                <PaperText size={2} weight={700} color="text-subtle">{section().title}</PaperText>
+                                                <Show when={section().description}>
+                                                    <PaperText size={2} color="text-subtle">{section().description}</PaperText>
+                                                </Show>
+                                            </PaperFlex>
                                         )}
-                                    </For>
-                                </PaperSettingList>
-                            </PaperFlex>
-                        )}
-                    </For>
-                </PaperFlex>
+                                    </Show>
+                                    <PaperSettingList autoHeight>
+                                        <For each={group.fields}>
+                                            {(field) => (
+                                                <PaperSettingItem title={field.label} description={field.description}>
+                                                    <GameOptionControl
+                                                        field={field}
+                                                        value={value(field)}
+                                                        secretStored={Boolean(values()?.[field.id])}
+                                                        disabled={locked() || saving()}
+                                                        onChange={(next) => void save(field.id, next)}
+                                                    />
+                                                </PaperSettingItem>
+                                            )}
+                                        </For>
+                                    </PaperSettingList>
+                                </PaperFlex>
+                            )}
+                        </For>
+                    </PaperFlex>
+                </Show>
             </Show>
         </>
     );

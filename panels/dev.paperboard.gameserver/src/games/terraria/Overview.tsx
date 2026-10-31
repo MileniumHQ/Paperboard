@@ -1,30 +1,15 @@
 import { createSignal, Show } from "solid-js";
-import { PaperAvatar, PaperButton, PaperFlex, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperAvatar, PaperButton, PaperFlex, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview from "../../components/ServerOverview";
 import { MotdEditor, MotdPreview } from "../../components/Motd";
 import { serverBridge, serverMotd, serverSoftware } from "../../lib/server";
-import { errorMessage } from "../../lib/failure";
 import { terraria } from "./index";
 import { terrariaMotd } from "./motd";
 import { softwareName, terrariaSoftware } from "./catalog";
 
 export default function TerrariaOverview() {
-    const [saving, setSaving] = createSignal(false);
-    const [saveError, setSaveError] = createSignal("");
     const [motdOpen, setMotdOpen] = createSignal(false);
     const [motdPending, setMotdPending] = createSignal(false);
-    const save = async () => {
-        setSaving(true);
-        setSaveError("");
-        try {
-            await serverBridge.call("terraria-save", undefined, { timeoutMs: null });
-        } catch (err) {
-            setSaveError(errorMessage(err));
-        } finally {
-            setSaving(false);
-        }
-    };
-
     const saveMotd = async (motd: string) => {
         const result = await serverBridge.call<{ appliesOnRestart: boolean }>("terraria-motd", { motd });
         setMotdPending(result.appliesOnRestart);
@@ -50,18 +35,7 @@ export default function TerrariaOverview() {
                 </PaperFlex>
             }
             software={softwareName(terrariaSoftware(serverSoftware()))}
-            actions={
-                <PaperButton onClick={() => void save()} disabled={saving()}>
-                    <PaperIcon>save</PaperIcon>
-                    {saving() ? "Saving..." : "Save world"}
-                </PaperButton>
-            }
         >
-            <Show when={saveError()}>
-                <PaperQuote variant="danger" icon="warning" title="World not saved" onDismiss={() => setSaveError("")}>
-                    {saveError()}
-                </PaperQuote>
-            </Show>
             <Show when={motdPending()}>
                 <PaperQuote variant="warning" icon="info" title="Message cleared" onDismiss={() => setMotdPending(false)}>
                     Players keep seeing the old message until the server restarts.

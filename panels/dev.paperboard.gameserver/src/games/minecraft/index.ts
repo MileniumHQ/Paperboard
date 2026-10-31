@@ -7,6 +7,7 @@ import { MODPACK_LOADER } from "../../core/modpack";
 import { versionSupports, type CapabilityName } from "../../lib/versionProfile";
 import { SOFTWARE_NAMES, getRequiredJavaVersion } from "../../lib/software";
 import { ACTION_IDS, TRIGGER_IDS } from "../../service/contract";
+import { minecraftOptions } from "./options";
 
 export function minecraftSoftware(value: string): ServerSoftwareType {
     if (!Object.hasOwn(SOFTWARE, value)) throw new Error(`Unsupported Minecraft software: ${value}`);
@@ -39,11 +40,11 @@ export const minecraft: GameDefinition = {
             ...(software !== "vanilla" ? [tab("loader", "Loader", "settings_applications", "Software")] : []),
             ...(SOFTWARE[software].addons ? [tab("plugins", SOFTWARE[software].addons?.kind === "mod" ? "Mods" : "Plugins", "extension", "Software")] : []),
             ...(MODPACK_LOADER[software] ? [tab("modpacks", "Modpacks", "package_2", "Software")] : []),
-            tab("options", "Options", "tune", "Server"),
+            tab("options", "Options", "tune", "Server", { owner: "shared" }),
             tab("files", "Files", "folder", "Server", { owner: "shared", variant: "fill" }),
             tab("logs", "Logs", "description", "Server", { owner: "shared", variant: "fill" }),
             tab("backups", "Backups", "backup", "Server", { owner: "shared" }),
-            tab("advanced", "Advanced", "settings", "Server"),
+            tab("advanced", "Advanced", "settings", "Server", { owner: "shared" }),
         ];
         // Roster/moderation remains supported independently of the statistics tab.
         // Action ids and schemas stay stable; optional game features are checked here
@@ -60,7 +61,8 @@ export const minecraft: GameDefinition = {
         if (!ready("playerStats")) unavailable.add(ACTION_IDS.listPlayerStats);
         const java = getRequiredJavaVersion(version);
         return {
-            options: [],
+            options: minecraftOptions(version),
+            optionsWhileRunning: "next-start",
             control: { kind: "stdin" },
             tabs,
             actions: [...Object.values(ACTION_IDS), ...Object.values(TRIGGER_IDS)].filter((id) => !unavailable.has(id)),

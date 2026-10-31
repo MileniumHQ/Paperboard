@@ -11,7 +11,8 @@ mock.module("../src/lib/server", () => ({ serverVersion, setServerVersion }));
 mock.module("../src/lib/api", () => ({ fileApi: {} }));
 
 const { countJsonEntries, joinRestriction } = await import("../src/core/whitelist");
-const { defaultValueFor, whitelistDefault, SERVER_PROPERTY_FIELDS } = await import("../src/lib/properties");
+const { whitelistDefault } = await import("../src/lib/properties");
+const { minecraftOptions } = await import("../src/games/minecraft/options");
 
 describe("whitelist default follows the version", () => {
     test("26.3 on, 26.2 off", () => {
@@ -20,9 +21,9 @@ describe("whitelist default follows the version", () => {
         setServerVersion("26.3");
         expect(whitelistDefault()).toBe("true");
         // the toggle lives on the Options tab, which takes its fallback from here
-        const field = SERVER_PROPERTY_FIELDS.find((f) => f.key === "white-list");
-        expect(field).toBeDefined();
-        expect(defaultValueFor(field!)).toBe("true");
+        const whitelist = (version: string) => minecraftOptions(version).find((f) => f.id === "white-list");
+        expect(whitelist("26.3")).toMatchObject({ kind: "boolean", default: true });
+        expect(whitelist("26.2")).toMatchObject({ kind: "boolean", default: false });
     });
 });
 

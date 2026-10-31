@@ -28,6 +28,7 @@ import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadine
 
 import { currentGameService, gameServiceFor } from "./games/service";
 import { assertGameAction, gameFor, games } from "./games";
+import { loadServerOptions } from "./service/options";
 import { livePortDeps } from "./service/portDeps";
 export * from "./service/types";
 export * from "./games/minecraft/actions";
@@ -237,7 +238,7 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
             scope.unsubscribe.push(
                 scopedProcess.onExit(game.primaryProcessId, () => handleProcessExit(scope.ctx)),
             );
-            await game.loadOptions(scope.ctx);
+            await loadServerOptions(scope.ctx);
             await game.initialize(scope.ctx, running);
             icons.set(server.id, await game.readIcon());
         });

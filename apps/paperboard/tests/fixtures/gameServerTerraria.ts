@@ -10,6 +10,7 @@ import { PaperCraneAuth } from "../../papercrane/auth";
 import { setupWebSocketServer } from "../../papercrane/ws";
 import { initPaperApi, closeTransport, actionsApi, backupApi, config, fileApi, processApi, secretsApi, WIDGET_CHOICES_ACTION } from "@mileniumhq/paperapi";
 import { backupServiceFor } from "../../papercrane/rpc/backups";
+import { getNetworkIp } from "../../papercrane/util";
 import { LOCAL_DESTINATION_ID } from "../../papercrane/backups/config";
 import { serverStateOf } from "../../../../panels/dev.paperboard.gameserver/src/servers";
 import { releaseFor, entrypoint } from "../../../../panels/dev.paperboard.gameserver/src/games/terraria/catalog";
@@ -98,9 +99,10 @@ for await (const line of console) { fs.appendFileSync(path.join(path.dirname(con
         await call("start-server");
         await until(async () => { const s = await state(); if (s.serverStatus === "offline") throw new Error("Terraria stopped before readiness:\n" + s.serverEntries.map(e => e.content).slice(-25).join("\n")); return s.serverStatus === "online"; }, "Terraria readiness", real ? 300_000 : 15_000);
         const online = await state(); assert(Number(online.serverPort) !== occupied, "Occupied port was not relocated");
+        assert(online.localIp === getNetworkIp(), `Overview address is ${online.localIp}, not the computer's LAN address ${getNetworkIp()}`);
         await new Promise<void>((resolve, reject) => { const socket = net.connect(Number(online.serverPort), "127.0.0.1"); socket.once("connect", () => { socket.destroy(); resolve(); }); socket.once("error", reject); });
         console.log(`Terraria ${version}: ONLINE, TCP ${online.serverPort}; collision ${occupied} relocated; host ${process.platform}/${process.arch}`);
-        await call("run-command", { command: "playing" }); console.log("playing: command delivered"); await call("terraria-save");
+        await call("run-command", { command: "playing" }); console.log("playing: command delivered"); await call("save-world");
         console.log("save: returned console prompt and changed world file confirmed");
         await call("stop-server"); await until(async () => !(await processApi.exists(processes[0]!)), "saved stop", 125_000);
         await until(async () => (await state()).serverStatus === "offline", "offline state");
@@ -132,7 +134,7 @@ for await (const line of console) { fs.appendFileSync(path.join(path.dirname(con
         assert(!fs.existsSync(path.join(directory, "after-backup.txt")), "Restore did not replace source data");
         assert((await secretsApi.get(`${first.id}-terraria-join-password`, PANEL)).value === "wire-secret", "Restore lost vault credential");
         assert(!(await actionsApi.call<any[]>(PANEL, WIDGET_CHOICES_ACTION, { widgetId: "players" })).some(x => x.value === first.id), "Terraria offered unsupported players widget");
-        await call("run-command", { command: "playing" }); console.log("playing: command delivered"); await call("terraria-save");
+        await call("run-command", { command: "playing" }); console.log("playing: command delivered"); await call("save-world");
         if (second) {
             const other = serverStateOf(await actionsApi.call<any>(PANEL, "list-servers"), second.id);
             assert(other.serverStatus === "online", "Backup or restore stopped another server");
@@ -158,7 +160,7 @@ for await (const line of console) { fs.appendFileSync(path.join(path.dirname(con
             assert(commands.includes("say Server stopping") && commands.includes("save\nexit"), "Backup did not announce/save/exit through real stdin");
             fs.writeFileSync(path.join(directory, "worlds/no-save"), "");
             await call("start-server"); await until(async () => (await state()).serverStatus === "online", "save failure test start");
-            let noSave = false; try { await call("terraria-save"); } catch (err) { noSave = /save completion/.test(String(err)); }
+            let noSave = false; try { await call("save-world"); } catch (err) { noSave = /save completion/.test(String(err)); }
             assert(noSave, "A returned prompt without a changed world file was accepted as a save");
             fs.writeFileSync(path.join(directory, "restore-refused.txt"), "must survive");
             let refusedRestore = false; try { await api.restore(record.id); } catch (err) { refusedRestore = /save completion/.test(String(err)); }

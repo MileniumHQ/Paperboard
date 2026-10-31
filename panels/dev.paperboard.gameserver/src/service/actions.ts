@@ -6,6 +6,7 @@ import { startServerInstance, stopServerInstance, restartServerInstance, sendSer
 import { listServerFiles, readServerFile, writeServerFile } from "./serverFiles";
 import { listLogFiles, readLogFile } from "./logs";
 import { currentGameService } from "../games/service";
+import { loadServerOptions } from "./options";
 import { currentServer } from "./scope";
 const loaderDeps = { serverDir: () => fileApi.getPath("", PANEL_ID) };
 export const backupAction = defineAction({
@@ -40,6 +41,24 @@ export const sharedActions = [
             const cmd = typeof inputs === "string" ? inputs : inputs?.command || "";
             await sendServerCommand(ctx, cmd);
             return `Executed: ${cmd}`;
+        },
+    }),
+    defineAction({
+        id: ACTION_IDS.saveWorld,
+        name: "Save the world",
+        category: "Server",
+        description: "Writes the running world to disk and waits for the server to confirm it",
+        template: "Save the world",
+        writtenOut: "Save the world",
+        output: {
+            type: "boolean",
+            label: "Saved",
+        },
+        quick: true,
+        icon: "save",
+        run: async (ctx: ServiceContext<GameServerState>) => {
+            await currentGameService().saveWorld(ctx);
+            return true;
         },
     }),
     defineAction({
@@ -106,7 +125,7 @@ export const sharedActions = [
         writtenOut: "Reload server configuration",
         output: { type: "boolean", label: "Success" },
         run: async (ctx) => {
-            await currentGameService().loadOptions(ctx);
+            await loadServerOptions(ctx);
             return true;
         },
     }),

@@ -203,8 +203,8 @@ export const terrariaService: GameService = {
     primaryProcessId: PROC, processIds: [PROC],
     initialState: () => ({ ...initialServerState(), serverSoftware: "vanilla", serverPort: "7777", serverMotd: "" }),
     actions: async () => { const { sharedActions, backupAction } = await import("../../service/actions"); return [ ...sharedActions, backupAction,
-        action("read-game-options", "Read options", async ctx => { await loadOptions(ctx); return ctx.state.gameSettings; }),
-        action("write-game-options", "Save options", (ctx, { patch }) => exclusive(ctx, async () => {
+        action(ACTION_IDS.readGameOptions, "Read options", async ctx => { await loadOptions(ctx); return ctx.state.gameSettings; }),
+        action(ACTION_IDS.writeGameOptions, "Save options", (ctx, { patch }) => exclusive(ctx, async () => {
             if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("Options patch is required");
             const next = validateOptions(patch, await settings());
             if (Object.hasOwn(patch, "password")) {
@@ -248,7 +248,6 @@ export const terrariaService: GameService = {
         action("terraria-world-inspect", "Read uploaded world", async (_ctx, { file }) => inspectUpload(await root(), file)),
         action("terraria-world-import", "Add uploaded world", async (_ctx, { file, name }) => { await importUpload(await root(), file, name); return true; }),
         action("terraria-world-discard", "Discard uploaded world", async (_ctx, { file }) => { await discardUpload(await root(), file); return true; }),
-        action("terraria-save", "Save Terraria world", save),
         action("terraria-mods", "List mods", async ctx => ({ mods: await (await modStore(ctx)).list(), tmodloader: String((await settings()).version) })),
         action("terraria-mod-search", "Search Steam Workshop", async (_ctx, { query, page, sort }) => {
             if (typeof query !== "string") throw new Error("Search text is required");
@@ -342,6 +341,7 @@ export const terrariaService: GameService = {
             socket.once("timeout", () => { socket.destroy(); reject(new Error("Terraria listener probe timed out")); });
         });
     } },
+    saveWorld: save,
     stopTimeoutMs: 120_000, stopEntry: "exit", stop: () => processApi.write(PROC, "exit\n"),
     commandLine(command) { const line = singleLine(command, "Command").trim(); if (/^(password|exit-nosave)\b/i.test(line)) throw new Error("Use Options for the password and Stop for a saved shutdown"); return `${line}\n`; },
     sendChat: (_ctx, message) => processApi.write(PROC, `say ${singleLine(message, "Message")}\n`),

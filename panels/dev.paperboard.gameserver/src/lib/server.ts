@@ -61,8 +61,6 @@ export const [recoveryBlock, setRecoveryBlock] = createSignal<string | null>(nul
 // a button that does nothing is a silent failure with a click handler.
 export const [serverActionError, setServerActionError] = createSignal("");
 
-export const MIN_RAM_GB = 1;
-export const MAX_RAM_GB = 16;
 
 export const serverBridge = createPanelBridge({
     panelId: PANEL_ID,
@@ -149,16 +147,19 @@ export function restartServer() {
         .catch((err) => reportActionError("restart-server", err));
 }
 
-export function sendServerCommand(cmd: string) {
-    serverBridge.call(ACTION_IDS.runCommand, { command: cmd }).catch((err) =>
-        console.error("[ServerBridge] run-command failed:", String(err)),
-    );
+/** Rejects when the command did not run; the console that sent it shows why. */
+export function sendServerCommand(cmd: string): Promise<unknown> {
+    return serverBridge.call(ACTION_IDS.runCommand, { command: cmd });
 }
 
-export function sendChatMessage(msg: string) {
-    serverBridge.call(ACTION_IDS.sayChat, { message: msg }).catch((err) =>
-        console.error("[ServerBridge] say-chat failed:", String(err)),
-    );
+/** Rejects when the message was not sent; the chat that sent it shows why. */
+export function sendChatMessage(msg: string): Promise<unknown> {
+    return serverBridge.call(ACTION_IDS.sayChat, { message: msg });
+}
+
+/** Asks the game to write its world to disk; resolves once the game confirms it. */
+export function saveWorld(): Promise<unknown> {
+    return serverBridge.call(ACTION_IDS.saveWorld, undefined, { timeoutMs: null });
 }
 
 export { getStatusBadge } from "../core/statusBadge";

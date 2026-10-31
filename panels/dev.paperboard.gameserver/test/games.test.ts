@@ -53,7 +53,10 @@ describe("bundled game modules", () => {
         for (const software of SOFTWARE_IDS) {
             const features = gameFor("minecraft").describe({ software, version: "1.21.4" });
             expect(features.tabs.map((tab) => tab.id)).toEqual(expected[software]);
-            expect(features.tabs.filter((tab) => tab.owner === "shared").map((tab) => tab.id)).toEqual(["files", "logs", "backups"]);
+            expect(features.tabs.filter((tab) => tab.owner === "shared").map((tab) => tab.id)).toEqual(["options", "files", "logs", "backups", "advanced"]);
+            // Options and Advanced are the shared options page over Minecraft's own options
+            for (const id of ["options", "advanced"]) expect(features.options.some((option) => (option.tab ?? "options") === id)).toBe(true);
+            expect(features.optionsWhileRunning).toBe("next-start");
             expect(features.tabs.find((tab) => tab.id === "plugins")?.label).toBe(software === "vanilla" ? undefined : software === "paper" ? "Plugins" : "Mods");
             expect(features.tabs.map((tab) => tab.group).filter((group, i, all) => group && group !== all[i - 1])).toEqual(["Play", "World", "Software", "Server"]);
             expect(features.control).toEqual({ kind: "stdin" });

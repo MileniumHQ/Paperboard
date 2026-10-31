@@ -13,7 +13,7 @@ import { prepareLaunch } from "./launch";
 import { isInstallRunning } from "./softwareInstall";
 import { commandLine, observeLine, sendChatMessage } from "./observe";
 import { portSpecs, portNames } from "./ports";
-import { withSavingPaused, pauseSavingForBackup, recoverPausedSaving } from "./saving";
+import { withSavingPaused, pauseSavingForBackup, recoverPausedSaving, saveWorld } from "./saving";
 
 export const minecraftService: GameService = {
     primaryProcessId: "mc-server",
@@ -41,6 +41,7 @@ export const minecraftService: GameService = {
     loadOptions: loadConfigAndProperties,
     prepareLaunch,
     isMutating: isInstallRunning,
+    saveWorld,
     stopEntry: "stop",
     stop: () => processApi.write("mc-server", "stop\n"),
     commandLine,

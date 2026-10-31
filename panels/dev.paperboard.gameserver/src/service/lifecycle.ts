@@ -5,6 +5,7 @@ import { assertRecoverySettled } from "./recoveryState";
 import { prepareGamePorts } from "./ports";
 import { livePortDeps } from "./portDeps";
 import { type GameServerState, appendCapped } from "./types";
+import { loadServerOptions } from "./options";
 import { TRIGGER_IDS } from "./contract";
 
 const primaryProcessId = () => currentGameService().primaryProcessId;
@@ -88,7 +89,7 @@ export async function startServerInstance(
     assertRecoverySettled("starting the server");
     try {
         ctx.setState({ activeIssue: null });
-        await currentGameService().loadOptions(ctx);
+        await loadServerOptions(ctx);
 
         const game = currentGameService();
         const support = currentGame().hostSupport({ os: process.platform, arch: process.arch }, { software: ctx.state.serverSoftware, version: ctx.state.serverVersion, settings: ctx.state.gameSettings });

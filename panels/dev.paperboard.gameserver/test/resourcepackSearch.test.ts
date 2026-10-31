@@ -64,7 +64,8 @@ test("without a server version it refuses instead of searching every version", a
 
 test("only the Resource Pack tab owns the resource pack keys", async () => {
     const src = (file: string) => readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
-    expect(src("components/Advanced.tsx")).not.toContain("resource-pack");
+    const { minecraftOptions } = await import("../src/games/minecraft/options");
+    expect(minecraftOptions("1.21.4").map((option) => option.id).filter((id) => id.includes("resource-pack"))).toEqual([]);
     expect(src("components/ResourcePack.tsx")).toContain("require-resource-pack");
     expect(src("components/ResourcePack.tsx")).toContain("resource-pack-prompt");
     expect(src("components/ResourcePack.tsx")).toContain("resource-pack-id");
