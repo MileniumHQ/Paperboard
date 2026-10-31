@@ -64,7 +64,7 @@ target_deps() {
     case "$1" in
         paperapi) echo "paperapi-build" ;;
         paperui) echo "paperui-build" ;;
-        create-panel) echo "create-panel-build" ;;
+        create-panel) echo "paperapi-build paperui-build create-panel-build" ;;
         packages) echo "paperapi-build paperui-build create-panel-build" ;;
         paperboard | paperdocs | origami-library) echo "paperapi-build paperui-build" ;;
         actions | agents | ai | botcreator | gameserver | terminal) echo "paperapi-build paperui-build" ;;

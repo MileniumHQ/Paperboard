@@ -128,7 +128,10 @@
       },
       "devDependencies": {
         "@types/node": "^22.20.5",
+        "solid-js": "^1.9.17",
         "typescript": "~6.0.3",
+        "vite": "^8.3.2",
+        "vite-plugin-solid": "^2.11.14",
       },
     },
     "packages/paperapi": {

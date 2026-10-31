@@ -1,18 +1,11 @@
-import {
-    definePanelService,
-    defineAction,
-    type ServiceContext,
-} from "@mileniumhq/paperapi";
+// The panel's background service: one long-running Node process the daemon
+// supervises, whether or not a window is open. It owns the state; windows
+// and the Home widget mirror it, and other panels reach it through actions.
+import { definePanelService, defineAction, type ServiceContext } from "@mileniumhq/paperapi";
 import { buildGreeting } from "./lib/greet";
+import { DEFAULT_STATE, PANEL_ID, type PanelState } from "./panel";
 
-// pass PANEL_ID explicitly, ambient scope resolves to last-imported panel
-const PANEL_ID = "__PANEL_ID__";
-
-interface StarterServiceState {
-    greetingCount: number;
-}
-
-type Ctx = ServiceContext<StarterServiceState>;
+type Ctx = ServiceContext<PanelState>;
 
 const actions = [
     defineAction({
@@ -28,25 +21,22 @@ const actions = [
         icon: "waving_hand",
         run: async (ctx: Ctx, inputs: { name?: string }) => {
             // validation lives in pure lib code (tested); the action only
-            // wires it to state. Invalid input throws a typed error, never
-            // an empty success.
+            // wires it to state. A bad name throws with the reason, so the
+            // caller is told, never handed an empty success.
             const greeting = buildGreeting(inputs?.name);
-            ctx.setState({
-                greetingCount: (ctx.state.greetingCount ?? 0) + 1,
-            });
+            ctx.setState({ greetingCount: ctx.state.greetingCount + 1 });
             return greeting;
         },
     }),
 ];
 
-export const starterService = definePanelService({
+export default definePanelService({
+    // passed explicitly: ambient scope resolves to the last panel imported
     id: PANEL_ID,
-    state: { greetingCount: 0 },
+    state: DEFAULT_STATE,
     categories: [{ name: "General", icon: "star", order: 1 }],
     actions,
-    async onInit(_ctx: Ctx) {
+    async onInit() {
         console.log(`[${PANEL_ID}] service ready.`);
     },
 });
-
-export default starterService;

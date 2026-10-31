@@ -13,7 +13,7 @@
     "dependencies": {
         "@mileniumhq/paperapi": "__PAPERAPI_DEP__",
         "@mileniumhq/paperui": "__PAPERUI_DEP__",
-        "solid-js": "^1.9.15"
+        "solid-js": "^1.9.17"
     },
     "devDependencies": {
         "typescript": "~6.0.3",

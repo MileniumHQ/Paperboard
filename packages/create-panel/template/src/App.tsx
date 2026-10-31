@@ -1,6 +1,8 @@
+// The panel is a menu and the page it picked. PaperPanel lays them out side
+// by side, and on a phone turns the menu into the first screen.
 import { createSignal } from "solid-js";
 import {
-    PaperFlex,
+    PaperPanel,
     PaperMenu,
     PaperMenuItem,
     PaperInterfaceGroup,
@@ -8,19 +10,19 @@ import {
 } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
-import "./style.css";
 import CounterPage from "./pages/CounterPage";
 import NotesPage from "./pages/NotesPage";
-import EchoPage from "./pages/EchoPage";
+// @if service
+import ServicePage from "./pages/ServicePage";
+// @endif
 
 export default function App() {
     const [activeTab, setActiveTab] = createSignal("counter");
 
     return (
-        <PaperFlex fullWidth fullHeight direction="row">
+        <PaperPanel>
             <PaperMenu
                 name="starter-menu"
-                spacing="half"
                 value={activeTab()}
                 onValueChange={(val) => setActiveTab(String(val))}
             >
@@ -30,24 +32,26 @@ export default function App() {
                 <PaperMenuItem value="notes" icon="edit">
                     Notes
                 </PaperMenuItem>
-                <PaperMenuItem value="echo" icon="chat">
-                    Echo
+                {/* @if service */}
+                <PaperMenuItem value="service" icon="sync_alt">
+                    Service
                 </PaperMenuItem>
+                {/* @endif */}
             </PaperMenu>
-            <PaperInterfaceGroup
-                value={activeTab()}
-                style={{ flex: 1, height: "100%", "min-height": 0, overflow: "auto" }}
-            >
+
+            <PaperInterfaceGroup value={activeTab()}>
                 <PaperInterfaceItem value="counter">
                     <CounterPage />
                 </PaperInterfaceItem>
                 <PaperInterfaceItem value="notes">
                     <NotesPage />
                 </PaperInterfaceItem>
-                <PaperInterfaceItem value="echo">
-                    <EchoPage />
+                {/* @if service */}
+                <PaperInterfaceItem value="service">
+                    <ServicePage />
                 </PaperInterfaceItem>
+                {/* @endif */}
             </PaperInterfaceGroup>
-        </PaperFlex>
+        </PaperPanel>
     );
 }

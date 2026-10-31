@@ -5,5 +5,16 @@
     "description": "__PANEL_DESC__",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
-    "service": "./dist/service.js"
+    "service": "./dist/service.js",
+    "widgets": [
+        {
+            "id": "greetings",
+            "name": "Greetings",
+            "description": "How many greetings the service has given",
+            "sizes": ["1x1", "2x1"]
+        }
+    ],
+    "store": {
+        "about": "./store/about.md"
+    }
 }
