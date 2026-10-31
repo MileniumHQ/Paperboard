@@ -70,7 +70,9 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
             const success = await engine.attachProcess(
                 procId,
                 ctx.ws,
-                (data) => sendEvent("process:data", { id: procId, data, stream: "stdout" }),
+                // onData omitted, as in process:run: a process's combined
+                // stream is its stdout and stderr again, so it sent every line twice
+                undefined,
                 (stdout) => sendEvent("process:data", { id: procId, data: stdout, stream: "stdout" }),
                 (stderr) => sendEvent("process:data", { id: procId, data: stderr, stream: "stderr" }),
                 (exitCode) => sendEvent("process:exit", { id: procId, exitCode }),
