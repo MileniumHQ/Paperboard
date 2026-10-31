@@ -158,7 +158,10 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
 
     const setHeight = (key: unknown, height: number) => {
         const prev = heights.get(key);
-        if (prev === height) return false;
+        // a row's measured height can flicker by a fraction of a pixel as it
+        // moves (subpixel layout); taking that as a change would re-lay out
+        // the window, move the row and measure it again, forever
+        if (prev !== undefined && Math.abs(prev - height) < 0.5) return false;
         measuredTotal += height - (prev ?? 0);
         heights.set(key, height);
         return true;

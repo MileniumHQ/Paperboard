@@ -77,6 +77,28 @@ describe("PaperConsole Component Tests", () => {
         expect(screen.queryByText("line 0")).toBeNull();
     });
 
+    test("a row whose height flickers by a subpixel settles instead of re-measuring forever", () => {
+        // real layouts report heights like 24.40625 and 24.4063720703125 for
+        // the same row depending on where it sits
+        const flicker = [24.40625, 24.4063720703125];
+        let measured = 0;
+        const rect = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(() => {
+            measured++;
+            // stop flickering eventually so a regression fails instead of hanging
+            const height = measured < 5000 ? flicker[measured % 2] : flicker[0];
+            return { height, width: 100, top: 0, left: 0, right: 100, bottom: height, x: 0, y: 0, toJSON() {} } as DOMRect;
+        });
+        const client = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(300);
+        try {
+            const entries = Array.from({ length: 100 }, (_, i) => `line ${i}`);
+            render(() => <PaperConsole showInput={false} entries={entries} />);
+            expect(measured).toBeLessThan(1000);
+        } finally {
+            rect.mockRestore();
+            client.mockRestore();
+        }
+    });
+
     test("a burst of lines lands in one frame and keeps the window bounded", async () => {
         const [entries, setEntries] = createSignal<string[]>([]);
         const { container } = render(() => <PaperConsole showInput={false} entries={entries()} />);
