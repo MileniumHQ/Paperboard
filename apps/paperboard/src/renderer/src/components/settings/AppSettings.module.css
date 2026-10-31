@@ -24,12 +24,6 @@
 
 .heading {
     margin: 0;
-    padding: 0 var(--paper-uigap);
-    font-size: var(--paper-text-size-1);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--paper-text-subtle);
 }
 
 .card {
@@ -47,7 +41,7 @@
     justify-content: space-between;
     gap: var(--paper-uigap);
     min-height: var(--paper-size-bar);
-    padding: 0 var(--paper-uigap);
+    padding: 0 var(--paper-inset);
     box-sizing: border-box;
     width: 100%;
     background: transparent;
@@ -73,8 +67,6 @@ button.row:active {
 .label {
     flex: 1;
     min-width: 0;
-    font-size: var(--paper-text-size-3);
-    font-weight: 500;
 }
 
 .chevron {

@@ -82,10 +82,10 @@ const AddLocationModal: Component<{
                     </For>
                 </PaperSelectMenu>
                 <Show when={provider().intro}>
-                    {(intro) => <PaperText size={2} color="text-subtle">{intro()}</PaperText>}
+                    {(intro) => <PaperText preset="text">{intro()}</PaperText>}
                 </Show>
                 <Show when={blocked()}>
-                    <PaperText size={2} color="warning">Connect {provider().name} from the Paperboard app. Its sign-in can't open in browser mode.</PaperText>
+                    <PaperText preset="hint" color="warning">Connect {provider().name} from the Paperboard app. Its sign-in can't open in browser mode.</PaperText>
                 </Show>
                 <For each={provider().fields}>
                     {(field) => (
@@ -112,7 +112,7 @@ const AddLocationModal: Component<{
                     )}
                 </For>
                 <Show when={error()}>
-                    <PaperText size={2} color="danger">{error()}</PaperText>
+                    <PaperText preset="error">{error()}</PaperText>
                 </Show>
             </PaperFlex>
         </PaperModal>

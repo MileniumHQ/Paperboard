@@ -30,19 +30,19 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
         </>}
     >
         <PaperFlex direction="column" gap="full">
-            <PaperText>
+            <PaperText preset="text">
                 {packageManaged() ? `${props.state.status === "manual" ? `Paperboard ${props.state.version} is available.` : "Paperboard could not check for updates."} Update Paperboard with the package manager you used to install it. You can keep using this version in the meantime.`
                     : failed() ? `${props.state.version ? `Version ${props.state.version} is available, but the update could not finish.` : "Paperboard could not check for or install an update."} You can keep using Paperboard and retry, or download the latest installer.`
                     : ready() ? `Version ${props.state.version} is downloaded. Restart Paperboard to apply it.`
                     : `Downloading Paperboard ${props.state.version ?? ""}${props.state.percent === null ? "…" : `: ${props.state.percent}%`}`}
             </PaperText>
             <Show when={failed() && props.state.error}>
-                <PaperText color="danger" breakWord>{props.state.error}</PaperText>
+                <PaperText preset="error" breakWord>{props.state.error}</PaperText>
             </Show>
             <Show when={props.state.status === "downloading"}>
                 <PaperProgress value={props.state.percent ?? undefined} max={100} />
             </Show>
-            <Show when={downloadError()}><PaperText role="alert" color="danger">{downloadError()}</PaperText></Show>
+            <Show when={downloadError()}><PaperText preset="error" role="alert">{downloadError()}</PaperText></Show>
         </PaperFlex>
     </PaperModal>;
 }

@@ -1,5 +1,5 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { PaperButton, PaperQuote, PaperSettingItem, PaperSettingList, PaperText, PaperToggle } from "@mileniumhq/paperui";
+import { PaperButton, PaperQuote, PaperSectionHeader, PaperSettingItem, PaperSettingList, PaperText, PaperToggle } from "@mileniumhq/paperui";
 import { panelPermissionsApi } from "../../lib/shell";
 import type { PanelPermission, PanelPermissionEntry } from "../../../../shared/panelPermissions";
 
@@ -40,11 +40,11 @@ export default function PanelPermissionSettings(props: { panelName: (panelId: st
 
     return (
         <>
-            <PaperText preset="subtitle">Panel permissions</PaperText>
+            <PaperSectionHeader icon="privacy_tip" title="Panel permissions" />
             <Show when={error()}>
                 {(failure) => (
                     <PaperQuote variant="danger" icon="error" title={failure().title} role="alert" onDismiss={() => setError(null)}>
-                        <PaperText breakWord>{failure().message}</PaperText>
+                        {failure().message}
                         <PaperButton size="tiny" onClick={() => void load()}>
                             Reload
                         </PaperButton>
@@ -53,7 +53,7 @@ export default function PanelPermissionSettings(props: { panelName: (panelId: st
             </Show>
             <Show
                 when={entries().length > 0}
-                fallback={<PaperText size={2} color="text-subtle">When a panel asks for your microphone, camera or screen, your answer shows up here.</PaperText>}
+                fallback={<PaperText preset="hint" inset>When a panel asks for your microphone, camera or screen, your answer shows up here.</PaperText>}
             >
                 <PaperSettingList autoHeight>
                     <For each={entries()}>

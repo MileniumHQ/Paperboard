@@ -44,7 +44,7 @@ const StepImage: Component<{ src: string; image: TutorialImage; compact?: boolea
             when={!failed()}
             fallback={
                 <PaperFlex center padding="full" class={`${picture()} ${styles.missing}`}>
-                    <PaperText preset="body" color="text-muted">
+                    <PaperText preset="hint">
                         Picture unavailable: {props.image.alt}
                     </PaperText>
                 </PaperFlex>
@@ -102,7 +102,7 @@ const TutorialDialog: Component<TutorialDialogProps> = (props) => {
                                             </Show>
                                             <PaperFlex direction="column" gap="half">
                                                 <PaperText preset="title">{step.title}</PaperText>
-                                                <PaperText preset="body">{step.body}</PaperText>
+                                                <PaperText preset="text">{step.body}</PaperText>
                                             </PaperFlex>
                                         </PaperFlex>
                                     </PaperFlex>

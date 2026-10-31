@@ -44,9 +44,9 @@ const ComputerPorts: Component<{ computerId: string }> = (props) => {
 
             <PaperFlex direction="column" gap="full" fullWidth>
                 <Show when={loadError()}>
-                    <PaperCard accent="danger" padding="full">
+                    <PaperCard accent="danger" padding="inset">
                         <PaperFlex direction="row" gap="full" align="center" justify="space-between">
-                            <PaperText size={2} color="danger">{loadError()}</PaperText>
+                            <PaperText preset="error">{loadError()}</PaperText>
                             <PaperButton onClick={() => void load()}>Try Again</PaperButton>
                         </PaperFlex>
                     </PaperCard>
@@ -63,17 +63,17 @@ const ComputerPorts: Component<{ computerId: string }> = (props) => {
                                 </PaperSettingItem>
                             </PaperSettingList>
                             <Show when={saveError()}>
-                                <PaperText size={2} color="danger">{saveError()}</PaperText>
+                                <PaperText preset="error" inset>{saveError()}</PaperText>
                             </Show>
                             <Show
                                 when={list().length > 0}
-                                fallback={<PaperText size={2} color="text-subtle">No panel holds a port on this computer.</PaperText>}
+                                fallback={<PaperText preset="hint" inset>No panel holds a port on this computer.</PaperText>}
                             >
                                 <PaperSettingList autoHeight>
                                     <For each={list()}>
                                         {(claim) => (
                                             <PaperSettingItem title={claim.label} description={PROTOCOL_NAMES[claim.protocol]}>
-                                                <PaperText weight={700}>{claim.port}</PaperText>
+                                                <PaperText preset="label">{claim.port}</PaperText>
                                             </PaperSettingItem>
                                         )}
                                     </For>
@@ -83,7 +83,7 @@ const ComputerPorts: Component<{ computerId: string }> = (props) => {
                     )}
                 </Show>
                 <Show when={!claims() && !loadError()}>
-                    <PaperText size={2} color="text-subtle">Loading ports…</PaperText>
+                    <PaperText preset="hint" inset>Loading ports…</PaperText>
                 </Show>
             </PaperFlex>
         </PaperFlex>

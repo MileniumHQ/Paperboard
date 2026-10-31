@@ -86,8 +86,8 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
             }
         >
             <PaperFlex direction="column" gap="half">
-                <PaperText preset="body">This panel's files and settings are copied here each time it makes a backup.</PaperText>
-                <Show when={locations()} fallback={<Show when={!error()}><PaperText size={2} color="text-subtle">Loading locations…</PaperText></Show>}>
+                <PaperText preset="text">This panel's files and settings are copied here each time it makes a backup.</PaperText>
+                <Show when={locations()} fallback={<Show when={!error()}><PaperText preset="hint">Loading locations…</PaperText></Show>}>
                     {(list) => (
                         <PaperSelector name="backup-location" value={selected()} onValueChange={(value) => setSelected(String(value))}>
                             <For each={list()}>
@@ -100,9 +100,9 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
                         </PaperSelector>
                     )}
                 </Show>
-                <PaperText size={2} color="text-subtle">Add Google Drive or an S3 bucket in {props.computerName}'s Computer Info.</PaperText>
+                <PaperText preset="hint">Add Google Drive or an S3 bucket in {props.computerName}'s Computer Info.</PaperText>
                 <Show when={error()}>
-                    <PaperText size={2} color="danger">{error()}</PaperText>
+                    <PaperText preset="error">{error()}</PaperText>
                 </Show>
             </PaperFlex>
         </PaperModal>

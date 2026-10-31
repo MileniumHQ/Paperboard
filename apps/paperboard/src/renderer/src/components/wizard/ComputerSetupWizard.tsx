@@ -234,7 +234,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             <PaperText preset="title">
                                 Connect a Computer
                             </PaperText>
-                            <PaperText preset="body">
+                            <PaperText preset="text">
                                 Select how you want to discover and pair with
                                 your computer.
                             </PaperText>
@@ -242,9 +242,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
 
                         <Show when={discoveryError()}>
                             <PaperQuote variant="warning" icon="wifi_find" title="Nearby computers not listed" role="alert">
-                                <PaperText breakWord>
-                                    {discoveryError()}. You can still connect by address.
-                                </PaperText>
+                                {discoveryError()}. You can still connect by address.
                             </PaperQuote>
                         </Show>
 
@@ -290,7 +288,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             <PaperText preset="title">
                                 Computer Details
                             </PaperText>
-                            <PaperText preset="body">
+                            <PaperText preset="text">
                                 Enter the IP address of a computer running
                                 the Paperboard server daemon.
                             </PaperText>
@@ -320,7 +318,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             />
 
                             <Show when={probeUnreachable()}>
-                                <PaperText size={2} color="danger">
+                                <PaperText preset="error">
                                     Can't reach {host().trim()}:
                                     {port().trim() || "45464"}. Check the
                                     address
@@ -347,7 +345,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             <PaperText preset="title">
                                 Pairing Verification
                             </PaperText>
-                            <PaperText preset="body">
+                            <PaperText preset="text">
                                 Enter the 6-digit pairing code shown by the
                                 Paperboard server daemon on{" "}
                                 {name() || host() || "the target computer"}.
@@ -366,7 +364,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             />
 
                             <Show when={pairError()}>
-                                <PaperText size={2} color="danger">
+                                <PaperText preset="error">
                                     {pairError()}
                                 </PaperText>
                             </Show>

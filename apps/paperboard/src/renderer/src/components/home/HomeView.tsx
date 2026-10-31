@@ -1004,7 +1004,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                 </Show>
                 <Show when={saveError()}>
                     <div class={styles.banner} role="alert">
-                        <PaperText size={1}>Couldn't save Home: {saveError()}</PaperText>
+                        <PaperText preset="error">Couldn't save Home: {saveError()}</PaperText>
                         <PaperButton size="tiny" variant="text" onClick={() => { setSaveError(null); void flush(); }}>Retry</PaperButton>
                     </div>
                 </Show>
@@ -1073,7 +1073,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                         <Show
                             when={ghostFrom()?.source === "builtin" ? ghostFrom() : undefined}
                             keyed
-                            fallback={<PaperText size={2}>{g().name}</PaperText>}
+                            fallback={<PaperText preset="label">{g().name}</PaperText>}
                         >
                             {(from) => content(from, () => g().size, () => true, "ghost", () => g().name)}
                         </Show>

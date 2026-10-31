@@ -13,6 +13,7 @@ import {
     PaperPage,
     PaperPageHeader,
     PaperQuote,
+    PaperSectionHeader,
     PaperText,
 } from "@mileniumhq/paperui";
 import { isBrowserShell, shellIpc } from "../../lib/shell";
@@ -146,11 +147,9 @@ export default function AppSettings(props: {
                     onDismiss={props.onDismissFailure}
                 >
                     <PaperFlex direction="column" gap="half" align="flex-start">
-                        <PaperText breakWord>
-                            {failure().kind === "load"
-                                ? `These are the defaults, not your settings: ${failure().message}`
-                                : `Your change was not kept: ${failure().message}`}
-                        </PaperText>
+                        {failure().kind === "load"
+                            ? `These are the defaults, not your settings: ${failure().message}`
+                            : `Your change was not kept: ${failure().message}`}
                         <Show when={failure().kind === "load" && props.onRetryLoad}>
                             <PaperButton size="tiny" onClick={() => props.onRetryLoad?.()}>Retry loading</PaperButton>
                         </Show>
@@ -281,7 +280,7 @@ export default function AppSettings(props: {
                 {(panelName) => <PanelPermissionSettings panelName={panelName()} />}
             </Show>
 
-            <PaperText preset="subtitle">Licenses</PaperText>
+            <PaperSectionHeader icon="license" title="Licenses" />
             <PaperSettingList autoHeight>
                 <PaperSettingItem
                     title="PolyForm Noncommercial 1.0.0"
@@ -328,7 +327,7 @@ function CompactSettings(props: {
             class={styles.row}
             onClick={row.onClick}
         >
-            <span class={styles.label}>{row.label}</span>
+            <PaperText preset="label" class={styles.label}>{row.label}</PaperText>
             <Show when={row.chevron}>
                 <PaperIcon class={styles.chevron} aria-hidden="true">chevron_right</PaperIcon>
             </Show>
@@ -346,10 +345,10 @@ function CompactSettings(props: {
                 onValueChange={props.onChange}
             >
                 <section class={styles.group} aria-labelledby="settings-appearance">
-                    <h2 id="settings-appearance" class={styles.heading}>Appearance</h2>
+                    <h2 id="settings-appearance" class={styles.heading}><PaperText preset="section" inset>Appearance</PaperText></h2>
                     <div class={styles.card}>
                         <div class={styles.row}>
-                            <span class={styles.label}>Theme</span>
+                            <PaperText preset="label" class={styles.label}>Theme</PaperText>
                             <PaperSelectMenu name="darkMode" value={props.settings.darkMode}>
                                 <PaperSelectMenuItem value="system" icon="contrast">System</PaperSelectMenuItem>
                                 <PaperSelectMenuItem value="light" icon="light_mode">Light</PaperSelectMenuItem>
@@ -357,17 +356,17 @@ function CompactSettings(props: {
                             </PaperSelectMenu>
                         </div>
                         <label class={styles.row}>
-                            <span class={styles.label}>Reduce motion</span>
+                            <PaperText preset="label" class={styles.label}>Reduce motion</PaperText>
                             <PaperToggle name="reducedMotion" checked={props.settings.reducedMotion} />
                         </label>
                     </div>
                 </section>
 
                 <section class={styles.group} aria-labelledby="settings-general">
-                    <h2 id="settings-general" class={styles.heading}>General</h2>
+                    <h2 id="settings-general" class={styles.heading}><PaperText preset="section" inset>General</PaperText></h2>
                     <div class={styles.card}>
                         <div class={styles.row}>
-                            <span class={styles.label}>Start on</span>
+                            <PaperText preset="label" class={styles.label}>Start on</PaperText>
                             <PaperSelectMenu name="startOn" value={props.settings.startOn}>
                                 <StartOnItems computers={props.computers} startOn={props.settings.startOn} />
                             </PaperSelectMenu>
@@ -379,7 +378,7 @@ function CompactSettings(props: {
 
             {/* a phone doesn't start at login, update itself, or quit: those rows are the desktop's */}
             <section class={styles.group} aria-labelledby="settings-licenses">
-                <h2 id="settings-licenses" class={styles.heading}>Licenses</h2>
+                <h2 id="settings-licenses" class={styles.heading}><PaperText preset="section" inset>Licenses</PaperText></h2>
                 <div class={styles.card}>
                     <ActionRow label={LICENSE_TITLES.paperboard} onClick={() => props.onViewLicense("paperboard")} chevron />
                     <ActionRow label={`${LICENSE_TITLES.mit} (SDKs)`} onClick={() => props.onViewLicense("mit")} chevron />

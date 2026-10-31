@@ -40,20 +40,20 @@ export default function PackageUpdateModal(props: {
     >
         <PaperFlex direction="column" gap="full">
             <Show when={props.state.notices.length === 0 && !props.error}>
-                <PaperText>Every package is up to date.</PaperText>
+                <PaperText preset="text">Every package is up to date.</PaperText>
             </Show>
             <For each={props.state.notices}>
                 {(notice) => <PaperFlex direction="column" gap="half">
-                    <PaperText>{noticeText(notice, showComputer())}</PaperText>
+                    <PaperText preset="text">{noticeText(notice, showComputer())}</PaperText>
                     <Show when={notice.error}>
-                        <PaperText color="danger" breakWord>{notice.error}</PaperText>
+                        <PaperText preset="error" breakWord>{notice.error}</PaperText>
                     </Show>
                 </PaperFlex>}
             </For>
             <For each={props.state.failures}>
-                {(failure) => <PaperText color="danger" breakWord>Could not check {failure.computerName}: {failure.error}</PaperText>}
+                {(failure) => <PaperText preset="error" breakWord>Could not check {failure.computerName}: {failure.error}</PaperText>}
             </For>
-            <Show when={props.error}><PaperText role="alert" color="danger">{props.error}</PaperText></Show>
+            <Show when={props.error}><PaperText preset="error" role="alert">{props.error}</PaperText></Show>
         </PaperFlex>
     </PaperModal>;
 }

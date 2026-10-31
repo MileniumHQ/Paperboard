@@ -98,13 +98,13 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                     </>
                 }
             >
-                <PaperText preset="body">
+                <PaperText preset="text">
                     Are you sure you want to forget{" "}
                     <strong>{props.computer?.name || "this computer"}</strong>?
                     This will disconnect all panels on this machine.
                 </PaperText>
                 <Show when={removeError()}>
-                    <PaperText size={2} color="danger">
+                    <PaperText preset="error">
                         {removeError()}
                     </PaperText>
                 </Show>

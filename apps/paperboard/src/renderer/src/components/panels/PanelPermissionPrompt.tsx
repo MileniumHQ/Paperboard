@@ -76,7 +76,7 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
         <Show when={error()}>
             {(message) => (
                 <PaperQuote variant="danger" icon="error" title="Your answer didn't go through" role="alert">
-                    <PaperText breakWord>{message()}</PaperText>
+                    <PaperText preset="text" breakWord>{message()}</PaperText>
                 </PaperQuote>
             )}
         </Show>
@@ -126,7 +126,7 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
                 }
             >
                 <PaperFlex direction="column" gap="half">
-                    <PaperText>Paperboard remembers your answer for {name(ask())}. You can change it in App Settings.</PaperText>
+                    <PaperText preset="text">Paperboard remembers your answer for {name(ask())}. You can change it in App Settings.</PaperText>
                     {failure()}
                 </PaperFlex>
             </PaperModal>
@@ -145,7 +145,7 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
                 }
             >
                 <PaperFlex direction="column" gap="full">
-                    <PaperText>Choose a screen or window. {name(pick())} sees it until it stops sharing.</PaperText>
+                    <PaperText preset="text">Choose a screen or window. {name(pick())} sees it until it stops sharing.</PaperText>
                     {failure()}
                     <PaperGrid>
                         <For each={pick()?.sources ?? []}>
@@ -179,7 +179,7 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
                 }
             >
                 <PaperFlex direction="column" gap="half">
-                    <PaperText>
+                    <PaperText preset="text">
                         {name(block())} asked for your {blockedNoun()}, but {system().name} isn't letting Paperboard use it. Turn on Paperboard in{" "}
                         {system().settings(SYSTEM_SECTIONS[block()?.permission ?? "microphone"])}, then try again.
                     </PaperText>

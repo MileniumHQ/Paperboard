@@ -43,7 +43,7 @@ const WidgetTile: Component<WidgetTileProps> = (props) => {
                     when={status().kind === "ok"}
                     fallback={
                         <div class={styles.tileStatus} role={status().kind === "unavailable" ? "alert" : "status"}>
-                            <PaperText size={1} color="text-subtle">
+                            <PaperText preset="hint">
                                 {(status() as { message: string }).message}
                             </PaperText>
                             <Show when={status().kind === "unavailable" && (status() as { retry?: () => void }).retry}>

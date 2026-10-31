@@ -52,11 +52,11 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
             <Show when={props.target}>
                 {(target) => (
                     <PaperFlex direction="column" gap="half">
-                        <PaperText preset="body">
+                        <PaperText preset="text">
                             Are you sure you want to uninstall{" "}
                             <strong>{target().panel.name}</strong>?
                         </PaperText>
-                        <PaperText size={2} color="text-subtle">
+                        <PaperText preset="hint">
                             This stops the panel and removes its installed code.
                             Your configuration, files and saved credentials are
                             kept for reinstalling.
@@ -71,7 +71,7 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
                             description="Configuration, files and vault entries are removed. This cannot be undone."
                         />
                         <Show when={props.error}>
-                            <PaperText size={2} color="danger">
+                            <PaperText preset="error">
                                 {props.error}
                             </PaperText>
                         </Show>

@@ -789,7 +789,7 @@ const App: Component = () => {
                                                     <PaperFlex direction="column" padding="half">
                                                         <PaperQuote variant="danger" icon="warning" title="Computer not switched" role="alert">
                                                             <PaperFlex direction="column" gap="half" align="flex-start">
-                                                                <PaperText size={1} breakWord>{switchError()[comp.id]}</PaperText>
+                                                                {switchError()[comp.id]}
                                                                 <PaperButton size="tiny" onClick={() => void connectComputer(comp.id)}>
                                                                     Retry
                                                                 </PaperButton>
@@ -801,7 +801,7 @@ const App: Component = () => {
                                                     <PaperFlex direction="column" padding="half">
                                                         <PaperQuote variant="danger" icon="warning" title="Panels not loaded" role="alert">
                                                             <PaperFlex direction="column" gap="half" align="flex-start">
-                                                                <PaperText size={1} breakWord>{panelsLoadError()[comp.id]}</PaperText>
+                                                                {panelsLoadError()[comp.id]}
                                                                 <PaperButton size="tiny" onClick={() => void refreshPanelsForComputer(comp.id)}>
                                                                     Retry
                                                                 </PaperButton>
@@ -1084,12 +1084,12 @@ const App: Component = () => {
                     </>
                 }
             >
-                <PaperText preset="body">
+                <PaperText preset="text">
                     Are you sure you want to forget{" "}
                     <strong>{forgetTargetName()}</strong>?
                 </PaperText>
                 <Show when={forgetError()}>
-                    <PaperText size={2} color="danger">
+                    <PaperText preset="error">
                         {forgetError()}
                     </PaperText>
                 </Show>

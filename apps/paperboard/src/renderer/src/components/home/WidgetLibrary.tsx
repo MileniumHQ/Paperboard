@@ -133,8 +133,8 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
                     </PaperButton>
                 </Show>
                 <div class={styles.libraryTitle}>
-                    <PaperText size={3} weight={700}>{choosing() && open() ? openName() : "Add widgets"}</PaperText>
-                    <PaperText size={1} color="text-subtle">
+                    <PaperText preset="heading">{choosing() && open() ? openName() : "Add widgets"}</PaperText>
+                    <PaperText preset="hint">
                         {open()
                             ? props.sheet
                                 ? "Hold to place on Home, or tap to add"
@@ -149,7 +149,7 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
             </div>
             <Show when={props.full}>
                 <div class={styles.libraryNote}>
-                    <PaperText size={1} color="text-subtle">Home is full. Remove a widget to add another.</PaperText>
+                    <PaperText preset="hint">Home is full. Remove a widget to add another.</PaperText>
                 </div>
             </Show>
 
@@ -176,13 +176,13 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
                                 {(computer) => (
                                     <>
                                         <Show when={props.computers.length > 1 && (panelSources(computer).length > 0 || props.panelsLoadFailed[computer.id])}>
-                                            <PaperText size={1} weight={700} color="text-subtle" class={styles.libraryComputer}>
+                                            <PaperText preset="section" class={styles.libraryComputer}>
                                                 {computer.name}
                                             </PaperText>
                                         </Show>
                                         <Show when={props.panelsLoadFailed[computer.id]}>
                                             <div class={styles.libraryNote} role="alert">
-                                                <PaperText size={1} color="text-subtle">Couldn't load widgets from {computer.name}.</PaperText>
+                                                <PaperText preset="error">Couldn't load widgets from {computer.name}.</PaperText>
                                                 <PaperButton size="tiny" variant="text" onClick={() => props.onRetry(computer.id)}>Retry</PaperButton>
                                             </div>
                                         </Show>
@@ -347,9 +347,9 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
     return (
         <PaperCard role="group" aria-label={props.widget.name} surface="frontest" padding="full" gap="threefourths">
             <div>
-                <PaperText size={2} weight={700} as="div">{props.widget.name}</PaperText>
+                <PaperText preset="label" as="div">{props.widget.name}</PaperText>
                 <Show when={props.widget.description}>
-                    <PaperText size={1} color="text-subtle" as="div">{props.widget.description}</PaperText>
+                    <PaperText preset="hint" as="div">{props.widget.description}</PaperText>
                 </Show>
             </div>
             <div class={styles.previewStage}>
@@ -464,7 +464,7 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
             <For each={declared()}>
                 {(option) => (
                     <div class={styles.optionRow} role="group" aria-label={option.label}>
-                        <PaperText size={1} color="text-subtle">{option.label}</PaperText>
+                        <PaperText preset="hint">{option.label}</PaperText>
                         <PaperSelectMenu
                             name={`${previewId}-${option.id}`}
                             fullWidth
@@ -482,7 +482,7 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
             </For>
             <Show when={declared().length > 0 && choices().kind !== "loading" && options() === null}>
                 <div class={styles.optionNote} role={choices().kind === "failed" ? "alert" : "status"}>
-                    <PaperText size={1} color="text-subtle">
+                    <PaperText preset={choices().kind === "failed" ? "error" : "hint"}>
                         {choices().kind === "failed"
                             ? `Couldn't load this widget's choices: ${(choices() as { message: string }).message}`
                             : `There is nothing to choose yet. Set this up in ${props.entryAt(size()).sourceName}, then check again.`}

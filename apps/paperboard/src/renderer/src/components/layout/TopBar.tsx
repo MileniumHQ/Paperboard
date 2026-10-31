@@ -97,7 +97,7 @@ const TopBar: Component<{
                 </PaperText>
                 <Show when={!props.mobile && versionLabel() !== null}>
                     <div class={styles.version} style={{ left: `${labelInset()}px` }}>
-                        <PaperText size={1} color="text-subtle">
+                        <PaperText preset="hint">
                             {versionLabel()}
                         </PaperText>
                     </div>
@@ -142,7 +142,7 @@ const TopBar: Component<{
                     <PaperButton onClick={() => setFolderErrorOpen(false)}>Close</PaperButton>
                 </>}
             >
-                <PaperText role="alert" breakWord>{folderError()}</PaperText>
+                <PaperText preset="error" role="alert" breakWord>{folderError()}</PaperText>
             </PaperModal>
         </>
     );

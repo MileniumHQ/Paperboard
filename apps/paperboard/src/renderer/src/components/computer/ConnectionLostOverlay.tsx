@@ -49,14 +49,10 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                 <PaperIcon class={styles.icon}>
                     cloud_off
                 </PaperIcon>
-                <PaperText size={6} weight={700}>
+                <PaperText preset="title">
                     Connection Lost
                 </PaperText>
-                <PaperText
-                    size={3}
-                    color="text-subtle"
-                    class={styles.message}
-                >
+                <PaperText preset="text" class={styles.message}>
                     Cannot communicate with{" "}
                     <strong>{props.computer.name}</strong> at{" "}
                     {props.computer.host}:{props.computer.port}. Make sure
@@ -64,11 +60,7 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                     keeps retrying on its own.
                 </PaperText>
                 <Show when={props.computer.status?.error}>
-                    <PaperText
-                        size={2}
-                        color="text-subtle"
-                        class={styles.message}
-                    >
+                    <PaperText preset="error" class={styles.message}>
                         {props.computer.status?.error}
                     </PaperText>
                 </Show>
@@ -82,7 +74,7 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                     {isReconnecting() ? "Reconnecting..." : "Attempt Reconnect"}
                 </PaperButton>
                 <Show when={lastError()}>
-                    <PaperText size={2} color="text-subtle">
+                    <PaperText preset="error">
                         Last error: {lastError()}
                     </PaperText>
                 </Show>

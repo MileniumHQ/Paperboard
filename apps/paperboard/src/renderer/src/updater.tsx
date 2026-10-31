@@ -81,7 +81,7 @@ function PaperUpdater() {
                     fullHeight
                     center
                 >
-                    <PaperText weight={700} size={4}>
+                    <PaperText preset="label">
                         {label()}
                     </PaperText>
                     <Show when={!failed()}>

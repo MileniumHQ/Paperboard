@@ -97,18 +97,18 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
 
             <PaperFlex direction="column" gap="full" fullWidth>
                 <Show when={loadError()}>
-                    <PaperCard accent="danger" padding="full">
+                    <PaperCard accent="danger" padding="inset">
                         <PaperFlex direction="row" gap="full" align="center" justify="space-between">
-                            <PaperText size={2} color="danger">{loadError()}</PaperText>
+                            <PaperText preset="error">{loadError()}</PaperText>
                             <PaperButton onClick={() => void load()}>Try Again</PaperButton>
                         </PaperFlex>
                     </PaperCard>
                 </Show>
                 <Show when={problem()}>
-                    <PaperCard accent="danger" padding="full">
+                    <PaperCard accent="danger" padding="inset">
                         <PaperFlex direction="column" gap="half">
-                            <PaperText size={2} color="danger">{problem()}</PaperText>
-                            <PaperText size={2} color="text-subtle">
+                            <PaperText preset="error">{problem()}</PaperText>
+                            <PaperText preset="hint">
                                 Starting fresh keeps the damaged file beside it and empties this list. Panels choose a location again; backups already at your locations are not deleted.
                             </PaperText>
                             <PaperFlex direction="row" gap="half">
@@ -121,22 +121,22 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
                     </PaperCard>
                 </Show>
                 <Show when={!locations() && !loadError() && !problem()}>
-                    <PaperText size={2} color="text-subtle">Loading locations…</PaperText>
+                    <PaperText preset="hint" inset>Loading locations…</PaperText>
                 </Show>
                 <Show when={reconnectError()}>
-                    <PaperText size={2} color="danger">{reconnectError()}</PaperText>
+                    <PaperText preset="error" inset>{reconnectError()}</PaperText>
                 </Show>
                 <For each={locations() ?? []}>
                     {(location) => (
-                        <PaperCard surface="front" padding="full">
+                        <PaperCard surface="front" padding="inset">
                             <PaperFlex direction="row" gap="full" align="center">
                                 <span class={styles.logoTile}>
                                     <LocationLogo kind={location.kind} size="large" />
                                 </span>
                                 <PaperFlex direction="column" flex={1} minWidth={0}>
-                                    <PaperText size={3} weight={700} truncate>{backupLocationLabel(location, props.computerName)}</PaperText>
-                                    <PaperText size={2} color="text-subtle" truncate>{location.detail}</PaperText>
-                                    <PaperText size={2} color={usage()[location.id]?.kind === "failed" ? "danger" : "text-subtle"}>
+                                    <PaperText preset="label" truncate>{backupLocationLabel(location, props.computerName)}</PaperText>
+                                    <PaperText preset="hint" truncate>{location.detail}</PaperText>
+                                    <PaperText preset={usage()[location.id]?.kind === "failed" ? "error" : "hint"}>
                                         {usageText(usage()[location.id] ?? { kind: "loading" })}
                                     </PaperText>
                                 </PaperFlex>
@@ -156,7 +156,7 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
                         </PaperCard>
                     )}
                 </For>
-                <PaperText size={2} color="text-subtle">
+                <PaperText preset="hint" inset>
                     A panel asks where to keep its backups the first time it makes one. Its later backups go to the same place.
                 </PaperText>
             </PaperFlex>
@@ -179,11 +179,11 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
                 }
             >
                 <PaperFlex direction="column" gap="half">
-                    <PaperText preset="body">
+                    <PaperText preset="text">
                         Remove <strong>{removing()?.label}</strong>? Panels using it stop making backups until you choose another location. Backups already there are not deleted.
                     </PaperText>
                     <Show when={removeError()}>
-                        <PaperText size={2} color="danger">{removeError()}</PaperText>
+                        <PaperText preset="error">{removeError()}</PaperText>
                     </Show>
                 </PaperFlex>
             </PaperModal>

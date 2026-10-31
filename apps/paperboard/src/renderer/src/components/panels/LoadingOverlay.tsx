@@ -34,7 +34,7 @@ const LoadingOverlay: Component<LoadingOverlayProps> = (props) => (
             />
         </Show>
         <Show when={props.error}>
-            <PaperText role="alert">{props.error}</PaperText>
+            <PaperText preset="error" role="alert">{props.error}</PaperText>
         </Show>
         <Show when={props.error && props.onRetry}>
             <PaperButton onClick={props.onRetry}>

@@ -76,7 +76,7 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
             <PaperFlex direction="column" gap="half">
                 <Show when={props.computer}>
                     {(comp) => (
-                        <PaperText preset="body">
+                        <PaperText preset="text">
                             Nothing responded at {comp().host}:
                             {comp().port}. Make sure the Paperboard Server
                             daemon is running on that computer and its
@@ -86,7 +86,7 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
                 </Show>
 
                 <Show when={error()}>
-                    <PaperText size={2} color="text-subtle">
+                    <PaperText preset="error">
                         Last error: {error()}
                     </PaperText>
                 </Show>
