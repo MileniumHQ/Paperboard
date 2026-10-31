@@ -165,7 +165,7 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
                 }
             >
                 <PaperFlex gap="full">
-                    <PaperText>“{deleting()?.title}” is deleted for good. What the agent remembers from it stays in its memory.</PaperText>
+                    <PaperText preset="text">“{deleting()?.title}” is deleted for good. What the agent remembers from it stays in its memory.</PaperText>
                     <Show when={deleteError()}>
                         <PaperQuote variant="danger" icon="error" title="Conversation not deleted" role="alert">
                             {deleteError()}

@@ -60,10 +60,10 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
             <PaperFlex direction="row" align="start" gap="half">
                 <PaperIcon>lock</PaperIcon>
                 <PaperFlex gap="onefourth">
-                    <PaperText size={3}>
+                    <PaperText preset="label">
                         Sign in on <strong>{e().site}</strong>
                     </PaperText>
-                    <PaperText size={1} color="text-muted">
+                    <PaperText preset="hint">
                         {props.name} picked these fields in its browser. It never sees what you type here.
                     </PaperText>
                 </PaperFlex>
@@ -132,16 +132,16 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                 <Match when={e().status === "submitted"}>
                     <PaperFlex direction="row" align="center" gap="half">
                         <PaperIcon>check</PaperIcon>
-                        <PaperText color="text-muted">
+                        <PaperText preset="hint">
                             Sent to {e().site}. {props.name} will check whether it worked.
                         </PaperText>
                     </PaperFlex>
                 </Match>
                 <Match when={e().status === "declined"}>
-                    <PaperText color="text-muted">You said no.</PaperText>
+                    <PaperText preset="hint">You said no.</PaperText>
                 </Match>
                 <Match when={e().status === "expired"}>
-                    <PaperText color="text-muted">This request lapsed. {props.name} can ask again.</PaperText>
+                    <PaperText preset="hint">This request lapsed. {props.name} can ask again.</PaperText>
                 </Match>
                 <Match when={e().status === "failed"}>
                     <PaperQuote variant="danger" icon="error" title="Not signed in" role="alert">

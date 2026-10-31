@@ -323,7 +323,7 @@ function Scenes(props: {
                             )}
                         </For>
                     </PaperSelector>
-                    <PaperText size={1} color="text-subtle">
+                    <PaperText preset="hint">
                         You can change this later.
                     </PaperText>
                 </Reveal>
@@ -336,7 +336,7 @@ function Scenes(props: {
                             <>
                                 <PaperSectionHeader title={harnessName(h())} role="heading" aria-level={2} />
                                 <Show when={brainReady() || brain()?.phase === "installed"}>
-                                    <PaperText size={1} color="text-muted">
+                                    <PaperText preset="hint" inset>
                                         {brainLine(h(), brain()!)}
                                     </PaperText>
                                 </Show>
@@ -387,7 +387,7 @@ function Scenes(props: {
                         </PaperSelectorItem>
                     </PaperSelector>
                     <Show when={machine().phase === "unsupported"}>
-                        <PaperText size={1} color="text-subtle">
+                        <PaperText preset="hint">
                             This computer can't run mine yet: {machine().error}
                         </PaperText>
                     </Show>

@@ -143,19 +143,19 @@ export default function App() {
                 <PaperSectionHeader title="Behaviour" role="heading" aria-level={2} />
                 <label class={styles.toggle}>
                     <PaperToggle checked={face.talking()} onChange={(on) => face.talk(on)} />
-                    <PaperText>Talking</PaperText>
+                    <PaperText preset="text">Talking</PaperText>
                 </label>
                 <label class={styles.toggle}>
                     <PaperToggle checked={face.shaking()} onChange={(on) => face.shake(on)} />
-                    <PaperText>Shaking</PaperText>
+                    <PaperText preset="text">Shaking</PaperText>
                 </label>
                 <label class={styles.toggle}>
                     <PaperToggle checked={face.pondering()} onChange={(on) => face.ponder(on)} />
-                    <PaperText>Pondering</PaperText>
+                    <PaperText preset="text">Pondering</PaperText>
                 </label>
                 <label class={styles.toggle}>
                     <PaperToggle checked={follow()} onChange={setFollow} />
-                    <PaperText>Follow the cursor</PaperText>
+                    <PaperText preset="text">Follow the cursor</PaperText>
                 </label>
                 <PaperFlex direction="row" wrap gap="onefourth">
                     <PaperButton size="small" onClick={() => face.blink()}>

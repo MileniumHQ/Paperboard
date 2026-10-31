@@ -62,8 +62,8 @@ describe("panel behavior", () => {
             expect(c.removeStillAsking, "a refused removal keeps its confirmation open").toBe(true);
             expect(c.removeRefusalInModal, "a refused removal must say why where the person is looking").toBe(true);
 
-            expect(c.routineScheduleColor, "a routine's schedule must be in the muted colour").toBe(c.mutedColor);
-            expect(c.routineTextColor, "the routine itself stays in the text colour").not.toBe(c.mutedColor);
+            expect(c.routineScheduleColor, "a routine's schedule must be in the hint colour").toBe(c.subtleColor);
+            expect(c.routineTextColor, "the routine itself stays in the text colour").not.toBe(c.subtleColor);
         },
         90_000,
     );

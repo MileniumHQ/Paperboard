@@ -114,7 +114,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
     return (
         <PaperModal open={props.open} onClose={close} title="OpenCode providers" size="large">
             <PaperFlex gap="full">
-                <PaperText size={1} color="text-muted">
+                <PaperText preset="hint">
                     OpenCode already has free models. Connect a provider to use its models too.
                 </PaperText>
                 <Switch>
@@ -146,7 +146,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                     <For each={p().connections}>
                                         {(c) => (
                                             <PaperFlex direction="row" gap="half" align="center">
-                                                <PaperText size={1}>{c.label} is connected.</PaperText>
+                                                <PaperText preset="hint">{c.label} is connected.</PaperText>
                                                 <PaperButton
                                                     variant="text"
                                                     disabled={busy()}
@@ -158,7 +158,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                         )}
                                     </For>
                                     <Show when={p().unsupported}>
-                                        <PaperText size={1} color="text-muted">
+                                        <PaperText preset="hint">
                                             {p().unsupported}
                                         </PaperText>
                                     </Show>
@@ -226,7 +226,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                     <Show when={attempt()?.provider === p().id ? attempt() : null}>
                                         {(a) => (
                                             <PaperFlex gap="half">
-                                                <PaperText size={1} color="text-muted">
+                                                <PaperText preset="hint">
                                                     {a().info.instructions || "Open the sign-in page and finish there."}
                                                 </PaperText>
                                                 <PaperFlex direction="row" gap="half" align="center">

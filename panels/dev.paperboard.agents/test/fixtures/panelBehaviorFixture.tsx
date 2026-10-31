@@ -197,13 +197,13 @@ async function run() {
     await page("routines");
     const what = [...document.querySelectorAll<HTMLElement>("*")].find((el) => el.children.length === 0 && el.textContent === "Text a flag fact");
     const when = [...document.querySelectorAll<HTMLElement>("*")].find((el) => el.children.length === 0 && el.textContent?.startsWith("every"));
-    const muted = document.createElement("span");
-    muted.style.color = "var(--paper-text-muted)";
-    root.appendChild(muted);
+    const subtle = document.createElement("span");
+    subtle.style.color = "var(--paper-text-subtle)";
+    root.appendChild(subtle);
     c.routineScheduleColor = when ? getComputedStyle(when).color : null;
     c.routineTextColor = what ? getComputedStyle(what).color : null;
-    c.mutedColor = getComputedStyle(muted).color;
-    muted.remove();
+    c.subtleColor = getComputedStyle(subtle).color;
+    subtle.remove();
 
     c.uncaught = uncaught;
 }

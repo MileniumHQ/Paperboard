@@ -30,7 +30,7 @@ export default function AppView(props: { app: OpenApp; extended: boolean; phone:
                     refresh
                 </PaperButton>
                 <PaperFlex flex minWidth={0} align="center">
-                    <PaperText size={3} weight={600} truncate>
+                    <PaperText preset="label" truncate>
                         {props.app.title}
                     </PaperText>
                 </PaperFlex>

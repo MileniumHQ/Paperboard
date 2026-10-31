@@ -184,7 +184,7 @@ export default function ComputerView(props: { agent: Agent }) {
                     </Match>
                     <Match when={c().phase === "none"}>
                         <div class={styles.setup}>
-                            <PaperText size={3}>
+                            <PaperText preset="text">
                                 A web browser of its own that {name()} uses for its work, about 400 MB of storage. It reaches the internet, never your files or your network.
                             </PaperText>
                             <PaperFlex direction="row">

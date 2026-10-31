@@ -31,10 +31,10 @@ export default function AppCard(props: { entry: AppEntry; apps: Launcher }) {
                     <Picture apps={props.apps} name={e().app} title={e().title} taken />
                 </Show>
                 <PaperFlex flex minWidth={0} gap="onefourth">
-                    <PaperText size={3} weight={600}>
+                    <PaperText preset="label">
                         {e().title}
                     </PaperText>
-                    <PaperText size={1} color="text-muted">
+                    <PaperText preset="hint">
                         {there() ? e().description : "This app was deleted."}
                     </PaperText>
                 </PaperFlex>

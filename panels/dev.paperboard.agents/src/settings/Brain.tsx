@@ -75,7 +75,7 @@ export function BrainStatus(props: { agent: Agent; harness: Harness; actions: Br
         <PaperFlex gap="half">
             <Switch>
                 <Match when={b().phase === "installing"}>
-                    <PaperText size={1} color="text-muted">
+                    <PaperText preset="hint">
                         Downloading {name()}. It comes straight from its maker and is checked before it's used.
                     </PaperText>
                     <PaperProgress value={b().percent ?? undefined} aria-label={`Installing ${name()}`} />
@@ -87,7 +87,7 @@ export function BrainStatus(props: { agent: Agent; harness: Harness; actions: Br
                     >
                         {(login) => (
                             <>
-                                <PaperText size={1} color="text-muted">
+                                <PaperText preset="hint">
                                     {login().expectsCode
                                         ? "A browser window should have opened. If it didn't, open the sign-in page yourself, sign in, and paste the code it shows."
                                         : login().code

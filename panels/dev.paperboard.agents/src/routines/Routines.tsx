@@ -74,8 +74,8 @@ export default function Routines(props: { agent: Agent }) {
                             <PaperCard borderless paddingX="full" paddingY="half">
                                 <PaperFlex direction="row" align="center" gap="full">
                                     <PaperFlex flex minWidth={0} gap="onefourth">
-                                        <PaperText size={2}>{r.what}</PaperText>
-                                        <PaperText size={1} color="text-muted">
+                                        <PaperText preset="label">{r.what}</PaperText>
+                                        <PaperText preset="hint">
                                             {describeSchedule(r.schedule)}
                                             {r.next ? ` · next ${localStamp(r.next)}` : ""}
                                             {r.lastRun ? ` · last ran ${localStamp(r.lastRun)}` : ""}

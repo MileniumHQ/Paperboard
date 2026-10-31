@@ -94,7 +94,7 @@ function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
                     <PaperCard borderless paddingX="full" paddingY="half">
                         <PaperFlex direction="row" align="center" gap="half">
                             <PaperFlex flex minWidth={0}>
-                                <PaperText size={2} breakWord>
+                                <PaperText preset="text" breakWord>
                                     {f.text}
                                 </PaperText>
                             </PaperFlex>
@@ -164,7 +164,7 @@ function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
                 {(n) => (
                     <>
                         <PaperSectionHeader icon="description" title={props.noteKey} />
-                        <PaperText size={1} color="text-muted">
+                        <PaperText preset="hint" inset>
                             Read {n().when}
                         </PaperText>
                         <PaperMarkdown text={n().body} />

@@ -269,12 +269,9 @@ function ComputerSettings(props: { agent: Agent }) {
             <PaperSectionHeader icon="computer" title="Computer" role="heading" aria-level={2} />
             <Switch>
                 <Match when={c().phase === "unsupported"}>
-                    {/* in line with the section header's title */}
-                    <PaperFlex paddingX="threefourths">
-                        <PaperText size={2} color="text-muted">
-                            {c().error}
-                        </PaperText>
-                    </PaperFlex>
+                    <PaperText preset="hint" inset>
+                        {c().error}
+                    </PaperText>
                 </Match>
                 <Match when={!c().installed && c().phase !== "installing"}>
                     <PaperSettingList autoHeight>
@@ -344,7 +341,7 @@ function ComputerSettings(props: { agent: Agent }) {
                     </>
                 }
             >
-                <PaperText>Everything on it is deleted: its files, downloads and sign-ins. This can't be undone.</PaperText>
+                <PaperText preset="text">Everything on it is deleted: its files, downloads and sign-ins. This can't be undone.</PaperText>
                 <Show when={eraseError()}>
                     <PaperQuote variant="danger" icon="error" title="Computer not erased" role="alert">
                         {eraseError()}
@@ -485,7 +482,7 @@ export function StartOver(props: { agent: Agent; open: boolean; onClose: () => v
                 </>
             }
         >
-            <PaperText>
+            <PaperText preset="text">
                 {name()} stops what it's doing and forgets your whole conversation. Its computer and what's on it stay. This can't be undone.
             </PaperText>
             <Show when={error()}>

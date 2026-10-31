@@ -144,30 +144,21 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
     return (
         <PaperFlex gap="full" role="region" aria-label="Tool servers">
             <PaperSectionHeader icon="dns" title="Tool servers" role="heading" aria-level={2} />
-            {/* in line with the section header's title and the servers' cards */}
-            <PaperFlex paddingX="threefourths">
-                <PaperText size={2} color="text-muted">
-                    MCP servers give {name()} more tools. They start when it next needs them. A server on this computer runs with your access; one inside {name()}'s computer stays in it.
-                </PaperText>
-            </PaperFlex>
+            <PaperText preset="hint" inset>
+                MCP servers give {name()} more tools. They start when it next needs them. A server on this computer runs with your access; one inside {name()}'s computer stays in it.
+            </PaperText>
             <For
                 each={view().config.servers}
-                fallback={
-                    <PaperFlex paddingX="threefourths">
-                        <PaperText size={2} color="text-muted">
-                            No tool servers yet.
-                        </PaperText>
-                    </PaperFlex>
-                }
+                fallback={<PaperEmptyState icon="dns" title="No tool servers yet" />}
             >
                 {(server) => {
                     const status = () => statusOf(server);
                     const restart = () => act(`restart:${server.name}`, status().phase === "running" ? "Server not restarted" : "Server not started", () => props.tools.restart(server.name));
                     return (
-                        <PaperCard surface="transparent" padding="full" gap="half" role="group" aria-label={server.name}>
+                        <PaperCard surface="transparent" padding="inset" gap="half" role="group" aria-label={server.name}>
                             <PaperFlex direction="row" align="center" wrap gap="half">
                                 <PaperFlex flex minWidth={0}>
-                                    <PaperText weight={600} breakWord>
+                                    <PaperText preset="label" breakWord>
                                         {server.name}
                                     </PaperText>
                                 </PaperFlex>
@@ -176,7 +167,7 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
                                     {server.enabled && status().phase === "running" ? ` · ${status().tools} tools` : ""}
                                 </PaperBadge>
                             </PaperFlex>
-                            <PaperText size={2} color="text-muted">
+                            <PaperText preset="hint">
                                 {where(server)} ·{" "}
                                 {server.transport === "stdio" ? [server.command, ...server.args].join(" ") : server.url}
                             </PaperText>
@@ -184,7 +175,7 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
                                 <Show
                                     when={status().phase === "failed"}
                                     fallback={
-                                        <PaperText size={2} color="text-muted" role="status">
+                                        <PaperText preset="hint" role="status">
                                             {status().error}
                                         </PaperText>
                                     }
@@ -271,7 +262,7 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
                     </>
                 }
             >
-                <PaperText>It stops, and the secrets saved for it are deleted. {name()} can't use its tools anymore.</PaperText>
+                <PaperText preset="text">It stops, and the secrets saved for it are deleted. {name()} can't use its tools anymore.</PaperText>
                 <Show when={removeError()}>
                     <PaperQuote variant="danger" icon="error" title="Server not removed" role="alert">
                         {removeError()}
@@ -360,7 +351,7 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
                         onInput={(e) => set("name", e.currentTarget.value)}
                     />
                     <PaperFlex gap="half">
-                        <PaperText size={2} weight={600}>
+                        <PaperText preset="heading">
                             Type
                         </PaperText>
                         <PaperSelectMenu
@@ -394,11 +385,11 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
                     </Show>
 
                     <PaperFlex gap="half">
-                        <PaperText size={2} weight={600}>
+                        <PaperText preset="heading">
                             {valuesLabel()}
                         </PaperText>
                         <Show when={http()}>
-                            <PaperText size={1} color="text-muted">
+                            <PaperText preset="hint">
                                 A secret header holds the whole value, like “Bearer abc123”.
                             </PaperText>
                         </Show>

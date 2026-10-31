@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, on, type JSX } from "solid-js";
-import { PaperButton, PaperContextMenu, PaperContextMenuItem, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPageHeader, PaperProgress, PaperQuote, PaperText, type MarkdownImage } from "@mileniumhq/paperui";
+import { PaperButton, PaperContextMenu, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPageHeader, PaperProgress, PaperQuote, PaperText, type MarkdownImage } from "@mileniumhq/paperui";
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import type { FaceController } from "../face/controller";
@@ -211,7 +211,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; apps: 
             >
                 <Show when={rows().length === 0}>
                     <PaperFlex flex center>
-                        <PaperText color="text-muted">Say hi to {name()}.</PaperText>
+                        <PaperEmptyState title={`Say hi to ${name()}`} />
                     </PaperFlex>
                 </Show>
                 <For each={visible()}>
@@ -219,7 +219,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; apps: 
                         <>
                             <Show when={row.stamp !== null}>
                                 <PaperFlex align="center" paddingY="half">
-                                    <PaperText size={1} weight={500} color="text-subtle">
+                                    <PaperText preset="hint">
                                         {stampText(row.stamp!)}
                                     </PaperText>
                                 </PaperFlex>

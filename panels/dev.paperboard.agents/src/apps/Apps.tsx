@@ -139,7 +139,7 @@ export default function Apps(props: { apps: Launcher; name: string; onOpened: ()
                 }
             >
                 <PaperFlex gap="full">
-                    <PaperText>
+                    <PaperText preset="text">
                         “{deleting()?.title}” and its folder, ~/Apps/{deleting()?.name}, are deleted. A checkpoint from before now still has it.
                     </PaperText>
                     <Show when={deleteError()}>
