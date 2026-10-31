@@ -4,15 +4,14 @@ import { Miniflare, convertV4MiniflareOptions, Response as MFResponse } from "mi
 
 const SECRET = "test-only-steam-key-never-real";
 const fixture = {
-  result: 1, visibility: 0, publishedfileid: "123", consumer_app_id: 4000,
-  title: "A Workshop item", description: "Description", preview_url: "https://images.steamusercontent.com/example.jpg",
+  result: 1, visibility: 0, publishedfileid: "123", consumer_appid: 4000,
+  title: "A Workshop item", short_description: "Short description", preview_url: "https://images.steamusercontent.com/example.jpg",
   creator: "76561198000000000", tags: [{ tag: "Build" }], subscriptions: 42,
   favorited: 8, time_updated: 1700000000, file_size: "2048", children: [{ publishedfileid: "456" }],
   file_url: "https://do-not-return.invalid/file", private_field: "must not pass through",
 };
-// IPublishedFileService/QueryFiles names fields differently from ISteamRemoteStorage details.
-const { consumer_app_id, description, ...shared } = fixture;
-const queryFixture = { ...shared, consumer_appid: consumer_app_id, short_description: "Short description" };
+// QueryFiles and GetDetails (IPublishedFileService) answer in the same shape.
+const queryFixture = fixture;
 let script: string;
 beforeAll(async () => {
   const result = await build({ stdin: {
@@ -94,14 +93,18 @@ describe("Modscan HTTP boundary in workerd", () => {
     expect(calls).toHaveLength(1);
     expect((await (await budget.fetch("https://budget/count")).json() as number[][])[0]![1]).toBe(1);
   });
-  it("uses POST form for item details without forwarding the key or arbitrary data", async () => {
+  it("looks items up with what they require, sending only the ids", async () => {
     const { request, calls } = await setup();
     const response = await request(`${base}/items?ids=123`);
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("public, max-age=300");
-    expect(calls[0]!.method).toBe("POST");
-    expect([...new URLSearchParams(calls[0]!.body)]).toEqual([["itemcount", "1"], ["publishedfileids[0]", "123"]]);
-    expect(calls[0]!.url.search).toBe("");
+    const body = await response.json() as any;
+    expect(body.items[0].children).toEqual(["456"]);
+    expect(body.items[0].description).toBe("Short description");
+    expect(JSON.stringify(body)).not.toContain(SECRET);
+    expect(calls[0]!.method).toBe("GET");
+    expect(calls[0]!.url.pathname).toBe("/IPublishedFileService/GetDetails/v1/");
+    expect(JSON.parse(calls[0]!.url.searchParams.get("input_json")!)).toEqual({ publishedfileids: ["123"], includetags: true, includechildren: true, short_description: true });
   });
   it("checks collection game via details before fetching collection children", async () => {
     const { request, calls } = await setup({ upstream: url => ({ response: url.pathname.includes("GetCollectionDetails") ? { collectiondetails: [{ result: 1, publishedfileid: "123", children: [{ publishedfileid: "789" }] }] } : { publishedfiledetails: [fixture] } }) });
@@ -112,7 +115,7 @@ describe("Modscan HTTP boundary in workerd", () => {
     expect(calls[1]!.body).toBe("collectioncount=1&publishedfileids%5B0%5D=123");
   });
   it("rejects cross-game items and never requests cross-game collection children", async () => {
-    const { request, calls } = await setup({ upstream: () => ({ response: { publishedfiledetails: [{ ...fixture, consumer_app_id: 440 }] } }) });
+    const { request, calls } = await setup({ upstream: () => ({ response: { publishedfiledetails: [{ ...fixture, consumer_appid: 440 }] } }) });
     expect((await request(`${base}/collections/123`)).status).toBe(404);
     expect(calls).toHaveLength(1);
   });

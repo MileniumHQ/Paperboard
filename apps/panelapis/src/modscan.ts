@@ -41,12 +41,11 @@ export interface Item {
   timeUpdated: number; fileSize: number; children: string[] | null; workshopUrl: string;
 }
 function children(value: unknown): string[] { return array(value).map(v => id(record(v).publishedfileid)); }
-// QueryFiles reports `consumer_appid`; the ISteamRemoteStorage details endpoint reports `consumer_app_id`.
-type AppField = "consumer_appid" | "consumer_app_id";
-function item(value: unknown, appid: number, appField: AppField): Item {
+// Both IPublishedFileService methods report the game as `consumer_appid`.
+function item(value: unknown, appid: number): Item {
   const v = record(value);
   if (number(v.result) !== 1) throw new Failure(404, "item_unavailable", "A requested Workshop item is unavailable.");
-  if (number(v[appField]) !== appid) throw new Failure(404, "wrong_game", "Workshop item does not belong to this game.");
+  if (number(v.consumer_appid) !== appid) throw new Failure(404, "wrong_game", "Workshop item does not belong to this game.");
   if (number(v.visibility) !== 0) throw new Failure(404, "item_not_public", "Only public Workshop items are available.");
   const itemId = id(v.publishedfileid);
   let preview: string | null = null;
@@ -90,11 +89,13 @@ async function steam(env: Env, method: "search" | "items" | "collection", params
   const budget = await env.BUDGET.get(env.BUDGET.idFromName("steam-key-budget-v1")).fetch("https://budget/reserve", { method: "POST" });
   if (budget.status === 429) throw new Failure(429, "steam_budget", "Steam API budget exhausted. Try again after earlier calls expire from the 24-hour window.");
   if (!budget.ok) throw new Failure(503, "budget_unavailable", "Steam API budget guard is unavailable.");
+  // QueryFiles and GetDetails take the key and input_json; collections are a keyless POST form
   const url = new URL(method === "search"
     ? "https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/"
-    : `https://api.steampowered.com/ISteamRemoteStorage/${method === "items" ? "GetPublishedFileDetails" : "GetCollectionDetails"}/v1/`);
+    : method === "items" ? "https://api.steampowered.com/IPublishedFileService/GetDetails/v1/"
+    : "https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/");
   let init: RequestInit = { redirect: "manual", signal: AbortSignal.timeout(10_000) };
-  if (method === "search") {
+  if (method !== "collection") {
     url.searchParams.set("key", env.STEAM_WEB_API_KEY!);
     url.searchParams.set("input_json", JSON.stringify(params));
   } else {
@@ -121,8 +122,8 @@ async function steam(env: Env, method: "search" | "items" | "collection", params
   if (raw.includes(env.STEAM_WEB_API_KEY!)) throw malformed();
   try { return record(JSON.parse(raw)); } catch { throw malformed(); }
 }
-function fileParams(ids: string[], collection = false) {
-  const params: Record<string, unknown> = { [collection ? "collectioncount" : "itemcount"]: ids.length };
+function collectionParams(ids: string[]) {
+  const params: Record<string, unknown> = { collectioncount: ids.length };
   ids.forEach((v, i) => { params[`publishedfileids[${i}]`] = v; }); return params;
 }
 
@@ -164,13 +165,14 @@ export const modscan = {
       if (mode === "search") {
         const result = record((await steam(env, "search", { appid, search_text: query, page, query_type: SORTS[sort], numperpage: 20, return_tags: true, return_children: true, return_short_description: true })).response);
         if (result.result !== undefined && number(result.result) !== 1) throw malformed();
-        items = array(result.publishedfiledetails).map(v => item(v, appid, "consumer_appid")); total = number(result.total);
+        items = array(result.publishedfiledetails).map(v => item(v, appid)); total = number(result.total);
       } else {
-        const result = record((await steam(env, "items", fileParams(ids))).response);
-        items = array(result.publishedfiledetails).map(v => item(v, appid, "consumer_app_id"));
+        // GetDetails, unlike ISteamRemoteStorage's details, says what each item requires
+        const result = record((await steam(env, "items", { publishedfileids: ids, includetags: true, includechildren: true, short_description: true })).response);
+        items = array(result.publishedfiledetails).map(v => item(v, appid));
         if (items.length !== ids.length || items.some(v => !ids.includes(v.id)) || new Set(items.map(v => v.id)).size !== ids.length) throw malformed();
         if (mode !== "items") {
-          const result = record((await steam(env, "collection", fileParams(ids, true))).response);
+          const result = record((await steam(env, "collection", collectionParams(ids))).response);
           const details = array(result.collectiondetails);
           if (details.length !== 1) throw malformed();
           const collection = record(details[0]);
