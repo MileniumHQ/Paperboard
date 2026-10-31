@@ -13,9 +13,7 @@ import {
     PaperQuote,
     PaperText,
 } from "@mileniumhq/paperui";
-import type { ModrinthHit } from "../../lib/modrinth";
-import type { AddonKind, AddonListing, InstalledAddon } from "../../lib/addons/kind";
-import { formatCount } from "../../lib/addons/presentation";
+import type { AddonHit, AddonKind, AddonListing, InstalledAddon } from "../../lib/addons/kind";
 import type { createAddonSearch } from "./state";
 
 const truncate = (text: string, max: number) => (text.length > max ? `${text.slice(0, max).trimEnd()}…` : text);
@@ -100,11 +98,28 @@ export function AddonSearchCard<Meta>(props: { kind: AddonKind<Meta>; search: Re
                 />
                 <PaperText size={2} color="text-subtle">
                     {props.kind.searchScope()} provided by{" "}
-                    <PaperLink href={props.kind.browseUrl} target="_blank">
-                        Modrinth
+                    <PaperLink href={props.kind.source.url} target="_blank">
+                        {props.kind.source.name}
                     </PaperLink>
                     .
                 </PaperText>
+                <For each={props.kind.source.notices?.() ?? []}>
+                    {(notice) => (
+                        <PaperText size={1} color="text-subtle">
+                            {notice.text}
+                            <Show when={notice.link}>
+                                {(link) => (
+                                    <>
+                                        {notice.text ? " " : ""}
+                                        <PaperLink href={link().href} target="_blank">
+                                            {link().label}
+                                        </PaperLink>
+                                    </>
+                                )}
+                            </Show>
+                        </PaperText>
+                    )}
+                </For>
                 <Show when={props.search.error()}>
                     <PaperQuote variant="danger" icon="warning" title="Search failed">
                         <PaperFlex direction="column" gap="half">
@@ -120,12 +135,12 @@ export function AddonSearchCard<Meta>(props: { kind: AddonKind<Meta>; search: Re
     );
 }
 
-/** The grid of Modrinth projects a search found. */
+/** The grid of projects a search found. */
 export function AddonResults<Meta>(props: {
     kind: AddonKind<Meta>;
     search: ReturnType<typeof createAddonSearch>;
     installedProjects: Set<string>;
-    onOpen(hit: ModrinthHit): void;
+    onOpen(hit: AddonHit): void;
 }) {
     return (
         <>
@@ -133,7 +148,7 @@ export function AddonResults<Meta>(props: {
                 <PaperCard>
                     <PaperFlex padding="full" center>
                         <PaperText size={3} color="text-subtle">
-                            Searching Modrinth...
+                            Searching {props.kind.source.name}...
                         </PaperText>
                     </PaperFlex>
                 </PaperCard>
@@ -164,7 +179,7 @@ export function AddonResults<Meta>(props: {
                                                 }
                                                 footerLeft={
                                                     <PaperText size={2} color="text-subtle">
-                                                        {formatCount(hit.downloads)} downloads
+                                                        {hit.stat}
                                                     </PaperText>
                                                 }
                                                 onClick={() => props.onOpen(hit)}

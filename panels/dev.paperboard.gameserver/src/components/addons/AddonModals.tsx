@@ -23,7 +23,7 @@ export interface InstallExtrasProps {
     report(state: { ready: boolean; payload?: unknown }): void;
 }
 
-/** Pick a build of a Modrinth project and install it. */
+/** Pick a build of a project and install it. */
 export function AddonInstallModal<Meta>(props: {
     kind: AddonKind<Meta>;
     install: ReturnType<typeof createAddonInstall<Meta>>;
@@ -53,8 +53,8 @@ export function AddonInstallModal<Meta>(props: {
                     <PaperFlex direction="column" gap="full">
                         <Show when={!props.kind.detail}>
                             <PaperText preset="body">{target().description}</PaperText>
-                            <PaperLink href={`https://modrinth.com/${props.kind.modrinthPath}/${target().slug}`} target="_blank">
-                                Open at Modrinth.com
+                            <PaperLink href={props.kind.source.pageUrl(target())} target="_blank">
+                                {props.kind.source.pageLabel}
                             </PaperLink>
                         </Show>
                         <Show
@@ -62,7 +62,7 @@ export function AddonInstallModal<Meta>(props: {
                             fallback={
                                 <Show when={!install().error()}>
                                     <PaperText size={2} color="text-subtle">
-                                        Loading versions from Modrinth...
+                                        Loading versions from {props.kind.source.name}...
                                     </PaperText>
                                 </Show>
                             }
@@ -80,16 +80,26 @@ export function AddonInstallModal<Meta>(props: {
                                         <PaperText size={3} weight={700}>
                                             Version
                                         </PaperText>
-                                        <PaperSelectMenu
-                                            name="addonVersion"
-                                            aria-label={`${props.kind.noun} version`}
-                                            fullWidth
-                                            value={install().versionId()}
-                                            disabled={install().installing()}
-                                            onValueChange={(value) => install().setVersionId(String(value))}
+                                        {/* one build has nothing to choose between */}
+                                        <Show
+                                            when={list().length > 1}
+                                            fallback={
+                                                <PaperText size={3} color="text-subtle">
+                                                    {list()[0]!.label}
+                                                </PaperText>
+                                            }
                                         >
-                                            <For each={list()}>{(v) => <PaperSelectMenuItem value={v.id}>{v.label}</PaperSelectMenuItem>}</For>
-                                        </PaperSelectMenu>
+                                            <PaperSelectMenu
+                                                name="addonVersion"
+                                                aria-label={`${props.kind.noun} version`}
+                                                fullWidth
+                                                value={install().versionId()}
+                                                disabled={install().installing()}
+                                                onValueChange={(value) => install().setVersionId(String(value))}
+                                            >
+                                                <For each={list()}>{(v) => <PaperSelectMenuItem value={v.id}>{v.label}</PaperSelectMenuItem>}</For>
+                                            </PaperSelectMenu>
+                                        </Show>
                                     </PaperFlex>
                                 </Show>
                             )}

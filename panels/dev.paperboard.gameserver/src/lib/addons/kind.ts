@@ -1,7 +1,6 @@
-import type { ModrinthHit } from "../modrinth";
-
-// What differs between the Modrinth add-on tabs (Plugins/Mods, Datapacks,
-// Modpacks, Resource Pack). The shared browser (components/addons) draws
+// What differs between the add-on tabs (Minecraft's Plugins/Mods, Datapacks,
+// Modpacks and Resource Pack from Modrinth; tModLoader's Mods from the Steam
+// Workshop). The shared browser (components/addons) draws
 // the search, the results, the installed list and the install and remove
 // dialogs from one of these; a descriptor holds no JSX, so what it decides
 // is testable without a page.
@@ -15,13 +14,54 @@ export interface AddonVersion {
     gameVersions?: string[];
 }
 
-/** A Modrinth project the user opened. */
+/** A project the user opened. */
 export interface AddonTarget {
     projectId: string;
     slug: string;
     title: string;
     description: string;
     iconUrl?: string;
+    /** the projects the catalog says this one requires, when it says */
+    dependencies?: string[];
+}
+
+/** One search result. */
+export interface AddonHit extends AddonTarget {
+    /** the result card's footer, e.g. "1.2k downloads" */
+    stat: string;
+}
+
+/** A project's page. */
+export interface AddonProject {
+    title: string;
+    description: string;
+    iconUrl?: string;
+    /** markdown, drawn with PaperMarkdown */
+    body: string;
+    /** images in the body load; only for catalogs that review what they host */
+    allowImages: boolean;
+    /** the Information table */
+    info: { label: string; value: string }[];
+}
+
+/** A line the source's terms require beside its results. */
+export interface AddonNotice {
+    text: string;
+    link?: { label: string; href: string };
+}
+
+/** Where a kind's add-ons are found. */
+export interface AddonSource {
+    /** "Modrinth", for sentences */
+    name: string;
+    /** the catalog's browse page, linked under the search */
+    url: string;
+    /** the project page's link, "Open at Modrinth.com" */
+    pageLabel: string;
+    pageUrl(target: AddonTarget): string;
+    project(target: AddonTarget): Promise<AddonProject>;
+    /** attribution and disclaimers shown with results */
+    notices?(): AddonNotice[];
 }
 
 /** One entry of the installed list: a file or folder Paperboard can name. */
@@ -34,11 +74,11 @@ export interface InstalledAddon {
     iconUrl?: string;
     badge: { label: string; variant: "success" | "monochrome" | "warning" };
     footer: string;
-    /** the Modrinth project it came from; absent when added by hand or uploaded */
+    /** the project it came from; absent when added by hand or uploaded */
     project?: { projectId: string; slug: string };
-    /** the version Modrinth gave it */
+    /** the version its source gave it */
     version?: string;
-    /** added through the Upload action, so no Modrinth record describes it */
+    /** added through the Upload action, so no catalog record describes it */
     uploaded: boolean;
 }
 
@@ -94,12 +134,9 @@ export interface AddonKind<Meta = undefined> {
     glyph: string;
     /** "plugin", for sentences */
     noun: string;
-    /** Modrinth's address segment: modrinth.com/<path>/<slug> */
-    modrinthPath: string;
-    /** Modrinth's browse page for this type */
-    browseUrl: string;
+    source: AddonSource;
     searchPlaceholder: string;
-    /** "Datapacks for Minecraft 1.21" — what the search covers, before "provided by Modrinth" */
+    /** "Datapacks for Minecraft 1.21" — what the search covers, before "provided by <source>" */
     searchScope(): string;
     emptySearch(): string;
     installedTitle: string;
@@ -114,7 +151,7 @@ export interface AddonKind<Meta = undefined> {
     /** a way out of a listing failure that the kind offers, e.g. forgetting a record it cannot read */
     recover?: { label: string; errorTitle: string; disabled?(): boolean; run(): Promise<void> };
 
-    search(query: string, signal: AbortSignal): Promise<ModrinthHit[]>;
+    search(query: string, signal: AbortSignal): Promise<AddonHit[]>;
     versions(projectId: string): Promise<AddonVersion[]>;
     /** the build selected when the dialog opens; defaults to the recommended, else the first */
     pickVersion?(versions: AddonVersion[]): AddonVersion | undefined;

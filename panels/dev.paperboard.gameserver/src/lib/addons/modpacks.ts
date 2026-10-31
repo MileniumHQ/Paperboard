@@ -5,6 +5,7 @@ import { SOFTWARE } from "../../software/catalog";
 import { versionLabel } from "./presentation";
 import type { ModpackRecord } from "../../core/modpack";
 import { commitModpack, discardUpload, pickModpackFile } from "./upload";
+import { modrinthHits, modrinthSource } from "./sources";
 import type { AddonKind, AddonListing, InstalledAddon } from "./kind";
 
 // Modpacks: one Modrinth pack for the server's loader. Installing replaces
@@ -33,8 +34,7 @@ export const modpacksKind: AddonKind<ModpackRecord | null> = {
     icon: "package_2",
     glyph: "package_2",
     noun: "modpack",
-    modrinthPath: "modpack",
-    browseUrl: "https://modrinth.com/modpacks",
+    source: modrinthSource("modpack", "https://modrinth.com/modpacks"),
     searchPlaceholder: "Search Modpacks",
     searchScope: () => `${loaderName()} modpacks that run on a server`,
     emptySearch: () => `No ${loaderName()} modpacks matched your search.`,
@@ -54,7 +54,7 @@ export const modpacksKind: AddonKind<ModpackRecord | null> = {
         run: () => removeModpack().then(() => undefined),
     },
 
-    search: (query, signal) => searchModpacks(query, signal),
+    search: async (query, signal) => modrinthHits(await searchModpacks(query, signal)),
     async versions(projectId) {
         return (await listModpackVersions(projectId)).map((v) => ({
             id: v.id,

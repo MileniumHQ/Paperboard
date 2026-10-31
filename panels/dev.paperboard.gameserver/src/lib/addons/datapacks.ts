@@ -3,6 +3,7 @@ import { installDatapack, listDatapacks, listDatapackVersions, removeDatapack, s
 import { versionLabel } from "./presentation";
 import type { DatapackListing } from "../../service/datapacks";
 import { commitDatapacks, discardUpload, listAdded, pickFiles, pickFolder, type UploadOutcome } from "./upload";
+import { modrinthHits, modrinthSource } from "./sources";
 import type { AddonKind, AddonListing, InstalledAddon } from "./kind";
 
 // Datapacks: the active world's datapacks/ folder, plus Modrinth's datapack
@@ -31,8 +32,7 @@ export const datapacksKind: AddonKind<DatapackListing> = {
     icon: "dataset",
     glyph: "dataset",
     noun: "datapack",
-    modrinthPath: "datapack",
-    browseUrl: "https://modrinth.com/datapacks",
+    source: modrinthSource("datapack", "https://modrinth.com/datapacks"),
     searchPlaceholder: "Search Datapacks",
     searchScope: () => `Datapacks for Minecraft ${serverVersion()}`,
     emptySearch: () => `No datapacks for Minecraft ${serverVersion()} matched your search.`,
@@ -50,7 +50,7 @@ export const datapacksKind: AddonKind<DatapackListing> = {
     },
     listFailureTitle: () => "Could not read the datapacks folder",
 
-    search: (query, signal) => searchDatapacks(query, signal),
+    search: async (query, signal) => modrinthHits(await searchDatapacks(query, signal)),
     async versions(projectId) {
         return (await listDatapackVersions(projectId)).map((v) => ({ id: v.id, label: v.versionNumber || v.name }));
     },

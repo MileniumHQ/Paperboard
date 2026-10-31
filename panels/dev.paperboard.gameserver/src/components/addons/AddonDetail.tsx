@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Show, untrack, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show, untrack, type JSX } from "solid-js";
 import {
     PaperAvatar,
     PaperButton,
@@ -11,23 +11,15 @@ import {
     PaperTable,
     PaperText,
 } from "@mileniumhq/paperui";
-import { getProject, type ModrinthProject } from "../../lib/modrinth";
-import type { AddonKind, AddonTarget, InstalledAddon } from "../../lib/addons/kind";
+import type { AddonKind, AddonProject, AddonTarget, InstalledAddon } from "../../lib/addons/kind";
 import type { DetailTarget } from "./state";
-import { formatCount } from "../../lib/addons/presentation";
 
 /** What a kind adds to its project page: buttons beside Uninstall, and a notice under the header. */
 export type DetailExtras = (entry: InstalledAddon, close: () => void) => { actions: JSX.Element; notice: JSX.Element };
 
-function formatDate(iso: string): string {
-    const date = new Date(iso);
-    if (!iso || Number.isNaN(date.getTime())) return "Unknown";
-    return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
-
 const truncate = (text: string, max: number) => (text.length > max ? `${text.slice(0, max).trimEnd()}…` : text);
 
-/** A Modrinth project's page, with Install, or Uninstall and a kind's own buttons once it is installed. */
+/** A catalog project's page, with Install, or Uninstall and a kind's own buttons once it is installed. */
 export function AddonDetail<Meta>(props: {
     kind: AddonKind<Meta>;
     target: DetailTarget | null;
@@ -39,22 +31,26 @@ export function AddonDetail<Meta>(props: {
     onInstall(target: AddonTarget): void;
     onRemove(entry: InstalledAddon): void;
 }) {
-    const [project, setProject] = createSignal<ModrinthProject | null>(null);
+    const [project, setProject] = createSignal<AddonProject | null>(null);
     const [loading, setLoading] = createSignal(false);
+    const [loadError, setLoadError] = createSignal<string | null>(null);
 
     createEffect(() => {
         const target = props.target;
         setProject(null);
         setLoading(false);
+        setLoadError(null);
         if (!target || target.local) return;
         setLoading(true);
-        getProject(target.projectId)
+        props.kind.source
+            .project(target)
             .then((next) => {
                 if (props.target?.projectId === target.projectId) setProject(next);
             })
             .catch((err) => {
-                // the page still shows what the list knows; the failure is not the user's to fix
+                // the page still shows what the list knows, and says why the rest is missing
                 console.error(`[${props.kind.title}] Failed to load project details:`, err);
+                if (props.target?.projectId === target.projectId) setLoadError(err instanceof Error ? err.message : String(err));
             })
             .finally(() => setLoading(false));
     });
@@ -79,8 +75,8 @@ export function AddonDetail<Meta>(props: {
                                 />
                                 <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
                                     <Show when={!target.local}>
-                                        <PaperLink href={`https://modrinth.com/${props.kind.modrinthPath}/${target.slug}`}>
-                                            Open at Modrinth.com
+                                        <PaperLink href={props.kind.source.pageUrl(target)} target="_blank">
+                                            {props.kind.source.pageLabel}
                                         </PaperLink>
                                     </Show>
                                     <PaperText size={5} weight={700}>
@@ -127,8 +123,8 @@ export function AddonDetail<Meta>(props: {
                                         </PaperText>
                                         <PaperText size={2} color="text-subtle">
                                             {target.local?.uploaded
-                                                ? "You uploaded this file. Modrinth has no record of it, so there are no details or updates to show."
-                                                : "This file was added outside Paperboard. Modrinth has no record of it, so there are no details or updates to show."}
+                                                ? `You uploaded this file. ${props.kind.source.name} has no record of it, so there are no details or updates to show.`
+                                                : `This file was added outside Paperboard. ${props.kind.source.name} has no record of it, so there are no details or updates to show.`}
                                         </PaperText>
                                     </PaperFlex>
                                 }
@@ -141,22 +137,21 @@ export function AddonDetail<Meta>(props: {
                                         when={!loading()}
                                         fallback={
                                             <PaperText size={2} color="text-subtle">
-                                                Loading details from Modrinth...
+                                                Loading details from {props.kind.source.name}...
                                             </PaperText>
                                         }
                                     >
                                         <Show
                                             when={project()?.body}
                                             fallback={
-                                                <PaperText size={2} color="text-subtle">
-                                                    No description provided.
+                                                <PaperText size={2} color={loadError() ? "danger" : "text-subtle"}>
+                                                    {loadError() ? `Couldn't load details: ${loadError()}` : "No description provided."}
                                                 </PaperText>
                                             }
                                         >
                                             {/* Third-party markdown goes through PaperMarkdown, which renders PaperUI
-                                                elements instead of HTML; images are allowed because Modrinth bodies are
-                                                reviewed, host-scoped by the panel manifest and CSP-enforced. */}
-                                            <PaperMarkdown text={project()!.body} allowImages />
+                                                elements instead of HTML; the source says whether its images may load. */}
+                                            <PaperMarkdown text={project()!.body} allowImages={project()!.allowImages} />
                                         </Show>
                                     </Show>
                                 </PaperFlex>
@@ -167,32 +162,14 @@ export function AddonDetail<Meta>(props: {
                                     </PaperText>
                                     <PaperTable>
                                         <tbody>
-                                            <tr>
-                                                <th>Downloads</th>
-                                                <td>{formatCount(project()?.downloads ?? 0)}</td>
-                                            </tr>
-                                            <tr>
-                                                <th>Follows</th>
-                                                <td>{formatCount(project()?.follows ?? 0)}</td>
-                                            </tr>
-                                            <tr>
-                                                <th>Last Updated</th>
-                                                <td>{formatDate(project()?.dateModified ?? "")}</td>
-                                            </tr>
-                                            <tr>
-                                                <th>License</th>
-                                                <td>{project()?.license ?? "Unknown"}</td>
-                                            </tr>
-                                            <tr>
-                                                <th>Loaders</th>
-                                                <td>
-                                                    {project()?.loaders.length
-                                                        ? project()!
-                                                              .loaders.map((l) => l.charAt(0).toUpperCase() + l.slice(1))
-                                                              .join(", ")
-                                                        : "Unknown"}
-                                                </td>
-                                            </tr>
+                                            <For each={project()?.info ?? []}>
+                                                {(row) => (
+                                                    <tr>
+                                                        <th>{row.label}</th>
+                                                        <td>{row.value}</td>
+                                                    </tr>
+                                                )}
+                                            </For>
                                             <tr>
                                                 <th>Installed Version</th>
                                                 <td>

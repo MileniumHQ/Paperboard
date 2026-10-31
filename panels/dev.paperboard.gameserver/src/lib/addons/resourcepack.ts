@@ -10,6 +10,7 @@ import {
 } from "../resourcepack";
 import { promptFromProperty } from "../../core/resourcepack";
 import { versionLabel } from "./presentation";
+import { modrinthHits, modrinthSource } from "./sources";
 import type { AddonKind, AddonListing, InstalledAddon } from "./kind";
 
 // Resource Pack: one pack at a time, written to server.properties. The
@@ -48,8 +49,7 @@ export const resourcePackKind: AddonKind<ResourcePackMeta> = {
     icon: "texture",
     glyph: "texture",
     noun: "resource pack",
-    modrinthPath: "resourcepack",
-    browseUrl: "https://modrinth.com/resourcepacks",
+    source: modrinthSource("resourcepack", "https://modrinth.com/resourcepacks"),
     searchPlaceholder: "Search Resource Packs",
     searchScope: () => `Resource packs for Minecraft ${serverVersion()}`,
     emptySearch: () => `No resource packs for Minecraft ${serverVersion()} matched your search.`,
@@ -74,7 +74,7 @@ export const resourcePackKind: AddonKind<ResourcePackMeta> = {
     },
     listFailureTitle: () => "Couldn't read the resource pack settings",
 
-    search: (query, signal) => searchResourcePacks(query, signal),
+    search: async (query, signal) => modrinthHits(await searchResourcePacks(query, signal)),
     async versions(projectId) {
         return (await listResourcePackVersions(projectId)).map((v) => ({ id: v.id, label: v.versionNumber || v.name }));
     },

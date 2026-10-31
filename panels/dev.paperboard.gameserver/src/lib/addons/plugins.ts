@@ -10,6 +10,7 @@ import {
     searchModrinth,
 } from "../plugins";
 import { commitPlugins, discardUpload, listAdded, pickFiles, type UploadOutcome } from "./upload";
+import { modrinthHits, modrinthSource } from "./sources";
 import type { AddonKind, AddonListing, InstalledAddon } from "./kind";
 
 // Plugins on a plugin server, mods on a mod loader: the same tab, the same
@@ -46,8 +47,7 @@ export const pluginsKind: AddonKind = {
     get noun() {
         return isMods() ? "mod" : "plugin";
     },
-    modrinthPath: "project",
-    browseUrl: "https://modrinth.com",
+    source: modrinthSource("project", "https://modrinth.com"),
     get searchPlaceholder() {
         return isMods() ? "Search Mods" : "Search Plugins";
     },
@@ -70,7 +70,7 @@ export const pluginsKind: AddonKind = {
     },
     listFailureTitle: () => `Couldn't read ${pluginDirName(minecraftSoftware(serverSoftware()))}/`,
 
-    search: (query, signal) => searchModrinth(query, signal),
+    search: async (query, signal) => modrinthHits(await searchModrinth(query, signal)),
     async versions(projectId) {
         return (await listProjectVersions(projectId)).map((option) => ({
             id: option.versionId,

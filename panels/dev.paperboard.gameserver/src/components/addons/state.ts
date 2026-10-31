@@ -1,9 +1,9 @@
 import { createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js";
 import { errorMessage } from "../../lib/failure";
-import type { ModrinthHit } from "../../lib/modrinth";
 import { versionLabel } from "../../lib/addons/presentation";
 import {
     defaultVersion,
+    type AddonHit,
     type AddonKind,
     type AddonListing,
     type AddonTarget,
@@ -13,7 +13,7 @@ import {
 } from "../../lib/addons/kind";
 import { newStage, stageFolder } from "../../lib/addons/upload";
 
-// The state every add-on tab shares: what is installed, the Modrinth search,
+// The state every add-on tab shares: what is installed, the catalog search,
 // the install dialog and the remove confirmation. Each is a function of the
 // tab's AddonKind; the browser (AddonBrowser) wires them to the page.
 
@@ -41,9 +41,9 @@ export function createAddonListing<Meta>(kind: Accessor<AddonKind<Meta>>) {
     return { listing, error, reload };
 }
 
-export function createAddonSearch(kind: Accessor<Pick<AddonKind<unknown>, "title" | "search">>) {
+export function createAddonSearch(kind: Accessor<Pick<AddonKind<unknown>, "title" | "search" | "source">>) {
     const [query, setQuery] = createSignal("");
-    const [results, setResults] = createSignal<ModrinthHit[] | null>(null);
+    const [results, setResults] = createSignal<AddonHit[] | null>(null);
     const [searching, setSearching] = createSignal(false);
     const [error, setError] = createSignal("");
     let controller: AbortController | undefined;
@@ -66,7 +66,7 @@ export function createAddonSearch(kind: Accessor<Pick<AddonKind<unknown>, "title
             if (!own.signal.aborted) setResults(hits);
         } catch (err) {
             if (own.signal.aborted) return;
-            console.error(`[${kind().title}] Modrinth search failed:`, err);
+            console.error(`[${kind().title}] ${kind().source.name} search failed:`, err);
             setError(errorMessage(err));
         } finally {
             if (controller === own) setSearching(false);
@@ -216,18 +216,19 @@ export function createAddonRemove<Meta>(
     };
 }
 
-/** A project page opens for a Modrinth project, or for an installed entry Modrinth does not know. */
+/** A project page opens for a catalog project, or for an installed entry the catalog does not know. */
 export interface DetailTarget extends AddonTarget {
-    /** set for an entry without a Modrinth project, which only its file identifies */
+    /** set for an entry without a catalog project, which only its file identifies */
     local?: InstalledAddon;
 }
 
-const asTarget = (hit: ModrinthHit): AddonTarget => ({
+const asTarget = (hit: AddonHit): AddonTarget => ({
     projectId: hit.projectId,
     slug: hit.slug,
     title: hit.title,
     description: hit.description,
     iconUrl: hit.iconUrl,
+    dependencies: hit.dependencies,
 });
 
 /**
@@ -373,7 +374,7 @@ export function createAddonBrowser<Meta = undefined>(options: {
         installedProjects,
         entryOf,
         /** a search result was clicked */
-        openResult: (hit: ModrinthHit) => (kind.detail ? setDetail(asTarget(hit)) : install.open(asTarget(hit))),
+        openResult: (hit: AddonHit) => (kind.detail ? setDetail(asTarget(hit)) : install.open(asTarget(hit))),
         /** an installed card was clicked */
         openItem: (item: InstalledAddon) => {
             if (kind.itemClick === "detail") setDetail(detailTarget(item));
