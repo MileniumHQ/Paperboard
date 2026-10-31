@@ -5,8 +5,8 @@ import { SOFTWARE_IDS } from "../src/software/catalog";
 import manifest from "../manifest.json";
 
 describe("bundled game modules", () => {
-    test("Minecraft, Terraria and Palworld are offered; unknown stored games never fall back to it", () => {
-        expect(games.map((game) => game.id)).toEqual(["minecraft", "terraria", "palworld"]);
+    test("Minecraft, Terraria, Palworld and Team Fortress 2 are offered; unknown stored games never fall back to it", () => {
+        expect(games.map((game) => game.id)).toEqual(["minecraft", "terraria", "palworld", "team-fortress-2"]);
         const saved = readServersConfig({ configured: true });
         for (const id of ["factorio", "", "constructor", "__proto__"]) {
             expect(() => gameFor(id)).toThrow(`Unsupported game: ${id}`);
@@ -24,6 +24,12 @@ describe("bundled game modules", () => {
                 expect(file.type).toBe("image/webp");
             }
         }
+    });
+
+    test("every game's port names fit the port registry once prefixed with a server id", async () => {
+        const { gameServiceFor } = await import("../src/games/service");
+        // apps/paperboard/papercrane/ports.ts: NAME_RE
+        for (const game of games) for (const name of gameServiceFor(game.id).portNames) expect(`s-0123456789ab-${name}`, `${game.id}: ${name}`).toMatch(/^[a-z0-9][a-z0-9-]{0,31}$/);
     });
 
     test("service resolution also refuses unknown game ids, including in a server scope", async () => {

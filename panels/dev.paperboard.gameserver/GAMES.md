@@ -1,6 +1,6 @@
 # Game modules
 
-Minecraft Java and Terraria vanilla are registered modules. Terraria uses a pinned publisher ZIP, stdin control, generated settings, a vault join password and offline backups. Minecraft retains its installers, launch arguments, readiness markers, console parsing, port names, tabs, Actions schemas and widgets. Terraria's `software: "tmodloader"` (phase 1b) is registered too: a pinned tModLoader GitHub release run on Origami's `dotnet-8` package, with a Mods tab over the Steam Workshop.
+Minecraft Java, Terraria, Palworld and Team Fortress 2 are registered modules. Terraria uses a pinned publisher ZIP, stdin control, generated settings, a vault join password and offline backups. Minecraft retains its installers, launch arguments, readiness markers, console parsing, port names, tabs, Actions schemas and widgets. Terraria's `software: "tmodloader"` (phase 1b) is registered too: a pinned tModLoader GitHub release run on Origami's `dotnet-8` package, with a Mods tab over the Steam Workshop.
 
 ## Module contract
 
@@ -15,7 +15,7 @@ Shared lifecycle owns process start/exit/restart, chunk buffering and force-kill
 
 Modules yield `PortSpec`s in order, reading/writing their own files; `src/service/ports.ts` claims/prepares them through the Port API. Minecraft keeps `java` and `bedrock` claim identities and existing per-server prefixes. Linked allocation waits for the first game needing it (Valheim, a future candidate below); no selected game does.
 
-Log viewing and command input are distinct; `Control` currently supports `none` and `stdin`. Players/moderation require a real roster adapter. Minecraft's quiesce backup policy retains save-off/save-all/save-on acknowledgments, cleanup on copy failure, and the pause marker across service restarts. An offline-only policy refuses live backup. Widgets stay declared in the manifest; choices and runtime rendering consult resolved support and unsupported selections fail visibly.
+Log viewing and command input are distinct; `Control` supports `none`, `stdin`, `rcon` and `broadcast`. Every console line passes `commandLine`, which refuses what the game must not take; `rcon` games then send what it returns through `GameService.sendCommand`. `serverLevel` is the map or level a running server plays, for games that change it while running. A game without a world passes `world={false}` to `ServerOverview` (Source derives it from its Actions), so the Overview has no Save world. Secret options can name what they hold with `noun` ("token") for their field. Players/moderation require a real roster adapter. Minecraft's quiesce backup policy retains save-off/save-all/save-on acknowledgments, cleanup on copy failure, and the pause marker across service restarts. An offline-only policy refuses live backup. Widgets stay declared in the manifest; choices and runtime rendering consult resolved support and unsupported selections fail visibly.
 
 `PackageRequirement` describes runtime ids from the daemon Package API (Java today). Setup installs the required Java; launch verifies it. Future distribution, host support, options schemas, RCON/HTTP control and runtime runners belong to the first module actually using them, with no placeholder implementations. Minecraft's protected-data and install-file rules remain specific to Minecraft; a future module must define its own persistent-data boundary.
 
@@ -111,7 +111,18 @@ Commands below use install-relative paths; adapters resolve absolute executables
 - `save` waits for completion; graceful `exit` saves, then await actual exit (initial 120s stop budget). Backups are offline only: retain `.wld`, `.bak`, `.twld`, mod manifests/config, banlist and server configuration. Refuse live copy even after `save`; autosaves can resume. Keep data on update/uninstall, and migrate neither vanilla nor modded saves without explicit action. Terraria version updates may rewrite world formats; retain a pre-update offline backup.
 - Tabs: Overview, Players, Worlds, Options, Versions, plus shared Files/Logs/Backups. tModLoader adds a Mods tab (Software group): the shared add-on browser over `tModLoader/Mods`, searched through modscan and downloaded by SteamCMD. Widgets: status, players, console; no Minecraft MOTD renderer/stats/map features.
 
-**Team Fortress 2 (`tf2`)**
+**Team Fortress 2 (`team-fortress-2`), registered**
+
+Built on `src/games/source/` (`sourceGame`, `sourceService`, `sourceUI` take a `SourceGameSpec`), which CS2 and GMod reuse where their servers match. What shipped, verified against the real build 26334371 on Linux:
+
+- Launch: `stdbuf -oL -eL srcds_linux64 -game tf -console -ip 0.0.0.0 -port P +clientport C -nohltv +maxplayers N +sv_lan 0|1 +exec paperboard_secrets.cfg +map M`, `LD_LIBRARY_PATH=bin/linux64`, HOME in the server's `profile/` with `~/.steam/sdk64/steamclient.so` copied from SteamCMD. srcds holds its output in a buffer on a pipe (hence `stdbuf`), ignores stdin without a terminal (hence RCON), and binds RCON only on its detected LAN address unless given `-ip`.
+- Preflight: `ldd` over the binary and its libraries; a missing system library (in practice `libcurl-gnutls.so.4`, absent on Arch, which makes `replay_srv.so` fail with a misleading "wrong ELF class") stops the start with the package to install.
+- Config: `tf/cfg/server.cfg` and `banned_user.cfg` are generated from Options and Paperboard's ban list at each start and on change (`log on`, `sv_logecho 1`, `sv_rcon_whitelist_address 127.0.0.1`); the user's own `server.cfg` in the server folder runs last as `paperboard_user.cfg`. Passwords (RCON, join, GSLT) live in the vault and reach the server through a 0600 `paperboard_secrets.cfg` removed once it is ready. The install is read-only through Files.
+- Control: RCON on the game port with a vault password Paperboard makes; readiness is an authenticated `status`; stop is RCON `quit` (30 s). Players, chat, joins/leaves, teams and map changes come from the HL log lines the console echoes. Bans are by Steam id, work while stopped, and go over RCON (`banid`/`removeid`) while running. The Overview changes map through a searchable picker of installed `.bsp` files, named by mode.
+- Not yet: Windows, Workshop maps, SourceTV, a verified GSLT login (`sv_setsteamaccount` from the early `+exec` is untested without a token).
+
+Original plan notes:
+
 
 - SteamCMD app **232250**, anonymous, public branch; 440 is the client/GSLT app id. Prefer the shipped 64-bit route: Linux `srcds_run_64 -game tf -console -norestart -port P +map ctf_2fort +maxplayers 24`; Windows `srcds_win64.exe -game tf -console -port P +map ctf_2fort +maxplayers 24`. Verify those entrypoints against the installed build; never silently switch architecture.
 - Game/query UDP P=27015 and RCON TCP P, claimed as one `tcp+udp` endpoint. Disable SourceTV initially (otherwise allocate its separate UDP port); allocate any enabled ancillary listener explicitly. Linux SteamCMD still requires 32-bit libc/libstdc++ even with a 64-bit TF2 binary; legacy 32-bit SRCDS also needs compatible libraries. Preflight missing dependencies and explain them; do not silently apt-install as root.

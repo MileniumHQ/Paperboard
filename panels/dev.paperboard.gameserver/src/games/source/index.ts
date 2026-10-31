@@ -1,0 +1,88 @@
+import type { GameDefinition, GameOption, GameTab } from "../types";
+import { ACTION_IDS as A } from "../../service/contract";
+import { gameArt } from "../art";
+
+/**
+ * A Source engine option and how the server takes it. `cvar`: a console
+ * variable, written to the generated server.cfg and, when restartRequired is
+ * false, set at once on a running server over RCON. Options without one are
+ * launch settings in the panel's settings, or passwords in the vault.
+ */
+export type SourceOption = GameOption & { cvar?: string };
+
+/** What sets one Source dedicated server apart from another. */
+export interface SourceGameSpec {
+    id: string;
+    name: string;
+    icon: string;
+    /** Steam's id for the dedicated server; SteamCMD downloads it anonymously. */
+    appId: number;
+    /** The mod folder under the install, passed as -game. */
+    gameDir: string;
+    /** The server binary and its library folder, relative to the install. */
+    executable: string;
+    libraryDir: string;
+    defaultPort: number;
+    /**
+     * Must include "hostname", "password", "maxplayers", "port", "internet",
+     * "rconPassword", "token" and "map": the map the server starts on, edited
+     * on the Overview.
+     */
+    options: readonly SourceOption[];
+    /** Game mode names by map prefix ("ctf" for ctf_2fort), shown beside each map. */
+    mapModes?: Readonly<Record<string, string>>;
+}
+
+/** The game mode a map's prefix names, if the game lists it. */
+export function mapMode(spec: Pick<SourceGameSpec, "mapModes">, map: string): string | undefined {
+    return spec.mapModes?.[map.split("_")[0]!.toLowerCase()];
+}
+
+/** Action ids every Source game registers, prefixed with its game id. */
+export const sourceActions = (id: string) => ({
+    info: `${id}-info`,
+    install: `${id}-install`,
+    players: `${id}-players`,
+    kick: `${id}-kick`,
+    ban: `${id}-ban`,
+    unban: `${id}-unban`,
+    changeMap: `${id}-change-map`,
+    maps: `${id}-maps`,
+});
+
+export function sourceGame(spec: SourceGameSpec): GameDefinition {
+    const ids = sourceActions(spec.id);
+    const tabs: GameTab[] = [
+        { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
+        { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },
+        { id: "players", label: "Players", icon: "group", group: "Play", owner: "game", variant: "fill", width: "full" },
+        { id: "versions", label: "Updates", icon: "update", group: "Software", owner: "game" },
+        { id: "options", label: "Options", icon: "tune", group: "Server", owner: "shared" },
+        { id: "files", label: "Files", icon: "folder", group: "Server", owner: "shared", variant: "fill" },
+        { id: "logs", label: "Logs", icon: "description", group: "Server", owner: "shared", variant: "fill" },
+        { id: "backups", label: "Backups", icon: "backup", group: "Server", owner: "shared" },
+        { id: "advanced", label: "Advanced", icon: "settings", group: "Server", owner: "shared" },
+    ];
+    return {
+        id: spec.id, name: spec.name, icon: spec.icon, art: gameArt(spec.id),
+        softwareLabel: ({ version }) => (version ? `${spec.name} ${version}` : spec.name),
+        hostSupport({ os, arch }) {
+            if (arch !== "x64") return { supported: false, reason: `The ${spec.name} dedicated server only runs on x64 computers.` };
+            if (os !== "linux") return { supported: false, reason: `This ${spec.name} host route is awaiting Windows x64 certification. Linux x64 is the verified server route.` };
+            return { supported: true };
+        },
+        describe() {
+            return {
+                options: spec.options,
+                optionsWhileRunning: "next-start",
+                // a Source server keeps no world; its files copy as it runs
+                backupWhileRunning: "quiesce",
+                control: { kind: "rcon" },
+                widgets: ["status", "console"],
+                packages: [{ id: "steamcmd", purpose: `Downloads and updates the ${spec.name} dedicated server from Steam` }],
+                actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, ...Object.values(ids), "backup-server"],
+                tabs,
+            };
+        },
+    };
+}
