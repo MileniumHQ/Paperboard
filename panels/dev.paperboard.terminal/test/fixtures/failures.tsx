@@ -1,6 +1,7 @@
 // Build with failures.vite.ts and open /test/fixtures/failures.html. The real panel against a
 // terminal service that fails on cue: a tab that didn't open, a rename the service refused and
-// a keystroke into a session that's gone must each be said, never dropped.
+// a keystroke into a session that's gone must each be said, never dropped. It also checks the
+// tab strip's layout: the tab, the New Tab button and the Saved commands button must not touch.
 import { render } from "solid-js/web";
 import { PaperProvider } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
@@ -44,6 +45,13 @@ const screen = () => {
 try {
     render(() => <PaperProvider fullWidth fullHeight><App /></PaperProvider>, document.getElementById("app")!);
     await wait(() => activeTerminals.has("t1"), "the saved tab must open");
+
+    const tabItem = [...document.querySelectorAll<HTMLElement>("*")].reverse().find((el) => el.textContent === "Shell")!.closest<HTMLElement>("[class*=PaperListItem]")!;
+    const gaps = [
+        button("New Tab")!.getBoundingClientRect().left - tabItem.getBoundingClientRect().right,
+        button("Saved commands")!.getBoundingClientRect().left - button("New Tab")!.getBoundingClientRect().right,
+    ];
+    if (gaps.some((gap) => gap < 1)) throw new Error(`the tab, New Tab and Saved commands must be spaced apart (gaps: ${gaps.join(", ")}px)`);
 
     failing.add("create-tab");
     button("New Tab")!.click();

@@ -282,22 +282,24 @@ export default function App() {
                             </PaperListItem>
                         )}
                     </For>
-                    <PaperButton size="tiny"
-                        icon
-                        onClick={addTab}
-                        title="New Tab"
-                        aria-label="New Tab">
-                        <PaperIcon>add</PaperIcon>
-                    </PaperButton>
-                    <PaperButton size="tiny"
-                        icon
-                        onClick={(e) => savedMenu.openBelow(e)}
-                        title="Saved commands"
-                        aria-label="Saved commands"
-                        aria-haspopup="menu"
-                        aria-expanded={savedMenu.isOpen()}>
-                        <PaperIcon>bookmarks</PaperIcon>
-                    </PaperButton>
+                    <PaperFlex direction="row" align="center" gap="half" paddingX="half">
+                        <PaperButton size="tiny"
+                            icon
+                            onClick={addTab}
+                            title="New Tab"
+                            aria-label="New Tab">
+                            <PaperIcon>add</PaperIcon>
+                        </PaperButton>
+                        <PaperButton size="tiny"
+                            icon
+                            onClick={(e) => savedMenu.openBelow(e)}
+                            title="Saved commands"
+                            aria-label="Saved commands"
+                            aria-haspopup="menu"
+                            aria-expanded={savedMenu.isOpen()}>
+                            <PaperIcon>bookmarks</PaperIcon>
+                        </PaperButton>
+                    </PaperFlex>
                 </PaperList>
                 </Show>
 
