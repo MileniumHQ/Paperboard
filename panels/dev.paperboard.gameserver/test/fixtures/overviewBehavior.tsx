@@ -64,6 +64,18 @@ try {
     checks.commandFailureReason = text().includes("Use Options for the password");
     overview();
 
+    // a game without a console messages everyone from the same line
+    const broadcast = render(() => <PaperProvider><ServerOverview avatar={<span />} software="Steam" control={{ kind: "broadcast" }} /></PaperProvider>, root);
+    await wait("the broadcast line", () => [...root.querySelectorAll<HTMLInputElement>("input")].some((i) => i.placeholder === "Message everyone on the server..."));
+    const broadcastInput = [...root.querySelectorAll<HTMLInputElement>("input")].find((i) => i.placeholder === "Message everyone on the server...")!;
+    const before = calls.length;
+    typeInto(broadcastInput, "restart at six");
+    broadcastInput.closest("form")!.requestSubmit();
+    await wait("the broadcast failure", () => text().includes("Message not sent"));
+    checks.broadcastSent = calls.slice(before).filter((c) => c !== "__getState");
+    checks.broadcastFailureReason = text().includes("The server closed its console");
+    broadcast();
+
     const chat = render(() => <PaperProvider><Chat avatar={() => <span />} /></PaperProvider>, root);
     const chatInput = [...root.querySelectorAll<HTMLInputElement>("input")].find((i) => i.placeholder === "Message server...")!;
     typeInto(chatInput, "hello world");

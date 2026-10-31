@@ -25,12 +25,14 @@ import {
     stopServer,
     restartServer,
     sendServerCommand,
+    sendChatMessage,
     saveWorld,
     getStatusBadge,
 } from "../lib/server";
 import ServerIssueModal from "./ServerIssueModal";
 import RecoveryNotice from "./RecoveryNotice";
 import { errorMessage } from "../lib/failure";
+import type { Control } from "../games/types";
 
 /**
  * Every game's Overview: the address card, the power controls, Save world
@@ -47,8 +49,8 @@ export default function ServerOverview(props: {
     actions?: JSX.Element;
     /** notices between the controls and the console */
     children?: JSX.Element;
-    /** false for a game with no console commands: the console only shows its output */
-    commands?: boolean;
+    /** what the console line does; console commands when left out */
+    control?: Control;
 }) {
     onMount(() => {
         void loadServerConfig();
@@ -69,9 +71,11 @@ export default function ServerOverview(props: {
             setSaving(false);
         }
     };
-    const runCommand = (command: string) => {
+    const control = () => props.control?.kind ?? "stdin";
+    const runCommand = (line: string) => {
         setCommandError("");
-        sendServerCommand(command).catch((err) => setCommandError(errorMessage(err)));
+        const sent = control() === "broadcast" ? sendChatMessage(line) : sendServerCommand(line);
+        sent.catch((err) => setCommandError(errorMessage(err)));
     };
 
     const badge = () => getStatusBadge(serverStatus());
@@ -142,7 +146,7 @@ export default function ServerOverview(props: {
             </Show>
 
             <Show when={commandError()}>
-                <PaperQuote variant="danger" icon="warning" title="Command not run" onDismiss={() => setCommandError("")}>
+                <PaperQuote variant="danger" icon="warning" title={control() === "broadcast" ? "Message not sent" : "Command not run"} onDismiss={() => setCommandError("")}>
                     {commandError()}
                 </PaperQuote>
             </Show>
@@ -155,9 +159,9 @@ export default function ServerOverview(props: {
                 <PaperConsole
                     entries={serverEntries()}
                     onCommand={runCommand}
-                    showInput={props.commands !== false}
-                    placeholder="Enter command..."
-                    prompt="chevron_right"
+                    showInput={control() !== "none"}
+                    placeholder={control() === "broadcast" ? "Message everyone on the server..." : "Enter command..."}
+                    prompt={control() === "broadcast" ? "campaign" : "chevron_right"}
                 />
             </PaperCard>
 

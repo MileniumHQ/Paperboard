@@ -50,11 +50,11 @@ describe("Palworld options", () => {
         expect(() => validateOptions(options, "Palworld", { Difficulty: "Hard" })).toThrow("Unknown Palworld option: Difficulty");
     });
 
-    test("every stored option names its ini key once, and the game has no console", () => {
+    test("every stored option names its ini key once, and messages go to everyone instead of a console", () => {
         const keys = options.flatMap((o) => (o.ini ? [o.ini.key] : []));
         expect(new Set(keys).size).toBe(keys.length);
         const features = palworld.describe({ software: "", version: "" });
-        expect(features.control).toEqual({ kind: "none" });
+        expect(features.control).toEqual({ kind: "broadcast" });
         expect(features.actions).not.toContain("run-command");
         expect(palworld.hostSupport({ os: "linux", arch: "arm64" }, { software: "", version: "" }).supported).toBe(false);
     });

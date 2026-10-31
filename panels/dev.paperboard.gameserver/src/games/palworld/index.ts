@@ -16,7 +16,7 @@ const advanced = { tab: "advanced" } as const;
 
 export const options: readonly PalworldOption[] = [
     { id: "ServerName", label: "Server name", kind: "text", maxLength: 64, default: "Default Palworld Server", restartRequired: true, ...ini("ServerName", "string") },
-    { id: "ServerDescription", label: "Description", kind: "text", maxLength: 256, default: "", restartRequired: true, ...ini("ServerDescription", "string") },
+    { id: "ServerDescription", label: "Description", kind: "text", maxLength: 256, default: "", restartRequired: true, scope: "overview", ...ini("ServerDescription", "string") },
     { id: "password", label: "Join password", kind: "secret", restartRequired: true },
     { id: "ServerPlayerMaxNum", label: "Maximum players", kind: "number", min: 1, max: 32, default: 32, restartRequired: true, ...ini("ServerPlayerMaxNum", "int") },
     { id: "port", label: "Port", description: "The UDP port players join on.", kind: "number", min: 1, max: 65535, default: 8211, restartRequired: true },
@@ -79,13 +79,13 @@ export const palworld: GameDefinition = {
         return {
             options, optionsWhileRunning: "next-start", backupWhileRunning: "offline",
             // Palworld reads no console input; Paperboard reaches it over its REST API
-            control: { kind: "none" }, widgets: ["status"],
+            control: { kind: "broadcast" }, widgets: ["status"],
             packages: [{ id: "steamcmd", purpose: "Downloads and updates the Palworld dedicated server from Steam" }],
             actions: [A.startServer, A.stopServer, A.restartServer, A.loadConfig, A.sayChat, A.saveWorld, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, "palworld-install", "palworld-info", "palworld-players", "palworld-kick", "palworld-ban", "palworld-unban", "backup-server"],
             tabs: [
                 { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
                 { id: "players", label: "Players", icon: "group", group: "Play", owner: "game", variant: "fill", width: "full" },
-                { id: "versions", label: "Versions", icon: "deployed_code", group: "Software", owner: "game" },
+                { id: "versions", label: "Updates", icon: "update", group: "Software", owner: "game" },
                 { id: "options", label: "Options", icon: "tune", group: "Server", owner: "shared" },
                 { id: "files", label: "Files", icon: "folder", group: "Server", owner: "shared", variant: "fill" },
                 { id: "logs", label: "Logs", icon: "description", group: "Server", owner: "shared", variant: "fill" },

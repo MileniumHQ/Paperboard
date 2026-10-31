@@ -4,7 +4,12 @@ export interface GameOptions {
     software: string;
     version: string;
 }
-export type Control = { kind: "none" } | { kind: "stdin" };
+/**
+ * What the console line under a running server does. "stdin": console
+ * commands. "broadcast": the game has no console; the line is a message to
+ * everyone on the server. "none": the console only shows output.
+ */
+export type Control = { kind: "none" } | { kind: "stdin" } | { kind: "broadcast" };
 export interface PackageRequirement {
     id: string;
     purpose: string;

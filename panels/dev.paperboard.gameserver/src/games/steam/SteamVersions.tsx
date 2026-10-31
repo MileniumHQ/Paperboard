@@ -45,7 +45,7 @@ export default function SteamVersions(props: { name: string; infoAction: string;
 
     return (
         <>
-            <PaperPageHeader icon="deployed_code" title="Versions" />
+            <PaperPageHeader icon="update" title="Updates" />
 
             <Show when={serverStatus() !== "offline"}>
                 <PaperQuote variant="warning" icon="warning" title="Server running">

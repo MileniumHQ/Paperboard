@@ -125,10 +125,10 @@ test("Palworld through daemon: REST control with a vaulted admin password, optio
         await services.stopService(PANEL); services.startService(PANEL); await services.waitUntilReady(PANEL);
 
         await refuses("op-player", { player: "Steve" }, /does not support|not registered|Unknown action|not found/i, "A Minecraft action reached Palworld");
-        await call("write-game-options", { patch: { ExpRate: 2.5, ServerName: "Wire Palworld", password: "join-secret", community: true } });
+        await call("write-game-options", { patch: { ExpRate: 2.5, ServerName: "Wire Palworld", ServerDescription: "Pals only", password: "join-secret", community: true } });
         const ini = path.join(directory, "saved/Config/LinuxServer/PalWorldSettings.ini");
         const written = fs.readFileSync(ini, "utf8");
-        assert(written.includes("ExpRate=2.500000") && written.includes('ServerName="Wire Palworld"') && written.includes("CrossplayPlatforms=(Steam,Xbox,PS5,Mac)"), `Options did not reach the ini or lost other keys:\n${written}`);
+        assert(written.includes("ExpRate=2.500000") && written.includes('ServerName="Wire Palworld"') && written.includes('ServerDescription="Pals only"') && written.includes("CrossplayPlatforms=(Steam,Xbox,PS5,Mac)"), `Options did not reach the ini or lost other keys:\n${written}`);
         assert(!written.includes("join-secret"), "The join password was written to a stopped server's ini");
         assert((await secretsApi.get(`${first.id}-palworld-join-password`, PANEL)).value === "join-secret", "Join password did not reach the vault");
         assert(!JSON.stringify(await config.get(PANEL)).includes("join-secret"), "Join password leaked into panel settings");
@@ -165,6 +165,7 @@ test("Palworld through daemon: REST control with a vaulted admin password, optio
         assert(!(await call<any>("palworld-players")).bans.includes("steam_76561190000000001"), "Unban left the player on the ban list");
         await refuses("palworld-kick", { userId: "../etc" }, /user id/, "An unsafe user id was accepted");
         await call("say-chat", { message: "Hello Pals" });
+        await until(async () => (await state()).serverEntries.some(e => e.content === "[Announcement] Hello Pals"), "the announcement in the console");
         assert(requests().includes('kick {"userid":"steam_76561190000000001"}') && requests().includes('announce {"message":"Hello Pals"}'), `REST calls not made:\n${requests()}`);
 
         await call("save-world");
@@ -187,7 +188,7 @@ test("Palworld through daemon: REST control with a vaulted admin password, optio
         const text = JSON.stringify(stopped);
         assert(text.includes("Wire Palworld") && !text.includes(admin) && !text.includes("join-secret"), "A stopped server's ini showed its passwords");
         await refuses("palworld-ban", { userId: "steam_76561190000000002" }, /Start the server to ban/, "A stopped server took a ban Palworld would have to write");
-        await refuses("write-server-file", { path: "install/PalServer.sh", content: "rm -rf /" }, /managed by Versions/, "The install was writable through Files");
+        await refuses("write-server-file", { path: "install/PalServer.sh", content: "rm -rf /" }, /managed by Updates/, "The install was writable through Files");
         console.log("Palworld wire: REST readiness, vaulted admin password, ini options, players, kick/ban/unban, announce, save proof, backup without install, graceful stop");
     } finally {
         await services.stopService(PANEL);

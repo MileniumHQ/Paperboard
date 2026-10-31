@@ -212,7 +212,7 @@ export async function sendServerCommand(
     // the last line of defense for raw-command callers too, matching
     // sendChatMessage's discipline one action over.
     const game = currentGameService();
-    if (currentGame().describe({ software: ctx.state.serverSoftware, version: ctx.state.serverVersion, settings: ctx.state.gameSettings }).control.kind === "none")
+    if (currentGame().describe({ software: ctx.state.serverSoftware, version: ctx.state.serverVersion, settings: ctx.state.gameSettings }).control.kind !== "stdin")
         throw new Error("This game does not support console commands");
     const line = game.commandLine(cmd);
     const trimmed = cmd.trim();

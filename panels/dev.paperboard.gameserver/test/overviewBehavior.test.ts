@@ -27,6 +27,8 @@ describe("shared overview behavior", () => {
             expect(c.commandFailureReason).toBe(true);
             expect(c.chatFailureTitled, "a refused chat message is shown").toBe(true);
             expect(c.chatFailureReason).toBe(true);
+            expect(c.broadcastSent, "a broadcast line is a message, not a command").toEqual(["s1/say-chat"]);
+            expect(c.broadcastFailureReason, "a refused broadcast is shown with its reason").toBe(true);
             expect(c.chatKeepsMessage, "an unsent message comes back to the field").toBe("hello world");
             expect(c.calls).toEqual(expect.arrayContaining(["s1/save-world", "s1/run-command", "s1/say-chat"]));
         },

@@ -67,7 +67,7 @@ async function ensureIni(): Promise<string> {
     const file = await iniFile();
     if (await exists(file)) return file;
     const template = path.join(await installDir(), "DefaultPalWorldSettings.ini");
-    if (!(await exists(template))) throw new Error("Install Palworld in Versions first");
+    if (!(await exists(template))) throw new Error("Install Palworld in Updates first");
     const text = (await fs.readFile(template, "utf8")).split(/\r?\n/).filter((line) => !line.startsWith(";")).join("\n");
     parseOptionSettings(text);
     await fs.mkdir(path.dirname(file), { recursive: true });
@@ -349,7 +349,7 @@ export const palworldService: GameService = {
         const saved = await settings();
         const install = await installDir();
         const build = await installedBuild(PALWORLD_APP_ID, install);
-        if (!build) throw new Error("Install Palworld in Versions first");
+        if (!build) throw new Error("Install Palworld in Updates first");
         const script = path.join(install, "PalServer.sh");
         await fs.access(script, fs.constants.X_OK);
         await linkSaved();
@@ -399,7 +399,12 @@ export const palworldService: GameService = {
     // Palworld saves before it shuts down
     stop: () => rest().shutdown(1, "The server is stopping."),
     commandLine() { throw new Error("Palworld has no console; use Players, Save world and Stop"); },
-    sendChat: (_ctx, message) => rest().announce(singleLine(message, "Message")),
+    async sendChat(ctx, message) {
+        const line = singleLine(message, "Message");
+        await rest().announce(line);
+        // Palworld does not log announcements; the console shows what went out
+        ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "info", content: `[Announcement] ${line}` }) }));
+    },
     observeLine(ctx, raw) {
         let line = raw.replace(/\r/g, "");
         // every REST call is logged, including the player polls, and followed by a blank line
@@ -421,7 +426,7 @@ export const palworldService: GameService = {
     },
     async assertFileAccess(ctx, file, write) {
         if (typeof file !== "string") throw new Error("Choose a file");
-        if (write && (file === "install" || file.startsWith("install/"))) throw new Error("Installed Palworld files are managed by Versions");
+        if (write && (file === "install" || file.startsWith("install/"))) throw new Error("Installed Palworld files are managed by Updates");
         if (file.endsWith("PalWorldSettings.ini")) {
             if (ctx.state.serverStatus !== "offline") throw new Error("Stop Palworld to open PalWorldSettings.ini; while it runs the file holds the admin password");
             await stripSecrets();
