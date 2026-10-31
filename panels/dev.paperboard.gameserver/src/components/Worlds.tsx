@@ -282,6 +282,10 @@ export default function Worlds() {
         if (!target) return null;
         return worlds()?.find((w) => w.name === target.name) ?? target;
     };
+    // what the world modal shows: the last world it opened on, kept through
+    // the close fade so the modal doesn't empty out as it leaves
+    const [shown, setShown] = createSignal<ReturnType<typeof detail>>(null);
+    createEffect(() => { const world = detail(); if (world) setShown(world); });
 
     return (
         <>
@@ -378,17 +382,17 @@ export default function Worlds() {
             <PaperModal
                 open={detail() !== null}
                 onClose={() => setSelected(null)}
-                title={detail()?.name ?? ""}
+                title={shown()?.name ?? ""}
                 size="medium"
                 footer={
                     <>
                         <PaperButton onClick={() => setSelected(null)}>
                             Close
                         </PaperButton>
-                        <Show when={detail()?.generated}>
+                        <Show when={shown()?.generated}>
                             <PaperButton
                                 disabled={downloading() || mutating()}
-                                onClick={() => { const name = detail()?.name; if (name) void downloadWorld(name); }}>
+                                onClick={() => { const name = shown()?.name; if (name) void downloadWorld(name); }}>
                                 <PaperIcon>download</PaperIcon>
                                 {downloading() ? "Zipping..." : "Download"}
                             </PaperButton>
@@ -400,7 +404,7 @@ export default function Worlds() {
                             <PaperIcon>delete</PaperIcon>
                             Delete
                         </PaperButton>
-                        <Show when={!(detail()?.active ?? false)}>
+                        <Show when={!(shown()?.active ?? false)}>
                             <PaperButton
                                 variant="success"
                                 disabled={online() || mutating()}
@@ -411,7 +415,7 @@ export default function Worlds() {
                     </>
                 }
             >
-                <Show when={detail()} keyed>
+                <Show when={shown()} keyed>
                     {(world) => (
                         <PaperFlex direction="column" gap="full">
                             <PaperFlex direction="row" gap="full" align="center">

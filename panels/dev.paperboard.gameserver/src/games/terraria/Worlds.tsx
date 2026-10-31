@@ -76,6 +76,10 @@ export default function TerrariaWorlds() {
 
     const taken = (name: string) => (worlds() ?? []).some((w) => w.name.toLowerCase() === name.trim().toLowerCase());
     const detail = () => worlds()?.find((w) => w.name === selected()) ?? null;
+    // what the world modal shows: the last world it opened on, kept through
+    // the close fade so the modal doesn't empty out as it leaves
+    const [shown, setShown] = createSignal<ReturnType<typeof detail>>(null);
+    createEffect(() => { const world = detail(); if (world) setShown(world); });
 
     const run = async (title: string, work: () => Promise<unknown>) => {
         setMutating(true);
@@ -267,37 +271,37 @@ export default function TerrariaWorlds() {
             <PaperModal
                 open={detail() !== null}
                 onClose={() => setSelected(null)}
-                title={detail()?.header?.name ?? detail()?.name ?? ""}
+                title={shown()?.header?.name ?? shown()?.name ?? ""}
                 size="medium"
                 footer={
                     <>
                         <PaperButton onClick={() => setSelected(null)}>Close</PaperButton>
-                        <Show when={detail()?.generated}>
+                        <Show when={shown()?.generated}>
                             <PaperButton
                                 disabled={downloading() || mutating()}
-                                onClick={() => { const name = detail()?.name; if (name) void download(name); }}>
+                                onClick={() => { const name = shown()?.name; if (name) void download(name); }}>
                                 <PaperIcon>download</PaperIcon>
                                 Download
                             </PaperButton>
                         </Show>
-                        <Show when={detail()?.generated}>
+                        <Show when={shown()?.generated}>
                             <PaperButton variant="danger" disabled={online() || mutating()} onClick={() => setDeleteConfirmOpen(true)}>
                                 <PaperIcon>delete</PaperIcon>
                                 Delete
                             </PaperButton>
                         </Show>
-                        <Show when={!(detail()?.active ?? false)}>
+                        <Show when={!(shown()?.active ?? false)}>
                             <PaperButton
                                 variant="success"
-                                disabled={online() || mutating() || !detail()?.header}
-                                onClick={() => { const name = detail()?.name; if (name) void switchTo(name); }}>
+                                disabled={online() || mutating() || !shown()?.header}
+                                onClick={() => { const name = shown()?.name; if (name) void switchTo(name); }}>
                                 Switch to this world
                             </PaperButton>
                         </Show>
                     </>
                 }
             >
-                <Show when={detail()} keyed>
+                <Show when={shown()} keyed>
                     {(world) => (
                         <PaperFlex direction="column" gap="full">
                             <PaperFlex direction="row" gap="full" align="center">
@@ -479,7 +483,7 @@ export default function TerrariaWorlds() {
             <PaperModal
                 open={deleteConfirmOpen()}
                 onClose={() => setDeleteConfirmOpen(false)}
-                title={`Delete world "${detail()?.header?.name ?? selected() ?? ""}"`}
+                title={`Delete world "${shown()?.header?.name ?? selected() ?? ""}"`}
                 size="small"
                 footer={
                     <>
@@ -490,7 +494,7 @@ export default function TerrariaWorlds() {
             >
                 <PaperText preset="body">
                     This moves "{selected()}" and its backup to the server folder's trash, with everything built in it.
-                    <Show when={detail()?.active}>
+                    <Show when={shown()?.active}>
                         {" "}This is the active world. The server will generate a fresh one on the next start.
                     </Show>
                 </PaperText>
