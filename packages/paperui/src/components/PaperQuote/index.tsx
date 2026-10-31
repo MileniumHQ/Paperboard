@@ -60,7 +60,8 @@ export function PaperQuote(props: ParentProps<PaperQuoteProps>) {
                         {local.title}
                     </PaperText>
                 </Show>
-                <PaperText size={2} weight={500}>
+                {/* errors quote paths and URLs, so long words wrap */}
+                <PaperText size={2} weight={500} breakWord>
                     {local.children}
                 </PaperText>
             </div>
