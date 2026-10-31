@@ -232,6 +232,23 @@ describe("panel assets and /panel-files", () => {
 		expect((await request(port, { path: "/panel-files/test.assets/doc.txt", headers: bearer(daemon.token) })).body.toString()).toBe("doc");
 	});
 
+	test("a request carrying the file's ETag gets an empty 304, and a changed file comes in full", async () => {
+		const daemon = await withPanel();
+		const port = daemon.instance.localPort;
+		const auth = bearer(daemon.token);
+		const first = await request(port, { path: "/panel/test.assets/app.js", headers: auth });
+		const etag = first.headers.etag as string;
+		expect(etag).toBeTruthy();
+		expect(first.headers["cache-control"]).toBe("no-cache");
+		const again = await request(port, { path: "/panel/test.assets/app.js", headers: { ...auth, "If-None-Match": etag } });
+		expect(again.status).toBe(304);
+		expect(again.body.length).toBe(0);
+		fs.writeFileSync(path.join(daemon.dataDir, "panels", "test.assets", "app.js"), "console.log('changed panel')");
+		const changed = await request(port, { path: "/panel/test.assets/app.js", headers: { ...auth, "If-None-Match": etag } });
+		expect(changed.status).toBe(200);
+		expect(changed.body.toString()).toBe("console.log('changed panel')");
+	});
+
 	test("every traversal vector is refused, raw or encoded, and the outside bytes never leave; reserved ids get 400", async () => {
 		const daemon = await withPanel();
 		const port = daemon.instance.localPort;
