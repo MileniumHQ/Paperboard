@@ -1,7 +1,7 @@
 import { processApi } from "./api";
 
-// Runs a software installer (Forge, NeoForge) as a daemon-supervised child
-// under a fixed id the panel owns, so its exit is observed rather than
+// Runs a software installer (Forge, NeoForge, SteamCMD) as a daemon-supervised
+// child under a fixed id the panel owns, so its exit is observed rather than
 // inferred: a timed-out installer is signalled and then waited for, and a
 // staging folder is only cleaned once nothing is writing into it.
 
@@ -13,7 +13,9 @@ const TAIL_LINES = 30;
 export type InstallerProcessApi = Pick<typeof processApi, "start" | "onData" | "onExit" | "kill" | "exists">;
 
 export interface InstallerRun {
-    javaBin: string;
+    command: string;
+    /** the process id; Minecraft's installers share INSTALLER_PROC_ID */
+    id?: string;
     args: string[];
     cwd: string;
     env?: Record<string, string>;
@@ -45,7 +47,8 @@ export async function runInstallerProcess(
     run: InstallerRun,
     proc: InstallerProcessApi = processApi,
 ): Promise<InstallerResult> {
-    if (await proc.exists(INSTALLER_PROC_ID)) {
+    const id = run.id ?? INSTALLER_PROC_ID;
+    if (await proc.exists(id)) {
         throw new Error("Another server install is still running");
     }
 
@@ -63,20 +66,20 @@ export async function runInstallerProcess(
     const exited = new Promise<number>((resolve) => {
         resolveExit = resolve;
     });
-    const offData = proc.onData(INSTALLER_PROC_ID, (chunk) => {
+    const offData = proc.onData(id, (chunk) => {
         const lines = (partial + chunk).split("\n");
         partial = lines.pop() ?? "";
         lines.forEach(pushLine);
     });
-    const offExit = proc.onExit(INSTALLER_PROC_ID, (code) => {
+    const offExit = proc.onExit(id, (code) => {
         // an exit with no code reported is not a success
         resolveExit(typeof code === "number" ? code : -1);
     });
 
     try {
         await proc.start({
-            id: INSTALLER_PROC_ID,
-            command: run.javaBin,
+            id,
+            command: run.command,
             args: run.args,
             cwd: run.cwd,
             env: run.env,
@@ -92,7 +95,7 @@ export async function runInstallerProcess(
 
         // timed out: signal, then observe the exit before reporting
         for (const signal of ["SIGTERM", "SIGKILL"]) {
-            await proc.kill(INSTALLER_PROC_ID, signal);
+            await proc.kill(id, signal);
             const grace = delay(run.exitGraceMs ?? EXIT_GRACE_MS, null);
             const code = await Promise.race([exited, grace.promise]);
             grace.cancel();
@@ -120,12 +123,13 @@ export async function stopLeftoverInstaller(
     proc: InstallerProcessApi = processApi,
     pollMs = 250,
     limitMs = 15_000,
+    id = INSTALLER_PROC_ID,
 ): Promise<boolean> {
-    if (!(await proc.exists(INSTALLER_PROC_ID))) return false;
-    await proc.kill(INSTALLER_PROC_ID, "SIGKILL");
+    if (!(await proc.exists(id))) return false;
+    await proc.kill(id, "SIGKILL");
     const deadline = Date.now() + limitMs;
     while (Date.now() < deadline) {
-        if (!(await proc.exists(INSTALLER_PROC_ID))) return true;
+        if (!(await proc.exists(id))) return true;
         await delay(pollMs, null).promise;
     }
     throw new InstallerStillRunningError("A leftover server installer did not exit when stopped");

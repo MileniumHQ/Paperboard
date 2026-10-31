@@ -1,6 +1,7 @@
 import type { GameDefinition, GameOption, OptionSection } from "../types";
 import { ACTION_IDS as A } from "../../service/contract";
 import { gameArt } from "../art";
+import { softwareName, terrariaSoftware, tmodloaderReleases } from "./catalog";
 
 export const options: readonly GameOption[] = [
     { id: "maxplayers", label: "Maximum players", kind: "number", min: 1, max: 255, default: 8, restartRequired: true },
@@ -31,25 +32,32 @@ function journeyPermissions(): GameOption[] {
 }
 /** The options a new world is generated with, asked for in New World rather than Options. */
 export const WORLD_GENERATION: readonly string[] = options.filter(o => o.scope === "world").map(o => o.id);
+/** Mod actions a tModLoader server adds; a vanilla server refuses them. */
+export const MOD_ACTIONS = ["terraria-mods", "terraria-mod-search", "terraria-mod-items", "terraria-mod-install", "terraria-mod-remove", "terraria-mod-upload", "terraria-mod-updates", A.discardAddonUpload] as const;
 export const terraria: GameDefinition = {
     id: "terraria", name: "Terraria", icon: "landscape", art: gameArt("terraria"),
-    softwareLabel: ({ software, version }) => { if (software !== "vanilla") throw new Error(`Unsupported Terraria software: ${software}`); return `Vanilla ${version}`.trim(); },
+    softwareLabel: ({ software, version }) => `${softwareName(terrariaSoftware(software))} ${version}`.trim(),
     hostSupport({ os, arch }) {
         if (arch !== "x64") return { supported: false, reason: "Terraria requires an x64 host. Apple Silicon has no certification machine; Rosetta is not certified." };
         if (os !== "linux") return { supported: false, reason: "This Terraria host route is awaiting Windows x64 / Intel Mac certification. Linux x64 is the verified server route." };
         return { supported: true };
     },
-    describe({ software }) {
-        if (software !== "vanilla") throw new Error(`Unsupported Terraria software: ${software}`);
+    describe({ software: raw, version }) {
+        const software = terrariaSoftware(raw);
+        const modded = software === "tmodloader";
+        // the runtime of the installed release; before setup, the newest
+        const runtime = (tmodloaderReleases.find(r => r.version === version) ?? tmodloaderReleases[0]).runtime;
         return {
-            options, control: { kind: "stdin" }, packages: [], widgets: ["status", "console"],
-            actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, "read-game-options", "write-game-options", "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", "terraria-save", "terraria-motd", "terraria-players", "terraria-kick", "terraria-ban", "terraria-unban", "backup-server"],
+            options, control: { kind: "stdin" }, widgets: ["status", "console"],
+            packages: modded ? [{ id: runtime, purpose: ".NET runtime for tModLoader" }] : [],
+            actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, "read-game-options", "write-game-options", "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", "terraria-save", "terraria-motd", "terraria-players", "terraria-kick", "terraria-ban", "terraria-unban", "backup-server", ...(modded ? MOD_ACTIONS : [])],
             tabs: [
                 { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
                 { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },
                 { id: "players", label: "Players", icon: "group", group: "Play", owner: "game", variant: "fill", width: "full" },
                 { id: "worlds", label: "Worlds", icon: "public", group: "World", owner: "game" },
                 { id: "versions", label: "Versions", icon: "deployed_code", group: "Software", owner: "game" },
+                ...(modded ? [{ id: "mods", label: "Mods", icon: "extension", group: "Software", owner: "game" } as const] : []),
                 { id: "options", label: "Options", icon: "tune", group: "Server", owner: "shared" },
                 { id: "files", label: "Files", icon: "folder", group: "Server", owner: "shared", variant: "fill" },
                 { id: "logs", label: "Logs", icon: "description", group: "Server", owner: "shared", variant: "fill" },

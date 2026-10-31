@@ -3,11 +3,12 @@ import TerrariaSetup from "./Setup";
 import TerrariaOverview from "./Overview";
 import TerrariaWorlds from "./Worlds";
 import TerrariaVersions from "./Versions";
+import TerrariaMods from "./Mods";
 import TerrariaPlayers, { TerrariaAvatar } from "./Players";
 import Chat from "../../components/Chat";
 
 export const terrariaUI: GameUI = {
-    create() {
+    create(ctx) {
         return {
             setup: (props) => <TerrariaSetup onComplete={props.onComplete} />,
             tab(id) {
@@ -17,6 +18,7 @@ export const terrariaUI: GameUI = {
                     case "players": return <TerrariaPlayers />;
                     case "worlds": return <TerrariaWorlds />;
                     case "versions": return <TerrariaVersions />;
+                    case "mods": return <TerrariaMods active={ctx.active() === id} />;
                     default: throw new Error(`Terraria tab has no renderer: ${id}`);
                 }
             },

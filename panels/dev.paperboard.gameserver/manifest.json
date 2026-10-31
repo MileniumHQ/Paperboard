@@ -80,6 +80,9 @@
         ],
         "services": [
             { "name": "Re-Logic / Terraria", "detail": "Verified vanilla dedicated-server downloads from terraria.org" },
+            { "name": "tModLoader", "detail": "Verified tModLoader server downloads from GitHub" },
+            { "name": "Microsoft .NET", "detail": "The runtime tModLoader runs on" },
+            { "name": "Steam Workshop", "detail": "Finding and downloading tModLoader mods, through Paperboard's modscan and SteamCMD" },
             {
                 "name": "Mojang",
                 "detail": "Downloading vanilla servers and player skins"

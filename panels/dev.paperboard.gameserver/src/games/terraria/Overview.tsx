@@ -2,10 +2,11 @@ import { createSignal, Show } from "solid-js";
 import { PaperAvatar, PaperButton, PaperFlex, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview from "../../components/ServerOverview";
 import { MotdEditor, MotdPreview } from "../../components/Motd";
-import { serverBridge, serverMotd } from "../../lib/server";
+import { serverBridge, serverMotd, serverSoftware } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { terraria } from "./index";
 import { terrariaMotd } from "./motd";
+import { softwareName, terrariaSoftware } from "./catalog";
 
 export default function TerrariaOverview() {
     const [saving, setSaving] = createSignal(false);
@@ -48,7 +49,7 @@ export default function TerrariaOverview() {
                     </PaperButton>
                 </PaperFlex>
             }
-            software="Vanilla"
+            software={softwareName(terrariaSoftware(serverSoftware()))}
             actions={
                 <PaperButton onClick={() => void save()} disabled={saving()}>
                     <PaperIcon>save</PaperIcon>

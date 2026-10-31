@@ -170,7 +170,7 @@ async function install(
             let result: InstallerResult;
             try {
                 result = await deps.runInstaller({
-                    javaBin: java.bin,
+                    command: java.bin,
                     args: plan.args(nodePath.join(root, staging, "installer.jar"), stagedAbs),
                     cwd: nodePath.join(root, staging),
                     env: { JAVA_HOME: java.home },

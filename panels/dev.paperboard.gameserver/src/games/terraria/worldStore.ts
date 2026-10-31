@@ -105,7 +105,7 @@ export async function discardUpload(root: string, file: unknown): Promise<void> 
 }
 
 /**
- * Moves a world and its backups (Terraria keeps `.wld.bak` and `.wld.bak2`)
+ * Moves a world, its tModLoader `.twld` and their backups (`.bak`, `.bak2`)
  * into a `.trash-<ts>/worlds` folder in the server folder, like every other
  * removal in Game Server: recoverable, never deleted. The shared trash helper
  * takes ASCII paths only and Terraria world names can be any letters, so the
@@ -122,8 +122,10 @@ export async function trashWorld(root: string, name: unknown, stamp = Date.now()
         if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
         entries = [];
     }
-    const files = entries.filter((file) => file === world || (file.startsWith(world) && /^\.bak\d*$/.test(file.slice(world.length))));
-    if (!files.length) throw new Error(`There is no world named "${checked}"`);
+    // tModLoader keeps the modded part of a world beside it, as .twld
+    const own = [world, `${checked}.twld`];
+    const files = entries.filter((file) => own.some((base) => file === base || (file.startsWith(base) && /^\.bak\d*$/.test(file.slice(base.length)))));
+    if (!files.some((file) => file.startsWith(world))) throw new Error(`There is no world named "${checked}"`);
     const trash = path.join(root, trashDirName(stamp), "worlds");
     await fs.mkdir(trash, { recursive: true });
     for (const file of files) await fs.rename(path.join(directory, file), path.join(trash, file));

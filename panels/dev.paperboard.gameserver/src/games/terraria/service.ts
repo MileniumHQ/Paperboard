@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import net from "node:net";
-import { config, files, processApi, type ServiceContext } from "../../service/api";
+import { config, files, packages as packageApi, processApi, type ServiceContext } from "../../service/api";
 import { fileApi as rawFiles, defineAction, secretsApi } from "@mileniumhq/paperapi";
 import { currentServer, serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
@@ -10,20 +10,26 @@ import { startServerInstance, stopServerInstance } from "../../service/lifecycle
 import type { GameService } from "../serviceTypes";
 import { terraria } from "./index";
 import { configText, singleLine, validateOptions, worldName } from "./config";
-import { releases, releaseFor, entrypoint } from "./catalog";
+import { archiveFor, entrypoint, installDirectories, releases, softwareName, terrariaSoftware, tmodloaderReleaseFor, tmodloaderReleases, TMODLOADER_ENTRYPOINT, type TerrariaSoftware } from "./catalog";
+import { ModStore, SAVE_DIR } from "./modStore";
+import { searchWorkshop, workshopItems, type ModscanSort } from "../steam/modscan";
+import { addonStageDir } from "../../core/addonUpload";
 import { install, recoverRelease } from "./install";
 import { discardUpload, importUpload, inspectUpload, listWorlds, trashWorld } from "./worldStore";
 import { WORLD_GENERATION } from "./index";
 import { parseConsoleLine, playerName, PlayerStore, stripPrompt, type ConsoleEvent } from "./roster";
-import { TRIGGER_IDS } from "../../service/contract";
+import { ACTION_IDS, TRIGGER_IDS } from "../../service/contract";
 import { chatId } from "../../lib/logs";
 import type { ChatMessage } from "../../service/types";
 const PROC = "terraria-server";
 type Context = ServiceContext<GameServerState>;
-const local = serverLocal(() => ({ busy: false, ready: false, password: "", prompts: 0, partialPrompt: false, logTimer: null as ReturnType<typeof setTimeout> | null, pending: [] as string[], queries: 0, listed: [] as { name: string; address: string }[], store: null as PlayerStore | null }));
+const local = serverLocal(() => ({ modsBusy: false, busy: false, ready: false, password: "", prompts: 0, partialPrompt: false, logTimer: null as ReturnType<typeof setTimeout> | null, pending: [] as string[], queries: 0, listed: [] as { name: string; address: string }[], store: null as PlayerStore | null }));
 const root = () => files.getPath("", PANEL_ID);
 const settings = async () => await config.get<Record<string, unknown>>(PANEL_ID) ?? {};
-function host() { const support = terraria.hostSupport({ os: process.platform, arch: process.arch }, { software: "vanilla", version: "" }); if (!support.supported) throw new Error(support.reason); }
+function hostFor(software: TerrariaSoftware) { return terraria.hostSupport({ os: process.platform, arch: process.arch }, { software, version: "" }); }
+function host(software: TerrariaSoftware) { const support = hostFor(software); if (!support.supported) throw new Error(support.reason); }
+/** a server is vanilla until its setup installs something else */
+const softwareOf = (saved: Record<string, unknown>) => terrariaSoftware(saved.software ?? "vanilla");
 function secretKey() { const id = currentServer()?.server.id; if (!id) throw new Error("Terraria requires a server scope"); return `${id}-terraria-join-password`; }
 async function marker() { const id = currentServer()?.server.id; if (!id) throw new Error("Terraria requires a server scope"); return rawFiles.getPath(`.terraria-resume/${id}`, PANEL_ID); }
 async function generate(password: string) {
@@ -39,7 +45,7 @@ async function generate(password: string) {
 async function loadOptions(ctx: Context) {
     const saved = await settings();
     const password = await secretsApi.get(secretKey(), PANEL_ID);
-    ctx.setState({ serverSoftware: "vanilla", serverVersion: String(saved.version ?? ""), serverPort: String(saved.port ?? 7777), serverMotd: String(saved.motd ?? ""), gameSettings: { ...saved, password: password.found } });
+    ctx.setState({ serverSoftware: softwareOf(saved), serverVersion: String(saved.version ?? ""), serverPort: String(saved.port ?? 7777), serverMotd: String(saved.motd ?? ""), gameSettings: { ...saved, password: password.found } });
 }
 async function waitUntil(check: () => boolean | Promise<boolean>, ms: number, label: string) {
     const deadline = Date.now() + ms;
@@ -159,6 +165,39 @@ async function onServerStarted(ctx: Context) {
     ctx.setState({ maxPlayers: max });
     queryPlayers(ctx);
 }
+/** tModLoader runs as `dotnet tModLoader.dll` on the Origami .NET package, without its launch scripts: they fetch .NET at launch. */
+async function launchTmodloader(directory: string, installDir: string, version: string) {
+    const release = tmodloaderReleaseFor(version);
+    await fs.access(path.join(installDir, TMODLOADER_ENTRYPOINT));
+    if (!(await packageApi.isInstalled(release.runtime))) throw new Error(`The ${release.runtime} runtime tModLoader needs is not installed; reinstall tModLoader in Versions`);
+    const runtime = path.join(await packageApi.getPath(release.runtime), "bin");
+    const dotnet = path.join(runtime, process.platform === "win32" ? "dotnet.exe" : "dotnet");
+    await fs.access(dotnet, process.platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK);
+    local().password = (await secretsApi.get(secretKey(), PANEL_ID)).value ?? "";
+    await generate(local().password); local().ready = false;
+    const home = path.join(directory, "profile"); await fs.mkdir(home, { recursive: true });
+    const save = path.join(directory, SAVE_DIR); await fs.mkdir(path.join(save, "Mods"), { recursive: true });
+    return { message: `Starting tModLoader ${release.version}…`, command: {
+        executable: dotnet,
+        args: [TMODLOADER_ENTRYPOINT, "-server", "-config", path.join(directory, "serverconfig.txt"), "-nosteam", "-tmlsavedirectory", save, "-noupnp"],
+        cwd: installDir,
+        // only the packaged runtime; never one installed on the computer
+        env: { HOME: home, XDG_DATA_HOME: home, DOTNET_ROOT: runtime, DOTNET_MULTILEVEL_LOOKUP: "0", DOTNET_CLI_TELEMETRY_OPTOUT: "1" },
+    } };
+}
+async function modStore(ctx: Context) {
+    const saved = await settings();
+    if (softwareOf(saved) !== "tmodloader" || !saved.version) throw new Error("Mods need a tModLoader server");
+    return new ModStore({ root: await root(), tmodloaderVersion: String(saved.version), onLine: line => { if (/Downloading|Update|ERROR/i.test(line)) ctx.setState(prev => ({ serverEntries: appendCapped(prev.serverEntries, { type: /ERROR/.test(line) ? "error" : "info", content: `[SteamCMD] ${line}` }) })); } });
+}
+/** one mod change at a time per server; the result says whether a running server must restart */
+async function modChange<T>(ctx: Context, work: (store: ModStore) => Promise<T>): Promise<{ result: T; restart: boolean }> {
+    if (local().modsBusy) throw new Error("Wait for the current mod change to finish");
+    local().modsBusy = true;
+    try { const result = await work(await modStore(ctx)); return { result, restart: ctx.state.serverStatus !== "offline" }; }
+    finally { local().modsBusy = false; }
+}
+const SORTS: readonly ModscanSort[] = ["relevance", "subscriptions", "updated"];
 const action = (id: string, name: string, run: (ctx: Context, input: any) => any) => defineAction({ id, name, category: "Server", description: name, internal: true, inputs: {}, run });
 export const terrariaService: GameService = {
     primaryProcessId: PROC, processIds: [PROC],
@@ -174,13 +213,20 @@ export const terrariaService: GameService = {
             }
             await config.set(next, PANEL_ID); await generate(""); await loadOptions(ctx); return ctx.state.gameSettings;
         })),
-        action("terraria-versions", "Terraria releases", () => ({ releases, host: terraria.hostSupport({ os: process.platform, arch: process.arch }, { software: "vanilla", version: "" }) })),
-        action("terraria-install", "Install Terraria", (ctx, { version }) => exclusive(ctx, async () => {
-            host(); releaseFor(version);
+        action("terraria-versions", "Terraria releases", () => ({ releases, tmodloaderReleases, host: hostFor("vanilla"), hosts: { vanilla: hostFor("vanilla"), tmodloader: hostFor("tmodloader") } })),
+        action("terraria-install", "Install Terraria", (ctx, { software: rawSoftware, version }) => exclusive(ctx, async () => {
+            const software = terrariaSoftware(rawSoftware ?? "vanilla");
+            host(software); const release = archiveFor(software, version);
             const previous = await settings();
+            // a world made by one can be unreadable to the other; a new server keeps them apart
+            if (previous.configured && softwareOf(previous) !== software) throw new Error(`This server runs ${softwareName(softwareOf(previous))}. Create a new server for ${softwareName(software)}.`);
             if (previous.version && previous.version !== version) throw new Error("Back up and retain the old server before changing Terraria world formats");
-            await install(ctx, version);
-            await config.set({ ...previous, software: "vanilla", version, configured: true }, PANEL_ID);
+            if (software === "tmodloader") {
+                const runtime = tmodloaderReleaseFor(version).runtime;
+                if (!(await packageApi.isInstalled(runtime))) throw new Error(`Install the ${runtime} runtime before tModLoader ${release.version}`);
+            }
+            await install(ctx, software, version);
+            await config.set({ ...previous, software, version, configured: true }, PANEL_ID);
             await generate(""); await loadOptions(ctx); return true;
         })),
         action("terraria-worlds", "Terraria worlds", async () => listWorlds(path.join(await root(), "worlds"), worldName((await settings()).world ?? "World"))),
@@ -203,6 +249,25 @@ export const terrariaService: GameService = {
         action("terraria-world-import", "Add uploaded world", async (_ctx, { file, name }) => { await importUpload(await root(), file, name); return true; }),
         action("terraria-world-discard", "Discard uploaded world", async (_ctx, { file }) => { await discardUpload(await root(), file); return true; }),
         action("terraria-save", "Save Terraria world", save),
+        action("terraria-mods", "List mods", async ctx => ({ mods: await (await modStore(ctx)).list(), tmodloader: String((await settings()).version) })),
+        action("terraria-mod-search", "Search Steam Workshop", async (_ctx, { query, page, sort }) => {
+            if (typeof query !== "string") throw new Error("Search text is required");
+            if (sort !== undefined && !SORTS.includes(sort)) throw new Error(`Sort is one of ${SORTS.join(", ")}`);
+            return searchWorkshop("tmodloader", query, { page: page ?? 1, sort });
+        }),
+        action("terraria-mod-items", "Look up Workshop mods", async (_ctx, { ids }) => {
+            if (!Array.isArray(ids)) throw new Error("Workshop ids are required");
+            return workshopItems("tmodloader", ids);
+        }),
+        action("terraria-mod-install", "Install Workshop mod", (ctx, { id, dependencies }) => modChange(ctx, store => {
+            if (typeof id !== "string") throw new Error("A Workshop id is required");
+            if (dependencies !== undefined && (!Array.isArray(dependencies) || dependencies.some(d => typeof d !== "string"))) throw new Error("Dependencies are Workshop ids");
+            return store.install(id, dependencies ?? []);
+        })),
+        action("terraria-mod-updates", "Update Workshop mods", ctx => modChange(ctx, store => store.update())),
+        action("terraria-mod-remove", "Uninstall mod", (ctx, { file }) => modChange(ctx, store => store.remove(file))),
+        action("terraria-mod-upload", "Add uploaded mods", (ctx, { stage }) => modChange(ctx, async store => ({ added: await store.upload(path.join(await root(), addonStageDir(stage))) }))),
+        action(ACTION_IDS.discardAddonUpload, "Discard upload", async (_ctx, { stage }) => { await fs.rm(path.join(await root(), addonStageDir(stage)), { recursive: true, force: true }); return true; }),
         action("terraria-players", "Terraria players", async () => ({ seen: await store().seen(), bans: await store().bans() })),
         action("terraria-kick", "Kick player", async (ctx, { name }) => {
             const online = onlineName(ctx, playerName(name));
@@ -242,7 +307,7 @@ export const terrariaService: GameService = {
         // reattaching to a running server: learn who is on it
         if (running) await onServerStarted(ctx);
         if (!running) {
-            for (const release of releases) await recoverRelease(path.join(await root(), "install", release.directory));
+            for (const directory of installDirectories()) await recoverRelease(path.join(await root(), "install", directory));
             await generate("");
         }
         const resume = await marker();
@@ -254,18 +319,20 @@ export const terrariaService: GameService = {
     async beforeRemove() { if (local().busy) throw new Error("Wait for Terraria's current operation"); },
     async dispose() { if (local().logTimer) clearTimeout(local().logTimer!); local().logTimer = null; }, readIcon: async () => null,
     async prepareLaunch(ctx) {
-        host();
-        const saved = await settings(); const release = releaseFor(String(saved.version));
+        const saved = await settings(); const software = softwareOf(saved);
+        host(software);
+        const release = archiveFor(software, String(saved.version));
         const directory = await root(); const installDir = path.join(directory, "install", release.directory);
         const record = JSON.parse(await fs.readFile(path.join(installDir, "manifest.json"), "utf8"));
-        if (record.sha256 !== release.sha256 || record.os !== process.platform || record.arch !== process.arch) throw new Error("Terraria install manifest does not match this release and host; reinstall");
+        if ((record.software ?? "vanilla") !== software || record.sha256 !== release.sha256 || record.os !== process.platform || record.arch !== process.arch) throw new Error(`${softwareName(software)} install manifest does not match this release and host; reinstall`);
+        if (software === "tmodloader") return launchTmodloader(directory, installDir, String(saved.version));
         const executable = path.join(installDir, entrypoint(process.platform)); await fs.access(executable, process.platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK);
         local().password = (await secretsApi.get(secretKey(), PANEL_ID)).value ?? "";
         await generate(local().password); local().ready = false;
         const home = path.join(directory, "profile"); await fs.mkdir(home, { recursive: true });
         return { message: `Starting Terraria ${release.version}…`, command: { executable, args: ["-config", path.join(directory, "serverconfig.txt"), "-noupnp"], cwd: path.dirname(executable), env: { HOME: home, XDG_DATA_HOME: home, LD_LIBRARY_PATH: path.join(path.dirname(executable), "lib64"), MONO_CONFIG: path.join(path.dirname(executable), "monoconfig") } } };
     },
-    isMutating: () => local().busy,
+    isMutating: () => local().busy || local().modsBusy,
     readiness: { timeoutMs: 300_000, async probe(ctx) {
         if (!local().ready) return false;
         return new Promise((resolve, reject) => {
@@ -298,6 +365,7 @@ export const terrariaService: GameService = {
         }, 100);
     },
     async assertFileAccess(ctx, file, write) {
+        if (write && typeof file === "string" && file.startsWith(`${SAVE_DIR}/Mods/`) && local().modsBusy) throw new Error("Wait for the mod change to finish");
         if (typeof file !== "string") throw new Error("Choose a file");
         if (file === "serverconfig.txt") throw new Error("Use Options for generated serverconfig.txt (contains vault credentials while running)");
         if (write && (file.startsWith("install/") || file.startsWith(".terraria-"))) throw new Error("Installed Terraria files are managed by Versions");

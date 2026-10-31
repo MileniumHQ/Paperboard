@@ -58,7 +58,7 @@ function fakeChild(opts: { exitOn?: string[] } = {}): FakeChild {
     return child;
 }
 
-const RUN = { javaBin: "/java/bin/java", args: ["-jar", "/s/installer.jar", "--installServer", "/s/server"], cwd: "/s" };
+const RUN = { command: "/java/bin/java", args: ["-jar", "/s/installer.jar", "--installServer", "/s/server"], cwd: "/s" };
 
 describe("runInstallerProcess", () => {
     test("runs java with the argv under the panel's installer id and reports the exit code and output tail", async () => {
