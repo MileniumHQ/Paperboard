@@ -80,6 +80,8 @@ export const ACTION_IDS = {
     queryPlayerStats: "query-player-stats",
     queryPlayerPositions: "query-player-positions",
     listPlayerStats: "list-player-stats",
+    listRoster: "list-roster",
+    currentPlayerNames: "current-player-names",
     listLogFiles: "list-log-files",
     readLogFile: "read-log-file",
     queryOnlinePlayers: "query-online-players",

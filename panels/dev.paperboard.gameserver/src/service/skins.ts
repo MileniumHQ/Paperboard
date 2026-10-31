@@ -10,9 +10,9 @@ import * as nodePath from "node:path";
 import { apiFetch } from "../lib/userAgent";
 import { composeHeadFromSkin, clampHeadSize } from "../core/skin";
 import { uuidForPlayerName } from "./playerStats";
+import { formatUuid, profileForName } from "./mojang";
 
 const PROFILE_URL = "https://sessionserver.mojang.com/session/minecraft/profile/";
-const NAME_URL = "https://api.mojang.com/users/profiles/minecraft/";
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_CACHE = 512;
 const MAX_CONCURRENT = 4;
@@ -123,24 +123,15 @@ async function fetchWithTimeout(url: string): Promise<Response | null> {
     }
 }
 
-function formatUuid(bare: string): string {
-    const hex = bare.toLowerCase();
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
 async function uuidFromName(name: string): Promise<string | null> {
     const local = await uuidForPlayerName(name);
     if (local) return local;
-    const res = await fetchWithTimeout(`${NAME_URL}${encodeURIComponent(name)}`);
-    if (!res || res.status === 204 || res.status === 404) return null;
-    if (!res.ok) {
-        console.debug(`[skins] name lookup for "${name}" returned ${res.status}`);
+    try {
+        return (await profileForName(name))?.uuid ?? null;
+    } catch (err) {
+        console.debug(`[skins] name lookup for "${name}" failed:`, String(err));
         return null;
     }
-    const body = (await res.json()) as { id?: unknown };
-    return typeof body?.id === "string" && UUID_BARE_RE.test(body.id)
-        ? formatUuid(body.id)
-        : null;
 }
 
 async function skinUrlForUuid(uuid: string): Promise<string | null> {

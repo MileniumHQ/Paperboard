@@ -42,7 +42,10 @@ function collectNames(raw: unknown, into: Map<string, string>): void {
 export type { PlayerStatSummary };
 
 // the { uuid, name } registries the server writes; the union keeps a player
-// whose usercache entry expired resolvable by either direction
+// whose usercache entry expired resolvable by either direction. usercache is
+// applied last: the server rewrites it on every join, while the lists keep
+// the name a player had when they were added, so a renamed player resolves
+// to their new name.
 export async function resolvePlayerIdentities(): Promise<Map<string, string>> {
     const [usercache, ops, whitelist, banned] = await Promise.all([
         readJson("usercache.json"),
@@ -51,7 +54,7 @@ export async function resolvePlayerIdentities(): Promise<Map<string, string>> {
         readJson("banned-players.json"),
     ]);
     const names = new Map<string, string>();
-    for (const raw of [usercache, ops, whitelist, banned]) collectNames(raw, names);
+    for (const raw of [banned, whitelist, ops, usercache]) collectNames(raw, names);
     return names;
 }
 

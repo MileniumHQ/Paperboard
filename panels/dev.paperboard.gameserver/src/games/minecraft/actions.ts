@@ -43,6 +43,7 @@ import { listMapRegions, renderMapTile } from "../../service/map";
 import { discardWorldTransfer, exportWorld, importWorld } from "../../service/worldTransfer";
 import type { MapDimension } from "../../core/map";
 import { listPlayerStats } from "../../service/playerStats";
+import { currentPlayerNames, listRoster, setPlayerFlag } from "../../service/playerLists";
 import { getHeadDataUrl } from "../../service/skins";
 import { listLogFiles, readLogFile } from "../../service/logs";
 import { queryGamerules, setGamerule } from "../../service/gamerules";
@@ -438,6 +439,8 @@ export const panelActions: ActionDefinition[] = [
     // player-flag actions: every one validates at this boundary — the UI
     // may never compose console commands from raw player names. Validated
     // kick/ban above set the pattern; op/deop/whitelist/pardon/kill follow it.
+    // Op and whitelist also work while the server is stopped: setPlayerFlag
+    // edits ops.json / whitelist.json then.
     defineAction({
         id: ACTION_IDS.opPlayer,
         name: "Op Player",
@@ -450,9 +453,9 @@ export const panelActions: ActionDefinition[] = [
         output: { type: "boolean", label: "Success" },
         quick: false,
         icon: "shield",
-        run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string }) => {
-            const name = assertPlayerName(inputs?.player);
-            await sendServerCommand(ctx, `op ${name}`);
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
+            // uuid is an optional input for the panel's own roster
+            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), "op", inputs?.player, true, inputs?.uuid);
             return true;
         },
     }),
@@ -469,9 +472,9 @@ export const panelActions: ActionDefinition[] = [
         output: { type: "boolean", label: "Success" },
         quick: false,
         icon: "shield_person",
-        run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string }) => {
-            const name = assertPlayerName(inputs?.player);
-            await sendServerCommand(ctx, `deop ${name}`);
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
+            // uuid is an optional input for the panel's own roster
+            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), "op", inputs?.player, false, inputs?.uuid);
             return true;
         },
     }),
@@ -488,9 +491,9 @@ export const panelActions: ActionDefinition[] = [
         output: { type: "boolean", label: "Success" },
         quick: false,
         icon: "verified_user",
-        run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string }) => {
-            const name = assertPlayerName(inputs?.player);
-            await sendServerCommand(ctx, `whitelist add ${name}`);
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
+            // uuid is an optional input for the panel's own roster
+            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), "whitelist", inputs?.player, true, inputs?.uuid);
             return true;
         },
     }),
@@ -507,9 +510,9 @@ export const panelActions: ActionDefinition[] = [
         output: { type: "boolean", label: "Success" },
         quick: false,
         icon: "person_off",
-        run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string }) => {
-            const name = assertPlayerName(inputs?.player);
-            await sendServerCommand(ctx, `whitelist remove ${name}`);
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
+            // uuid is an optional input for the panel's own roster
+            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), "whitelist", inputs?.player, false, inputs?.uuid);
             return true;
         },
     }),
@@ -1527,6 +1530,39 @@ export const panelActions: ActionDefinition[] = [
             queryPlayerPositions(ctx);
             return true;
         },
+    }),
+
+    defineAction({
+        // the Players tab's roster; a flow names players, it does not page
+        // through the lists, so it stays out of the Actions library
+        id: ACTION_IDS.listRoster,
+        name: "List Player Roster",
+        category: "Players",
+        description: "Lists whitelisted, operator and banned players by uuid with their newest known name",
+        template: "List player roster",
+        internal: true,
+        inputs: {},
+        output: { type: "object", label: "Roster" },
+        quick: false,
+        icon: "group",
+        run: async () => listRoster(),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.currentPlayerNames,
+        name: "Current Player Names",
+        category: "Players",
+        description: "Looks up the names players have now from Mojang, by uuid",
+        template: "Current names for {uuids}",
+        internal: true,
+        inputs: {
+            uuids: { type: "object", label: "UUIDs", required: true },
+        },
+        output: { type: "object", label: "Names" },
+        quick: false,
+        icon: "badge",
+        run: async (_ctx: ServiceContext<GameServerState>, inputs: { uuids?: unknown }) =>
+            currentPlayerNames(inputs?.uuids),
     }),
 
     defineAction({

@@ -21,7 +21,6 @@ import {
     PaperText,
     PaperToggle,
 } from "@mileniumhq/paperui";
-import { fileApi } from "../lib/api";
 import {
     forgetPlayerData,
     getPlayerPlaytimeSeconds,
@@ -50,30 +49,21 @@ interface PlayerInfo {
     op: boolean;
 }
 
+/** service/playerLists.ts RosterEntry */
+interface RosterEntry extends PlayerInfo {
+    uuid: string;
+    banned: boolean;
+}
+
 function isOnline(): boolean {
     return serverStatus() === "online";
 }
 
-async function loadJsonEntries(path: string): Promise<{ name: string; uuid?: string }[]> {
-    try {
-        const content = await fileApi.read(path, PANEL_ID);
-        if (!content) return [];
-        const parsed: unknown = JSON.parse(content);
-        if (!Array.isArray(parsed)) return [];
-        const entries: { name: string; uuid?: string }[] = [];
-        for (const entry of parsed) {
-            if (entry && typeof entry.name === "string") {
-                entries.push({
-                    name: entry.name,
-                    uuid: typeof entry.uuid === "string" ? entry.uuid : undefined,
-                });
-            }
-        }
-        return entries;
-    } catch (err) {
-        console.error(`[Players] Failed to read ${path}:`, err);
-        return [];
-    }
+// a running server takes op and whitelist through its console, a stopped
+// one has its files edited; only a server between the two must wait
+function canEditLists(): boolean {
+    const status = serverStatus();
+    return status === "online" || status === "starting" || status === "offline";
 }
 
 function formatPlaytime(seconds: number | undefined): string {
@@ -111,6 +101,10 @@ const SORT_LABELS: Record<SortKey, string> = {
 export default function Players() {
     const [players, setPlayers] = createSignal<PlayerInfo[]>([]);
     const [bannedNames, setBannedNames] = createSignal<Set<string>>(new Set());
+    // the names players have now, by uuid: a renamed player is shown by
+    // their new name even before they rejoin
+    const [currentNames, setCurrentNames] = createSignal<Map<string, string>>(new Map());
+    const requestedNames = new Set<string>();
     const [showOnline, setShowOnline] = createSignal(true);
     const [showWhitelisted, setShowWhitelisted] = createSignal(true);
     const [showOp, setShowOp] = createSignal(true);
@@ -128,7 +122,71 @@ export default function Players() {
     // re-verify ban state after a written command; tracked so unmount clears it
     let banRecheckTimer: ReturnType<typeof setTimeout> | null = null;
 
-    onMount(async () => {
+    const nameOf = (player: PlayerInfo) =>
+        (player.uuid && currentNames().get(player.uuid.toLowerCase())) || player.name;
+
+    // rows keep their objects (PlayerRoster rebuilds a row whose object
+    // changes), so a new name replaces only the renamed player's entry
+    const withCurrentNames = (list: PlayerInfo[]) =>
+        list.map((p) => (nameOf(p) === p.name ? p : { ...p, name: nameOf(p) }));
+
+    // asks Mojang (through the service) once per uuid per visit; the
+    // service caches answers for an hour
+    const refreshNames = (uuids: string[]) => {
+        const wanted = uuids.map((u) => u.toLowerCase()).filter((u) => !requestedNames.has(u));
+        if (wanted.length === 0) return;
+        for (const uuid of wanted) requestedNames.add(uuid);
+        serverBridge
+            .call<Record<string, string>>(ACTION_IDS.currentPlayerNames, { uuids: wanted })
+            .then((names) => {
+                const entries = Object.entries(names ?? {});
+                if (entries.length === 0) return;
+                // keep the open player open under their new name
+                const open = openPlayer();
+                setCurrentNames((prev) => {
+                    const next = new Map(prev);
+                    for (const [uuid, name] of entries) next.set(uuid.toLowerCase(), name);
+                    return next;
+                });
+                // a ban is shown by name: carry it over to the new one
+                const renamed = players().filter((p) => p.uuid && names[p.uuid.toLowerCase()]);
+                setBannedNames((prev) => {
+                    const next = new Set(prev);
+                    for (const p of renamed) {
+                        if (!next.delete(p.name.toLowerCase())) continue;
+                        next.add(names[p.uuid!.toLowerCase()].toLowerCase());
+                    }
+                    return next;
+                });
+                setPlayers(withCurrentNames);
+                if (open?.uuid && names[open.uuid.toLowerCase()]) {
+                    setOpenPlayerName(names[open.uuid.toLowerCase()]);
+                }
+            })
+            .catch((err) => {
+                const message = err instanceof Error ? err.message : String(err);
+                console.error("[Players] current-player-names failed:", message);
+                setFeedback(message);
+            });
+    };
+
+    // whitelist, operators and bans, by uuid, from the service; the files
+    // are the truth, so this runs again after anything that changes them
+    const loadRoster = async (): Promise<void> => {
+        try {
+            const roster = (await serverBridge.call<RosterEntry[]>(ACTION_IDS.listRoster)) ?? [];
+            const listed = withCurrentNames(roster.map(({ banned: _banned, ...player }) => player));
+            setPlayers(listed);
+            setBannedNames(new Set(listed.filter((_, i) => roster[i].banned).map((p) => p.name.toLowerCase())));
+            refreshNames(roster.map((p) => p.uuid));
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error("[Players] list-roster failed:", message);
+            setFeedback(message);
+        }
+    };
+
+    onMount(() => {
         queryOnlinePlayers();
         loadPlayerStats();
         const poll = setInterval(queryOnlinePlayers, LIST_POLL_MS);
@@ -138,56 +196,38 @@ export default function Players() {
             clearInterval(statsPoll);
             if (banRecheckTimer) clearTimeout(banRecheckTimer);
         });
-
-        const [whitelisted, ops, cached, banned] = await Promise.all([
-            loadJsonEntries("whitelist.json"),
-            loadJsonEntries("ops.json"),
-            loadJsonEntries("usercache.json"),
-            loadJsonEntries("banned-players.json"),
-        ]);
-
-        const whitelistSet = new Set(whitelisted.map((e) => e.name.toLowerCase()));
-        const opSet = new Set(ops.map((n) => n.name.toLowerCase()));
-        setBannedNames(new Set(banned.map((n) => n.name.toLowerCase())));
-
-        const byKey = new Map<string, PlayerInfo>();
-        for (const entry of [...cached, ...whitelisted, ...ops]) {
-            const key = entry.name.toLowerCase();
-            const existing = byKey.get(key);
-            if (existing) {
-                existing.uuid = existing.uuid ?? entry.uuid;
-            } else {
-                byKey.set(key, {
-                    name: entry.name,
-                    uuid: entry.uuid,
-                    whitelisted: whitelistSet.has(key),
-                    op: opSet.has(key),
-                });
-            }
-        }
-        setPlayers([...byKey.values()]);
+        void loadRoster();
     });
 
+    // players known only from their stats files get current names too
+    createEffect(() => refreshNames([...playerStatSummaries().keys()]));
+
+    // the roster is the server's lists plus everyone with data in this
+    // world, one row per uuid; usercache.json is only a name book (the
+    // server keeps writing it back), so a player whose data was deleted
+    // and who is on no list is gone for good
     const allPlayers = () => {
-        const known = players().slice();
-        const listed = new Set(players().map((p) => p.name.toLowerCase()));
+        const byUuid = new Map<string, PlayerInfo>();
+        const known: PlayerInfo[] = [];
+        for (const player of players()) {
+            known.push(player);
+            if (player.uuid) byUuid.set(player.uuid.toLowerCase(), player);
+        }
+        for (const summary of playerStatSummaries().values()) {
+            const uuid = summary.uuid.toLowerCase();
+            if (byUuid.has(uuid)) continue;
+            const entry = { name: summary.name, uuid, whitelisted: false, op: false };
+            entry.name = nameOf(entry);
+            byUuid.set(uuid, entry);
+            known.push(entry);
+        }
+        // online and recently seen players not on file yet (their first
+        // session has not been saved)
+        const listed = new Set(known.map((p) => p.name.toLowerCase()));
         for (const name of [...seenPlayerNames(), ...onlinePlayerNames()]) {
             if (listed.has(name)) continue;
             listed.add(name);
             known.push({ name, whitelisted: false, op: false });
-        }
-        // players discovered only from their stats files (e.g. an expired
-        // usercache entry) still belong on the leaderboard
-        for (const summary of playerStatSummaries().values()) {
-            const key = summary.name.toLowerCase();
-            if (listed.has(key)) continue;
-            listed.add(key);
-            known.push({
-                name: summary.name,
-                uuid: summary.uuid,
-                whitelisted: false,
-                op: false,
-            });
         }
         return known;
     };
@@ -312,8 +352,16 @@ export default function Players() {
             field === "op"
                 ? value ? ACTION_IDS.opPlayer : ACTION_IDS.deopPlayer
                 : value ? ACTION_IDS.whitelistPlayer : ACTION_IDS.unwhitelistPlayer;
-        const ok = await callPlayerAction(actionId, playerName);
+        const uuid = allPlayers().find((p) => p.name === playerName)?.uuid;
+        const ok = await callPlayerAction(actionId, playerName, { uuid });
         if (!ok) return; // state stays as the server reports it
+        // a stopped server's files were edited in place: read them back.
+        // A running one writes them a moment after the command, so the
+        // change is echoed instead
+        if (serverStatus() === "offline") {
+            await loadRoster();
+            return;
+        }
         setPlayers((prev) =>
             prev.map((p) =>
                 p.name.toLowerCase() === playerName.toLowerCase()
@@ -331,11 +379,7 @@ export default function Players() {
         // ban file after a delay so the UI's ban state converges on what
         // the server actually recorded
         if (banRecheckTimer) clearTimeout(banRecheckTimer);
-        banRecheckTimer = setTimeout(() => {
-            void loadJsonEntries("banned-players.json").then((bannedEntries) => {
-                setBannedNames(new Set(bannedEntries.map((n) => n.name.toLowerCase())));
-            });
-        }, 1500);
+        banRecheckTimer = setTimeout(() => void loadRoster(), 1500);
         return result;
     };
 
@@ -354,9 +398,22 @@ export default function Players() {
             setWhitelistError("Names are 1–16 letters, numbers, or underscores.");
             return;
         }
-        const ok = await callPlayerAction(ACTION_IDS.whitelistPlayer, name);
-        if (!ok) {
-            setWhitelistError("The server refused the whitelist command.");
+        try {
+            await serverBridge.call(ACTION_IDS.whitelistPlayer, { player: name });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error(`[Players] whitelist failed for "${name}":`, message);
+            setWhitelistError(message);
+            return;
+        }
+        if (serverStatus() === "offline") {
+            // the file now holds the account's own casing
+            await loadRoster();
+            const added = players().find((p) => p.name.toLowerCase() === name.toLowerCase());
+            setWhitelistName("");
+            setWhitelistError("");
+            setWhitelistOpen(false);
+            setOpenPlayerName(added ? nameOf(added) : name);
             return;
         }
         setPlayers((prev) => {
@@ -394,16 +451,11 @@ export default function Players() {
     const deleteOpenPlayer = async () => {
         const player = openPlayer();
         setDeleteConfirmOpen(false);
-        if (!player?.uuid) return;
+        if (!player) return;
 
-        if (onlinePlayerNames().has(player.name.toLowerCase())) {
-            // best effort: an online player is kicked first; a kick failure
-            // is logged, it must not block the (trash-first) data delete
-            await kickPlayer(player.name, "Your data was deleted");
-        }
-
-        // service-owned: trash-first delete under the actual level-name,
-        // never hardcoded "world/..." paths from the component
+        // service-owned: an online player is kicked and their files saved
+        // out first, then trash-first delete under the actual level-name.
+        // Without a uuid the service resolves one from the server's files
         try {
             await serverBridge.call(ACTION_IDS.deletePlayerData, {
                 player: player.name,
@@ -415,12 +467,14 @@ export default function Players() {
             setFeedback(message);
             return;
         }
+        setFeedback("");
 
         forgetPlayerData(player.name, player.uuid);
-        setPlayers((prev) =>
-            prev.filter((p) => p.name.toLowerCase() !== player.name.toLowerCase()),
-        );
-        setOpenPlayerName(undefined);
+        // a player on the whitelist, an operator or banned stays listed,
+        // now without data; anyone else leaves the roster
+        await loadRoster();
+        loadPlayerStats();
+        if (!allPlayers().some((p) => p.name === player.name)) setOpenPlayerName(undefined);
     };
 
     return (
@@ -444,7 +498,7 @@ export default function Players() {
                     </PaperFlex>
                     <PaperButton
                         variant="primary"
-                        disabled={!isOnline()}
+                        disabled={!canEditLists()}
                         onClick={() => {
                             setWhitelistError("");
                             setWhitelistOpen(true);
@@ -543,7 +597,8 @@ export default function Players() {
                 <PaperText preset="body">
                     This moves this player's inventory, position, and progress to a
                     .trash folder inside the server folder. They will join as a fresh
-                    player.
+                    player. If they are online, they are kicked first. Whitelist,
+                    operator and ban settings stay.
                 </PaperText>
             </PaperModal>
 
@@ -559,7 +614,7 @@ export default function Players() {
                         </PaperButton>
                         <PaperButton
                             variant="primary"
-                            disabled={!isOnline()}
+                            disabled={!canEditLists()}
                             onClick={() => void whitelistNewPlayer()}
                         >
                             Whitelist
@@ -826,7 +881,7 @@ function PlayerInspector(props: {
                         >
                             <PaperToggle
                                 checked={props.player?.op ?? false}
-                                disabled={!isOnline()}
+                                disabled={!canEditLists()}
                                 onChange={(checked) => props.onToggleFlag(name(), "op", checked)}
                             />
                         </PaperSettingItem>
@@ -836,7 +891,7 @@ function PlayerInspector(props: {
                         >
                             <PaperToggle
                                 checked={props.player?.whitelisted ?? false}
-                                disabled={!isOnline()}
+                                disabled={!canEditLists()}
                                 onChange={(checked) =>
                                     props.onToggleFlag(name(), "whitelisted", checked)
                                 }
