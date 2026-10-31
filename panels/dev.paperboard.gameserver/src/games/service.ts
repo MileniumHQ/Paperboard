@@ -4,8 +4,10 @@ import { minecraft } from "./minecraft";
 import { currentServer } from "../service/scope";
 import { defaultGame, gameFor } from "./index";
 import { minecraftService } from "./minecraft/service";
+import { palworld } from "./palworld";
+import { palworldService } from "./palworld/service";
 import type { GameService } from "./serviceTypes";
-const services: Readonly<Record<string, GameService>> = { [minecraft.id]: minecraftService, [terraria.id]: terrariaService };
+const services: Readonly<Record<string, GameService>> = { [minecraft.id]: minecraftService, [terraria.id]: terrariaService, [palworld.id]: palworldService };
 export function gameServiceFor(id: string): GameService {
     const game = gameFor(id);
     const service = services[game.id];

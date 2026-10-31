@@ -5,8 +5,8 @@ import { SOFTWARE_IDS } from "../src/software/catalog";
 import manifest from "../manifest.json";
 
 describe("bundled game modules", () => {
-    test("Minecraft and Terraria are offered; unknown stored games never fall back to it", () => {
-        expect(games.map((game) => game.id)).toEqual(["minecraft", "terraria"]);
+    test("Minecraft, Terraria and Palworld are offered; unknown stored games never fall back to it", () => {
+        expect(games.map((game) => game.id)).toEqual(["minecraft", "terraria", "palworld"]);
         const saved = readServersConfig({ configured: true });
         for (const id of ["factorio", "", "constructor", "__proto__"]) {
             expect(() => gameFor(id)).toThrow(`Unsupported game: ${id}`);
@@ -31,6 +31,14 @@ describe("bundled game modules", () => {
         const { inServer } = await import("../src/service/scope");
         expect(() => gameServiceFor("factorio")).toThrow("Unsupported game: factorio");
         expect(() => inServer({ server: { game: "factorio" } } as any, () => currentGameService())).toThrow("Unsupported game: factorio");
+    });
+
+    test("the page tells what a backup does to a running server the way the game's service does it", async () => {
+        const { gameServiceFor } = await import("../src/games/service");
+        for (const game of games) {
+            const software = game.id === "minecraft" ? "paper" : game.id === "terraria" ? "vanilla" : "";
+            expect(game.describe({ software, version: "" }).backupWhileRunning, game.id).toBe(gameServiceFor(game.id).backup.mode);
+        }
     });
 
     test("metadata bundles for browsers without service or Node dependencies", async () => {

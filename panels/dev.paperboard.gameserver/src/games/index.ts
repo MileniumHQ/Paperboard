@@ -1,9 +1,10 @@
 import { terraria } from "./terraria";
 import { minecraft } from "./minecraft";
+import { palworld } from "./palworld";
 import type { GameDefinition } from "./types";
 export type * from "./types";
 
-export const games: readonly GameDefinition[] = [minecraft, terraria];
+export const games: readonly GameDefinition[] = [minecraft, terraria, palworld];
 export const defaultGame = minecraft;
 /** Never interpret an unknown stored id as another game's files or commands. */
 export function gameFor(id: string): GameDefinition {
