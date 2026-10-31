@@ -3,9 +3,12 @@
 // for each Xbox account as a Minecraft texture. Neither profile endpoint
 // sends CORS headers, so the browser cannot read them directly; the service
 // fetches, composites the head (face + hat) and returns a data URL the panel
-// can draw. Nothing is kept: every lookup asks again, so a changed skin shows
-// the next time a head is drawn. Lookups are concurrency capped — a roster of
-// a hundred players issues a bounded number of requests at a time.
+// can draw. A skin's texture URL names its content (a new skin is a new URL),
+// so heads are kept by that URL and can never show an old skin; which skin a
+// player wears is asked again after a minute, so a changed skin shows within
+// one. Lookups for the same player share one request, and lookups are
+// concurrency capped: a roster of a hundred players issues a bounded number
+// of requests at a time.
 import { apiFetch } from "../lib/userAgent";
 import { composeHeadFromSkin, clampHeadSize } from "../core/skin";
 import { gamertagOf, floodgateUuid, xuidOfFloodgateUuid, type BedrockNaming } from "../core/bedrock";
@@ -17,6 +20,20 @@ const PROFILE_URL = "https://sessionserver.mojang.com/session/minecraft/profile/
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_CONCURRENT = 4;
 const MAX_SKIN_BYTES = 1_024 * 1_024;
+const SKIN_TTL_MS = 60_000;
+const MAX_KEPT = 512;
+
+// uuid → the skin they wore when last asked (null: none); texture URL and
+// size → head. Both are bounded, oldest first out.
+const skins = new Map<string, { url: string | null; at: number }>();
+const heads = new Map<string, string>();
+const inflight = new Map<string, Promise<string | null>>();
+
+function keep<V>(map: Map<string, V>, key: string, value: V): void {
+    map.delete(key);
+    map.set(key, value);
+    while (map.size > MAX_KEPT) map.delete(map.keys().next().value!);
+}
 
 const UUID_DASHED_RE =
     /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -141,13 +158,24 @@ async function resolveHead(
     if (!resolved && name) resolved = (await uuidFromName(name, naming)) ?? "";
     if (!resolved) return null;
 
-    const skinUrl = await skinUrlForUuid(resolved);
-    if (!skinUrl) return null;
-    const bytes = await fetchSkinBytes(skinUrl);
+    let skin = skins.get(resolved);
+    if (!skin || Date.now() - skin.at >= SKIN_TTL_MS) {
+        const url = await skinUrlForUuid(resolved);
+        skin = { url, at: Date.now() };
+        // a failed lookup is asked again next time, not remembered as "no skin"
+        if (url) keep(skins, resolved, skin);
+    }
+    if (!skin.url) return null;
+    const headKey = `${size}:${skin.url}`;
+    const kept = heads.get(headKey);
+    if (kept) return kept;
+    const bytes = await fetchSkinBytes(skin.url);
     if (!bytes) return null;
     const head = composeHeadFromSkin(bytes, size);
     if (!head) return null;
-    return `data:image/png;base64,${Buffer.from(head).toString("base64")}`;
+    const dataUrl = `data:image/png;base64,${Buffer.from(head).toString("base64")}`;
+    keep(heads, headKey, dataUrl);
+    return dataUrl;
 }
 
 /**
@@ -166,12 +194,20 @@ export async function getHeadDataUrl(inputs: {
     const uuid = typeof inputs?.uuid === "string" ? inputs.uuid.trim() : "";
     if (!name && !uuid) return null;
 
-    await acquire();
-    try {
-        const dataUrl = await resolveHead(name, uuid, clampHeadSize(inputs?.size), inputs.naming);
-        if (!dataUrl) console.debug(`[skins] no head for ${uuid || name}`);
-        return dataUrl;
-    } finally {
-        release();
-    }
+    const size = clampHeadSize(inputs?.size);
+    const key = `${size}:${uuid.toLowerCase() || name.toLowerCase()}`;
+    const running = inflight.get(key);
+    if (running) return running;
+    const lookup = (async () => {
+        await acquire();
+        try {
+            const dataUrl = await resolveHead(name, uuid, size, inputs.naming);
+            if (!dataUrl) console.debug(`[skins] no head for ${uuid || name}`);
+            return dataUrl;
+        } finally {
+            release();
+        }
+    })().finally(() => inflight.delete(key));
+    inflight.set(key, lookup);
+    return lookup;
 }

@@ -2,9 +2,10 @@
 // server answering for Mojang, GeyserMC's global API and the texture CDN the
 // way the real ones do (checked with curl: skin/<xuid> → {texture_id, ...},
 // or {} when GeyserMC holds no skin). A Java uuid's skin comes from Mojang, a
-// Floodgate uuid's from GeyserMC, and nothing is kept between lookups: a
-// changed skin shows on the next one. Only the daemon's file API is replaced.
-import { afterAll, beforeEach, describe, expect, it, mock } from "bun:test";
+// Floodgate uuid's from GeyserMC. A texture URL is a hash of the skin, so a
+// changed skin is a new URL: heads are kept by URL, and which skin a player
+// wears is asked again after a minute. Only the daemon's file API is replaced.
+import { afterAll, afterEach, beforeEach, describe, expect, it, mock, setSystemTime } from "bun:test";
 import { PNG } from "pngjs";
 
 mock.module("../src/service/api", () => {
@@ -34,6 +35,7 @@ function skinPng([r, g, b]: [number, number, number]): Uint8Array {
     return PNG.sync.write(png);
 }
 
+let javaTexture = "a1a1a1";
 let bedrockSkins = new Map<string, string>([[TIM_XUID, "5a82069695be4bb61de2bda14a51e531347b60942a1d265358be77a3e8e2dd38"]]);
 const requests: string[] = [];
 const upstream = Bun.serve({
@@ -45,7 +47,7 @@ const upstream = Bun.serve({
         const tail = pathname.slice(pathname.lastIndexOf("/") + 1);
         if (pathname.startsWith("/session/session/minecraft/profile/")) {
             if (tail !== JAVA.replace(/-/g, "")) return new Response(null, { status: 204 });
-            const textures = { textures: { SKIN: { url: "http://textures.minecraft.net/texture/a1a1a1" } } };
+            const textures = { textures: { SKIN: { url: `http://textures.minecraft.net/texture/${javaTexture}` } } };
             return Response.json({ id: tail, name: "Notch", properties: [{ name: "textures", value: Buffer.from(JSON.stringify(textures)).toString("base64") }] });
         }
         if (pathname.startsWith("/geysermc/v2/skin/")) {
@@ -94,12 +96,19 @@ function centre(dataUrl: string | null): number[] {
     return [png.data[i], png.data[i + 1], png.data[i + 2]];
 }
 
+// every test starts a minute after the last, so no skin is still fresh
+let clock = Date.parse("2026-10-30T00:00:00Z");
 beforeEach(() => {
+    clock += 120_000;
+    setSystemTime(new Date(clock));
+    javaTexture = "a1a1a1";
     requests.length = 0;
     bedrockSkins = new Map([[TIM_XUID, "5a82069695be4bb61de2bda14a51e531347b60942a1d265358be77a3e8e2dd38"]]);
     colours.set("a1a1a1", [200, 0, 0]);
     colours.set("5a82069695be4bb61de2bda14a51e531347b60942a1d265358be77a3e8e2dd38", [0, 0, 200]);
+    colours.set("b2b2b2", [0, 200, 0]);
 });
+afterEach(() => setSystemTime());
 
 describe("player heads", () => {
     it("cuts a Java player's head from their Mojang skin", async () => {
@@ -122,10 +131,37 @@ describe("player heads", () => {
         expect(await getHeadDataUrl({ name: ".Tim203", uuid: TIM, naming: crossplay })).toBeNull();
     });
 
-    it("asks again on every lookup, so a changed skin shows at once", async () => {
+    it("shows a changed skin within a minute", async () => {
         expect(centre(await getHeadDataUrl({ name: "Notch", uuid: JAVA, naming: noCrossplay }))).toEqual([200, 0, 0]);
-        colours.set("a1a1a1", [0, 200, 0]);
+        javaTexture = "b2b2b2";
+        setSystemTime(new Date(clock + 60_000));
         expect(centre(await getHeadDataUrl({ name: "Notch", uuid: JAVA, naming: noCrossplay }))).toEqual([0, 200, 0]);
-        expect(requests).toHaveLength(4);
+    });
+
+    it("draws a head it has drawn before without asking for the skin again", async () => {
+        // a skin no earlier test drew
+        javaTexture = "c3c3c3";
+        colours.set("c3c3c3", [90, 90, 90]);
+        await getHeadDataUrl({ name: "Notch", uuid: JAVA, naming: noCrossplay });
+        setSystemTime(new Date(clock + 30_000));
+        expect(centre(await getHeadDataUrl({ name: "Notch", uuid: JAVA, naming: noCrossplay }))).toEqual([90, 90, 90]);
+        // past the minute the profile is asked again; the same skin is not downloaded again
+        setSystemTime(new Date(clock + 60_000));
+        expect(centre(await getHeadDataUrl({ name: "Notch", uuid: JAVA, naming: noCrossplay }))).toEqual([90, 90, 90]);
+        const profile = `/session/session/minecraft/profile/${JAVA.replace(/-/g, "")}`;
+        expect(requests).toEqual([profile, "/textures/texture/c3c3c3", profile]);
+    });
+
+    it("shares one lookup between everything drawing the same player at once", async () => {
+        const drawn = await Promise.all([1, 2, 3].map(() => getHeadDataUrl({ name: ".Tim203", uuid: TIM, naming: crossplay })));
+        expect(drawn.map(centre)).toEqual([[0, 0, 200], [0, 0, 200], [0, 0, 200]]);
+        expect(requests.filter((r) => r.startsWith("/geysermc/v2/skin/"))).toHaveLength(1);
+    });
+
+    it("asks again after a lookup that found nothing", async () => {
+        bedrockSkins.clear();
+        expect(await getHeadDataUrl({ name: ".Tim203", uuid: TIM, naming: crossplay })).toBeNull();
+        bedrockSkins.set(TIM_XUID, "5a82069695be4bb61de2bda14a51e531347b60942a1d265358be77a3e8e2dd38");
+        expect(centre(await getHeadDataUrl({ name: ".Tim203", uuid: TIM, naming: crossplay }))).toEqual([0, 0, 200]);
     });
 });
