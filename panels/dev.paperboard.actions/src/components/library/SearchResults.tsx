@@ -1,6 +1,6 @@
 // A Library search: every match, grouped under the category it came from.
 import { For, Show } from "solid-js";
-import { PaperBadge, PaperIcon, PaperText } from "@mileniumhq/paperui";
+import { PaperBadge, PaperEmptyState, PaperIcon, PaperText } from "@mileniumhq/paperui";
 import type { SearchGroup } from "../../lib/libraryCategories";
 import LibraryItem, { type LibraryPress } from "./LibraryItem";
 
@@ -8,12 +8,7 @@ export default function SearchResults(props: { search: string; groups: SearchGro
     return (
         <>
             <Show when={props.groups.length === 0}>
-                <div class="library-empty">
-                    <PaperIcon>search_off</PaperIcon>
-                    <PaperText preset="body">
-                        No actions matching "{props.search}"
-                    </PaperText>
-                </div>
+                <PaperEmptyState icon="search_off" title={`No actions matching "${props.search}"`} />
             </Show>
 
             <For each={props.groups}>
@@ -26,7 +21,7 @@ export default function SearchResults(props: { search: string; groups: SearchGro
                             <Show when={!group.categoryIconUrl}>
                                 <PaperIcon>{group.categoryIcon}</PaperIcon>
                             </Show>
-                            <PaperText size={2} weight={700}>
+                            <PaperText preset="heading">
                                 {group.categoryName}
                             </PaperText>
                             <PaperBadge variant="monochrome">

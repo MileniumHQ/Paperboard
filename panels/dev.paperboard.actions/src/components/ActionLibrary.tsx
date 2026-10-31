@@ -348,7 +348,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                                     {currentCategory()?.icon || "extension"}
                                                 </PaperIcon>
                                             </Show>
-                                            <PaperText preset="header-small">
+                                            <PaperText preset="heading">
                                                 {selectedCategoryId() === "functions"
                                                     ? "Functions"
                                                     : currentCategory()?.name}
@@ -368,7 +368,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                             gap="half"
                                         >
                                             <PaperIcon>search</PaperIcon>
-                                            <PaperText preset="header-small">
+                                            <PaperText preset="heading">
                                                 Search
                                             </PaperText>
                                             <PaperBadge variant="monochrome">

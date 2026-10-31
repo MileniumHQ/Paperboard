@@ -229,7 +229,7 @@ export default function ActionBlock(props: ActionBlockProps) {
                 {(message) => (
                     <div class="actionDeprecated" role="note">
                         <PaperIcon aria-hidden="true">warning</PaperIcon>
-                        <PaperText size={2}>{message()}</PaperText>
+                        <PaperText preset="hint" color="warning-deep">{message()}</PaperText>
                     </div>
                 )}
             </Show>
@@ -239,7 +239,7 @@ export default function ActionBlock(props: ActionBlockProps) {
                     {(problem) => (
                         <div class="actionProblem">
                             <PaperIcon aria-hidden="true">error</PaperIcon>
-                            <PaperText size={2}>{problem.message}</PaperText>
+                            <PaperText preset="error">{problem.message}</PaperText>
                         </div>
                     )}
                 </For>
@@ -276,7 +276,7 @@ export default function ActionBlock(props: ActionBlockProps) {
                                 const def = schemaInputs()[key];
                                 return (
                                     <div class={`actionMoreOptionsRow ${def?.multiline ? "isMultiline" : ""}`}>
-                                        <PaperText size={3} weight={500}>
+                                        <PaperText preset="text">
                                             {def?.label || formatFallbackLabel(key)}
                                         </PaperText>
                                         {renderInputPill(
@@ -313,7 +313,7 @@ export default function ActionBlock(props: ActionBlockProps) {
                 <FlowBranch block={props} blocks={props.children} isHoverIndex={isHoverIndex} />
 
                 <Show when={props.action.id === "if-else" || props.action.id === "try-catch"}>
-                    <PaperText size={3} weight={500} class="ifElsePlain">
+                    <PaperText preset="text" class="ifElsePlain">
                         {props.action.id === "try-catch" ? "catch" : "else"}
                     </PaperText>
 

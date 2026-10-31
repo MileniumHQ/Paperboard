@@ -95,7 +95,7 @@ export default function FunctionModal(props: {
                         onInput={(e) => setDraftName(e.currentTarget.value)}
                     />
                     <Show when={editingId()}>
-                        <PaperText preset="body" color="text-subtle">
+                        <PaperText preset="hint">
                             Renaming updates every flow that uses this function.
                         </PaperText>
                     </Show>
@@ -109,7 +109,7 @@ export default function FunctionModal(props: {
                             align="center"
                             fullWidth
                         >
-                            <PaperText size={3} weight={700}>
+                            <PaperText preset="heading">
                                 Parameters
                             </PaperText>
                             <PaperButton
@@ -125,7 +125,7 @@ export default function FunctionModal(props: {
                         </PaperFlex>
     
                         <Show when={draftParams.length === 0}>
-                            <PaperText preset="body" color="text-subtle">
+                            <PaperText preset="hint">
                                 Parameters become variables other actions can read.
                             </PaperText>
                         </Show>

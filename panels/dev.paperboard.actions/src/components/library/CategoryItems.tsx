@@ -1,7 +1,7 @@
 // The blocks of the chosen Library category: a panel's, in its sections (its
 // global blocks and the shown project's), or a builtin category's list.
 import { For, Show } from "solid-js";
-import { PaperBadge, PaperIcon, PaperText } from "@mileniumhq/paperui";
+import { PaperBadge, PaperEmptyState, PaperIcon, PaperText } from "@mileniumhq/paperui";
 import type { Category } from "../../lib/libraryCategories";
 import type { LibrarySection } from "../../lib/librarySections";
 import { isBuiltinTrigger } from "../../lib/libraryCategories";
@@ -25,7 +25,7 @@ export default function CategoryItems(props: { category: Category | undefined; s
                                     <PaperIcon>
                                         {section.icon || "category"}
                                     </PaperIcon>
-                                    <PaperText size={2} weight={700}>
+                                    <PaperText preset="heading">
                                         {section.name}
                                     </PaperText>
                                     <PaperBadge variant="monochrome">
@@ -54,12 +54,7 @@ export default function CategoryItems(props: { category: Category | undefined; s
                 {(category) => (
                     <>
                         <Show when={category().items.length === 0}>
-                            <div class="library-empty">
-                                <PaperIcon>extension_off</PaperIcon>
-                                <PaperText preset="body">
-                                    No actions in this category
-                                </PaperText>
-                            </div>
+                            <PaperEmptyState icon="extension_off" title="No actions in this category" />
                         </Show>
 
                         <For each={category().items}>

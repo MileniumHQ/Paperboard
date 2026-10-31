@@ -160,16 +160,6 @@
     gap: var(--paper-uigap-onefourth);
 }
 
-.library-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--paper-uigap-half);
-    padding: var(--paper-uigap-quadruple) 0;
-    opacity: var(--paper-opacity-disabled);
-}
-
 .library-block-wrapper {
     position: relative;
     cursor: grab;

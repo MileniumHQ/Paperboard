@@ -56,7 +56,7 @@ export default function ConsolePanel(props: { log: ConsoleLog }) {
                 <div class="canvas-console-header">
                     <div class="canvas-console-title">
                         <PaperIcon class="canvas-console-icon">terminal</PaperIcon>
-                        <PaperText size={1} weight={700}>Console</PaperText>
+                        <PaperText preset="heading">Console</PaperText>
                     </div>
                     <PaperButton size="tiny" icon onClick={() => props.log.clear()} title="Clear Console">
                         <PaperIcon>delete_sweep</PaperIcon>

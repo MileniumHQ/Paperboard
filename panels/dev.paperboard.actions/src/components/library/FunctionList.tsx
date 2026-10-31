@@ -1,7 +1,7 @@
 // The Functions category: each function's trigger and call blocks, with
 // rename and delete beside its name.
 import { For, Show } from "solid-js";
-import { PaperBadge, PaperButton, PaperIcon, PaperText } from "@mileniumhq/paperui";
+import { PaperBadge, PaperButton, PaperEmptyState, PaperIcon, PaperText } from "@mileniumhq/paperui";
 import type { ActionInfo } from "@mileniumhq/paperapi";
 import { buildCallSchema, buildTriggerSchema, type FunctionDef } from "../../lib/functions";
 import LibraryItem, { type LibraryPress } from "./LibraryItem";
@@ -25,25 +25,16 @@ export default function FunctionList(props: {
             </Show>
 
             <Show when={props.functions.length === 0}>
-                <div class="library-empty">
-                    <PaperIcon>functions</PaperIcon>
-                    <PaperText preset="body">
-                        No functions yet.
-                    </PaperText>
+                <PaperEmptyState icon="functions" title="No functions yet">
                     <PaperButton size="tiny" onClick={props.onCreate}>
                         <PaperIcon>add</PaperIcon>
                         Create Function
                     </PaperButton>
-                </div>
+                </PaperEmptyState>
             </Show>
 
             <Show when={props.shown.length === 0 && props.functions.length > 0}>
-                <div class="library-empty">
-                    <PaperIcon>search_off</PaperIcon>
-                    <PaperText preset="body">
-                        No functions matching "{props.search}"
-                    </PaperText>
-                </div>
+                <PaperEmptyState icon="search_off" title={`No functions matching "${props.search}"`} />
             </Show>
 
             <For each={props.shown}>
@@ -55,7 +46,7 @@ export default function FunctionList(props: {
                             <div class="library-function-header">
                                 <div class="library-function-title">
                                     <PaperIcon>functions</PaperIcon>
-                                    <PaperText size={2} weight={700}>
+                                    <PaperText preset="heading">
                                         {fn.name}
                                     </PaperText>
                                     <PaperBadge variant="monochrome">
@@ -78,7 +69,7 @@ export default function FunctionList(props: {
                                 </div>
                             </div>
 
-                            <PaperText size={1} color="text-subtle" class="library-function-caption">
+                            <PaperText preset="section" class="library-function-caption">
                                 Trigger
                             </PaperText>
                             <LibraryItem
@@ -87,7 +78,7 @@ export default function FunctionList(props: {
                                 onPress={props.onPress}
                             />
 
-                            <PaperText size={1} color="text-subtle" class="library-function-caption">
+                            <PaperText preset="section" class="library-function-caption">
                                 Call
                             </PaperText>
                             <LibraryItem

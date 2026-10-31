@@ -164,7 +164,7 @@ export function DeleteProjectModal(props: {
             }
         >
             <PaperFlex direction="column" gap="half">
-                <PaperText preset="body">
+                <PaperText preset="text">
                     "{props.project?.name}" and its {props.project?.flowCount === 1 ? "flow" : `${props.project?.flowCount ?? 0} flows`} will be deleted.
                     This can't be undone; a backup made before now still has it.
                 </PaperText>

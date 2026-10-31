@@ -205,10 +205,10 @@ export function createCanvasFileActions(props: {
             }
         >
             <PaperFlex direction="column" gap="half">
-                <PaperText preset="body">Loading a backup replaces every project, with its flows, notes, functions and variables, with the backup's. Flows running now stop.</PaperText>
+                <PaperText preset="text">Loading a backup replaces every project, with its flows, notes, functions and variables, with the backup's. Flows running now stop.</PaperText>
                 <Show when={backups()} fallback={<Show when={!loadError()}><PaperLoader loaderStatus="indeterminate" size="small" label="Loading backups" /></Show>}>
                     {(list) => (
-                        <Show when={list().length > 0} fallback={<PaperText size={2} color="text-subtle">No backups here yet. Make one with File, then Create backup.</PaperText>}>
+                        <Show when={list().length > 0} fallback={<PaperText preset="hint">No backups here yet. Make one with File, then Create backup.</PaperText>}>
                             <PaperSelector name="actions-backup" value={selected()} onValueChange={(value) => setSelected(String(value))}>
                                 <For each={list()}>
                                     {(record) => (
@@ -224,7 +224,7 @@ export function createCanvasFileActions(props: {
                 <Show when={status()?.location}>
                     {(location) => (
                         <PaperFlex direction="row" align="center" justify="space-between" gap="half" fullWidth>
-                            <PaperText size={2} color="text-subtle">Kept in {location().label}</PaperText>
+                            <PaperText preset="hint">Kept in {location().label}</PaperText>
                             <PaperButton size="tiny" variant="text" disabled={restoring()} onClick={() => void changeLocation()}>Change</PaperButton>
                         </PaperFlex>
                     )}

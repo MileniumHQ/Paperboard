@@ -101,7 +101,7 @@ export default function NoteBlock(props: NoteBlockProps) {
             <div class="canvas-note-header">
                 <div class="canvas-note-title">
                     <PaperIcon class="canvas-note-icon">edit_note</PaperIcon>
-                    <PaperText size={2} weight={700}>
+                    <PaperText preset="heading" color="warning">
                         Note
                     </PaperText>
                 </div>
