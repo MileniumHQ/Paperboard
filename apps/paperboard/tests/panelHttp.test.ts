@@ -68,6 +68,25 @@ describe("/panel/ asset auth", () => {
         expect(await res.text()).toContain("hi");
     });
 
+    it("answers a request carrying the file's ETag with 304 and no body", async () => {
+        const auth = { Authorization: `Bearer ${TOKEN}` };
+        const first = await fetch(`${base}/panel/testpanel/index.html`, { headers: auth });
+        const etag = first.headers.get("etag");
+        expect(etag).toBeTruthy();
+        expect(first.headers.get("cache-control")).toBe("no-cache");
+        await first.text();
+        const again = await fetch(`${base}/panel/testpanel/index.html`, { headers: { ...auth, "If-None-Match": etag! } });
+        expect(again.status).toBe(304);
+        expect(await again.text()).toBe("");
+        // a changed file is a new ETag, so it comes in full
+        const file = path.join(tmp, "panels", "testpanel", "dist", "index.html");
+        fs.writeFileSync(file, "<html><body>hi again</body></html>");
+        const changed = await fetch(`${base}/panel/testpanel/index.html`, { headers: { ...auth, "If-None-Match": etag! } });
+        expect(changed.status).toBe(200);
+        expect(await changed.text()).toContain("hi again");
+        fs.writeFileSync(file, "<html><body>hi</body></html>");
+    });
+
     it("shares the panel:// resolver's traversal vectors (one implementation)", async () => {
         const sentinel = path.join(tmp, "outside-http.txt");
         fs.writeFileSync(sentinel, "secret");

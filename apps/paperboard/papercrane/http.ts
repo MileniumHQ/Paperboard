@@ -176,10 +176,25 @@ export function handleHttpRequest(
         const ext = path.extname(filePath).toLowerCase();
         const contentType = lookupMime(ext);
 
+        // a panel's files change only when it's installed or updated, so a
+        // client that has one asks again with its ETag and gets a 304
+        // instead of the file (remote computers pay for every byte)
+        const stat = fs.statSync(filePath);
+        const etag = `W/"${stat.size.toString(36)}-${Math.floor(stat.mtimeMs).toString(36)}"`;
         const headers: Record<string, string> = {
             "Content-Type": contentType,
+            "Content-Length": String(stat.size),
             "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-cache",
+            ETag: etag,
+            "Last-Modified": stat.mtime.toUTCString(),
         };
+        const ifNoneMatch = req.headers["if-none-match"];
+        if (ifNoneMatch && (ifNoneMatch.trim() === "*" || ifNoneMatch.split(",").some((tag) => tag.trim() === etag))) {
+            res.writeHead(304, { ETag: etag, "Cache-Control": "no-cache" });
+            res.end();
+            return;
+        }
         // one fixed panel CSP (panelNet) — same builder electron uses
         if (ext === ".html") {
             headers["Content-Security-Policy"] = [
