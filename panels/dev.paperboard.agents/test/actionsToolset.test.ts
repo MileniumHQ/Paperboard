@@ -54,11 +54,20 @@ describe("listing actions", () => {
         expect(bot.actions[0]).toMatchObject({ action: "send-message", output: "string" });
     });
 
-    test("the agent's own actions, internal, deprecated and schema-less ones are never listed", async () => {
+    test("internal, deprecated and schema-less actions are never listed", async () => {
         const { set } = fake(registry);
         // the actions panel's only listable entry here is its event
         expect((await listOf(set, { panel: "dev.paperboard.actions" })).actions.map((a: any) => a.action)).toEqual(["on-output"]);
-        expect(await set.call("list_actions", { panel: "dev.paperboard.agents" })).toMatchObject({ isError: true });
+    });
+
+    test("the agent's own actions are listed as flow-only, so it can build a flow that texts it", async () => {
+        const { set } = fake(registry);
+        const own = await listOf(set, { panel: "dev.paperboard.agents" });
+        expect(own.actions).toEqual([expect.objectContaining({ action: "send-message", flowOnly: true })]);
+        expect(await set.instructions!()).toContain("dev.paperboard.agents");
+        // other panels' actions aren't marked
+        const bot = await listOf(set, { panel: "dev.paperboard.botcreator" });
+        expect(bot.actions.every((a: any) => a.flowOnly === undefined)).toBe(true);
     });
 
     test("events are listed as events, with the fields a flow started by one reads", async () => {
@@ -104,7 +113,6 @@ describe("running actions", () => {
     test("what the agent can't find it can't run, even when it names it directly", async () => {
         const { set, calls } = fake(registry);
         for (const [panel, action] of [
-            ["dev.paperboard.agents", "send-message"], // itself
             ["dev.paperboard.actions", "ui-hidden"], // internal
             ["dev.paperboard.actions", "old"], // deprecated
             ["dev.paperboard.actions", "state:get"], // plumbing
@@ -113,6 +121,12 @@ describe("running actions", () => {
         ]) {
             expect(await set.call("run_action", { panel, action })).toMatchObject({ isError: true, text: expect.stringContaining("isn't an action you can run") });
         }
+        expect(calls).toEqual([]);
+    });
+
+    test("the agent's own action is found but never run: texting itself is a loop", async () => {
+        const { set, calls } = fake(registry);
+        expect(await set.call("run_action", { panel: "dev.paperboard.agents", action: "send-message" })).toMatchObject({ isError: true, text: expect.stringContaining("place it in a flow") });
         expect(calls).toEqual([]);
     });
 
