@@ -160,11 +160,11 @@ export default function Overview(props: OverviewProps) {
 
                             <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
                                 <PaperFlex direction="row" gap="half" align="baseline" wrap>
-                                    <PaperText weight={700} size={6}>
+                                    <PaperText preset="title">
                                         {props.bot().name}
                                     </PaperText>
                                     <Show when={tag() && tag() !== props.bot().name}>
-                                        <PaperText size={3} color="text-subtle">
+                                        <PaperText preset="hint">
                                             @{tag()}
                                         </PaperText>
                                     </Show>
@@ -175,7 +175,7 @@ export default function Overview(props: OverviewProps) {
 
                                 <Show when={props.bot().applicationId}>
                                     <PaperFlex direction="row" gap="half" align="center">
-                                        <PaperText size={2} color="text-subtle" family="code">
+                                        <PaperText preset="hint" family="code">
                                             {props.bot().applicationId}
                                         </PaperText>
                                         <PaperCopyButton text={props.bot().applicationId} title="Copy application ID" />
@@ -212,10 +212,10 @@ export default function Overview(props: OverviewProps) {
             <PaperCard>
                 <PaperFlex direction="column" gap="half" padding="full">
                     <PaperFlex direction="row" justify="space-between" align="center">
-                                <PaperText weight={700} size={5}>
+                                <PaperText preset="heading">
                                     Health
                                 </PaperText>
-                                <PaperText size={2} color="text-subtle">
+                                <PaperText preset="hint">
                                     Refreshes every {HEALTH_POLL_MS / 1000}s
                                 </PaperText>
                             </PaperFlex>
@@ -230,7 +230,7 @@ export default function Overview(props: OverviewProps) {
                                 when={health()}
                                 fallback={
                                     <Show when={!healthError()}>
-                                        <PaperText size={2} color="text-subtle">
+                                        <PaperText preset="hint">
                                             Checking health…
                                         </PaperText>
                                     </Show>
@@ -290,13 +290,13 @@ export default function Overview(props: OverviewProps) {
             <Show when={recent().length > 0}>
                 <PaperCard>
                     <PaperFlex direction="column" gap="half" padding="full">
-                        <PaperText weight={700} size={5}>
+                        <PaperText preset="heading">
                             Recent messages
                         </PaperText>
                         <For each={recent()}>
                             {(msg) => (
-                                <PaperText size={3}>
-                                    <PaperText as="span" size={3} color="text-subtle">
+                                <PaperText preset="text">
+                                    <PaperText as="span" preset="text" color="text-subtle">
                                         {msg.author}:
                                     </PaperText>{" "}
                                     {msg.content || "(no text)"}

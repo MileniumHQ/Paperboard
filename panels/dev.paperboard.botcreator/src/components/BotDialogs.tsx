@@ -92,7 +92,7 @@ export function NewBotModal(props: {
         >
             <form onSubmit={(e) => { e.preventDefault(); void submit(); }}>
                 <PaperFlex direction="column" gap="full">
-                    <PaperText preset="body">
+                    <PaperText preset="text">
                         Each bot is its own Discord application. Make one in the{" "}
                         <PaperLink href={PORTAL_URL} target="_blank">Discord Developer Portal</PaperLink>:
                     </PaperText>
@@ -174,7 +174,7 @@ export function ReplaceTokenModal(props: {
         >
             <form onSubmit={(e) => { e.preventDefault(); void submit(); }}>
                 <PaperFlex direction="column" gap="half">
-                    <PaperText preset="body">
+                    <PaperText preset="text">
                         After you reset {props.bot?.name}'s token in the Developer Portal, paste the new one here. Its commands and flows stay as they are.
                     </PaperText>
                     <TokenField value={token()} onInput={setToken} appId={appId()} expectedAppId={props.bot?.applicationId || undefined} />
@@ -227,7 +227,7 @@ export function DeleteBotModal(props: {
             }
         >
             <PaperFlex direction="column" gap="half">
-                <PaperText preset="body">
+                <PaperText preset="text">
                     {props.bot?.name} goes offline, and its token and slash commands are deleted from Paperboard.
                     Flows that use it stop working. The application stays in the Discord Developer Portal.
                 </PaperText>

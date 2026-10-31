@@ -90,7 +90,7 @@ export default function Invite(props: { bot: () => BotSummary }) {
         perms: typeof PERMISSION_DEFINITIONS,
     ) => (
         <PaperCard padding="full" gap="half">
-            <PaperText weight={700} size={3}>
+            <PaperText preset="label">
                 {title}
             </PaperText>
             <PaperSeparator />
@@ -123,7 +123,7 @@ export default function Invite(props: { bot: () => BotSummary }) {
             <PaperCard>
                 <PaperFlex direction="row" padding="full" gap="full" align="center">
                     <PaperFlex flex minWidth={0}>
-                        <PaperText size={3} weight={500} truncate>
+                        <PaperText preset="text" truncate>
                             {inviteUrl() || (inviteError() ? "No invite link" : "Generating invite link…")}
                         </PaperText>
                     </PaperFlex>
@@ -153,10 +153,10 @@ export default function Invite(props: { bot: () => BotSummary }) {
 
             <PaperCard>
                 <PaperFlex direction="column" padding="full" gap="half">
-                    <PaperText weight={700} size={3}>
+                    <PaperText preset="label">
                         Install on your account
                     </PaperText>
-                    <PaperText size={2} color="text-subtle">
+                    <PaperText preset="hint">
                         For user-app commands: installs the app for one user
                         instead of a server, so its commands work in DMs and
                         group chats. Needs User Install enabled in the Discord
@@ -169,7 +169,7 @@ export default function Invite(props: { bot: () => BotSummary }) {
                     </Show>
                     <PaperFlex direction="row" gap="full" align="center">
                         <PaperFlex flex minWidth={0}>
-                            <PaperText size={3} weight={500} truncate>
+                            <PaperText preset="text" truncate>
                                 {userInstallUrl() || (userInstallError() ? "No install link" : "Generating user install link…")}
                             </PaperText>
                         </PaperFlex>

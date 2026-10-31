@@ -32,7 +32,7 @@ export default function Configuration(props: ConfigurationProps) {
                     title="Application ID"
                     description="The Discord Snowflake ID for this bot"
                 >
-                    <PaperText size={3} color="text-subtle">
+                    <PaperText preset="hint">
                         {props.bot().applicationId || "Unknown"}
                     </PaperText>
                 </PaperSettingItem>

@@ -6,6 +6,7 @@ import {
     PaperAvatar,
     PaperButton,
     PaperCard,
+    PaperEmptyState,
     PaperIcon,
     PaperBadge,
     PaperInput,
@@ -290,15 +291,11 @@ export default function Servers(props: { bot: () => BotSummary }) {
                             when={guilds().length > 0 || listError()}
                             fallback={
                                 <PaperCard>
-                                    <PaperFlex padding="double" center direction="column" gap="half">
-                                        <PaperText size={4} weight={600}>
-                                            {loadingList() ? "Loading servers…" : "No servers"}
-                                        </PaperText>
-                                        <PaperText size={2} color="text-subtle">
-                                            Invite the bot to a server from the Invite tab and
-                                            it will show up here.
-                                        </PaperText>
-                                    </PaperFlex>
+                                    <PaperEmptyState
+                                        icon="dns"
+                                        title={loadingList() ? "Loading servers…" : "No servers"}
+                                        description="Invite the bot to a server from the Invite tab and it will show up here."
+                                    />
                                 </PaperCard>
                             }
                         >
@@ -322,7 +319,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                         <Show when={detailLoading()}>
                             <PaperCard>
                                 <PaperFlex padding="double" center>
-                                    <PaperText size={3} color="text-subtle">
+                                    <PaperText preset="hint">
                                         Loading server…
                                     </PaperText>
                                 </PaperFlex>
@@ -347,11 +344,11 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                             />
 
                                             <PaperFlex direction="column" gap="half" flex minWidth={0}>
-                                                <PaperText weight={700} size={6}>
+                                                <PaperText preset="title">
                                                     {guild().name}
                                                 </PaperText>
                                                 <PaperFlex direction="row" gap="half" align="center" wrap>
-                                                    <PaperText size={2} color="text-subtle" family="code">
+                                                    <PaperText preset="hint" family="code">
                                                         {guild().id}
                                                     </PaperText>
                                                     <PaperCopyButton text={guild().id} title="Copy server ID" />
@@ -376,7 +373,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
 
                                     <PaperCard>
                                         <PaperFlex direction="column" gap="half" padding="full">
-                                            <PaperText weight={700} size={5}>
+                                            <PaperText preset="heading">
                                                 Channels
                                             </PaperText>
                                             <For each={channelGroups()}>
@@ -395,10 +392,10 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                                                     <PaperIcon>
                                                                         {CHANNEL_KIND_ICONS[channel.kind]}
                                                                     </PaperIcon>
-                                                                    <PaperText size={3}>
+                                                                    <PaperText preset="text">
                                                                         {channel.name}
                                                                     </PaperText>
-                                                                    <PaperText size={1} color="text-subtle">
+                                                                    <PaperText preset="hint">
                                                                         {CHANNEL_KIND_LABELS[channel.kind]}
                                                                     </PaperText>
                                                                 </PaperFlex>
@@ -412,7 +409,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
 
                                     <PaperCard>
                                         <PaperFlex direction="column" gap="half" padding="full">
-                                            <PaperText weight={700} size={5}>
+                                            <PaperText preset="heading">
                                                 Roles
                                             </PaperText>
                                             <PaperTable>
@@ -447,7 +444,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
 
                                     <PaperCard>
                                         <PaperFlex direction="column" gap="half" padding="full">
-                                            <PaperText weight={700} size={5}>
+                                            <PaperText preset="heading">
                                                 Members
                                             </PaperText>
                                             <PaperFlex direction="row" gap="half" align="center">
@@ -483,7 +480,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                                 <Show
                                                     when={members()!.length > 0}
                                                     fallback={
-                                                        <PaperText size={2} color="text-subtle">
+                                                        <PaperText preset="hint">
                                                             No members matched.
                                                         </PaperText>
                                                     }
@@ -504,7 +501,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                                                             gap="half"
                                                                             align="center"
                                                                         >
-                                                                            <PaperText size={3} weight={600}>
+                                                                            <PaperText preset="label">
                                                                                 {member.displayName}
                                                                             </PaperText>
                                                                             <Show when={member.bot}>
@@ -513,7 +510,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                                                                 </PaperBadge>
                                                                             </Show>
                                                                         </PaperFlex>
-                                                                        <PaperText size={1} color="text-subtle">
+                                                                        <PaperText preset="hint">
                                                                             @{member.username} ·{" "}
                                                                             {formatJoined(member.joinedAt)}
                                                                         </PaperText>
@@ -530,7 +527,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                     <Show when={textChannels().length > 0}>
                                         <PaperCard>
                                             <PaperFlex direction="column" gap="half" padding="full">
-                                                <PaperText weight={700} size={5}>
+                                                <PaperText preset="heading">
                                                     Send a message
                                                 </PaperText>
                                                 <PaperSelectMenu

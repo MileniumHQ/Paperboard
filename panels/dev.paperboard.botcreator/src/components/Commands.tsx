@@ -7,6 +7,7 @@ import {
     PaperIcon,
     PaperBadge,
     PaperCard,
+    PaperEmptyState,
     PaperInput,
     PaperModal,
     PaperEffect,
@@ -324,15 +325,11 @@ export default function Commands(props: { bot: () => BotSummary }) {
                         when={commands().length > 0}
                         fallback={
                             <PaperCard>
-                                <PaperFlex padding="double" center direction="column" gap="half">
-                                    <PaperText size={4} weight={600}>
-                                        No slash commands yet
-                                    </PaperText>
-                                    <PaperText size={2} color="text-subtle">
-                                        Create one, then build a flow on its trigger to
-                                        answer it.
-                                    </PaperText>
-                                </PaperFlex>
+                                <PaperEmptyState
+                                    icon="terminal"
+                                    title="No slash commands yet"
+                                    description="Create one, then build a flow on its trigger to answer it."
+                                />
                             </PaperCard>
                         }
                     >
@@ -341,7 +338,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
                                     {(command) => (
                                         <PaperSettingItem
                                             title={
-                                                <PaperText family="code">
+                                                <PaperText preset="label" family="code">
                                                     /{command.name}
                                                 </PaperText>
                                             }
@@ -469,7 +466,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
                                 onChange={(checked) => setUserInstall(checked)}
                             />
                             <Show when={userInstall()}>
-                                <PaperText size={2} color="text-subtle">
+                                <PaperText preset="hint">
                                     Users can install this command on their
                                     account so it works in DMs and servers
                                     without the bot. Needs User Install
@@ -481,7 +478,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
 
                     <PaperFlex direction="column" gap="half">
                         <PaperFlex direction="row" justify="space-between" align="center">
-                            <PaperText size={3} weight={700}>
+                            <PaperText preset="heading">
                                 Parameters
                             </PaperText>
                             <PaperButton onClick={addOption}>
@@ -491,7 +488,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
                         </PaperFlex>
 
                         <Show when={options().length === 0}>
-                            <PaperText size={2} color="text-subtle">
+                            <PaperText preset="hint">
                                 No parameters. Discord shows this command with no
                                 arguments.
                             </PaperText>
@@ -587,7 +584,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
                                             />
 
                                             <Show when={orderProblem()}>
-                                                <PaperText size={2} color="danger">
+                                                <PaperText preset="error">
                                                     Required parameters must come before
                                                     optional ones.
                                                 </PaperText>
@@ -625,7 +622,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
                     </>
                 }
             >
-                <PaperText preset="body">
+                <PaperText preset="text">
                     This removes the command and its trigger. Flows bound to the trigger
                     stop firing until a command with this name is created again.
                 </PaperText>
