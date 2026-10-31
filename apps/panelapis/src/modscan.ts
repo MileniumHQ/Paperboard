@@ -17,7 +17,7 @@ class Failure extends Error {
 }
 const bad = () => new Failure(400, "invalid_request", "Invalid or unsupported request parameters.");
 const malformed = () => new Failure(502, "steam_schema", "Steam returned invalid Workshop data.");
-function json(body: unknown, status = 200, headers: Record<string, string> = {}) {
+export function json(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...headers } });
 }
 function record(value: unknown): Record<string, unknown> {
@@ -41,10 +41,12 @@ export interface Item {
   timeUpdated: number; fileSize: number; children: string[] | null; workshopUrl: string;
 }
 function children(value: unknown): string[] { return array(value).map(v => id(record(v).publishedfileid)); }
-function item(value: unknown, appid: number): Item {
+// QueryFiles reports `consumer_appid`; the ISteamRemoteStorage details endpoint reports `consumer_app_id`.
+type AppField = "consumer_appid" | "consumer_app_id";
+function item(value: unknown, appid: number, appField: AppField): Item {
   const v = record(value);
   if (number(v.result) !== 1) throw new Failure(404, "item_unavailable", "A requested Workshop item is unavailable.");
-  if (number(v.consumer_app_id) !== appid) throw new Failure(404, "wrong_game", "Workshop item does not belong to this game.");
+  if (number(v[appField]) !== appid) throw new Failure(404, "wrong_game", "Workshop item does not belong to this game.");
   if (number(v.visibility) !== 0) throw new Failure(404, "item_not_public", "Only public Workshop items are available.");
   const itemId = id(v.publishedfileid);
   let preview: string | null = null;
@@ -124,7 +126,7 @@ function fileParams(ids: string[], collection = false) {
   ids.forEach((v, i) => { params[`publishedfileids[${i}]`] = v; }); return params;
 }
 
-export default {
+export const modscan = {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
       if (request.method !== "GET") return json({ error: { code: "method_not_allowed", message: "Only GET is supported." } }, 405, { Allow: "GET" });
@@ -162,10 +164,10 @@ export default {
       if (mode === "search") {
         const result = record((await steam(env, "search", { appid, search_text: query, page, query_type: SORTS[sort], numperpage: 20, return_tags: true, return_children: true, return_short_description: true })).response);
         if (result.result !== undefined && number(result.result) !== 1) throw malformed();
-        items = array(result.publishedfiledetails).map(v => item(v, appid)); total = number(result.total);
+        items = array(result.publishedfiledetails).map(v => item(v, appid, "consumer_appid")); total = number(result.total);
       } else {
         const result = record((await steam(env, "items", fileParams(ids))).response);
-        items = array(result.publishedfiledetails).map(v => item(v, appid));
+        items = array(result.publishedfiledetails).map(v => item(v, appid, "consumer_app_id"));
         if (items.length !== ids.length || items.some(v => !ids.includes(v.id)) || new Set(items.map(v => v.id)).size !== ids.length) throw malformed();
         if (mode !== "items") {
           const result = record((await steam(env, "collection", fileParams(ids, true))).response);

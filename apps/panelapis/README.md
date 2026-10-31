@@ -1,6 +1,6 @@
 # Panel APIs
 
-Server-side APIs for Paperboard panels, served under `panels.ariapis.com`. Each API owns its own path; the first is modscan, at `/modscan`.
+Server-side APIs for Paperboard panels, served from the root of `panels.ariapis.com`. `src/index.ts` routes each request by its first path segment to that API's module; the first is modscan (`src/modscan.ts`), at `/modscan`. Unknown segments return 404. Add an API by adding its module to `ROUTES`.
 
 ## Modscan
 
@@ -82,7 +82,7 @@ Tests run local workerd via Miniflare, with real cache, rate-limit and durable s
 Operator steps below are documentation only; no deployment, secret upload or Cloudflare writes were performed during implementation:
 
 1. Complete the pre-operation terms/privacy steps above and register the correct application/domain with Valve. Confirm that a normal Web API key can query the chosen games; a live authenticated smoke test was not performed here. Upstream access denial is explicit and must be resolved with Valve, never worked around.
-2. Authenticate Wrangler to the intended Cloudflare account; confirm the `ariapis.com` zone and that `panels.ariapis.com` has a proxied DNS record/origin. The config uses the path route `panels.ariapis.com/modscan/*`, not a host-wide custom domain. Other paths can serve other applications.
+2. Authenticate Wrangler to the intended Cloudflare account; confirm the `ariapis.com` zone is in that account. The config attaches `panels.ariapis.com` as a Worker custom domain, so the Worker owns the whole host and deployment creates its DNS record and certificate. The hostname must not already have a conflicting DNS record. Other panel APIs are routed in code, not with extra Cloudflare routes.
 3. Confirm rate-limit namespace `1281930` is unique in the account (change before first deployment if necessary). The first deployment migration creates the SQLite Durable Object; remote bindings are not used locally.
 4. Set the Worker secret named `STEAM_WEB_API_KEY` securely through the Cloudflare dashboard for Worker `panelapis`; never put its value in `wrangler.jsonc`, shell history, a URL shared with users or Git. Missing configuration produces a clear 503. No secret-setting command is run by these scripts.
 5. When separately authorized to publish, run `bun run --cwd apps/panelapis deploy`. Verify routing, attribution, privacy disclosures, cache behavior and visible failures before integrating any panel.

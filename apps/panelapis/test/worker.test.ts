@@ -10,6 +10,9 @@ const fixture = {
   favorited: 8, time_updated: 1700000000, file_size: "2048", children: [{ publishedfileid: "456" }],
   file_url: "https://do-not-return.invalid/file", private_field: "must not pass through",
 };
+// IPublishedFileService/QueryFiles names fields differently from ISteamRemoteStorage details.
+const { consumer_app_id, description, ...shared } = fixture;
+const queryFixture = { ...shared, consumer_appid: consumer_app_id, short_description: "Short description" };
 let script: string;
 beforeAll(async () => {
   const result = await build({ stdin: {
@@ -40,7 +43,7 @@ async function setup(options: { secret?: string; limit?: number; upstream?: (url
       const url = new URL(request.url); const body = await request.text();
       calls.push({ url, body, method: request.method });
       if (url.hostname !== "api.steampowered.com") throw new Error("Unexpected upstream");
-      const payload = options.upstream ? options.upstream(url, body) : { response: { total: 1, publishedfiledetails: [fixture] } };
+      const payload = options.upstream ? options.upstream(url, body) : { response: { total: 1, publishedfiledetails: [url.pathname.includes("QueryFiles") ? queryFixture : fixture] } };
       return new MFResponse(typeof payload === "string" ? payload : JSON.stringify(payload), { status: options.status ?? 200 });
     },
   }] }));
@@ -53,6 +56,16 @@ async function setup(options: { secret?: string; limit?: number; upstream?: (url
 }
 const base = "/modscan/v1/garrysmod";
 describe("Modscan HTTP boundary in workerd", () => {
+  it("routes by first path segment and rejects unknown panel APIs", async () => {
+    const { request, calls } = await setup();
+    for (const path of ["/", "/other/v1/search", "/constructor", "/v1/garrysmod/search"]) {
+      const response = await request(path);
+      expect(response.status).toBe(404);
+      expect((await response.json() as any).error.code).toBe("not_found");
+    }
+    expect((await request(`${base}/search`)).status).toBe(200);
+    expect(calls).toHaveLength(1);
+  });
   it("rejects unknown games, paths, parameters, duplicates, bounds and methods before Steam", async () => {
     const { request, calls } = await setup();
     for (const path of ["/", "/modscan/v1/other/search", `${base}/other`, `${base}/collections/nope`, "/modscan/v1/constructor/search"]) {
@@ -71,7 +84,7 @@ describe("Modscan HTTP boundary in workerd", () => {
     expect(response.headers.get("access-control-allow-origin")).toBeNull();
     expect(response.headers.get("cache-control")).toBe("public, max-age=60");
     const body = await response.json() as any;
-    expect(body.items[0]).toEqual({ id: "123", title: fixture.title, description: fixture.description, previewImageUrl: fixture.preview_url, tags: ["Build"], authorId: fixture.creator, subscriptions: 42, favorites: 8, timeUpdated: fixture.time_updated, fileSize: 2048, children: ["456"], workshopUrl: "https://steamcommunity.com/sharedfiles/filedetails/?id=123" });
+    expect(body.items[0]).toEqual({ id: "123", title: fixture.title, description: queryFixture.short_description, previewImageUrl: fixture.preview_url, tags: ["Build"], authorId: fixture.creator, subscriptions: 42, favorites: 8, timeUpdated: fixture.time_updated, fileSize: 2048, children: ["456"], workshopUrl: "https://steamcommunity.com/sharedfiles/filedetails/?id=123" });
     expect(body.meta.attribution).toBe("Powered by Steam");
     expect(JSON.stringify(body)).not.toContain(SECRET);
     expect(calls[0]!.url.pathname).toBe("/IPublishedFileService/QueryFiles/v1/");
@@ -129,7 +142,7 @@ describe("Modscan HTTP boundary in workerd", () => {
     const games = { tmodloader: 1281930, garrysmod: 4000, tf2: 440, cs2: 730, palworld: 1623730 };
     const { request, calls } = await setup({ upstream: url => {
       const appid = JSON.parse(url.searchParams.get("input_json")!).appid;
-      return { response: { total: 1, publishedfiledetails: [{ ...fixture, consumer_app_id: appid }] } };
+      return { response: { total: 1, publishedfiledetails: [{ ...queryFixture, consumer_appid: appid }] } };
     } });
     for (const [game, appid] of Object.entries(games)) {
       expect((await request(`/modscan/v1/${game}/search`)).status).toBe(200);
@@ -182,7 +195,7 @@ describe("Modscan HTTP boundary in workerd", () => {
     expect(calls).toHaveLength(2);
   });
   it("rejects malformed data and upstream attempts to echo the secret", async () => {
-    for (const payload of ["not json", { response: {} }, { response: { total: 1, publishedfiledetails: [{ ...fixture, title: SECRET }] } }]) {
+    for (const payload of ["not json", { response: {} }, { response: { total: 1, publishedfiledetails: [{ ...queryFixture, title: SECRET }] } }]) {
       const { request } = await setup({ upstream: () => payload });
       const response = await request(`${base}/search`);
       expect(response.status).toBe(502);
