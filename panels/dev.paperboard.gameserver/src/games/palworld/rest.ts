@@ -24,8 +24,15 @@ export interface PalworldMetrics {
     currentplayernum: number;
     maxplayernum: number;
     serverfps: number;
+    /** the average over the last stretch, so one slow frame does not move it */
+    serverfpsaverage: number;
+    /** milliseconds the server took for its last frame */
+    serverframetime: number;
+    /** seconds since the server started */
     uptime: number;
+    /** days passed in the game world */
     days: number;
+    basecampnum: number;
 }
 
 const TIMEOUT_MS = 15_000;
@@ -64,7 +71,13 @@ export class PalworldRest {
     }
 
     info(): Promise<PalworldInfo> { return this.request("GET", "info"); }
-    metrics(): Promise<PalworldMetrics> { return this.request("GET", "metrics"); }
+    async metrics(): Promise<PalworldMetrics> {
+        const answer = await this.request<Record<string, unknown>>("GET", "metrics");
+        for (const key of ["currentplayernum", "maxplayernum", "serverfps", "serverfpsaverage", "serverframetime", "uptime", "days", "basecampnum"]) {
+            if (typeof answer[key] !== "number") throw new Error(`Palworld's metrics answer has no ${key}`);
+        }
+        return answer as unknown as PalworldMetrics;
+    }
     async players(): Promise<PalworldPlayer[]> {
         const answer = await this.request<{ players?: unknown }>("GET", "players");
         if (!Array.isArray(answer.players)) throw new Error("Palworld's player list has no players array");

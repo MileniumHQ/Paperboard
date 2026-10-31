@@ -314,6 +314,7 @@ export const palworldService: GameService = {
             await loadOptions(ctx);
             return true;
         })),
+        action("palworld-metrics", "Palworld server health", () => rest().metrics()),
         action("palworld-players", "Palworld players", async () => ({ seen: await roster().seen(), bans: await roster().bans(), online: local().online })),
         action("palworld-kick", "Kick player", async (ctx, { userId: id }) => {
             const checked = userId(id);

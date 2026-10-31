@@ -55,7 +55,7 @@ Bun.serve({ port: restPort, hostname: "0.0.0.0", async fetch(req) {
   console.log("");
   log(endpoint + " " + JSON.stringify(body));
   if (endpoint === "info") return Response.json({ version: "v1.0.5.102999", servername: get("ServerName"), description: "", worldguid: guid });
-  if (endpoint === "metrics") return Response.json({ currentplayernum: 0, serverfps: 60, maxplayernum: Number(get("ServerPlayerMaxNum")), uptime: 1, days: 0 });
+  if (endpoint === "metrics") return Response.json({ currentplayernum: 1, serverfps: 59, serverfpsaverage: 59.78, serverframetime: 16.72, days: 3, maxplayernum: Number(get("ServerPlayerMaxNum")), basecampnum: 2, uptime: 128 });
   if (endpoint === "players") return Response.json({ players: fs.existsSync(playersFile) ? JSON.parse(fs.readFileSync(playersFile, "utf8")) : [] });
   if (endpoint === "save") { if (!fs.existsSync(path.join(process.cwd(), "no-save"))) write(); return new Response(""); }
   if (endpoint === "announce" || endpoint === "kick") return new Response("");
@@ -169,6 +169,8 @@ test("Palworld through daemon: REST control with a vaulted admin password, optio
         await until(async () => { const s = await state(); return s.serverStatus === "online" && s.maxPlayers === 32 && s.onlinePlayers.includes("Pal Tamer"); }, "reattach to the running server", 15_000);
         // the roster found by the first answer after reattaching is not a crowd that just joined
         assert(!(await state()).chatMessages.some(m => m.event === "join"), "Players already online were announced as joining after a reattach");
+        const health = await call<any>("palworld-metrics");
+        assert(health.serverfpsaverage === 59.78 && health.basecampnum === 2 && health.days === 3 && health.uptime === 128, `Server health not read: ${JSON.stringify(health)}`);
         const say = (line: string) => fs.appendFileSync(path.join(install, "say.txt"), line + "\n");
         say("[2026-10-31 13:00:00] [CHAT] <Pal Tamer> catching a Lamball");
         say(`[2026-10-31 13:00:01] [CHAT] <Pal Tamer> the password is ${admin}`);
