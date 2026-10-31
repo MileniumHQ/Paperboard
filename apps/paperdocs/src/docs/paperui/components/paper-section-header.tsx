@@ -80,8 +80,8 @@ export function Example() {
 
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">
-                PaperSectionHeader formats the title row with bold typography and subtle border separators.
-                Trailing action buttons align along the opposite edge.
+                PaperSectionHeader sets its title in the heading preset and indents by the card inset, so the title lines up with
+                the row titles in the PaperSettingList or card below it. Trailing action buttons align along the opposite edge.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>

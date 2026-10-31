@@ -20,6 +20,7 @@ export const spacingSizes = [
     "double",
     "triple",
     "quadruple",
+    "inset",
 ] as const;
 
 export type PaperSpacingSize = (typeof spacingSizes)[number];
@@ -122,12 +123,17 @@ export const textPresets = [
     "subheader",
     "title",
     "subtitle",
+    "heading",
     "section",
+    "label",
+    "text",
     "body",
+    "hint",
+    "error",
     "caption",
 ] as const;
 
-export type PaperTextPreset = (typeof textPresets)[number] | (string & {});
+export type PaperTextPreset = (typeof textPresets)[number];
 
 export const buttonVariants = [
     ...paperRoles,

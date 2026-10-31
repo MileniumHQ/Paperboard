@@ -17,16 +17,32 @@ export interface PaperTextProps extends JSX.HTMLAttributes<HTMLElement> {
     color?: PaperColor;
     breakWord?: boolean;
     truncate?: boolean | number;
+    /** indents by --paper-inset-outside so text outside a card lines up with the text inside it */
+    inset?: boolean;
 }
 
-export const PRESETS: Record<string, { size: number; weight: number }> = {
+/** size and weight per preset; colour, case and line height live in the stylesheet */
+export const PRESETS: Record<PaperTextPreset, { size: number; weight: number }> = {
     headline: { size: 12, weight: 800 },
     header: { size: 10, weight: 700 },
     subheader: { size: 7, weight: 600 },
-    title: { size: 5, weight: 700 },
+    /** the title at the top of a page or wizard step */
+    title: { size: 6, weight: 700 },
     subtitle: { size: 3, weight: 500 },
+    /** the heading over a group of cards or rows */
+    heading: { size: 2, weight: 700 },
+    /** an uppercase overline over a menu or list group */
     section: { size: 1, weight: 700 },
+    /** the name of one card, row or empty state */
+    label: { size: 4, weight: 600 },
+    /** a sentence of app copy */
+    text: { size: 3, weight: 400 },
+    /** long reading: markdown and documentation */
     body: { size: 3, weight: 400 },
+    /** supporting text: descriptions, status, counts, notes */
+    hint: { size: 2, weight: 400 },
+    /** a failure shown next to what failed */
+    error: { size: 2, weight: 400 },
     caption: { size: 1, weight: 500 },
 };
 
@@ -41,6 +57,7 @@ export function PaperText(props: PaperTextProps) {
         "color",
         "breakWord",
         "truncate",
+        "inset",
         "class",
         "classList",
         "children",
@@ -81,6 +98,7 @@ export function PaperText(props: PaperTextProps) {
             local.preset ? styles[local.preset] : "",
             local.breakWord ? styles.breakWord : "",
             local.truncate ? styles.truncate : "",
+            local.inset ? styles.inset : "",
             local.class,
         ]
             .filter(Boolean)

@@ -4,15 +4,8 @@
 .PaperText.rounded {
     font-family: var(--paper-font-family-rounded);
 }
-.PaperText.headline {
-}
-.PaperText.header {
-}
-.PaperText.subheader {
-}
-.PaperText.title {
-}
-.PaperText.subtitle {
+.PaperText.heading {
+    color: var(--paper-text-subtle);
 }
 .PaperText.section {
     text-transform: uppercase;
@@ -22,7 +15,16 @@
 .PaperText.body {
     line-height: 1.75;
 }
-.PaperText.caption {
+.PaperText.hint {
+    color: var(--paper-text-subtle);
+}
+.PaperText.error {
+    color: var(--paper-danger);
+}
+/* block, so every wrapped line indents and not only the first */
+.PaperText.inset {
+    display: block;
+    padding-inline: var(--paper-inset-outside);
 }
 .PaperText.breakWord {
     word-break: break-word;

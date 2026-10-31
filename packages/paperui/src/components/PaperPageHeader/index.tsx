@@ -84,7 +84,7 @@ export function PaperPageHeader(props: ParentProps<PaperPageHeaderProps>) {
                     </span>
                 </Show>
                 <div class={styles.text}>
-                    <PaperText size={6} weight={700} class={styles.title}>
+                    <PaperText preset="title" class={styles.title}>
                         {local.title}
                     </PaperText>
                     <Show when={local.subtitle}>

@@ -82,6 +82,45 @@ export default function SpacingDoc() {
                 </tbody>
             </PaperTable>
 
+            <PaperText preset="subheader" id="inset">Inset</PaperText>
+            <PaperText preset="body">
+                The inset is how far text sits in from a card's edge. PaperSettingList rows pad by it, and text outside a card indents by
+                the same line so a section header, a hint under a card and the row titles inside it all start at one edge.
+                Never pad text by hand to line it up: set inset on PaperText, or padding="inset" on a PaperCard or PaperFlex.
+            </PaperText>
+
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Used by</th>
+                        <th>CSS variable</th>
+                        <th>Calculated value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>padding="inset"</td>
+                        <td><PaperCode>--paper-inset</PaperCode></td>
+                        <td>18px, the padding inside a card</td>
+                    </tr>
+                    <tr>
+                        <td>PaperText inset, PaperSectionHeader</td>
+                        <td><PaperCode>--paper-inset-outside</PaperCode></td>
+                        <td>19px, the inset plus the card's border, for text outside the card</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+
+            <PaperCode block language="tsx">
+{`<PaperFlex direction="column" gap="half">
+    <PaperSectionHeader icon="lan" title="Ports" />
+    <PaperSettingList autoHeight>
+        <PaperSettingItem title="Refuse taken ports" />
+    </PaperSettingList>
+    <PaperText preset="hint" inset>No panel holds a port on this computer.</PaperText>
+</PaperFlex>`}
+            </PaperCode>
+
             <PaperText preset="subheader" id="border-radii">Border radii and widths</PaperText>
             <PaperText preset="body">
                 Standard corner curvatures and border strokes:

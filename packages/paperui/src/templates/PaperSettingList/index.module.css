@@ -37,7 +37,7 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--paper-uigap);
-    padding: var(--paper-uigap-sixfourths);
+    padding: var(--paper-inset);
     border-bottom: var(--paper-border-width) solid var(--paper-border);
 }
 

@@ -165,6 +165,11 @@ body[data-unselectable="true"],
     --paper-uigap-double: calc(var(--paper-uigap) * 2);
     --paper-uigap-triple: calc(var(--paper-uigap) * 3);
     --paper-uigap-quadruple: calc(var(--paper-uigap) * 4);
+    /* how far text sits in from a card's edge; text outside a card (section
+       headers, hints, errors) indents by the same amount so they line up */
+    --paper-inset: var(--paper-uigap-sixfourths);
+    /* the same line seen from outside a card, past its border */
+    --paper-inset-outside: calc(var(--paper-inset) + var(--paper-border-width));
 
     --paper-element-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     --paper-heavy-element-shadow: 0 2px 6px 1px rgba(0, 0, 0, 0.2);

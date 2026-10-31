@@ -11,6 +11,7 @@ export const SPACING_MAP: Record<string, string> = {
     double: getVarCss("uigap-double"),
     triple: getVarCss("uigap-triple"),
     quadruple: getVarCss("uigap-quadruple"),
+    inset: getVarCss("inset"),
 };
 
 export function resolveSpacing(val?: PaperSpacing): string | undefined {

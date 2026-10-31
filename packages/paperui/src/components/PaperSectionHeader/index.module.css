@@ -5,7 +5,7 @@
     gap: var(--paper-uigap-half);
     width: 100%;
     box-sizing: border-box;
-    padding: 0 var(--paper-uigap-threefourths);
+    padding: 0 var(--paper-inset-outside);
     color: var(--paper-text-subtle);
 }
 

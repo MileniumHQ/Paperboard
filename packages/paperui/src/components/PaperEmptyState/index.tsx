@@ -33,12 +33,12 @@ export function PaperEmptyState(props: ParentProps<PaperEmptyStateProps>) {
                 )}
             </Show>
             <Show when={local.title}>
-                <PaperText size={4} weight={600}>
+                <PaperText preset="label">
                     {local.title}
                 </PaperText>
             </Show>
             <Show when={local.description}>
-                <PaperText size={2} color="text-subtle" style={{ "text-align": "center" }}>
+                <PaperText preset="hint">
                     {local.description}
                 </PaperText>
             </Show>

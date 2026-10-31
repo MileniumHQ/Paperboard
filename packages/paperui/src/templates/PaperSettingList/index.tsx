@@ -138,11 +138,11 @@ export function PaperSettingItem(props: ParentProps<PaperSettingItemProps>) {
             classList={local.classList}
         >
             <PaperFlex direction="column" gap="onefourth" style={{ flex: 1, "min-width": 0 }}>
-                <PaperText size={4} weight={600}>
+                <PaperText preset="label">
                     {local.title}
                 </PaperText>
                 <Show when={local.description}>
-                    <PaperText size={2} weight={500} color="text-subtle">
+                    <PaperText preset="hint">
                         {local.description}
                     </PaperText>
                 </Show>

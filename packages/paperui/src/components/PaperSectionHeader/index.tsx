@@ -35,7 +35,7 @@ export function PaperSectionHeader(props: ParentProps<PaperSectionHeaderProps>) 
                         local.icon
                     )}
                 </Show>
-                <PaperText size={2} weight={700}>
+                <PaperText preset="heading">
                     {local.title}
                 </PaperText>
                 <Show when={local.count !== undefined}>
