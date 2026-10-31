@@ -101,6 +101,10 @@ export interface ConversationDeps {
     settings: () => Settings | null;
     /** the harness executable, or null if it isn't installed */
     resolve: (harness: Harness) => string | null;
+    /** what the harness runs with besides the daemon's environment: its home, and no updating itself */
+    env: (harness: Harness) => Record<string, string>;
+    /** why the harness can't take a turn (not signed in, say), or null: asked before it's started, so a signed-out harness fails with the way out instead of its own reply */
+    problem?: (harness: Harness) => string | null;
     /** the computer's MCP endpoint for this service generation */
     mcp: () => { url: string; token: string; onToolsListed(cb: () => void): () => void };
     /** every toolset's part of the agent's instructions, read at the start of each turn */
@@ -545,7 +549,9 @@ export class Conversation {
 
     private async run(settings: Settings, thread: string | null, message: string) {
         const command = this.deps.resolve(settings.harness);
-        if (!command) throw new Error(`${HARNESS_NAMES[settings.harness]} isn't installed on this computer anymore.`);
+        if (!command) throw new Error(`${HARNESS_NAMES[settings.harness]} isn't installed. Install it in the agent's settings.`);
+        const problem = this.deps.problem?.(settings.harness);
+        if (problem) throw new Error(problem);
         const mcp = this.deps.mcp();
         const sections = await this.deps.instructions();
         const launch = turnLaunch({
@@ -653,7 +659,7 @@ export class Conversation {
                 command: launch.command,
                 args: launch.args,
                 cwd: this.workdir(),
-                env: { ...launch.env, [launch.tokenEnv]: mcp.token },
+                env: { ...this.deps.env(settings.harness), ...launch.env, [launch.tokenEnv]: mcp.token },
                 // only an ACP turn talks over stdin; codex exec reads a piped stdin to its end before it starts
                 ...(acp ? {} : { stdin: false }),
             });

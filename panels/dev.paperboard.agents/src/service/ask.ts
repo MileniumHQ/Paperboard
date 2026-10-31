@@ -24,6 +24,10 @@ export interface AskDeps {
     host: TurnHost;
     settings: () => Settings | null;
     resolve: (harness: Harness) => string | null;
+    /** what the harness runs with besides the daemon's environment: its home, and no updating itself */
+    env: (harness: Harness) => Record<string, string>;
+    /** why the harness can't answer (not signed in, say), or null */
+    problem?: (harness: Harness) => string | null;
     /** an empty folder to run in: no project files or instruction files for the harness to pick up */
     workdir: string;
     askMs?: number;
@@ -47,7 +51,9 @@ export class Asker {
         if (own && own.length > LIMITS.instructions) throw new Error(`instructions are limited to ${LIMITS.instructions} characters`);
         const custom = own || settings.automationInstructions || null;
         const command = this.deps.resolve(settings.harness);
-        if (!command) throw new Error(`${HARNESS_NAMES[settings.harness]} isn't installed on this computer anymore`);
+        if (!command) throw new Error(`${HARNESS_NAMES[settings.harness]} isn't installed. Install it in the agent's settings`);
+        const problem = this.deps.problem?.(settings.harness);
+        if (problem) throw new Error(problem);
         if (this.running.size >= MAX_ASKING) throw new Error(`the agent is already answering ${MAX_ASKING} questions; ask again once one is done`);
         const id = `${PANEL_ID}.ask.${randomUUID()}`;
         this.running.add(id);
@@ -125,7 +131,7 @@ export class Asker {
             command: launch.command,
             args: launch.args,
             cwd: this.deps.workdir,
-            env: launch.env,
+            env: { ...this.deps.env(settings.harness), ...launch.env },
             ...(acp ? {} : { stdin: false }),
         });
         const ms = this.deps.askMs ?? ASK_MS;

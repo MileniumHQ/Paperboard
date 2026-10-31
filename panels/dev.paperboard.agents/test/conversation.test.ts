@@ -36,6 +36,7 @@ function setup(
         dir,
         settings: () => settings,
         resolve: () => (o.installed === false ? null : "/usr/bin/codex"),
+        env: () => ({}),
         mcp: () => ({ url: "http://127.0.0.1:1/mcp", token: "secret-token", onToolsListed: o.onToolsListed ?? (() => () => {}) }),
         instructions: async () => ["a section"],
         emit: (e) => emitted.push(e),
@@ -135,7 +136,7 @@ describe("the conversation", () => {
         conv.send("hi");
         await until(() => emitted.length === 2);
         expect(host.started).toEqual([]);
-        expect(emitted[1]).toMatchObject({ kind: "error", text: "Codex isn't installed on this computer anymore." });
+        expect(emitted[1]).toMatchObject({ kind: "error", text: "Codex isn't installed. Install it in the agent's settings." });
     });
 
     test("stop ends the turn and drops what was waiting", async () => {
@@ -385,7 +386,7 @@ describe("the conversation", () => {
         host.alive.add(TURN_PROC_ID);
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-conv-"));
         dirs.push(dir);
-        const conv = new Conversation({ host, dir, settings: () => null, resolve: () => null, mcp: () => ({ url: "", token: "", onToolsListed: () => () => {} }), instructions: async () => [], emit: () => {}, onState: () => {}, codexHome: null });
+        const conv = new Conversation({ host, dir, settings: () => null, resolve: () => null, env: () => ({}), mcp: () => ({ url: "", token: "", onToolsListed: () => () => {} }), instructions: async () => [], emit: () => {}, onState: () => {}, codexHome: null });
         conv.init();
         await until(() => host.killed.length === 1);
         expect(host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGKILL" });

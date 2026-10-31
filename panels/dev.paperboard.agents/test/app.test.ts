@@ -31,9 +31,16 @@ describe("the service's agent", () => {
         if (dir) fs.rmSync(dir, { recursive: true, force: true });
     });
 
-    async function start(installed: string[], saved: unknown = null, readSettings?: () => Promise<unknown>, plant?: (storage: string) => void) {
+    // `installed` names the brains' programs that are installed (and signed in) as packages
+    // `signedOut` names the installed brains that aren't signed in
+    async function start(installed: string[], saved: unknown = null, readSettings?: () => Promise<unknown>, plant?: (storage: string) => void, signedOut: string[] = []) {
         dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-app-"));
         plant?.(dir);
+        const packageOf = (program: string) => (program === "claude" ? "claude-code" : program);
+        for (const program of installed) {
+            fs.mkdirSync(path.join(dir, "packages", packageOf(program), "bin"), { recursive: true });
+            fs.writeFileSync(path.join(dir, "packages", packageOf(program), "bin", program), "#!/bin/sh\n", { mode: 0o755 });
+        }
         const procs = new FakeProcesses();
         const writes: Settings[] = [];
         const vault = new Map<string, string>();
@@ -46,18 +53,26 @@ describe("the service's agent", () => {
             onExit: procs.onExit,
             onStdout: procs.onStdout,
             onStderr: procs.onStderr,
-            exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
+            // what the brains answer when asked who they're signed in as
+            exec: async (command, args) => {
+                const out = signedOut.some((p) => command.endsWith(p));
+                if (args.join(" ") === "login status") return out ? { stdout: "Not logged in", stderr: "", exitCode: 1 } : { stdout: "Logged in using ChatGPT", stderr: "", exitCode: 0 };
+                if (args.join(" ") === "auth status") return { stdout: JSON.stringify({ loggedIn: !out, email: "pip@example.com" }), stderr: "", exitCode: out ? 1 : 0 };
+                if (args[0] === "auth" && args[1] === "list") return { stdout: "[]", stderr: "", exitCode: 0 };
+                throw new Error(`unexpected command ${args.join(" ")}`);
+            },
             packages: {
-                isInstalled: async () => false,
+                isInstalled: async (name) => installed.map(packageOf).includes(name),
                 download: async () => {
                     throw new Error("no network in tests");
                 },
                 getPath: async (name) => path.join(dir, "packages", name),
+                version: async () => "1.2.3",
+                updateWaiting: async () => false,
             },
             storageDir: async () => dir,
             readSettings: readSettings ?? (async () => saved),
             writeSettings: async (s) => void writes.push(s),
-            harnessHomes: { claude: "/nonexistent/claude", codex: path.join(dir, "codex") },
             which: (c) => (installed.includes(c) ? `/usr/bin/${c}` : null),
             registerAction: async () => {},
             tools: {
@@ -107,23 +122,31 @@ describe("the service's agent", () => {
         app = null;
     });
 
-    test("detect reports what's installed", async () => {
-        const { app } = await start(["claude"]);
-        expect(app.detect()).toEqual([
-            { id: "codex", installed: false, version: null },
-            { id: "claude-code", installed: true, version: null },
-            { id: "opencode", installed: false, version: null },
-        ]);
+    test("the brains' state says what's installed and who is signed in, from the packages and their own status commands", async () => {
+        const { state } = await start(["claude"]);
+        const { brains } = state();
+        expect(brains["codex"]).toMatchObject({ phase: "none", installed: false, signedIn: false });
+        expect(brains["claude-code"]).toMatchObject({ phase: "ready", installed: true, signedIn: true, account: "pip@example.com", version: "1.2.3", error: null });
+        expect(brains["opencode"]).toMatchObject({ phase: "none", installed: false });
     });
 
-    test("setup saves only valid settings for a harness that's installed", async () => {
+    test("setup saves only valid settings for a brain that's installed and signed in", async () => {
         const { app, writes, state } = await start(["claude"]);
-        await expect(app.setup({ settings: { name: "Pip", harness: "codex", model: null } })).rejects.toThrow(/Codex isn't installed/);
+        await expect(app.setup({ settings: { name: "Pip", harness: "codex", model: null } })).rejects.toThrow(/Codex isn't ready: install it first/);
         await expect(app.setup({ settings: { name: "", harness: "claude-code" } })).rejects.toThrow(/required/);
         expect(writes).toEqual([]);
         await app.setup({ settings: { name: "Pip", harness: "claude-code", model: "default" } });
         expect(writes).toEqual([{ name: "Pip", harness: "claude-code", model: null, compaction: "summarize" }]);
         expect(state().settings).toEqual({ name: "Pip", harness: "claude-code", model: null, compaction: "summarize" });
+    });
+
+    test("a brain that isn't signed in is refused before its turn starts, with the way out", async () => {
+        const { app, procs, state } = await start(["codex"], { name: "Pip", harness: "codex", model: null }, undefined, undefined, ["codex"]);
+        expect(state().brains["codex"].phase).toBe("installed");
+        app.conversation.send("hi");
+        await until(() => app.conversation.history().some((e) => e.kind === "error"));
+        expect(app.conversation.history().find((e) => e.kind === "error")).toMatchObject({ text: "Codex isn't signed in. Sign in to it in the agent's settings." });
+        expect(procs.started).toEqual([]);
     });
 
     test("a tool server's secret goes to the vault under this panel; the saved config only names it", async () => {
@@ -200,7 +223,7 @@ describe("the service's agent", () => {
         await until(() => procs.started.length === 1);
         procs.stdout(TURN_PROC_ID, `{"type":"thread.started","thread_id":"t-1"}\n` + JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "hey" } }) + "\n");
         // Codex's rollout says the thread is past the budget
-        const day = path.join(dir, "codex", "sessions", "2026", "10", "26");
+        const day = path.join(dir, "brains", "codex", "sessions", "2026", "10", "26");
         fs.mkdirSync(day, { recursive: true });
         const count = { type: "event_msg", payload: { type: "token_count", info: { last_token_usage: { input_tokens: CONTEXT_BUDGET }, model_context_window: 1_000_000 } } };
         fs.writeFileSync(path.join(day, "rollout-2026-10-26T10-00-00-t-1.jsonl"), JSON.stringify(count) + "\n");

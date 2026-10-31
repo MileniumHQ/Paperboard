@@ -15,7 +15,6 @@ import {
     type AiState,
     type Compaction,
     type Harness,
-    type HarnessInfo,
     type Settings,
 } from "../contract";
 import { HomeFolder, moveHomeFolder } from "./homeFolder";
@@ -23,16 +22,19 @@ import { Checkpoints } from "./checkpoints";
 import { shellToolset } from "./shell";
 import { Apps } from "./apps";
 import { BrowserComputer, type ComputerHost } from "./browser";
+import { Brains, type BrainPackages } from "./brains";
+import { Providers } from "./providers";
+import type { LoginMethod } from "./brainLogin";
 import { startComputerMcp, type ComputerMcp } from "./computerMcp";
 import { Conversation, type TurnHost } from "./conversation";
-import { HARNESS_COMMANDS, HARNESS_NAMES, customSection } from "./harness";
+import { HARNESS_NAMES, customSection } from "./harness";
 import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from "./computerTools";
 import { filesToolset } from "./attachmentTools";
 import { actionsToolset, type ActionsHost } from "./actionsToolset";
 import { McpServers, type Vault } from "./mcpServers";
 import { mcpToolset } from "./mcpToolset";
 import { TOOLS_EVENT, type ToolsConfig, type ToolsView } from "../toolsContract";
-import { listModels, type HarnessHomes } from "./models";
+import { listModels } from "./models";
 import { Memory } from "./memory";
 import { messagesToolset } from "./messages";
 import { Routines } from "./routines";
@@ -56,16 +58,17 @@ export interface ToolsHost {
     actions: ActionsHost;
 }
 
-export interface AppHost extends ComputerHost, Omit<TurnHost, "write"> {
+export interface AppHost extends Omit<ComputerHost, "packages">, Omit<TurnHost, "write"> {
+    /** the daemon's packages: the browser, and the brains */
+    packages: BrainPackages;
     tools: ToolsHost;
     storageDir(): Promise<string>;
     /** the panel's config document: the agent's settings */
     readSettings(): Promise<unknown>;
     writeSettings(s: Settings): Promise<void>;
-    exec(command: string, args: string[], o?: { timeoutMs?: number }): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+    exec(command: string, args: string[], o?: { timeoutMs?: number; env?: Record<string, string> }): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+    /** a program on PATH: for the user's own tool servers; the brains are packages, never looked for here */
     which(command: string): string | null;
-    /** where each harness keeps its own files, for its model catalog */
-    harnessHomes: HarnessHomes;
     /** register an action again, as it is now: the flow actions' conversation dropdown follows the history */
     registerAction(def: ActionDefinition): Promise<void>;
 }
@@ -81,6 +84,8 @@ export interface AppContext {
 export class AiApp {
     private ctx!: AppContext;
     computer!: BrowserComputer;
+    brains!: Brains;
+    providers!: Providers;
     conversation!: Conversation;
     memory!: Memory;
     routines!: Routines;
@@ -146,6 +151,17 @@ export class AiApp {
             post: (entry) => this.conversation.post(entry),
             notice: (text) => this.conversation.notice(text),
         });
+        const brainsHost = { ...this.host, write: this.host.tools.write };
+        this.brains = new Brains({ host: brainsHost, dir: path.join(root, "brains"), onState: (brains) => this.ctx.setState({ brains }) });
+        this.providers = new Providers({
+            host: brainsHost,
+            program: () => this.brains.resolve("opencode"),
+            env: () => this.brains.env("opencode"),
+            cwd: this.brains.home("opencode"),
+            onChange: () => this.brains.refresh("opencode"),
+        });
+        // looked at before the conversation can take a turn, so an installed brain is never "not installed" for a moment
+        await this.brains.init();
         // its own folder beside the browser's, where it used to be inside it
         moveHomeFolder(path.join(root, "browser", "home"), path.join(root, "home"));
         const home = new HomeFolder(path.join(root, "home"));
@@ -209,7 +225,9 @@ export class AiApp {
             host: { ...this.host, write: this.host.tools.write },
             dir: path.join(root, "conversation"),
             settings: () => this.ctx.state.settings,
-            resolve: (h) => this.host.which(HARNESS_COMMANDS[h]),
+            resolve: (h) => this.brains.resolve(h),
+            env: (h) => this.brains.env(h),
+            problem: (h) => this.brainProblem(h),
             mcp: () => ({ url: this.mcp!.url, token: this.mcp!.token, onToolsListed: (cb) => this.mcp!.onToolsListed(cb) }),
             instructions: () => this.tools!.instructions(),
             emit: (entry) => {
@@ -228,13 +246,15 @@ export class AiApp {
                 if (entry.kind === "user" || entry.kind === "agent") this.publish();
             },
             onState: (chat) => this.ctx.setState({ chat }),
-            codexHome: this.host.harnessHomes.codex,
+            codexHome: this.brains.homes.codex,
         });
         this.conversation.init();
         this.asker = new Asker({
             host: { ...this.host, write: this.host.tools.write },
             settings: () => this.ctx.state.settings,
-            resolve: (h) => this.host.which(HARNESS_COMMANDS[h]),
+            resolve: (h) => this.brains.resolve(h),
+            env: (h) => this.brains.env(h),
+            problem: (h) => this.brainProblem(h),
             workdir: path.join(root, "ask"),
         });
         // after the conversation exists: a one-off missed while the service was down runs as soon as it's read
@@ -249,7 +269,15 @@ export class AiApp {
     async shutdown() {
         // before the conversation closes, so a waiting request's bubble says it lapsed
         this.signIns?.shutdown();
-        const stops = await Promise.allSettled([this.routines?.shutdown(), this.conversation?.shutdown(), this.asker?.shutdown(), this.computer?.shutdown(), this.servers?.shutdown()]);
+        const stops = await Promise.allSettled([
+            this.routines?.shutdown(),
+            this.conversation?.shutdown(),
+            this.asker?.shutdown(),
+            this.computer?.shutdown(),
+            this.servers?.shutdown(),
+            this.brains?.shutdown(),
+            this.providers?.stop(),
+        ]);
         for (const r of stops) if (r.status === "rejected") console.error("[ai] shutdown:", String(r.reason));
         await Promise.all([this.mcp?.close(), this.apps?.close()]);
     }
@@ -264,7 +292,10 @@ export class AiApp {
         }
         const settings = parseSettings(i.settings);
         if (!settings) throw new Error("name and brain are required");
-        if (!this.host.which(HARNESS_COMMANDS[settings.harness])) throw new Error(`${HARNESS_NAMES[settings.harness]} isn't installed on this computer`);
+        const brain = this.brains.snapshot()[settings.harness];
+        if (brain.phase !== "ready") {
+            throw new Error(`${HARNESS_NAMES[settings.harness]} isn't ready: ${brain.installed ? "sign in to it first" : "install it first"}`);
+        }
         await this.host.writeSettings(settings);
         this.ctx.setState({ settings });
         return { saved: true };
@@ -278,17 +309,69 @@ export class AiApp {
 
     /** What a brain can think with, from its harness's own catalog. */
     async models(input: unknown) {
-        const harness = (input as { harness?: unknown } | undefined)?.harness;
-        if (!HARNESSES.includes(harness as Harness)) throw new Error("which brain?");
-        return { models: await listModels(harness as Harness, this.host.harnessHomes, (command, args, o) => {
-                const resolved = this.host.which(command);
-                if (!resolved) throw new Error(`${command} isn't installed on this computer`);
-                return this.host.exec(resolved, args, o);
-            }) };
+        const harness = this.harnessOf(input);
+        // OpenCode's own listing opens the folder its provider server is using
+        if (harness === "opencode" && !(await this.providers.quiet())) throw new Error("Finish connecting the provider first.");
+        return {
+            models: await listModels(harness, this.brains.homes, (command, args, o) => {
+                const h: Harness = command === "codex" ? "codex" : "opencode";
+                const resolved = this.brains.resolve(h);
+                if (!resolved) throw new Error(`${HARNESS_NAMES[h]} isn't installed`);
+                return this.host.exec(resolved, args, { timeoutMs: o.timeoutMs, env: this.brains.env(h) });
+            }),
+        };
     }
 
-    detect(): HarnessInfo[] {
-        return HARNESSES.map((id) => ({ id, installed: this.host.which(HARNESS_COMMANDS[id]) !== null, version: null }));
+    /** Why a brain can't think right now, in words that say how to fix it; null when it can. */
+    private brainProblem(harness: Harness): string | null {
+        const b = this.brains.snapshot()[harness];
+        if (b.phase === "ready" || b.phase === "signing-in" || b.phase === "installing") return null;
+        const name = HARNESS_NAMES[harness];
+        if (b.phase === "installed") return `${name} isn't signed in. Sign in to it in the agent's settings.`;
+        if (b.phase === "failed" && b.installed) return `${name} isn't working: ${b.error}`;
+        return null;
+    }
+
+    private harnessOf(input: unknown): Harness {
+        const harness = (input as { harness?: unknown } | undefined)?.harness;
+        if (!HARNESSES.includes(harness as Harness)) throw new Error("which brain?");
+        return harness as Harness;
+    }
+
+    // ------------------------------------------------------------- brains
+
+    installBrain(input: unknown) {
+        const harness = this.harnessOf(input);
+        // a download and an unpack: accepted now, followed through state.brains
+        void this.brains.install(harness).catch((e) => console.error(`[ai] ${HARNESS_NAMES[harness]} didn't install:`, String(e)));
+        return { accepted: true };
+    }
+
+    async signInBrain(input: unknown) {
+        const harness = this.harnessOf(input);
+        const method = (input as { method?: unknown }).method;
+        if (method !== undefined && method !== "browser" && method !== "code") throw new Error("sign in with the browser or with a code");
+        await this.brains.signIn(harness, method as LoginMethod | undefined);
+        return { started: true };
+    }
+
+    async brainCode(input: unknown) {
+        await this.brains.submitCode(this.harnessOf(input), (input as { code?: unknown }).code);
+        return { sent: true };
+    }
+
+    async cancelBrainSignIn(input: unknown) {
+        await this.brains.cancelSignIn(this.harnessOf(input));
+        return { cancelled: true };
+    }
+
+    async signOutBrain(input: unknown) {
+        await this.brains.signOut(this.harnessOf(input));
+        return { signedOut: true };
+    }
+
+    async providerList() {
+        return { providers: await this.providers.list() };
     }
 
     installComputer() {

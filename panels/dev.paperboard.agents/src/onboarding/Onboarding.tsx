@@ -21,21 +21,25 @@ import { scriptFor } from "./script";
 import { SEARCH_MODELS_FROM, createModels, harnessDescription, harnessName, loadedModels } from "../lib/brains";
 import BrainLogo from "../lib/BrainLogo";
 import { SetupProgress } from "../computer/Computer";
-import { LIMITS, characterOf, type Harness, type HarnessInfo } from "../contract";
+import { HARNESSES, LIMITS, characterOf, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import { errorText } from "../lib/failure";
+import { BrainButtons, BrainStatus, brainLine, createBrainActions } from "../settings/Brain";
+import Providers from "../settings/Providers";
 import styles from "./Onboarding.module.css";
 
 // The first meeting: name, brain, and (if the user wants it now) the agent's
-// computer. The speech is scripted; everything else is the service's: which
-// harnesses are installed, saving the settings, and the computer's setup.
+// computer. The speech is scripted; everything else is the service's: the
+// brain's install and sign-in, saving the settings, and the computer's setup.
+// Choosing a brain and pressing Next is all it takes: the next step installs
+// it and opens its sign-in.
 
 const NAMES = ["Pip", "Juniper", "Biscuit", "Nova", "Pebble", "Moss", "Echo", "Clover", "Ziggy", "Wren", "Tofu", "Atlas", "Maple", "Orbit", "Fern", "Scout"];
 
 const DEFAULT_MODEL = "default";
 
 // the last step is the answer to the computer: setting it up, or not yet
-const STEP = { name: 0, brain: 1, model: 2, computer: 3, last: 4 } as const;
+const STEP = { name: 0, brain: 1, signIn: 2, model: 3, computer: 4, last: 5 } as const;
 
 
 /**
@@ -148,22 +152,28 @@ function Scenes(props: {
     const [speakerShown, setSpeakerShown] = createSignal(true);
     const [leaving, setLeaving] = createSignal(false);
 
-    // which harnesses this computer has, as the service finds them
-    const [harnesses, setHarnesses] = createSignal<HarnessInfo[] | null>(null);
-    const [detectError, setDetectError] = createSignal<string | null>(null);
-    const detect = async () => {
-        setDetectError(null);
-        try {
-            setHarnesses(await agent.detect());
-        } catch (e) {
-            setDetectError(errorText(e));
+    // the chosen brain is installed and signed in by the next step; its models can be listed once it is
+    const actions = createBrainActions(agent);
+    const [providers, setProviders] = createSignal(false);
+    const brain = () => (props.harness() ? agent.state.brains[props.harness()!] : undefined);
+    const brainReady = () => brain()?.phase === "ready";
+    // each brain is installed and signed in once per visit to the step; stopping a sign-in doesn't start another by itself
+    const started = new Set<string>();
+    createEffect(() => {
+        const h = props.harness();
+        const b = brain();
+        if (!h || !b || wizard.currentStep() !== STEP.signIn) return;
+        if (b.phase === "none" && !started.has(`install:${h}`)) {
+            started.add(`install:${h}`);
+            void actions.install(h);
+        } else if (b.phase === "installed" && !started.has(`sign-in:${h}`)) {
+            started.add(`sign-in:${h}`);
+            void actions.signIn(h);
         }
-    };
-    void detect();
-    const installed = () => (harnesses() ?? []).filter((h) => h.installed);
+    });
 
     // the chosen brain's own models; a model belongs to its harness, so another brain is chosen afresh
-    const models = createModels(agent, props.harness);
+    const models = createModels(agent, () => (brainReady() ? props.harness() : undefined));
     createEffect(
         on(
             props.harness,
@@ -193,6 +203,8 @@ function Scenes(props: {
                 return name().length > 0;
             case STEP.brain:
                 return Boolean(props.harness());
+            case STEP.signIn:
+                return brainReady();
             case STEP.model:
                 return Boolean(props.model());
             case STEP.computer:
@@ -212,6 +224,7 @@ function Scenes(props: {
         [STEP.name]: () =>
             speaker.say(["[happy]Hi there! I'm your personal agent. I don't have a name yet though, that's your call."]),
         [STEP.brain]: () => speaker.say(scriptFor(name()).named(name())),
+        [STEP.signIn]: () => speaker.say(scriptFor(name()).signIn),
         [STEP.model]: async () => {
             setSpeakerShown(false);
             speaker.clear();
@@ -301,41 +314,37 @@ function Scenes(props: {
 
             <PaperWizardStep class={styles.step} index={STEP.brain} canProceed={ready()}>
                 <Reveal when={revealed()}>
-                    <Switch>
-                        <Match when={detectError()}>
-                            <PaperQuote variant="danger" icon="error" title="Harnesses not looked for" role="alert">
-                                {detectError()}
-                            </PaperQuote>
-                            <PaperButton onClick={() => void detect()}>Look again</PaperButton>
-                        </Match>
-                        <Match when={harnesses() === null}>
-                            <PaperLoader loaderStatus="indeterminate" label="Looking for harnesses" />
-                        </Match>
-                        <Match when={installed().length === 0}>
-                            <PaperText size={1} color="text-subtle">
-                                I didn't find Codex, Claude or OpenCode on this computer. Install one and sign in to it, then look again.
-                            </PaperText>
-                            <PaperButton onClick={() => void detect()}>Look again</PaperButton>
-                        </Match>
-                        <Match when={true}>
-                            <PaperSelector name="harness" value={props.harness()} onValueChange={(v) => props.setHarness(v as Harness)}>
-                                <For each={installed()}>
-                                    {(h) => (
-                                        <PaperSelectorItem
-                                            value={h.id}
-                                            icon={<BrainLogo harness={h.id} />}
-                                            description={harnessDescription(h.id)}
-                                        >
-                                            {harnessName(h.id)}
-                                        </PaperSelectorItem>
-                                    )}
-                                </For>
-                            </PaperSelector>
-                            <PaperText size={1} color="text-subtle">
-                                You can change this later.
-                            </PaperText>
-                        </Match>
-                    </Switch>
+                    <PaperSelector name="harness" value={props.harness()} onValueChange={(v) => props.setHarness(v as Harness)}>
+                        <For each={HARNESSES}>
+                            {(h) => (
+                                <PaperSelectorItem value={h} icon={<BrainLogo harness={h} />} description={harnessDescription(h)}>
+                                    {harnessName(h)}
+                                </PaperSelectorItem>
+                            )}
+                        </For>
+                    </PaperSelector>
+                    <PaperText size={1} color="text-subtle">
+                        You can change this later.
+                    </PaperText>
+                </Reveal>
+            </PaperWizardStep>
+
+            <PaperWizardStep class={styles.step} index={STEP.signIn} canProceed={ready()}>
+                <Reveal when={revealed()}>
+                    <Show when={props.harness()}>
+                        {(h) => (
+                            <>
+                                <PaperSectionHeader title={harnessName(h())} role="heading" aria-level={2} />
+                                <Show when={brainReady() || brain()?.phase === "installed"}>
+                                    <PaperText size={1} color="text-muted">
+                                        {brainLine(h(), brain()!)}
+                                    </PaperText>
+                                </Show>
+                                <BrainStatus agent={agent} harness={h()} actions={actions} />
+                                <BrainButtons agent={agent} harness={h()} actions={actions} onProviders={() => setProviders(true)} />
+                            </>
+                        )}
+                    </Show>
                 </Reveal>
             </PaperWizardStep>
 
@@ -426,6 +435,7 @@ function Scenes(props: {
                 </Show>
             </PaperWizardStep>
             <div class={styles.below} />
+            <Providers agent={agent} open={providers()} onClose={() => setProviders(false)} />
         </div>
     );
 }

@@ -25,6 +25,11 @@ afterEach(async () => {
 async function start(settings: Settings | null = PIP) {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-flows-"));
     const procs = new FakeProcesses();
+    // every brain is installed as a package, and signed in
+    for (const [pkg, program] of [["codex", "codex"], ["claude-code", "claude"], ["opencode", "opencode"]]) {
+        fs.mkdirSync(path.join(dir, "packages", pkg!, "bin"), { recursive: true });
+        fs.writeFileSync(path.join(dir, "packages", pkg!, "bin", program!), "#!/bin/sh\n", { mode: 0o755 });
+    }
     const registered: ActionDefinition[] = [];
     const triggers: { id: string; payload: unknown }[] = [];
     let state: AiState = structuredClone(DEFAULT_STATE);
@@ -35,18 +40,24 @@ async function start(settings: Settings | null = PIP) {
         onExit: procs.onExit,
         onStdout: procs.onStdout,
         onStderr: procs.onStderr,
-        exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
+        exec: async (_command, args) => {
+            if (args.join(" ") === "login status") return { stdout: "Logged in using ChatGPT", stderr: "", exitCode: 0 };
+            if (args.join(" ") === "auth status") return { stdout: JSON.stringify({ loggedIn: true }), stderr: "", exitCode: 0 };
+            if (args[0] === "auth" && args[1] === "list") return { stdout: "[]", stderr: "", exitCode: 0 };
+            throw new Error(`unexpected command ${args.join(" ")}`);
+        },
         packages: {
-            isInstalled: async () => false,
+            isInstalled: async () => true,
             download: async () => {
                 throw new Error("no network in tests");
             },
             getPath: async (name) => path.join(dir, "packages", name),
+            version: async () => null,
+            updateWaiting: async () => false,
         },
         storageDir: async () => dir,
         readSettings: async () => settings,
         writeSettings: async () => {},
-        harnessHomes: { claude: "/nonexistent/claude", codex: path.join(dir, "codex") },
         which: (c) => `/usr/bin/${c}`,
         registerAction: async (def) => void registered.push(def),
         tools: {
@@ -153,7 +164,10 @@ describe("the agent's actions in flows", () => {
         await until(() => procs.started.length === 1);
         const run = procs.started[0]!;
         expect(run.id).not.toBe(TURN_PROC_ID);
-        expect(run.command).toBe("/usr/bin/codex");
+        // the brain runs from its package, with its own home and no updating itself
+        expect(run.command).toBe(path.join(dir, "packages", "codex", "bin", "codex"));
+        expect(run.env).toMatchObject({ CODEX_HOME: path.join(dir, "brains", "codex") });
+        expect(run.args).toContain("check_for_update_on_startup=false");
         expect(run.args).toContain("--ephemeral");
         expect(run.args.join(" ")).not.toContain("mcp_servers");
         // a question that looks like a flag is still the question
@@ -359,7 +373,7 @@ describe("a question past its time", () => {
         const procs = new FakeProcesses();
         const workdir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-ask-"));
         dir = workdir;
-        const asker = new Asker({ host: procs, settings: () => PIP, resolve: () => "/usr/bin/codex", workdir, askMs: 50 });
+        const asker = new Asker({ host: procs, settings: () => PIP, resolve: () => "/usr/bin/codex", env: () => ({}), workdir, askMs: 50 });
         await expect(asker.ask("think forever")).rejects.toThrow("didn't answer within");
         expect(procs.killed.map((k) => k.signal)).toEqual(["SIGKILL"]);
     });

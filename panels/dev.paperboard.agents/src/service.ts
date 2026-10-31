@@ -1,5 +1,3 @@
-import os from "node:os";
-import path from "node:path";
 import { actionsApi, configApi, defineAction, definePanelService, fileApi, packageApi, processApi, secretsApi, type ActionDefinition } from "@mileniumhq/paperapi";
 import { DEFAULT_STATE, PANEL_ID, UI_ACTION_IDS, type AiState } from "./contract";
 import { TOOLS_ACTION_IDS } from "./toolsContract";
@@ -16,11 +14,17 @@ const host: AppHost = {
     // a harness's stdout is its protocol: stderr never mixes into it
     onStdout: (id, cb) => processApi.onStdout(id, cb),
     onStderr: (id, cb) => processApi.onStderr(id, cb),
-    exec: (command, args, o) => processApi.exec(command, args, { timeoutMs: o?.timeoutMs }),
+    exec: (command, args, o) => processApi.exec(command, args, { timeoutMs: o?.timeoutMs, env: o?.env }),
     packages: {
         isInstalled: (name) => packageApi.isInstalled(name),
         download: (name, onProgress) => packageApi.download(name, onProgress),
         getPath: (name) => packageApi.getPath(name),
+        version: async (name) => {
+            const record = (await packageApi.getIndex())[name];
+            const version = typeof record === "string" ? record : record?.version;
+            return typeof version === "string" ? version : null;
+        },
+        updateWaiting: async (name) => (await packageApi.pendingUpdates()).some((u) => u.name === name),
     },
     storageDir: () => fileApi.getPath("", PANEL_ID),
     readSettings: () => configApi.get(PANEL_ID),
@@ -47,13 +51,7 @@ const host: AppHost = {
             call: (panel, action, inputs, o) => actionsApi.call(panel, action, inputs, { timeoutMs: o.timeoutMs }),
         },
     },
-    // where the harnesses look for their own files: their documented overrides, else their defaults. The
-    // harnesses run with this service's environment, so they and the panel agree on it.
     registerAction: (def) => actionsApi.register(def, undefined, PANEL_ID),
-    harnessHomes: {
-        claude: process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"),
-        codex: process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
-    },
 };
 
 const app = new AiApp(host);
@@ -79,7 +77,17 @@ export const aiService = definePanelService({
         // registered again with the history in the dropdown once the conversation is read
         ...app.flowActions(),
         ui(UI_ACTION_IDS.setup, "Save the agent's settings", (i) => app.setup(i)),
-        ui(UI_ACTION_IDS.detect, "Find installed agent harnesses", () => app.detect()),
+        ui(UI_ACTION_IDS.installBrain, "Install a brain", (i) => app.installBrain(i)),
+        ui(UI_ACTION_IDS.signInBrain, "Start signing in to a brain", (i) => app.signInBrain(i)),
+        ui(UI_ACTION_IDS.brainCode, "Give a brain the code its sign-in page showed", (i) => app.brainCode(i)),
+        ui(UI_ACTION_IDS.cancelBrainSignIn, "Stop signing in to a brain", (i) => app.cancelBrainSignIn(i)),
+        ui(UI_ACTION_IDS.signOutBrain, "Sign out of a brain", (i) => app.signOutBrain(i)),
+        ui(UI_ACTION_IDS.providers, "List OpenCode's providers", () => app.providerList()),
+        ui(UI_ACTION_IDS.connectKey, "Connect an OpenCode provider with a key", (i) => app.providers.connectKey(i.provider, i.key, i.answer)),
+        ui(UI_ACTION_IDS.beginProvider, "Start signing in to an OpenCode provider", (i) => app.providers.begin(i.provider, i.method, i.answer)),
+        ui(UI_ACTION_IDS.providerAttempt, "Check, or finish, a provider sign-in", (i) => app.providers.attempt(i.provider, i.attempt, i.code)),
+        ui(UI_ACTION_IDS.cancelProvider, "Stop a provider sign-in", (i) => app.providers.cancel(i.provider, i.attempt)),
+        ui(UI_ACTION_IDS.disconnectProvider, "Disconnect an OpenCode provider", (i) => app.providers.disconnect(i.credential)),
         ui(UI_ACTION_IDS.models, "List a brain's models", (i) => app.models(i)),
         ui(UI_ACTION_IDS.history, "Read the conversation", (i) => app.conversation.history(Number(i.limit) || undefined)),
         ui(UI_ACTION_IDS.send, "Send a message", (i) =>

@@ -1,7 +1,7 @@
 // What the AI panel's service and its UI agree on: ids, state, events.
 //
 // The agent is one ongoing conversation, like texting a friend. Its brain is
-// an agent harness the user already has (Codex or Claude Code) with every
+// an agent harness Paperboard installs for them (Codex, Claude Code or OpenCode) with every
 // built-in tool off except web search; its hands are its own computer, a
 // web browser the service runs, reached through the service's MCP endpoint.
 
@@ -22,7 +22,19 @@ export const TRIGGER_IDS = {
 export const UI_ACTION_IDS = {
     // onboarding: name and brain
     setup: "ui-setup",
-    detect: "ui-detect",
+    // the brains (Codex, Claude, OpenCode): install one, sign in to it, sign out, stop a sign-in
+    installBrain: "ui-install-brain",
+    signInBrain: "ui-sign-in-brain",
+    brainCode: "ui-brain-code",
+    cancelBrainSignIn: "ui-cancel-brain-sign-in",
+    signOutBrain: "ui-sign-out-brain",
+    // OpenCode's providers: list them, connect one by key or by a sign-in page, take it back
+    providers: "ui-providers",
+    connectKey: "ui-provider-connect-key",
+    beginProvider: "ui-provider-begin",
+    providerAttempt: "ui-provider-attempt",
+    cancelProvider: "ui-provider-cancel",
+    disconnectProvider: "ui-provider-disconnect",
     history: "ui-history",
     send: "ui-send",
     installComputer: "ui-install-computer",
@@ -237,11 +249,89 @@ export interface BrainModel {
     older: boolean;
 }
 
-export interface HarnessInfo {
-    id: Harness;
+/**
+ * Where a brain stands on this computer. Each is a package Paperboard installs (codex, claude-code,
+ * opencode); its sign-in is the harness's own login, kept in a folder only this panel uses.
+ */
+export type BrainPhase =
+    | "none" // not installed
+    | "unsupported" // no build for this computer (see error)
+    | "installing"
+    | "installed" // there, but it needs signing in to
+    | "signing-in"
+    | "ready"
+    | "failed"; // the last install, sign-in or look at its state didn't work (see error)
+
+/** What a sign-in asks of the user, as its harness printed it. */
+export interface LoginPrompt {
+    /** the page to open */
+    url: string | null;
+    /** a code to type on that page */
+    code: string | null;
+    /** the page ends in a code to paste back here */
+    expectsCode: boolean;
+}
+
+export interface BrainState {
+    phase: BrainPhase;
     installed: boolean;
     version: string | null;
+    signedIn: boolean;
+    /** who it's signed in as, when the harness says */
+    account: string | null;
+    /** 0–100 while installing */
+    percent: number | null;
+    login: LoginPrompt | null;
+    error: string | null;
+    /** a newer build is downloaded and waits for the running agent to stop */
+    updateWaiting: boolean;
 }
+
+/** OpenCode works with its free models before anything is connected; the others need their sign-in. */
+export const SIGN_IN_REQUIRED: Record<Harness, boolean> = { codex: true, "claude-code": true, opencode: false };
+
+/** A field of a provider's connect form. Only text fields (optionally a list of choices) are supported. */
+export interface ProviderField {
+    key: string;
+    title: string;
+    required: boolean;
+    hidden: boolean;
+    placeholder: string | null;
+    default: string | null;
+    options: { value: string; label: string; description: string | null }[] | null;
+    /** shown only while another field has (or hasn't) a value */
+    when: { key: string; op: "eq" | "neq"; value: string }[];
+}
+
+/** One way to connect a provider that this panel can drive. */
+export interface ProviderMethod {
+    /** null for a key */
+    id: string | null;
+    kind: "key" | "oauth";
+    label: string;
+    fields: ProviderField[];
+}
+
+export interface ProviderInfo {
+    id: string;
+    name: string;
+    connected: boolean;
+    /** the credentials it has, by id, so one can be taken back */
+    connections: { id: string; label: string }[];
+    methods: ProviderMethod[];
+    /** why it can't be connected here when it has no method this panel supports ("set OPENAI_API_KEY in the environment") */
+    unsupported: string | null;
+}
+
+/** A provider sign-in in progress: open the page; `code` mode ends with a code pasted back. */
+export interface ProviderAttempt {
+    id: string;
+    url: string;
+    instructions: string;
+    mode: "auto" | "code";
+}
+
+export type ProviderAttemptStatus = { status: "pending" | "complete" | "expired" } | { status: "failed"; message: string };
 
 export type SetupStepId = "download" | "unpack";
 export type StepStatus = "waiting" | "running" | "done" | "failed";
@@ -328,6 +418,7 @@ export interface WaitingMessage {
 export interface AiState {
     /** null until onboarding has saved them */
     settings: Settings | null;
+    brains: Record<Harness, BrainState>;
     computer: ComputerState;
     chat: ChatState;
     memory: MemoryState;
@@ -402,8 +493,11 @@ export interface SignInEntry {
 
 export const SETUP_STEPS: SetupStepId[] = ["download", "unpack"];
 
+const NO_BRAIN: BrainState = { phase: "none", installed: false, version: null, signedIn: false, account: null, percent: null, login: null, error: null, updateWaiting: false };
+
 export const DEFAULT_STATE: AiState = {
     settings: null,
+    brains: { codex: { ...NO_BRAIN }, "claude-code": { ...NO_BRAIN }, opencode: { ...NO_BRAIN } },
     computer: { phase: "none", installed: false, steps: [], error: null, userControl: false },
     chat: { busy: false, typing: false, waiting: [], compacting: false },
     memory: { revision: 0, error: null },

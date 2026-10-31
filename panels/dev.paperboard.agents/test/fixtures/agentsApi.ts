@@ -29,7 +29,7 @@ export const service = {
 
 const answers: Record<string, () => unknown> = {
     [UI_ACTION_IDS.history]: () => service.history,
-    [UI_ACTION_IDS.detect]: () => [{ id: "codex", installed: true, version: "1.0.0" }],
+    [UI_ACTION_IDS.providers]: () => ({ providers: [] }),
     [UI_ACTION_IDS.models]: () => ({ models: [] }),
     [UI_ACTION_IDS.windows]: () => ({ windows: [] }),
     [UI_ACTION_IDS.routines]: () => service.routines,

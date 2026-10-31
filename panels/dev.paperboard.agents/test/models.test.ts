@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { listModels, MAX_CATALOG_BYTES, openCodeModels, type RunCommand } from "../src/service/models";
 
-// Each test makes its own fake harness homes; the real ~/.claude and ~/.codex are never read.
+// Each test makes its own fake harness homes; the real ~/.claude is never read.
 const dirs: string[] = [];
 afterEach(() => {
     for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
@@ -19,7 +19,7 @@ function write(file: string, data: unknown) {
     fs.writeFileSync(file, typeof data === "string" ? data : JSON.stringify(data));
 }
 const noRun: RunCommand = async () => {
-    throw new Error("Claude and Codex models come from their catalogs, not a command");
+    throw new Error("Claude's models come from its catalog, not a command");
 };
 const catalog = (fetchedAt: number, models: unknown[], surface = "cc") => ({ version: 1, fetchedAt, staleAt: fetchedAt + 1, catalog: { surface, config: { models } } });
 
@@ -65,26 +65,30 @@ describe("Claude's models", () => {
 });
 
 describe("Codex's models", () => {
-    test("the listed ones in priority order; hidden ones left out", async () => {
-        const h = homes();
-        write(path.join(h.codex, "models_cache.json"), {
-            models: [
+    const codexOut = (models: unknown, exitCode = 0, stderr = ""): RunCommand => async () => ({ stdout: JSON.stringify({ models }), stderr, exitCode });
+
+    test("the listed ones in priority order; hidden ones left out, from `codex debug models`", async () => {
+        const runs: [string, string[]][] = [];
+        const run: RunCommand = async (command, args, o) => {
+            runs.push([command, args]);
+            return codexOut([
                 { slug: "second", display_name: "Second", visibility: "list", priority: 2 },
                 { slug: "internal", display_name: "Internal", visibility: "hide", priority: 0 },
                 { slug: "first", display_name: "First", description: "best", visibility: "list", priority: 1 },
-            ],
-        });
-        expect(await listModels("codex", h, noRun)).toEqual([
+            ])(command, args, o);
+        };
+        expect(await listModels("codex", homes(), run)).toEqual([
             { id: "first", name: "First", description: "best", older: false },
             { id: "second", name: "Second", description: null, older: false },
         ]);
+        expect(runs).toEqual([["codex", ["debug", "models"]]]);
     });
 
-    test("no cache, or nothing listed, is an error", async () => {
-        const h = homes();
-        await expect(listModels("codex", h, noRun)).rejects.toThrow("hasn't listed its models");
-        write(path.join(h.codex, "models_cache.json"), { models: [{ slug: "x", visibility: "hide" }] });
-        await expect(listModels("codex", h, noRun)).rejects.toThrow("empty");
+    test("a failed command, something that isn't a list, or nothing listed is an error", async () => {
+        await expect(listModels("codex", homes(), codexOut([], 1, "boom"))).rejects.toThrow("boom");
+        await expect(listModels("codex", homes(), async () => ({ stdout: "not json", stderr: "", exitCode: 0 }))).rejects.toThrow("isn't JSON");
+        await expect(listModels("codex", homes(), async () => ({ stdout: "{}", stderr: "", exitCode: 0 }))).rejects.toThrow("isn't a list");
+        await expect(listModels("codex", homes(), codexOut([{ slug: "x", visibility: "hide" }]))).rejects.toThrow("empty");
     });
 });
 

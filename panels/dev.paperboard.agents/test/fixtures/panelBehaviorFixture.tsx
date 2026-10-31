@@ -24,7 +24,10 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const HOUR = 60 * 60 * 1000;
 service.routines = [{ id: "r1", what: "Text a flag fact", schedule: { kind: "every", minutes: 60 }, created: 0, lastRun: null, lastError: null, next: Date.now() + HOUR }];
-service.refuse[UI_ACTION_IDS.detect] = "harness detection is down";
+// Claude is installed but its look at itself failed; OpenCode isn't installed, and installing it is refused
+service.state.brains["codex"] = { ...service.state.brains["codex"], phase: "ready", installed: true, signedIn: true, account: "Logged in using ChatGPT", version: "0.166.0" };
+service.state.brains["claude-code"] = { ...service.state.brains["claude-code"], phase: "failed", installed: true, error: "Claude's sign-in status couldn't be read: database is locked" };
+service.refuse[UI_ACTION_IDS.installBrain] = "the download was refused";
 service.history = [
     { id: "m1", at: Date.now() - 1000, kind: "user", text: "hi" },
     { id: "m2", at: Date.now(), kind: "error", title: "Not answered", text: "usage limit reached" },
@@ -148,10 +151,16 @@ async function run() {
     menu.click();
     await sleep(300);
 
-    // settings while the brains can't be looked for: the page stands, and says why
+    // settings while a brain is in trouble: the page stands, and says why
     await page("settings");
     c.settingsShown = Boolean(document.querySelector('input[name="name"]'));
-    c.detectFailureShown = alertSaying(document, "harness detection is down");
+    c.brainFailureShown = alertSaying(document, "database is locked");
+    // installing one, refused: the page names the brain that didn't install and says why
+    const install = button(document, "Install");
+    if (!install) throw new Error("a brain that isn't installed offers no way to install it");
+    install.click();
+    await sleep(300);
+    c.installRefusalShown = alertSaying(document, "the download was refused");
 
     // erasing the computer, refused: the confirmation says why
     const erase = button(document, "Set up again");

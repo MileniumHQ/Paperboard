@@ -1,6 +1,6 @@
 // The panel as a person meets it (real browser): the real Main on real
 // PaperUI over a fake Agents service. It proves settings stand and say why
-// when the brains can't be looked for, that a failed turn names what didn't
+// when a brain is in trouble, that a failed turn names what didn't
 // happen, that a refused erase or tool server
 // removal is explained inside the confirmation that's still open, and that
 // quiet text reads in PaperUI's muted colour, and that an app's card opens
@@ -53,8 +53,9 @@ describe("panel behavior", () => {
             expect(c.frameFromList).toBe("about:blank#planner");
             expect(c.openAppMarked, "the app open beside the chat is marked").toEqual(["planner"]);
 
-            expect(c.settingsShown, "settings must show while the brains can't be looked for").toBe(true);
-            expect(c.detectFailureShown, "a failed look for the brains must say why").toBe(true);
+            expect(c.settingsShown, "settings must show while a brain is in trouble").toBe(true);
+            expect(c.brainFailureShown, "a brain that can't be looked at must say why").toBe(true);
+            expect(c.installRefusalShown, "a refused install must say why").toBe(true);
 
             expect(c.eraseStillAsking, "a refused erase keeps its confirmation open").toBe(true);
             expect(c.eraseRefusalInModal, "a refused erase must say why where the person is looking").toBe(true);

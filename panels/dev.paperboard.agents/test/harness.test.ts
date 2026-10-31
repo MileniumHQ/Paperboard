@@ -3,7 +3,7 @@ import { MCP_TOKEN_ENV } from "../src/service/computerMcp";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { codexContext, instructions, openCodeConfig, parseTurnLine, turnLaunch } from "../src/service/harness";
+import { askLaunch, codexContext, instructions, openCodeConfig, parseTurnLine, turnLaunch } from "../src/service/harness";
 import { MESSAGES_INSTRUCTIONS } from "../src/service/messages";
 import { COMPUTER_INSTRUCTIONS } from "../src/service/computerTools";
 import { characterOf } from "../src/contract";
@@ -182,5 +182,21 @@ describe("how much of its context a thread fills", () => {
         } finally {
             fs.rmSync(home, { recursive: true, force: true });
         }
+    });
+});
+
+describe("a brain that can't think says so instead of speaking for the agent", () => {
+    test("Claude Code's 'Not logged in' reply is a failure, not a message the agent sent", () => {
+        // what Claude Code 2.1.316 printed for a turn while signed out
+        const assistant = JSON.stringify({ type: "assistant", error: "authentication_failed", message: { role: "assistant", model: "<synthetic>", content: [{ type: "text", text: "Not logged in · Please run /login" }], usage: { input_tokens: 0, output_tokens: 0 } } });
+        expect(parseTurnLine("claude-code", assistant)).toEqual([{ type: "failed", message: "Not logged in · Please run /login" }]);
+        const result = JSON.stringify({ type: "result", subtype: "success", is_error: true, result: "Not logged in · Please run /login", terminal_reason: "api_error" });
+        expect(parseTurnLine("claude-code", result)).toEqual([{ type: "failed", message: "Not logged in · Please run /login" }]);
+    });
+
+    test("Codex is told not to look for a newer build of itself, in a turn and in a question", () => {
+        const spec = { harness: "codex" as const, command: "/p/codex", model: null, name: "Pip", thread: null, message: "hi", mcpUrl: "http://127.0.0.1:1/mcp", sections: [] };
+        expect(turnLaunch(spec).args).toContain("check_for_update_on_startup=false");
+        expect(askLaunch({ harness: "codex", command: "/p/codex", model: null, name: "Pip", question: "q", instructions: null }).args).toContain("check_for_update_on_startup=false");
     });
 });

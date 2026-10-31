@@ -2,7 +2,7 @@
 // conversation. Each change saves as it's made, through the service, which
 // validates it; a refused change says why and shows what's still saved.
 
-import { For, Match, Show, Switch, createEffect, createResource, createSignal, on } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -23,6 +23,8 @@ import { COMPACTIONS, HARNESSES, LIMITS, type Compaction, type Harness, type Set
 import type { Agent } from "../lib/agent";
 import { SEARCH_MODELS_FROM, createModels, harnessName, loadedModels } from "../lib/brains";
 import { errorText, failure, type Failure } from "../lib/failure";
+import { BrainButtons, BrainStatus, brainLine, createBrainActions } from "./Brain";
+import Providers from "./Providers";
 
 const DEFAULT_MODEL = "default";
 
@@ -31,6 +33,8 @@ export default function Settings(props: { agent: Agent }) {
     return (
         <PaperFlex gap="full">
             <AgentSettings agent={agent} />
+            <PaperSeparator />
+            <BrainsSettings agent={agent} />
             <PaperSeparator />
             <ComputerSettings agent={agent} />
             <PaperSeparator />
@@ -47,8 +51,6 @@ function AgentSettings(props: { agent: Agent }) {
     const [name, setName] = createSignal(current().name);
     const [model, setModel] = createSignal(current().model ?? "");
     const [error, setError] = createSignal<Failure | null>(null);
-    // a failed look leaves the saved brain choosable, and says why
-    const [installed, { refetch: detectAgain }] = createResource(() => props.agent.detect());
     const models = createModels(props.agent, () => current().harness);
     // as the harness lists them: its current models, then its older ones
     const listed = () => loadedModels(models) ?? [];
@@ -87,7 +89,8 @@ function AgentSettings(props: { agent: Agent }) {
         }
         save("Name not saved", { name: n });
     };
-    const isInstalled = (h: Harness) => (installed.error ? undefined : installed.latest)?.find((i) => i.id === h)?.installed ?? h === current().harness;
+    // only a brain that is installed and signed in can think; the saved one stays choosable
+    const isReady = (h: Harness) => props.agent.state.brains[h].phase === "ready" || h === current().harness;
 
     return (
         <PaperFlex gap="full" role="region" aria-label="Agent">
@@ -114,9 +117,9 @@ function AgentSettings(props: { agent: Agent }) {
                     >
                         <For each={HARNESSES}>
                             {(h) => (
-                                <PaperSelectMenuItem value={h} icon={<BrainLogo harness={h} />} disabled={!isInstalled(h)}>
+                                <PaperSelectMenuItem value={h} icon={<BrainLogo harness={h} />} disabled={!isReady(h)}>
                                     {harnessName(h)}
-                                    {isInstalled(h) ? "" : " (not installed)"}
+                                    {isReady(h) ? "" : " (not set up)"}
                                 </PaperSelectMenuItem>
                             )}
                         </For>
@@ -169,14 +172,6 @@ function AgentSettings(props: { agent: Agent }) {
                     {errorText(models.error)} Type a model's id instead.
                 </PaperQuote>
             </Show>
-            <Show when={installed.error}>
-                <PaperQuote variant="danger" icon="error" title="Brains not found" role="alert">
-                    {errorText(installed.error)}
-                </PaperQuote>
-                <PaperFlex direction="row">
-                    <PaperButton onClick={() => void detectAgain()}>Look again</PaperButton>
-                </PaperFlex>
-            </Show>
             <Show when={error()}>
                 {(shown) => (
                     <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
@@ -184,6 +179,43 @@ function AgentSettings(props: { agent: Agent }) {
                     </PaperQuote>
                 )}
             </Show>
+        </PaperFlex>
+    );
+}
+
+/** Codex, Claude and OpenCode: each is installed here from its maker and signed in with its own login. */
+function BrainsSettings(props: { agent: Agent }) {
+    const actions = createBrainActions(props.agent);
+    const [providers, setProviders] = createSignal(false);
+    const busy = (h: Harness) => ["installing", "signing-in", "failed", "unsupported"].includes(props.agent.state.brains[h].phase);
+    return (
+        <PaperFlex gap="full" role="region" aria-label="Brains">
+            <PaperSectionHeader icon="psychology" title="Brains" role="heading" aria-level={2} />
+            <PaperSettingList autoHeight>
+                <For each={HARNESSES}>
+                    {(h) => (
+                        <PaperSettingItem title={harnessName(h)} description={brainLine(h, props.agent.state.brains[h])}>
+                            <BrainButtons agent={props.agent} harness={h} actions={actions} onProviders={() => setProviders(true)} />
+                        </PaperSettingItem>
+                    )}
+                </For>
+            </PaperSettingList>
+            <For each={HARNESSES.filter(busy)}>
+                {(h) => (
+                    <PaperFlex gap="half">
+                        <PaperText preset="section">{harnessName(h)}</PaperText>
+                        <BrainStatus agent={props.agent} harness={h} actions={actions} />
+                    </PaperFlex>
+                )}
+            </For>
+            <Show when={!HARNESSES.some(busy) && actions.error()}>
+                {(shown) => (
+                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
+                        {shown().message}
+                    </PaperQuote>
+                )}
+            </Show>
+            <Providers agent={props.agent} open={providers()} onClose={() => setProviders(false)} />
         </PaperFlex>
     );
 }

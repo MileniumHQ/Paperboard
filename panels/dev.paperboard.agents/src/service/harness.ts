@@ -1,4 +1,4 @@
-// The agent's brain: an agent harness the user already has, run for one turn
+// The agent's brain: an agent harness Paperboard installed (brains.ts), run for one turn
 // at a time with every built-in tool off except web search. Its hands are the
 // computer's MCP endpoint, served by this service.
 //
@@ -25,7 +25,6 @@ import path from "node:path";
 import { characterOf, type Character, type Harness } from "../contract";
 import { MCP_TOKEN_ENV } from "./computerMcp";
 
-export const HARNESS_COMMANDS: Record<Harness, string> = { codex: "codex", "claude-code": "claude", opencode: "opencode" };
 export const HARNESS_NAMES: Record<Harness, string> = { codex: "Codex", "claude-code": "Claude", opencode: "OpenCode" };
 
 /** MCP server name the harness knows the service's endpoint by; its tools are mcp__paperboard__<tool> */
@@ -48,6 +47,9 @@ export function instructions(name: string, sections: string[] = []): string {
         ...sections,
     ].join("\n\n");
 }
+
+// Codex looks for a newer build when it starts; the package is the only way a new one arrives
+const CODEX_NO_UPDATE_CHECK = `check_for_update_on_startup=false`;
 
 // Codex features that would hand the model tools other than search and the computer
 const CODEX_FEATURES_OFF = [
@@ -133,6 +135,7 @@ export function turnLaunch(spec: TurnSpec): TurnLaunch {
             `approval_policy="never"`,
             `sandbox_mode="read-only"`,
             `web_search="live"`,
+            CODEX_NO_UPDATE_CHECK,
             `developer_instructions=${toml(instructions(spec.name, spec.sections))}`,
             `mcp_servers.${MCP_SERVER}.url=${toml(spec.mcpUrl)}`,
             `mcp_servers.${MCP_SERVER}.bearer_token_env_var=${toml(MCP_TOKEN_ENV)}`,
@@ -226,6 +229,7 @@ export function askLaunch(spec: AskSpec): { command: string; args: string[]; env
             `approval_policy="never"`,
             `sandbox_mode="read-only"`,
             `web_search="live"`,
+            CODEX_NO_UPDATE_CHECK,
             `developer_instructions=${JSON.stringify(system)}`,
             ...CODEX_MEMORY_OFF,
         ].flatMap((c) => ["-c", c]);
@@ -295,6 +299,11 @@ export function parseTurnLine(harness: Harness, line: string): TurnEvent[] {
     }
     if (ev.type === "assistant") {
         const out: TurnEvent[] = [];
+        // Claude Code says a failed request in an assistant message of its own ("Not logged in · Please run /login"): a failure, not what the agent said
+        if (typeof ev.error === "string" && !(typeof ev.parent_tool_use_id === "string")) {
+            const text = (ev.message?.content ?? []).find((c: any) => c?.type === "text" && typeof c.text === "string")?.text;
+            return [{ type: "failed", message: String(text ?? ev.error) }];
+        }
         // a subagent's words go back to the agent, which says what came of them; only its searches show
         const subagent = typeof ev.parent_tool_use_id === "string";
         // the request this message answered, plus the message itself: what the next request starts with
