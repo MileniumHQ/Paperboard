@@ -2541,13 +2541,19 @@ async function loadBots(): Promise<void> {
 }
 
 // a bot's actions, then its connection: one bot failing never holds back another
-async function startEntry(entry: BotEntry): Promise<void> {
+/** Adds a saved bot's actions to Actions. The daemon is local, so this is quick, and it's done before the service is
+ * ready: a flow that runs at startup finds the bot's actions registered. */
+async function registerEntry(entry: BotEntry): Promise<void> {
     try {
         await registerBot(entry);
     } catch (err) {
         entry.actionsError = `Its actions couldn't be added to Actions: ${errorToMessage(err)}`;
         console.error(`[DiscordService] ${entry.stored.name}:`, entry.actionsError);
     }
+}
+
+/** Logs a saved bot in to Discord, which can stall on a rate limit, so it runs after the service is ready. */
+async function connectEntry(entry: BotEntry): Promise<void> {
     try {
         entry.hasToken = Boolean(await readToken(entry.stored.id));
         if (!entry.hasToken) entry.session.fail("No token is saved for this bot. Replace its token in Configuration.");
@@ -3071,8 +3077,9 @@ export const botService = definePanelService({
             botsError = errorToMessage(err);
             console.error("[DiscordService] reading the saved bots failed:", botsError);
         }
+        for (const entry of bots.values()) await registerEntry(entry);
         publish();
-        startBots(bots.values(), startEntry);
+        startBots(bots.values(), connectEntry);
         console.log(`[DiscordService] Ready with ${bots.size} bot(s); connecting them to Discord.`);
     },
 });
