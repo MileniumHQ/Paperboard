@@ -73,8 +73,8 @@ describe("op and whitelist on a stopped server", () => {
     it("writes whitelist.json and ops.json in the server's format", async () => {
         write("server.properties", "op-permission-level=3\n");
 
-        await setPlayerFlag(ctx("offline"), toConsole, "whitelist", "notch", true);
-        await setPlayerFlag(ctx("offline"), toConsole, "op", "notch", true);
+        await setPlayerFlag(ctx("offline"), toConsole, null, "whitelist", "notch", true);
+        await setPlayerFlag(ctx("offline"), toConsole, null, "op", "notch", true);
 
         // Mojang's casing and uuid, as `whitelist add` / `op` record them
         expect(readJson("whitelist.json")).toEqual([{ uuid: NOTCH, name: "Notch" }]);
@@ -82,7 +82,7 @@ describe("op and whitelist on a stopped server", () => {
             { uuid: NOTCH, name: "Notch", level: 3, bypassesPlayerLimit: false },
         ]);
 
-        await setPlayerFlag(ctx("offline"), toConsole, "op", "Notch", false);
+        await setPlayerFlag(ctx("offline"), toConsole, null, "op", "Notch", false);
         expect(readJson("ops.json")).toEqual([]);
         expect(readJson("whitelist.json")).toHaveLength(1);
     });
@@ -90,7 +90,7 @@ describe("op and whitelist on a stopped server", () => {
     it("uses the uuid an offline-mode server derives from the name", async () => {
         write("server.properties", "online-mode=false\n");
 
-        await setPlayerFlag(ctx("offline"), toConsole, "whitelist", "Steve", true);
+        await setPlayerFlag(ctx("offline"), toConsole, null, "whitelist", "Steve", true);
 
         // java.util.UUID.nameUUIDFromBytes("OfflinePlayer:Steve")
         expect(offlinePlayerUuid("Steve")).toBe("5627dd98-e6be-3c21-b8a8-e92344183641");
@@ -103,31 +103,31 @@ describe("op and whitelist on a stopped server", () => {
     it("keeps a player the server already knows under their known uuid", async () => {
         write("usercache.json", [{ uuid: STEVE, name: "Steve", expiresOn: "2027-01-01 00:00:00 +0000" }]);
 
-        await setPlayerFlag(ctx("offline"), toConsole, "whitelist", "steve", true);
+        await setPlayerFlag(ctx("offline"), toConsole, null, "whitelist", "steve", true);
 
         expect(readJson("whitelist.json")).toEqual([{ uuid: STEVE, name: "Steve" }]);
         expect(mojangCalls).toEqual([]);
     });
 
     it("fails loudly for a name no account has, and on a damaged list", async () => {
-        await expect(setPlayerFlag(ctx("offline"), toConsole, "op", "Nobody_12345", true)).rejects.toThrow(
+        await expect(setPlayerFlag(ctx("offline"), toConsole, null, "op", "Nobody_12345", true)).rejects.toThrow(
             'No Minecraft account is named "Nobody_12345"',
         );
         expect(exists("ops.json")).toBe(false);
 
         write("ops.json", "{broken");
-        await expect(setPlayerFlag(ctx("offline"), toConsole, "op", "Notch", true)).rejects.toThrow(
+        await expect(setPlayerFlag(ctx("offline"), toConsole, null, "op", "Notch", true)).rejects.toThrow(
             "ops.json is not valid JSON",
         );
         expect(fs.readFileSync(inRoot("ops.json"), "utf8")).toBe("{broken");
 
-        await expect(setPlayerFlag(ctx("offline"), toConsole, "whitelist", "Notch", false)).rejects.toThrow(
+        await expect(setPlayerFlag(ctx("offline"), toConsole, null, "whitelist", "Notch", false)).rejects.toThrow(
             "Notch is not on the whitelist",
         );
     });
 
     it("waits while the server is stopping, when it could write over the edit", async () => {
-        await expect(setPlayerFlag(ctx("stopping"), toConsole, "whitelist", "Notch", true)).rejects.toThrow(
+        await expect(setPlayerFlag(ctx("stopping"), toConsole, null, "whitelist", "Notch", true)).rejects.toThrow(
             "Wait until the server has finished stopping",
         );
         expect(exists("whitelist.json")).toBe(false);
@@ -136,8 +136,8 @@ describe("op and whitelist on a stopped server", () => {
 
 describe("op and whitelist on a running server", () => {
     it("go through the toConsole, which rewrites the files itself", async () => {
-        await setPlayerFlag(ctx("online"), toConsole, "op", "Notch", true);
-        await setPlayerFlag(ctx("starting"), toConsole, "whitelist", "Notch", false);
+        await setPlayerFlag(ctx("online"), toConsole, null, "op", "Notch", true);
+        await setPlayerFlag(ctx("starting"), toConsole, null, "whitelist", "Notch", false);
 
         expect(commands).toEqual(["op Notch", "whitelist remove Notch"]);
         expect(exists("ops.json")).toBe(false);
@@ -155,7 +155,7 @@ describe("renamed players", () => {
         ]);
 
         // and is found under it: the lists match by uuid
-        await setPlayerFlag(ctx("offline"), toConsole, "op", "NewSteve", false);
+        await setPlayerFlag(ctx("offline"), toConsole, null, "op", "NewSteve", false);
         expect(readJson("ops.json")).toEqual([]);
     });
 
@@ -163,18 +163,18 @@ describe("renamed players", () => {
         write("whitelist.json", [{ uuid: NOTCH, name: "Notch" }]);
         accounts[0].name = "Notch2";
 
-        expect(await currentPlayerNames([NOTCH])).toEqual({ [NOTCH]: "Notch2" });
+        expect(await currentPlayerNames([NOTCH], null)).toEqual({ [NOTCH]: "Notch2" });
         expect((await listRoster())[0].name).toBe("Notch2");
 
         // a renamed player not known locally is matched by the uuid the roster passes
-        await setPlayerFlag(ctx("offline"), toConsole, "whitelist", "Notch2", false, NOTCH);
+        await setPlayerFlag(ctx("offline"), toConsole, null, "whitelist", "Notch2", false, NOTCH);
         expect(readJson("whitelist.json")).toEqual([]);
     });
 
     it("asks nothing for an offline-mode server, whose uuids come from names", async () => {
         write("server.properties", "online-mode=false\n");
 
-        expect(await currentPlayerNames([NOTCH])).toEqual({});
+        expect(await currentPlayerNames([NOTCH], null)).toEqual({});
         expect(mojangCalls).toEqual([]);
     });
 });

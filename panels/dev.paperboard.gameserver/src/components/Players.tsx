@@ -33,9 +33,10 @@ import {
     seenPlayerNames,
     serverBridge,
     serverStatus,
-    PLAYER_NAME_PATTERN,
 } from "../lib/server";
 import { ACTION_IDS, type ActionId } from "../service/contract";
+import { JAVA_NAME_PATTERN, PLAYER_NAME_PATTERN } from "../core/players";
+import { gamertagOf, isFloodgateUuid, type BedrockNaming } from "../core/bedrock";
 import PlayerHead from "./PlayerHead";
 import PlayerRoster, { statusColor } from "./PlayerRoster";
 
@@ -64,6 +65,11 @@ function isOnline(): boolean {
 function canEditLists(): boolean {
     const status = serverStatus();
     return status === "online" || status === "starting" || status === "offline";
+}
+
+/** a Bedrock player: a Floodgate uuid, or a name with Floodgate's prefix */
+function isBedrockPlayer(player: PlayerInfo, naming: BedrockNaming | null): boolean {
+    return (player.uuid !== undefined && isFloodgateUuid(player.uuid)) || gamertagOf(player.name, naming) !== null;
 }
 
 function formatPlaytime(seconds: number | undefined): string {
@@ -118,6 +124,8 @@ export default function Players() {
     const [whitelistError, setWhitelistError] = createSignal("");
     const [feedback, setFeedback] = createSignal("");
     const [sortBy, setSortBy] = createSignal<SortKey>("playtime");
+    // how Floodgate names Bedrock players; null without crossplay
+    const [bedrock, setBedrock] = createSignal<BedrockNaming | null>(null);
 
     // re-verify ban state after a written command; tracked so unmount clears it
     let banRecheckTimer: ReturnType<typeof setTimeout> | null = null;
@@ -197,6 +205,14 @@ export default function Players() {
             if (banRecheckTimer) clearTimeout(banRecheckTimer);
         });
         void loadRoster();
+        serverBridge
+            .call<BedrockNaming | null>(ACTION_IDS.readBedrockNaming)
+            .then((naming) => setBedrock(naming ?? null))
+            .catch((err) => {
+                const message = err instanceof Error ? err.message : String(err);
+                console.error("[Players] read-bedrock-naming failed:", message);
+                setFeedback(message);
+            });
     });
 
     // players known only from their stats files get current names too
@@ -394,8 +410,14 @@ export default function Players() {
     // is only so the field can explain itself before the round trip.
     const whitelistNewPlayer = async () => {
         const name = whitelistName().trim();
-        if (!PLAYER_NAME_PATTERN.test(name)) {
-            setWhitelistError("Names are 1–16 letters, numbers, or underscores.");
+        const naming = bedrock();
+        const isBedrockName = gamertagOf(name, naming) !== null && PLAYER_NAME_PATTERN.test(name);
+        if (!isBedrockName && !JAVA_NAME_PATTERN.test(name)) {
+            setWhitelistError(
+                naming
+                    ? `Java names are 1–16 letters, numbers, or underscores. Bedrock names start with "${naming.prefix}".`
+                    : "Names are 1–16 letters, numbers, or underscores.",
+            );
             return;
         }
         try {
@@ -479,7 +501,11 @@ export default function Players() {
 
     return (
         <>
-            <PaperPageHeader icon="group" title="Players">
+            <PaperPageHeader
+                icon="group"
+                title="Players"
+                subtitle={bedrock() ? `Bedrock players' names start with "${bedrock()!.prefix}", like ${bedrock()!.prefix}Steve` : undefined}
+            >
                 <PaperFlex direction="row" gap="half" align="center">
                     <PaperFlex minWidth="field">
                         <PaperSelectMenu
@@ -545,6 +571,7 @@ export default function Players() {
             >
                 <PlayerInspector
                     player={openPlayer()}
+                    bedrock={openPlayer() ? isBedrockPlayer(openPlayer()!, bedrock()) : false}
                     banned={openIsBanned()}
                     onToggleFlag={togglePlayerFlag}
                     onAction={(action) => setActionModal(action)}
@@ -627,6 +654,16 @@ export default function Players() {
                         Adds a player to the server whitelist. They do not need to
                         have joined before.
                     </PaperText>
+                    <Show when={bedrock()}>
+                        {(naming) => (
+                            <PaperText preset="body" color="text-subtle">
+                                For a Bedrock player, type their gamertag after "{naming().prefix}"
+                                {naming().replaceSpaces ? ", with underscores for spaces" : ""}. Floodgate
+                                finds their Xbox account through GeyserMC, which knows a gamertag once
+                                its player has joined any Geyser server.
+                            </PaperText>
+                        )}
+                    </Show>
                     <PaperInput
                         fullWidth
                         icon="person_add"
@@ -653,6 +690,7 @@ export default function Players() {
 
 function PlayerInspector(props: {
     player?: PlayerInfo;
+    bedrock: boolean;
     banned: boolean;
     onToggleFlag: (name: string, field: "op" | "whitelisted", value: boolean) => void;
     onAction: (action: "kick" | "ban") => void;
@@ -747,6 +785,9 @@ function PlayerInspector(props: {
                                 </Show>
                                 <Show when={props.player?.whitelisted}>
                                     <PaperBadge>Whitelisted</PaperBadge>
+                                </Show>
+                                <Show when={props.bedrock}>
+                                    <PaperBadge variant="monochrome">Bedrock</PaperBadge>
                                 </Show>
                             </PaperFlex>
                             <Show when={props.player?.uuid}>
@@ -877,7 +918,11 @@ function PlayerInspector(props: {
                     <PaperSettingList autoHeight>
                         <PaperSettingItem
                             title="Operator"
-                            description="Full command and administration access."
+                            description={
+                                props.bedrock
+                                    ? "Full command and administration access. While the server runs, only a Bedrock player who has joined once can be made an operator."
+                                    : "Full command and administration access."
+                            }
                         >
                             <PaperToggle
                                 checked={props.player?.op ?? false}

@@ -1,5 +1,6 @@
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
+import type { BedrockNaming } from "../core/bedrock";
 import { parseProperties } from "../core/properties";
 import { pluginDirName } from "../core/plugins";
 import { SOFTWARE, type ServerSoftwareType } from "../software/catalog";
@@ -76,6 +77,30 @@ export async function readCrossplay(software: ServerSoftwareType, deps: LoaderDe
     const jars = await findCrossplayJars(software, deps);
     const { groups } = await readSchemaSettings(platform.schema, deps);
     return { software, ...jars, groups };
+}
+
+/**
+ * How Floodgate names Bedrock players on this server, read from its own
+ * config.yml, or null when Floodgate is not installed (no Bedrock players).
+ */
+export async function readBedrockNaming(software: ServerSoftwareType, deps: LoaderDeps): Promise<BedrockNaming | null> {
+    const platform = CROSSPLAY[software];
+    if (!platform) return null;
+    const { floodgate } = await findCrossplayJars(software, deps);
+    if (!floodgate) return null;
+    const { groups } = await readSchemaSettings(platform.schema, deps);
+    const group = groups.find((g) => g.settings.some((s) => s.id === "floodgate.username-prefix"));
+    if (!group) throw new Error("Floodgate's settings are missing from the crossplay schema");
+    if (group.error) throw new Error(`Floodgate's ${group.path} could not be read: ${group.error}`);
+    const value = (id: string) => {
+        const setting = group.settings.find((s) => s.id === id);
+        if (!setting) throw new Error(`Floodgate's ${id} setting is missing from the crossplay schema`);
+        return setting.value;
+    };
+    return {
+        prefix: value("floodgate.username-prefix"),
+        replaceSpaces: value("floodgate.replace-spaces") !== "false",
+    };
 }
 
 async function javaPort(deps: LoaderDeps): Promise<number> {

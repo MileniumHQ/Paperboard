@@ -1,4 +1,10 @@
-export const PLAYER_NAME_PATTERN = /^[a-zA-Z0-9_]{1,16}$/;
+// Java names are letters, digits and underscores. Floodgate names a Bedrock
+// player with its username prefix in front ("." by default), so a player name
+// also takes the other characters a console command reads as one bare word
+// (Brigadier's unquoted strings: . + -), still at most 16 long.
+export const JAVA_NAME_PATTERN = /^[a-zA-Z0-9_]{1,16}$/;
+export const PLAYER_NAME_PATTERN = /^[a-zA-Z0-9_.+-]{1,16}$/;
+const NAME_IN_LINE = "[a-zA-Z0-9_.+-]{1,16}";
 export const SERVER_PROC_ID = "mc-server";
 
 // names reach console commands raw (`kick ${name}`, `data get entity
@@ -48,11 +54,11 @@ export function consoleTimeToSeconds(clean: string): number | undefined {
 }
 
 export function extractJoinedName(clean: string): string | undefined {
-    return clean.match(/([a-zA-Z0-9_]{1,16})\s+joined the game/i)?.[1];
+    return clean.match(new RegExp(`(${NAME_IN_LINE})\\s+joined the game`, "i"))?.[1];
 }
 
 export function extractLeftName(clean: string): string | undefined {
-    return clean.match(/([a-zA-Z0-9_]{1,16})\s+left the game/i)?.[1];
+    return clean.match(new RegExp(`(${NAME_IN_LINE})\\s+left the game`, "i"))?.[1];
 }
 
 export function extractListedNames(clean: string): string[] | undefined {

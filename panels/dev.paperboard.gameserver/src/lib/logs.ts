@@ -42,7 +42,7 @@ export function parseChatMessage(rawLine: string): ChatMessage | null {
         .trim();
     if (!text) return null;
 
-    const playerChatMatch = text.match(/^<([a-zA-Z0-9_]{1,16})>\s+(.+)$/);
+    const playerChatMatch = text.match(/^<([a-zA-Z0-9_.+-]{1,16})>\s+(.+)$/);
     if (playerChatMatch) {
         return { id: chatId(), sender: playerChatMatch[1], content: playerChatMatch[2].trim(), text, timestamp: time };
     }
@@ -50,7 +50,7 @@ export function parseChatMessage(rawLine: string): ChatMessage | null {
     const serverMatch = text.match(/^\[Server(?::\s*[^\]]+)?\]\s+(.+)$/i);
     if (serverMatch) return { id: chatId(), event: "server", content: serverMatch[1], text, timestamp: time };
 
-    const presenceMatch = text.match(/^([a-zA-Z0-9_]{1,16})\s+(joined|left) the game$/i);
+    const presenceMatch = text.match(/^([a-zA-Z0-9_.+-]{1,16})\s+(joined|left) the game$/i);
     if (presenceMatch) {
         return { id: chatId(), event: presenceMatch[2].toLowerCase() === "joined" ? "join" : "leave", sender: presenceMatch[1], text, timestamp: time };
     }

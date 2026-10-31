@@ -4,13 +4,27 @@
 // the panel edits the files directly. Everything is keyed by uuid, which is
 // what the server matches on: a renamed player keeps their entries, and the
 // roster shows the name they have now.
+//
+// With crossplay, Bedrock players (named with Floodgate's prefix) are Xbox
+// accounts Mojang does not know: the vanilla `whitelist` cannot find them,
+// so a running server whitelists them through Floodgate's `fwhitelist`, and
+// a stopped one gets the uuid Floodgate derives from their XUID written in.
 import { createHash } from "node:crypto";
 import { files as fileApi, type ServiceContext } from "./api";
 import { serverLocal } from "./scope";
 import { resolvePlayerIdentities } from "./playerStats";
 import { profileForName, profileForUuid } from "./mojang";
+import { gamertagForXuid, xuidForGamertag } from "./xbox";
 import { parseProperties } from "../core/properties";
-import { assertPlayerName } from "../core/players";
+import { assertPlayerName, JAVA_NAME_PATTERN } from "../core/players";
+import {
+    bedrockPlayerName,
+    floodgateUuid,
+    gamertagOf,
+    isFloodgateUuid,
+    xuidOfFloodgateUuid,
+    type BedrockNaming,
+} from "../core/bedrock";
 import { type GameServerState, PANEL_ID } from "./types";
 
 export type PlayerFlag = "op" | "whitelist";
@@ -130,17 +144,21 @@ export async function listRoster(): Promise<RosterEntry[]> {
 }
 
 /**
- * The names these players have now, from Mojang; a player looked up in the
- * last hour is answered from memory. An offline-mode server's
- * uuids come from the name itself, so there is nothing to look up.
+ * The names these players have now: Java players' from Mojang, Bedrock
+ * players' from their gamertag on GeyserMC; a player looked up in the last
+ * hour is answered from memory. An offline-mode server's Java uuids come
+ * from the name itself, so there is nothing to look up for those.
  */
-export async function currentPlayerNames(rawUuids: unknown): Promise<Record<string, string>> {
+export async function currentPlayerNames(rawUuids: unknown, naming: BedrockNaming | null): Promise<Record<string, string>> {
     if (!Array.isArray(rawUuids)) throw new Error("uuids must be a list");
-    const uuids = [...new Set(rawUuids.map((u) => String(u ?? "").trim().toLowerCase()))]
+    const valid = [...new Set(rawUuids.map((u) => String(u ?? "").trim().toLowerCase()))]
         .filter((u) => UUID_RE.test(u))
         .slice(0, MAX_NAMES_PER_CALL);
     const result: Record<string, string> = {};
-    if (uuids.length === 0 || !isOnlineMode(await readServerProperties())) return result;
+    if (valid.length === 0) return result;
+    const onlineMode = isOnlineMode(await readServerProperties());
+    // a Floodgate uuid is no Mojang account; without Floodgate it has no name to look up
+    const uuids = valid.filter((u) => (isFloodgateUuid(u) ? naming !== null : onlineMode));
 
     const now = Date.now();
     const stale: string[] = [];
@@ -153,10 +171,10 @@ export async function currentPlayerNames(rawUuids: unknown): Promise<Record<stri
     const worker = async () => {
         for (let uuid = stale.shift(); uuid !== undefined; uuid = stale.shift()) {
             try {
-                const profile = await profileForUuid(uuid);
-                if (!profile) continue;
-                rememberName(uuid, profile.name);
-                result[uuid] = profile.name;
+                const name = await currentName(uuid, naming);
+                if (!name) continue;
+                rememberName(uuid, name);
+                result[uuid] = name;
             } catch (err) {
                 failures.push(err instanceof Error ? err.message : String(err));
             }
@@ -171,6 +189,15 @@ export async function currentPlayerNames(rawUuids: unknown): Promise<Record<stri
     return result;
 }
 
+async function currentName(uuid: string, naming: BedrockNaming | null): Promise<string | null> {
+    const xuid = xuidOfFloodgateUuid(uuid);
+    if (xuid && naming) {
+        const gamertag = await gamertagForXuid(xuid);
+        return gamertag ? bedrockPlayerName(gamertag, naming) : null;
+    }
+    return (await profileForUuid(uuid))?.name ?? null;
+}
+
 function rememberName(uuid: string, name: string): void {
     local().names.delete(uuid);
     local().names.set(uuid, { name, at: Date.now() });
@@ -181,21 +208,53 @@ function rememberName(uuid: string, name: string): void {
     }
 }
 
-// the account a name stands for on this server: one the server has already
-// seen first (so an offline-mode server's own uuids are kept), then Mojang
-// for an online-mode server, else the uuid offline mode derives
-async function accountForName(name: string, props: Record<string, string>): Promise<{ uuid: string; name: string }> {
+async function knownAccount(name: string): Promise<{ uuid: string; name: string } | null> {
     const wanted = name.toLowerCase();
     for (const [uuid, known] of await resolvePlayerIdentities()) {
         if (known.toLowerCase() === wanted) return { uuid, name: known };
     }
+    return null;
+}
+
+// a Bedrock player's account: the uuid Floodgate derives from their XUID,
+// which GeyserMC looks up the way `fwhitelist` does
+async function bedrockAccount(gamertag: string, naming: BedrockNaming): Promise<{ uuid: string; name: string }> {
+    const xuid = await xuidForGamertag(gamertag);
+    if (!xuid) {
+        throw new Error(
+            `GeyserMC has no Xbox account named "${gamertag}" on record. It learns a gamertag when that player first joins any Geyser server, so ask them to join once and try again.`,
+        );
+    }
+    return { uuid: floodgateUuid(xuid), name: bedrockPlayerName(gamertag, naming) };
+}
+
+// the account a name stands for on this server: one the server has already
+// seen first (so an offline-mode server's own uuids are kept), then
+// GeyserMC for a Bedrock name, Mojang for a Java name on an online-mode
+// server, else the uuid offline mode derives
+async function accountForName(
+    name: string,
+    gamertag: string | null,
+    naming: BedrockNaming | null,
+    props: Record<string, string>,
+): Promise<{ uuid: string; name: string }> {
+    const known = await knownAccount(name);
+    if (known) return known;
+    if (gamertag && naming) return bedrockAccount(gamertag, naming);
     if (!isOnlineMode(props)) return { uuid: offlinePlayerUuid(name), name };
     const profile = await profileForName(name);
     if (!profile) throw new Error(`No Minecraft account is named "${name}"`);
     return profile;
 }
 
-async function editListFile(flag: PlayerFlag, name: string, on: boolean, uuid: string | null): Promise<void> {
+async function editListFile(
+    flag: PlayerFlag,
+    name: string,
+    on: boolean,
+    uuid: string | null,
+    gamertag: string | null,
+    naming: BedrockNaming | null,
+): Promise<void> {
     const path = LIST_FILES[flag];
     const list = await readList(path);
     const props = await readServerProperties();
@@ -221,7 +280,7 @@ async function editListFile(flag: PlayerFlag, name: string, on: boolean, uuid: s
     }
 
     if (list.some(matches)) return;
-    const account = uuid ? { uuid, name } : await accountForName(name, props);
+    const account = uuid ? { uuid, name } : await accountForName(name, gamertag, naming, props);
     if (list.some((entry) => entryUuid(entry) === account.uuid)) return;
     const entry: Record<string, unknown> = { uuid: account.uuid, name: account.name };
     if (flag === "op") {
@@ -240,15 +299,62 @@ export function playerFlagCommand(flag: PlayerFlag, name: string, on: boolean): 
         : `whitelist ${on ? "add" : "remove"} ${name}`;
 }
 
+// Floodgate reads its argument as one quoted-or-bare word
+function floodgateArgument(gamertag: string): string {
+    return gamertag.includes(" ") ? `"${gamertag}"` : gamertag;
+}
+
+async function inUsercache(name: string): Promise<boolean> {
+    const list = await readList("usercache.json");
+    const wanted = name.toLowerCase();
+    return list.some((entry) => typeof entry.name === "string" && entry.name.toLowerCase() === wanted);
+}
+
+/**
+ * A running server's command for a Bedrock player. The whitelist goes
+ * through Floodgate, which finds the Xbox account itself; it is looked up
+ * here first so a gamertag GeyserMC does not know fails in the panel, not
+ * only in the console. `op` finds a name only in the server's own profile
+ * cache, so a Bedrock player must have joined once before a running server
+ * can op them; a stopped server's file takes them any time.
+ */
+async function bedrockFlagCommand(
+    flag: PlayerFlag,
+    name: string,
+    gamertag: string,
+    naming: BedrockNaming,
+    on: boolean,
+    uuid: string | null,
+): Promise<string> {
+    if (flag === "whitelist") {
+        if (!on) {
+            const known = uuid ?? (await knownAccount(name))?.uuid ?? null;
+            return `fwhitelist remove ${known && isFloodgateUuid(known) ? known : floodgateArgument(gamertag)}`;
+        }
+        await bedrockAccount(gamertag, naming);
+        return `fwhitelist add ${floodgateArgument(gamertag)}`;
+    }
+    if (!(await inUsercache(name))) {
+        throw new Error(
+            on
+                ? `${name} has not joined this server yet, and a running server can only make Bedrock players it has seen operators. Stop the server to make them an operator now.`
+                : `${name} has not joined this server yet, so the running server cannot find them. Stop the server to take operator away now.`,
+        );
+    }
+    return playerFlagCommand(flag, name, on);
+}
+
 /**
  * Ops or whitelists a player, or takes it away. Through the console while
  * the server runs (`send` is the console); in the file while it is stopped.
  * Between the two (stopping, restarting) the server may rewrite the file
- * over the edit, so it waits.
+ * over the edit, so it waits. `naming` is Floodgate's, null without it: a
+ * name with its prefix is a Bedrock player then.
  */
 export async function setPlayerFlag(
     ctx: ServiceContext<GameServerState>,
     send: (command: string) => Promise<void>,
+    naming: BedrockNaming | null,
     flag: PlayerFlag,
     rawName: unknown,
     on: boolean,
@@ -258,15 +364,23 @@ export async function setPlayerFlag(
     // the panel's own roster knows the uuid; flows only name a player
     const given = String(rawUuid ?? "").trim().toLowerCase();
     const uuid = UUID_RE.test(given) ? given : null;
+    const gamertag = gamertagOf(name, naming);
+    if (!gamertag && !JAVA_NAME_PATTERN.test(name)) {
+        throw new Error(
+            naming
+                ? `"${name}" is not a player name. Java names are letters, numbers and underscores, and Bedrock names start with "${naming.prefix}".`
+                : `"${name}" is not a Java player name: those are letters, numbers and underscores. Turn crossplay on to add Bedrock players.`,
+        );
+    }
     const status = ctx.state.serverStatus;
     if (status === "online" || status === "starting") {
-        await send(playerFlagCommand(flag, name, on));
+        await send(gamertag && naming ? await bedrockFlagCommand(flag, name, gamertag, naming, on, uuid) : playerFlagCommand(flag, name, on));
         return;
     }
     if (status !== "offline") {
         throw new Error("Wait until the server has finished stopping");
     }
-    const edit = local().editing.then(() => editListFile(flag, name, on, uuid));
+    const edit = local().editing.then(() => editListFile(flag, name, on, uuid, gamertag, naming));
     local().editing = edit.catch(() => undefined);
     await edit;
 }

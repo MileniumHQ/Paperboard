@@ -103,6 +103,10 @@
             {
                 "name": "Modrinth",
                 "detail": "Finding plugins and mods"
+            },
+            {
+                "name": "GeyserMC",
+                "detail": "Downloading Floodgate, and Bedrock players' Xbox accounts and skins"
             }
         ],
         "credits": [

@@ -82,6 +82,7 @@ export const ACTION_IDS = {
     listPlayerStats: "list-player-stats",
     listRoster: "list-roster",
     currentPlayerNames: "current-player-names",
+    readBedrockNaming: "read-bedrock-naming",
     listLogFiles: "list-log-files",
     readLogFile: "read-log-file",
     queryOnlinePlayers: "query-online-players",

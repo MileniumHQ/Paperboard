@@ -53,7 +53,7 @@ import { settleInterruptedWork } from "../../service/recovery";
 import { readLoaderSettings, writeLoaderSetting } from "../../service/loaderSettings";
 import { listServerFiles, readServerFile, writeServerFile } from "../../service/serverFiles";
 import { locateAddonConfig } from "../../service/addonConfig";
-import { prepareCrossplay, readCrossplay, writeCrossplaySetting } from "../../service/crossplay";
+import { prepareCrossplay, readBedrockNaming, readCrossplay, writeCrossplaySetting } from "../../service/crossplay";
 import { claimBedrockPort } from "../../service/ports";
 import { livePortDeps } from "../../service/portDeps";
 import { readServerIcon, removeServerIcon, setServerIcon } from "../../service/serverIcon";
@@ -116,6 +116,10 @@ export const commandType = defineType({
 });
 
 const loaderDeps = { serverDir: () => fileApi.getPath("", PANEL_ID) };
+
+// how Floodgate names Bedrock players here; null when it is not installed
+const bedrockNaming = (ctx: ServiceContext<GameServerState>) =>
+    readBedrockNaming(minecraftSoftware(ctx.state.serverSoftware), loaderDeps);
 
 export const customTypes: CustomTypeDefinition[] = [
     playerType,
@@ -455,7 +459,7 @@ export const panelActions: ActionDefinition[] = [
         icon: "shield",
         run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
             // uuid is an optional input for the panel's own roster
-            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), "op", inputs?.player, true, inputs?.uuid);
+            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), await bedrockNaming(ctx), "op", inputs?.player, true, inputs?.uuid);
             return true;
         },
     }),
@@ -474,7 +478,7 @@ export const panelActions: ActionDefinition[] = [
         icon: "shield_person",
         run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
             // uuid is an optional input for the panel's own roster
-            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), "op", inputs?.player, false, inputs?.uuid);
+            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), await bedrockNaming(ctx), "op", inputs?.player, false, inputs?.uuid);
             return true;
         },
     }),
@@ -493,7 +497,7 @@ export const panelActions: ActionDefinition[] = [
         icon: "verified_user",
         run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
             // uuid is an optional input for the panel's own roster
-            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), "whitelist", inputs?.player, true, inputs?.uuid);
+            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), await bedrockNaming(ctx), "whitelist", inputs?.player, true, inputs?.uuid);
             return true;
         },
     }),
@@ -512,7 +516,7 @@ export const panelActions: ActionDefinition[] = [
         icon: "person_off",
         run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
             // uuid is an optional input for the panel's own roster
-            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), "whitelist", inputs?.player, false, inputs?.uuid);
+            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), await bedrockNaming(ctx), "whitelist", inputs?.player, false, inputs?.uuid);
             return true;
         },
     }),
@@ -1435,7 +1439,7 @@ export const panelActions: ActionDefinition[] = [
         id: ACTION_IDS.getPlayerSkin,
         name: "Get Player Skin",
         category: "Players",
-        description: "Builds a layered player head from Mojang's skin service",
+        description: "Builds a layered player head from Mojang's skin service, or GeyserMC's for Bedrock players",
         template: "Get skin for {player}",
         internal: true,
         inputs: {
@@ -1447,13 +1451,14 @@ export const panelActions: ActionDefinition[] = [
         quick: false,
         icon: "person",
         run: async (
-            _ctx: ServiceContext<GameServerState>,
+            ctx: ServiceContext<GameServerState>,
             inputs: { player?: string; uuid?: string; size?: number },
         ) => {
             return getHeadDataUrl({
                 name: inputs?.player,
                 uuid: inputs?.uuid,
                 size: inputs?.size,
+                naming: () => bedrockNaming(ctx),
             });
         },
     }),
@@ -1552,7 +1557,7 @@ export const panelActions: ActionDefinition[] = [
         id: ACTION_IDS.currentPlayerNames,
         name: "Current Player Names",
         category: "Players",
-        description: "Looks up the names players have now from Mojang, by uuid",
+        description: "Looks up the names players have now from Mojang, or GeyserMC for Bedrock players, by uuid",
         template: "Current names for {uuids}",
         internal: true,
         inputs: {
@@ -1561,8 +1566,23 @@ export const panelActions: ActionDefinition[] = [
         output: { type: "object", label: "Names" },
         quick: false,
         icon: "badge",
-        run: async (_ctx: ServiceContext<GameServerState>, inputs: { uuids?: unknown }) =>
-            currentPlayerNames(inputs?.uuids),
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { uuids?: unknown }) =>
+            currentPlayerNames(inputs?.uuids, await bedrockNaming(ctx)),
+    }),
+
+    defineAction({
+        // the Players tab explains Bedrock names with Floodgate's own prefix
+        id: ACTION_IDS.readBedrockNaming,
+        name: "Read Bedrock Naming",
+        category: "Players",
+        description: "Reads how Floodgate names Bedrock players, or nothing when Floodgate is not installed",
+        template: "Read Bedrock naming",
+        internal: true,
+        inputs: {},
+        output: { type: "object", label: "Bedrock naming" },
+        quick: false,
+        icon: "devices",
+        run: async (ctx: ServiceContext<GameServerState>) => bedrockNaming(ctx),
     }),
 
     defineAction({
