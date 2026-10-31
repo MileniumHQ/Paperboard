@@ -54,8 +54,9 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
                 const target = frame?.contentWindow;
                 const request = parseBackupLocationRequest(event.data, panelId, chooser() !== null);
                 if (!target || !request) return;
-                const answer = (result: BackupLocationChoice) =>
+                const answer = (result: BackupLocationChoice) => {
                     target.postMessage({ type: BACKUP_LOCATION_RESULT, generation: current, requestId: request.requestId, result }, "*");
+                };
                 if (request.refused) answer({ status: "failed", message: request.refused });
                 else setChooser({ requestId: request.requestId, sourceId: request.sourceId, generation: current, target });
             } else {
@@ -63,8 +64,9 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
                 const request = parseFileTransferMessage(event.data);
                 const target = frame?.contentWindow;
                 if (!request || !target) return;
-                void runPanelFileTransfer(computerId, panelId, request).then((result) =>
-                    target.postMessage({ type: FILE_TRANSFER_RESULT, generation: current, requestId: request.requestId, result }, "*"));
+                void runPanelFileTransfer(computerId, panelId, request).then((result) => {
+                    target.postMessage({ type: FILE_TRANSFER_RESULT, generation: current, requestId: request.requestId, result }, "*");
+                });
             }
         };
         window.addEventListener("message", receive);
@@ -77,7 +79,7 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
         <iframe ref={frame} data-panel-key={props.panelKey} title={panelId}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="clipboard-read; clipboard-write; microphone; camera; display-capture"
-            onLoad={() => frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName }, "*")}
+            onLoad={() => { frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName }, "*"); }}
             class={`${styles.frame} ${styles.panelFrame}`} classList={{ [styles.unpainted]: !ready() || Boolean(failure()) || Boolean(props.restart) }} />
         <BackupLocationChooser computerId={computerId} computerName={props.computerName} panelId={panelId} sourceId={chooser()?.sourceId} open={chooser() !== null} onDone={(result) => {
             const request = chooser();

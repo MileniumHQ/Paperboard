@@ -49,8 +49,9 @@ const PanelWidgetFrame: Component<PanelWidgetFrameProps> = (props) => {
     let frame: HTMLIFrameElement | undefined;
     let attempt: { generation: string; cancelled: boolean; initialized: boolean; stop: () => void } | null = null;
 
-    const post = (message: Record<string, unknown>) =>
-        attempt && frame?.contentWindow?.postMessage({ ...message, generation: attempt.generation }, "*");
+    const post = (message: Record<string, unknown>) => {
+        if (attempt) frame?.contentWindow?.postMessage({ ...message, generation: attempt.generation }, "*");
+    };
 
     const start = () => {
         attempt?.stop();

@@ -105,7 +105,9 @@ export async function mountRequestedWidget(panelId: string, generation: string, 
         visible: () => visible,
         onResize: (callback) => bounded(resizeListeners, callback),
         onVisibilityChange: (callback) => bounded(visibilityListeners, callback),
-        openPanel: () => window.parent.postMessage({ type: "paperboard:widget-open-panel", generation }, "*"),
+        openPanel: () => {
+            window.parent.postMessage({ type: "paperboard:widget-open-panel", generation }, "*");
+        },
     };
 
     const receive = (event: MessageEvent) => {
