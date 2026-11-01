@@ -15,6 +15,7 @@ import {
     getSupervisorMetadataPath,
     supervisorEndpointName,
     supervisorSocketPathForName,
+    supervisorPresent,
 } from "../papercrane/supervisor";
 import { stopSpawnedSupervisor } from "../papercrane/engineSupervisor";
 import { getSocketsDir } from "../papercrane/paths";
@@ -84,6 +85,8 @@ async function supervise(id: string, config: { source?: string; noStdin?: boolea
         // the metadata file can be seen mid-write; keep waiting until it parses
         try {
             const meta = JSON.parse(fs.readFileSync(getSupervisorMetadataPath(id), "utf8")) as { childPid?: number };
+            // the metadata is written before the endpoint listens
+            if (!supervisorPresent(id)) throw new Error("its endpoint is not listening yet");
             if (meta.childPid && meta.childPid !== child.pid) workloadPids.push(meta.childPid);
             break;
         } catch (error) {
@@ -216,6 +219,23 @@ describe("a workload started with no input", () => {
         expect(() => engine.writeProcess(id, "hello\n")).toThrow(/no input/);
         await engine.killProcess(id);
         expect(await exited(child)).toBe(true);
+    }, 30_000);
+});
+
+describe("a workload's exit", () => {
+    // a caller that starts the same id again the moment it hears the exit (a
+    // server restarted, an installer run again) found the old supervisor
+    // still there: refused as "still running", or attached to it on Windows,
+    // where its pipe kept accepting while it killed the process tree
+    it("is announced once the supervisor's endpoint is gone", async () => {
+        const id = "dev.test.exit.endpoint";
+        await supervise(id, { source: `${WORKLOAD_SOURCE}; process.stdin.once("data", () => process.exit(5))` });
+        const client = new SupervisedProcessClient(id);
+        cleanup.push(() => client.destroy());
+        const present = new Promise<boolean>((resolve) => client.on("exit", () => resolve(supervisorPresent(id))));
+        expect(await client.connect()).toBe(true);
+        client.write("go\n");
+        expect(await present).toBe(false);
     }, 30_000);
 });
 

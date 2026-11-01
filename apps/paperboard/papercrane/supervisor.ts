@@ -403,9 +403,21 @@ export async function runSupervisor(procId: string): Promise<void> {
         }
     };
 
+    // assigned once the endpoint exists; a teardown before then has none to close
+    let server: net.Server | null = null;
+
     const cleanupAndExit = (code: number) => {
         if (isExited) return;
         isExited = true;
+        // the endpoint goes before the exit is announced: a caller that
+        // starts the same id the moment it hears the exit (an installer run
+        // again, a server restarted) must reach the new supervisor, not this
+        // one. A Windows named pipe has no path to unlink and keeps
+        // accepting until closed, and the tree kill below takes a taskkill
+        // there: a new run attached here and "exited" at once, with no output.
+        if (process.platform === "win32") server?.close();
+        try { if (fs.existsSync(metadataPath)) fs.unlinkSync(metadataPath); } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
+        try { if (process.platform !== "win32" && fs.existsSync(socketPath)) fs.unlinkSync(socketPath); } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
         broadcast({ type: "exit", code });
 
         // every teardown path must reach the workload: a supervisor that
@@ -418,10 +430,8 @@ export async function runSupervisor(procId: string): Promise<void> {
         for (const client of clients) {
             try { client.end(); } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
         }
-        try { if (fs.existsSync(metadataPath)) fs.unlinkSync(metadataPath); } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
-        try { if (process.platform !== "win32" && fs.existsSync(socketPath)) fs.unlinkSync(socketPath); } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
 
-        // exit without server.close(): closing a unix socket server unlinks
+        // a unix socket server is not closed: closing it unlinks
         // its path, which by then may be the socket of a supervisor started
         // again under the same id (a shell restarted the moment it exited),
         // leaving that one unreachable. The path is already unlinked above,
@@ -435,7 +445,7 @@ export async function runSupervisor(procId: string): Promise<void> {
         unrefTimer(exitTimer);
     };
 
-    const server = net.createServer((socket) => {
+    server = net.createServer((socket) => {
         clients.add(socket);
         socket.write(
             JSON.stringify({
