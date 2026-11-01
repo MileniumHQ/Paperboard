@@ -881,6 +881,18 @@ export class PaperCraneEngine {
         this.killAllClients();
     }
 
+    // lets go of every supervised workload without stopping it: the sockets
+    // close, the supervisors keep their programs running, and the next daemon
+    // adopts them (recoverRunningSupervisors)
+    public releaseAllClients(): void {
+        for (const [id, client] of [...this.clients.entries()]) {
+            try {
+                client.destroy();
+            } catch (err) { logger.debug("[engine.ts] op failed:", err) }
+            this.clients.delete(id);
+        }
+    }
+
     // last-resort sync teardown for exit handlers
     public killAllClients(): void {
         for (const [id, client] of [...this.clients.entries()]) {
