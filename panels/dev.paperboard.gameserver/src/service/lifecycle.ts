@@ -81,6 +81,24 @@ export const __lifecycleTest = {
     isStopForceKillPending: () => local().stopTimeout !== null,
 };
 
+/**
+ * Tells the game its server's process is gone. A failure is shown in the
+ * console, never dropped; undefined when the game has nothing to take back.
+ */
+function releaseServer(ctx: ServiceContext<GameServerState>): Promise<void> | undefined {
+    const afterStop = currentGameService().afterStop;
+    if (!afterStop) return undefined;
+    return afterStop(ctx).catch((err) => {
+        console.error("[gameserver] cleaning up after the server stopped failed:", err);
+        ctx.setState((prev) => ({
+            serverEntries: appendCapped(prev.serverEntries, {
+                type: "error",
+                content: `[Server] Could not clean up after the server stopped: ${err instanceof Error ? err.message : String(err)}`,
+            }),
+        }));
+    });
+}
+
 export async function startServerInstance(
     ctx: ServiceContext<GameServerState>,
 ): Promise<void> {
@@ -139,6 +157,8 @@ export async function startServerInstance(
         monitorReadiness(ctx);
     } catch (err: any) {
         console.error("[Service:Lifecycle] Failed to start server:", err);
+        // the launch may have got as far as preparing the server's files
+        void releaseServer(ctx);
         ctx.setState({
             serverStatus: "offline",
             serverEntries: appendCapped(ctx.state.serverEntries, {
@@ -292,8 +312,13 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>): void {
                 content: "[Server] Restarting instance...",
             }),
         });
-        void startServerInstance(ctx).catch(err => console.error("[gameserver] restart failed:", err));
+        // the game takes back what the last start set aside before the next one sets it again
+        const restart = () => void startServerInstance(ctx).catch(err => console.error("[gameserver] restart failed:", err));
+        const released = releaseServer(ctx);
+        if (released) void released.then(restart);
+        else restart();
     } else {
+        void releaseServer(ctx);
         ctx.setState({
             serverStatus: "offline",
             onlinePlayers: [],

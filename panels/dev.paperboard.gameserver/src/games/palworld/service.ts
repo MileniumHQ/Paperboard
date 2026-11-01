@@ -49,6 +49,8 @@ const local = serverLocal(() => ({
     baseline: false,
     pollError: "",
     secrets: [] as string[],
+    // the settings file is read, changed and written back; two of those at once lose one
+    ini: Promise.resolve() as Promise<unknown>,
     console: new ConsoleBuffer((line) => /error|exception|\bfail/i.test(line)),
 }));
 
@@ -73,18 +75,31 @@ async function ensureIni(): Promise<string> {
     await writePrivate(file, text);
     return file;
 }
+/** Runs settings-file work after what is already queued, in the order it was asked for. */
+function serialIni<T>(work: () => Promise<T>): Promise<T> {
+    const run = local().ini.then(work, work);
+    local().ini = Promise.allSettled([run]);
+    return run;
+}
 /** Sets these raw values in OptionSettings, keeping every other entry as it is. */
-async function updateIni(values: Record<string, string>): Promise<void> {
+const updateIni = (values: Record<string, string>): Promise<void> => serialIni(() => rewriteIni(values));
+async function rewriteIni(values: Record<string, string>): Promise<void> {
     const file = await ensureIni();
     const text = await fs.readFile(file, "utf8");
     const entries: IniEntry[] = parseOptionSettings(text).map((e) => (Object.hasOwn(values, e.key) ? { key: e.key, raw: values[e.key]! } : e));
     for (const [key, raw] of Object.entries(values)) if (!entries.some((e) => e.key === key)) entries.push({ key, raw });
     await writePrivate(file, writeOptionSettings(text, entries));
 }
-/** A stopped server's settings hold no passwords, so Files and backups never see them. */
-async function stripSecrets(): Promise<void> {
-    if (await exists(await iniFile())) await updateIni({ AdminPassword: '""', ServerPassword: '""' });
-}
+/**
+ * A stopped server's settings hold no passwords, so Files and backups never
+ * see them. They are taken out when the process is gone, not once it is up:
+ * Palworld reads the file as it starts, but nothing documents that it never
+ * reads it again, and a server that lost its join password while running
+ * would be open to anyone.
+ */
+const stripSecrets = (): Promise<void> => serialIni(async () => {
+    if (await exists(await iniFile())) await rewriteIni({ AdminPassword: '""', ServerPassword: '""' });
+});
 const linkSaved = async () => linkFolder(path.join(await installDir(), "Pal", "Saved"), await savedDir());
 
 const displayVersion = (saved: Record<string, unknown>) =>
@@ -302,6 +317,7 @@ export const palworldService: GameService = {
             },
         };
     },
+    afterStop: stripSecrets,
     isMutating: () => local().busy,
     readiness: { timeoutMs: 600_000, async probe(ctx) {
         try { await rest().info(); }

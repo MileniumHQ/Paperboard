@@ -38,6 +38,14 @@ export interface GameService {
     backupExclude?: readonly string[];
     loadOptions(ctx: Context): Promise<void>;
     prepareLaunch(ctx: Context): Promise<PreparedLaunch>;
+    /**
+     * Runs once the server's process is gone, however it went: stopped,
+     * crashed, killed, or never started because the launch failed. A game
+     * takes back what prepareLaunch set aside for the start, such as secrets
+     * written into its settings files. It can run again for a server it
+     * already cleaned up, and a restart waits for it before starting again.
+     */
+    afterStop?(ctx: Context): Promise<void>;
     isMutating(): boolean;
     assertFileAccess?(ctx: Context, path: unknown, write: boolean): Promise<void>;
     /** Writes the running world to disk and resolves once the game confirms it; refuses when offline. */
