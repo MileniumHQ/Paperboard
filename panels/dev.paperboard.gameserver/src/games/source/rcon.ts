@@ -47,6 +47,12 @@ export function decodePackets(buffer: Buffer): { packets: RconPacket[]; rest: Bu
 }
 
 export class RconError extends Error {}
+/**
+ * The server took the connection but didn't answer in time: it is still
+ * loading, or it dropped the reply while banning someone else's bad RCON
+ * attempt (an internet scanner). Worth asking again.
+ */
+export class RconNoAnswer extends RconError {}
 
 /** One authenticated connection, reopened on demand; commands run one at a time. */
 export class SourceRcon {
@@ -56,7 +62,7 @@ export class SourceRcon {
     private waiting: ((packet: RconPacket | Error) => void) | null = null;
     private queue: Promise<unknown> = Promise.resolve();
 
-    constructor(private readonly port: number, private readonly password: string, private readonly label = "The server") {
+    constructor(private readonly port: number, private readonly password: string, private readonly label = "The server", private readonly timeoutMs = TIMEOUT_MS) {
         if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`RCON port is not a port: ${port}`);
         if (!password) throw new Error("RCON needs a password");
     }
@@ -73,6 +79,8 @@ export class SourceRcon {
         this.socket?.destroy();
         this.socket = null;
         this.buffer = Buffer.alloc(0);
+        // a late reply on the old connection must not answer a command on the next
+        this.pending = [];
     }
 
     private async run(command: string): Promise<string> {
@@ -102,10 +110,10 @@ export class SourceRcon {
         return new Promise<void>((resolve, reject) => {
             const socket = net.connect({ host: "127.0.0.1", port: this.port });
             const fail = (err: Error) => { socket.destroy(); reject(err); };
-            socket.setTimeout(TIMEOUT_MS);
-            socket.once("timeout", () => fail(new RconError(`${this.label} did not answer on RCON port ${this.port}`)));
+            socket.setTimeout(this.timeoutMs);
+            socket.once("timeout", () => fail(new RconNoAnswer(`${this.label} did not answer on RCON port ${this.port}`)));
             socket.once("error", (err: NodeJS.ErrnoException) =>
-                fail(err.code === "ECONNREFUSED" ? new RconError(`${this.label} did not answer on RCON port ${this.port}`) : err));
+                fail(err.code === "ECONNREFUSED" ? new RconNoAnswer(`${this.label} did not answer on RCON port ${this.port}`) : err));
             socket.once("connect", () => {
                 socket.removeAllListeners("error");
                 socket.removeAllListeners("timeout");
@@ -157,8 +165,8 @@ export class SourceRcon {
             const timer = setTimeout(() => {
                 this.waiting = null;
                 this.close();
-                reject(new RconError(`${this.label} did not finish answering over RCON`));
-            }, TIMEOUT_MS);
+                reject(new RconNoAnswer(`${this.label} did not finish answering over RCON`));
+            }, this.timeoutMs);
             this.waiting = (packet) => {
                 clearTimeout(timer);
                 if (packet instanceof Error) reject(packet);

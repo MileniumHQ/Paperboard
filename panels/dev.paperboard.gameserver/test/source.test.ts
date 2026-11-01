@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import net from "node:net";
-import { decodePackets, encodePacket, SourceRcon } from "../src/games/source/rcon";
+import { decodePackets, encodePacket, RconNoAnswer, SourceRcon } from "../src/games/source/rcon";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -156,6 +156,36 @@ describe("Source RCON", () => {
         await new Promise((resolve) => closed.close(resolve));
         await expect(new SourceRcon(free, "secret", "TF2").exec("status")).rejects.toThrow(`TF2 did not answer on RCON port ${free}`);
         expect(() => new SourceRcon(port, "secret").exec("say hi\nquit")).toThrow("single line");
+    });
+
+    test("a reply the server drops is asked for again on a new connection", async () => {
+        // srcds drops a reply in flight while it bans a scanner's bad RCON attempt
+        let logins = 0;
+        const server = net.createServer((socket) => {
+            let buffer = Buffer.alloc(0);
+            let first = false;
+            socket.on("data", (chunk) => {
+                buffer = Buffer.concat([buffer, chunk]);
+                // anything else that finds the port is not an RCON client
+                if (buffer.length >= 4 && (buffer.readInt32LE(0) < 10 || buffer.readInt32LE(0) > 4106)) { socket.destroy(); return; }
+                const decoded = decodePackets(buffer);
+                buffer = decoded.rest;
+                for (const p of decoded.packets) {
+                    if (p.type === 3) { first = ++logins === 1; socket.write(encodePacket(p.id, 0, "")); socket.write(encodePacket(p.id, 2, "")); }
+                    else if (p.type === 2 && !first) socket.write(encodePacket(p.id, 0, STATUS));
+                    else if (p.type === 0 && !first) socket.write(encodePacket(p.id, 0, ""));
+                }
+            });
+        });
+        servers.push(server);
+        await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+        const rcon = new SourceRcon((server.address() as net.AddressInfo).port, "secret", "TF2", 200);
+        const lost = await rcon.exec("status").catch((err) => err);
+        expect(lost).toBeInstanceOf(RconNoAnswer);
+        expect(lost.message).toBe("TF2 did not finish answering over RCON");
+        expect(await rcon.exec("status")).toBe(STATUS);
+        expect(logins).toBe(2);
+        rcon.close();
     });
 
     test("a server that resets the connection as it quits reads as closed, not as a failure", async () => {

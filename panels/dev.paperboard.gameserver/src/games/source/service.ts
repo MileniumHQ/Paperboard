@@ -19,7 +19,7 @@ import { SOURCEMOD_PACKAGES, sourceActions, type SourceGameSpec, type SourceModV
 import { pluginFile, SourceMod } from "./sourcemod";
 import { cvarValue, mapName, optionValue, secretsCfg, serverCfg } from "./config";
 import { consoleLine, isErrorLine, linePlayer, parseLogLine, parseStatus, steamId, type SourceLogEvent } from "./log";
-import { SourceRcon, RconError } from "./rcon";
+import { SourceRcon, RconError, RconNoAnswer } from "./rcon";
 import { bannedUserCfg, noStats, SourceRoster, type SourceStats } from "./roster";
 
 /** A player on the running server, by the server's user id for their connection. */
@@ -540,8 +540,9 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         readiness: { timeoutMs: 300_000, async probe(ctx) {
             try { await readStatus(ctx); }
             catch (err) {
-                // RCON listens once the map has loaded
-                if (err instanceof RconError && /did not answer/.test(err.message)) return false;
+                // RCON listens once the map has loaded, and a reply lost to a
+                // scanner's banned RCON attempt is asked for again
+                if (err instanceof RconNoAnswer) return false;
                 throw err;
             }
             await removeSecrets();
