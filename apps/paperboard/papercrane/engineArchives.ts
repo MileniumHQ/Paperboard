@@ -4,6 +4,7 @@ import { logger } from "./logger";
 import fs from "fs";
 import AdmZip from "adm-zip";
 import { spawn } from "child_process";
+import { extractMsi } from "./msiArchive";
 import { moveFileSafe, extractTarSafely, validateExtractedLinks, TAR_BUDGET } from "./storage";
 import type { PackageRecipe } from "./packageRecipe";
 
@@ -152,6 +153,7 @@ export const RECIPE_SUFFIX: Record<PackageRecipe["unpack"], string> = {
     tar: ".tar",
     "tar.xz": ".tar.xz",
     dmg: ".dmg",
+    msi: ".msi",
 };
 
 // a system tool, with its stderr in the error when it fails
@@ -221,6 +223,8 @@ export async function applyPackageRecipe(archivePath: string, pkgDir: string, re
             } finally {
                 await fs.promises.rm(plain, { force: true });
             }
+        } else if (recipe.unpack === "msi") {
+            await extractMsi(archivePath, scratch);
         } else {
             if (process.platform !== "darwin") throw new Error("This package unpacks a macOS disk image, which only macOS can open");
             tree = path.join(scratch, "volume");

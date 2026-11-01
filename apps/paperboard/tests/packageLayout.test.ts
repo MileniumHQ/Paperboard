@@ -11,6 +11,7 @@ import * as tar from "tar";
 import AdmZip from "adm-zip";
 import { releaseMessage } from "../papercrane/releaseSignature";
 import { fixtureSign, FIXTURE_RELEASE_PUBLIC_KEY } from "./registryFixture";
+import { buildMsi } from "./fixtures/msiFixture";
 import { PaperCraneEngine } from "../papercrane/engine";
 import { recipeDigest, parsePackageRecipe, assertRecipeRunsHere } from "../papercrane/packageRecipe";
 
@@ -207,6 +208,23 @@ describe("package recipes", () => {
         expect(fs.readFileSync(exe, "utf8")).toContain("echo ok");
         expect(fs.statSync(exe).mode & 0o111).not.toBe(0);
         expect(fs.existsSync(path.join(home, "README"))).toBe(false);
+        expect(fs.readdirSync(home).sort()).toEqual(["bin"]);
+    });
+
+    it("msi: the cabinet inside a Windows Installer package, members taken by their File keys", async () => {
+        const msi = buildMsi([
+            { name: "Microsoft_Xna_Framework_dll_GAC", data: Buffer.from("managed assembly") },
+            { name: "XnaNative_dll_File", data: Buffer.from("native library") },
+            { name: "DXRedist_DXSetup_File", data: Buffer.from("not taken") },
+        ]);
+        const recipe = { unpack: "msi", take: { "bin/Microsoft.Xna.Framework.dll": "Microsoft_Xna_Framework_dll_GAC", "bin/XnaNative.dll": "XnaNative_dll_File" } };
+        const digest = publish("xna", "xnafx40_redist.msi", msi, undefined, recipe);
+
+        const e = engine();
+        await e.downloadPackage("xna", "dl-msi", undefined, digest);
+        const home = e.getPackagePath("xna");
+        expect(fs.readdirSync(path.join(home, "bin")).sort()).toEqual(["Microsoft.Xna.Framework.dll", "XnaNative.dll"]);
+        expect(fs.readFileSync(path.join(home, "bin", "Microsoft.Xna.Framework.dll"), "utf8")).toBe("managed assembly");
         expect(fs.readdirSync(home).sort()).toEqual(["bin"]);
     });
 

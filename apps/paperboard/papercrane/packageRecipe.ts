@@ -16,8 +16,10 @@ import crypto from "crypto";
  * - tar: the bundled tar reader (plain, gzip or zstd, told apart by the bytes)
  * - tar.xz: the system's xz decompresses, the bundled reader extracts
  * - dmg: macOS only; hdiutil mounts the image read-only and ditto copies out
+ * - msi: the cabinets inside a Windows Installer package, read on any
+ *   computer (papercrane/msiArchive.ts); members are the MSI's File keys
  */
-export const RECIPE_UNPACKS = ["zip", "tar", "tar.xz", "dmg"] as const;
+export const RECIPE_UNPACKS = ["zip", "tar", "tar.xz", "dmg", "msi"] as const;
 export type RecipeUnpack = (typeof RECIPE_UNPACKS)[number];
 
 export interface PackageRecipe {
