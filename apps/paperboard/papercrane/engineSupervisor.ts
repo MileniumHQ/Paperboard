@@ -1,17 +1,57 @@
 // spawn helper for detached supervisors
 import { spawn, type ChildProcess } from "child_process";
+import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { SupervisedProcessClient, supervisorPresent } from "./supervisor";
 import { mountAppImage, inMount, stopMountHolder, supervisorLaunch, type AppImageMount } from "./supervisorLaunch";
 import { logger } from "./logger";
 import { LimitError } from "./storage";
+import { getLogsDir } from "./paths";
 
 // Live supervised workload budget: each client is a detached supervisor
 // process plus a socket and metadata files, so minting unique ids must not
 // grow that set without bound (bounded everything). Enforced here — the
 // single choke point every create path (RPC, TUI, desktop app) spawns through.
 export const MAX_LIVE_CLIENTS = 128;
+
+// how much of a supervisor's stderr a failed start reports
+const STARTUP_STDERR_TAIL_BYTES = 4096;
+
+// Where a starting supervisor's stderr goes until it is ready. A file, not a
+// pipe: the supervisor keeps running after this daemon exits, and a pipe the
+// daemon closed would fail its later writes. The file is removed once the
+// start is decided, which a running supervisor does not mind (its handle
+// keeps working on every platform Node opens files on).
+class StartupStderr {
+    private constructor(private readonly file: string, readonly fd: number) {}
+
+    static open(): StartupStderr {
+        const dir = getLogsDir();
+        fs.mkdirSync(dir, { recursive: true });
+        const file = path.join(dir, `supervisor-start-${randomUUID()}.stderr`);
+        return new StartupStderr(file, fs.openSync(file, "wx+", 0o600));
+    }
+
+    // what the supervisor wrote last, bounded
+    tail(): string {
+        const size = fs.fstatSync(this.fd).size;
+        const length = Math.min(size, STARTUP_STDERR_TAIL_BYTES);
+        const buffer = Buffer.alloc(length);
+        fs.readSync(this.fd, buffer, 0, length, size - length);
+        return buffer.toString("utf8").trim();
+    }
+
+    discard(): void {
+        try { fs.closeSync(this.fd); } catch (err) { logger.warn(`[engineSupervisor] could not close ${this.file}:`, err); }
+        try { fs.rmSync(this.file, { force: true }); } catch (err) { logger.warn(`[engineSupervisor] could not remove ${this.file}:`, err); }
+    }
+}
+
+function exitDescription(proc: ChildProcess): string {
+    if (proc.signalCode !== null) return `it was killed by ${proc.signalCode}`;
+    return `it exited with code ${proc.exitCode}`;
+}
 
 export interface PreListeners {
     onData?: (data: string) => void;
@@ -81,14 +121,17 @@ export async function spawnSupervisedClient(
     }
 
     let supervisorProc: ChildProcess;
+    let startupStderr: StartupStderr | undefined;
     try {
+        startupStderr = StartupStderr.open();
         supervisorProc = spawn(command, args, {
             detached: true,
             env: launch.env,
-            stdio: ["pipe", "ignore", "ignore"],
+            stdio: ["pipe", "ignore", startupStderr.fd],
             windowsHide: true,
         });
     } catch (err) {
+        startupStderr?.discard();
         stopMountHolder(mount?.holder.pid);
         throw err;
     }
@@ -132,9 +175,16 @@ export async function spawnSupervisedClient(
 
     if (!client.isConnected()) {
         client.destroy(); clientsMap.delete(id);
+        // read before the stop below: that one's own exit is not the cause
+        const cause = supervisorExited ? exitDescription(supervisorProc) : "it did not answer within 5 s";
+        let stderr: string;
+        try { stderr = startupStderr.tail(); }
+        catch (err) { stderr = `(its stderr could not be read: ${err instanceof Error ? err.message : String(err)})`; }
+        startupStderr.discard();
         await stopSpawnedSupervisor(id, supervisorProc);
-        throw new Error(`Supervisor ${id} did not become ready`);
+        throw new Error(`Supervisor ${id} did not become ready: ${cause}${stderr ? `\n${stderr}` : ""}`);
     }
+    startupStderr.discard();
     try {
         await client.awaitStarted();
     } catch (err) {
