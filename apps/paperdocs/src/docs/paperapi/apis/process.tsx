@@ -90,6 +90,10 @@ console.log("Git status:", stdout);`}
                 Arguments must be supplied as discrete array items; arguments are never passed to sh -c with string interpolation.
                 Buffered exec calls enforce a default memory cap of 10 megabytes. If a command times out, the child is killed and throws a RUN_TIMEOUT error.
             </PaperText>
+            <PaperText preset="body">
+                Background processes run under their own supervisor, so they keep running if Paperboard crashes. When Paperboard starts again, it reattaches them: call exists with the same ID when your service starts, and subscribe again if it returns true.
+                Quitting Paperboard normally stops them.
+            </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
             <PaperText preset="body">

@@ -1,14 +1,16 @@
 // spawn helper for detached supervisors
 import { spawn, type ChildProcess } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
 import { SupervisedProcessClient, supervisorPresent } from "./supervisor";
-import { EmbeddedSupervisor, isEmbeddedHost } from "./embeddedSupervisor";
+import { mountAppImage, inMount, stopMountHolder, supervisorLaunch, type AppImageMount } from "./supervisorLaunch";
 import { logger } from "./logger";
 import { LimitError } from "./storage";
 
 // Live supervised workload budget: each client is a detached supervisor
 // process plus a socket and metadata files, so minting unique ids must not
 // grow that set without bound (bounded everything). Enforced here — the
-// single choke point every create path (RPC, TUI, embedded) spawns through.
+// single choke point every create path (RPC, TUI, desktop app) spawns through.
 export const MAX_LIVE_CLIENTS = 128;
 
 export interface PreListeners {
@@ -19,6 +21,16 @@ export interface PreListeners {
     // runs on the new client before it connects, so a caller can attach
     // its own stream listeners without missing the first output
     attach?: (client: any) => void;
+}
+
+// electron-vite bundles the supervisor entry beside the app's main bundle
+// (electron.vite.config.ts), which is the process's main module
+function desktopSupervisorEntry(): string {
+    const main = typeof require === "undefined" ? undefined : require.main?.filename;
+    if (!main) throw new Error("The desktop app's main module is unknown, so its supervisor can't be found");
+    const entry = path.join(path.dirname(main), "supervisor.js");
+    if (!fs.existsSync(entry)) throw new Error(`The desktop app's supervisor is missing: ${entry}`);
+    return entry;
 }
 
 export async function spawnSupervisedClient(
@@ -41,28 +53,6 @@ export async function spawnSupervisedClient(
         clientsMap.delete(id);
     }
 
-    // embedded host supervises in-process, it cannot spawn itself
-    if (isEmbeddedHost()) {
-        const embedded = new EmbeddedSupervisor(id, supervisorConfig);
-        clientsMap.set(id, embedded);
-
-        if (preListeners?.onData) embedded.on("data", preListeners.onData);
-        if (preListeners?.onStdout) embedded.on("stdout", preListeners.onStdout);
-        if (preListeners?.onStderr) embedded.on("stderr", preListeners.onStderr);
-        if (preListeners?.onExit)
-            embedded.on("exit", (code: number) => {
-                clientsMap.delete(id);
-                preListeners!.onExit!(code);
-            });
-        preListeners?.attach?.(embedded);
-
-        if (!await embedded.connect()) {
-            clientsMap.delete(id);
-            throw new Error(embedded.startError ?? `Process ${id} could not start`);
-        }
-        return embedded;
-    }
-
     // a supervisor already listening for this id (one that outlived a
     // daemon restart) is a running workload: spawning another would take
     // over its endpoint and orphan it beyond the reach of kill and uninstall
@@ -73,19 +63,48 @@ export async function spawnSupervisedClient(
         if (live) throw new Error(`Process ${id} is already running; attach to it instead of starting it again`);
     }
 
-    const execPath = process.execPath;
-
-    const supervisorProc = spawn(execPath, ["--supervise", id], {
-        detached: true,
-        stdio: ["pipe", "ignore", "ignore"],
-        windowsHide: true,
+    const launch = supervisorLaunch(id, {
+        execPath: process.execPath,
+        electron: Boolean(process.versions.electron),
+        platform: process.platform,
+        env: process.env,
+        entry: process.versions.electron ? desktopSupervisorEntry() : undefined,
     });
+    let { command, args } = launch;
+    let config = supervisorConfig;
+    let mount: AppImageMount | null = null;
+    if (launch.appImage) {
+        mount = await mountAppImage(launch.appImage.image);
+        command = inMount(command, launch.appImage.appDir, mount.dir);
+        args = [inMount(args[0]!, launch.appImage.appDir, mount.dir), ...args.slice(1)];
+        config = { ...supervisorConfig, mountHolderPid: mount.holder.pid };
+    }
+
+    let supervisorProc: ChildProcess;
+    try {
+        supervisorProc = spawn(command, args, {
+            detached: true,
+            env: launch.env,
+            stdio: ["pipe", "ignore", "ignore"],
+            windowsHide: true,
+        });
+    } catch (err) {
+        stopMountHolder(mount?.holder.pid);
+        throw err;
+    }
+    // the supervisor stops its mount as it exits; one that dies before it
+    // can (a bad config, a crash) is caught here while this host is up, and
+    // by the adoption sweep (engine.ts) after a restart
+    if (mount) {
+        const holder = mount.holder.pid;
+        supervisorProc.once("exit", () => stopMountHolder(holder));
+    }
 
     if (supervisorProc.stdin) {
         // a supervisor that dies before reading its config must not leave
         // an unhandled EPIPE rejection behind
         supervisorProc.stdin.on("error", (err) => logger.debug(`[engineSupervisor] supervisor ${id} stdin closed early:`, err));
-        supervisorProc.stdin.write(JSON.stringify(supervisorConfig));
+        supervisorProc.stdin.write(JSON.stringify(config));
         supervisorProc.stdin.end();
     }
     supervisorProc.unref();
@@ -100,7 +119,12 @@ export async function spawnSupervisedClient(
     if (preListeners?.onExit) client.on("exit", preListeners.onExit);
     preListeners?.attach?.(client);
 
-    for (let i = 0; i < 40; i++) {
+    // up to 5 s: the desktop app's supervisor is an Electron binary starting
+    // in node mode, sometimes from a fresh AppImage mount. One that has
+    // exited is never coming up.
+    let supervisorExited = supervisorProc.exitCode !== null || supervisorProc.signalCode !== null;
+    supervisorProc.once("exit", () => { supervisorExited = true; });
+    for (let i = 0; i < 100 && !supervisorExited; i++) {
         const connected = await client.connect();
         if (connected) break;
         await new Promise((r) => setTimeout(r, 50));

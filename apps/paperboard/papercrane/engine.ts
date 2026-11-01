@@ -24,6 +24,7 @@ import {
 } from "./storage";
 import { getSocketsDir, getPaperboardDir } from "./paths";
 import { logger } from "./logger";
+import { stopMountHolder } from "./supervisorLaunch";
 import { spawnSupervisedClient } from "./engineSupervisor";
 import { getDefaultShell } from "./pty";
 import { applyPackageRecipe, extractArchive, extractPackageArchive, findBinDir, packageArchiveSuffix, parsePackageLayout, RECIPE_SUFFIX } from "./engineArchives";
@@ -812,11 +813,13 @@ export class PaperCraneEngine {
             let id: unknown;
             let command: unknown;
             let noStdin: unknown;
+            let mountHolderPid: unknown;
             try {
                 const meta = JSON.parse(await fs.promises.readFile(path.join(socketsDir, file), "utf8"));
                 id = meta?.id;
                 command = meta?.config?.command;
                 noStdin = meta?.config?.noStdin;
+                mountHolderPid = meta?.config?.mountHolderPid;
             } catch (err) {
                 logger.warn(`[Paperboard Server] unreadable supervisor metadata ${file}; not adopting it:`, err);
                 continue;
@@ -838,6 +841,16 @@ export class PaperCraneEngine {
                 });
             } else {
                 client.destroy();
+                // A supervisor that was killed outright never stopped the
+                // AppImage mount it ran from (supervisorLaunch.ts). Its
+                // metadata goes too, so a later start never signals that pid
+                // again once it may belong to another supervisor's mount.
+                if (typeof mountHolderPid === "number" && Number.isInteger(mountHolderPid) && mountHolderPid > 0) {
+                    stopMountHolder(mountHolderPid);
+                    await fs.promises.rm(path.join(socketsDir, file), { force: true }).catch((err) =>
+                        logger.warn(`[Paperboard Server] could not remove the metadata of dead supervisor "${id}":`, err),
+                    );
+                }
             }
         }
     }

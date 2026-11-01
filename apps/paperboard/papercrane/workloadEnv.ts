@@ -1,6 +1,5 @@
-// The environment a workload starts with, for both supervisors (the
-// supervisor process and the embedded one in the Electron app): the daemon's
-// own, then `extra`, then what the creator asked for.
+// The environment a workload starts with (supervisor.ts): the supervisor's
+// own, which is the daemon's, then `extra`, then what the creator asked for.
 //
 // PWD names the workload's own working directory. Inherited, it would name
 // the daemon's, and programs that trust PWD over getcwd (`opencode run` does)

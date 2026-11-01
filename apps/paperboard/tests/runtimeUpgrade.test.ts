@@ -4,7 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import * as tar from "tar";
 import { PaperCraneEngine } from "../papercrane/engine";
-import { EmbeddedSupervisor } from "../papercrane/embeddedSupervisor";
+import { spawn } from "node:child_process";
+import { SupervisedProcessClient } from "../papercrane/supervisor";
 import { handlePackages } from "../papercrane/rpc/packages";
 import { releaseMessage } from "../papercrane/releaseSignature";
 import { fixtureSign, FIXTURE_RELEASE_PUBLIC_KEY } from "./registryFixture";
@@ -13,9 +14,16 @@ const platformKey = `${process.platform === "win32" ? "windows" : process.platfo
 
 // a live workload the engine supervises, running `command` as far as the
 // engine knows (the fixture child itself is an idle Bun process)
+const MAIN = path.join(import.meta.dir, "..", "papercrane", "main.ts");
+
 async function workload(engine: PaperCraneEngine, id: string, command: string, owner: string | null, cwd: string) {
-    const client = new EmbeddedSupervisor(id, { id, type: "child_process", command: process.execPath, args: ["-e", "setInterval(()=>{},1000)"], cwd });
-    await client.connect();
+    const supervisor = spawn(process.execPath, [MAIN, "--supervise", id], { stdio: ["pipe", "ignore", "ignore"], env: process.env });
+    supervisor.stdin!.end(JSON.stringify({ id, command: process.execPath, args: ["-e", "setInterval(()=>{},1000)"], cwd }));
+    const client = new SupervisedProcessClient(id);
+    let connected = false;
+    for (let i = 0; i < 100 && !(connected = await client.connect()); i++) await new Promise((r) => setTimeout(r, 50));
+    if (!connected) throw new Error(`supervisor ${id} did not come up`);
+    await client.awaitStarted();
     (engine as any).clients.set(id, client);
     (engine as any).clientCommands.set(id, command);
     engine.setClientOwner(id, owner);
@@ -50,7 +58,7 @@ test("a runtime update waits for the workloads running from that runtime, then i
     };
     const installed = () => fs.readFileSync(path.join(engine.getPackagePath("runtime"), "bin", "version"), "utf8");
     const runtimeCommand = () => path.join(engine.getPackagePath("runtime"), "bin", "runtime");
-    const started: EmbeddedSupervisor[] = [];
+    const started: SupervisedProcessClient[] = [];
     try {
         await release("0.1.0");
         expect(await engine.downloadPackage("runtime", "first", undefined, digest)).toEqual({ path: path.join(host, "packages", "runtime") });

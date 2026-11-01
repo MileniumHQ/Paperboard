@@ -5,7 +5,6 @@
 import { afterEach, expect, it } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import * as path from "node:path";
-import { EmbeddedSupervisor } from "../papercrane/embeddedSupervisor";
 import { SupervisedProcessClient } from "../papercrane/supervisor";
 
 const MAIN = path.join(import.meta.dir, "..", "papercrane", "main.ts");
@@ -16,12 +15,10 @@ const SPLIT_EURO =
 
 const children: ChildProcess[] = [];
 const clients: SupervisedProcessClient[] = [];
-const embedded: EmbeddedSupervisor[] = [];
 
 afterEach(() => {
     for (const client of clients.splice(0)) client.destroy();
     for (const child of children.splice(0)) if (child.exitCode === null) child.kill("SIGKILL");
-    for (const workload of embedded.splice(0)) workload.kill("SIGKILL");
 });
 
 it("keeps a character split across two reads whole (supervisor process)", async () => {
@@ -46,25 +43,6 @@ it("keeps a character split across two reads whole (supervisor process)", async 
     }
     expect(connected).toBe(true);
     expect(await exitCode).toBe(0);
-    expect(stdout.join("")).toBe("€\n");
-    expect(stderr.join("")).toBe("€\n");
-}, 15_000);
-
-it("keeps a character split across two reads whole (embedded supervisor)", async () => {
-    const workload = new EmbeddedSupervisor("utf8-split-embedded", {
-        id: "utf8-split-embedded",
-        type: "child_process",
-        command: process.execPath,
-        args: ["-e", SPLIT_EURO],
-    });
-    embedded.push(workload);
-    const stdout: string[] = [];
-    const stderr: string[] = [];
-    workload.on("stdout", (d: string) => stdout.push(d));
-    workload.on("stderr", (d: string) => stderr.push(d));
-    const exited = new Promise<void>((resolve) => workload.on("exit", () => resolve()));
-    expect(await workload.connect()).toBe(true);
-    await exited;
     expect(stdout.join("")).toBe("€\n");
     expect(stderr.join("")).toBe("€\n");
 }, 15_000);

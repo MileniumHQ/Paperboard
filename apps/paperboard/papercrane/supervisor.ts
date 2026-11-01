@@ -12,6 +12,7 @@ import { workloadExitCode } from "./exitStatus";
 import { batchFileRefusal } from "./batchFile";
 import { killWorkload } from "./processTree";
 import { redactEnvValues, unrefTimer } from "./storage";
+import { stopMountHolder } from "./supervisorLaunch";
 
 export interface SupervisorSpawnConfig {
     command?: string;
@@ -24,6 +25,8 @@ export interface SupervisorSpawnConfig {
     appId?: string;
     /** the child's input is closed from the start: a program that reads to its end (codex exec) is not left waiting */
     noStdin?: boolean;
+    /** the AppImage runtime holding the mount this supervisor runs from (supervisorLaunch.ts), stopped as it exits */
+    mountHolderPid?: number;
 }
 
 export interface SupervisorMetadata {
@@ -424,7 +427,11 @@ export async function runSupervisor(procId: string): Promise<void> {
         // leaving that one unreachable. The path is already unlinked above,
         // so nothing new can connect here. The delay lets the exit frame
         // reach the clients.
-        const exitTimer = setTimeout(() => process.exit(code), 40);
+        // The mount goes last: this process runs from it.
+        const exitTimer = setTimeout(() => {
+            stopMountHolder(config.mountHolderPid);
+            process.exit(code);
+        }, 40);
         unrefTimer(exitTimer);
     };
 
