@@ -9,10 +9,13 @@ import {
     DEFAULT_LAUNCH,
     detectInstallerLaunch,
     javaLaunchArgs,
+    jvmFlags,
+    type JvmTuning,
     launchEntryFile,
     parseLaunchSpec,
 } from "../src/software/launch";
 import { currentInstall, parseInstallRecord } from "../src/software/installRecord";
+import { javaMajorOf, transparentHugePages } from "../src/games/minecraft/launch";
 
 let dir: string;
 beforeEach(() => {
@@ -80,19 +83,46 @@ describe("java argv", () => {
         windows: "libraries/net/neoforged/neoforge/21.1.256/win_args.txt",
     })!;
 
+    const java21 = { ramGb: 6, javaMajor: 21, hugePages: false };
+
     test("argument-file launch passes the OS's file to java", () => {
-        expect(javaLaunchArgs(argfile, 6, false)).toEqual([
-            "-Xmx6G",
-            "-Xms6G",
-            "@libraries/net/neoforged/neoforge/21.1.256/unix_args.txt",
-            "nogui",
-        ]);
-        expect(javaLaunchArgs(argfile, 6, true)[2]).toBe("@libraries/net/neoforged/neoforge/21.1.256/win_args.txt");
+        const args = javaLaunchArgs(argfile, java21, false);
+        expect(args.slice(0, 2)).toEqual(["-Xmx6144M", "-Xms6144M"]);
+        expect(args.slice(-2)).toEqual(["@libraries/net/neoforged/neoforge/21.1.256/unix_args.txt", "nogui"]);
+        expect(javaLaunchArgs(argfile, java21, true).at(-2)).toBe("@libraries/net/neoforged/neoforge/21.1.256/win_args.txt");
         expect(launchEntryFile(argfile, true)).toBe("libraries/net/neoforged/neoforge/21.1.256/win_args.txt");
     });
 
-    test("jar launch is unchanged from before launch records", () => {
-        expect(javaLaunchArgs(DEFAULT_LAUNCH, 4, false)).toEqual(["-Xmx4G", "-Xms4G", "-jar", "server.jar", "nogui"]);
+    test("a jar launch runs the recorded jar after the JVM's tuning", () => {
+        const args = javaLaunchArgs(DEFAULT_LAUNCH, { ...java21, ramGb: 4 }, false);
+        expect(args.slice(0, 3)).toEqual(["-Xmx4096M", "-Xms4096M", "-XX:+UseG1GC"]);
+        expect(args.slice(-3)).toEqual(["-jar", "server.jar", "nogui"]);
+    });
+
+    test("memory in tenths of a gigabyte is a whole number of megabytes", () => {
+        expect(javaLaunchArgs(DEFAULT_LAUNCH, { ...java21, ramGb: 2.5 }, false).slice(0, 2)).toEqual(["-Xmx2560M", "-Xms2560M"]);
+        // 0.1 steps drift in floating point: 0.7 * 1024 is 716.8000000000001
+        expect(javaLaunchArgs(DEFAULT_LAUNCH, { ...java21, ramGb: 0.7 }, false)[0]).toBe("-Xmx717M");
+    });
+});
+
+describe("JVM tuning", () => {
+    const flags = (tuning: Partial<JvmTuning>) => jvmFlags({ ramGb: 6, javaMajor: 21, hugePages: false, ...tuning });
+
+    test("Aikar's flags, with the larger young generation over 12 GB", () => {
+        expect(flags({})).toContain("-XX:G1HeapRegionSize=8M");
+        expect(flags({})).toContain("-XX:G1NewSizePercent=30");
+        expect(flags({ ramGb: 16 })).toContain("-XX:G1HeapRegionSize=16M");
+        expect(flags({ ramGb: 16 })).toContain("-XX:G1NewSizePercent=40");
+        expect(flags({ ramGb: 12 })).toContain("-XX:G1NewSizePercent=30");
+        for (const flag of ["-XX:+UseG1GC", "-XX:+AlwaysPreTouch", "-XX:+DisableExplicitGC", "-XX:MaxTenuringThreshold=1"]) expect(flags({})).toContain(flag);
+    });
+
+    test("compact object headers only on Java 25 and later, huge pages only where offered", () => {
+        expect(flags({ javaMajor: 21 })).not.toContain("-XX:+UseCompactObjectHeaders");
+        expect(flags({ javaMajor: 25 })).toContain("-XX:+UseCompactObjectHeaders");
+        expect(flags({})).not.toContain("-XX:+UseTransparentHugePages");
+        expect(flags({ hugePages: true })).toContain("-XX:+UseTransparentHugePages");
     });
 });
 
@@ -122,5 +152,29 @@ describe("recorded launch is validated", () => {
             launch: DEFAULT_LAUNCH,
             files: ["server.jar"],
         });
+    });
+});
+
+describe("transparent huge pages", () => {
+    const write = (text: string) => {
+        const file = path.join(dir, "enabled");
+        fs.writeFileSync(file, text);
+        return file;
+    };
+
+    test("the bracketed mode decides", async () => {
+        expect(await transparentHugePages(write("always [madvise] never\n"))).toBe(true);
+        expect(await transparentHugePages(write("[always] madvise never\n"))).toBe(true);
+        expect(await transparentHugePages(write("always madvise [never]\n"))).toBe(false);
+    });
+
+    test("a kernel without them has no file", async () => {
+        expect(await transparentHugePages(path.join(dir, "missing"))).toBe(false);
+    });
+
+    test("the Java major comes from the runtime package", () => {
+        expect(javaMajorOf("java-8")).toBe(8);
+        expect(javaMajorOf("java-25")).toBe(25);
+        expect(() => javaMajorOf("node-22")).toThrow();
     });
 });

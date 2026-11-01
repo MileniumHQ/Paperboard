@@ -44,6 +44,10 @@ mock.module("../src/service/api", () => ({
 
 const { startServerInstance } = await import("../src/service/lifecycle");
 const { installServerSoftware } = await import("../src/games/minecraft/softwareInstall");
+const { transparentHugePages } = await import("../src/games/minecraft/launch");
+const { javaLaunchArgs } = await import("../src/software/launch");
+type LaunchSpec = import("../src/software/launch").LaunchSpec;
+const tuning = async () => ({ ramGb: 6, javaMajor: 21, hugePages: await transparentHugePages() });
 
 const NEOFORGE = {
     software: "neoforge",
@@ -86,7 +90,7 @@ describe("startServerInstance", () => {
         await startServerInstance(ctx);
         expect(starts[0]).toMatchObject({
             command: "/pkgs/java-21/bin/java",
-            args: ["-Xmx6G", "-Xms6G", "@libraries/net/neoforged/neoforge/21.1.256/unix_args.txt", "nogui"],
+            args: javaLaunchArgs(NEOFORGE.install.launch as LaunchSpec, await tuning(), false),
             cwd: serverDir,
         });
         expect(ctx.state.serverStatus).toBe("starting");
@@ -97,6 +101,8 @@ describe("startServerInstance", () => {
         await startServerInstance(makeCtx());
         expect(starts[0]!.command).toBe("/pkgs/java-21/bin/java.exe");
         expect(starts[0]!.args).toContain("@libraries/net/neoforged/neoforge/21.1.256/win_args.txt");
+        // Linux's huge pages flag is unknown to Windows' java
+        expect(starts[0]!.args).not.toContain("-XX:+UseTransparentHugePages");
     });
 
     test("a missing entry file is reported, not launched", async () => {
@@ -112,7 +118,7 @@ describe("startServerInstance", () => {
         savedConfig = { software: "paper", version: "1.21.1" };
         present = new Set(["server.jar"]);
         await startServerInstance(makeCtx());
-        expect(starts[0]!.args).toEqual(["-Xmx6G", "-Xms6G", "-jar", "server.jar", "nogui"]);
+        expect(starts[0]!.args).toEqual(javaLaunchArgs({ type: "jar", jar: "server.jar" }, await tuning(), false));
     });
 
     test("refused while an install holds the server folder", async () => {

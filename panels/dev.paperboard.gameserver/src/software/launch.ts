@@ -4,9 +4,9 @@ import { isListableDirArg } from "../core/dirs";
 // files the install actually produced. Lifecycle launches from this record
 // instead of assuming `java -jar server.jar`.
 //
-//   jar      java -Xmx… -jar <jar> nogui
+//   jar      java -Xmx… <tuning> -jar <jar> nogui
 //            vanilla, Paper, Fabric's launcher, Forge up to 1.16.5
-//   argfile  java -Xmx… @<args file> nogui
+//   argfile  java -Xmx… <tuning> @<args file> nogui
 //            NeoForge and Forge 1.17+: the installer writes a classpath
 //            argument file per OS (unix_args.txt with `:` separators,
 //            win_args.txt with `;`), and there is no runnable server jar
@@ -47,12 +47,59 @@ export function launchEntryFile(spec: LaunchSpec, windows: boolean): string {
     return windows ? spec.windows : spec.unix;
 }
 
+/** What the JVM is tuned for: the heap, the runtime's major version and what the computer offers. */
+export interface JvmTuning {
+    /** heap size, in steps of 0.1 GB */
+    ramGb: number;
+    /** major version of the Java runtime that runs the server, such as 21 */
+    javaMajor: number;
+    /** Linux with transparent huge pages available (enabled "always" or "madvise") */
+    hugePages: boolean;
+}
+
+/**
+ * Aikar's G1 flags (https://docs.papermc.io/paper/aikars-flags), the
+ * standard tuning for Minecraft servers: short, predictable collection
+ * pauses for a heap that is fixed in size and touched up front. Heaps over
+ * 12 GB get the larger young generation and regions the guide gives them.
+ * On top: transparent huge pages where Linux offers them (fewer TLB misses
+ * on a multi-gigabyte heap), and on Java 25+ compact object headers, which
+ * shrink every object by 4 bytes, so the same world takes less of the heap.
+ */
+export function jvmFlags({ ramGb, javaMajor, hugePages }: JvmTuning): string[] {
+    const large = ramGb > 12;
+    return [
+        "-XX:+UseG1GC",
+        "-XX:+ParallelRefProcEnabled",
+        "-XX:MaxGCPauseMillis=200",
+        "-XX:+UnlockExperimentalVMOptions",
+        "-XX:+DisableExplicitGC",
+        "-XX:+AlwaysPreTouch",
+        `-XX:G1NewSizePercent=${large ? 40 : 30}`,
+        `-XX:G1MaxNewSizePercent=${large ? 50 : 40}`,
+        `-XX:G1HeapRegionSize=${large ? 16 : 8}M`,
+        `-XX:G1ReservePercent=${large ? 15 : 20}`,
+        "-XX:G1HeapWastePercent=5",
+        "-XX:G1MixedGCCountTarget=4",
+        `-XX:InitiatingHeapOccupancyPercent=${large ? 20 : 15}`,
+        "-XX:G1MixedGCLiveThresholdPercent=90",
+        "-XX:G1RSetUpdatingPauseTimePercent=5",
+        "-XX:SurvivorRatio=32",
+        "-XX:+PerfDisableSharedMem",
+        "-XX:MaxTenuringThreshold=1",
+        ...(hugePages ? ["-XX:+UseTransparentHugePages"] : []),
+        ...(javaMajor >= 25 ? ["-XX:+UseCompactObjectHeaders"] : []),
+    ];
+}
+
 /** java argv (without the java binary) for a server launch. */
-export function javaLaunchArgs(spec: LaunchSpec, ramGb: number, windows: boolean): string[] {
-    const memory = [`-Xmx${ramGb}G`, `-Xms${ramGb}G`];
-    if (spec.type === "jar") return [...memory, "-jar", spec.jar, "nogui"];
+export function javaLaunchArgs(spec: LaunchSpec, tuning: JvmTuning, windows: boolean): string[] {
+    // in megabytes: java takes whole units, and 0.1 GB steps aren't whole gigabytes
+    const heap = `${Math.round(tuning.ramGb * 1024)}M`;
+    const jvm = [`-Xmx${heap}`, `-Xms${heap}`, ...jvmFlags(tuning)];
+    if (spec.type === "jar") return [...jvm, "-jar", spec.jar, "nogui"];
     // java expands @file itself; no shell is involved
-    return [...memory, `@${windows ? spec.windows : spec.unix}`, "nogui"];
+    return [...jvm, `@${windows ? spec.windows : spec.unix}`, "nogui"];
 }
 
 /** Where an installer-based software may leave its launch entry point. */

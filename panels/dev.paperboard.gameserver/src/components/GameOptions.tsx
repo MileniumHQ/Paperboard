@@ -75,6 +75,7 @@ export function GameOptionControl(props: {
                         aria-label={field.label}
                         min={field.min}
                         max={field.max}
+                        step={field.step}
                         marks={field.marks ? [...field.marks] : undefined}
                         value={draft() ?? Number(props.value ?? field.min)}
                         formatValue={(value) => `${value} ${field.unit}`}

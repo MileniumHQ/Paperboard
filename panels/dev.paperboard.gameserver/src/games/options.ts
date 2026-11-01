@@ -1,7 +1,7 @@
 import type { GameOption } from "./types";
 
 type NumberOption = Extract<GameOption, { kind: "number" | "slider" }>;
-const stepOf = (field: NumberOption) => (field.kind === "number" ? field.step ?? 1 : 1);
+const stepOf = (field: NumberOption) => field.step ?? 1;
 
 /** Whether a value is in the option's range and on its step; the options screen checks typing with it too. */
 export function fitsNumber(field: NumberOption, value: unknown): boolean {

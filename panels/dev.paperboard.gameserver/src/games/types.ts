@@ -49,8 +49,8 @@ export type GameOption = OptionBase & (
     | { kind: "text"; maxLength?: number; default?: string }
     /** `step` below 1 allows decimals in that step, as a 0.1 multiplier; whole numbers otherwise. */
     | { kind: "number"; min: number; max: number; step?: number; default?: number }
-    /** A whole number picked on a range, shown with its unit ("10 chunks"); marks are the ticks under it. */
-    | { kind: "slider"; min: number; max: number; unit: string; marks?: readonly number[]; default?: number }
+    /** A number picked on a range, shown with its unit ("10 chunks"); whole numbers unless `step` says otherwise; marks are the ticks under it. */
+    | { kind: "slider"; min: number; max: number; step?: number; unit: string; marks?: readonly number[]; default?: number }
     | { kind: "boolean"; default?: boolean }
     | { kind: "select"; choices: readonly { value: string; label: string }[]; default?: string }
     /** noun: what the secret is, for its empty and set field ("token"); a password otherwise */

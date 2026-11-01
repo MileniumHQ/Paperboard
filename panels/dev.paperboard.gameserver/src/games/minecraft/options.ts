@@ -4,8 +4,9 @@ import { versionSupports, type CapabilityName } from "../../lib/versionProfile";
 
 /** The Java heap the server is given, stored in the server's settings rather than server.properties. */
 export const RAM_OPTION = "ramGB";
-export const MIN_RAM_GB = 1;
+export const MIN_RAM_GB = 0.5;
 export const MAX_RAM_GB = 16;
+export const RAM_STEP_GB = 0.1;
 
 type Field = GameOption & { capability?: CapabilityName };
 
@@ -33,7 +34,7 @@ export function minecraftOptions(version: string): GameOption[] {
         // 26.3 turned the whitelist on for new servers
         { id: "white-list", label: "Whitelist", description: "Only players on the whitelist and operators can join.", kind: "boolean", default: has("whitelistOnByDefault") && Boolean(semver.coerce(version)), restartRequired: true },
 
-        { ...advanced, id: RAM_OPTION, label: "Memory Allocation", description: `Java heap size (-Xmx/-Xms) for the server process, from ${MIN_RAM_GB} GB to ${MAX_RAM_GB} GB.`, kind: "slider", min: MIN_RAM_GB, max: MAX_RAM_GB, unit: "GB", marks: ramMarks(), default: 4, restartRequired: true },
+        { ...advanced, id: RAM_OPTION, label: "Memory Allocation", description: `Memory the server keeps for itself while it runs, from ${MIN_RAM_GB} GB to ${MAX_RAM_GB} GB in steps of ${RAM_STEP_GB} GB.`, kind: "slider", min: MIN_RAM_GB, max: MAX_RAM_GB, step: RAM_STEP_GB, unit: "GB", marks: ramMarks(), default: 4, restartRequired: true },
         { ...advanced, id: "view-distance", label: "Render Distance", description: "Chunks sent to each player around them. Lower is lighter on the server.", kind: "slider", min: 2, max: 32, unit: "chunks", default: 10, restartRequired: true },
         { ...advanced, id: "simulation-distance", label: "Simulation Distance", description: "Chunks around each player where mobs, crops and redstone keep running.", kind: "slider", min: 2, max: 32, unit: "chunks", default: 10, restartRequired: true, capability: "simulationDistance" },
         { ...advanced, id: "online-mode", label: "Online Mode", description: "Verify players against Mojang accounts. Disabling allows cracked clients.", kind: "boolean", default: true, restartRequired: true },
@@ -56,7 +57,7 @@ export function minecraftOptions(version: string): GameOption[] {
 
 // a tick at the smallest size and at every fourth gigabyte
 function ramMarks(): number[] {
-    return Array.from({ length: MAX_RAM_GB - MIN_RAM_GB + 1 }, (_, i) => MIN_RAM_GB + i).filter((gb) => gb === MIN_RAM_GB || gb % 4 === 0);
+    return [MIN_RAM_GB, ...Array.from({ length: Math.floor(MAX_RAM_GB / 4) }, (_, i) => (i + 1) * 4)];
 }
 
 /** A server.properties string as the option's value; an unparseable one throws rather than showing a default over it. */
