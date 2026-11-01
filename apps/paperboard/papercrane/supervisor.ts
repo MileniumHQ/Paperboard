@@ -13,6 +13,10 @@ import { batchFileRefusal } from "./batchFile";
 import { killWorkload } from "./processTree";
 import { redactEnvValues, unrefTimer } from "./storage";
 import { stopMountHolder } from "./supervisorLaunch";
+import { consoleRelayLaunch } from "./consoleRelay";
+
+export const INPUT_ENCODINGS = ["utf8", "utf16le"] as const;
+export type InputEncoding = (typeof INPUT_ENCODINGS)[number];
 
 export interface SupervisorSpawnConfig {
     command?: string;
@@ -25,6 +29,20 @@ export interface SupervisorSpawnConfig {
     appId?: string;
     /** the child's input is closed from the start: a program that reads to its end (codex exec) is not left waiting */
     noStdin?: boolean;
+    /**
+     * how input text is encoded for the child; default UTF-8. A .NET
+     * program on Windows that sets Console.InputEncoding to Unicode reads
+     * UTF-16, where UTF-8 text never forms a line
+     */
+    inputEncoding?: InputEncoding;
+    /**
+     * Windows: the child's input is an empty console instead of a pipe, for
+     * a program that reads a console and fails on a pipe (a Source dedicated
+     * server in -console mode); it runs behind consoleRelay.ts. Nothing can
+     * be written to it. Elsewhere a pipe is a program's console, so this
+     * changes nothing there.
+     */
+    consoleInput?: boolean;
     /** the AppImage runtime holding the mount this supervisor runs from (supervisorLaunch.ts), stopped as it exits */
     mountHolderPid?: number;
 }
@@ -485,7 +503,7 @@ export async function runSupervisor(procId: string): Promise<void> {
                         if (pendingExit !== null) cleanupAndExit(pendingExit);
                     } else if (msg.type === "stdin" && typeof msg.data === "string") {
                         if (ptyInstance) ptyInstance.write(msg.data);
-                        else childProcess?.stdin?.write(msg.data);
+                        else childProcess?.stdin?.write(Buffer.from(msg.data, config.inputEncoding ?? "utf8"));
                     } else if (msg.type === "resize" && ptyInstance) {
                         ptyInstance.resize(msg.cols, msg.rows);
                     } else if (msg.type === "kill") {
@@ -558,8 +576,13 @@ export async function runSupervisor(procId: string): Promise<void> {
                 failStart(refusal);
                 return;
             }
+            // a Windows program that reads a console runs behind the relay,
+            // which has one; its input is the relay's console, so none here
+            const relay = config.consoleInput && process.platform === "win32" ? consoleRelayLaunch(command, args) : null;
             try {
-                childProcess = cp.spawn(command, args, { cwd: finalCwd, env: mergedEnv, windowsHide: true, stdio: [config.noStdin ? "ignore" : "pipe", "pipe", "pipe"] });
+                childProcess = relay
+                    ? cp.spawn(relay.command, relay.args, { cwd: finalCwd, env: { ...mergedEnv, ...relay.env }, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
+                    : cp.spawn(command, args, { cwd: finalCwd, env: mergedEnv, windowsHide: true, stdio: [config.noStdin ? "ignore" : "pipe", "pipe", "pipe"] });
             } catch (err) {
                 // a synchronous spawn throw is a start failure the creator reads, not an uncaught crash
                 failStart(`Could not start ${command}: ${(err as Error).message}`);

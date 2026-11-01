@@ -94,6 +94,23 @@ console.log("Git status:", stdout);`}
                 Background processes run under their own supervisor, so they keep running if Paperboard crashes. When Paperboard starts again, it reattaches them: call exists with the same ID when your service starts, and subscribe again if it returns true.
                 Quitting Paperboard normally stops them.
             </PaperText>
+            <PaperText preset="body">
+                Text written to a process reaches it as UTF-8. A program that reads its input in another encoding sets inputEncoding on start: "utf16le" for a .NET program that sets Console.InputEncoding to Unicode on Windows, as Terraria does.
+                A process started with stdin set to false has no input, so it takes no inputEncoding.
+            </PaperText>
+            <PaperText preset="body">
+                Some Windows programs read their input from a console and quit when it is a pipe, such as a Source dedicated server in -console mode. Set consoleInput on start to give the program a console with no window.
+                It reads nothing written to it: talk to such a program another way, such as RCON. On Linux and macOS consoleInput does nothing.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`await processApi.start({
+    id: "server",
+    command: "TerrariaServer.exe",
+    args: ["-config", "serverconfig.txt"],
+    inputEncoding: process.platform === "win32" ? "utf16le" : "utf8",
+});
+await processApi.write("server", "save\\n");`}
+            </PaperCode>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
             <PaperText preset="body">

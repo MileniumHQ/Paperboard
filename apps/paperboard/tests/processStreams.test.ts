@@ -38,7 +38,8 @@ async function until(check: () => boolean, what: string) {
 
 const count = (text: string, needle: string) => text.split(needle).length - 1;
 
-test("a process's stdout and stderr reach every attached socket once", async () => {
+// a real daemon socket over a compiled supervisor
+async function daemon() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "process-streams-"));
     const bunExecutable = process.execPath;
     const launcherSource = path.join(root, "supervisor.ts");
@@ -57,8 +58,26 @@ test("a process's stdout and stderr reach every attached socket once", async () 
     setupWebSocketServer(wss, engine, auth);
     await once(wss, "listening");
     const port = (wss.address() as { port: number }).port;
-    const service = viewer(port);
-    const window = viewer(port);
+    const viewers: ReturnType<typeof viewer>[] = [];
+    return {
+        engine,
+        viewer: () => { const v = viewer(port); viewers.push(v); return v; },
+        async close() {
+            await engine.killProcess(ID);
+            process.execPath = bunExecutable;
+            for (const v of viewers) v.transport.close();
+            for (const socket of wss.clients) socket.terminate();
+            await new Promise<void>((resolve) => wss.close(() => resolve()));
+            auth.dispose();
+            fs.rmSync(root, { recursive: true, force: true });
+        },
+    };
+}
+
+test("a process's stdout and stderr reach every attached socket once", async () => {
+    const crane = await daemon();
+    const service = crane.viewer();
+    const window = crane.viewer();
     try {
         // a console: says each line it reads on stdout, and on stderr too
         const script = 'while read line; do echo "out-$line"; echo "err-$line" >&2; done';
@@ -79,12 +98,27 @@ test("a process's stdout and stderr reach every attached socket once", async () 
             expect(v.streams.stdout).not.toContain("err-42");
         }
     } finally {
-        await engine.killProcess(ID);
-        process.execPath = bunExecutable;
-        for (const v of [service, window]) v.transport.close();
-        for (const socket of wss.clients) socket.terminate();
-        await new Promise<void>((resolve) => wss.close(() => resolve()));
-        auth.dispose();
-        fs.rmSync(root, { recursive: true, force: true });
+        await crane.close();
+    }
+}, 30_000);
+
+// Terraria's Windows server reads its console as UTF-16: a command written
+// as UTF-8 never formed a line, so every command was ignored
+test("a process started with an input encoding reads what is written in it", async () => {
+    const crane = await daemon();
+    const service = crane.viewer();
+    try {
+        await expect(service.transport.call("process:run", { id: ID, command: "sh", args: ["-c", "true"], inputEncoding: "latin1" }))
+            .rejects.toThrow("inputEncoding must be one of utf8, utf16le");
+        await expect(service.transport.call("process:run", { id: ID, command: "sh", args: ["-c", "true"], stdin: false, inputEncoding: "utf16le" }))
+            .rejects.toThrow("no input has no inputEncoding");
+        // the bytes it reads, in hex
+        await service.transport.call("process:run", { id: ID, command: "sh", args: ["-c", "head -c 4 | od -An -tx1"], inputEncoding: "utf16le" });
+        await service.transport.call("process:attach", { id: ID });
+        await service.transport.call("process:write", { id: ID, data: "é\n" });
+        await until(() => service.streams.stdout.trim() !== "", "the bytes");
+        expect(service.streams.stdout.trim()).toBe("e9 00 0a 00");
+    } finally {
+        await crane.close();
     }
 }, 30_000);

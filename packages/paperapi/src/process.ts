@@ -25,6 +25,10 @@ export interface ProcessStartOptions {
     env?: Record<string, string>;
     /** false: the process starts with its input closed, so one that reads input to its end isn't left waiting; writes to it fail */
     stdin?: boolean;
+    /** how written text reaches the process; default "utf8". "utf16le" for a Windows program that reads its input as UTF-16 */
+    inputEncoding?: "utf8" | "utf16le";
+    /** Windows: the process reads an empty console instead of a pipe, for a program that fails on a pipe (a Source dedicated server in -console mode); writes to it fail. No effect elsewhere */
+    consoleInput?: boolean;
 }
 
 // supervised background processes
@@ -37,6 +41,8 @@ export const processApi = {
             cwd: options.cwd,
             env: options.env,
             ...(options.stdin === false ? { stdin: false } : {}),
+            ...(options.inputEncoding ? { inputEncoding: options.inputEncoding } : {}),
+            ...(options.consoleInput ? { consoleInput: true } : {}),
         }),
 
     write: (id: string, data: string): Promise<void> =>

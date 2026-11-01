@@ -10,6 +10,7 @@
 // import can never boot a server.
 import { pathToFileURL } from "url";
 import { parseCliArgs, startPaperCraneServer } from "./index";
+import { consoleRelayArgs, runConsoleRelay } from "./consoleRelay";
 import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
 
@@ -28,6 +29,13 @@ function fatalCliError(err: any): never {
 }
 
 async function main(): Promise<void> {
+    // a supervisor's console relay (consoleRelay.ts): its arguments are the
+    // program's, so they never reach the option parser
+    const relay = consoleRelayArgs(process.argv);
+    if (relay) {
+        runConsoleRelay(relay.command, relay.args);
+        return;
+    }
     let cliOptions;
     try {
         cliOptions = parseCliArgs();

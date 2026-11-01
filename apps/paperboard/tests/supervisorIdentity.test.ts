@@ -76,10 +76,10 @@ afterEach(async () => {
     if (survivors.length) throw new Error(`supervised workloads survived teardown: ${survivors.join(", ")}`);
 });
 
-async function supervise(id: string, config: { source?: string; noStdin?: boolean } = {}): Promise<ChildProcess> {
+async function supervise(id: string, config: { source?: string; noStdin?: boolean; inputEncoding?: string } = {}): Promise<ChildProcess> {
     const child = spawn(process.execPath, [MAIN, "--supervise", id], { stdio: ["pipe", "ignore", "ignore"], env: process.env });
     children.push(child);
-    child.stdin!.end(JSON.stringify({ command: process.execPath, args: ["-e", config.source ?? WORKLOAD_SOURCE], noStdin: config.noStdin }));
+    child.stdin!.end(JSON.stringify({ command: process.execPath, args: ["-e", config.source ?? WORKLOAD_SOURCE], noStdin: config.noStdin, inputEncoding: config.inputEncoding }));
     const deadline = Date.now() + 10_000;
     for (;;) {
         // the metadata file can be seen mid-write; keep waiting until it parses
@@ -220,6 +220,27 @@ describe("a workload started with no input", () => {
         await engine.killProcess(id);
         expect(await exited(child)).toBe(true);
     }, 30_000);
+});
+
+describe("a workload's input encoding", () => {
+    // Terraria's Windows server reads its console as UTF-16, so commands
+    // written as UTF-8 never formed a line and every command was ignored
+    const READER = `${WORKLOAD_SOURCE}; process.stdin.once("data", (d) => process.exit(d.equals(Buffer.from("é\\n", "utf16le")) ? 16 : d.equals(Buffer.from("é\\n")) ? 8 : 1))`;
+    for (const [encoding, code] of [[undefined, 8], ["utf16le", 16]] as const) {
+        it(`delivers written text as ${encoding ?? "UTF-8 by default"}`, async () => {
+            const id = `dev.test.encoding.${encoding ?? "default"}`;
+            await supervise(id, { source: READER, inputEncoding: encoding });
+            const client = new SupervisedProcessClient(id);
+            cleanup.push(() => client.destroy());
+            const exitCode = new Promise<number | "still waiting">((resolve) => {
+                const timer = setTimeout(() => resolve("still waiting"), 5000);
+                client.on("exit", (exit: number) => { clearTimeout(timer); resolve(exit); });
+            });
+            expect(await client.connect()).toBe(true);
+            client.write("é\n");
+            expect(await exitCode).toBe(code);
+        }, 30_000);
+    }
 });
 
 describe("a workload's exit", () => {

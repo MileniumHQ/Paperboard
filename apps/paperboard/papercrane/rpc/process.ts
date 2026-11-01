@@ -1,5 +1,6 @@
 import type { RpcContext } from "./context";
 import { claimClient, checkClientOwnership, checkSpawnEnv } from "./ownership";
+import { INPUT_ENCODINGS } from "../supervisor";
 import { assertStr, assertOptStr, assertEnvMap, InvalidParamsError } from "./params";
 
 export async function handleProcess(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {
@@ -24,6 +25,16 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
             if (params?.stdin !== undefined && typeof params.stdin !== "boolean") {
                 throw new InvalidParamsError("Invalid parameter: stdin must be a boolean");
             }
+            const inputEncoding = params?.inputEncoding;
+            if (inputEncoding !== undefined && !INPUT_ENCODINGS.includes(inputEncoding)) {
+                throw new InvalidParamsError(`Invalid parameter: inputEncoding must be one of ${INPUT_ENCODINGS.join(", ")}`);
+            }
+            if (inputEncoding !== undefined && params?.stdin === false) {
+                throw new InvalidParamsError("Invalid parameter: a process started with no input has no inputEncoding");
+            }
+            if (params?.consoleInput !== undefined && typeof params.consoleInput !== "boolean") {
+                throw new InvalidParamsError("Invalid parameter: consoleInput must be a boolean");
+            }
             checkSpawnEnv(env, ctx, "process:run");
             await claimClient(procId, ctx, "process:run", () => engine.startProcess(
                 procId,
@@ -36,6 +47,8 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
                 (stderr) => sendEvent("process:data", { id: procId, data: stderr, stream: "stderr" }),
                 {
                     stdin: params?.stdin,
+                    inputEncoding,
+                    consoleInput: params?.consoleInput,
                     subscriber: ctx.ws,
                     onExit: (exitCode) => sendEvent("process:exit", { id: procId, exitCode }),
                 },

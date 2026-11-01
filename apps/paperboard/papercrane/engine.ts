@@ -7,6 +7,7 @@ import {
     supervisorPresent,
     supervisorEndpointName,
     supervisorSocketPathForName,
+    type InputEncoding,
 } from "./supervisor";
 import { PanelManifest } from "./types";
 import {
@@ -611,7 +612,7 @@ export class PaperCraneEngine {
         // subscriber: the socket that receives the streams (see
         // subscribeStreams), onExit its exit listener; without one, the
         // listeners belong to this process alone
-        options: { stdin?: boolean; subscriber?: object; onExit?: (exitCode: number) => void } = {},
+        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; subscriber?: object; onExit?: (exitCode: number) => void } = {},
     ): Promise<{ completion: Promise<{ exitCode: number }> }> {
         if (!id || typeof id !== "string") {
             throw new Error("process id is required");
@@ -639,6 +640,9 @@ export class PaperCraneEngine {
 
         let resolveExit!: (result: { exitCode: number }) => void;
         const completion = new Promise<{ exitCode: number }>((resolve) => { resolveExit = resolve; });
+        // a Windows console input takes no writes: the process is inputless,
+        // recorded as such so a daemon that adopts it refuses writes too
+        const inputless = options.stdin === false || (options.consoleInput === true && process.platform === "win32");
         await spawnSupervisedClient(
                 id,
                 {
@@ -648,7 +652,9 @@ export class PaperCraneEngine {
                     args,
                     cwd: resolvedCwd,
                     env,
-                    noStdin: options.stdin === false,
+                    noStdin: inputless,
+                    inputEncoding: options.inputEncoding,
+                    consoleInput: options.consoleInput,
                 },
                 this.clients,
                 {
@@ -665,7 +671,7 @@ export class PaperCraneEngine {
                 },
             );
         this.clientCommands.set(id, command);
-        if (options.stdin === false) this.inputless.add(id);
+        if (inputless) this.inputless.add(id);
         else this.inputless.delete(id);
         return { completion };
     }
