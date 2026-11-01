@@ -5,7 +5,7 @@
 // unsaved progress each time. Supervisors are detached so the next daemon
 // adopts what they keep running.
 import { test, expect, beforeAll, afterAll } from "bun:test";
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { CraneTransport } from "../../../packages/paperapi/src/ws";
@@ -34,11 +34,9 @@ const alive = (pid: number) => {
 };
 // only ever signal a pid that is still this test's workload, never a reused one
 const isWorkload = (pid: number) => {
-    try {
-        return execFileSync("ps", ["-p", String(pid), "-o", "args="], { encoding: "utf8" }).includes(MARK);
-    } catch {
-        return false;
-    }
+    // ps exits non-zero when the pid is gone
+    const ps = spawnSync("ps", ["-p", String(pid), "-o", "args="], { encoding: "utf8" });
+    return ps.status === 0 && ps.stdout.includes(MARK);
 };
 
 beforeAll(async () => {
