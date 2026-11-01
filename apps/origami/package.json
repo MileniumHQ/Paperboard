@@ -19,6 +19,7 @@
         "update:steamcmd": "bun scripts/update-steamcmd.ts",
         "update:libcurl-gnutls": "bun scripts/update-libcurl-gnutls.ts",
         "update:sourcemod": "bun scripts/update-sourcemod.ts",
+        "update:windows-runtimes": "bun scripts/update-windows-runtimes.ts",
         "update:dotnet": "bun scripts/update-dotnet.ts",
         "update:proton": "bun scripts/update-proton.ts",
         "update:codex": "bun scripts/update-codex.ts",
