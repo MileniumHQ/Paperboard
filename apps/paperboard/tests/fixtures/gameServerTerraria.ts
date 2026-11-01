@@ -48,8 +48,8 @@ export async function runTerrariaScenario(real: boolean): Promise<void> {
         if (!bundled.success) throw new AggregateError(bundled.logs, "Service build failed");
         let source = await bundled.outputs[0]!.text();
         if (!real) {
-            assert(source.includes('120000, "save completion'), "Save deadline test seam did not match compiled service");
-            source = source.replace("timeoutMs: 300000", "timeoutMs: 500").replace('120000, "save completion', '300, "save completion');
+            assert(source.includes('120000, "Terraria to save'), "Save deadline test seam did not match compiled service");
+            source = source.replace("timeoutMs: 300000", "timeoutMs: 500").replace('120000, "Terraria to save', '300, "Terraria to save');
         }
         await Bun.write(path.join(panelDir, "service.mjs"), source);
         await config.set({ version: 2, serversDirectory: "servers-0123456789ab", servers: [] }, PANEL);
@@ -160,10 +160,10 @@ for await (const line of console) { fs.appendFileSync(path.join(path.dirname(con
             assert(commands.includes("say Server stopping") && commands.includes("save\nexit"), "Backup did not announce/save/exit through real stdin");
             fs.writeFileSync(path.join(directory, "worlds/no-save"), "");
             await call("start-server"); await until(async () => (await state()).serverStatus === "online", "save failure test start");
-            let noSave = false; try { await call("save-world"); } catch (err) { noSave = /save completion/.test(String(err)); }
+            let noSave = false; try { await call("save-world"); } catch (err) { noSave = /Timed out waiting for Terraria to save/.test(String(err)); }
             assert(noSave, "A returned prompt without a changed world file was accepted as a save");
             fs.writeFileSync(path.join(directory, "restore-refused.txt"), "must survive");
-            let refusedRestore = false; try { await api.restore(record.id); } catch (err) { refusedRestore = /save completion/.test(String(err)); }
+            let refusedRestore = false; try { await api.restore(record.id); } catch (err) { refusedRestore = /Timed out waiting for Terraria to save/.test(String(err)); }
             assert(refusedRestore && fs.existsSync(path.join(directory, "restore-refused.txt")), "Failed pre-restore save still replaced source files");
             fs.unlinkSync(path.join(directory, "worlds/no-save"));
             await call("stop-server"); await until(async () => (await state()).serverStatus === "offline", "save failure test stop");

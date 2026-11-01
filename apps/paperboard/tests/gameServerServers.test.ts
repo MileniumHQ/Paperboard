@@ -165,6 +165,7 @@ test("Game Server over the real daemon: migration, independent servers, projects
         // Launch preparation crosses the real config, file, package and system
         // APIs. No Java is run: fixture package directories describe the runtime.
         const { gameServiceFor } = await import("../../../panels/dev.paperboard.gameserver/src/games/service");
+        const { jvmFlags } = await import("../../../panels/dev.paperboard.gameserver/src/software/launch");
         const { initialServerState } = await import("../../../panels/dev.paperboard.gameserver/src/service/initialState");
         const javaHome = path.join(root, "packages", "java-21");
         fs.mkdirSync(path.join(javaHome, "bin"), { recursive: true });
@@ -174,9 +175,11 @@ test("Game Server over the real daemon: migration, independent servers, projects
         fs.writeFileSync(path.join(launchDir, "server.jar"), "launch fixture");
         const resolveLaunch = () => inServer({ server: launchServer, legacy: false } as any, () => gameServiceFor(launchServer.game).prepareLaunch(launchContext));
         const jar = await resolveLaunch();
+        // Aikar's flags for a 6 GB heap on Java 21; huge pages only where this computer offers them
+        const tuning = jvmFlags({ ramGb: 6, javaMajor: 21, hugePages: jar.command.args.includes("-XX:+UseTransparentHugePages") });
         expect(jar.command).toEqual({
             executable: `${javaHome}/bin/${process.platform === "win32" ? "java.exe" : "java"}`,
-            args: ["-Xmx6G", "-Xms6G", "-jar", "server.jar", "nogui"],
+            args: ["-Xmx6144M", "-Xms6144M", ...tuning, "-jar", "server.jar", "nogui"],
             cwd: launchDir,
             env: { JAVA_HOME: javaHome },
         });
@@ -186,7 +189,7 @@ test("Game Server over the real daemon: migration, independent servers, projects
         Object.assign(launchServer.settings, { install: { software: "neoforge", version: "1.21.4", build: "test", launch, files: ["libraries"], staging: ".install-1-1" } });
         expect((await resolveLaunch()).command).toEqual({
             ...jar.command,
-            args: ["-Xmx6G", "-Xms6G", `@${process.platform === "win32" ? launch.windows : launch.unix}`, "nogui"],
+            args: ["-Xmx6144M", "-Xms6144M", ...tuning, `@${process.platform === "win32" ? launch.windows : launch.unix}`, "nogui"],
         });
         fs.unlinkSync(path.join(launchDir, process.platform === "win32" ? launch.windows : launch.unix));
         await expect(resolveLaunch()).rejects.toThrow("is missing in the server folder");
