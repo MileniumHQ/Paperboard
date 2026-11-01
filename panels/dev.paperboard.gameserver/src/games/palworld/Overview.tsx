@@ -1,6 +1,6 @@
 import { createEffect, createSignal, on, onCleanup, Show } from "solid-js";
-import { PaperAvatar, PaperButton, PaperFlex, PaperGrid, PaperInput, PaperModal, PaperQuote, PaperStatTile, PaperText } from "@mileniumhq/paperui";
-import ServerOverview from "../../components/ServerOverview";
+import { PaperAvatar, PaperButton, PaperGrid, PaperInput, PaperModal, PaperQuote, PaperStatTile, PaperText } from "@mileniumhq/paperui";
+import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { gameSettings, serverBridge, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { ACTION_IDS } from "../../service/contract";
@@ -53,14 +53,11 @@ export default function PalworldOverview() {
         <ServerOverview
             avatar={<PaperAvatar size="xlarge" shape="square" src={palworld.art.icon} alt="Palworld" fallbackIcon="pets" />}
             detail={
-                <PaperFlex direction="row" gap="half" align="center">
+                <EditableDetail edit="Edit description" onEdit={edit}>
                     <Show when={description()} fallback={<PaperText color="text-subtle">No description</PaperText>}>
                         <PaperText color="text-subtle">{description()}</PaperText>
                     </Show>
-                    <PaperButton size="tiny" icon onClick={edit} title="Edit description" aria-label="Edit description">
-                        edit
-                    </PaperButton>
-                </PaperFlex>
+                </EditableDetail>
             }
             software="Steam"
             control={palworld.describe({ software: "", version: "" }).control}

@@ -473,7 +473,7 @@ export default function Worlds() {
                 size="small"
                 footer={
                     <>
-                        <PaperButton disabled={uploading()} onClick={() => void cancelUpload()}>
+                        <PaperButton variant="text" disabled={uploading()} onClick={() => void cancelUpload()}>
                             Cancel
                         </PaperButton>
                         <PaperButton
@@ -513,7 +513,7 @@ export default function Worlds() {
                 size="medium"
                 footer={
                     <>
-                        <PaperButton onClick={() => setCreateOpen(false)}>
+                        <PaperButton variant="text" onClick={() => setCreateOpen(false)}>
                             Cancel
                         </PaperButton>
                         <PaperButton

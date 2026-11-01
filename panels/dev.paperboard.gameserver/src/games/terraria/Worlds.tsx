@@ -400,7 +400,7 @@ export default function TerrariaWorlds() {
                 size="small"
                 footer={
                     <>
-                        <PaperButton disabled={uploading()} onClick={() => void cancelUpload()}>Cancel</PaperButton>
+                        <PaperButton variant="text" disabled={uploading()} onClick={() => void cancelUpload()}>Cancel</PaperButton>
                         <PaperButton variant="success" disabled={!uploadNameValid() || uploading()} onClick={() => void submitUpload()}>
                             {uploading() ? "Adding..." : "Add world"}
                         </PaperButton>
@@ -434,7 +434,7 @@ export default function TerrariaWorlds() {
                 size="medium"
                 footer={
                     <>
-                        <PaperButton onClick={() => setCreateOpen(false)}>Cancel</PaperButton>
+                        <PaperButton variant="text" onClick={() => setCreateOpen(false)}>Cancel</PaperButton>
                         <PaperButton
                             variant="success"
                             disabled={!newNameValid() || taken(newName()) || worlds() === null || mutating()}

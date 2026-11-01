@@ -1,18 +1,17 @@
-import { createSignal, onMount, Show } from "solid-js";
+import { createSignal, onMount } from "solid-js";
 import {
     PaperButton,
     PaperCard,
     PaperFlex,
     PaperIcon,
-    PaperModal,
     PaperPageHeader,
-    PaperQuote,
     PaperTable,
     PaperText,
 } from "@mileniumhq/paperui";
-import InstallLoaders from "../../components/InstallLoaders";
+import InstallNotices from "../../components/InstallNotices";
+import InstallProgressModal from "../../components/InstallProgressModal";
 import { serverBridge, serverStatus } from "../../lib/server";
-import { errorMessage } from "../../lib/failure";
+import { errorMessage, type Outcome } from "../../lib/failure";
 import { createSteamInstall, type SteamInstallInfo } from "./installRows";
 
 /**
@@ -21,16 +20,17 @@ import { createSteamInstall, type SteamInstallInfo } from "./installRows";
  */
 export default function SteamVersions(props: { name: string; infoAction: string; installAction: string }) {
     const [info, setInfo] = createSignal<SteamInstallInfo | null>(null);
-    const [loadError, setLoadError] = createSignal("");
+    const [loadFailure, setLoadFailure] = createSignal<Outcome>();
     const [installOpen, setInstallOpen] = createSignal(false);
     const install = createSteamInstall(props.installAction);
 
     const load = async () => {
         try {
             setInfo(await serverBridge.call<SteamInstallInfo>(props.infoAction));
-            setLoadError("");
+            setLoadFailure(undefined);
         } catch (err) {
-            setLoadError(errorMessage(err));
+            console.error(`[Updates] Failed to read the ${props.name} install:`, err);
+            setLoadFailure({ title: `The ${props.name} install could not be read`, message: errorMessage(err) });
         }
     };
     onMount(() => void load());
@@ -47,21 +47,7 @@ export default function SteamVersions(props: { name: string; infoAction: string;
         <>
             <PaperPageHeader icon="update" title="Updates" />
 
-            <Show when={serverStatus() !== "offline"}>
-                <PaperQuote variant="warning" icon="warning" title="Server running">
-                    Stop the server to update it.
-                </PaperQuote>
-            </Show>
-            <Show when={loadError()}>
-                <PaperQuote variant="danger" icon="warning" title={`The ${props.name} install could not be read`}>
-                    {loadError()}
-                </PaperQuote>
-            </Show>
-            <Show when={info() && !info()!.host.supported}>
-                <PaperQuote variant="warning" icon="warning" title={`This computer can't run ${props.name} yet`}>
-                    {info()!.host.reason}
-                </PaperQuote>
-            </Show>
+            <InstallNotices game={props.name} stopFor="update it" loadFailure={loadFailure()} host={info()?.host ?? null} />
 
             <PaperCard>
                 <PaperFlex direction="column" gap="half" padding="full">
@@ -91,25 +77,12 @@ export default function SteamVersions(props: { name: string; infoAction: string;
                 </PaperButton>
             </PaperFlex>
 
-            <PaperModal
+            <InstallProgressModal
                 open={installOpen()}
-                size="medium"
-                noHeader
-                closeOnBackdropClick={false}
-                closeOnEsc={false}
-                footer={install.error() ? <PaperButton onClick={() => { setInstallOpen(false); install.reset(); }}>Dismiss</PaperButton> : undefined}
-            >
-                <PaperFlex fullWidth center>
-                    <PaperFlex fullWidth maxWidth="panel-small">
-                        <InstallLoaders items={install.rows(props.name)} />
-                        <Show when={install.error()}>
-                            <PaperQuote variant="danger" icon="warning" title="Update failed">
-                                {install.error()}
-                            </PaperQuote>
-                        </Show>
-                    </PaperFlex>
-                </PaperFlex>
-            </PaperModal>
+                rows={install.rows(props.name)}
+                failure={install.error() ? { title: "Update failed", message: install.error() } : undefined}
+                onDismiss={() => { setInstallOpen(false); install.reset(); }}
+            />
         </>
     );
 }

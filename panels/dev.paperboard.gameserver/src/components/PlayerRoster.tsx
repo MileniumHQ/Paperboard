@@ -7,12 +7,14 @@ import {
     PaperList,
     PaperListItem,
     PaperListLabel,
+    PaperQuote,
     PaperSeparator,
     PaperSplit,
     PaperSwatch,
     PaperText,
     type PaperColor,
 } from "@mileniumhq/paperui";
+import type { Outcome } from "../lib/failure";
 
 export interface RosterFilter {
     label: string;
@@ -40,7 +42,9 @@ export default function PlayerRoster<T extends { name: string }>(props: {
     search: string;
     onSearch(query: string): void;
     filters: readonly RosterFilter[];
-    feedback?: string;
+    /** the last thing that went wrong with the roster, quoted above the list */
+    feedback?: Outcome;
+    onDismissFeedback?(): void;
     sections: readonly RosterSection<T>[];
     icon(player: T): JSX.Element;
     description(player: T): string;
@@ -85,9 +89,11 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                                 </For>
                             </PaperFlex>
                             <Show when={props.feedback}>
-                                <PaperText size={2} color="danger">
-                                    {props.feedback}
-                                </PaperText>
+                                {(note) => (
+                                    <PaperQuote variant="danger" icon="warning" title={note().title} onDismiss={props.onDismissFeedback}>
+                                        {note().message}
+                                    </PaperQuote>
+                                )}
                             </Show>
                         </PaperFlex>
                         <PaperSeparator />

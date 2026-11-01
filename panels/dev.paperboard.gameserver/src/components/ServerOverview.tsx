@@ -34,6 +34,18 @@ import RecoveryNotice from "./RecoveryNotice";
 import { errorMessage } from "../lib/failure";
 import type { Control } from "../games/types";
 
+/** What a game's Overview says under the address, beside the button that edits it. */
+export function EditableDetail(props: { edit: string; onEdit(): void; children: JSX.Element }) {
+    return (
+        <PaperFlex direction="row" gap="half" align="center">
+            {props.children}
+            <PaperButton size="tiny" icon onClick={props.onEdit} title={props.edit} aria-label={props.edit}>
+                edit
+            </PaperButton>
+        </PaperFlex>
+    );
+}
+
 /**
  * Every game's Overview: the address card, the power controls, Save world
  * and the console. A game fills in its own avatar, the line under the address,

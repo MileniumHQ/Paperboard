@@ -1,36 +1,20 @@
-import { createSignal, onCleanup, onMount, Show } from "solid-js";
+import { createSignal, onMount, Show } from "solid-js";
 import {
-    PaperButton,
     PaperCenteredInterface,
-    PaperFlex,
     PaperQuote,
-    PaperText,
     PaperWizard,
     PaperWizardStep,
-    useWizard,
 } from "@mileniumhq/paperui";
-import InstallLoaders from "../../components/InstallLoaders";
+import InstallStepView, { createWizardInstall } from "../../components/InstallStepView";
+import { UnsupportedHost } from "../../components/InstallNotices";
 import { serverBridge } from "../../lib/server";
-import { errorMessage } from "../../lib/failure";
+import { errorMessage, type Outcome } from "../../lib/failure";
 import { createSteamInstall, type SteamInstallInfo } from "./installRows";
 
 function InstallStep(props: { name: string; infoAction: string; installAction: string }) {
-    const wizard = useWizard();
     const install = createSteamInstall(props.installAction);
-    const [done, setDone] = createSignal(false);
-    const [blocked, setBlocked] = createSignal<{ title: string; reason: string } | null>(null);
-    let disposed = false;
-    onCleanup(() => { disposed = true; });
-
-    const run = async () => {
-        wizard?.setOptionsShown(false);
-        wizard?.setCanProceed(false);
-        const ok = await install.run();
-        if (disposed) return;
-        setDone(ok);
-        wizard?.setCanProceed(ok);
-        wizard?.setOptionsShown(true);
-    };
+    const { run, wizard, disposed } = createWizardInstall(install.run);
+    const [blocked, setBlocked] = createSignal<{ failure?: Outcome; host?: SteamInstallInfo["host"] } | null>(null);
 
     // the host is checked first, so an unsupported computer is told why instead of downloading
     onMount(async () => {
@@ -39,30 +23,29 @@ function InstallStep(props: { name: string; infoAction: string; installAction: s
         try {
             info = await serverBridge.call<SteamInstallInfo>(props.infoAction);
         } catch (err) {
-            if (!disposed) setBlocked({ title: `${props.name} could not be checked`, reason: errorMessage(err) });
+            console.error(`[Setup] Failed to check ${props.name}:`, err);
+            if (!disposed()) setBlocked({ failure: { title: `${props.name} could not be checked`, message: errorMessage(err) } });
             return;
         }
-        if (disposed) return;
-        if (!info.host.supported) setBlocked({ title: `This computer can't run ${props.name} yet`, reason: info.host.reason ?? "" });
+        if (disposed()) return;
+        if (!info.host.supported) setBlocked({ host: info.host });
         else void run();
     });
 
     return (
-        <PaperCenteredInterface>
-            <Show
-                when={!blocked()}
-                fallback={<PaperQuote variant="warning" title={blocked()!.title}>{blocked()!.reason}</PaperQuote>}
-            >
-                <PaperFlex direction="column" gap="full" center fullWidth>
-                    <PaperText preset="title">{done() ? `${props.name} is ready` : "Setting things up..."}</PaperText>
-                    <Show when={install.error()}>
-                        <PaperQuote variant="danger" title="Setup failed">{install.error()}</PaperQuote>
-                        <PaperButton onClick={() => void run()}>Retry setup</PaperButton>
+        <Show
+            when={!blocked()}
+            fallback={
+                <PaperCenteredInterface>
+                    <UnsupportedHost game={props.name} host={blocked()!.host ?? null} />
+                    <Show when={blocked()!.failure}>
+                        {(note) => <PaperQuote variant="danger" icon="warning" title={note().title}>{note().message}</PaperQuote>}
                     </Show>
-                    <InstallLoaders items={install.rows(props.name)} />
-                </PaperFlex>
-            </Show>
-        </PaperCenteredInterface>
+                </PaperCenteredInterface>
+            }
+        >
+            <InstallStepView rows={install.rows(props.name)} error={install.error()} onRetry={() => void run()} />
+        </Show>
     );
 }
 

@@ -45,4 +45,42 @@ describe("UI standards", () => {
         }
         expect(offenders).toEqual([]);
     });
+
+    test("Cancel beside a confirm that is not danger is a text button", () => {
+        // a danger confirm keeps a bordered Cancel; any other confirm is the
+        // blue one, and Cancel steps back from it
+        const offenders: string[] = [];
+        for (const file of tsxFiles(SRC)) {
+            const lines = readFileSync(file, "utf8").split("\n");
+            lines.forEach((line, index) => {
+                const cancel = lines.slice(Math.max(0, index - 3), index + 1).join(" ");
+                if (!/>\s*Cancel\s*(<\/PaperButton>)?\s*$/.test(line)) return;
+                const opening = cancel.slice(cancel.lastIndexOf("<PaperButton"));
+                if (!/>\s*Cancel\s*(<\/PaperButton>)?\s*$/.test(opening)) return;
+                const after = lines.slice(index + 1, index + 12).join(" ");
+                const confirm = after.slice(after.indexOf("<PaperButton"), after.indexOf(">", after.indexOf("<PaperButton")));
+                if (!confirm || /variant="danger"/.test(confirm)) return;
+                if (!/variant=("text"|\{[^}]*"text")/.test(opening)) offenders.push(`${relative(SRC, file)}:${index + 1}`);
+            });
+        }
+        expect(offenders).toEqual([]);
+    });
+
+    test("a game builds its screens from the shared pieces", () => {
+        // adding a game means filling in GameRoster and the install pieces,
+        // not copying the roster list, the install modal or the loader rows
+        const own: Record<string, RegExp> = {
+            "PlayerRoster": /from "[^"]*components\/PlayerRoster"/,
+            "InstallLoaders": /from "[^"]*components\/InstallLoaders"/,
+            "PaperAvatar": /\bPaperAvatar\b[^\n]*fallbackIcon="person"/,
+        };
+        const offenders: string[] = [];
+        for (const file of tsxFiles(join(SRC, "games"))) {
+            const text = readFileSync(file, "utf8");
+            for (const [name, pattern] of Object.entries(own)) {
+                if (pattern.test(text)) offenders.push(`${relative(SRC, file)} builds its own ${name}`);
+            }
+        }
+        expect(offenders).toEqual([]);
+    });
 });

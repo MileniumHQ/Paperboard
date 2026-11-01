@@ -2,8 +2,8 @@ import { createSignal } from "solid-js";
 import type { LoaderStatus } from "@mileniumhq/paperui";
 import type { InstallLoaderItem } from "../../components/InstallLoaders";
 import { installProgress, serverBridge } from "../../lib/server";
-import { errorMessage } from "../../lib/failure";
 import { ensureJavaRuntime } from "../../lib/ensureJava";
+import { createInstallFlow } from "../installFlow";
 import { softwareName, tmodloaderReleaseFor, type TerrariaSoftware } from "./catalog";
 
 /**
@@ -12,19 +12,15 @@ import { softwareName, tmodloaderReleaseFor, type TerrariaSoftware } from "./cat
  * unpacking follows it. run() resolves true once installed.
  */
 export function createTerrariaInstall() {
-    const [error, setError] = createSignal("");
-    const [installed, setInstalled] = createSignal(false);
-    const [running, setRunning] = createSignal(false);
+    const flow = createInstallFlow();
+    const { error, installed, running } = flow;
     const [runtimePercent, setRuntimePercent] = createSignal(0);
     const [runtimeReady, setRuntimeReady] = createSignal(false);
 
-    const run = async (software: TerrariaSoftware, version: string): Promise<boolean> => {
-        setError("");
-        setInstalled(false);
-        setRuntimeReady(false);
-        setRuntimePercent(0);
-        setRunning(true);
-        try {
+    const run = (software: TerrariaSoftware, version: string): Promise<boolean> =>
+        flow.run(async () => {
+            setRuntimeReady(false);
+            setRuntimePercent(0);
             if (software === "tmodloader") {
                 // the same package ensure Minecraft's Java uses: download, then unpack
                 await ensureJavaRuntime(tmodloaderReleaseFor(version).runtime, {
@@ -34,15 +30,7 @@ export function createTerrariaInstall() {
                 setRuntimeReady(true);
             }
             await serverBridge.call("terraria-install", { software, version }, { timeoutMs: null });
-            setInstalled(true);
-            return true;
-        } catch (err) {
-            setError(errorMessage(err));
-            return false;
-        } finally {
-            setRunning(false);
-        }
-    };
+        });
 
     const stage = () => installProgress()?.stage;
     const downloaded = () => installed() || stage() === "completed";
@@ -67,5 +55,5 @@ export function createTerrariaInstall() {
         { label: "Setting up server...", percent: () => (installed() ? 100 : 0), status: setupStatus },
     ];
 
-    return { error, installed, running, run, rows, reset: () => setError("") };
+    return { error, installed, running, run, rows, reset: flow.reset };
 }

@@ -4,8 +4,9 @@ import TerrariaOverview from "./Overview";
 import TerrariaWorlds from "./Worlds";
 import TerrariaVersions from "./Versions";
 import TerrariaMods from "./Mods";
-import TerrariaPlayers, { TerrariaAvatar } from "./Players";
+import TerrariaPlayers from "./Players";
 import Chat from "../../components/Chat";
+import PlayerAvatar from "../../components/PlayerAvatar";
 
 export const terrariaUI: GameUI = {
     create(ctx) {
@@ -14,7 +15,7 @@ export const terrariaUI: GameUI = {
             tab(id) {
                 switch (id) {
                     case "overview": return <TerrariaOverview />;
-                    case "chat": return <Chat avatar={(name) => <TerrariaAvatar name={name} size="small" />} />;
+                    case "chat": return <Chat avatar={(name) => <PlayerAvatar name={name} size="small" />} />;
                     case "players": return <TerrariaPlayers />;
                     case "worlds": return <TerrariaWorlds />;
                     case "versions": return <TerrariaVersions />;

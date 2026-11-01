@@ -1,5 +1,5 @@
-import { PaperAvatar } from "@mileniumhq/paperui";
 import Chat from "../../components/Chat";
+import PlayerAvatar from "../../components/PlayerAvatar";
 import type { GameDefinition } from "../types";
 import type { GameUI } from "../uiTypes";
 import SteamSetup from "../steam/SteamSetup";
@@ -18,7 +18,7 @@ export function sourceUI(spec: SourceGameSpec, game: GameDefinition): GameUI {
                 tab(id) {
                     switch (id) {
                         case "overview": return <SourceOverview spec={spec} game={game} />;
-                        case "chat": return <Chat avatar={(name) => <PaperAvatar size="small" shape="square" alt={name} fallbackIcon="person" />} />;
+                        case "chat": return <Chat avatar={(name) => <PlayerAvatar name={name} size="small" />} />;
                         case "players": return <SourcePlayers spec={spec} />;
                         case "versions": return <SteamVersions name={spec.name} infoAction={ids.info} installAction={ids.install} />;
                         case "mods": return <SourceMods spec={spec} active={ctx.active() === id} />;

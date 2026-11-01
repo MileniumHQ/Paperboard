@@ -121,7 +121,7 @@ export default function TerrariaMods(props: { active: boolean }) {
             notices={
                 <>
                     <Show when={updateError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Update error">
+                        <PaperQuote variant="danger" icon="warning" title="Mods not updated">
                             {updateError()}
                         </PaperQuote>
                     </Show>

@@ -13,7 +13,7 @@ import {
     PaperCard,
 } from "@mileniumhq/paperui";
 import { config } from "../lib/api";
-import InstallLoaders from "./InstallLoaders";
+import InstallProgressModal from "./InstallProgressModal";
 import { PANEL_ID } from "../service/types";
 import { serverStatus } from "../lib/server";
 import { createInstallRun } from "../lib/installRun";
@@ -241,37 +241,15 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                 </PaperFlex>
             </PaperModal>
 
-            <PaperModal
+            <InstallProgressModal
                 open={installOpen()}
-                size="medium"
-                noHeader
-                closeOnBackdropClick={false}
-                closeOnEsc={false}
-                footer={
-                    installFailed() ? (
-                        <>
-                            <PaperButton
-                                onClick={() => {
-                                    setInstallOpen(false);
-                                    setInstallFailed(false);
-                                }}>
-                                Dismiss
-                            </PaperButton>
-                        </>
-                    ) : undefined
-                }
-            >
-                <PaperFlex fullWidth center>
-                    <PaperFlex fullWidth maxWidth="panel-small">
-                        <InstallLoaders items={install.rows(software())} />
-                        <Show when={installFailed() && error()}>
-                            <PaperQuote variant="danger" icon="warning" title="Switch failed">
-                                {error()?.message}
-                            </PaperQuote>
-                        </Show>
-                    </PaperFlex>
-                </PaperFlex>
-            </PaperModal>
+                rows={install.rows(software())}
+                failure={(installFailed() && error()) || undefined}
+                onDismiss={() => {
+                    setInstallOpen(false);
+                    setInstallFailed(false);
+                }}
+            />
 
             <PaperModal
                 open={postSwitchOpen()}

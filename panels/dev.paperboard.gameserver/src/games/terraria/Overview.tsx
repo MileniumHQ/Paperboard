@@ -1,6 +1,6 @@
 import { createSignal, Show } from "solid-js";
-import { PaperAvatar, PaperButton, PaperFlex, PaperQuote, PaperText } from "@mileniumhq/paperui";
-import ServerOverview from "../../components/ServerOverview";
+import { PaperAvatar, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { MotdEditor, MotdPreview } from "../../components/Motd";
 import { serverBridge, serverMotd, serverSoftware } from "../../lib/server";
 import { terraria } from "./index";
@@ -19,20 +19,11 @@ export default function TerrariaOverview() {
         <ServerOverview
             avatar={<PaperAvatar size="xlarge" shape="square" src={terraria.art.icon} alt="Terraria" fallbackIcon="landscape" />}
             detail={
-                <PaperFlex direction="row" gap="half" align="center">
+                <EditableDetail edit="Edit message of the day" onEdit={() => setMotdOpen(true)}>
                     <Show when={serverMotd()} fallback={<PaperText color="text-subtle">No message of the day</PaperText>}>
                         <MotdPreview motd={serverMotd()} dialect={terrariaMotd} />
                     </Show>
-                    <PaperButton
-                        size="tiny"
-                        icon
-                        onClick={() => setMotdOpen(true)}
-                        title="Edit message of the day"
-                        aria-label="Edit message of the day"
-                    >
-                        edit
-                    </PaperButton>
-                </PaperFlex>
+                </EditableDetail>
             }
             software={softwareName(terrariaSoftware(serverSoftware()))}
         >

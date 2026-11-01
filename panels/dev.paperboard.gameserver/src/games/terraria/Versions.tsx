@@ -1,4 +1,4 @@
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, onMount, Show } from "solid-js";
 import {
     PaperButton,
     PaperCard,
@@ -7,15 +7,14 @@ import {
     PaperModal,
     PaperPageHeader,
     PaperQuote,
-    PaperSelector,
-    PaperSelectorItem,
     PaperText,
 } from "@mileniumhq/paperui";
-import InstallLoaders from "../../components/InstallLoaders";
+import InstallNotices, { type HostSupport } from "../../components/InstallNotices";
+import InstallProgressModal from "../../components/InstallProgressModal";
 import { serverBridge, serverSoftware, serverStatus, serverVersion } from "../../lib/server";
-import { errorMessage } from "../../lib/failure";
+import { errorMessage, type Outcome } from "../../lib/failure";
 import { softwareName, terrariaSoftware } from "./catalog";
-import { releasesOf } from "./Setup";
+import ReleaseSelector, { releasesOf } from "./ReleaseSelector";
 import { createTerrariaInstall } from "./installRows";
 
 export default function TerrariaVersions() {
@@ -23,8 +22,8 @@ export default function TerrariaVersions() {
     const software = () => terrariaSoftware(serverSoftware());
     const name = () => (software() === "tmodloader" ? "tModLoader" : "Terraria");
     const [selected, setSelected] = createSignal(serverVersion() || releasesOf(software())[0]!.version);
-    const [support, setSupport] = createSignal<{ supported: boolean; reason?: string } | null>(null);
-    const [loadError, setLoadError] = createSignal("");
+    const [support, setSupport] = createSignal<HostSupport | null>(null);
+    const [loadFailure, setLoadFailure] = createSignal<Outcome>();
     const [confirmOpen, setConfirmOpen] = createSignal(false);
     const [installOpen, setInstallOpen] = createSignal(false);
     const install = createTerrariaInstall();
@@ -32,9 +31,10 @@ export default function TerrariaVersions() {
 
     onMount(async () => {
         try {
-            setSupport((await serverBridge.call<{ hosts: Record<string, { supported: boolean; reason?: string }> }>("terraria-versions")).hosts[software()] ?? null);
+            setSupport((await serverBridge.call<{ hosts: Record<string, HostSupport> }>("terraria-versions")).hosts[software()] ?? null);
         } catch (err) {
-            setLoadError(errorMessage(err));
+            console.error("[Versions] Failed to read the Terraria releases:", err);
+            setLoadFailure({ title: "Terraria releases could not be read", message: errorMessage(err) });
         }
     });
 
@@ -50,21 +50,7 @@ export default function TerrariaVersions() {
         <>
             <PaperPageHeader icon="deployed_code" title="Versions" />
 
-            <Show when={serverStatus() !== "offline"}>
-                <PaperQuote variant="warning" icon="warning" title="Server running">
-                    Stop the server to reinstall or change its version.
-                </PaperQuote>
-            </Show>
-            <Show when={loadError()}>
-                <PaperQuote variant="danger" icon="warning" title="Terraria releases could not be read">
-                    {loadError()}
-                </PaperQuote>
-            </Show>
-            <Show when={support() && !support()!.supported}>
-                <PaperQuote variant="warning" icon="warning" title="This computer can't run Terraria yet">
-                    {support()!.reason}
-                </PaperQuote>
-            </Show>
+            <InstallNotices game="Terraria" stopFor="reinstall or change its version" loadFailure={loadFailure()} host={support()} />
 
             <PaperCard>
                 <PaperFlex direction="column" gap="half" padding="full">
@@ -76,18 +62,7 @@ export default function TerrariaVersions() {
                             Installed: {serverVersion() ? `${softwareName(software())} ${serverVersion()}` : "none"}
                         </PaperText>
                     </PaperFlex>
-                    <PaperSelector name="terrariaVersion" value={selected()} onValueChange={(value) => setSelected(String(value))}>
-                        <For each={releasesOf(software())}>
-                            {(release, index) => (
-                                <PaperSelectorItem
-                                    value={release.version}
-                                    description={index() === 0 ? <><strong>Latest.</strong> {release.description}</> : release.description}
-                                >
-                                    {softwareName(software())} {release.version}
-                                </PaperSelectorItem>
-                            )}
-                        </For>
-                    </PaperSelector>
+                    <ReleaseSelector software={software()} value={selected()} onChange={setSelected} />
                 </PaperFlex>
             </PaperCard>
 
@@ -105,7 +80,7 @@ export default function TerrariaVersions() {
                 size="small"
                 footer={
                     <>
-                        <PaperButton onClick={() => setConfirmOpen(false)}>Cancel</PaperButton>
+                        <PaperButton variant={reinstall() ? "text" : undefined} onClick={() => setConfirmOpen(false)}>Cancel</PaperButton>
                         <PaperButton variant={reinstall() ? "success" : "danger"} onClick={() => void run()}>
                             {reinstall() ? "Reinstall" : "Switch anyway"}
                         </PaperButton>
@@ -126,29 +101,12 @@ export default function TerrariaVersions() {
                 </PaperFlex>
             </PaperModal>
 
-            <PaperModal
+            <InstallProgressModal
                 open={installOpen()}
-                size="medium"
-                noHeader
-                closeOnBackdropClick={false}
-                closeOnEsc={false}
-                footer={
-                    install.error() ? (
-                        <PaperButton onClick={() => { setInstallOpen(false); install.reset(); }}>Dismiss</PaperButton>
-                    ) : undefined
-                }
-            >
-                <PaperFlex fullWidth center>
-                    <PaperFlex fullWidth maxWidth="panel-small">
-                        <InstallLoaders items={install.rows(software(), selected())} />
-                        <Show when={install.error()}>
-                            <PaperQuote variant="danger" icon="warning" title={reinstall() ? "Reinstall failed" : "Switch failed"}>
-                                {install.error()}
-                            </PaperQuote>
-                        </Show>
-                    </PaperFlex>
-                </PaperFlex>
-            </PaperModal>
+                rows={install.rows(software(), selected())}
+                failure={install.error() ? { title: reinstall() ? "Reinstall failed" : "Switch failed", message: install.error() } : undefined}
+                onDismiss={() => { setInstallOpen(false); install.reset(); }}
+            />
         </>
     );
 }

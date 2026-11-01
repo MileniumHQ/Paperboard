@@ -2,7 +2,7 @@ import { createEffect, createSignal } from "solid-js";
 import type { LoaderStatus } from "@mileniumhq/paperui";
 import type { InstallLoaderItem } from "../../components/InstallLoaders";
 import { installProgress, serverBridge } from "../../lib/server";
-import { errorMessage } from "../../lib/failure";
+import { createInstallFlow } from "../installFlow";
 
 /** What a Steam game's install action reports; the setup and Versions screens read it. */
 export interface SteamInstallInfo {
@@ -19,26 +19,14 @@ export interface SteamInstallInfo {
  * up. run() resolves true once installed.
  */
 export function createSteamInstall(action: string) {
-    const [error, setError] = createSignal("");
-    const [installed, setInstalled] = createSignal(false);
-    const [running, setRunning] = createSignal(false);
+    const flow = createInstallFlow();
+    const { error, installed, running } = flow;
 
-    const run = async (): Promise<boolean> => {
-        setError("");
-        setInstalled(false);
-        setReached(-1);
-        setRunning(true);
-        try {
+    const run = (): Promise<boolean> =>
+        flow.run(async () => {
+            setReached(-1);
             await serverBridge.call(action, undefined, { timeoutMs: null });
-            setInstalled(true);
-            return true;
-        } catch (err) {
-            setError(errorMessage(err));
-            return false;
-        } finally {
-            setRunning(false);
-        }
-    };
+        });
 
     // the furthest step reached; a failure keeps it, so the failed row is the one shown failing
     const ORDER = ["downloading", "verifying", "installing", "completed"];
@@ -63,5 +51,5 @@ export function createSteamInstall(action: string) {
         { label: "Setting up server...", percent: percent(2), status: status(2) },
     ];
 
-    return { error, installed, running, run, rows, reset: () => setError("") };
+    return { error, installed, running, run, rows, reset: flow.reset };
 }

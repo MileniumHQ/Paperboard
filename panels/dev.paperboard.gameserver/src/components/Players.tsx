@@ -41,6 +41,7 @@ import { JAVA_NAME_PATTERN, PLAYER_NAME_PATTERN } from "../core/players";
 import { bedrockPlayerName, gamertagOf, isFloodgateUuid, type BedrockNaming } from "../core/bedrock";
 import PlayerHead from "./PlayerHead";
 import PlayerRoster, { statusColor } from "./PlayerRoster";
+import { errorMessage, type Outcome } from "../lib/failure";
 
 const LIST_POLL_MS = 15000;
 const STATS_POLL_MS = 30000;
@@ -125,7 +126,7 @@ export default function Players() {
     const [whitelistName, setWhitelistName] = createSignal("");
     const [whitelistError, setWhitelistError] = createSignal("");
     const [whitelistEdition, setWhitelistEdition] = createSignal<"java" | "bedrock">("java");
-    const [feedback, setFeedback] = createSignal("");
+    const [feedback, setFeedback] = createSignal<Outcome | undefined>();
     const [sortBy, setSortBy] = createSignal<SortKey>("playtime");
     // how Floodgate names Bedrock players; null without crossplay
     const [bedrock, setBedrock] = createSignal<BedrockNaming | null>(null);
@@ -175,9 +176,8 @@ export default function Players() {
                 }
             })
             .catch((err) => {
-                const message = err instanceof Error ? err.message : String(err);
-                console.error("[Players] current-player-names failed:", message);
-                setFeedback(message);
+                console.error("[Players] current-player-names failed:", err);
+                setFeedback({ title: "Player names not updated", message: errorMessage(err) });
             });
     };
 
@@ -191,9 +191,8 @@ export default function Players() {
             setBannedNames(new Set(listed.filter((_, i) => roster[i].banned).map((p) => p.name.toLowerCase())));
             refreshNames(roster.map((p) => p.uuid));
         } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            console.error("[Players] list-roster failed:", message);
-            setFeedback(message);
+            console.error("[Players] list-roster failed:", err);
+            setFeedback({ title: "Players not loaded", message: errorMessage(err) });
         }
     };
 
@@ -212,9 +211,8 @@ export default function Players() {
             .call<BedrockNaming | null>(ACTION_IDS.readBedrockNaming)
             .then((naming) => setBedrock(naming ?? null))
             .catch((err) => {
-                const message = err instanceof Error ? err.message : String(err);
-                console.error("[Players] read-bedrock-naming failed:", message);
-                setFeedback(message);
+                console.error("[Players] read-bedrock-naming failed:", err);
+                setFeedback({ title: "Bedrock names not read", message: errorMessage(err) });
             });
     });
 
@@ -348,16 +346,16 @@ export default function Players() {
     const callPlayerAction = async (
         actionId: ActionId,
         playerName: string,
+        failure: string,
         extra?: Record<string, unknown>,
     ): Promise<boolean> => {
         try {
             await serverBridge.call(actionId, { player: playerName, ...extra });
-            setFeedback("");
+            setFeedback(undefined);
             return true;
         } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            console.error(`[Players] ${actionId} failed for "${playerName}":`, message);
-            setFeedback(message);
+            console.error(`[Players] ${actionId} failed for "${playerName}":`, err);
+            setFeedback({ title: `${playerName} was not ${failure}`, message: errorMessage(err) });
             return false;
         }
     };
@@ -371,8 +369,9 @@ export default function Players() {
             field === "op"
                 ? value ? ACTION_IDS.opPlayer : ACTION_IDS.deopPlayer
                 : value ? ACTION_IDS.whitelistPlayer : ACTION_IDS.unwhitelistPlayer;
+        const failure = field === "op" ? (value ? "made an operator" : "removed as an operator") : value ? "whitelisted" : "removed from the whitelist";
         const uuid = allPlayers().find((p) => p.name === playerName)?.uuid;
-        const ok = await callPlayerAction(actionId, playerName, { uuid });
+        const ok = await callPlayerAction(actionId, playerName, failure, { uuid });
         if (!ok) return; // state stays as the server reports it
         // a stopped server's files were edited in place: read them back.
         // A running one writes them a moment after the command, so the
@@ -392,8 +391,8 @@ export default function Players() {
 
     const setPlayerBanned = (playerName: string, banned: boolean, reason?: string): Promise<boolean> => {
         const result = banned
-            ? callPlayerAction(ACTION_IDS.banPlayer, playerName, { reason })
-            : callPlayerAction(ACTION_IDS.pardonPlayer, playerName);
+            ? callPlayerAction(ACTION_IDS.banPlayer, playerName, "banned", { reason })
+            : callPlayerAction(ACTION_IDS.pardonPlayer, playerName, "pardoned");
         // a written console command is not ban-truth: re-verify from the
         // ban file after a delay so the UI's ban state converges on what
         // the server actually recorded
@@ -403,10 +402,10 @@ export default function Players() {
     };
 
     const kickPlayer = (playerName: string, reason?: string): Promise<boolean> =>
-        callPlayerAction(ACTION_IDS.kickPlayer, playerName, { reason });
+        callPlayerAction(ACTION_IDS.kickPlayer, playerName, "kicked", { reason });
 
     const killPlayer = (playerName: string): Promise<boolean> =>
-        callPlayerAction(ACTION_IDS.killPlayer, playerName);
+        callPlayerAction(ACTION_IDS.killPlayer, playerName, "killed");
 
     // whitelist a name that may not be on the roster yet (a player who has
     // not joined). A gamertag becomes the name Floodgate gives it here. The
@@ -493,12 +492,11 @@ export default function Players() {
                 uuid: player.uuid,
             });
         } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            console.error("[Players] Failed to delete player data:", message);
-            setFeedback(message);
+            console.error("[Players] Failed to delete player data:", err);
+            setFeedback({ title: `${player.name}'s data was not deleted`, message: errorMessage(err) });
             return;
         }
-        setFeedback("");
+        setFeedback(undefined);
 
         forgetPlayerData(player.name, player.uuid);
         // a player on the whitelist, an operator or banned stays listed,
@@ -554,6 +552,7 @@ export default function Players() {
                     { label: "OP", count: opCount(), selected: showOp(), onToggle: () => setShowOp((v) => !v) },
                 ]}
                 feedback={feedback()}
+                onDismissFeedback={() => setFeedback(undefined)}
                 sections={[
                     { label: "Online", players: onlineSorted() },
                     { label: "Offline", players: offlineSorted() },
@@ -646,7 +645,7 @@ export default function Players() {
                 size="small"
                 footer={
                     <>
-                        <PaperButton onClick={() => setWhitelistOpen(false)}>
+                        <PaperButton variant="text" onClick={() => setWhitelistOpen(false)}>
                             Cancel
                         </PaperButton>
                         <PaperButton

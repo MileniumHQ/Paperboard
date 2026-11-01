@@ -38,7 +38,7 @@ export function AddonInstallModal<Meta>(props: {
             size="medium"
             footer={
                 <>
-                    <PaperButton disabled={install().installing()} onClick={install().close}>
+                    <PaperButton variant="text" disabled={install().installing()} onClick={install().close}>
                         Cancel
                     </PaperButton>
                     <PaperButton variant="success" disabled={!install().canConfirm()} onClick={() => void install().confirm()}>
@@ -179,7 +179,7 @@ export function AddonUploadConfirmModal<Meta>(props: { kind: AddonKind<Meta>; br
             size="small"
             footer={
                 <>
-                    <PaperButton onClick={() => void props.browser.cancelUpload()}>Cancel</PaperButton>
+                    <PaperButton variant="text" onClick={() => void props.browser.cancelUpload()}>Cancel</PaperButton>
                     <PaperButton variant="success" onClick={() => void props.browser.confirmUpload()}>
                         <PaperIcon aria-hidden="true">{props.kind.install.icon}</PaperIcon>
                         {confirm()?.action}

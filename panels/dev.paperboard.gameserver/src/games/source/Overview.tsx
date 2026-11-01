@@ -1,6 +1,6 @@
 import { createSignal, For, Show } from "solid-js";
-import { PaperAvatar, PaperButton, PaperFlex, PaperModal, PaperQuote, PaperSelectMenu, PaperSelectMenuItem, PaperText } from "@mileniumhq/paperui";
-import ServerOverview from "../../components/ServerOverview";
+import { PaperAvatar, PaperButton, PaperModal, PaperQuote, PaperSelectMenu, PaperSelectMenuItem, PaperText } from "@mileniumhq/paperui";
+import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { gameSettings, serverBridge, serverLevel, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import type { GameDefinition } from "../types";
@@ -43,15 +43,12 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
         <ServerOverview
             avatar={<PaperAvatar size="xlarge" shape="square" src={props.game.art.icon} alt={props.spec.name} fallbackIcon={props.spec.icon} />}
             detail={
-                <PaperFlex direction="row" gap="half" align="center">
+                <EditableDetail edit="Change map" onEdit={() => void edit()}>
                     <PaperText color="text-subtle">
                         {map()}
                         <Show when={label(map())}>{(mode) => ` · ${mode()}`}</Show>
                     </PaperText>
-                    <PaperButton size="tiny" icon onClick={() => void edit()} title="Change map" aria-label="Change map">
-                        edit
-                    </PaperButton>
-                </PaperFlex>
+                </EditableDetail>
             }
             software="Steam"
             control={features.control}

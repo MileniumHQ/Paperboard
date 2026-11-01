@@ -286,7 +286,7 @@ export default function Plugins(props: {
             }
             notices={
                 <Show when={updateError()}>
-                    <PaperQuote variant="danger" icon="warning" title="Update error">
+                    <PaperQuote variant="danger" icon="warning" title={`${unit()[0]!.toUpperCase()}${unit().slice(1)}s not updated`}>
                         {updateError()}
                     </PaperQuote>
                 </Show>

@@ -16,7 +16,7 @@ import {
     useWizard,
     type LoaderStatus,
 } from "@mileniumhq/paperui";
-import InstallLoaders from "./InstallLoaders";
+import InstallStepView from "./InstallStepView";
 import { fileApi } from "../lib/api";
 import { createInstallRun } from "../lib/installRun";
 import {
@@ -180,32 +180,25 @@ function InstallStep(props: InstallStepProps) {
 
     return (
         <>
-        <PaperCenteredInterface>
-            <PaperFlex direction="column" gap="full" center fullWidth>
-                <Show when={declineNotice()}>
-                    <PaperQuote variant="warning" icon="info" title="Setup cancelled">
-                        {declineNotice()}
-                    </PaperQuote>
-                </Show>
-                <Show when={error()}>
-                    <PaperQuote variant="danger" title="Setup failed">{error()}</PaperQuote>
-                    <PaperFlex gap="half">
-                        <PaperButton onClick={() => void startInstallation()}>Retry setup</PaperButton>
-                        <PaperButton onClick={() => { started = false; setError(""); wizard?.setCurrentStep(0); }}>Change software or version</PaperButton>
-                    </PaperFlex>
-                </Show>
-                <InstallLoaders
-                    items={[
-                        ...install.rows(props.software),
-                        {
-                            label: "Setting up server...",
-                            percent: setupPercent,
-                            status: setupStatus,
-                        },
-                    ]}
-                />
-                </PaperFlex>
-            </PaperCenteredInterface>
+        <InstallStepView
+            rows={[
+                ...install.rows(props.software),
+                {
+                    label: "Setting up server...",
+                    percent: setupPercent,
+                    status: setupStatus,
+                },
+            ]}
+            error={error()}
+            onRetry={() => void startInstallation()}
+            actions={<PaperButton onClick={() => { started = false; setError(""); wizard?.setCurrentStep(0); }}>Change software or version</PaperButton>}
+        >
+            <Show when={declineNotice()}>
+                <PaperQuote variant="warning" icon="info" title="Setup cancelled">
+                    {declineNotice()}
+                </PaperQuote>
+            </Show>
+        </InstallStepView>
             <PaperModal
                 open={showEulaModal()}
                 onClose={() => { if (!busy()) void handleDeclineEula(); }}
