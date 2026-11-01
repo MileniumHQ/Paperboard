@@ -102,10 +102,10 @@ describe("the console", () => {
 
 describe("computers each game runs on", () => {
     const options = { software: "", version: "" };
-    test("Linux on x64 only, each refusal with a reason", () => {
+    test("Linux and Windows on x64, nothing else, each refusal with a reason", () => {
         for (const game of [palworld, tf2, terraria]) {
-            for (const os of ["linux"]) expect(game.hostSupport({ os, arch: "x64" }, options)).toEqual({ supported: true });
-            for (const [os, arch] of [["darwin", "x64"], ["darwin", "arm64"], ["linux", "arm64"], ["win32", "arm64"], ["win32", "x64"]]) {
+            for (const os of ["linux", "win32"]) expect(game.hostSupport({ os, arch: "x64" }, options)).toEqual({ supported: true });
+            for (const [os, arch] of [["darwin", "x64"], ["darwin", "arm64"], ["linux", "arm64"], ["win32", "arm64"]]) {
                 const support = game.hostSupport({ os: os!, arch: arch! }, options);
                 expect(support.supported).toBe(false);
                 expect(support.reason).toContain(game.name);

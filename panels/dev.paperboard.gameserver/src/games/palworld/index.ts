@@ -71,7 +71,7 @@ export const options: readonly PalworldOption[] = [
 export const palworld: GameDefinition = {
     id: "palworld", name: "Palworld", icon: "pets", art: gameArt("palworld"),
     softwareLabel: ({ version }) => (version ? `Palworld ${version}` : "Palworld"),
-    hostSupport: hostRoutes("Palworld dedicated server", { os: ["linux"], arch: ["x64"] }),
+    hostSupport: hostRoutes("Palworld dedicated server", { os: ["linux", "win32"], arch: ["x64"] }),
     describe() {
         return {
             options, optionsWhileRunning: "next-start", backupWhileRunning: "offline",

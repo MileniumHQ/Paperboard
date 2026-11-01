@@ -5,7 +5,7 @@ import path from "node:path";
 import { decode, encode, parseOptionSettings, writeOptionSettings } from "../src/games/palworld/ini";
 import { options, palworld } from "../src/games/palworld";
 import { validateOptions } from "../src/games/options";
-import { installApp, parseAppProgress, parseAppResult, type Runner } from "../src/games/steam/steamcmd";
+import { installApp, parseAppProgress, parseAppResult, takeSelfUpdate, type Runner } from "../src/games/steam/steamcmd";
 
 // lines as the 2026 Palworld dedicated server writes them
 const DEFAULT = `; This configuration file is a sample of the default server settings.
@@ -104,6 +104,28 @@ echo "Success! App '2394010' fully installed."
         expect(await installApp(2394010, path.join(ws, "server"), { runner, workspace: ws, onProgress: (p) => progress.push(p.percent) })).toBe("25247047");
         expect(progress).toEqual([50]);
         expect((await fs.readFile(path.join(ws, "runs"), "utf8")).trim()).toBe("2");
+    });
+
+    // Windows SteamCMD exits with 7 after updating itself and finishes the
+    // run in a relaunched copy; a download then finished unseen and failed
+    test("Windows SteamCMD's self-update is taken by a run that only quits, before the real one", async () => {
+        const ws = await fs.mkdtemp(path.join(os.tmpdir(), "steamcmd-update-"));
+        roots.push(ws);
+        const script = path.join(ws, "steamcmd.sh");
+        const updates = (n: number) => fs.writeFile(script, `#!/bin/sh
+count="${ws}/runs"; n=$(cat "$count" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "$count"; echo "$*" >> "${ws}/args"
+if [ $n -le ${n} ]; then echo "[----] Update complete, launching..."; exit 7; fi
+`, { mode: 0o755 });
+        await updates(1);
+        await takeSelfUpdate(runner, script, ws, "win32");
+        expect((await fs.readFile(path.join(ws, "args"), "utf8")).trim().split("\n")).toEqual(["+quit", "+quit"]);
+        await takeSelfUpdate(runner, script, ws, "linux");
+        expect((await fs.readFile(path.join(ws, "runs"), "utf8")).trim()).toBe("2");
+        await fs.rm(path.join(ws, "runs"));
+        await updates(3);
+        await expect(takeSelfUpdate(runner, script, ws, "win32")).rejects.toThrow("SteamCMD updated itself three times in a row without settling");
+        await fs.writeFile(script, "#!/bin/sh\necho 'missing steam.dll'; exit 3\n", { mode: 0o755 });
+        await expect(takeSelfUpdate(runner, script, ws, "win32")).rejects.toThrow("SteamCMD could not start (exited with 3)\nmissing steam.dll");
     });
 
     test("a second failure is reported with SteamCMD's reason", async () => {

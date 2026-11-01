@@ -2,7 +2,7 @@
 
 Host Minecraft and game servers on your computer without the hassle of learning a terminal. The Game Server panel is a full-featured server hosting dashboard that brings all your server management tasks into one convenient interface.
 
-- **Several servers** - The Servers home lists up to 50 independent Minecraft and Terraria servers. Add one in a setup dialog, open its card to manage it, and return with Back to Servers. Each has its own console, players, worlds, software, port claims, Actions project, backups and schedule. Widgets have a Server option. Rename or remove a server from its card; removal stops it and keeps its files and backups.
+- **Several servers** - The Servers home lists up to 50 independent game servers. Add one in a setup dialog, open its card to manage it, and return with Back to Servers. Each has its own console, players, worlds, software, port claims, Actions project, backups and schedule. Widgets have a Server option. Rename or remove a server from its card; removal stops it and keeps its files and backups.
 - **Existing servers** - Your original server is migrated once without moving its directory or changing its installed software. Its backup history and schedule stay with it. Existing project-less Actions keep forwarding to it until v0.5; new flows should choose its project.
 - **No setup required** - You don't need to install anything. Paperboard handles software installs and server downloads automatically. Just select the version you want to play on and you're good to go.
 - **Automatic plugin management** - Install plugins just by searching their name. Update all of them to the latest version in just a click. Installing plugins has never been easier.
@@ -11,4 +11,4 @@ Host Minecraft and game servers on your computer without the hassle of learning 
 
 ## Game modules
 
-Minecraft Java and Terraria vanilla are bundled. Terraria uses verified official downloads, worlds, generic Options, console, per-server ports, vault passwords and the full Backup API. Linux x64 has the server smoke route; Windows x64 and Intel Mac await certification, and Apple Silicon is unsupported. tModLoader and Terraria mods are not included. Complete the owner client-join checklist before release. See [GAMES.md](GAMES.md) for the bundled module contracts, shared infrastructure and future game requirements.
+Minecraft Java, Terraria (vanilla and tModLoader), Team Fortress 2 and Palworld are bundled; Terraria, Team Fortress 2 and Palworld run on Linux x64 and Windows x64. Each has its console, players, options, per-server ports, vault passwords, versions and the full Backup API. Windows needs XNA Framework 4.0 for Terraria and the Visual C++ runtime for Palworld; the panel says so and links them. Complete the owner client-join checklist before release. See [GAMES.md](GAMES.md) for the bundled module contracts, shared infrastructure and future game requirements.

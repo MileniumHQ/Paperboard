@@ -7,6 +7,10 @@ export interface LaunchCommand {
     args: string[];
     cwd: string;
     env: Record<string, string>;
+    /** how console commands are encoded for the server; default UTF-8 */
+    inputEncoding?: "utf8" | "utf16le";
+    /** Windows: the server reads an empty console rather than a pipe (processApi's consoleInput) */
+    consoleInput?: boolean;
 }
 export interface PreparedLaunch { command: LaunchCommand; message: string }
 export interface PortSpec {

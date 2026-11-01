@@ -28,7 +28,7 @@ export const TF2: SourceGameSpec = {
     icon: "sports_esports",
     appId: 232250,
     gameDir: "tf",
-    binaries: { linux: { executable: "srcds_linux64", libraryDir: "bin/linux64" } },
+    binaries: { linux: { executable: "srcds_linux64", libraryDir: "bin/linux64" }, win32: { executable: "srcds_win64.exe" } },
     // replay_srv.so links it; Debian and Ubuntu have it, Arch and Fedora don't
     libraryPackages: { "libcurl-gnutls.so.4": { id: "libcurl-gnutls", purpose: "The curl library Team Fortress 2's Linux server links, on computers without it" } },
     sourcemod: true,

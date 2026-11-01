@@ -133,6 +133,8 @@ export async function startServerInstance(
             args: launch.command.args,
             cwd: launch.command.cwd,
             env: launch.command.env,
+            inputEncoding: launch.command.inputEncoding,
+            consoleInput: launch.command.consoleInput,
         });
         monitorReadiness(ctx);
     } catch (err: any) {

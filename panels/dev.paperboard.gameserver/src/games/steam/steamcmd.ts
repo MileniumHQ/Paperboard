@@ -58,6 +58,29 @@ async function prepare(own?: string): Promise<{ command: string; root: string; h
 
 const ANSI = /\x1b\[[0-9;]*m/g;
 
+/** SteamCMD on Windows after updating itself: "Update complete, launching..." */
+const SELF_UPDATED = 7;
+
+/**
+ * SteamCMD on Windows updates itself in place, then exits with 7 and hands
+ * the rest of its commands to a relaunched copy nobody watches: a download
+ * would finish unseen and be reported failed. A run that only quits takes
+ * the update first, so the real run is the one watched. Linux's steamcmd.sh
+ * restarts itself and needs none of this.
+ */
+export async function takeSelfUpdate(run: Runner, command: string, home: string, platform = process.platform): Promise<void> {
+    if (platform !== "win32") return;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const result = await run({ id: STEAMCMD_PROC_ID, command, args: ["+quit"], cwd: path.dirname(command), env: { HOME: home }, timeoutMs: TIMEOUT_MS });
+        if (result.exitCode === 0) return;
+        if (result.exitCode !== SELF_UPDATED) {
+            const tail = result.tail.map(l => l.replace(ANSI, "")).slice(-8).join("\n");
+            throw new Error(`SteamCMD could not start (exited with ${result.exitCode})${tail ? `\n${tail}` : ""}`);
+        }
+    }
+    throw new Error("SteamCMD updated itself three times in a row without settling; try again");
+}
+
 /** What SteamCMD said about each item; null when it said nothing about one. */
 export function parseDownloads(lines: string[], ids: readonly string[]): Map<string, { ok: true; path: string } | { ok: false; reason: string }> {
     const results = new Map<string, { ok: true; path: string } | { ok: false; reason: string }>();
@@ -90,6 +113,7 @@ export function downloadWorkshopItems(appId: number, ids: readonly string[], opt
         if (!options.runner) await stopLeftoverInstaller(undefined, undefined, undefined, STEAMCMD_PROC_ID);
         const lines: string[] = [];
         const run = options.runner ?? ((r: InstallerRun) => runInstallerProcess(r));
+        await takeSelfUpdate(run, command, home);
         const result = await run({
             id: STEAMCMD_PROC_ID,
             command,
@@ -177,6 +201,7 @@ export function installApp(appId: number, dir: string, options: { onProgress?: (
         await fs.mkdir(dir, { recursive: true });
         if (!options.runner) await stopLeftoverInstaller(undefined, undefined, undefined, STEAMCMD_PROC_ID);
         const run = options.runner ?? ((r: InstallerRun) => runInstallerProcess(r));
+        await takeSelfUpdate(run, command, home);
         const attempt = async () => {
             const lines: string[] = [];
             const result = await run({

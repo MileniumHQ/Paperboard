@@ -17,6 +17,8 @@ import { ModStore, SAVE_DIR } from "./modStore";
 import { searchWorkshop, workshopItems, type ModscanSort } from "../steam/modscan";
 import { addonStageDir } from "../../core/addonUpload";
 import { install, recoverRelease } from "./install";
+import { consoleInput } from "./windows";
+import { assertWindowsRuntime, XNA_4 } from "../windowsRuntime";
 import { discardUpload, importUpload, inspectUpload, listWorlds, trashWorld } from "./worldStore";
 import { WORLD_GENERATION } from "./index";
 import { parseConsoleLine, playerName, PlayerStore, stripPrompt, type ConsoleEvent } from "./roster";
@@ -161,6 +163,7 @@ async function launchTmodloader(directory: string, installDir: string, version: 
         cwd: installDir,
         // only the packaged runtime; never one installed on the computer
         env: { ...home, DOTNET_ROOT: runtime, DOTNET_MULTILEVEL_LOOKUP: "0", DOTNET_CLI_TELEMETRY_OPTOUT: "1" },
+        inputEncoding: consoleInput(process.platform),
     } };
 }
 async function modStore(ctx: Context) {
@@ -298,13 +301,14 @@ export const terrariaService: GameService = {
         if (software === "tmodloader") return launchTmodloader(directory, installDir, String(saved.version));
         const executable = path.join(installDir, entrypoint(process.platform));
         await fs.access(executable, process.platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK);
+        if (process.platform === "win32") await assertWindowsRuntime("Terraria dedicated server", XNA_4);
         await startConfig();
         const bin = path.dirname(executable);
         // Linux's server is Mono, bundled beside it
         const mono: Record<string, string> = process.platform === "linux" ? { LD_LIBRARY_PATH: path.join(bin, "lib64"), MONO_CONFIG: path.join(bin, "monoconfig") } : {};
         return {
             message: `Starting Terraria ${release.version}…`,
-            command: { executable, args: ["-config", path.join(directory, "serverconfig.txt"), "-noupnp"], cwd: bin, env: { ...await profile(directory), ...mono } },
+            command: { executable, args: ["-config", path.join(directory, "serverconfig.txt"), "-noupnp"], cwd: bin, env: { ...await profile(directory), ...mono }, inputEncoding: consoleInput(process.platform) },
         };
     },
     isMutating: () => local().busy || local().modsBusy,

@@ -27,8 +27,8 @@ test("Terraria config round trip retains unknown keys, replaces duplicates, vali
 });
 test("Terraria host/capability metadata has no Minecraft operations or uncertified host routes", () => {
     const options = { software: "vanilla", version: "1.4.5.8" };
-    for (const os of ["linux"]) for (const software of ["vanilla", "tmodloader"]) expect(terraria.hostSupport({ os, arch: "x64" }, { ...options, software }).supported).toBe(true);
-    for (const [os, arch] of [["linux", "arm64"], ["darwin", "arm64"], ["win32", "x64"], ["darwin", "x64"]]) {
+    for (const os of ["linux", "win32"]) for (const software of ["vanilla", "tmodloader"]) expect(terraria.hostSupport({ os, arch: "x64" }, { ...options, software }).supported).toBe(true);
+    for (const [os, arch] of [["linux", "arm64"], ["darwin", "arm64"], ["win32", "arm64"], ["darwin", "x64"]]) {
         const support = terraria.hostSupport({ os: os!, arch: arch! }, options); expect(support.supported).toBe(false); expect(support.reason).toBeTruthy();
     }
     expect(terraria.describe(options).widgets).toEqual(["status", "console"]);
@@ -65,4 +65,27 @@ test("Terraria release replacement and interrupted swap recovery leave worlds un
         expect(await fs.readFile(path.join(target, "server"), "utf8")).toBe("repaired executable");
         expect(await fs.readFile(path.join(root, "World.wld"), "utf8")).toBe("persistent world");
     } finally { await fs.rm(root, { recursive: true }); }
+});
+
+test("a Windows server refuses to start without the Microsoft runtime it loads, naming the download", async () => {
+    const { assertWindowsRuntime, VISUAL_CPP_X64, XNA_4 } = await import("../src/games/windowsRuntime");
+    const windir = await fs.mkdtemp(path.join(os.tmpdir(), "windir-"));
+    try {
+        await expect(assertWindowsRuntime("Terraria dedicated server", XNA_4, windir)).rejects.toThrow("The Terraria dedicated server needs Microsoft XNA Framework Redistributable 4.0, which this computer doesn't have. Install it from https://www.microsoft.com/en-us/download/details.aspx?id=20914, then start again.");
+        // every file counts: a partial Visual C++ install still fails to load
+        for (const file of [...XNA_4.files, ...VISUAL_CPP_X64.files.slice(0, 2)]) {
+            await fs.mkdir(path.dirname(path.join(windir, file)), { recursive: true });
+            await fs.writeFile(path.join(windir, file), "MZ");
+        }
+        await assertWindowsRuntime("Terraria dedicated server", XNA_4, windir);
+        await expect(assertWindowsRuntime("Palworld dedicated server", VISUAL_CPP_X64, windir)).rejects.toThrow("needs Microsoft Visual C++ Redistributable 2015–2022 (x64)");
+        await fs.writeFile(path.join(windir, VISUAL_CPP_X64.files[2]!), "MZ");
+        await assertWindowsRuntime("Palworld dedicated server", VISUAL_CPP_X64, windir);
+    } finally { await fs.rm(windir, { recursive: true }); }
+});
+
+test("Windows sends console commands as UTF-16, the encoding Terraria reads there", async () => {
+    const { consoleInput } = await import("../src/games/terraria/windows");
+    expect(consoleInput("win32")).toBe("utf16le");
+    expect(consoleInput("linux")).toBe("utf8");
 });

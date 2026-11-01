@@ -533,7 +533,8 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 message: `Starting ${spec.name}${saved.build ? ` build ${saved.build}` : ""}…`,
                 command: linux
                     ? { executable: linux.stdbuf, args: ["-oL", "-eL", executable, ...args], cwd: install, env: linux.env }
-                    : { executable, args, cwd: install, env: {} },
+                    // Windows: -console reads a real console and quits on a pipe; Paperboard talks over RCON
+                    : { executable, args, cwd: install, env: {}, consoleInput: true },
             };
         },
         isMutating: () => local().busy,

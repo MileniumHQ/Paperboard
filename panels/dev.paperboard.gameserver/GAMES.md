@@ -119,7 +119,8 @@ Built on `src/games/source/` (`sourceGame`, `sourceService`, `sourceUI` take a `
 - Preflight: `ldd` over the binary and its libraries; a missing system library (in practice `libcurl-gnutls.so.4`, absent on Arch, which makes `replay_srv.so` fail with a misleading "wrong ELF class") stops the start with the package to install.
 - Config: `tf/cfg/server.cfg` and `banned_user.cfg` are generated from Options and Paperboard's ban list at each start and on change (`log on`, `sv_logecho 1`, `sv_rcon_whitelist_address 127.0.0.1`); the user's own `server.cfg` in the server folder runs last as `paperboard_user.cfg`. Passwords (RCON, join, GSLT) live in the vault and reach the server through a 0600 `paperboard_secrets.cfg` removed once it is ready. The install is read-only through Files.
 - Control: RCON on the game port with a vault password Paperboard makes; readiness is an authenticated `status`; stop is RCON `quit` (30 s). Players, chat, joins/leaves, teams and map changes come from the HL log lines the console echoes. Bans are by Steam id, work while stopped, and go over RCON (`banid`/`removeid`) while running. The Overview changes map through a searchable picker of installed `.bsp` files, named by mode.
-- Not yet: Windows, Workshop maps, SourceTV, a verified GSLT login (`sv_setsteamaccount` from the early `+exec` is untested without a token).
+- Windows: `srcds_win64.exe` with the same arguments and `consoleInput` (see Windows below); SourceMod and Metamod come from Origami's `windows-x64` builds.
+- Not yet: Workshop maps, SourceTV, a verified GSLT login (`sv_setsteamaccount` from the early `+exec` is untested without a token).
 
 Original plan notes:
 
@@ -164,15 +165,25 @@ These are intended certification targets, not already-tested claims. Unsupported
 
 | Game/software | Linux x64 | Windows x64 | macOS Intel | macOS Apple Silicon | Linux ARM64 |
 |---|---|---|---|---|---|
-| Terraria vanilla | Native target | Native target | Publisher Intel build target | Unsupported: no certification machine | Unsupported |
-| Terraria tModLoader | Native target | Native target | Supported-release .NET/Intel target | Release-specific runtime/Rosetta target; block until certified | Unsupported initially |
-| TF2 | Native target; SteamCMD i386 libs | Native target | Unsupported | Unsupported | Unsupported |
+| Terraria vanilla | Native target | Native; server verified | Publisher Intel build target | Unsupported: no certification machine | Unsupported |
+| Terraria tModLoader | Native target | Native; server verified | Supported-release .NET/Intel target | Release-specific runtime/Rosetta target; block until certified | Unsupported initially |
+| TF2 | Native target; SteamCMD i386 libs | Native; server verified | Unsupported | Unsupported | Unsupported |
 | CS2 | Native target | Native target | Unsupported | Unsupported | Unsupported |
 | GMod | Native target; public branch i386 libs | Native target | Unsupported | Unsupported | Unsupported |
-| Palworld | Native target | Native target | Unsupported | Unsupported | Unsupported |
+| Palworld | Native target | Native; server verified | Unsupported | Unsupported | Unsupported |
 | Rust | Native target | Native target | Unsupported | Unsupported | Unsupported |
 
 The concurrent Origami packages are prerequisites, not game support: `steamcmd` targets linux-x64 (32-bit bootstrap), macos-x64 and windows-x64; `proton` targets linux-x64/arm64 and stays published for future Windows-only games; no selected game uses it, and an ARM64 Proton package would not translate an x64 server's CPU instructions. No Box64/FEX route is planned. macOS SteamCMD availability does not create macOS game depots.
+
+### Windows
+
+Terraria (vanilla and tModLoader), TF2 and Palworld were verified server-side on Windows 11 x64 on 2026-11-01: install, start, console commands, chat, save, offline backup, stop and restart. TF2 also covered map changes and SourceMod; tModLoader covered a Workshop mod. Client joins are still on the owner checklist. What differs from Linux:
+
+- **Prerequisites:** Windows has no package manager the panel may drive, so a missing runtime stops the start with its download link (`src/games/windowsRuntime.ts`). Terraria needs XNA Framework 4.0, and Palworld needs the Visual C++ 2015–2022 x64 runtime (without it the server exits with 0xC0000135). tModLoader brings its own .NET from Origami.
+- **Console input:** Terraria and tModLoader set `Console.InputEncoding` to Unicode on Windows, so their commands are written as UTF-16 (`inputEncoding: "utf16le"`). srcds in `-console` mode reads a real console and quits on a pipe, so it runs with `consoleInput` and Paperboard talks to it over RCON.
+- **SteamCMD:** on Windows, SteamCMD that updates itself exits with 7 and runs the rest of the command in a child Paperboard can't watch. A `+quit` run takes the update first (`takeSelfUpdate`).
+- **RCON readiness:** srcds drops a reply in flight while it bans someone else's bad RCON attempt, which an internet scanner makes. During startup a reply that never finishes means "not ready yet", not a failure.
+- **Saved folders:** Palworld's `Pal/Saved` is a junction to the server folder's `saved/`, as on Linux it is a symlink.
 
 ### Shared implementation pieces
 
@@ -244,7 +255,7 @@ The pinned binary prints no “World saved” message: save completion requires 
 Owner join checklist (record server/client build, OS/arch and date):
 
 - **Linux x64:** create vanilla 1.4.5.8, join the relocated TCP port from a matching client; verify password rejection/acceptance, two-server isolation, player cap and options; edit terrain, save, stop, restart and rejoin; scheduled offline backup must announce/disconnect/restart; change terrain, restore and rejoin the restored world. Confirm missing executable, occupied port and startup deadline errors are visible. Linux smoke certification is server-only until this join passes.
-- **Windows x64 laptop:** inspect publisher `Windows/TerrariaServer.exe`, private generated-password config handling and stdin/save/exit; run the same client-join/backup/restore checklist. Certify the route before enabling it in `hostSupport`.
+- **Windows x64:** server-side verified (see Windows above): publisher `Windows/TerrariaServer.exe`, private generated-password config handling and stdin/save/exit. Run the same client-join/backup/restore checklist.
 - **Intel Mac:** inspect publisher `Mac/Terraria Server.app` native Intel binary, bundled dylibs, executable permissions and launch environment (avoid a wrapper that leaks descendants); run the same client-join/backup/restore checklist. Certify the route before enabling it in `hostSupport`.
 - **Apple Silicon:** unavailable; no owner test machine or certified runtime route. Do not enable.
 
