@@ -171,14 +171,18 @@ async function worldDir(): Promise<string> {
     if (!name) throw new Error("Palworld's GameUserSettings.ini names no world");
     return path.join(await savedDir(), "SaveGames", "0", name);
 }
-const worldStamp = async () => fileStamp(path.join(await worldDir(), "Level.sav"), "Palworld's Level.sav");
+/** null until Palworld first writes the world: a new one has no Level.sav before its first save */
+export const worldStamp = async () => {
+    const file = path.join(await worldDir(), "Level.sav");
+    return await exists(file) ? fileStamp(file, "Palworld's Level.sav") : null;
+};
 
 /** Saves through the REST API and waits for Level.sav to change; an answer alone is not a save. */
 export async function save(ctx: Context) {
     if (ctx.state.serverStatus !== "online") throw new Error("Start Palworld before saving");
     const before = await worldStamp();
     await rest().save();
-    await waitUntil(async () => (await worldStamp()) !== before, 60_000, "Palworld to write Level.sav");
+    await waitUntil(async () => { const now = await worldStamp(); return now !== null && now !== before; }, 60_000, "Palworld to write Level.sav");
 }
 
 export const palworldService: GameService = {
