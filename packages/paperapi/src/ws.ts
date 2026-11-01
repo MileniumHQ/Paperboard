@@ -659,7 +659,8 @@ export class CraneTransport {
         // v marks the wire protocol version — the daemon refuses unknown
         // versions with a typed BAD_PROTOCOL error instead of guessing
         const duringCall = actionCallScope?.current();
-        const finalParams = { ...params, ...(duringCall ? { duringCall } : {}), token: this.token, v: PROTOCOL_VERSION };
+        if (duringCall) params = { ...params, duringCall };
+        const finalParams = { ...params, token: this.token, v: PROTOCOL_VERSION };
         return new Promise((resolve, reject) => {
             // null timeoutMs waits indefinitely (long-running operations)
             const timer =
