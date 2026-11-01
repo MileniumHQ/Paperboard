@@ -1,26 +1,26 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { randomBytes } from "node:crypto";
-import { config, files, packages as packageApi, processApi, type ServiceContext } from "../../service/api";
-import { defineAction, secretsApi } from "@mileniumhq/paperapi";
-import { currentServer, serverLocal } from "../../service/scope";
+import { packages as packageApi, processApi } from "../../service/api";
+import { serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
-import { appendCapped, PANEL_ID, type ChatMessage, type GameServerState } from "../../service/types";
+import { appendCapped } from "../../service/types";
 import { ACTION_IDS, TRIGGER_IDS } from "../../service/contract";
-import { chatId } from "../../lib/logs";
 import { validateOptions } from "../options";
-import { installApp, installedBuild, steamClientLibrary } from "../steam/steamcmd";
+import { installedBuild, steamClientLibrary } from "../steam/steamcmd";
+import { steamInstallActions } from "../steam/installAction";
+import {
+    ConsoleBuffer, assertHost, exists, gameAction, isLinked, linkFolder, pushChat, readSettings, redact, report,
+    serverRoot, serverSecret, settingPort, settled, singleLine, unlinkFolder, updateSettings, writePrivate, type Context,
+} from "../serviceKit";
 import type { GameDefinition } from "../types";
 import type { GameService } from "../serviceTypes";
 import { addonStageDir } from "../../core/addonUpload";
 import { SOURCEMOD_PACKAGES, sourceActions, type SourceGameSpec, type SourceModView } from "./index";
-import { linkFolder, pluginFile, SourceMod, unlinkFolder } from "./sourcemod";
+import { pluginFile, SourceMod } from "./sourcemod";
 import { cvarValue, mapName, optionValue, secretsCfg, serverCfg } from "./config";
 import { consoleLine, isErrorLine, linePlayer, parseLogLine, parseStatus, steamId, type SourceLogEvent } from "./log";
 import { SourceRcon, RconError } from "./rcon";
 import { bannedUserCfg, noStats, SourceRoster, type SourceStats } from "./roster";
-
-type Context = ServiceContext<GameServerState>;
 
 /** A player on the running server, by the server's user id for their connection. */
 export interface SourceOnline {
@@ -59,8 +59,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         roster: null as SourceRoster | null,
         online: new Map<number, SourceOnline>(),
         secrets: [] as string[],
-        pending: [] as string[],
-        logTimer: null as ReturnType<typeof setTimeout> | null,
+        console: new ConsoleBuffer(isErrorLine),
         /** stats not yet in the roster, by Steam id */
         unsaved: new Map<string, Partial<SourceStats>>(),
         /** when each online player's time was last added to their playtime, by user id */
@@ -73,33 +72,23 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
 
     // Layout: install/ is SteamCMD's folder, left out of backups; Paperboard's
     // players, bans, logs and the user's own server.cfg sit beside it.
-    const root = () => files.getPath("", PANEL_ID);
+    const root = serverRoot;
     const installDir = async () => path.join(await root(), "install");
     const gameDir = async () => path.join(await installDir(), spec.gameDir);
     const cfgDir = async () => path.join(await gameDir(), "cfg");
-    const settings = async () => (await config.get<Record<string, unknown>>(PANEL_ID)) ?? {};
+    const settings = readSettings;
 
-    function serverId() { const id = currentServer()?.server.id; if (!id) throw new Error(`${spec.name} requires a server scope`); return id; }
-    const secretKey = (name: string) => `${serverId()}-${spec.id}-${name}`;
-    const vaulted = [["password", "join-password"], ["rconPassword", "rcon-password"], ["token", "login-token"]] as const;
-
-    function host() {
-        const support = game.hostSupport({ os: process.platform, arch: process.arch }, { software: "", version: "" });
-        if (!support.supported) throw new Error(support.reason);
-    }
+    const joinPassword = serverSecret(spec.id, "join-password");
+    const rconPassword = serverSecret(spec.id, "rcon-password");
+    const loginToken = serverSecret(spec.id, "login-token");
+    /** Options kept in the vault, by option id. */
+    const vaulted = [["password", joinPassword], ["rconPassword", rconPassword], ["token", loginToken]] as const;
     function rcon(): SourceRcon {
         const client = local().rcon;
         if (!client) throw new Error(`${spec.name} is not running`);
         return client;
     }
     function roster() { const r = local().roster; if (!r) throw new Error(`${spec.name}'s player list is not ready`); return r; }
-    /** Background work has no caller to throw to, so its failures land in the console. */
-    function report(ctx: Context, what: string, err: unknown) {
-        ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Paperboard] ${what}: ${err instanceof Error ? err.message : String(err)}` }) }));
-    }
-    async function exists(file: string): Promise<boolean> {
-        return fs.lstat(file).then(() => true, (err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return false; throw err; });
-    }
 
     async function loadOptions(ctx: Context) {
         const saved = await settings();
@@ -109,7 +98,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             const value = optionValue(option, saved);
             if (value !== undefined) values[option.id] = value;
         }
-        for (const [id, name] of vaulted) values[id] = (await secretsApi.get(secretKey(name), PANEL_ID)).found;
+        for (const [id, secret] of vaulted) values[id] = await secret.found();
         ctx.setState({ serverSoftware: spec.id, serverVersion: saved.build ? `Build ${saved.build}` : "", serverPort: String(values.port ?? spec.defaultPort), gameSettings: values });
     }
 
@@ -172,10 +161,11 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         return true;
     }
 
+    function linuxBinary() { const binary = spec.binaries.linux; if (!binary) throw new Error(`${spec.name} has no Linux server`); return binary; }
     /** System libraries the server needs that these folders and the computer lack, as ldd reports them. */
     async function missingLibraries(install: string, folders: readonly string[]): Promise<string[]> {
-        const libraries = path.join(install, spec.libraryDir);
-        const targets = [path.join(install, spec.executable), ...(await fs.readdir(libraries)).filter((f) => f.endsWith(".so")).map((f) => path.join(libraries, f))];
+        const libraries = path.join(install, linuxBinary().libraryDir);
+        const targets = [path.join(install, linuxBinary().executable), ...(await fs.readdir(libraries)).filter((f) => f.endsWith(".so")).map((f) => path.join(libraries, f))];
         let output = "";
         const result = await processApi.run({ command: "ldd", args: targets, env: { LD_LIBRARY_PATH: folders.join(":") }, onStdout: (data) => { output += data; } });
         if (result.exitCode !== 0 && !output) throw new Error(`Could not check ${spec.name}'s libraries: ldd exited with ${result.exitCode}`);
@@ -189,7 +179,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
 
     /** The folders the server loads libraries from: its own, then Origami's for what the computer lacks. */
     async function libraryPath(install: string): Promise<string[]> {
-        const folders = [path.join(install, spec.libraryDir)];
+        const folders = [path.join(install, linuxBinary().libraryDir)];
         const missing = await missingLibraries(install, folders);
         const supplied = missing.filter((name) => spec.libraryPackages?.[name]);
         if (supplied.length === 0) return checked(missing, folders);
@@ -212,11 +202,6 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             seenPlayers: humans.reduce((seen, p) => (seen.includes(p.name) ? seen : appendCapped(seen, p.name)), prev.seenPlayers),
         }));
     }
-    function chat(ctx: Context, message: Omit<ChatMessage, "id" | "timestamp">) {
-        const entry = { ...message, id: chatId(), timestamp: new Date().toTimeString().slice(0, 8) };
-        ctx.setState((prev) => ({ chatMessages: appendCapped(prev.chatMessages, entry) }));
-        return entry;
-    }
     const isPlayer = (id: string) => /^\[U:1:\d+\]$/.test(id);
 
     function observeEvent(ctx: Context, event: SourceLogEvent) {
@@ -230,7 +215,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 local().counted.set(p.userId, now);
                 setOnline(ctx);
                 if (isPlayer(p.steamId)) {
-                    chat(ctx, { event: "join", sender: p.name, text: `${p.name} joined the game` });
+                    pushChat(ctx, { event: "join", sender: p.name, text: `${p.name} joined the game` });
                     ctx.emitTrigger(TRIGGER_IDS.playerJoined, p.name);
                     roster().remember(p.steamId, p.name).catch((err) => report(ctx, `Could not record ${p.name}`, err));
                 }
@@ -245,7 +230,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 setOnline(ctx);
                 const name = p.name || known?.name || "";
                 if (isPlayer(p.steamId) && name) {
-                    chat(ctx, { event: "leave", sender: name, text: `${name} left the game` });
+                    pushChat(ctx, { event: "leave", sender: name, text: `${name} left the game` });
                     ctx.emitTrigger(TRIGGER_IDS.playerLeft, name);
                     roster().remember(p.steamId, name).catch((err) => report(ctx, `Could not record ${name} leaving`, err));
                     saveStats().catch((err) => report(ctx, `Could not save ${name}'s stats`, err));
@@ -279,10 +264,10 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             case "domination": bump(ctx, event.player.userId, "dominations"); return;
             case "say": {
                 const p = event.player;
-                if (p.steamId === "Console") { chat(ctx, { event: "server", content: event.text, text: `<Server> ${event.text}` }); return; }
+                if (p.steamId === "Console") { pushChat(ctx, { event: "server", content: event.text, text: `<Server> ${event.text}` }); return; }
                 if (p.steamId === "BOT") return;
                 const text = event.team ? `(Team) ${event.text}` : event.text;
-                ctx.emitTrigger(TRIGGER_IDS.chatMessage, chat(ctx, { sender: p.name, content: text, text: `<${p.name}> ${text}` }));
+                ctx.emitTrigger(TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: p.name, content: text, text: `<${p.name}> ${text}` }));
                 return;
             }
         }
@@ -340,22 +325,12 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         for (const id of [...local().counted.keys()]) if (!online.has(id)) local().counted.delete(id);
         ctx.setState({ maxPlayers: status.maxPlayers, serverLevel: status.map });
         const saved = await settings();
-        if (status.version && saved.version !== status.version) await config.set({ ...saved, version: status.version }, PANEL_ID);
+        if (status.version && saved.version !== status.version) await updateSettings({ version: status.version });
         setOnline(ctx);
     }
 
-    function online(ctx: Context): boolean {
-        const status = ctx.state.serverStatus;
-        if (status !== "online" && status !== "offline") throw new Error(`Wait for ${spec.name} to finish starting or stopping`);
-        return status === "online";
-    }
-    async function exclusive<T>(ctx: Context, work: () => Promise<T>): Promise<T> {
-        if (local().busy || ctx.state.serverStatus !== "offline") throw new Error(`Stop ${spec.name} and wait for the current operation to finish`);
-        local().busy = true;
-        try { return await work(); } finally { local().busy = false; }
-    }
-
-    const action = (id: string, name: string, run: (ctx: Context, input: any) => any) => defineAction({ id, name, category: "Server", description: name, internal: true, inputs: {}, run });
+    const online = (ctx: Context) => settled(ctx, spec.name);
+    const action = gameAction;
 
     return {
         primaryProcessId: PROC, processIds: [PROC],
@@ -375,12 +350,8 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                     if (option.cvar) live.push(`${option.cvar} ${cvarValue(patch[option.id], option.label)}`);
                     if (option.id === "password") live.push(`sv_password ${cvarValue(patch.password, option.label)}`);
                 }
-                for (const [id, name] of vaulted) {
-                    if (!Object.hasOwn(patch, id)) continue;
-                    if (patch[id]) await secretsApi.set(secretKey(name), patch[id], PANEL_ID);
-                    else await secretsApi.delete(secretKey(name), PANEL_ID);
-                }
-                await config.set(next, PANEL_ID);
+                for (const [id, secret] of vaulted) if (Object.hasOwn(patch, id)) await secret.set(patch[id]);
+                await updateSettings(next);
                 if (ctx.state.serverStatus === "online") {
                     if (Object.hasOwn(patch, "password")) local().secrets = [...local().secrets, String(patch.password)].filter(Boolean);
                     for (const line of live) await rcon().exec(line);
@@ -389,35 +360,11 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 await loadOptions(ctx);
                 return ctx.state.gameSettings;
             }),
-            action(ids.info, `${spec.name} install`, async () => {
-                const saved = await settings();
-                return { host: game.hostSupport({ os: process.platform, arch: process.arch }, { software: "", version: "" }), build: await installedBuild(spec.appId, await installDir()), version: typeof saved.version === "string" ? saved.version : null };
+            ...steamInstallActions({
+                game, appId: spec.appId, ids: { info: ids.info, install: ids.install },
+                installDir, flag: local, loadOptions,
+                async afterInstall() { await linkLogs(); await writeConfigs(); },
             }),
-            action(ids.install, `Install or update ${spec.name}`, (ctx) => exclusive(ctx, async () => {
-                host();
-                ctx.setState({ installProgress: { stage: "downloading", percent: 0 } });
-                let last = "";
-                try {
-                    const build = await installApp(spec.appId, await installDir(), {
-                        onProgress: ({ stage, percent }) => {
-                            const next = { stage: stage === "verifying" ? "verifying" as const : "downloading" as const, percent: Math.floor(percent) };
-                            if (`${next.stage}${next.percent}` === last) return;
-                            last = `${next.stage}${next.percent}`;
-                            ctx.setState({ installProgress: next });
-                        },
-                    });
-                    ctx.setState({ installProgress: { stage: "installing", percent: 100 } });
-                    await linkLogs();
-                    await writeConfigs();
-                    await config.set({ ...(await settings()), configured: true, build }, PANEL_ID);
-                    ctx.setState({ installProgress: { stage: "completed", percent: 100 } });
-                } catch (err) {
-                    ctx.setState({ installProgress: { stage: "error", percent: 0 } });
-                    throw err;
-                }
-                await loadOptions(ctx);
-                return true;
-            })),
             action(ids.players, `${spec.name} players`, async () => {
                 await saveStats();
                 return { seen: await roster().seen(), bans: await roster().bans(), online: [...local().online.values()], admins: (await modsOn()) ? await (await mods()).admins() : null };
@@ -454,7 +401,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                     }));
                     await sm.install(metamod!, sourcemod!);
                 }
-                await config.set({ ...(await settings()), sourcemod: on }, PANEL_ID);
+                await updateSettings({ sourcemod: on });
                 // a running server keeps what it started with until it restarts
                 if (ctx.state.serverStatus === "offline") await placeMods();
             })),
@@ -507,7 +454,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 const map = mapName(raw);
                 if (!(await exists(path.join(await gameDir(), "maps", `${map}.bsp`)))) throw new Error(`${map} is not installed`);
                 const running = online(ctx);
-                await config.set({ ...(await settings()), map }, PANEL_ID);
+                await updateSettings({ map });
                 if (running) await rcon().exec(`changelevel ${map}`);
                 await loadOptions(ctx);
                 return { now: running };
@@ -519,12 +466,12 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             if (running) {
                 // reattaching to a running server: talk to it with the password it started with
                 const saved = await settings();
-                const password = (await secretsApi.get(secretKey("rcon-password"), PANEL_ID)).value;
+                const password = await rconPassword.value();
                 if (!password) throw new Error(`${spec.name} is running without the RCON password Paperboard set; stop it from the computer and start it again here`);
                 local().rcon = new SourceRcon(Number(saved.port ?? spec.defaultPort), password, spec.name);
-                local().secrets = [password, (await secretsApi.get(secretKey("join-password"), PANEL_ID)).value ?? "", (await secretsApi.get(secretKey("login-token"), PANEL_ID)).value ?? ""].filter(Boolean);
+                local().secrets = [password, await joinPassword.value(), await loginToken.value()].filter(Boolean);
                 // the links are what the server started with: placeMods makes them only at a start
-                local().modsActive = (await modsOn()) && (await fs.lstat(path.join(await gameDir(), "addons")).then((s) => s.isSymbolicLink(), () => false));
+                local().modsActive = (await modsOn()) && (await isLinked(path.join(await gameDir(), "addons")));
                 await readStatus(ctx).catch((err) => report(ctx, `Could not read who is on ${spec.name}`, err));
             } else await removeSecrets().catch((err) => report(ctx, `Could not remove ${spec.name}'s start passwords`, err));
         },
@@ -538,58 +485,55 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             local().rcon = null;
             local().online.clear();
             local().modsActive = false;
-            if (local().logTimer) clearTimeout(local().logTimer!);
-            local().logTimer = null;
+            local().console.dispose();
         },
-        readIcon: async () => null,
-        async prepareLaunch(ctx) {
-            host();
+        async prepareLaunch() {
+            assertHost(game);
             const saved = await settings();
             const install = await installDir();
             if (!(await installedBuild(spec.appId, install))) throw new Error(`Install ${spec.name} in Updates first`);
-            const executable = path.join(install, spec.executable);
-            await fs.access(executable, fs.constants.X_OK);
-            const stdbuf = (await Promise.all(STDBUF.map(async (p) => ((await exists(p)) ? p : null)))).find(Boolean);
-            if (!stdbuf) throw new Error(`${spec.name}'s console needs stdbuf from coreutils, which this computer doesn't have`);
-            const libraries = await libraryPath(install);
+            const windows = process.platform === "win32";
+            const binary = spec.binaries[windows ? "win32" : "linux"]!;
+            const executable = path.join(install, binary.executable);
+            await fs.access(executable, windows ? fs.constants.F_OK : fs.constants.X_OK);
             const map = mapName(optionValue(options.find((o) => o.id === "map")!, saved));
             if (!(await exists(path.join(await gameDir(), "maps", `${map}.bsp`)))) throw new Error(`The starting map ${map} is not installed; choose another on the Overview`);
 
-            // the server loads Steam's client library from ~/.steam/sdk64
-            const home = path.join(await root(), "profile");
-            const sdk = path.join(home, ".steam", "sdk64");
-            await fs.mkdir(sdk, { recursive: true });
-            await fs.copyFile(await steamClientLibrary(), path.join(sdk, "steamclient.so"));
-
-            let rconPassword = (await secretsApi.get(secretKey("rcon-password"), PANEL_ID)).value;
-            if (!rconPassword) {
-                rconPassword = randomBytes(18).toString("base64url");
-                await secretsApi.set(secretKey("rcon-password"), rconPassword, PANEL_ID);
+            // Linux: Source holds its console output in a buffer when it isn't a terminal,
+            // links libraries the computer may lack, and loads Steam's client library from ~/.steam/sdk64
+            let linux: { stdbuf: string; env: Record<string, string> } | null = null;
+            if (!windows) {
+                const stdbuf = (await Promise.all(STDBUF.map(async (p) => ((await exists(p)) ? p : null)))).find(Boolean);
+                if (!stdbuf) throw new Error(`${spec.name}'s console needs stdbuf from coreutils, which this computer doesn't have`);
+                const libraries = await libraryPath(install);
+                const home = path.join(await root(), "profile");
+                const sdk = path.join(home, ".steam", "sdk64");
+                await fs.mkdir(sdk, { recursive: true });
+                await fs.copyFile(await steamClientLibrary(), path.join(sdk, "steamclient.so"));
+                linux = { stdbuf, env: { HOME: home, XDG_DATA_HOME: home, LD_LIBRARY_PATH: libraries.join(":") } };
             }
-            const join = (await secretsApi.get(secretKey("join-password"), PANEL_ID)).value ?? "";
-            const token = (await secretsApi.get(secretKey("login-token"), PANEL_ID)).value ?? "";
+
+            const rconSecret = await rconPassword.ensure();
+            const join = await joinPassword.value();
+            const token = await loginToken.value();
             await linkLogs();
             const modsActive = await placeMods();
             await writeConfigs();
-            await fs.writeFile(await secretsFile(), secretsCfg({ rcon: rconPassword, join, token }), { mode: 0o600 });
-            await fs.chmod(await secretsFile(), 0o600);
+            await writePrivate(await secretsFile(), secretsCfg({ rcon: rconSecret, join, token }));
 
             const port = Number(saved.port ?? spec.defaultPort);
             local().rcon?.close();
-            local().rcon = new SourceRcon(port, rconPassword, spec.name);
-            local().secrets = [rconPassword, join, token].filter(Boolean);
+            local().rcon = new SourceRcon(port, rconSecret, spec.name);
+            local().secrets = [rconSecret, join, token].filter(Boolean);
             local().online.clear();
             local().modsActive = modsActive;
             const internet = optionValue(options.find((o) => o.id === "internet")!, saved) !== false;
+            const args = ["-game", spec.gameDir, "-console", "-ip", "0.0.0.0", "-port", String(port), "+clientport", String(Number(saved.clientPort ?? DEFAULT_CLIENT_PORT)), "-nohltv", "+maxplayers", String(Number(optionValue(options.find((o) => o.id === "maxplayers")!, saved))), "+sv_lan", internet ? "0" : "1", "+exec", "paperboard_secrets.cfg", "+map", map];
             return {
                 message: `Starting ${spec.name}${saved.build ? ` build ${saved.build}` : ""}…`,
-                command: {
-                    // Source holds its console output in a buffer when it isn't a terminal
-                    executable: stdbuf,
-                    args: ["-oL", "-eL", executable, "-game", spec.gameDir, "-console", "-ip", "0.0.0.0", "-port", String(port), "+clientport", String(Number(saved.clientPort ?? DEFAULT_CLIENT_PORT)), "-nohltv", "+maxplayers", String(Number(optionValue(options.find((o) => o.id === "maxplayers")!, saved))), "+sv_lan", internet ? "0" : "1", "+exec", "paperboard_secrets.cfg", "+map", map],
-                    cwd: install,
-                    env: { HOME: home, XDG_DATA_HOME: home, LD_LIBRARY_PATH: libraries.join(":") },
-                },
+                command: linux
+                    ? { executable: linux.stdbuf, args: ["-oL", "-eL", executable, ...args], cwd: install, env: linux.env }
+                    : { executable, args, cwd: install, env: {} },
             };
         },
         isMutating: () => local().busy,
@@ -624,12 +568,10 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             await rcon().exec(command);
         },
         async sendChat(_ctx, message) {
-            if (typeof message !== "string" || /[\r\n\0]/.test(message)) throw new Error("Message must be a single line");
-            await rcon().exec(`say ${message}`);
+            await rcon().exec(`say ${singleLine(message, "Message")}`);
         },
         observeLine(ctx, raw) {
-            let line = raw.replace(/\r/g, "");
-            for (const secret of local().secrets) line = line.replaceAll(secret, "[redacted]");
+            const line = redact(raw.replace(/\r/g, ""), local().secrets);
             // every line about a player names their team, kills and objectives too; status doesn't
             const subject = linePlayer(line);
             const known = subject?.team && subject.team !== "Unassigned" ? local().online.get(subject.userId) : undefined;
@@ -637,13 +579,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             const event = parseLogLine(line);
             if (event) observeEvent(ctx, event);
             if (!line.trim()) return;
-            local().pending = [...local().pending, consoleLine(line)].slice(-1000);
-            if (!local().logTimer) local().logTimer = setTimeout(() => {
-                local().logTimer = null;
-                const lines = local().pending;
-                local().pending = [];
-                ctx.setState({ serverEntries: [...ctx.state.serverEntries, ...lines.map((content) => ({ type: isErrorLine(content) ? "error" as const : "info" as const, content }))].slice(-1000) });
-            }, 100);
+            local().console.push(ctx, consoleLine(line));
         },
         async assertFileAccess(_ctx, file, write) {
             if (typeof file !== "string") throw new Error("Choose a file");
@@ -655,8 +591,8 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         portNames: ["game", "client"],
         async *ports(ctx) {
             const saved = await settings();
-            yield { name: "game", label: spec.name, protocol: "tcp+udp", preferred: Number(saved.port ?? spec.defaultPort), async write(port) { await config.set({ ...(await settings()), port }, PANEL_ID); ctx.setState({ serverPort: String(port) }); } };
-            yield { name: "client", label: `${spec.name} client`, protocol: "udp", preferred: Number(saved.clientPort ?? DEFAULT_CLIENT_PORT), async write(port) { await config.set({ ...(await settings()), clientPort: port }, PANEL_ID); } };
+            yield settingPort({ name: "game", label: spec.name, protocol: "tcp+udp", key: "port", fallback: spec.defaultPort, onWrite: (port) => ctx.setState({ serverPort: String(port) }) }, saved);
+            yield settingPort({ name: "client", label: `${spec.name} client`, protocol: "udp", key: "clientPort", fallback: DEFAULT_CLIENT_PORT }, saved);
         },
         backup: { mode: "quiesce", before: async () => {}, recover: async () => {}, withConsistentData: async (_ctx, work) => work() },
     };

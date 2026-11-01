@@ -1,10 +1,6 @@
 import path from "node:path";
 import { options } from "./index";
-import { validateOptions as validateShared } from "../options";
-export function singleLine(value: unknown, label: string): string {
-    if (typeof value !== "string" || /[\r\n\0]/.test(value)) throw new Error(`${label} must be a single line`);
-    return value;
-}
+import { singleLine, validateOptions as validateShared } from "../options";
 export function validateOptions(input: Record<string, unknown>, previous: Record<string, unknown> = {}): Record<string, unknown> {
     return validateShared(options, "Terraria", input, previous);
 }

@@ -23,7 +23,8 @@ export interface GameService {
     initialize(ctx: Context, running: boolean): Promise<void>;
     dispose(): Promise<void>;
     beforeRemove(): Promise<void>;
-    readIcon(): Promise<string | null>;
+    /** The server's own icon, for games that have one. */
+    readIcon?(): Promise<string | null>;
     primaryProcessId: string;
     customTypes?(): Promise<import("../service/api").CustomTypeDefinition[]>;
     readiness?: { timeoutMs: number; probe(ctx: Context): Promise<boolean> };

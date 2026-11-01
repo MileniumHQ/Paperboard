@@ -1,6 +1,7 @@
 import type { GameDefinition, GameOption, OptionSection } from "../types";
 import { ACTION_IDS as A } from "../../service/contract";
 import { gameArt } from "../art";
+import { hostRoutes } from "../host";
 import type { IniType } from "./ini";
 
 /** Steam's id for the Palworld Dedicated Server; SteamCMD downloads it anonymously. */
@@ -70,11 +71,7 @@ export const options: readonly PalworldOption[] = [
 export const palworld: GameDefinition = {
     id: "palworld", name: "Palworld", icon: "pets", art: gameArt("palworld"),
     softwareLabel: ({ version }) => (version ? `Palworld ${version}` : "Palworld"),
-    hostSupport({ os, arch }) {
-        if (arch !== "x64") return { supported: false, reason: "The Palworld dedicated server only runs on x64 computers." };
-        if (os !== "linux") return { supported: false, reason: "This Palworld host route is awaiting Windows x64 certification. Linux x64 is the verified server route." };
-        return { supported: true };
-    },
+    hostSupport: hostRoutes("Palworld dedicated server", { os: ["linux"], arch: ["x64"] }),
     describe() {
         return {
             options, optionsWhileRunning: "next-start", backupWhileRunning: "offline",

@@ -133,7 +133,7 @@ function bind(scope: ServerScope, def: ActionDefinition): ActionDefinition {
                           if (["set-server-icon", "remove-server-icon"].includes(def.id)) {
                               icons.set(
                                   scope.server.id,
-                                  await inServer(scope, () => gameServiceFor(scope.server.game).readIcon()),
+                                  await inServer(scope, () => gameServiceFor(scope.server.game).readIcon?.() ?? null),
                               );
                               publish();
                           }
@@ -241,7 +241,7 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
             );
             await loadServerOptions(scope.ctx);
             await game.initialize(scope.ctx, running);
-            icons.set(server.id, await game.readIcon());
+            icons.set(server.id, (await game.readIcon?.()) ?? null);
         });
         return scope;
     } catch (err) {

@@ -1,15 +1,17 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import net from "node:net";
-import { config, files, packages as packageApi, processApi, type ServiceContext } from "../../service/api";
-import { fileApi as rawFiles, defineAction, secretsApi } from "@mileniumhq/paperapi";
-import { currentServer, serverLocal } from "../../service/scope";
+import { config, packages as packageApi, processApi } from "../../service/api";
+import { serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
-import { appendCapped, PANEL_ID, type GameServerState } from "../../service/types";
-import { startServerInstance, stopServerInstance } from "../../service/lifecycle";
+import { appendCapped, PANEL_ID } from "../../service/types";
 import type { GameService } from "../serviceTypes";
+import {
+    ConsoleBuffer, assertHost, exclusive, exists, fileStamp, gameAction, hostSupportHere, offlineBackup, pushChat, readSettings, redact, report,
+    resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, waitUntil, writePrivate, type Context,
+} from "../serviceKit";
 import { terraria } from "./index";
-import { configText, singleLine, validateOptions, worldName } from "./config";
+import { configText, validateOptions, worldName } from "./config";
 import { archiveFor, entrypoint, installDirectories, releases, softwareName, terrariaSoftware, tmodloaderReleaseFor, tmodloaderReleases, TMODLOADER_ENTRYPOINT, type TerrariaSoftware } from "./catalog";
 import { ModStore, SAVE_DIR } from "./modStore";
 import { searchWorkshop, workshopItems, type ModscanSort } from "../steam/modscan";
@@ -19,84 +21,55 @@ import { discardUpload, importUpload, inspectUpload, listWorlds, trashWorld } fr
 import { WORLD_GENERATION } from "./index";
 import { parseConsoleLine, playerName, PlayerStore, stripPrompt, type ConsoleEvent } from "./roster";
 import { ACTION_IDS, TRIGGER_IDS } from "../../service/contract";
-import { chatId } from "../../lib/logs";
-import type { ChatMessage } from "../../service/types";
+
+const GAME = "terraria";
 const PROC = "terraria-server";
-type Context = ServiceContext<GameServerState>;
-const local = serverLocal(() => ({ modsBusy: false, busy: false, ready: false, password: "", prompts: 0, partialPrompt: false, logTimer: null as ReturnType<typeof setTimeout> | null, pending: [] as string[], queries: 0, listed: [] as { name: string; address: string }[], store: null as PlayerStore | null }));
-const root = () => files.getPath("", PANEL_ID);
-const settings = async () => await config.get<Record<string, unknown>>(PANEL_ID) ?? {};
-function hostFor(software: TerrariaSoftware) { return terraria.hostSupport({ os: process.platform, arch: process.arch }, { software, version: "" }); }
-function host(software: TerrariaSoftware) { const support = hostFor(software); if (!support.supported) throw new Error(support.reason); }
+const local = serverLocal(() => ({
+    modsBusy: false,
+    busy: false,
+    ready: false,
+    password: "",
+    prompts: 0,
+    partialPrompt: false,
+    queries: 0,
+    listed: [] as { name: string; address: string }[],
+    store: null as PlayerStore | null,
+    console: new ConsoleBuffer((line) => /error|exception/i.test(line)),
+}));
+const root = serverRoot;
+const settings = readSettings;
+const hostFor = (software: TerrariaSoftware) => hostSupportHere(terraria, { software, version: "" });
+const host = (software: TerrariaSoftware) => assertHost(terraria, { software, version: "" });
 /** a server is vanilla until its setup installs something else */
 const softwareOf = (saved: Record<string, unknown>) => terrariaSoftware(saved.software ?? "vanilla");
-function secretKey() { const id = currentServer()?.server.id; if (!id) throw new Error("Terraria requires a server scope"); return `${id}-terraria-join-password`; }
-async function marker() { const id = currentServer()?.server.id; if (!id) throw new Error("Terraria requires a server scope"); return rawFiles.getPath(`.terraria-resume/${id}`, PANEL_ID); }
+const joinPassword = serverSecret(GAME, "join-password");
+/** Writes serverconfig.txt; the password is in it only while the server runs. */
 async function generate(password: string) {
     const directory = await root();
     await fs.mkdir(path.join(directory, "worlds"), { recursive: true });
     const file = path.join(directory, "serverconfig.txt");
     let existing = "";
     try { existing = await fs.readFile(file, "utf8"); } catch (err) { if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err; }
-    const text = configText(directory, await settings(), password, existing);
-    await fs.writeFile(file, text, { mode: 0o600 });
-    await fs.chmod(file, 0o600);
+    await writePrivate(file, configText(directory, await settings(), password, existing));
 }
 async function loadOptions(ctx: Context) {
     const saved = await settings();
-    const password = await secretsApi.get(secretKey(), PANEL_ID);
-    ctx.setState({ serverSoftware: softwareOf(saved), serverVersion: String(saved.version ?? ""), serverPort: String(saved.port ?? 7777), serverMotd: String(saved.motd ?? ""), gameSettings: { ...saved, password: password.found } });
+    ctx.setState({ serverSoftware: softwareOf(saved), serverVersion: String(saved.version ?? ""), serverPort: String(saved.port ?? 7777), serverMotd: String(saved.motd ?? ""), gameSettings: { ...saved, password: await joinPassword.found() } });
 }
-async function waitUntil(check: () => boolean | Promise<boolean>, ms: number, label: string) {
-    const deadline = Date.now() + ms;
-    while (!(await check())) { if (Date.now() >= deadline) throw new Error(`Timed out waiting for Terraria ${label}`); await new Promise(r => setTimeout(r, 50)); }
-}
-async function worldStamp(): Promise<string> {
-    const saved = await settings();
-    const stat = await fs.stat(path.join(await root(), "worlds", `${worldName(saved.world ?? "World")}.wld`), { bigint: true });
-    if (stat.size <= 0n) throw new Error("Terraria world file is empty");
-    return `${stat.ino}:${stat.mtimeNs}:${stat.size}`;
-}
+const worldStamp = async () => fileStamp(path.join(await root(), "worlds", `${worldName((await settings()).world ?? "World")}.wld`), "Terraria's world file");
 export async function save(ctx: Context) {
     if (ctx.state.serverStatus !== "online") throw new Error("Start Terraria before saving");
-    const before = await worldStamp(); const prompts = local().prompts;
+    const before = await worldStamp();
+    const prompts = local().prompts;
     await processApi.write(PROC, "save\n");
     // 1.4.5.8 prints no 'World saved' line. Its console returns ': ' only
     // after save/validation/backup finishes. Require both that response and
     // a changed, nonempty world file; a prompt alone is not a save proof.
-    await waitUntil(async () => local().prompts > prompts && await worldStamp() !== before, 120_000, "save completion (console prompt and changed world file)");
-}
-
-async function offline(ctx: Context) {
-    if (local().busy) throw new Error("Wait for the Terraria operation to finish");
-    if (ctx.state.serverStatus === "offline") { await generate(""); return; }
-    if (ctx.state.serverStatus !== "online") throw new Error("Terraria is starting or stopping; wait before backup/restore");
-    local().busy = true;
-    try {
-        await processApi.write(PROC, "say Server stopping for backup or restore.\n");
-        await save(ctx);
-        // Outside the source: restored snapshots must never decide whether to restart.
-        const resume = await marker(); await fs.mkdir(path.dirname(resume), { recursive: true });
-        await fs.writeFile(resume, "resume after offline operation\n", { mode: 0o600 });
-        const savedBeforeExit = await worldStamp();
-        await stopServerInstance(ctx);
-        await waitUntil(async () => !(await processApi.exists(PROC)), 125_000, "graceful exit");
-        await generate("");
-        if (await worldStamp() === savedBeforeExit) throw new Error("Terraria exited without confirming its shutdown save; no backup was copied");
-    } finally { local().busy = false; }
-}
-async function exclusive<T>(ctx: Context, work: () => Promise<T>): Promise<T> {
-    if (local().busy || ctx.state.serverStatus !== "offline") throw new Error("Stop Terraria and wait for the current operation to finish");
-    local().busy = true;
-    try { return await work(); } finally { local().busy = false; }
+    await waitUntil(async () => local().prompts > prompts && await worldStamp() !== before, 120_000, "Terraria to save (console prompt and changed world file)", 50);
 }
 /** Set up by initialize, so console lines can queue roster writes before they publish state. */
 function store() { const s = local().store; if (!s) throw new Error("Terraria's player roster is not ready"); return s; }
 const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-/** Background roster work has no caller to throw to, so its failures land in the console. */
-function report(ctx: Context, what: string, err: unknown) {
-    ctx.setState(prev => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Paperboard] ${what}: ${err instanceof Error ? err.message : String(err)}` }) }));
-}
 /** Asks the server who is connected; the answer is read back by observeLine and kept out of the console. */
 function queryPlayers(ctx: Context) {
     local().queries++;
@@ -104,14 +77,7 @@ function queryPlayers(ctx: Context) {
 }
 /** The online player's name as Terraria spells it; kick and ban match it exactly. */
 function onlineName(ctx: Context, name: string) {
-    const status = ctx.state.serverStatus;
-    if (status !== "online" && status !== "offline") throw new Error("Wait for Terraria to finish starting or stopping");
-    return status === "online" ? ctx.state.onlinePlayers.find(p => sameName(p, name)) : undefined;
-}
-function chat(ctx: Context, message: Omit<ChatMessage, "id" | "timestamp">) {
-    const entry = { ...message, id: chatId(), timestamp: new Date().toTimeString().slice(0, 8) };
-    ctx.setState(prev => ({ chatMessages: appendCapped(prev.chatMessages, entry) }));
-    return entry;
+    return settled(ctx, "Terraria") ? ctx.state.onlinePlayers.find(p => sameName(p, name)) : undefined;
 }
 /** Applies a console line to the roster and chat. Returns true for an answer to Paperboard's own `playing`. */
 function observePlayers(ctx: Context, event: ConsoleEvent): boolean {
@@ -121,7 +87,7 @@ function observePlayers(ctx: Context, event: ConsoleEvent): boolean {
                 onlinePlayers: prev.onlinePlayers.some(p => sameName(p, event.name)) ? prev.onlinePlayers : [...prev.onlinePlayers, event.name],
                 seenPlayers: prev.seenPlayers.some(p => sameName(p, event.name)) ? prev.seenPlayers : appendCapped(prev.seenPlayers, event.name),
             }));
-            chat(ctx, { event: "join", sender: event.name, text: `${event.name} has joined.` });
+            pushChat(ctx, { event: "join", sender: event.name, text: `${event.name} has joined.` });
             ctx.emitTrigger(TRIGGER_IDS.playerJoined, event.name);
             // the join line has no address; `playing` lists it for bans
             queryPlayers(ctx);
@@ -130,16 +96,16 @@ function observePlayers(ctx: Context, event: ConsoleEvent): boolean {
         case "leave": {
             store().remember(event.name).catch(err => report(ctx, `Could not record ${event.name} leaving`, err));
             ctx.setState(prev => ({ onlinePlayers: prev.onlinePlayers.filter(p => !sameName(p, event.name)) }));
-            chat(ctx, { event: "leave", sender: event.name, text: `${event.name} has left.` });
+            pushChat(ctx, { event: "leave", sender: event.name, text: `${event.name} has left.` });
             ctx.emitTrigger(TRIGGER_IDS.playerLeft, event.name);
             return false;
         }
         case "chat": {
-            ctx.emitTrigger(TRIGGER_IDS.chatMessage, chat(ctx, { sender: event.sender, content: event.content, text: `<${event.sender}> ${event.content}` }));
+            ctx.emitTrigger(TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: event.sender, content: event.content, text: `<${event.sender}> ${event.content}` }));
             return false;
         }
         case "server": {
-            chat(ctx, { event: "server", content: event.content, text: `<Server> ${event.content}` });
+            pushChat(ctx, { event: "server", content: event.content, text: `<Server> ${event.content}` });
             return false;
         }
         case "listed": {
@@ -165,6 +131,19 @@ async function onServerStarted(ctx: Context) {
     ctx.setState({ maxPlayers: max });
     queryPlayers(ctx);
 }
+/** The server's config with its password, written as it starts. */
+async function startConfig() {
+    local().password = await joinPassword.value();
+    await generate(local().password);
+    local().ready = false;
+}
+/** On Linux the game writes its own files under HOME; this keeps them in the server folder. Windows uses Documents, which these don't move. */
+async function profile(directory: string): Promise<Record<string, string>> {
+    if (process.platform === "win32") return {};
+    const home = path.join(directory, "profile");
+    await fs.mkdir(home, { recursive: true });
+    return { HOME: home, XDG_DATA_HOME: home };
+}
 /** tModLoader runs as `dotnet tModLoader.dll` on the Origami .NET package, without its launch scripts: they fetch .NET at launch. */
 async function launchTmodloader(directory: string, installDir: string, version: string) {
     const release = tmodloaderReleaseFor(version);
@@ -173,16 +152,15 @@ async function launchTmodloader(directory: string, installDir: string, version: 
     const runtime = path.join(await packageApi.getPath(release.runtime), "bin");
     const dotnet = path.join(runtime, process.platform === "win32" ? "dotnet.exe" : "dotnet");
     await fs.access(dotnet, process.platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK);
-    local().password = (await secretsApi.get(secretKey(), PANEL_ID)).value ?? "";
-    await generate(local().password); local().ready = false;
-    const home = path.join(directory, "profile"); await fs.mkdir(home, { recursive: true });
+    await startConfig();
+    const home = await profile(directory);
     const save = path.join(directory, SAVE_DIR); await fs.mkdir(path.join(save, "Mods"), { recursive: true });
     return { message: `Starting tModLoader ${release.version}…`, command: {
         executable: dotnet,
         args: [TMODLOADER_ENTRYPOINT, "-server", "-config", path.join(directory, "serverconfig.txt"), "-nosteam", "-tmlsavedirectory", save, "-noupnp"],
         cwd: installDir,
         // only the packaged runtime; never one installed on the computer
-        env: { HOME: home, XDG_DATA_HOME: home, DOTNET_ROOT: runtime, DOTNET_MULTILEVEL_LOOKUP: "0", DOTNET_CLI_TELEMETRY_OPTOUT: "1" },
+        env: { ...home, DOTNET_ROOT: runtime, DOTNET_MULTILEVEL_LOOKUP: "0", DOTNET_CLI_TELEMETRY_OPTOUT: "1" },
     } };
 }
 async function modStore(ctx: Context) {
@@ -198,23 +176,20 @@ async function modChange<T>(ctx: Context, work: (store: ModStore) => Promise<T>)
     finally { local().modsBusy = false; }
 }
 const SORTS: readonly ModscanSort[] = ["relevance", "subscriptions", "updated"];
-const action = (id: string, name: string, run: (ctx: Context, input: any) => any) => defineAction({ id, name, category: "Server", description: name, internal: true, inputs: {}, run });
+const action = gameAction;
 export const terrariaService: GameService = {
     primaryProcessId: PROC, processIds: [PROC],
     initialState: () => ({ ...initialServerState(), serverSoftware: "vanilla", serverPort: "7777", serverMotd: "" }),
     actions: async () => { const { sharedActions, backupAction } = await import("../../service/actions"); return [ ...sharedActions, backupAction,
         action(ACTION_IDS.readGameOptions, "Read options", async ctx => { await loadOptions(ctx); return ctx.state.gameSettings; }),
-        action(ACTION_IDS.writeGameOptions, "Save options", (ctx, { patch }) => exclusive(ctx, async () => {
+        action(ACTION_IDS.writeGameOptions, "Save options", (ctx, { patch }) => exclusive(ctx, local(), "Terraria", async () => {
             if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("Options patch is required");
             const next = validateOptions(patch, await settings());
-            if (Object.hasOwn(patch, "password")) {
-                if (patch.password) await secretsApi.set(secretKey(), patch.password, PANEL_ID);
-                else await secretsApi.delete(secretKey(), PANEL_ID);
-            }
+            if (Object.hasOwn(patch, "password")) await joinPassword.set(singleLine(patch.password, "Join password"));
             await config.set(next, PANEL_ID); await generate(""); await loadOptions(ctx); return ctx.state.gameSettings;
         })),
         action("terraria-versions", "Terraria releases", () => ({ releases, tmodloaderReleases, host: hostFor("vanilla"), hosts: { vanilla: hostFor("vanilla"), tmodloader: hostFor("tmodloader") } })),
-        action("terraria-install", "Install Terraria", (ctx, { software: rawSoftware, version }) => exclusive(ctx, async () => {
+        action("terraria-install", "Install Terraria", (ctx, { software: rawSoftware, version }) => exclusive(ctx, local(), "Terraria", async () => {
             const software = terrariaSoftware(rawSoftware ?? "vanilla");
             host(software); const release = archiveFor(software, version);
             const previous = await settings();
@@ -230,11 +205,11 @@ export const terrariaService: GameService = {
             await generate(""); await loadOptions(ctx); return true;
         })),
         action("terraria-worlds", "Terraria worlds", async () => listWorlds(path.join(await root(), "worlds"), worldName((await settings()).world ?? "World"))),
-        action("terraria-world", "Select or create world", (ctx, { name, create, generation }) => exclusive(ctx, async () => {
+        action("terraria-world", "Select or create world", (ctx, { name, create, generation }) => exclusive(ctx, local(), "Terraria", async () => {
             const nameChecked = worldName(name);
             const file = path.join(await root(), "worlds", `${nameChecked}.wld`);
-            const exists = await fs.stat(file).then(s => s.isFile(), err => { if (err.code === "ENOENT") return false; throw err; });
-            if (create ? exists : !exists) throw new Error(create ? "This world already exists; select it instead" : "The selected .wld world does not exist");
+            const found = await exists(file);
+            if (create ? found : !found) throw new Error(create ? "This world already exists; select it instead" : "The selected .wld world does not exist");
             let next = { ...await settings(), world: nameChecked };
             if (create && generation !== undefined) {
                 // a new world's size, difficulty and seed; Terraria reads them on the start that creates it
@@ -244,7 +219,7 @@ export const terrariaService: GameService = {
             await config.set(next, PANEL_ID);
             await generate(""); await loadOptions(ctx); return true;
         })),
-        action("terraria-world-delete", "Delete world", (ctx, { name }) => exclusive(ctx, async () => { await trashWorld(await root(), name); return true; })),
+        action("terraria-world-delete", "Delete world", (ctx, { name }) => exclusive(ctx, local(), "Terraria", async () => { await trashWorld(await root(), name); return true; })),
         action("terraria-world-inspect", "Read uploaded world", async (_ctx, { file }) => inspectUpload(await root(), file)),
         action("terraria-world-import", "Add uploaded world", async (_ctx, { file, name }) => { await importUpload(await root(), file, name); return true; }),
         action("terraria-world-discard", "Discard uploaded world", async (_ctx, { file }) => { await discardUpload(await root(), file); return true; }),
@@ -301,7 +276,7 @@ export const terrariaService: GameService = {
     ]; },
     loadOptions,
     async initialize(ctx, running) {
-        local().password = (await secretsApi.get(secretKey(), PANEL_ID)).value ?? "";
+        local().password = await joinPassword.value();
         local().store = new PlayerStore(await root());
         // reattaching to a running server: learn who is on it
         if (running) await onServerStarted(ctx);
@@ -309,15 +284,11 @@ export const terrariaService: GameService = {
             for (const directory of installDirectories()) await recoverRelease(path.join(await root(), "install", directory));
             await generate("");
         }
-        const resume = await marker();
-        if (await fs.stat(resume).then(() => true, err => { if (err.code === "ENOENT") return false; throw err; })) {
-            if (!running) await startServerInstance(ctx);
-            await fs.unlink(resume);
-        }
+        await resumeAfterBackup(ctx, GAME, running);
     },
     async beforeRemove() { if (local().busy) throw new Error("Wait for Terraria's current operation"); },
-    async dispose() { if (local().logTimer) clearTimeout(local().logTimer!); local().logTimer = null; }, readIcon: async () => null,
-    async prepareLaunch(ctx) {
+    async dispose() { local().console.dispose(); },
+    async prepareLaunch() {
         const saved = await settings(); const software = softwareOf(saved);
         host(software);
         const release = archiveFor(software, String(saved.version));
@@ -325,11 +296,16 @@ export const terrariaService: GameService = {
         const record = JSON.parse(await fs.readFile(path.join(installDir, "manifest.json"), "utf8"));
         if ((record.software ?? "vanilla") !== software || record.sha256 !== release.sha256 || record.os !== process.platform || record.arch !== process.arch) throw new Error(`${softwareName(software)} install manifest does not match this release and host; reinstall`);
         if (software === "tmodloader") return launchTmodloader(directory, installDir, String(saved.version));
-        const executable = path.join(installDir, entrypoint(process.platform)); await fs.access(executable, process.platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK);
-        local().password = (await secretsApi.get(secretKey(), PANEL_ID)).value ?? "";
-        await generate(local().password); local().ready = false;
-        const home = path.join(directory, "profile"); await fs.mkdir(home, { recursive: true });
-        return { message: `Starting Terraria ${release.version}…`, command: { executable, args: ["-config", path.join(directory, "serverconfig.txt"), "-noupnp"], cwd: path.dirname(executable), env: { HOME: home, XDG_DATA_HOME: home, LD_LIBRARY_PATH: path.join(path.dirname(executable), "lib64"), MONO_CONFIG: path.join(path.dirname(executable), "monoconfig") } } };
+        const executable = path.join(installDir, entrypoint(process.platform));
+        await fs.access(executable, process.platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK);
+        await startConfig();
+        const bin = path.dirname(executable);
+        // Linux's server is Mono, bundled beside it
+        const mono: Record<string, string> = process.platform === "linux" ? { LD_LIBRARY_PATH: path.join(bin, "lib64"), MONO_CONFIG: path.join(bin, "monoconfig") } : {};
+        return {
+            message: `Starting Terraria ${release.version}…`,
+            command: { executable, args: ["-config", path.join(directory, "serverconfig.txt"), "-noupnp"], cwd: bin, env: { ...await profile(directory), ...mono } },
+        };
     },
     isMutating: () => local().busy || local().modsBusy,
     readiness: { timeoutMs: 300_000, async probe(ctx) {
@@ -351,18 +327,13 @@ export const terrariaService: GameService = {
         local().partialPrompt = prompt;
     },
     observeLine(ctx, raw) {
-        const line = local().password ? raw.replaceAll(local().password, "[redacted]") : raw;
+        const line = redact(raw, [local().password]);
         if (/Server started|Listening on port/i.test(line)) local().ready = true;
         local().partialPrompt = false;
         if (stripPrompt(line) === "Server started") void onServerStarted(ctx).catch(err => report(ctx, "Could not read Terraria's player limit", err));
         const event = parseConsoleLine(line);
         if (event && observePlayers(ctx, event)) return;
-        local().pending = [...local().pending, line.replace(/\r/g, "")].slice(-1000);
-        if (!local().logTimer) local().logTimer = setTimeout(() => {
-            local().logTimer = null;
-            const lines = local().pending; local().pending = [];
-            ctx.setState({ serverEntries: [...ctx.state.serverEntries, ...lines.map(content => ({ type: /error|exception/i.test(content) ? "error" as const : "info" as const, content }))].slice(-1000) });
-        }, 100);
+        local().console.push(ctx, line.replace(/\r/g, ""));
     },
     async assertFileAccess(ctx, file, write) {
         if (write && typeof file === "string" && file.startsWith(`${SAVE_DIR}/Mods/`) && local().modsBusy) throw new Error("Wait for the mod change to finish");
@@ -374,7 +345,13 @@ export const terrariaService: GameService = {
     portNames: ["terraria"],
     async *ports(ctx) {
         const saved = await settings();
-        yield { name: "terraria", label: "Terraria", protocol: "tcp", preferred: Number(saved.port ?? 7777), async write(port) { await config.set({ ...await settings(), port }, PANEL_ID); ctx.setState({ serverPort: String(port) }); await generate(""); } };
+        yield settingPort({ name: "terraria", label: "Terraria", protocol: "tcp", key: "port", fallback: 7777, async onWrite(port) { ctx.setState({ serverPort: String(port) }); await generate(""); } }, saved);
     },
-    backup: { mode: "offline", before: offline, recover: async () => {}, async withConsistentData(ctx, work) { await offline(ctx); return work(); } },
+    backup: offlineBackup({
+        gameId: GAME, name: "Terraria", processId: PROC, flag: local,
+        announce: () => processApi.write(PROC, "say Server stopping for backup or restore.\n"),
+        save, clean: () => generate(""),
+        // Terraria saves again as it exits; an unchanged world means that save failed
+        exitStamp: worldStamp,
+    }),
 };

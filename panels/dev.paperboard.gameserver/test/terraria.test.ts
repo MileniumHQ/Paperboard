@@ -27,7 +27,7 @@ test("Terraria config round trip retains unknown keys, replaces duplicates, vali
 });
 test("Terraria host/capability metadata has no Minecraft operations or uncertified host routes", () => {
     const options = { software: "vanilla", version: "1.4.5.8" };
-    expect(terraria.hostSupport({ os: "linux", arch: "x64" }, options).supported).toBe(true);
+    for (const os of ["linux"]) for (const software of ["vanilla", "tmodloader"]) expect(terraria.hostSupport({ os, arch: "x64" }, { ...options, software }).supported).toBe(true);
     for (const [os, arch] of [["linux", "arm64"], ["darwin", "arm64"], ["win32", "x64"], ["darwin", "x64"]]) {
         const support = terraria.hostSupport({ os: os!, arch: arch! }, options); expect(support.supported).toBe(false); expect(support.reason).toBeTruthy();
     }

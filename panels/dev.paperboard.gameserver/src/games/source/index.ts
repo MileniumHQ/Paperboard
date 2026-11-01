@@ -1,6 +1,7 @@
 import type { GameDefinition, GameOption, GameTab } from "../types";
 import { ACTION_IDS as A } from "../../service/contract";
 import { gameArt } from "../art";
+import { hostRoutes } from "../host";
 import type { SourcePlugin } from "./sourcemod";
 
 /**
@@ -20,9 +21,11 @@ export interface SourceGameSpec {
     appId: number;
     /** The mod folder under the install, passed as -game. */
     gameDir: string;
-    /** The server binary and its library folder, relative to the install. */
-    executable: string;
-    libraryDir: string;
+    /**
+     * The server binary on each operating system it runs on, relative to
+     * the install; on Linux, with the folder of the libraries it ships.
+     */
+    binaries: { linux?: { executable: string; libraryDir: string }; win32?: { executable: string } };
     /**
      * System libraries the Linux server links that Origami can supply, by
      * file name: the package is installed and put on the library path only
@@ -99,11 +102,7 @@ export function sourceGame(spec: SourceGameSpec): GameDefinition {
     return {
         id: spec.id, name: spec.name, icon: spec.icon, art: gameArt(spec.id),
         softwareLabel: ({ version }) => (version ? `${spec.name} ${version}` : spec.name),
-        hostSupport({ os, arch }) {
-            if (arch !== "x64") return { supported: false, reason: `The ${spec.name} dedicated server only runs on x64 computers.` };
-            if (os !== "linux") return { supported: false, reason: `This ${spec.name} host route is awaiting Windows x64 certification. Linux x64 is the verified server route.` };
-            return { supported: true };
-        },
+        hostSupport: hostRoutes(`${spec.name} dedicated server`, { os: (["linux", "win32"] as const).filter((os) => spec.binaries[os]), arch: ["x64"] }),
         describe() {
             return {
                 options: spec.options,

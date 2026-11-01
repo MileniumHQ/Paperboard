@@ -1,6 +1,7 @@
 import type { GameDefinition, GameOption, OptionSection } from "../types";
 import { ACTION_IDS as A } from "../../service/contract";
 import { gameArt } from "../art";
+import { hostRoutes } from "../host";
 import { softwareName, terrariaSoftware, tmodloaderReleases } from "./catalog";
 
 export const options: readonly GameOption[] = [
@@ -37,11 +38,8 @@ export const MOD_ACTIONS = ["terraria-mods", "terraria-mod-search", "terraria-mo
 export const terraria: GameDefinition = {
     id: "terraria", name: "Terraria", icon: "landscape", art: gameArt("terraria"),
     softwareLabel: ({ software, version }) => `${softwareName(terrariaSoftware(software))} ${version}`.trim(),
-    hostSupport({ os, arch }) {
-        if (arch !== "x64") return { supported: false, reason: "Terraria requires an x64 host. Apple Silicon has no certification machine; Rosetta is not certified." };
-        if (os !== "linux") return { supported: false, reason: "This Terraria host route is awaiting Windows x64 / Intel Mac certification. Linux x64 is the verified server route." };
-        return { supported: true };
-    },
+    // the publisher's ZIP has a Mac server too; no Mac has run it here yet
+    hostSupport: hostRoutes("Terraria dedicated server", { os: ["linux"], arch: ["x64"] }),
     describe({ software: raw, version }) {
         const software = terrariaSoftware(raw);
         const modded = software === "tmodloader";

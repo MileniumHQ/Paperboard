@@ -108,7 +108,7 @@ export function downloadWorkshopItems(appId: number, ids: readonly string[], opt
             const folder = path.join(target, "steamapps", "workshop", "content", String(appId), id);
             if (!item) problems.push(`${id}: SteamCMD did not report the download`);
             else if (!item.ok) problems.push(`${id}: ${item.reason || "download failed"}`);
-            else if (!(await fs.stat(folder).then(s => s.isDirectory(), () => false))) problems.push(`${id}: SteamCMD reported success but left no files`);
+            else if (!(await fs.stat(folder).then(s => s.isDirectory(), (err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return false; throw err; }))) problems.push(`${id}: SteamCMD reported success but left no files`);
             else folders.set(id, folder);
         }
         if (problems.length > 0 || result.exitCode !== 0) {

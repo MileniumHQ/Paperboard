@@ -180,29 +180,3 @@ export class SourceMod {
         catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") return ""; throw err; }
     }
 }
-
-/**
- * Points `link` at `target`, a folder in the server folder: what the game
- * left at `link` moves into `target` first. Windows gets a junction, which
- * needs no administrator rights.
- */
-export async function linkFolder(link: string, target: string): Promise<void> {
-    await fs.mkdir(target, { recursive: true });
-    const stat = await fs.lstat(link).catch((err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return null; throw err; });
-    if (stat?.isSymbolicLink()) {
-        if (path.resolve(path.dirname(link), await fs.readlink(link)) === path.resolve(target)) return;
-        await fs.unlink(link);
-    } else if (stat?.isDirectory()) {
-        for (const entry of await fs.readdir(link)) await fs.rename(path.join(link, entry), path.join(target, entry));
-        await fs.rmdir(link);
-    } else if (stat) throw new Error(`${path.basename(link)} in the game's folder is a file; remove it in Files`);
-    await fs.mkdir(path.dirname(link), { recursive: true });
-    if (process.platform === "win32") await fs.symlink(path.resolve(target), link, "junction");
-    else await fs.symlink(path.relative(path.dirname(link), target), link, "dir");
-}
-
-/** Removes a link linkFolder made; a real folder there is the user's and stays. */
-export async function unlinkFolder(link: string): Promise<void> {
-    const stat = await fs.lstat(link).catch((err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return null; throw err; });
-    if (stat?.isSymbolicLink()) await fs.unlink(link);
-}

@@ -10,6 +10,12 @@ export function fitsNumber(field: NumberOption, value: unknown): boolean {
     return Math.abs(steps - Math.round(steps)) < 1e-6;
 }
 
+/** Refuses text that a console or config line can't hold. */
+export function singleLine(value: unknown, label: string): string {
+    if (typeof value !== "string" || /[\r\n\0]/.test(value)) throw new Error(`${label} must be a single line`);
+    return value;
+}
+
 /** What a number option takes, as its refusal says it. */
 export function numberRule(field: NumberOption): string {
     const step = stepOf(field);
@@ -33,8 +39,8 @@ export function validateOptionValue(field: GameOption, value: unknown): void {
             return;
         case "text":
         case "secret":
-            if (typeof value !== "string" || /[\r\n\0]/.test(value)) throw new Error(`${field.label} must be a single line`);
-            if (field.kind === "text" && field.maxLength !== undefined && value.length > field.maxLength) throw new Error(`${field.label} is at most ${field.maxLength} characters`);
+            const text = singleLine(value, field.label);
+            if (field.kind === "text" && field.maxLength !== undefined && text.length > field.maxLength) throw new Error(`${field.label} is at most ${field.maxLength} characters`);
             return;
     }
 }
