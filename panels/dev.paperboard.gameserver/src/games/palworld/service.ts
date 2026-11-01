@@ -6,7 +6,8 @@ import { appendCapped } from "../../service/types";
 import { ACTION_IDS, TRIGGER_IDS } from "../../service/contract";
 import { validateOptions } from "../options";
 import { installedBuild } from "../steam/steamcmd";
-import { assertWindowsRuntime, VISUAL_CPP_X64 } from "../windowsRuntime";
+import { VISUAL_CPP_X64 } from "../windowsRuntime";
+import { provideWindowsRuntime } from "../windowsRuntimeInstall";
 import { steamInstallActions } from "../steam/installAction";
 import type { GameService } from "../serviceTypes";
 import {
@@ -281,7 +282,7 @@ export const palworldService: GameService = {
         const { executable: relative, args } = platform();
         const executable = path.join(install, relative);
         await fs.access(executable, process.platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK);
-        if (process.platform === "win32") await assertWindowsRuntime("Palworld dedicated server", VISUAL_CPP_X64);
+        if (process.platform === "win32") await provideWindowsRuntime(VISUAL_CPP_X64, path.dirname(executable));
         await linkSaved();
         const admin = await adminPassword.ensure();
         const join = await joinPassword.value();

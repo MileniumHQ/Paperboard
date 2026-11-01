@@ -2,6 +2,7 @@ import type { GameDefinition, GameOption, OptionSection } from "../types";
 import { ACTION_IDS as A } from "../../service/contract";
 import { gameArt } from "../art";
 import { hostRoutes } from "../host";
+import { XNA_4 } from "../windowsRuntime";
 import { softwareName, terrariaSoftware, tmodloaderReleases } from "./catalog";
 
 export const options: readonly GameOption[] = [
@@ -47,7 +48,7 @@ export const terraria: GameDefinition = {
         const runtime = (tmodloaderReleases.find(r => r.version === version) ?? tmodloaderReleases[0]).runtime;
         return {
             options, optionsWhileRunning: "locked", backupWhileRunning: "offline", control: { kind: "stdin" }, widgets: ["status", "console"],
-            packages: modded ? [{ id: runtime, purpose: ".NET runtime for tModLoader" }] : [],
+            packages: modded ? [{ id: runtime, purpose: ".NET runtime for tModLoader" }] : [XNA_4.package],
             actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", A.saveWorld, "terraria-motd", "terraria-players", "terraria-kick", "terraria-ban", "terraria-unban", "backup-server", ...(modded ? MOD_ACTIONS : [])],
             tabs: [
                 { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },

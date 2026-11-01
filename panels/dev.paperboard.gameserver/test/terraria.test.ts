@@ -67,21 +67,60 @@ test("Terraria release replacement and interrupted swap recovery leave worlds un
     } finally { await fs.rm(root, { recursive: true }); }
 });
 
-test("a Windows server refuses to start without the Microsoft runtime it loads, naming the download", async () => {
-    const { assertWindowsRuntime, VISUAL_CPP_X64, XNA_4 } = await import("../src/games/windowsRuntime");
-    const windir = await fs.mkdtemp(path.join(os.tmpdir(), "windir-"));
+test("a Windows server without the Microsoft runtime it loads gets Origami's copy beside its executable", async () => {
+    const { VISUAL_CPP_X64, XNA_4 } = await import("../src/games/windowsRuntime");
+    const { provideWindowsRuntime } = await import("../src/games/windowsRuntimeInstall");
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "windows-runtime-"));
+    const windir = path.join(root, "Windows"), server = path.join(root, "server"), store = path.join(root, "packages");
+    const downloads: string[] = [];
+    const packages = {
+        isInstalled: async (id: string) => downloads.includes(id),
+        getPath: async (id: string) => path.join(store, id),
+        download: async (id: string) => {
+            downloads.push(id);
+            await fs.mkdir(path.join(store, id, "bin"), { recursive: true });
+            for (const dll of id === "xna-framework" ? ["Microsoft.Xna.Framework.dll", "msvcr100.dll"] : ["vcruntime140.dll", "msvcp140.dll"]) await fs.writeFile(path.join(store, id, "bin", dll), `${id} ${dll}`);
+        },
+    };
     try {
-        await expect(assertWindowsRuntime("Terraria dedicated server", XNA_4, windir)).rejects.toThrow("The Terraria dedicated server needs Microsoft XNA Framework Redistributable 4.0, which this computer doesn't have. Install it from https://www.microsoft.com/en-us/download/details.aspx?id=20914, then start again.");
-        // every file counts: a partial Visual C++ install still fails to load
+        await fs.mkdir(server, { recursive: true });
+        await provideWindowsRuntime(XNA_4, server, windir, packages);
+        expect(downloads).toEqual(["xna-framework"]);
+        expect((await fs.readdir(server)).sort()).toEqual(["Microsoft.Xna.Framework.dll", "msvcr100.dll"]);
+        expect(await fs.readFile(path.join(server, "msvcr100.dll"), "utf8")).toBe("xna-framework msvcr100.dll");
+        // installed once, placed again at the next start
+        await fs.rm(path.join(server, "msvcr100.dll"));
+        await provideWindowsRuntime(XNA_4, server, windir, packages);
+        expect(downloads).toEqual(["xna-framework"]);
+        expect(await fs.readFile(path.join(server, "msvcr100.dll"), "utf8")).toBe("xna-framework msvcr100.dll");
+
+        // Windows' own install wins; a partial Visual C++ install still counts as missing
+        const palworld = path.join(root, "palworld");
+        await fs.mkdir(palworld);
         for (const file of [...XNA_4.files, ...VISUAL_CPP_X64.files.slice(0, 2)]) {
             await fs.mkdir(path.dirname(path.join(windir, file)), { recursive: true });
             await fs.writeFile(path.join(windir, file), "MZ");
         }
-        await assertWindowsRuntime("Terraria dedicated server", XNA_4, windir);
-        await expect(assertWindowsRuntime("Palworld dedicated server", VISUAL_CPP_X64, windir)).rejects.toThrow("needs Microsoft Visual C++ Redistributable 2015–2022 (x64)");
+        await provideWindowsRuntime(VISUAL_CPP_X64, palworld, windir, packages);
+        expect(downloads).toEqual(["xna-framework", "vc-runtime"]);
+        expect((await fs.readdir(palworld)).sort()).toEqual(["msvcp140.dll", "vcruntime140.dll"]);
         await fs.writeFile(path.join(windir, VISUAL_CPP_X64.files[2]!), "MZ");
-        await assertWindowsRuntime("Palworld dedicated server", VISUAL_CPP_X64, windir);
-    } finally { await fs.rm(windir, { recursive: true }); }
+        const other = path.join(root, "other");
+        await fs.mkdir(other);
+        await provideWindowsRuntime(VISUAL_CPP_X64, other, windir, packages);
+        expect(await fs.readdir(other)).toEqual([]);
+
+        // a failed install fails the start with its own reason
+        const offline = { ...packages, isInstalled: async () => false, download: async () => { throw new Error("Package xna-framework not found"); } };
+        await expect(provideWindowsRuntime(XNA_4, server, path.join(root, "bare"), offline)).rejects.toThrow("Package xna-framework not found");
+        await expect(provideWindowsRuntime(XNA_4, server, "", packages)).rejects.toThrow("SystemRoot is not set");
+    } finally { await fs.rm(root, { recursive: true }); }
+});
+
+test("vanilla Terraria and Palworld list the Windows runtime packages they may install", async () => {
+    const { palworld } = await import("../src/games/palworld");
+    expect(terraria.describe({ software: "vanilla", version: "1.4.5.8" }).packages).toEqual([{ id: "xna-framework", purpose: "XNA Framework for the server on Windows computers without it" }]);
+    expect(palworld.describe({ software: "", version: "" }).packages.map(p => p.id)).toEqual(["steamcmd", "vc-runtime"]);
 });
 
 test("Windows sends console commands as UTF-16, the encoding Terraria reads there", async () => {

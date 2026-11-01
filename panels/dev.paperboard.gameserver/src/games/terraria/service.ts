@@ -18,7 +18,8 @@ import { searchWorkshop, workshopItems, type ModscanSort } from "../steam/modsca
 import { addonStageDir } from "../../core/addonUpload";
 import { install, recoverRelease } from "./install";
 import { consoleInput } from "./windows";
-import { assertWindowsRuntime, XNA_4 } from "../windowsRuntime";
+import { XNA_4 } from "../windowsRuntime";
+import { provideWindowsRuntime } from "../windowsRuntimeInstall";
 import { discardUpload, importUpload, inspectUpload, listWorlds, trashWorld } from "./worldStore";
 import { WORLD_GENERATION } from "./index";
 import { parseConsoleLine, playerName, PlayerStore, stripPrompt, type ConsoleEvent } from "./roster";
@@ -301,7 +302,7 @@ export const terrariaService: GameService = {
         if (software === "tmodloader") return launchTmodloader(directory, installDir, String(saved.version));
         const executable = path.join(installDir, entrypoint(process.platform));
         await fs.access(executable, process.platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK);
-        if (process.platform === "win32") await assertWindowsRuntime("Terraria dedicated server", XNA_4);
+        if (process.platform === "win32") await provideWindowsRuntime(XNA_4, path.dirname(executable));
         await startConfig();
         const bin = path.dirname(executable);
         // Linux's server is Mono, bundled beside it

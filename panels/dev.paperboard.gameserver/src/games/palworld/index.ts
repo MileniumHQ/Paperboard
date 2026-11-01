@@ -2,6 +2,7 @@ import type { GameDefinition, GameOption, OptionSection } from "../types";
 import { ACTION_IDS as A } from "../../service/contract";
 import { gameArt } from "../art";
 import { hostRoutes } from "../host";
+import { VISUAL_CPP_X64 } from "../windowsRuntime";
 import type { IniType } from "./ini";
 
 /** Steam's id for the Palworld Dedicated Server; SteamCMD downloads it anonymously. */
@@ -77,7 +78,7 @@ export const palworld: GameDefinition = {
             options, optionsWhileRunning: "next-start", backupWhileRunning: "offline",
             // Palworld reads no console input; Paperboard reaches it over its REST API
             control: { kind: "broadcast" }, widgets: ["status"],
-            packages: [{ id: "steamcmd", purpose: "Downloads and updates the Palworld dedicated server from Steam" }],
+            packages: [{ id: "steamcmd", purpose: "Downloads and updates the Palworld dedicated server from Steam" }, VISUAL_CPP_X64.package],
             actions: [A.startServer, A.stopServer, A.restartServer, A.loadConfig, A.sayChat, A.saveWorld, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, "palworld-install", "palworld-info", "palworld-metrics", "palworld-players", "palworld-kick", "palworld-ban", "palworld-unban", "backup-server"],
             tabs: [
                 { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
