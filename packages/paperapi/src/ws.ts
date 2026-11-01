@@ -1,5 +1,6 @@
 // WebSocket transport bound to one computer; remote frames ride a tunnel or fail
 import type * as fsType from "fs";
+import type { AsyncLocalStorage as CallStorage } from "async_hooks";
 
 import { debug, debugErr } from "./debug";
 import { PROTOCOL_VERSION } from "./protocol";
@@ -47,6 +48,23 @@ async function randomTunnelId(): Promise<string> {
 // @vite-ignore keeps node builtins out of browser builds
 async function nodeBuiltin(name: string): Promise<any> {
     return import(/* @vite-ignore */ `node:${name}`);
+}
+
+// The action call a service is answering, for the requests it makes while
+// doing so. Some requests stop the service that makes them (a backup pauses
+// its own panel's service), and the daemon, which cannot get the action's
+// answer from a service it stopped, needs to know which call to answer for it.
+// Only Node runs a service; other contexts have nothing to carry.
+interface ActionCallScope {
+    run<T>(callId: string, fn: () => T): T;
+    current(): string | undefined;
+}
+let actionCallScope: ActionCallScope | undefined;
+async function loadActionCallScope(): Promise<void> {
+    if (actionCallScope) return;
+    const { AsyncLocalStorage } = await nodeBuiltin("async_hooks");
+    const storage: CallStorage<string> = new AsyncLocalStorage();
+    actionCallScope = { run: (callId, fn) => storage.run(callId, fn), current: () => storage.getStore() };
 }
 
 function defaultCraneJsonPath(pathMod: any): string {
@@ -286,6 +304,7 @@ export class CraneTransport {
     }
 
     private async open(): Promise<void> {
+        if (this.isNode) await loadActionCallScope();
         await this.resolveCredentials();
         if (this.closedByUser) throw new Error("PaperCrane transport is disposed");
 
@@ -544,7 +563,10 @@ export class CraneTransport {
                 return;
             }
             Promise.resolve()
-                .then(() => handler(...(Array.isArray(args) ? args : [])))
+                .then(() => {
+                    const call = () => handler(...(Array.isArray(args) ? args : []));
+                    return actionCallScope ? actionCallScope.run(callId, call) : call();
+                })
                 .then((result) => {
                     this.frame({
                         type: "action_reply",
@@ -636,7 +658,8 @@ export class CraneTransport {
         // typo'd field) can never clobber the real credential.
         // v marks the wire protocol version — the daemon refuses unknown
         // versions with a typed BAD_PROTOCOL error instead of guessing
-        const finalParams = { ...params, token: this.token, v: PROTOCOL_VERSION };
+        const duringCall = actionCallScope?.current();
+        const finalParams = { ...params, ...(duringCall ? { duringCall } : {}), token: this.token, v: PROTOCOL_VERSION };
         return new Promise((resolve, reject) => {
             // null timeoutMs waits indefinitely (long-running operations)
             const timer =

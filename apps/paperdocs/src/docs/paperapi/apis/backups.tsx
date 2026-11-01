@@ -232,6 +232,7 @@ await backups.create({ label: "Before updating" });`}
                 A service defined with a <PaperCode>beforeBackup</PaperCode> hook (see definePanelService) is asked first, while it still runs, so it can write out what it holds and stop processes it runs from writing. When the hook throws, create fails with CONFLICT and the service is still stopped and started again.
                 On restart, services that manage several workloads should initialize every workload and recover any saving pauses left by a previous backup.
                 A service that was stopped before a backup or restore stays stopped.
+                A service can call create or restore from inside an action on its own panel. The service is stopped by it, so the action is answered with what create or restore returns once it finishes, or with its error, and the service starts again afterwards. Code the action runs after the call does not run.
                 create and restore have no call timeout. They take as long as the bytes take to copy.
             </PaperText>
         </PaperFlex>

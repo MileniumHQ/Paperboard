@@ -6,6 +6,7 @@ import { requireHost, resourcePanelId } from "../principal";
 import { BackupService } from "../backups/service";
 import { isDestinationId } from "../backups/config";
 import { BACKUP_LABEL_MAX } from "../backups/types";
+import { actionsRegistry } from "../actions";
 
 // one service per engine; it lives as long as the engine does
 const services = new WeakMap<PaperCraneEngine, BackupService>();
@@ -28,6 +29,22 @@ function destinationId(value: unknown): string {
 function panelFor(params: any, action: string, ctx: RpcContext): string {
     const owner = resourcePanelId(ctx.callerPanelId(), assertPanelId(params?.panelId), action)!;
     return params?.sourceId === undefined ? owner : backupServiceFor(ctx.engine).sources.resolve(owner, assertStr(params.sourceId, "sourceId", 64));
+}
+
+// A backup or restore stops its panel's service while it runs. When that
+// service asked for it from inside an action (duringCall names the call), it
+// is gone before it can answer, so the action is answered with the outcome.
+async function carrying<T>(params: any, ctx: RpcContext, operation: () => Promise<T>): Promise<T> {
+    const callId = assertOptStr(params?.duringCall, "duringCall", 64);
+    const finish = callId === undefined ? null : actionsRegistry.carryCall(callId, ctx.ws);
+    try {
+        const result = await operation();
+        finish?.({ result });
+        return result;
+    } catch (err) {
+        finish?.({ error: err instanceof Error ? err.message : String(err) });
+        throw err;
+    }
 }
 
 // Locations are the user's choice, made in the shell: every location
@@ -87,7 +104,7 @@ export async function handleBackups(action: string, id: unknown, params: any, ct
             case "backup:create": {
                 const panelId = panelFor(params, action, ctx);
                 const label = assertOptStr(params?.label, "label", BACKUP_LABEL_MAX) ?? null;
-                reply(id, await backups.create(panelId, label));
+                reply(id, await carrying(params, ctx, () => backups.create(panelId, label)));
                 return true;
             }
             case "backup:list": {
@@ -97,7 +114,8 @@ export async function handleBackups(action: string, id: unknown, params: any, ct
             }
             case "backup:restore": {
                 const panelId = panelFor(params, action, ctx);
-                reply(id, await backups.restore(panelId, assertStr(params?.backupId, "backupId", 64)));
+                const backupId = assertStr(params?.backupId, "backupId", 64);
+                reply(id, await carrying(params, ctx, () => backups.restore(panelId, backupId)));
                 return true;
             }
             case "backup:schedule-set": {
