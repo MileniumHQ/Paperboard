@@ -1,10 +1,12 @@
 import type { KeyObject } from "node:crypto";
-import { putRecord, type CommandRunner } from "./kv";
+import { putRecord, readPublished, type CommandRunner, type PublishedReader } from "./kv";
 import { loadReleaseSigningKey } from "../../../../scripts/releaseSigning";
 import type { PackageRecord } from "./records";
 
 export interface UpdateOutcome {
     written: string[];
+    /** built cleanly and already served exactly as built: nothing written */
+    unchanged: string[];
     errors: Record<string, string>;
 }
 
@@ -15,9 +17,9 @@ export interface UpdateOutcome {
  */
 export async function writeRecords(
     built: { key: string; record?: PackageRecord; error?: string }[],
-    opts: { dryRun: boolean; run?: CommandRunner; key?: KeyObject; publicKey?: string },
+    opts: { dryRun: boolean; run?: CommandRunner; key?: KeyObject; publicKey?: string; published?: PublishedReader },
 ): Promise<UpdateOutcome> {
-    const outcome: UpdateOutcome = { written: [], errors: {} };
+    const outcome: UpdateOutcome = { written: [], unchanged: [], errors: {} };
     // a real write needs the offline release key; a dry run signs nothing
     const signingKey = opts.dryRun ? undefined : (opts.key ?? loadReleaseSigningKey());
     for (const { key, record, error } of built) {
@@ -31,8 +33,8 @@ export async function writeRecords(
             continue;
         }
         try {
-            await putRecord(record, signingKey!, opts.run, opts.publicKey);
-            outcome.written.push(key);
+            const result = await putRecord(record, signingKey!, opts.run, opts.publicKey, opts.published ?? readPublished);
+            outcome[result].push(key);
         } catch (err) {
             outcome.errors[key] = err instanceof Error ? err.message : String(err);
         }
@@ -43,6 +45,7 @@ export async function writeRecords(
 export function report(outcome: UpdateOutcome, dryRun: boolean): number {
     const verb = dryRun ? "would write" : "wrote";
     for (const key of outcome.written) console.log(`${verb} ${key}`);
+    for (const key of outcome.unchanged) console.log(`unchanged ${key}`);
     for (const [key, message] of Object.entries(outcome.errors)) {
         console.error(`FAILED ${key}: ${message}`);
     }

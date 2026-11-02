@@ -56,13 +56,50 @@ export function signRecord(
     return { ...record, platforms };
 }
 
+/** The record the registry serves now, or undefined when it serves none. */
+export type PublishedReader = (name: string) => Promise<unknown>;
+
+// Reads through the public route, not wrangler: the same bytes daemons see,
+// and no account call for a record that has not changed.
+export const readPublished: PublishedReader = async (name) => {
+    const res = await fetch(`https://origami.ariapis.com/package/${encodeURIComponent(name)}.json`, {
+        headers: { "cache-control": "no-cache" },
+    });
+    if (res.status === 404) return undefined;
+    if (!res.ok) throw new Error(`reading the published ${name} record failed: HTTP ${res.status}`);
+    return res.json();
+};
+
+// Key order differs between the written JSON and the worker's re-serialized
+// response, so records compare by sorted keys.
+function canonical(value: unknown): string {
+    if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+    if (value && typeof value === "object") {
+        const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+        return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
+    }
+    return JSON.stringify(value);
+}
+
 export async function putRecord(
     record: PackageRecord,
     key: KeyObject,
     run: CommandRunner = runCommand,
     publicKey: string = RELEASE_PUBLIC_KEY,
-): Promise<void> {
+    published?: PublishedReader,
+): Promise<"written" | "unchanged"> {
     assertValidRecord(record);
     const signed = signRecord(record, key, publicKey);
+    // ed25519 signatures are deterministic, so an unchanged upstream release
+    // signs to the record already served. A failed read is not a reason to
+    // skip: the write goes ahead.
+    if (published) {
+        const live = await published(signed.name).catch((err) => {
+            console.warn(err instanceof Error ? err.message : String(err));
+            return undefined;
+        });
+        if (live !== undefined && canonical(live) === canonical(signed)) return "unchanged";
+    }
     await run("bunx", wranglerPutArgs(signed.name, JSON.stringify(signed, null, 2)), ORIGAMI_DIR);
+    return "written";
 }

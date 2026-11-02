@@ -45,7 +45,7 @@ Panels are published by the operator, not by a worker route: `bun run publish` i
 
 ## Package records
 
-Package records (`java-<N>`, `ollama`, `helium`, `steamcmd`, `proton`, `opencode`, `codex`, `claude-code`) are written by operator scripts, never by a worker route. They write straight to the production `PACKAGES` namespace through wrangler, so sign in first with `bunx wrangler login`.
+Package records (`java-<N>`, `ollama`, `helium`, `steamcmd`, `proton`, `opencode`, `codex`, `claude-code`) are written by operator scripts, never by a worker route. They write straight to the production `PACKAGES` namespace through wrangler, so sign in first with `bunx wrangler login`. A record identical to the one the registry already serves is skipped (`unchanged <name>`), so the updaters are safe to run on a schedule.
 
 ```bash
 # every Adoptium feature release (or name them: -- 21 25)
@@ -98,8 +98,6 @@ The Agents panel's three CLIs are packages too, none of them hosted by Paperboar
 `codex` tracks `openai/codex` (`rust-vX.Y.Z` tags) and installs `codex-package-<triple>.tar.gz`. Only the `.tar.gz` files are listed in the release's `codex-package_SHA256SUMS`, which GitHub's digest must agree with. The Linux builds are static musl and run on any distribution. The recipe takes `bin/`, `codex-package.json` and `codex-path/`, plus what each OS adds under `codex-resources/`: `bwrap` on Linux, the two Windows sandbox helpers on Windows, nothing on macOS. It leaves out `codex-resources/voice/` (about 50 MB). Because a recipe that names a missing path would only fail on a user's computer, the updater downloads all six archives, checks each against its digest, lists it with `tar -t`, and refuses the record if any `take` source is absent. Nothing in an archive is extracted or run.
 
 `claude-code` installs Anthropic's per-platform npm packages (`@anthropic-ai/claude-code-<platform>`, plain tarballs without install scripts) holding the unmodified binary and its `LICENSE.md`. The version is read from `downloads.claude.ai/claude-code-releases/stable`. The updater requires Anthropic's `manifest.json` to verify against its detached GPG signature, using the key at `downloads.claude.ai/keys` in a throwaway keyring and only if the signing key's primary fingerprint is the one pinned in `scripts/update-claude-code.ts`, so `gpg` must be installed. It then downloads each tarball and requires its sha512 and sha1 to match the registry's `dist.integrity` and `dist.shasum`, and the sha256 of the binary inside it to match the signed manifest. The recorded SHA-256 is the tarball's own. Linux is glibc only: Anthropic publishes separate musl builds, but a record has no libc dimension.
-
-**Publication blocker:** real GE-Proton11-11 extraction currently loses symlink chains in the daemon's tar dependency (9 links on x64, 1 on arm64). Do not publish `proton` until extraction preserves these chains with resolved-target safety checks; disabling tar path protections is not a safe workaround. SteamCMD extraction passed on all three bootstrap archives.
 
 ## Configuration
 

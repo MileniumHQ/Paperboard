@@ -305,11 +305,48 @@ describe("KV writer", () => {
         expect(ran).toBe(false);
     });
 
+    it("skips the write when the registry already serves the signed record", async () => {
+        let live: unknown;
+        await putRecord(record, keys.privateKey, async (_command, args) => {
+            live = JSON.parse(args[5]!);
+            return { stdout: "", stderr: "" };
+        }, PUBLIC);
+        // the worker re-serializes, so key order is not preserved
+        const reordered = JSON.parse(JSON.stringify({ platforms: (live as PackageRecord).platforms, version: "1.0.0", name: "ollama" }));
+        let ran = false;
+        const result = await putRecord(record, keys.privateKey, async () => {
+            ran = true;
+            return { stdout: "", stderr: "" };
+        }, PUBLIC, async () => reordered);
+        expect(result).toBe("unchanged");
+        expect(ran).toBe(false);
+    });
+
+    it("writes when the served record differs, is missing, or cannot be read", async () => {
+        const served = [
+            async () => ({ ...record, version: "0.9.0" }),
+            async () => undefined,
+            async () => {
+                throw new Error("HTTP 500");
+            },
+        ];
+        for (const published of served) {
+            let ran = false;
+            const result = await putRecord(record, keys.privateKey, async () => {
+                ran = true;
+                return { stdout: "", stderr: "" };
+            }, PUBLIC, published);
+            expect(result).toBe("written");
+            expect(ran).toBe(true);
+        }
+    });
+
     it("reports write failures instead of claiming success", async () => {
         const outcome = await writeRecords([{ key: "ollama", record }, { key: "java-8", error: "no assets" }], {
             dryRun: false,
             key: keys.privateKey,
             publicKey: PUBLIC,
+            published: async () => undefined,
             run: async () => {
                 throw new Error("not logged in");
             },
