@@ -77,7 +77,7 @@ export default function Automation() {
                     <PaperSettingList autoHeight>
                         <PaperSettingItem
                             title="Restart after a crash"
-                            description="Starts the server again a few seconds after it crashes. If it crashes 3 times in 10 minutes, it stays stopped until you start it."
+                            description="Starts the server again a few seconds after it crashes, or as Paperboard starts if the server stopped while Paperboard was not running. If it crashes 3 times in 10 minutes, it stays stopped until you start it."
                         >
                             <PaperToggle checked={current().restartAfterCrash} disabled={saving()} onChange={(on) => void save({ restartAfterCrash: on })} />
                         </PaperSettingItem>

@@ -1,11 +1,13 @@
 import { minecraftSoftware } from "./index";
 import { config, files as fileApi, packages as packageApi, system, type ServiceContext } from "../../service/api";
 import type { GameServerState } from "../../service/types";
-import { PANEL_ID } from "../../service/types";
+import { PANEL_ID, appendCapped } from "../../service/types";
+import { heapFit } from "../../service/memory";
 import { SOFTWARE_NAMES } from "../../lib/software";
 import { isWindowsTarget } from "../../lib/platform";
 import { currentInstall } from "../../software/installRecord";
 import * as nodeFs from "node:fs/promises";
+import * as os from "node:os";
 import { javaLaunchArgs, launchEntryFile } from "../../software/launch";
 import { isSupportedMcVersion, MIN_SUPPORTED_MC_VERSION } from "../../lib/versionProfile";
 import { javaBinaryPath } from "./java";
@@ -59,6 +61,10 @@ export async function prepareLaunch(ctx: ServiceContext<GameServerState>): Promi
         `[Service:Lifecycle] starting in ${serverDir} (${entry} present) using ${javaPkg}...`,
     );
     const javaBin = javaBinaryPath(javaPath, isWin);
+    // the heap is set aside whole as Java starts (-Xms = -Xmx)
+    const fit = heapFit(ctx.state.ramAllocation, os.totalmem());
+    if (fit && "refuse" in fit) throw new Error(fit.refuse);
+    if (fit) ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: fit.warn }) }));
 
     return {
         command: {

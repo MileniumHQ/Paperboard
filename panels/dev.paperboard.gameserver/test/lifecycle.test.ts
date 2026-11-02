@@ -18,6 +18,10 @@ const starts: string[] = [];
 let savedConfig: Record<string, unknown> = {};
 const configSets: Record<string, unknown>[] = [];
 
+// the system's count of programs it ended for memory; a test raises it
+let oomKills: number | null = 0;
+const realMemory = await import("../src/service/memory");
+mock.module("../src/service/memory", () => ({ ...realMemory, oomKillCount: () => oomKills }));
 mock.module("../src/service/api", () => ({
     portApi: portApiStub(),
     config: {
@@ -425,6 +429,34 @@ describe("crashes", () => {
         const restarted = lines.findIndex((line: string) => /^\[Server\] Restarted after a crash at .+ \(exit code 137\)\.$/.test(line));
         expect(restarted).toBeGreaterThan(lines.indexOf("[Server] The server crashed (exit code 137). Logs has what it printed."));
         expect(lines.indexOf("[Server] The server crashed (exit code 137). Logs has what it printed.")).toBeGreaterThanOrEqual(0);
+    });
+
+    it("a server the system ended for memory is told as that, and still starts again", async () => {
+        const ctx = makeCtx({ serverStatus: "offline" });
+        await startServerInstance(ctx);
+        ctx.setState({ serverStatus: "online" });
+        oomKills = 1;
+        jest.useFakeTimers();
+        try {
+            handleProcessExit(ctx, 137);
+            const lines = ctx.state.serverEntries.map((e: any) => e.content);
+            expect(lines).toContain("[Server] The computer ran out of memory, so the system ended the server (exit code 137). Give the server less memory or close other programs.");
+            expect(crashed(ctx)).toEqual([]);
+            expect(lines).toContain(`[Server] Restarting in ${automation.CRASH_RESTART_DELAY_MS / 1000} seconds.`);
+        } finally {
+            oomKills = 0;
+            automation.cancelAutomation();
+        }
+    });
+
+    it("a SIGKILL without the system's memory count going up is a plain crash", async () => {
+        const ctx = makeCtx({ serverStatus: "offline" });
+        await startServerInstance(ctx);
+        ctx.setState({ serverStatus: "online" });
+        jest.useFakeTimers();
+        handleProcessExit(ctx, 137);
+        automation.cancelAutomation();
+        expect(crashed(ctx)).toEqual(["[Server] The server crashed (exit code 137). Logs has what it printed."]);
     });
 
     it("a Windows crash status is named in hex, as Windows names it", () => {

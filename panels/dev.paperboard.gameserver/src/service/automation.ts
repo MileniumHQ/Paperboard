@@ -112,10 +112,11 @@ function describeExitCode(code: number): string {
  * CRASH_LIMIT times inside CRASH_WINDOW_MS. A crash while starting never
  * restarts: the next start fails the same way. Says in the console either way.
  */
-export function afterCrash(ctx: ServiceContext<GameServerState>, exit: { whileStarting: boolean; exitCode: number | undefined }, start: (ctx: ServiceContext<GameServerState>, carry: GameServerState["serverEntries"]) => Promise<void>, now = Date.now()): void {
+export function afterCrash(ctx: ServiceContext<GameServerState>, exit: { whileStarting: boolean; exitCode: number | undefined; outOfMemory?: boolean }, start: (ctx: ServiceContext<GameServerState>, carry: GameServerState["serverEntries"]) => Promise<void>, now = Date.now()): void {
     const code = exit.exitCode === undefined ? "" : ` (exit code ${describeExitCode(exit.exitCode)})`;
     const say = (type: "error" | "warn" | "info", content: string) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type, content }) }));
-    say("error", `[Server] The server crashed${exit.whileStarting ? " while starting" : ""}${code}. Logs has what it printed.`);
+    if (exit.outOfMemory) say("error", `[Server] The computer ran out of memory, so the system ended the server${exit.whileStarting ? " while it was starting" : ""}${code}. Give the server less memory or close other programs.`);
+    else say("error", `[Server] The server crashed${exit.whileStarting ? " while starting" : ""}${code}. Logs has what it printed.`);
     if (exit.whileStarting) return;
     const settings = local().settings ?? AUTOMATION_DEFAULTS;
     if (!settings.restartAfterCrash) return;

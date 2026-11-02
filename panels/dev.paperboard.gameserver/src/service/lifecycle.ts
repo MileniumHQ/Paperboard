@@ -6,11 +6,12 @@ import { prepareGamePorts } from "./ports";
 import { livePortDeps } from "./portDeps";
 import { type GameServerState, appendCapped, MAX_BUFFERED_ENTRIES } from "./types";
 import { loadServerOptions } from "./options";
+import { oomKillCount } from "./memory";
 import { TRIGGER_IDS } from "./contract";
 import { afterCrash, cancelStopRequest, classifyExit, markStarting, markStopRequested, updateBeforeStart } from "./automation";
 
 const primaryProcessId = () => currentGameService().primaryProcessId;
-const local = serverLocal(() => ({ lineBuffer: "", readinessTimer: null as ReturnType<typeof setTimeout> | null, readinessDeadline: null as ReturnType<typeof setTimeout> | null, generation: 0, isRestarting: false, stopTimeout: null as ReturnType<typeof setTimeout> | null }));
+const local = serverLocal(() => ({ oomBaseline: null as number | null, lineBuffer: "", readinessTimer: null as ReturnType<typeof setTimeout> | null, readinessDeadline: null as ReturnType<typeof setTimeout> | null, generation: 0, isRestarting: false, stopTimeout: null as ReturnType<typeof setTimeout> | null }));
 
 export function cancelReadiness(): void {
     local().generation++;
@@ -101,6 +102,16 @@ function releaseServer(ctx: ServiceContext<GameServerState>): Promise<void> | un
     });
 }
 
+/** The system's count of programs it ended for memory, or null where it keeps none; a count it can't read is said. */
+function readOomKills(ctx: ServiceContext<GameServerState>): number | null {
+    try {
+        return oomKillCount();
+    } catch (err) {
+        ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] Could not read the system's memory events, so a crash from running out of memory is not told apart: ${err instanceof Error ? err.message : String(err)}` }) }));
+        return null;
+    }
+}
+
 /** `carry`: lines the fresh console opens with, as why the server is starting again. */
 export async function startServerInstance(
     ctx: ServiceContext<GameServerState>,
@@ -157,6 +168,7 @@ export async function startServerInstance(
         });
 
         markStarting();
+        local().oomBaseline = readOomKills(ctx);
         await processApi.start({
             id: primaryProcessId(),
             command: launch.command.executable,
@@ -348,8 +360,12 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>, exitCode
         ctx.emitTrigger(TRIGGER_IDS.serverStopped, true);
         if (exit.kind === "crashed") {
             ctx.emitTrigger(TRIGGER_IDS.serverCrashed, exitCode ?? null);
+            // SIGKILL, while the system's count of programs it ended for
+            // memory went up: the system ran out and chose the server
+            const baseline = local().oomBaseline;
+            const outOfMemory = exitCode === 137 && baseline !== null && (readOomKills(ctx) ?? baseline) > baseline;
             // the game takes back what the crashed start set aside before the next one
-            afterCrash(ctx, { whileStarting: exit.whileStarting, exitCode }, (ctx, carry) => (released ?? Promise.resolve()).then(() => startServerInstance(ctx, carry)));
+            afterCrash(ctx, { whileStarting: exit.whileStarting, exitCode, outOfMemory }, (ctx, carry) => (released ?? Promise.resolve()).then(() => startServerInstance(ctx, carry)));
         }
     }
 }
