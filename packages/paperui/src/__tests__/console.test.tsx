@@ -112,4 +112,13 @@ describe("PaperConsole Component Tests", () => {
         const rows = container.querySelectorAll("[class*='entry']:not([class*='entries'])");
         expect(rows.length).toBeLessThan(200);
     });
+
+    test("an empty console shows its empty state until the first line arrives", async () => {
+        const [entries, setEntries] = createSignal<PaperConsoleEntry[]>([]);
+        render(() => <PaperConsole entries={entries()} empty={<p>Nothing printed yet</p>} />);
+        expect(screen.queryByText("Nothing printed yet")).not.toBeNull();
+        setEntries([{ type: "output", content: "Server started" }]);
+        expect(await screen.findByText("Server started")).toBeDefined();
+        expect(screen.queryByText("Nothing printed yet")).toBeNull();
+    });
 });

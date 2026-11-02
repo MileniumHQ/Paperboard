@@ -93,6 +93,8 @@ export interface PaperConsoleProps
     /** large preformatted body (log files); one text node, auto-scrolled */
     text?: string;
     banner?: string | JSX.Element;
+    /** shown in the middle of the output while there are no entries or text, usually a PaperEmptyState */
+    empty?: JSX.Element;
     placeholder?: string;
     prompt?: string | JSX.Element;
     inputDisabled?: boolean;
@@ -116,6 +118,7 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
         "showInput",
         "text",
         "banner",
+        "empty",
         "placeholder",
         "prompt",
         "inputDisabled",
@@ -534,6 +537,10 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
                 </Show>
 
                 {local.children}
+
+                <Show when={local.empty && items().length === 0 && !local.text}>
+                    <div class={styles.empty}>{local.empty}</div>
+                </Show>
             </div>
 
             <Show when={local.showInput !== false}>

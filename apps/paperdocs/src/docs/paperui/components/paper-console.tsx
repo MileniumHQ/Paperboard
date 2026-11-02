@@ -4,6 +4,7 @@ import {
     PaperCard,
     PaperCode,
     PaperConsole,
+    PaperEmptyState,
     PaperFlex,
     PaperTable,
     PaperText,
@@ -153,6 +154,12 @@ export function Example() {
                             <td>Preformatted raw text block rendered as a single log view.</td>
                         </tr>
                         <tr>
+                            <td><PaperCode>empty</PaperCode></td>
+                            <td><PaperCode>JSX.Element</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Shown in the middle of the output while there are no entries or text, usually a PaperEmptyState.</td>
+                        </tr>
+                        <tr>
                             <td><PaperCode>autoScroll</PaperCode></td>
                             <td><PaperCode>boolean</PaperCode></td>
                             <td><PaperCode>true</PaperCode></td>
@@ -216,6 +223,21 @@ process.onLine((line) =>
                         { type: "info", content: "Compiling artifacts" },
                         { type: "output", content: "Build succeeded" },
                     ]}
+                />
+            </PaperCard>
+            <PaperText preset="body">
+                Say what an empty console means with the empty prop. It shows until the first line arrives.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperConsole
+    entries={entries()}
+    empty={<PaperEmptyState icon="terminal" title="The server is stopped" description="Start it and what it prints shows up here." />}
+/>`}
+            </PaperCode>
+            <PaperCard padding="none" surface="front" height="panel-height-small">
+                <PaperConsole
+                    entries={[]}
+                    empty={<PaperEmptyState icon="terminal" title="The server is stopped" description="Start it and what it prints shows up here." />}
                 />
             </PaperCard>
         </PaperFlex>
