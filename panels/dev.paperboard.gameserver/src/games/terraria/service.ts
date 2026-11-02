@@ -37,7 +37,8 @@ const local = serverLocal(() => ({
     queries: 0,
     listed: [] as { name: string; address: string }[],
     store: null as PlayerStore | null,
-    console: new ConsoleBuffer((line) => /error|exception/i.test(line)),
+    // "Error Logging Enabled." is a notice every start prints, not an error
+    console: new ConsoleBuffer((line) => /error|exception/i.test(line) && !/^Error Logging Enabled\.?$/i.test(line)),
 }));
 const root = serverRoot;
 const settings = readSettings;
@@ -338,7 +339,9 @@ export const terrariaService: GameService = {
         if (stripPrompt(line) === "Server started") void onServerStarted(ctx).catch(err => report(ctx, "Could not read Terraria's player limit", err));
         const event = parseConsoleLine(line);
         if (event && observePlayers(ctx, event)) return;
-        local().console.push(ctx, line.replace(/\r/g, ""));
+        // the console's ": " prompt rides on the next line it prints; blank lines say nothing
+        const shown = stripPrompt(line).trimEnd();
+        if (shown) local().console.push(ctx, shown);
     },
     async assertFileAccess(ctx, file, write) {
         if (write && typeof file === "string" && file.startsWith(`${SAVE_DIR}/Mods/`) && local().modsBusy) throw new Error("Wait for the mod change to finish");

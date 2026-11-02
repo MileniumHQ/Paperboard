@@ -141,3 +141,16 @@ test("a join is tracked, its address learned from a quiet `playing`, and kick, b
     expect(fs.readFileSync(path.join(root, "banlist.txt"), "utf8")).toBe("");
     await terrariaService.dispose();
 }));
+
+test("the console shows Terraria's lines without its prompt, blank lines or a false error", () => inServer(scope, async () => {
+    const ctx = makeCtx();
+    for (const line of ["Error Logging Enabled.", "Terraria Server v1.4.5.8", "", ": Server started", "Listening on port 7777", ": ", "Exception thrown: System.IO.IOException"]) terrariaService.observeLine(ctx, line);
+    await settle();
+    expect(ctx.state.serverEntries).toEqual([
+        { type: "info", content: "Error Logging Enabled." },
+        { type: "info", content: "Terraria Server v1.4.5.8" },
+        { type: "info", content: "Server started" },
+        { type: "info", content: "Listening on port 7777" },
+        { type: "error", content: "Exception thrown: System.IO.IOException" },
+    ]);
+}));
