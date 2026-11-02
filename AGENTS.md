@@ -15,6 +15,7 @@ Paperboard is a dashboard for self-hostable programs. Panels are like the apps. 
 - **Don't touch .paperboard:** The user's .paperboard is theirs, ensure tests don't reach it. Use `PAPERBOARD_DIR`.
 - **Suicide prevention:** Don't `pkill -f`, because that could also kill your own shell.
 - **Always test.** Unless you're certain it'll work fine, always do a manual check to ensure the feature works and looks great.
+- When making Actions, placeholders are the type (etc "Text" or "Channel ID") and not a description (etc "Example Text" "1234567890")
 
 Fixes:
 
