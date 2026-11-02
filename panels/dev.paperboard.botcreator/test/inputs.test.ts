@@ -3,7 +3,7 @@
 import { describe, it, expect } from "bun:test";
 import { ChannelType, GuildScheduledEventEntityType } from "discord.js";
 import { buildPoll, fileFromUrl, listInput, parseMoment, permissionNames } from "../src/discordOps";
-import { channelPermissionChanges, scheduledEventOptions } from "../src/service";
+import { botActions, builderActions, channelPermissionChanges, managementActions, scheduledEventOptions } from "../src/service";
 
 describe("list inputs", () => {
     it("takes a list, or text with one item per line, and commas only where asked", () => {
@@ -83,5 +83,26 @@ describe("scheduled events", () => {
         await expect(scheduledEventOptions(bot, { name: "x", start: later(2), end: later(1), location: "K" })).rejects.toThrow(/ends after/);
         await expect(scheduledEventOptions(bot, { name: "x", start: later(1), channel: "300000000000000001" })).rejects.toThrow(/voice or stage/);
         expect(() => parseMoment("next tuesday", "Starts")).toThrow(/Starts is a date and time/);
+    });
+});
+
+describe("input placeholders", () => {
+    // AGENTS.md: a placeholder is the input's type ("Text", "Channel ID"),
+    // never an example value ("24", "https://…") or a sentence about it
+    const NOT_A_TYPE = /^(one|no|keep|every|any|leave|e\.g)\b/i;
+    const defs = [...botActions, ...builderActions, ...managementActions({ stored: { id: "bot" } } as any)];
+
+    it("every action input's placeholder names its type", () => {
+        const offenders: string[] = [];
+        for (const def of defs as any[]) {
+            for (const [key, input] of Object.entries<any>(def.inputs ?? {})) {
+                const placeholder = input.placeholder;
+                if (placeholder === undefined) continue;
+                if (!/^[A-Z][A-Za-z]*( [A-Za-z]+){0,2}$/.test(placeholder) || NOT_A_TYPE.test(placeholder)) {
+                    offenders.push(`${def.id}.${key}: "${placeholder}"`);
+                }
+            }
+        }
+        expect(offenders).toEqual([]);
     });
 });

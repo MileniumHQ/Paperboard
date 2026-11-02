@@ -1904,8 +1904,8 @@ export const laterActions = [
         inputs: {
             channel: INPUTS.channel,
             question: { type: "string", label: "Question", placeholder: "Question", required: true },
-            answers: { type: "list<string>", label: "Answers", placeholder: "One per line", required: true },
-            hours: { type: "number", label: "Hours", placeholder: "24" },
+            answers: { type: "list<string>", label: "Answers", placeholder: "Answers", required: true },
+            hours: { type: "number", label: "Hours", placeholder: "Hours" },
             multiple: { type: "boolean", label: "Allow several answers", default: false },
         },
         output: { type: "discord-message", label: "Message" },
@@ -1945,12 +1945,12 @@ export const laterActions = [
         id: "send-file",
         name: "Send File",
         category: "Messages",
-        description: "Sends a file from a web address to a channel, with an optional message. Discord downloads it; at most 10 MB unless the server is boosted",
+        description: "Sends a file from a web address to a channel, with an optional message; File name renames it. Discord downloads it; at most 10 MB unless the server is boosted",
         template: "Send file {url} to {channel}",
         inputs: {
             channel: INPUTS.channel,
-            url: { type: "url", label: "File address", placeholder: "https://…", required: true },
-            name: { type: "string", label: "File name", placeholder: "Keep its name" },
+            url: { type: "url", label: "File address", placeholder: "URL", required: true },
+            name: { type: "string", label: "File name", placeholder: "File name" },
             content: INPUTS.content,
         },
         output: { type: "discord-message", label: "Message" },
@@ -2079,7 +2079,7 @@ export const laterActions = [
         template: "Set {user}'s nickname to {nickname}",
         inputs: {
             user: INPUTS.user,
-            nickname: { type: "string", label: "Nickname", placeholder: "No nickname" },
+            nickname: { type: "string", label: "Nickname", placeholder: "Nickname" },
             reason: INPUTS.reason,
             guildId: INPUTS.guildId,
         },
@@ -2152,10 +2152,10 @@ export const laterActions = [
         template: "Set {target}'s permissions in {channel}",
         inputs: {
             channel: INPUTS.channel,
-            target: { type: "string", label: "Role or user", placeholder: "Role id, user id, or everyone", required: true },
-            allow: { type: "list<string>", label: "Allow", placeholder: "SendMessages, ViewChannel" },
-            deny: { type: "list<string>", label: "Deny", placeholder: "SendMessages" },
-            reset: { type: "list<string>", label: "Reset", placeholder: "AttachFiles" },
+            target: { type: "string", label: "Role or user", placeholder: "Role or user", required: true },
+            allow: { type: "list<string>", label: "Allow", placeholder: "Permissions" },
+            deny: { type: "list<string>", label: "Deny", placeholder: "Permissions" },
+            reset: { type: "list<string>", label: "Reset", placeholder: "Permissions" },
             reason: INPUTS.reason,
         },
         output: { type: "boolean", label: "Success" },
@@ -2210,10 +2210,10 @@ export const laterActions = [
         template: "Schedule {name}",
         inputs: {
             name: INPUTS.name,
-            start: { type: "string", label: "Starts", placeholder: "2026-11-02T18:00:00Z", required: true },
-            end: { type: "string", label: "Ends", placeholder: "2026-11-02T20:00:00Z" },
+            start: { type: "string", label: "Starts", placeholder: "Time", required: true },
+            end: { type: "string", label: "Ends", placeholder: "Time" },
             channel: { ...INPUTS.channel, label: "Voice channel", required: false },
-            location: { type: "string", label: "Location", placeholder: "Where, when not in a channel" },
+            location: { type: "string", label: "Location", placeholder: "Location" },
             description: { type: "string", label: "Description", placeholder: "Description" },
             guildId: INPUTS.guildId,
         },
@@ -2668,7 +2668,7 @@ async function deleteCommand(entry: BotEntry, rawId: unknown): Promise<CommandMu
 // values) but in the bot's project for programs and the Agents panel: the
 // ids every other action takes, looked up by name, and the bot's commands.
 // A command made here is an event in the same project, ready for a flow.
-function managementActions(entry: BotEntry): ActionDefinition[] {
+export function managementActions(entry: BotEntry): ActionDefinition[] {
     const client = () => entry.session.requireClient();
     const commandEvent = (command: SlashCommandDefinition) => projectActionId(entry.stored.id, commandTriggerId(command));
     const withEvent = (result: CommandMutationResult) => ({ ...result, event: commandEvent(result.command) });
@@ -2759,7 +2759,7 @@ function managementActions(entry: BotEntry): ActionDefinition[] {
             inputs: {
                 name: INPUTS.name,
                 description: { type: "string", label: "Description", placeholder: "Description", required: true },
-                scope: { type: "string", label: "Server ID", placeholder: "Every server" },
+                scope: { type: "string", label: "Server ID", placeholder: "Server ID" },
                 options: { type: "list<object>", label: "Options" },
                 userInstall: { type: "boolean", label: "Usable in DMs", default: false },
             },
