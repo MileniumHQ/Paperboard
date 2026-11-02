@@ -2,12 +2,11 @@ import Chat from "../../components/Chat";
 import PlayerAvatar from "../../components/PlayerAvatar";
 import type { GameDefinition } from "../types";
 import type { GameUI } from "../uiTypes";
-import SteamSetup from "../steam/SteamSetup";
 import SteamVersions from "../steam/SteamVersions";
 import { sourceActions, type SourceGameSpec } from "./index";
 import SourceOverview from "./Overview";
 import SourcePlayers from "./Players";
-import SourcePlayStep from "./PlayStep";
+import SourceSetup from "./Setup";
 import SourceMaps from "./Maps";
 import SourceMods from "./Mods";
 
@@ -16,7 +15,7 @@ export function sourceUI(spec: SourceGameSpec, game: GameDefinition): GameUI {
     return {
         create(ctx) {
             return {
-                setup: (props) => <SteamSetup name={spec.name} infoAction={ids.info} installAction={ids.install} choose={(register) => <SourcePlayStep spec={spec} register={register} />} onComplete={props.onComplete} />,
+                setup: (props) => <SourceSetup spec={spec} onComplete={props.onComplete} />,
                 tab(id) {
                     switch (id) {
                         case "overview": return <SourceOverview spec={spec} game={game} />;

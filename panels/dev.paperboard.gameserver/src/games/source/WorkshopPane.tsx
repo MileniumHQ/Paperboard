@@ -81,7 +81,7 @@ export default function WorkshopPane(props: {
                             when={found().items.length > 0}
                             fallback={<PaperText size={2} color="text-subtle">{found().hidden > 0 ? "The Workshop has nothing but items that are not maps for that." : "No Workshop maps matched."}</PaperText>}
                         >
-                            <MapCards bare maps={choices()} pictures={{ of: () => undefined, titleOf: () => undefined, source: () => null, error: () => "", retry: () => {} }} disabled={props.disabled} onPick={pick} />
+                            <MapCards bare maps={choices()} pictures={{ of: () => undefined, titleOf: () => undefined, all: () => [], source: () => null, error: () => "", retry: () => {} }} disabled={props.disabled} onPick={pick} />
                         </Show>
                         <Show when={found().hidden > 0 && found().items.length > 0}>
                             <PaperText size={1} color="text-subtle">{found().hidden} {found().hidden === 1 ? "result is" : "results are"} not {found().hidden === 1 ? "a map" : "maps"} and left out.</PaperText>
