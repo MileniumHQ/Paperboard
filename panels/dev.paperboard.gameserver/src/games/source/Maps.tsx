@@ -1,5 +1,6 @@
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
 import {
+    PaperAvatar,
     PaperButton,
     PaperCard,
     PaperEmptyState,
@@ -9,13 +10,13 @@ import {
     PaperModal,
     PaperPageHeader,
     PaperQuote,
-    PaperSelectMenu,
-    PaperSelectMenuItem,
     PaperText,
 } from "@mileniumhq/paperui";
 import { serverBridge, serverLevel, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { mapMode, sourceActions, type SourceGameSpec, type SourceMapCycle } from "./index";
+import MapCards, { MapPicturesNote, mapChoices } from "./MapCards";
+import { createMapPictures } from "./useMapPictures";
 
 // The maps a server plays through, in order. The server reads a map cycle
 // file; until the rotation is edited here that is the game's own or one the
@@ -30,6 +31,8 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
     const [error, setError] = createSignal<{ title: string; message: string } | null>(null);
     const [notice, setNotice] = createSignal("");
     const [resetting, setResetting] = createSignal(false);
+    const [adding, setAdding] = createSignal(false);
+    const pictures = createMapPictures(props.spec);
 
     const load = async () => {
         setLoadError("");
@@ -149,20 +152,9 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                         </Show>
 
                         <Show when={current().custom && editable()}>
-                            <PaperSelectMenu
-                                name="source-map-cycle-add"
-                                fullWidth
-                                searchable
-                                searchPlaceholder="Search maps"
-                                placeholder="Add a map"
-                                disabled={working() || addable().length === 0}
-                                value=""
-                                onValueChange={(value) => add(String(value))}
-                            >
-                                <For each={addable()}>
-                                    {(name) => <PaperSelectMenuItem value={name} description={label(name)} keywords={label(name)}>{name}</PaperSelectMenuItem>}
-                                </For>
-                            </PaperSelectMenu>
+                            <PaperFlex>
+                                <PaperButton variant="primary" disabled={working() || addable().length === 0} onClick={() => setAdding(true)}>Add maps</PaperButton>
+                            </PaperFlex>
                         </Show>
 
                         <Show
@@ -187,7 +179,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                         {(name, index) => (
                                             <PaperListItem
                                                 value={name}
-                                                icon="map"
+                                                icon={<PaperAvatar size="large" shape="square" src={pictures.of(name)} alt={name} fallbackIcon="map" />}
                                                 onClose={current().custom && editable() ? () => remove(name) : undefined}
                                                 description={[installed().has(name) ? label(name) : "Not installed", serverLevel() === name ? "Playing now" : undefined].filter(Boolean).join(" · ")}
                                                 actions={
@@ -206,9 +198,26 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                 </PaperList>
                             </PaperCard>
                         </Show>
+                        <MapPicturesNote pictures={pictures} />
                     </PaperFlex>
                 )}
             </Show>
+
+            <PaperModal
+                open={adding()}
+                onClose={() => setAdding(false)}
+                title="Add maps"
+                size="large"
+                footer={<PaperButton variant="primary" onClick={() => setAdding(false)}>Done</PaperButton>}
+            >
+                <PaperText preset="body">Each map you choose joins the end of the rotation.</PaperText>
+                <Show when={error()}>
+                    {(failure) => <PaperQuote variant="danger" icon="warning" title={failure().title} onDismiss={() => setError(null)}>{failure().message}</PaperQuote>}
+                </Show>
+                <Show when={addable().length > 0} fallback={<PaperText color="text-subtle">Every map the server has is in the rotation.</PaperText>}>
+                    <MapCards maps={mapChoices(props.spec, addable())} pictures={pictures} disabled={working()} onPick={add} />
+                </Show>
+            </PaperModal>
 
             <PaperModal
                 open={resetting()}

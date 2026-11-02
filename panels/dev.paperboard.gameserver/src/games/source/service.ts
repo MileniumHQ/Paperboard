@@ -19,6 +19,7 @@ import { SOURCEMOD_PACKAGES, sourceActions, type SourceGameSpec, type SourceMapC
 import { pluginFile, SourceMod, SOURCEMOD_MISSING } from "./sourcemod";
 import { cvarValue, mapName, optionValue, secretsCfg, serverCfg } from "./config";
 import { cfgMapCycleFile, checkRotation, DEFAULT_MAPCYCLE, findMap, installedMaps, mapCycleFile, PAPERBOARD_MAPCYCLE, readServerCycle } from "./mapcycle";
+import { mapPictures } from "./mapPictures";
 import { consoleLine, isErrorLine, linePlayer, parseLogLine, parseStatus, steamId, type SourceLogEvent } from "./log";
 import { SourceRcon, RconError, RconNoAnswer } from "./rcon";
 import { bannedUserCfg, noStats, SourceRoster, type SourceStats } from "./roster";
@@ -467,6 +468,10 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 await smLive(ctx, "sm_reloadadmins");
             })),
             action(ids.maps, `${spec.name} maps`, async () => installedMaps(await gameDir())),
+            action(ids.mapPictures, `${spec.name} map pictures`, async () => {
+                if (!spec.mapPictures) throw new Error(`${spec.name} has no source of map pictures`);
+                return mapPictures(spec.mapPictures);
+            }),
             action(ids.mapCycle, `${spec.name} map rotation`, () => mapCycleView()),
             action(ids.mapCycleSet, "Set the map rotation", async (ctx, { maps }) => {
                 if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);

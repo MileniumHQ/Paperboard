@@ -40,6 +40,8 @@ export const TF2: SourceGameSpec = {
         mvm: "Mann vs. Machine", pass: "PASS Time", pd: "Player Destruction", pl: "Payload", plr: "Payload Race", rd: "Robot Destruction",
         sd: "Special Delivery", tc: "Territorial Control", tow: "Tug of War", tr: "Training", vsh: "Versus Saxton Hale", zi: "Zombie Infection",
     },
+    // the server ships no map pictures; the wiki shows one of each map it installs
+    mapPictures: { name: "Official Team Fortress Wiki", page: "https://wiki.teamfortress.com/wiki/List_of_maps" },
 };
 
 export const tf2 = sourceGame(TF2);

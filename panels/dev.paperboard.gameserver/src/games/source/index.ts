@@ -46,6 +46,25 @@ export interface SourceGameSpec {
     roleNames?: Readonly<Record<string, string>>;
     /** Game mode names by map prefix ("ctf" for ctf_2fort), shown beside each map. */
     mapModes?: Readonly<Record<string, string>>;
+    /**
+     * A wiki page listing the game's maps with a picture each, read at runtime
+     * (the dedicated server ships none). Maps without one are shown without.
+     */
+    mapPictures?: SourceMapPictureSource;
+}
+
+/** Where a game's map pictures come from: a MediaWiki list page of maps, a file name and a thumbnail to a row. */
+export interface SourceMapPictureSource {
+    /** who the pictures are credited to, named beside them */
+    name: string;
+    /** the page, an https address */
+    page: string;
+}
+
+/** The pictures a game's wiki shows, by map name, and where they came from. */
+export interface SourceMapPictures {
+    source: { name: string; url: string };
+    pictures: Record<string, string>;
 }
 
 /** The game mode a map's prefix names, if the game lists it. */
@@ -64,6 +83,7 @@ export const sourceActions = (id: string) => ({
     unban: `${id}-unban`,
     changeMap: `${id}-change-map`,
     maps: `${id}-maps`,
+    mapPictures: `${id}-map-pictures`,
     mapCycle: `${id}-map-cycle`,
     mapCycleSet: `${id}-map-cycle-set`,
     sourcemod: `${id}-sourcemod`,

@@ -1,11 +1,13 @@
-import { createSignal, For, Show } from "solid-js";
-import { PaperAvatar, PaperButton, PaperModal, PaperQuote, PaperSelectMenu, PaperSelectMenuItem, PaperText } from "@mileniumhq/paperui";
+import { createSignal, Show } from "solid-js";
+import { PaperAvatar, PaperButton, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { gameSettings, serverBridge, serverLevel, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import type { GameDefinition } from "../types";
 import { ACTION_IDS as A } from "../../service/contract";
 import { mapMode, sourceActions, type SourceGameSpec } from "./index";
+import MapCards, { mapChoices } from "./MapCards";
+import { createMapPictures } from "./useMapPictures";
 
 export default function SourceOverview(props: { spec: SourceGameSpec; game: GameDefinition }) {
     const ids = sourceActions(props.spec.id);
@@ -17,6 +19,7 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
     const [choice, setChoice] = createSignal("");
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal("");
+    const pictures = createMapPictures(props.spec);
 
     const edit = async () => {
         setChoice(map());
@@ -58,7 +61,7 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
                 open={open()}
                 onClose={() => setOpen(false)}
                 title="Change map"
-                size="small"
+                size="large"
                 footer={
                     <>
                         <PaperButton variant="text" onClick={() => setOpen(false)}>Cancel</PaperButton>
@@ -73,20 +76,9 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
                         ? "Everyone moves to the new map now, and the server starts on it next time."
                         : "The server starts on this map."}
                 </PaperText>
-                <PaperSelectMenu
-                    name="source-map"
-                    fullWidth
-                    searchable
-                    searchPlaceholder="Search maps"
-                    placeholder={maps().length ? "Choose a map" : "Loading maps..."}
-                    disabled={maps().length === 0}
-                    value={choice()}
-                    onValueChange={(value) => setChoice(String(value))}
-                >
-                    <For each={maps()}>
-                        {(name) => <PaperSelectMenuItem value={name} description={label(name)} keywords={label(name)}>{name}</PaperSelectMenuItem>}
-                    </For>
-                </PaperSelectMenu>
+                <Show when={maps().length > 0} fallback={<Show when={!error()}><PaperText color="text-subtle">Loading maps...</PaperText></Show>}>
+                    <MapCards maps={mapChoices(props.spec, maps())} value={choice()} pictures={pictures} disabled={busy()} onPick={setChoice} />
+                </Show>
                 <Show when={error()}>
                     <PaperQuote variant="danger" icon="warning" title="Map not changed">{error()}</PaperQuote>
                 </Show>
