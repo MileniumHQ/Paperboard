@@ -6,6 +6,7 @@
 // the program's output and exit code straight through.
 import * as cp from "child_process";
 import * as fs from "fs";
+import { exactExitCode, exitWithCode } from "./exitStatus";
 
 export const CONSOLE_RELAY_FLAG = "--console-relay";
 
@@ -43,5 +44,13 @@ export function runConsoleRelay(command: string, args: readonly string[]): void 
         console.error(`Could not start ${command}: ${err.message}`);
         process.exit(1);
     });
-    child.on("exit", (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
+    child.on("exit", (code, signal) => {
+        if (code === null) return exitWithCode(signal ? 1 : 0);
+        try {
+            exitWithCode(exactExitCode(child.pid!, code));
+        } catch (err) {
+            console.error(`Could not read the exit code of ${command}, so it is reported as ${code}: ${(err as Error).message}`);
+            exitWithCode(code);
+        }
+    });
 }

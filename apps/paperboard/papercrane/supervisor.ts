@@ -8,7 +8,7 @@ import { spawnPty, getDefaultShell } from "./pty";
 import { workloadEnv } from "./workloadEnv";
 import { IPtyProcess } from "./types";
 import { logger } from "./logger";
-import { workloadExitCode } from "./exitStatus";
+import { exactExitCode, workloadExitCode } from "./exitStatus";
 import { batchFileRefusal } from "./batchFile";
 import { killWorkload } from "./processTree";
 import { redactEnvValues, unrefTimer } from "./storage";
@@ -596,7 +596,19 @@ export async function runSupervisor(procId: string): Promise<void> {
             childProcess.stderr?.setEncoding("utf8");
             childProcess.stdout?.on("data", (chunk: string) => emitOutput("stdout", chunk));
             childProcess.stderr?.on("data", (chunk: string) => emitOutput("stderr", chunk));
-            childProcess.on("close", (code, signal) => workloadExited(workloadExitCode(code, signal)));
+            // the code is read when the child exits, while its handle is still held
+            let exactCode: number | null = null;
+            childProcess.on("exit", (code) => {
+                if (code === null || !childPid) return;
+                try {
+                    exactCode = exactExitCode(childPid, code);
+                } catch (err) {
+                    const message = `Could not read the exit code of ${command}, so it is reported as ${code}: ${(err as Error).message}`;
+                    logger.error(`[supervisor:${procId}] ${message}`);
+                    emitOutput("stderr", `\n[Paperboard] ${message}\n`);
+                }
+            });
+            childProcess.on("close", (code, signal) => workloadExited(workloadExitCode(exactCode ?? code, signal)));
             childProcess.on("error", (err) => {
                 emitOutput("stderr", `\n[Process Error] ${err.message}\n`);
                 workloadExited(1);
