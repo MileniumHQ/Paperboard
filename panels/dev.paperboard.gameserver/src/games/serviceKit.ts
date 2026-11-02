@@ -137,23 +137,38 @@ export function redact(line: string, secrets: readonly string[]): string {
 }
 
 const CONSOLE_LINES = 1000;
+/** A progress line's step, as "Loading world data" for "Loading world data: 27%"; null for any other line. */
+export function progressStep(line: string): string | null {
+    const match = /^(.*\D)\s*:?\s*\d{1,3}(?:\.\d+)?%$/.exec(line.trim());
+    return match ? match[1]!.replace(/[\s:]+$/, "") : null;
+}
+
 /**
  * Console lines gathered for a tenth of a second and published together, so a
  * chatty server costs one state update per batch rather than one per line.
+ * A progress line replaces the one before it of the same step: a start shows
+ * "Loading world data: 100%" once, not a hundred times.
  */
 export class ConsoleBuffer {
     private pending: string[] = [];
     private timer: ReturnType<typeof setTimeout> | null = null;
     constructor(private readonly isError: (line: string) => boolean) {}
     push(ctx: Context, line: string) {
+        const step = progressStep(line);
+        const previous = this.pending.at(-1);
+        if (step !== null && previous !== undefined && progressStep(previous) === step) this.pending = this.pending.slice(0, -1);
         this.pending = [...this.pending, line].slice(-CONSOLE_LINES);
         if (this.timer) return;
         this.timer = setTimeout(() => {
             this.timer = null;
             const lines = this.pending;
             this.pending = [];
+            // checked as it publishes: a line written in between keeps the old progress line
+            const step = progressStep(lines[0]!);
+            const last = ctx.state.serverEntries.at(-1);
+            const published = step !== null && last && progressStep(String(last.content)) === step ? ctx.state.serverEntries.slice(0, -1) : ctx.state.serverEntries;
             const entries: PaperConsoleEntry[] = lines.map((content) => ({ type: this.isError(content) ? "error" : "info", content }));
-            ctx.setState({ serverEntries: [...ctx.state.serverEntries, ...entries].slice(-CONSOLE_LINES) });
+            ctx.setState({ serverEntries: [...published, ...entries].slice(-CONSOLE_LINES) });
         }, 100);
     }
     dispose() {

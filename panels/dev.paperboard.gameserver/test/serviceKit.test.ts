@@ -98,6 +98,41 @@ describe("the console", () => {
         await new Promise((r) => setTimeout(r, 150));
         expect(updates).toBe(1);
     });
+
+    test("a progress count shows as one line that counts up, not a line per step", async () => {
+        let state = { serverEntries: [] as { type: string; content: string }[] };
+        const ctx = { get state() { return state; }, setState(patch: any) { state = { ...state, ...patch }; } } as any;
+        const buffer = new ConsoleBuffer(() => false);
+        const wait = () => new Promise((r) => setTimeout(r, 150));
+        // as Terraria prints a start
+        buffer.push(ctx, "Resetting game objects 1%");
+        buffer.push(ctx, "Resetting game objects 2%");
+        await wait();
+        buffer.push(ctx, "Resetting game objects 100%");
+        for (let n = 1; n <= 100; n++) buffer.push(ctx, `Loading world data: ${n}%`);
+        buffer.push(ctx, "Settling liquids 50%");
+        await wait();
+        buffer.push(ctx, "Settling liquids 100%");
+        await wait();
+        // a line written between two of a step's counts keeps the earlier count
+        buffer.push(ctx, "Validating world save: 10%");
+        await wait();
+        state = { serverEntries: [...state.serverEntries, { type: "warn", content: "[Server] note" }] };
+        buffer.push(ctx, "Validating world save: 20%");
+        buffer.push(ctx, "Server started");
+        buffer.push(ctx, "Players: 10% off at the shop");
+        await wait();
+        expect(state.serverEntries.map((e) => e.content)).toEqual([
+            "Resetting game objects 100%",
+            "Loading world data: 100%",
+            "Settling liquids 100%",
+            "Validating world save: 10%",
+            "[Server] note",
+            "Validating world save: 20%",
+            "Server started",
+            "Players: 10% off at the shop",
+        ]);
+    });
 });
 
 describe("computers each game runs on", () => {
