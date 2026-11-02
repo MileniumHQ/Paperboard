@@ -1,4 +1,5 @@
 import type { SourceOption } from "./index";
+import { PAPERBOARD_MAPCYCLE } from "./mapcycle";
 
 // Source config files and RCON commands are console lines: a quote ends a
 // value and a semicolon or newline starts another command, and neither can be
@@ -23,6 +24,7 @@ export function optionValue(option: SourceOption, saved: Record<string, unknown>
  * The server.cfg Paperboard generates into the install. Source runs it on
  * every map load, after the map's own settings. A server.cfg the user keeps in
  * the server folder follows as paperboard_user.cfg, so it has the last word.
+ * A map rotation set in Paperboard (saved.mapCycle) is the server's map cycle.
  */
 export function serverCfg(options: readonly SourceOption[], saved: Record<string, unknown>, user: boolean): string {
     const lines = ["// Written by Paperboard at each start. Edit Options, or server.cfg in the server folder.", "log on", "sv_logecho 1", "sv_logfile 1", "sv_rcon_log 0", "sv_rcon_whitelist_address 127.0.0.1"];
@@ -31,6 +33,7 @@ export function serverCfg(options: readonly SourceOption[], saved: Record<string
         const value = optionValue(option, saved);
         if (value !== undefined) lines.push(`${option.cvar} ${cvarValue(value, option.label)}`);
     }
+    if (Array.isArray(saved.mapCycle)) lines.push(`mapcyclefile ${PAPERBOARD_MAPCYCLE}`);
     lines.push("exec banned_user.cfg");
     if (user) lines.push("exec paperboard_user.cfg");
     return `${lines.join("\n")}\n`;

@@ -15,9 +15,10 @@ import {
 import type { GameDefinition } from "../types";
 import type { GameService } from "../serviceTypes";
 import { addonStageDir } from "../../core/addonUpload";
-import { SOURCEMOD_PACKAGES, sourceActions, type SourceGameSpec, type SourceModView } from "./index";
+import { SOURCEMOD_PACKAGES, sourceActions, type SourceGameSpec, type SourceMapCycle, type SourceModView } from "./index";
 import { pluginFile, SourceMod, SOURCEMOD_MISSING } from "./sourcemod";
 import { cvarValue, mapName, optionValue, secretsCfg, serverCfg } from "./config";
+import { cfgMapCycleFile, checkRotation, DEFAULT_MAPCYCLE, findMap, installedMaps, mapCycleFile, PAPERBOARD_MAPCYCLE, readServerCycle } from "./mapcycle";
 import { consoleLine, isErrorLine, linePlayer, parseLogLine, parseStatus, steamId, type SourceLogEvent } from "./log";
 import { SourceRcon, RconError, RconNoAnswer } from "./rcon";
 import { bannedUserCfg, noStats, SourceRoster, type SourceStats } from "./roster";
@@ -110,8 +111,25 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         const hasUser = await exists(user);
         if (hasUser) await fs.copyFile(user, path.join(dir, "paperboard_user.cfg"));
         else await fs.rm(path.join(dir, "paperboard_user.cfg"), { force: true });
-        await fs.writeFile(path.join(dir, "server.cfg"), serverCfg(options, await settings(), hasUser));
+        const saved = await settings();
+        await fs.writeFile(path.join(dir, "server.cfg"), serverCfg(options, saved, hasUser));
         await fs.writeFile(path.join(dir, "banned_user.cfg"), bannedUserCfg(await roster().bans()));
+        if (Array.isArray(saved.mapCycle)) await fs.writeFile(path.join(dir, PAPERBOARD_MAPCYCLE), mapCycleFile(saved.mapCycle as string[]));
+        else await fs.rm(path.join(dir, PAPERBOARD_MAPCYCLE), { force: true });
+    }
+    /** What a server.cfg in the server folder sets mapcyclefile to; it has the last word over the rotation set here. */
+    async function userMapCycleFile(): Promise<string | null> {
+        const user = path.join(await root(), "server.cfg");
+        return (await exists(user)) ? cfgMapCycleFile(await fs.readFile(user, "utf8")) : null;
+    }
+    async function mapCycleView(): Promise<SourceMapCycle> {
+        const game = await gameDir();
+        const installed = await installedMaps(game);
+        const saved = (await settings()).mapCycle;
+        const overriddenBy = await userMapCycleFile();
+        if (Array.isArray(saved)) return { maps: saved as string[], custom: true, file: `cfg/${PAPERBOARD_MAPCYCLE}`, installed, overriddenBy };
+        const read = await readServerCycle(game, overriddenBy ?? DEFAULT_MAPCYCLE);
+        return { maps: read?.maps ?? [], custom: false, file: read?.file ?? null, installed, overriddenBy };
     }
     const secretsFile = async () => path.join(await cfgDir(), "paperboard_secrets.cfg");
     async function removeSecrets() { await fs.rm(await secretsFile(), { force: true }); }
@@ -349,6 +367,8 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
                 if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("Options patch is required");
                 const next = validateOptions(options, spec.name, patch, await settings());
+                // the starting map is chosen from the installed ones; the Overview offers only those
+                if (Object.hasOwn(patch, "map") && !(await findMap(await gameDir(), mapName(patch.map)))) throw new Error(`${patch.map} is not installed`);
                 // refuse what a console line can't hold before anything is saved
                 for (const option of options) if (Object.hasOwn(patch, option.id) && (option.cvar || option.kind === "secret") && patch[option.id] !== "") cvarValue(patch[option.id], option.label);
                 const live: string[] = [];
@@ -446,16 +466,23 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 await sm.setAdmin(id, admin);
                 await smLive(ctx, "sm_reloadadmins");
             })),
-            action(ids.maps, `${spec.name} maps`, async () => {
-                const dir = path.join(await gameDir(), "maps");
-                let entries: string[];
-                try { entries = await fs.readdir(dir); }
-                catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") throw new Error(`Install ${spec.name} in Updates first`); throw err; }
-                return entries.filter((f) => f.endsWith(".bsp")).map((f) => f.slice(0, -4)).filter((m) => m !== "background01" && m !== "itemtest").sort();
+            action(ids.maps, `${spec.name} maps`, async () => installedMaps(await gameDir())),
+            action(ids.mapCycle, `${spec.name} map rotation`, () => mapCycleView()),
+            action(ids.mapCycleSet, "Set the map rotation", async (ctx, { maps }) => {
+                if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
+                const overriddenBy = await userMapCycleFile();
+                if (overriddenBy) throw new Error(`server.cfg in the server folder sets mapcyclefile to ${overriddenBy}, which the server follows over this page. Remove that line to set the rotation here.`);
+                // null hands the rotation back to the game's map cycle file
+                const rotation = maps === null ? null : checkRotation(maps, await installedMaps(await gameDir()));
+                await updateSettings({ mapCycle: rotation });
+                if (await exists(await installDir())) await writeConfigs();
+                // a running server reads the cycle file again when it changes, and the variable once
+                if (online(ctx)) await rcon().exec(`mapcyclefile ${rotation ? PAPERBOARD_MAPCYCLE : DEFAULT_MAPCYCLE}`);
+                return mapCycleView();
             }),
             action(ids.changeMap, "Change map", async (ctx, { map: raw }) => {
                 const map = mapName(raw);
-                if (!(await exists(path.join(await gameDir(), "maps", `${map}.bsp`)))) throw new Error(`${map} is not installed`);
+                if (!(await findMap(await gameDir(), map))) throw new Error(`${map} is not installed`);
                 const running = online(ctx);
                 await updateSettings({ map });
                 if (running) await rcon().exec(`changelevel ${map}`);
@@ -500,7 +527,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             const executable = path.join(install, binary.executable);
             await fs.access(executable, windows ? fs.constants.F_OK : fs.constants.X_OK);
             const map = mapName(optionValue(options.find((o) => o.id === "map")!, saved));
-            if (!(await exists(path.join(await gameDir(), "maps", `${map}.bsp`)))) throw new Error(`The starting map ${map} is not installed; choose another on the Overview`);
+            if (!(await findMap(await gameDir(), map))) throw new Error(`The starting map ${map} is not installed; choose another on the Overview`);
 
             // Linux: Source holds its console output in a buffer when it isn't a terminal,
             // links libraries the computer may lack, and loads Steam's client library from ~/.steam/sdk64

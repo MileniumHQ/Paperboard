@@ -64,6 +64,8 @@ export const sourceActions = (id: string) => ({
     unban: `${id}-unban`,
     changeMap: `${id}-change-map`,
     maps: `${id}-maps`,
+    mapCycle: `${id}-map-cycle`,
+    mapCycleSet: `${id}-map-cycle-set`,
     sourcemod: `${id}-sourcemod`,
     sourcemodSet: `${id}-sourcemod-set`,
     plugin: `${id}-plugin`,
@@ -83,6 +85,20 @@ export interface SourceModView {
     plugins: SourcePlugin[];
 }
 
+/** What the Maps tab shows of the server's map rotation. */
+export interface SourceMapCycle {
+    /** the maps the server plays through, in order, then starts over */
+    maps: string[];
+    /** the rotation was set on the Maps tab; otherwise the server reads `file` */
+    custom: boolean;
+    /** where the rotation is read from, relative to the game folder; null while the server has none */
+    file: string | null;
+    /** the maps the server can load, for choosing and for marking what the rotation lists but the server lacks */
+    installed: string[];
+    /** a mapcyclefile in the server folder's server.cfg, which the server follows over this page; null when none */
+    overriddenBy: string | null;
+}
+
 /** The packages SourceMod comes from, as Origami names them. */
 export const SOURCEMOD_PACKAGES = [
     { id: "metamod-source", purpose: "Metamod:Source, which loads SourceMod into the server" },
@@ -95,6 +111,7 @@ export function sourceGame(spec: SourceGameSpec): GameDefinition {
         { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
         { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },
         { id: "players", label: "Players", icon: "group", group: "Play", owner: "game", variant: "fill", width: "full" },
+        { id: "maps", label: "Maps", icon: "map", group: "Play", owner: "game" },
         { id: "versions", label: "Updates", icon: "update", group: "Software", owner: "game" },
         ...(spec.sourcemod ? [{ id: "mods", label: "Mods", icon: "extension", group: "Software", owner: "game" } as const] : []),
         { id: "options", label: "Options", icon: "tune", group: "Server", owner: "shared" },
