@@ -70,6 +70,17 @@ try {
     checks.readsWhileShown = reads - readsShown;
     checks.mutationsWhileIdle = mutations;
     checks.refused = refused.filter((line) => line.includes("Error"));
+    // every tab but the overview opens under its own page header
+    const unheaded: string[] = [];
+    for (const label of ["Chat", "Players", "Updates", "Options", "Files", "Logs", "Backups", "Advanced"]) {
+        const entry = [...document.querySelectorAll<HTMLElement>("*")].find((el) => el.children.length === 0 && el.textContent?.trim() === label);
+        if (!entry) throw new Error(`No ${label} menu entry`);
+        entry.click();
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const headers = [...document.querySelectorAll<HTMLElement>("[class*='PaperPageHeader']")];
+        if (!headers.some((header) => header.innerText.includes(label))) unheaded.push(label);
+    }
+    checks.unheaded = unheaded;
 } catch (err) {
     error = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
 }

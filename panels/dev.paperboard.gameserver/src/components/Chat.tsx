@@ -14,6 +14,7 @@ import {
     PaperInput,
     PaperButton,
     PaperIcon,
+    PaperPageHeader,
     PaperQuote,
 } from "@mileniumhq/paperui";
 import { errorMessage } from "../lib/failure";
@@ -83,6 +84,7 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
 
     return (
         <>
+            <PaperPageHeader icon="chat" title="Chat" />
             <PaperCard grow minHeight={0}>
                 <PaperFlex
                     ref={(el) => (scrollRef = el)}

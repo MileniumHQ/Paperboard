@@ -10,8 +10,8 @@ const behaviorTest = chrome ? test : test.skip;
 describe("server page", () => {
     behaviorTest(
         chrome
-            ? "options stay put while state arrives, and Palworld state is never described as Minecraft (headless Chrome)"
-            : "options stay put while state arrives, and Palworld state is never described as Minecraft (skipped: no Chrome)",
+            ? "options stay put while state arrives, every tab has its page header, and Palworld state is never described as Minecraft (headless Chrome)"
+            : "options stay put while state arrives, every tab has its page header, and Palworld state is never described as Minecraft (skipped: no Chrome)",
         async () => {
             if (!chrome) return;
             const results = await runBrowserFixture(chrome, "test/fixtures/gamePage.html?server=s1", {});
@@ -22,6 +22,7 @@ describe("server page", () => {
             expect(c.optionsShown).toBe(true);
             expect(c.readsWhileShown, "the options tab kept reloading itself").toBe(0);
             expect(c.mutationsWhileIdle, "the page kept re-rendering").toBe(0);
+            expect(c.unheaded, "these tabs open without a page header").toEqual([]);
         },
         120_000,
     );
