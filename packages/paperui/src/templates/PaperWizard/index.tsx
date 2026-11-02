@@ -32,6 +32,8 @@ export interface PaperWizardStepProps extends JSX.HTMLAttributes<HTMLDivElement>
     name?: string;
     index: number;
     canProceed?: boolean;
+    /** no Back button on this step, for one that can't be undone (a download that is done) */
+    hideBack?: boolean;
     onStepActive?: () => void;
 }
 
@@ -47,6 +49,7 @@ export interface WizardContextType {
     optionsShown: () => boolean;
     setOptionsShown: (show: boolean) => void;
     setCanProceed: (canProceed: boolean) => void;
+    setBackHidden: (hidden: boolean) => void;
     isLastStep: () => boolean;
     isFirstStep: () => boolean;
     registerStep: (index: number) => void;
@@ -75,6 +78,7 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
     const [totalSteps, setTotalSteps] = createSignal(1);
     const [optionsShown, setOptionsShown] = createSignal(true);
     const [canProceedCurrent, setCanProceedCurrent] = createSignal(true);
+    const [backHiddenCurrent, setBackHiddenCurrent] = createSignal(false);
 
     const [wizardData, setWizardData] = createSignal<Record<string, any>>({
         ...(local.initialData || {}),
@@ -146,6 +150,7 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
         optionsShown,
         setOptionsShown,
         setCanProceed: setCanProceedCurrent,
+        setBackHidden: setBackHiddenCurrent,
         isLastStep,
         isFirstStep,
         registerStep,
@@ -179,7 +184,7 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
                     }}
                 >
                     <div>
-                        <Show when={!local.hideBack && !isFirstStep()}>
+                        <Show when={!local.hideBack && !backHiddenCurrent() && !isFirstStep()}>
                             <PaperEffect colorless disabled={!optionsShown()}>
                                 <PaperButton
                                     type="button"
@@ -247,6 +252,7 @@ export function PaperWizardStep(props: ParentProps<PaperWizardStepProps>) {
         "name",
         "index",
         "canProceed",
+        "hideBack",
         "onStepActive",
         "class",
         "classList",
@@ -260,6 +266,7 @@ export function PaperWizardStep(props: ParentProps<PaperWizardStepProps>) {
     createEffect(() => {
         if (wizard?.currentStep() === local.index) {
             local.onStepActive?.();
+            wizard.setBackHidden(local.hideBack ?? false);
             if (local.canProceed !== undefined) {
                 wizard.setCanProceed(local.canProceed);
             } else {

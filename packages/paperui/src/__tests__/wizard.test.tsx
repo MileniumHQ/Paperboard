@@ -21,3 +21,24 @@ describe("PaperWizard progress dots", () => {
         expect(progress.getAttribute("aria-valuetext")).toBe("Step 2 of 3");
     });
 });
+
+describe("PaperWizardStep hideBack", () => {
+    test("a step can hide Back while the next step shows it again", async () => {
+        render(() => (
+            <PaperWizard>
+                <PaperWizardStep index={0}>One</PaperWizardStep>
+                <PaperWizardStep index={1} hideBack>Two</PaperWizardStep>
+                <PaperWizardStep index={2}>Three</PaperWizardStep>
+            </PaperWizard>
+        ));
+        fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+        expect(await screen.findByText("Two")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: /Back/ })).toBeNull();
+
+        fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+        expect(await screen.findByText("Three")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: /Back/ }));
+        expect(await screen.findByText("Two")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: /Back/ })).toBeNull();
+    });
+});

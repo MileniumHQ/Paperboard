@@ -115,6 +115,18 @@ export function Example() {
     <PaperText preset="body">You must check the agreement before proceeding.</PaperText>
 </PaperWizardStep>`}
             </PaperCode>
+            <PaperText preset="body">
+                Hide Back on one step with hideBack on its PaperWizardStep, for a step that follows something that can't be undone, such as a finished download.
+                The steps after it show Back again, and going back from them stops at this step.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperWizardStep index={0}>
+    <InstallStep />
+</PaperWizardStep>
+<PaperWizardStep index={1} hideBack>
+    <PaperText preset="body">The download is done; Back would only start it again.</PaperText>
+</PaperWizardStep>`}
+            </PaperCode>
         </PaperFlex>
     );
 }
