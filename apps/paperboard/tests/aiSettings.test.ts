@@ -15,12 +15,18 @@ import { PANEL_ID, UI_ACTION_IDS, type AiState, type Settings } from "../../../p
 
 test("the agent's settings persist and hydrate through the running AI service", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "ai-settings-wire-"));
-    // the service looks for the chosen brain's command on PATH: only Codex is installed here, whatever this machine has
-    const bin = path.join(root, "bin");
-    fs.mkdirSync(bin);
-    fs.writeFileSync(path.join(bin, "codex"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
-    const originalPath = process.env.PATH;
-    process.env.PATH = [bin, path.dirname(process.execPath)].join(path.delimiter);
+    // brains are the daemon's packages: only a signed-in Codex is installed here, whatever this machine has
+    const bin = path.join(root, "packages", "codex", "bin");
+    fs.mkdirSync(bin, { recursive: true });
+    fs.writeFileSync(path.join(bin, "codex"), "#!/bin/sh\necho 'Logged in using ChatGPT'\n", { mode: 0o755 });
+    // the daemon runs a brain's commands under a supervisor: a compiled one that also runs the panel's service
+    const bunExecutable = process.execPath;
+    const launcherSource = path.join(root, "supervisor.ts");
+    const launcher = path.join(root, process.platform === "win32" ? "supervisor.exe" : "supervisor");
+    fs.writeFileSync(launcherSource, `import { runSupervisor } from ${JSON.stringify(path.resolve(import.meta.dir, "../papercrane/supervisor.ts"))}; if (process.argv.includes("--panel-service")) await import(process.argv.at(-1)!); else await runSupervisor(process.argv.at(-1)!);`);
+    const compiled = Bun.spawnSync([bunExecutable, "build", launcherSource, "--compile", "--outfile", launcher]);
+    if (compiled.exitCode !== 0) throw new Error(compiled.stderr.toString());
+    process.execPath = launcher;
     const manager = new PanelServicesManager(root);
     const engine = new PaperCraneEngine(root, manager);
     const auth = new PaperCraneAuth(false, path.join(root, "local"));
@@ -67,7 +73,7 @@ test("the agent's settings persist and hydrate through the running AI service", 
         await manager.waitUntilReady(PANEL_ID);
         expect((await state()).settings).toEqual(settings);
     } finally {
-        process.env.PATH = originalPath;
+        process.execPath = bunExecutable;
         sdk?.close();
         await manager.stopService(PANEL_ID);
         await engine.disposeClients();
