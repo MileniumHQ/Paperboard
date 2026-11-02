@@ -7,7 +7,7 @@ import { appendCapped } from "../../service/types";
 import { ACTION_IDS, TRIGGER_IDS } from "../../service/contract";
 import { validateOptions } from "../options";
 import { installedBuild, steamClientLibrary } from "../steam/steamcmd";
-import { steamInstallActions } from "../steam/installAction";
+import { steamInstallActions, steamUpdateStatus } from "../steam/installAction";
 import {
     ConsoleBuffer, assertHost, exists, gameAction, isLinked, linkFolder, pushChat, readSettings, redact, report,
     serverRoot, serverSecret, settingPort, settled, singleLine, unlinkFolder, updateSettings, writePrivate, type Context,
@@ -335,6 +335,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
     return {
         primaryProcessId: PROC, processIds: [PROC],
         backupExclude: ["install"],
+        updateStatus: () => steamUpdateStatus({ appId: spec.appId, installDir }),
         initialState: () => ({ ...initialServerState(), serverSoftware: spec.id, serverPort: String(spec.defaultPort), serverMotd: "" }),
         actions: async () => { const { sharedActions, backupAction } = await import("../../service/actions"); return [...sharedActions, backupAction,
             action(ACTION_IDS.readGameOptions, "Read options", async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; }),
@@ -361,7 +362,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 return ctx.state.gameSettings;
             }),
             ...steamInstallActions({
-                game, appId: spec.appId, ids: { info: ids.info, install: ids.install },
+                game, appId: spec.appId, ids: { info: ids.info, latest: ids.latest, install: ids.install },
                 installDir, flag: local, loadOptions,
                 async afterInstall() { await linkLogs(); await writeConfigs(); },
             }),

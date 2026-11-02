@@ -3,6 +3,8 @@ import type { LoaderStatus } from "@mileniumhq/paperui";
 import type { InstallLoaderItem } from "../../components/InstallLoaders";
 import { installProgress, serverBridge } from "../../lib/server";
 import { createInstallFlow } from "../installFlow";
+import type { SteamUpdateStatus } from "./installAction";
+export type { SteamUpdateStatus };
 
 /** What a Steam game's install action reports; the setup and Versions screens read it. */
 export interface SteamInstallInfo {

@@ -8,7 +8,7 @@ import { validateOptions } from "../options";
 import { installedBuild } from "../steam/steamcmd";
 import { VISUAL_CPP_X64 } from "../windowsRuntime";
 import { provideWindowsRuntime } from "../windowsRuntimeInstall";
-import { steamInstallActions } from "../steam/installAction";
+import { steamInstallActions, steamUpdateStatus } from "../steam/installAction";
 import type { GameService } from "../serviceTypes";
 import {
     ConsoleBuffer, assertHost, exists, fileStamp, gameAction, linkFolder, offlineBackup, pushChat, readSettings, redact, report,
@@ -205,6 +205,7 @@ export async function save(ctx: Context) {
 export const palworldService: GameService = {
     primaryProcessId: PROC, processIds: [PROC],
     backupExclude: ["install"],
+    updateStatus: () => steamUpdateStatus({ appId: PALWORLD_APP_ID, installDir }),
     initialState: () => ({ ...initialServerState(), serverSoftware: "palworld", serverPort: String(DEFAULT_PORT), serverMotd: "" }),
     actions: async () => { const { sharedActions, backupAction } = await import("../../service/actions"); return [...sharedActions, backupAction,
         gameAction(ACTION_IDS.readGameOptions, "Read options", async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; }),
@@ -224,7 +225,7 @@ export const palworldService: GameService = {
             return ctx.state.gameSettings;
         }),
         ...steamInstallActions({
-            game: palworld, appId: PALWORLD_APP_ID, ids: { info: "palworld-info", install: "palworld-install" },
+            game: palworld, appId: PALWORLD_APP_ID, ids: { info: "palworld-info", latest: "palworld-latest", install: "palworld-install" },
             installDir, flag: local, loadOptions,
             async afterInstall() { await linkSaved(); await ensureIni(); await stripSecrets(); },
         }),

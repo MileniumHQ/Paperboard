@@ -27,6 +27,8 @@ export interface GameService {
     initialize(ctx: Context, running: boolean): Promise<void>;
     dispose(): Promise<void>;
     beforeRemove(): Promise<void>;
+    /** Asks the game's download source whether a newer build than the installed one is out; Steam games have it. Throws when the source cannot be asked. */
+    updateStatus?(ctx: Context): Promise<import("./steam/installAction").SteamUpdateStatus>;
     /** The server's own icon, for games that have one. */
     readIcon?(): Promise<string | null>;
     primaryProcessId: string;

@@ -1,12 +1,12 @@
-import { installApp, installedBuild } from "./steamcmd";
+import { installApp, installedBuild, latestBuild } from "./steamcmd";
 import { assertHost, exclusive, gameAction, hostSupportHere, readSettings, updateSettings, type BusyFlag, type Context } from "../serviceKit";
 import type { GameDefinition } from "../types";
 
 export interface SteamInstallSpec {
     game: GameDefinition;
     appId: number;
-    /** Action ids: the install's facts, and install or update. */
-    ids: { info: string; install: string };
+    /** Action ids: the install's facts, its newest build on Steam, and install or update. */
+    ids: { info: string; latest: string; install: string };
     installDir(): Promise<string>;
     flag(): BusyFlag;
     /** The game's own setup after each download, such as links and generated settings. */
@@ -37,7 +37,24 @@ export async function installWithProgress(ctx: Context, appId: number, dir: stri
     }
 }
 
-/** The Updates tab's two Actions for a game downloaded from Steam. */
+/** Whether Steam has a newer public build of a game than the one installed. */
+export interface SteamUpdateStatus {
+    /** the installed build; null before an install */
+    installed: string | null;
+    /** Steam's newest public build */
+    latest: string;
+    /** true only for an install that is behind; a server not installed has nothing to update */
+    updateAvailable: boolean;
+}
+
+/** Asks Steam for the newest build and compares it with the install. Throws when Steam cannot be asked. */
+export async function steamUpdateStatus(spec: Pick<SteamInstallSpec, "appId" | "installDir">, steam: Parameters<typeof latestBuild>[1] = {}): Promise<SteamUpdateStatus> {
+    const installed = await installedBuild(spec.appId, await spec.installDir());
+    const latest = await latestBuild(spec.appId, steam);
+    return { installed, latest, updateAvailable: installed !== null && installed !== latest };
+}
+
+/** The Updates tab's three Actions for a game downloaded from Steam. */
 export function steamInstallActions(spec: SteamInstallSpec) {
     const name = spec.game.name;
     return [
@@ -45,6 +62,7 @@ export function steamInstallActions(spec: SteamInstallSpec) {
             const saved = await readSettings();
             return { host: hostSupportHere(spec.game), build: await installedBuild(spec.appId, await spec.installDir()), version: typeof saved.version === "string" ? saved.version : null };
         }),
+        gameAction(spec.ids.latest, `${name} newest build`, () => steamUpdateStatus(spec)),
         gameAction(spec.ids.install, `Install or update ${name}`, (ctx) => exclusive(ctx, spec.flag(), name, async () => {
             assertHost(spec.game);
             const build = await installWithProgress(ctx, spec.appId, await spec.installDir(), spec.afterInstall);

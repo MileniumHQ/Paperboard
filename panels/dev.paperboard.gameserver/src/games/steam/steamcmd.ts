@@ -188,6 +188,83 @@ export async function installedBuild(appId: number, dir: string): Promise<string
     return build;
 }
 
+type VdfNode = string | Map<string, VdfNode>;
+type VdfToken = { brace: "{" | "}" } | { text: string };
+
+/** Valve's text format (KeyValues): quoted keys with a quoted value or a braced block of more. */
+function parseVdfBlock(text: string): Map<string, VdfNode> {
+    const pattern = /\s*(?:"((?:[^"\\]|\\.)*)"|([{}]))/y;
+    const next = (): VdfToken => {
+        const match = pattern.exec(text);
+        if (!match) throw new Error("Steam's app information is cut short");
+        return match[2] ? { brace: match[2] as "{" | "}" } : { text: match[1]!.replace(/\\(.)/g, "$1") };
+    };
+    const block = (): Map<string, VdfNode> => {
+        const entries = new Map<string, VdfNode>();
+        for (;;) {
+            const key = next();
+            if ("brace" in key) {
+                if (key.brace === "}") return entries;
+                throw new Error("Steam's app information has a stray brace");
+            }
+            const value = next();
+            if ("text" in value) entries.set(key.text, value.text);
+            else if (value.brace === "{") entries.set(key.text, block());
+            else throw new Error(`Steam's app information has no value for "${key.text}"`);
+        }
+    };
+    const open = next();
+    if (!("brace" in open) || open.brace !== "{") throw new Error("Steam's app information does not open a block");
+    return block();
+}
+
+/**
+ * The newest public build of an app, from what `+app_info_print` printed: the
+ * block named for the app (SteamCMD's own log lines surround it), and in it
+ * depots, branches, public, buildid. Throws when the output holds none.
+ */
+export function parseLatestBuild(lines: readonly string[], appId: number): string {
+    const clean = lines.map(l => l.replace(ANSI, ""));
+    const start = clean.findIndex((l, i) => l.trim() === `"${appId}"` && clean[i + 1]?.trim() === "{");
+    if (start < 0) throw new Error(`SteamCMD printed no information for app ${appId}`);
+    const info = parseVdfBlock(clean.slice(start + 1).join("\n"));
+    const child = (node: VdfNode | undefined, key: string) => (node instanceof Map ? node.get(key) : undefined);
+    const id = child(child(child(info.get("depots"), "branches"), "public"), "buildid");
+    if (typeof id !== "string" || !/^\d+$/.test(id)) throw new Error(`Steam lists no public build for app ${appId}`);
+    return id;
+}
+
+/**
+ * The newest public build of a Steam app, asked of Steam anonymously. It
+ * waits for any install in progress: SteamCMD's state is not shareable.
+ */
+export function latestBuild(appId: number, options: { runner?: Runner; workspace?: string } = {}): Promise<string> {
+    if (!Number.isInteger(appId) || appId <= 0) throw new Error(`Not a Steam app id: ${appId}`);
+    return serialized(async () => {
+        const { command, home } = await prepare(options.workspace);
+        if (!options.runner) await stopLeftoverInstaller(undefined, undefined, undefined, STEAMCMD_PROC_ID);
+        const run = options.runner ?? ((r: InstallerRun) => runInstallerProcess(r));
+        await takeSelfUpdate(run, command, home);
+        const lines: string[] = [];
+        const result = await run({
+            id: STEAMCMD_PROC_ID,
+            command,
+            args: ["+login", "anonymous", "+app_info_update", "1", "+app_info_print", String(appId), "+quit"],
+            cwd: path.dirname(command),
+            env: { HOME: home },
+            timeoutMs: TIMEOUT_MS,
+            onLine: line => { lines.push(line); },
+        });
+        try {
+            if (result.exitCode !== 0) throw new Error(`SteamCMD exited with ${result.exitCode}`);
+            return parseLatestBuild(lines, appId);
+        } catch (err) {
+            const tail = result.tail.map(l => l.replace(ANSI, "")).slice(-8).join("\n");
+            throw new Error(`Could not read the newest build of app ${appId}: ${(err as Error).message}${tail ? `\n${tail}` : ""}`);
+        }
+    });
+}
+
 /**
  * Installs or updates a Steam dedicated server anonymously into `dir` and
  * returns the build installed. Only SteamCMD's own success line counts; a

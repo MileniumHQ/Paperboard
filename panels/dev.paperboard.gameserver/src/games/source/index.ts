@@ -55,6 +55,7 @@ export function mapMode(spec: Pick<SourceGameSpec, "mapModes">, map: string): st
 /** Action ids every Source game registers, prefixed with its game id. */
 export const sourceActions = (id: string) => ({
     info: `${id}-info`,
+    latest: `${id}-latest`,
     install: `${id}-install`,
     players: `${id}-players`,
     kick: `${id}-kick`,

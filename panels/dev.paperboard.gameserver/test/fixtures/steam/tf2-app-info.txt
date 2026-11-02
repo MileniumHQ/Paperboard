@@ -1,0 +1,285 @@
+Redirecting stderr to '/home/steam/workspace/home/Steam/logs/stderr.txt'
+ILocalize::AddFile() failed to load file "public/steambootstrapper_english.txt".
+[  0%] Checking for available update...
+[----] Downloading update (0 of 41,429 KB)...
+[  0%] Downloading update (0 of 41,429 KB)...
+[  0%] Downloading update (0 of 41,429 KB)...
+[  0%] Downloading update (3,971 of 41,429 KB)...
+[  9%] Downloading update (9,027 of 41,429 KB)...
+[ 21%] Downloading update (14,465 of 41,429 KB)...
+[ 34%] Downloading update (18,020 of 41,429 KB)...
+[ 43%] Downloading update (21,478 of 41,429 KB)...
+[ 51%] Downloading update (24,568 of 41,429 KB)...
+[ 59%] Downloading update (27,561 of 41,429 KB)...
+[ 66%] Downloading update (29,176 of 41,429 KB)...
+[ 70%] Downloading update (30,795 of 41,429 KB)...
+[ 74%] Downloading update (32,170 of 41,429 KB)...
+[ 77%] Downloading update (33,551 of 41,429 KB)...
+[ 80%] Downloading update (35,225 of 41,429 KB)...
+[ 85%] Downloading update (36,700 of 41,429 KB)...
+[ 88%] Downloading update (38,178 of 41,429 KB)...
+[ 92%] Downloading update (39,810 of 41,429 KB)...
+[ 96%] Downloading update (41,396 of 41,429 KB)...
+[ 99%] Downloading update (41,429 of 41,429 KB)...
+[100%] Download Complete.
+[----] Applying update...
+[----] Extracting package...
+[----] Extracting package...
+[----] Extracting package...
+[----] Extracting package...
+[----] Installing update...
+[----] Installing update...
+[----] Installing update...
+[----] Installing update...
+[----] Installing update...
+[----] Installing update...
+[----] Installing update...
+[----] Installing update...
+[----] Installing update...
+[----] Cleaning up...
+[----] Update complete, launching...
+steamcmd.sh[1341196]: Starting  /home/steam/workspace/bin/linux32/steamcmd
+Redirecting stderr to '/home/steam/workspace/home/Steam/logs/stderr.txt'
+Logging directory: '/home/steam/workspace/home/Steam/logs'
+[  0%] Checking for available updates...
+[----] Downloading update (0 of 41,370 KB)...
+[  0%] Downloading update (999 of 41,370 KB)...
+[  2%] Downloading update (12,104 of 41,370 KB)...
+[ 29%] Downloading update (21,349 of 41,370 KB)...
+[ 51%] Downloading update (24,794 of 41,370 KB)...
+[ 59%] Downloading update (28,247 of 41,370 KB)...
+[ 68%] Downloading update (32,034 of 41,370 KB)...
+[ 77%] Downloading update (35,484 of 41,370 KB)...
+[ 85%] Downloading update (38,927 of 41,370 KB)...
+[ 94%] Downloading update (41,370 of 41,370 KB)...
+[100%] Download complete.
+[----] Installing update...
+[----] Extracting package...
+[----] Extracting package...
+[----] Extracting package...
+[----] Extracting package...
+[----] Installing update...
+[----] Installing update...
+[----] Installing update...
+[----] Installing update...
+[----] Installing update...
+[----] Installing update...
+[----] Installing update...
+[----] Installing update...
+[----] Installing update...
+[----] Cleaning up...
+[----] Update complete, launching Steamcmd...
+UpdateUI: skip show logo
+steamcmd.sh[1341196]: Restarting steamcmd by request...
+steamcmd.sh[1341196]: Starting  /home/steam/workspace/bin/linux32/steamcmd
+Redirecting stderr to '/home/steam/workspace/home/Steam/logs/stderr.txt'
+Logging directory: '/home/steam/workspace/home/Steam/logs'
+[  0%] Checking for available updates...
+[----] Verifying installation...
+UpdateUI: skip show logo
+Steam Console Client (c) Valve Corporation - version 1792617903
+-- type 'quit' to exit --
+Loading Steam API...[0mOK
+[0m
+Connecting anonymously to Steam Public...[0mOK
+[0mWaiting for client config...[0mOK
+[0mWaiting for user info...[0mOK
+[0mAppID : 232250, change number : 40442607/40442607, last change : Sun Nov  1 20:35:32 2026 
+"232250"
+{
+	"common"
+	{
+		"name"		"Team Fortress 2 Dedicated Server"
+		"type"		"Tool"
+		"ReleaseState"		"released"
+		"oslist"		"windows,linux"
+		"parent"		"440"
+		"freetodownload"		"1"
+		"gameid"		"232250"
+	}
+	"extended"
+	{
+		"checkpkgstate"		"1"
+		"developer"		""
+		"gamedir"		"ValveTestApp232250"
+		"homepage"		""
+		"icon"		""
+		"noservers"		"0"
+		"sourcegame"		"1"
+		"state"		"eStateComingSoonNoPreload"
+		"visibleonlywhensubscribed"		"1"
+	}
+	"config"
+	{
+		"verifyupdates"		"1"
+		"contenttype"		"3"
+		"installdir"		"Team Fortress 2 Dedicated Server"
+	}
+	"depots"
+	{
+		"232250"
+		{
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"5757605357257765879"
+					"size"		"15089400440"
+					"download"		"10617189344"
+				}
+				"double-physics-test"
+				{
+					"gid"		"7293141821359455619"
+					"size"		"14643925483"
+					"download"		"9768072080"
+				}
+				"prerelease"
+				{
+					"gid"		"5757605357257765879"
+					"size"		"15089400440"
+					"download"		"10617189344"
+				}
+				"valve_ds"
+				{
+					"gid"		"5757605357257765879"
+					"size"		"15089400440"
+					"download"		"10617189344"
+				}
+			}
+		}
+		"232255"
+		{
+			"config"
+			{
+				"oslist"		"windows"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"256991621203216237"
+					"size"		"268076621"
+					"download"		"99608576"
+				}
+				"double-physics-test"
+				{
+					"gid"		"1097700401760448874"
+					"size"		"267752525"
+					"download"		"98988992"
+				}
+				"prerelease"
+				{
+					"gid"		"256991621203216237"
+					"size"		"268076621"
+					"download"		"99608576"
+				}
+				"valve_ds"
+				{
+					"gid"		"256991621203216237"
+					"size"		"268076621"
+					"download"		"99608576"
+				}
+			}
+		}
+		"232256"
+		{
+			"config"
+			{
+				"oslist"		"linux"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"8265263630080743034"
+					"size"		"156352847"
+					"download"		"46205376"
+				}
+				"double-physics-test"
+				{
+					"gid"		"4812289594469975332"
+					"size"		"156090787"
+					"download"		"45953728"
+				}
+				"prerelease"
+				{
+					"gid"		"8265263630080743034"
+					"size"		"156352847"
+					"download"		"46205376"
+				}
+				"valve_ds"
+				{
+					"gid"		"8265263630080743034"
+					"size"		"156352847"
+					"download"		"46205376"
+				}
+			}
+		}
+		"232257"
+		{
+			"config"
+			{
+				"oslist"		"linux"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"4797708003880603728"
+					"size"		"9989"
+					"download"		"2608"
+				}
+				"double-physics-test"
+				{
+					"gid"		"4797708003880603728"
+					"size"		"9989"
+					"download"		"2608"
+				}
+				"prerelease"
+				{
+					"gid"		"4797708003880603728"
+					"size"		"9989"
+					"download"		"2608"
+				}
+				"valve_ds"
+				{
+					"gid"		"4797708003880603728"
+					"size"		"9989"
+					"download"		"2608"
+				}
+			}
+		}
+		"overridescddb"		"1"
+		"branches"
+		{
+			"public"
+			{
+				"buildid"		"26334371"
+				"timeupdated"		"1793402152"
+				"timebuildupdated"		"1793394618"
+			}
+			"double-physics-test"
+			{
+				"buildid"		"20717414"
+				"description"		"Not compatible with public version"
+				"timeupdated"		"1762557989"
+				"timebuildupdated"		"1762557607"
+			}
+			"prerelease"
+			{
+				"buildid"		"26334371"
+				"timeupdated"		"1793402141"
+				"timebuildupdated"		"1793394618"
+			}
+			"valve_ds"
+			{
+				"buildid"		"26334371"
+				"description"		"The version Valve dedicated servers will sync to"
+				"timeupdated"		"1793402104"
+				"timebuildupdated"		"1793394618"
+			}
+		}
+	}
+}
+Unloading Steam API...[0mOK
+[0m
