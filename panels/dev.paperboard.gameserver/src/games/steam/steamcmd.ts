@@ -143,13 +143,21 @@ export function downloadWorkshopItems(appId: number, ids: readonly string[], opt
     });
 }
 
-/** SteamCMD's progress through an app download: "Update state (0x61) downloading, progress: 12.34 (…)". */
-export function parseAppProgress(line: string): { stage: "downloading" | "verifying" | "preallocating"; percent: number } | null {
-    const match = /Update state \(0x[0-9a-f]+\) (downloading|verifying install|verifying update|preallocating|reconfiguring|committing)[^,]*, progress: ([\d.]+)/i.exec(line.replace(ANSI, ""));
+/** What an app download is doing, by SteamCMD's progress lines. */
+export interface AppProgress {
+    /** "preparing" is making room for the files (reconfiguring, preallocating), whose percent is not the download's */
+    stage: "preparing" | "downloading" | "verifying";
+    percent: number;
+    bytes: { done: number; total: number };
+}
+
+/** SteamCMD's progress through an app download: "Update state (0x61) downloading, progress: 12.34 (119 / 970)". */
+export function parseAppProgress(line: string): AppProgress | null {
+    const match = /Update state \(0x[0-9a-f]+\) (downloading|verifying install|verifying update|preallocating|reconfiguring|committing)[^,]*, progress: ([\d.]+) \((\d+) \/ (\d+)\)/i.exec(line.replace(ANSI, ""));
     if (!match) return null;
     const state = match[1]!.toLowerCase();
-    const stage = state.startsWith("verifying") ? "verifying" : state === "preallocating" ? "preallocating" : "downloading";
-    return { stage, percent: Math.max(0, Math.min(100, Number(match[2]))) };
+    const stage = state.startsWith("verifying") ? "verifying" : state === "preallocating" || state === "reconfiguring" ? "preparing" : "downloading";
+    return { stage, percent: Math.max(0, Math.min(100, Number(match[2]))), bytes: { done: Number(match[3]), total: Number(match[4]) } };
 }
 
 /** Did SteamCMD confirm the app installed? Its exit code alone does not say. */
@@ -270,7 +278,7 @@ export function latestBuild(appId: number, options: { runner?: Runner; workspace
  * returns the build installed. Only SteamCMD's own success line counts; a
  * download it does not confirm fails, quoting its last lines.
  */
-export function installApp(appId: number, dir: string, options: { onProgress?: (progress: { stage: string; percent: number }) => void; onLine?: (line: string) => void; runner?: Runner; workspace?: string } = {}): Promise<string> {
+export function installApp(appId: number, dir: string, options: { onProgress?: (progress: AppProgress) => void; onLine?: (line: string) => void; runner?: Runner; workspace?: string } = {}): Promise<string> {
     if (!Number.isInteger(appId) || appId <= 0) throw new Error(`Not a Steam app id: ${appId}`);
     if (!path.isAbsolute(dir)) throw new Error("A Steam app installs into an absolute folder");
     return serialized(async () => {

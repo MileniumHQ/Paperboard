@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 import { serverBridge, serverVersion } from "../server";
-import { formatCount } from "./presentation";
+import { formatCount, formatSize } from "./presentation";
 import { discardUpload, listAdded, pickFiles } from "./upload";
 import type { WorkshopItem, WorkshopMeta, WorkshopPage } from "../../games/steam/modscan";
 import type { InstalledMod } from "../../games/terraria/modStore";
@@ -56,11 +56,6 @@ const lookupMod = async (id: string): Promise<WorkshopItem> => {
 const formatDate = (seconds: number) =>
     new Date(seconds * 1000).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 
-function formatSize(bytes: number): string {
-    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-    const mb = bytes / (1024 * 1024);
-    return mb < 1024 ? `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB` : `${(mb / 1024).toFixed(1)} GB`;
-}
 
 /** Steam's short descriptions are plain text; markdown must not read them as syntax */
 const escapeMarkdown = (text: string) => text.replace(/([\\`*_{}[\]()#+\-.!|>~<])/g, "\\$1");

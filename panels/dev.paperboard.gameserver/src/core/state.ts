@@ -28,8 +28,12 @@ export interface ChatMessage {
 // "installing" is a software installer running (Forge, NeoForge), which
 // reports no percentage. Null when no install is running.
 export interface InstallProgress {
-    stage: "downloading" | "verifying" | "installing" | "completed" | "error";
+    // "preparing" is work with no measure yet: a downloader starting, or
+    // making room for the files before it downloads them
+    stage: "preparing" | "downloading" | "verifying" | "installing" | "completed" | "error";
     percent: number;
+    // how much of how much, when the download says
+    bytes?: { done: number; total: number };
 }
 
 // Live progress of a modpack install, published the same way. "done" and

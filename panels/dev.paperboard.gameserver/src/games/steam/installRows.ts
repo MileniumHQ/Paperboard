@@ -3,6 +3,7 @@ import type { LoaderStatus } from "@mileniumhq/paperui";
 import type { InstallLoaderItem } from "../../components/InstallLoaders";
 import { installProgress, serverBridge } from "../../lib/server";
 import { createInstallFlow } from "../installFlow";
+import { formatSize } from "../../lib/addons/presentation";
 import type { SteamUpdateStatus } from "./installAction";
 export type { SteamUpdateStatus };
 
@@ -30,26 +31,38 @@ export function createSteamInstall(action: string) {
             await serverBridge.call(action, undefined, { timeoutMs: null });
         });
 
+    // the row each stage belongs to; getting ready to download is the download's row
+    const ROW: Record<string, number> = { preparing: 0, downloading: 0, verifying: 1, installing: 2, completed: 3 };
     // the furthest step reached; a failure keeps it, so the failed row is the one shown failing
-    const ORDER = ["downloading", "verifying", "installing", "completed"];
     const [reached, setReached] = createSignal(-1);
     createEffect(() => {
-        const at = ORDER.indexOf(installProgress()?.stage ?? "");
+        const at = ROW[installProgress()?.stage ?? ""] ?? -1;
         if (at > reached()) setReached(at);
     });
     const current = () => Math.max(0, reached());
-    const percent = (step: number) => () => (installed() || reached() > step ? 100 : reached() === step && step < 2 ? installProgress()?.percent ?? 0 : 0);
+    /** the row's own progress, while it is the one running */
+    const live = (step: number) => {
+        const progress = installProgress();
+        return progress && ROW[progress.stage] === step && reached() === step ? progress : undefined;
+    };
+    const percent = (step: number) => () => (installed() || reached() > step ? 100 : step < 2 ? live(step)?.percent ?? 0 : 0);
     const status = (step: number) => (): LoaderStatus => {
         if (installed() || reached() > step) return "success";
         if (current() !== step) return "waiting";
         if (error()) return "error";
         if (!running()) return "waiting";
-        return step === 2 ? "indeterminate" : "loading";
+        // nothing measured yet (SteamCMD starting, room being made): it spins instead of sitting at nothing
+        if (step === 2 || !live(step) || live(step)!.stage === "preparing") return "indeterminate";
+        return "loading";
+    };
+    const amount = (step: number) => () => {
+        const bytes = live(step)?.stage === "preparing" ? undefined : live(step)?.bytes;
+        return bytes && bytes.done > 0 && bytes.total > 0 ? `${formatSize(bytes.done)} of ${formatSize(bytes.total)}` : undefined;
     };
 
     const rows = (name: string): InstallLoaderItem[] => [
-        { label: `Downloading ${name} from Steam...`, percent: percent(0), status: status(0) },
-        { label: "Checking the downloaded files...", percent: percent(1), status: status(1) },
+        { label: `Downloading ${name} from Steam...`, detail: amount(0), percent: percent(0), status: status(0) },
+        { label: "Checking the downloaded files...", detail: amount(1), percent: percent(1), status: status(1) },
         { label: "Setting up server...", percent: percent(2), status: status(2) },
     ];
 

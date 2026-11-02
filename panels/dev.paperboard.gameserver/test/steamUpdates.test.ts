@@ -147,3 +147,45 @@ echo "Success! App '$app' fully installed."
     await run(`${tf2.id}-play`, { mode: null, map: "ctf_2fort" });
     expect(settings).toMatchObject({ configured: true, map: "ctf_2fort" });
 });
+
+test("a download is published as getting ready until Steam measures it, then by how much of how much", async () => {
+    // what SteamCMD printed downloading app 90 (2026-11-02): it makes room first, with its own percent, then downloads
+    const workspace = path.join(root, ".steam", PANEL_ID);
+    const script = path.join(workspace, "steamcmd", "steamcmd.sh");
+    fs.writeFileSync(script, `#!/bin/sh
+dir="$2"; app="$6"
+mkdir -p "$dir/steamapps" "$dir/tf/maps" "$dir/tf/cfg"
+printf '"AppState"\\n{\\n\\t"buildid"\\t\\t"26334371"\\n}\\n' > "$dir/steamapps/appmanifest_$app.acf"
+printf '\\033[0m Update state (0x3) reconfiguring, progress: 0.00 (0 / 0)\\n'
+printf '\\033[0m Update state (0x11) preallocating, progress: 80.31 (778988852 / 970035750)\\n'
+printf '\\033[0m Update state (0x61) downloading, progress: 8.21 (79648257 / 970035750)\\n'
+printf '\\033[0m Update state (0x81) verifying update, progress: 14.79 (143436135 / 970035750)\\n'
+echo "Success! App '$app' fully installed."
+`, { mode: 0o755 });
+    fs.rmSync(path.join(root, "server"), { recursive: true, force: true });
+    settings = {};
+    const { inServer } = await import("../src/service/scope");
+    const published: unknown[] = [];
+    const state: Record<string, unknown> = { serverStatus: "offline" };
+    const ctx = {
+        state,
+        setState: (patch: any) => {
+            const next = typeof patch === "function" ? patch(state) : patch;
+            if ("installProgress" in next) published.push(next.installProgress);
+            Object.assign(state, next);
+        },
+        emitTrigger: () => {},
+    } as any;
+    const scope = { server: { id: "s-steam-progress", game: tf2.id, directory: "" }, locals: new Map() } as any;
+    await inServer(scope, () => tf2Service.initialize!(ctx, false));
+    await inServer(scope, async () => (await tf2Service.actions()).find((a) => a.id === `${tf2.id}-install`)!.run(ctx, {}));
+
+    expect(published.slice(0, 5)).toEqual([
+        { stage: "preparing", percent: 0 },
+        { stage: "preparing", percent: 0, bytes: { done: 0, total: 0 } },
+        { stage: "preparing", percent: 80, bytes: { done: 778988852, total: 970035750 } },
+        { stage: "downloading", percent: 8, bytes: { done: 79648257, total: 970035750 } },
+        { stage: "verifying", percent: 14, bytes: { done: 143436135, total: 970035750 } },
+    ]);
+    expect(published.at(-1)).toEqual({ stage: "completed", percent: 100 });
+});
