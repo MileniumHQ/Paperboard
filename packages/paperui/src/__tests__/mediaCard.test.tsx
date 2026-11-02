@@ -132,3 +132,26 @@ describe("PaperMediaCard title", () => {
         expect(getByText("arena_lumberyard_event").className).toContain("breakWord");
     });
 });
+
+describe("PaperMediaCard banner pictures", () => {
+    it("a list of addresses tiles as one banner, four at most, described once", () => {
+        const { container, getByRole } = render(() => (
+            <PaperMediaCard title="Mixed" bannerAlt="Four of its maps" banner={["/a.png", "/b.png", "/c.png", "/d.png", "/e.png"]} />
+        ));
+        const banner = getByRole("img", { name: "Four of its maps" });
+        const tiles = [...banner.querySelectorAll("img")];
+        expect(tiles.map((tile) => tile.getAttribute("src"))).toEqual(["/a.png", "/b.png", "/c.png", "/d.png"]);
+        // the set is one picture to assistive technology, and each tile loads as it scrolls into view
+        expect(tiles.every((tile) => tile.getAttribute("alt") === "" && tile.getAttribute("loading") === "lazy")).toBe(true);
+        expect(container.querySelector('img[src="/e.png"]')).toBeNull();
+    });
+
+    it("no addresses is no banner, and a single address or an element is shown as before", () => {
+        const none = render(() => <PaperMediaCard title="Empty" banner={[]} />);
+        expect(none.container.querySelector('[class*="bannerContainer"]')).toBeNull();
+        const one = render(() => <PaperMediaCard title="One" bannerAlt="A map" banner="/one.png" />);
+        expect(one.container.querySelector<HTMLImageElement>('img[src="/one.png"]')!.alt).toBe("A map");
+        const custom = render(() => <PaperMediaCard title="Custom" banner={<span>Custom banner</span>} />);
+        expect(custom.getByText("Custom banner")).toBeTruthy();
+    });
+});

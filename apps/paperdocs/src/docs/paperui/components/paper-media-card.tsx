@@ -107,9 +107,9 @@ export function Example() {
                         </tr>
                         <tr>
                             <td><PaperCode>banner</PaperCode></td>
-                            <td><PaperCode>string | JSX.Element</PaperCode></td>
+                            <td><PaperCode>string | string[] | JSX.Element</PaperCode></td>
                             <td><PaperCode>undefined</PaperCode></td>
-                            <td>Header graphic banner URL or custom component.</td>
+                            <td>Header graphic: a picture URL, a list of URLs or a custom component. A list of up to four URLs tiles as one picture, for a card that stands for several things (a playlist, a mix of maps); <PaperCode>bannerAlt</PaperCode> describes the whole set.</td>
                         </tr>
                         <tr>
                             <td><PaperCode>badge</PaperCode></td>
@@ -176,6 +176,17 @@ export function Example() {
         {(map) => <PaperMediaCard banner={map.picture} title={map.name} selected={map.name === chosen()} onClick={() => setChosen(map.name)} />}
     </For>
 </PaperMediaCardGroup>`}
+            </PaperCode>
+            <PaperText preset="body">
+                Give a banner a list of pictures and they tile as one, for a card that stands for several things.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperMediaCard
+    banner={["/maps/ctf_2fort.png", "/maps/cp_dustbowl.png", "/maps/pl_badwater.png", "/maps/koth_viaduct.png"]}
+    bannerAlt="Four of the server's maps"
+    title="Mixed"
+    description="Every kind of map."
+/>`}
             </PaperCode>
             <PaperText preset="body">
                 Pair a banner with a poster to present something with cover art, such as a game to choose.

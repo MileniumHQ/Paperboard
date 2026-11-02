@@ -1,7 +1,7 @@
 import { getVarCss, resolveSize } from "../../utils/theme";
 import type { PaperSize } from "../../types";
 import styles from "./index.module.css";
-import { splitProps, Show, type JSX, type ParentProps } from "solid-js";
+import { splitProps, For, Show, type JSX, type ParentProps } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { PaperText } from "../PaperText";
 import { PaperIcon } from "../PaperIcon";
@@ -9,7 +9,13 @@ import { PaperEffect } from "../PaperEffect";
 
 export interface PaperMediaCardProps
     extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "title" | "onClick"> {
-    banner?: string | JSX.Element;
+    /**
+     * The picture across the card's top: an address, a list of addresses
+     * (up to four tile it as one picture, for a card that stands for
+     * several things) or any element.
+     */
+    banner?: string | readonly string[] | JSX.Element;
+    /** What the banner shows, for a picture or a tiled set of them. */
     bannerAlt?: string;
     bannerHeight?: string;
     icon?: string | JSX.Element;
@@ -53,6 +59,9 @@ export interface PaperMediaCardProps
     rel?: string;
     onClick?: (e: MouseEvent) => void;
 }
+
+/** How many pictures tile a banner. */
+const MOSAIC_MAX = 4;
 
 const CONTROLS = [
     "a[href]",
@@ -103,7 +112,12 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
 
     const isLink = () => Boolean(local.href);
 
-    const hasBanner = () => Boolean(local.banner);
+    /** the addresses of a tiled banner; undefined for any other */
+    const tiles = () => {
+        const banner = local.banner;
+        return Array.isArray(banner) && banner.every((tile) => typeof tile === "string") ? (banner as readonly string[]).slice(0, MOSAIC_MAX) : undefined;
+    };
+    const hasBanner = () => (tiles() ? tiles()!.length > 0 : Boolean(local.banner));
     const hasOverlappingIcon = () => hasBanner() && !local.poster && Boolean(local.icon);
     const hasOverlappingPoster = () => hasBanner() && Boolean(local.poster);
 
@@ -172,7 +186,13 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                         height: local.bannerHeight,
                     }}
                 >
-                    {typeof local.banner === "string" ? (
+                    {tiles() ? (
+                        <div class={styles.bannerMosaic} role="img" aria-label={local.bannerAlt}>
+                            <For each={tiles()}>
+                                {(src) => <img src={src} alt="" class={styles.bannerImage} loading="lazy" decoding="async" />}
+                            </For>
+                        </div>
+                    ) : typeof local.banner === "string" ? (
                         <img
                             src={local.banner}
                             alt={local.bannerAlt || ""}
@@ -181,7 +201,7 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                             decoding="async"
                         />
                     ) : (
-                        local.banner
+                        (local.banner as JSX.Element)
                     )}
 
                     <Show when={local.poster}>

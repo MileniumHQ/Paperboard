@@ -64,6 +64,26 @@
     display: block;
 }
 
+/* a few pictures as one: two columns, a lone last picture across the row */
+.bannerMosaic {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: minmax(0, 1fr);
+    gap: var(--paper-border-width);
+    width: 100%;
+    height: 100%;
+    background: var(--paper-border);
+    overflow: hidden;
+}
+
+.bannerMosaic > .bannerImage {
+    min-height: 0;
+}
+
+.bannerMosaic > .bannerImage:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+}
+
 .iconWrapper {
     position: absolute;
     left: var(--paper-uigap);
