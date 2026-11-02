@@ -17,3 +17,8 @@ export function assertGameAction(game: GameDefinition, options: import("./types"
     if (!game.describe(options).actions.includes(id))
         throw new Error(`${game.name} does not support action "${id}" with this server's software and version`);
 }
+/** A server card's "game · software" line; a game that is its own software (Palworld, Source games) is named once. */
+export function serverSubtitle(game: GameDefinition, options: import("./types").GameOptions): string {
+    const software = game.softwareLabel(options);
+    return software.startsWith(game.name) ? software : `${game.name} · ${software}`;
+}

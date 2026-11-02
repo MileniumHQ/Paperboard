@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { gameFor, games, assertGameAction } from "../src/games";
+import { gameFor, games, assertGameAction, serverSubtitle } from "../src/games";
 import { readServersConfig } from "../src/servers";
 import { SOFTWARE_IDS } from "../src/software/catalog";
 import manifest from "../manifest.json";
@@ -90,5 +90,14 @@ describe("bundled game modules", () => {
         expect(() => assertGameAction(game, { software: "vanilla", version: "1.21.4" }, "prepare-crossplay")).toThrow("does not support");
         expect(() => assertGameAction(game, old, "run-command")).not.toThrow();
         expect(game.describe({ software: "paper", version: "26.3" }).packages[0]!.id).toBe("java-25");
+    });
+});
+
+describe("server card subtitle", () => {
+    test("names the game once, whether or not it has its own software", () => {
+        expect(serverSubtitle(gameFor("minecraft"), { software: "paper", version: "26.3" })).toBe("Minecraft · Paper 26.3");
+        expect(serverSubtitle(gameFor("terraria"), { software: "vanilla", version: "1.4.5.8" })).toBe("Terraria · Vanilla 1.4.5.8");
+        expect(serverSubtitle(gameFor("palworld"), { version: "Build 25247047" })).toBe("Palworld Build 25247047");
+        expect(serverSubtitle(gameFor("team-fortress-2"), { version: "Build 26334371" })).toBe("Team Fortress 2 Build 26334371");
     });
 });

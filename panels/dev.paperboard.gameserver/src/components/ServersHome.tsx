@@ -21,7 +21,7 @@ import {
 } from "@mileniumhq/paperui";
 import { serversBridge, openServer } from "../lib/api";
 import type { ServerSummary, ServersState } from "../service";
-import { gameFor, games } from "../games";
+import { gameFor, games, serverSubtitle } from "../games";
 import GamePicker from "./GamePicker";
 export default function ServersHome(props: { state: ServersState }) {
     const [dialog, setDialog] = createSignal<"add" | "rename" | "remove" | null>(null);
@@ -113,7 +113,7 @@ export default function ServersHome(props: { state: ServersState }) {
                                     effect={false}
                                     icon={server.icon ?? gameFor(server.game).art.icon}
                                     title={server.name}
-                                    subtitle={`${gameFor(server.game).name} · ${gameFor(server.game).softwareLabel({ software: server.state.serverSoftware, version: server.state.serverVersion })}`}
+                                    subtitle={serverSubtitle(gameFor(server.game), { software: server.state.serverSoftware, version: server.state.serverVersion })}
                                     description={
                                         server.state.recoveryBlock ??
                                         (!server.configured ? "Finish setup" : undefined)
