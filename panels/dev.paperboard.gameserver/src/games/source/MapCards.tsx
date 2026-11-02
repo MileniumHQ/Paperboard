@@ -85,6 +85,8 @@ export default function MapCards(props: {
     pictures: MapPicturesState;
     /** leave out each card's mode, when every card has the same one */
     hideMode?: boolean;
+    /** only the cards: no search, mode filter or credit line, for a list that is already what was asked for */
+    bare?: boolean;
     onPick(name: string): void;
 }) {
     const [query, setQuery] = createSignal("");
@@ -106,6 +108,7 @@ export default function MapCards(props: {
 
     return (
         <PaperFlex direction="column" gap="half">
+            <Show when={!props.bare}>
             <PaperFlex direction="row" gap="half" align="center">
                 <PaperInput fullWidth icon="search" placeholder={props.placeholder ?? "Search maps"} value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
                 <Show when={modes().length > 1}>
@@ -117,6 +120,7 @@ export default function MapCards(props: {
                     </PaperSelectMenu>
                 </Show>
             </PaperFlex>
+            </Show>
             <Show
                 when={shown().length > 0}
                 fallback={<PaperEmptyState icon="search" title="No maps match">Try another name or mode.</PaperEmptyState>}
@@ -139,7 +143,9 @@ export default function MapCards(props: {
                     </For>
                 </PaperMediaCardGroup>
             </Show>
-            <MapPicturesNote pictures={props.pictures} />
+            <Show when={!props.bare}>
+                <MapPicturesNote pictures={props.pictures} />
+            </Show>
         </PaperFlex>
     );
 }

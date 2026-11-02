@@ -3,7 +3,9 @@ import { ACTION_IDS as A } from "../../service/contract";
 import { gameArt } from "../art";
 import { AUTOMATION_ACTIONS, AUTOMATION_TAB } from "../automation";
 import { hostRoutes } from "../host";
+import type { ModscanGame } from "../steam/modscan";
 import type { SourcePlugin } from "./sourcemod";
+import type { SourceWorkshopMap } from "./workshop";
 
 /**
  * A Source engine option and how the server takes it. `cvar`: a console
@@ -51,6 +53,13 @@ export interface SourceGameSpec {
      * (the dedicated server ships none). Maps without one are shown without.
      */
     mapPictures?: SourceMapPictureSource;
+    /**
+     * The server loads Steam Workshop maps itself, as `workshop/<id>`: the
+     * Maps tab searches the Workshop for them and a server can start on, change
+     * to and cycle through them. `game` is modscan's name for the game; `base`
+     * replaces the search service's address, for tests.
+     */
+    workshop?: { game: ModscanGame; base?: string };
 }
 
 /** Where a game's map pictures come from: a MediaWiki list page of maps, a file name and a thumbnail to a row. */
@@ -87,6 +96,10 @@ export const sourceActions = (id: string) => ({
     mapCycle: `${id}-map-cycle`,
     mapCycleSet: `${id}-map-cycle-set`,
     play: `${id}-play`,
+    workshopMaps: `${id}-workshop-maps`,
+    workshopFind: `${id}-workshop-find`,
+    workshopAdd: `${id}-workshop-add`,
+    workshopRemove: `${id}-workshop-remove`,
     sourcemod: `${id}-sourcemod`,
     sourcemodSet: `${id}-sourcemod-set`,
     plugin: `${id}-plugin`,
@@ -114,8 +127,10 @@ export interface SourceMapCycle {
     custom: boolean;
     /** where the rotation is read from, relative to the game folder; null while the server has none */
     file: string | null;
-    /** the maps the server can load, for choosing and for marking what the rotation lists but the server lacks */
+    /** the maps the server can load, for choosing and for marking what the rotation lists but the server lacks; Workshop maps added to the server are `workshop/<id>` */
     installed: string[];
+    /** the Steam Workshop maps added to the server, for their titles and pictures */
+    workshop: SourceWorkshopMap[];
     /** a mapcyclefile in the server folder's server.cfg, which the server follows over this page; null when none */
     overriddenBy: string | null;
 }

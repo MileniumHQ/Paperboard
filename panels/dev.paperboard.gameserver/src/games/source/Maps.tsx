@@ -3,6 +3,7 @@ import {
     PaperAvatar,
     PaperButton,
     PaperCard,
+    PaperChip,
     PaperEmptyState,
     PaperFlex,
     PaperList,
@@ -17,6 +18,9 @@ import { errorMessage } from "../../lib/failure";
 import { mapMode, sourceActions, type SourceGameSpec, type SourceMapCycle } from "./index";
 import MapCards, { MapPicturesNote, mapChoices } from "./MapCards";
 import { createMapPictures } from "./useMapPictures";
+import { workshopChoice } from "./useWorkshopMaps";
+import WorkshopPane from "./WorkshopPane";
+import { canonicalMap, workshopId, workshopName, type SourceWorkshopHit } from "./workshop";
 
 // The maps a server plays through, in order. The server reads a map cycle
 // file; until the rotation is edited here that is the game's own or one the
@@ -32,6 +36,8 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
     const [notice, setNotice] = createSignal("");
     const [resetting, setResetting] = createSignal(false);
     const [adding, setAdding] = createSignal(false);
+    const [source, setSource] = createSignal<"server" | "workshop">("server");
+    const [joined, setJoined] = createSignal("");
     const pictures = createMapPictures(props.spec);
 
     const load = async () => {
@@ -64,6 +70,9 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
 
     const label = (name: string) => mapMode(props.spec, name);
     const installed = createMemo(() => new Set(view()?.installed ?? []));
+    /** the Steam Workshop map a name is, if this server has it */
+    const workshopMap = (name: string) => view()?.workshop.find((m) => workshopName(m.id) === canonicalMap(name));
+    const choices = () => addable().map((name) => { const map = workshopMap(name); return map ? workshopChoice(map) : mapChoices(props.spec, [name])[0]!; });
     const addable = createMemo(() => (view()?.installed ?? []).filter((name) => !view()!.maps.includes(name)));
     const editable = () => !!view() && !view()!.overriddenBy;
 
@@ -74,6 +83,22 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
         const maps = view()!.maps.filter((m) => m !== name);
         if (maps.length === 0) setError({ title: `${name} was not removed`, message: "A rotation needs at least one map. Use the game's map cycle instead to stop choosing." });
         else void save(maps, `${name} was not removed`);
+    };
+    /** A Workshop map chosen in the search: added to the server, then to the rotation. */
+    const addFromWorkshop = async (hit: SourceWorkshopHit) => {
+        setWorking(true);
+        setError(null);
+        try {
+            await serverBridge.call(ids.workshopAdd, { id: hit.id }, { timeoutMs: 30_000 });
+        } catch (err) {
+            setError({ title: `${hit.title} was not added`, message: errorMessage(err) });
+            setWorking(false);
+            return;
+        }
+        setWorking(false);
+        const name = workshopName(hit.id);
+        if (view()!.maps.includes(name)) setError({ title: `${hit.title} was not added`, message: "It is in the rotation already." });
+        else if (await save([...view()!.maps, name], `${hit.title} was not added to the rotation`)) setJoined(`${hit.title} joined the end of the rotation.`);
     };
     const move = (name: string, by: number) => {
         const maps = [...view()!.maps];
@@ -153,7 +178,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
 
                         <Show when={current().custom && editable()}>
                             <PaperFlex>
-                                <PaperButton variant="primary" disabled={working() || addable().length === 0} onClick={() => setAdding(true)}>Add maps</PaperButton>
+                                <PaperButton variant="primary" disabled={working() || (addable().length === 0 && !props.spec.workshop)} onClick={() => { setJoined(""); setAdding(true); }}>Add maps</PaperButton>
                             </PaperFlex>
                         </Show>
 
@@ -179,9 +204,9 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                         {(name, index) => (
                                             <PaperListItem
                                                 value={name}
-                                                icon={<PaperAvatar size="large" shape="square" src={pictures.of(name)} alt={name} fallbackIcon="map" />}
+                                                icon={<PaperAvatar size="large" shape="square" src={workshopMap(name)?.previewImageUrl ?? pictures.of(name)} alt={workshopMap(name)?.title ?? name} fallbackIcon="map" />}
                                                 onClose={current().custom && editable() ? () => remove(name) : undefined}
-                                                description={[installed().has(name) ? label(name) : "Not installed", serverLevel() === name ? "Playing now" : undefined].filter(Boolean).join(" · ")}
+                                                description={[!installed().has(name) ? "Not installed" : workshopId(name) ? "Steam Workshop" : label(name), serverLevel() !== null && canonicalMap(serverLevel()!) === name ? "Playing now" : undefined].filter(Boolean).join(" · ")}
                                                 actions={
                                                     <Show when={current().custom && editable()}>
                                                         <PaperFlex direction="row" gap="onefourth" align="center">
@@ -191,7 +216,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                                     </Show>
                                                 }
                                             >
-                                                {name}
+                                                {workshopMap(name)?.title ?? name}
                                             </PaperListItem>
                                         )}
                                     </For>
@@ -211,11 +236,24 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                 footer={<PaperButton variant="primary" onClick={() => setAdding(false)}>Done</PaperButton>}
             >
                 <PaperText preset="body">Each map you choose joins the end of the rotation.</PaperText>
+                <Show when={props.spec.workshop}>
+                    <PaperFlex direction="row" gap="half">
+                        <PaperChip selected={source() === "server"} onClick={() => setSource("server")}>On this server</PaperChip>
+                        <PaperChip selected={source() === "workshop"} onClick={() => setSource("workshop")}>Steam Workshop</PaperChip>
+                    </PaperFlex>
+                </Show>
                 <Show when={error()}>
                     {(failure) => <PaperQuote variant="danger" icon="warning" title={failure().title} onDismiss={() => setError(null)}>{failure().message}</PaperQuote>}
                 </Show>
-                <Show when={addable().length > 0} fallback={<PaperText color="text-subtle">Every map the server has is in the rotation.</PaperText>}>
-                    <MapCards maps={mapChoices(props.spec, addable())} pictures={pictures} disabled={working()} onPick={add} />
+                <Show when={joined()}>
+                    <PaperQuote variant="success" icon="check_circle" onDismiss={() => setJoined("")}>{joined()}</PaperQuote>
+                </Show>
+                <Show when={source() === "workshop" && props.spec.workshop} fallback={
+                    <Show when={addable().length > 0} fallback={<PaperText color="text-subtle">Every map the server has is in the rotation.</PaperText>}>
+                        <MapCards maps={choices()} pictures={pictures} disabled={working()} onPick={add} />
+                    </Show>
+                }>
+                    <WorkshopPane spec={props.spec} inRotation={view()?.maps ?? []} disabled={working()} onPick={(hit) => void addFromWorkshop(hit)} />
                 </Show>
             </PaperModal>
 

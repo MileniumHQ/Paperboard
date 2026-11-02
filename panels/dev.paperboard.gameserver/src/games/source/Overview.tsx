@@ -8,25 +8,31 @@ import { ACTION_IDS as A } from "../../service/contract";
 import { mapMode, sourceActions, type SourceGameSpec } from "./index";
 import MapCards, { mapChoices } from "./MapCards";
 import { createMapPictures } from "./useMapPictures";
+import { createWorkshopMaps } from "./useWorkshopMaps";
+import { canonicalMap } from "./workshop";
 
 export default function SourceOverview(props: { spec: SourceGameSpec; game: GameDefinition }) {
     const ids = sourceActions(props.spec.id);
     const features = props.game.describe({ software: "", version: "" });
     // a running server's own map, which its map cycle changes; the one it starts on otherwise
-    const map = () => serverLevel() ?? String(gameSettings().map ?? "");
+    const map = () => canonicalMap(serverLevel() ?? String(gameSettings().map ?? ""));
     const [open, setOpen] = createSignal(false);
     const [maps, setMaps] = createSignal<string[]>([]);
     const [choice, setChoice] = createSignal("");
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal("");
     const pictures = createMapPictures(props.spec);
+    const workshop = createWorkshopMaps(props.spec);
 
     const edit = async () => {
         setChoice(map());
         setError("");
         setOpen(true);
-        try { setMaps(await serverBridge.call<string[]>(ids.maps)); }
-        catch (err) { setError(errorMessage(err)); }
+        try {
+            setMaps(await serverBridge.call<string[]>(ids.maps));
+            if (props.spec.workshop) await workshop.reload();
+            if (workshop.error()) setError(workshop.error());
+        } catch (err) { setError(errorMessage(err)); }
     };
     const change = async () => {
         setBusy(true);
@@ -48,8 +54,7 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
             detail={
                 <EditableDetail edit="Change map" onEdit={() => void edit()}>
                     <PaperText color="text-subtle">
-                        {map()}
-                        <Show when={label(map())}>{(mode) => ` · ${mode()}`}</Show>
+                        {[workshop.titleOf(map()) ?? map(), workshop.titleOf(map()) ? "Steam Workshop" : label(map())].filter(Boolean).join(" · ")}
                     </PaperText>
                 </EditableDetail>
             }
@@ -77,7 +82,7 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
                         : "The server starts on this map."}
                 </PaperText>
                 <Show when={maps().length > 0} fallback={<Show when={!error()}><PaperText color="text-subtle">Loading maps...</PaperText></Show>}>
-                    <MapCards maps={mapChoices(props.spec, maps())} value={choice()} pictures={pictures} disabled={busy()} onPick={setChoice} />
+                    <MapCards maps={[...mapChoices(props.spec, maps()), ...workshop.choices()]} value={choice()} pictures={pictures} disabled={busy()} onPick={setChoice} />
                 </Show>
                 <Show when={error()}>
                     <PaperQuote variant="danger" icon="warning" title="Map not changed">{error()}</PaperQuote>

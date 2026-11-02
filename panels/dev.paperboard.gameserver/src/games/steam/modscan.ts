@@ -5,7 +5,7 @@
 // own message so the tab can show it.
 
 export const MODSCAN_URL = "https://panels.ariapis.com/modscan/v1";
-export type ModscanGame = "tmodloader";
+export type ModscanGame = "tmodloader" | "tf2";
 export type ModscanSort = "relevance" | "subscriptions" | "updated";
 
 export interface WorkshopItem {

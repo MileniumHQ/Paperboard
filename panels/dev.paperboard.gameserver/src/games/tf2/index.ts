@@ -42,6 +42,7 @@ export const TF2: SourceGameSpec = {
     },
     // the server ships no map pictures; the wiki shows one of each map it installs
     mapPictures: { name: "Official Team Fortress Wiki", page: "https://wiki.teamfortress.com/wiki/List_of_maps" },
+    workshop: { game: "tf2" },
 };
 
 export const tf2 = sourceGame(TF2);

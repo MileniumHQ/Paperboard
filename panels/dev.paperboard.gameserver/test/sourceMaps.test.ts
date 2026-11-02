@@ -146,7 +146,7 @@ test("until a rotation is set, the page shows the game's map cycle file, and set
     put(path.join(game, "cfg", "mapcycle.txt"), own);
     put(path.join(game, "cfg", "mapcycle_default.txt"), "cp_dustbowl\n");
 
-    expect(await run(ids.mapCycle)).toEqual({ maps: ["pl_badwater", "ctf_2fort"], custom: false, file: path.join("cfg", "mapcycle.txt"), installed: ["cp_dustbowl", "cp_granary", "ctf_2fort", "pl_badwater"], overriddenBy: null });
+    expect(await run(ids.mapCycle)).toEqual({ maps: ["pl_badwater", "ctf_2fort"], custom: false, file: path.join("cfg", "mapcycle.txt"), installed: ["cp_dustbowl", "cp_granary", "ctf_2fort", "pl_badwater"], workshop: [], overriddenBy: null });
 
     const view = await run(ids.mapCycleSet, { maps: ["cp_granary", "pl_badwater"] });
     expect(view).toMatchObject({ maps: ["cp_granary", "pl_badwater"], custom: true, file: "cfg/paperboard_mapcycle.txt" });

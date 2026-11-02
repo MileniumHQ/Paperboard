@@ -21,6 +21,7 @@ import { cvarValue, mapName, optionValue, secretsCfg, serverCfg } from "./config
 import { cfgMapCycleFile, checkRotation, DEFAULT_MAPCYCLE, findMap, installedMaps, mapCycleFile, PAPERBOARD_MAPCYCLE, readServerCycle } from "./mapcycle";
 import { mapPictures } from "./mapPictures";
 import { playModes } from "./modes";
+import { findWorkshopMaps, readWorkshopMaps, workshopId, workshopMapToAdd, workshopName, type SourceWorkshopMap } from "./workshop";
 import { consoleLine, isErrorLine, linePlayer, parseLogLine, parseStatus, steamId, type SourceLogEvent } from "./log";
 import { SourceRcon, RconError, RconNoAnswer } from "./rcon";
 import { bannedUserCfg, noStats, SourceRoster, type SourceStats } from "./roster";
@@ -124,14 +125,29 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         const user = path.join(await root(), "server.cfg");
         return (await exists(user)) ? cfgMapCycleFile(await fs.readFile(user, "utf8")) : null;
     }
+    /** The Steam Workshop maps added to this server. */
+    async function workshopLibrary(): Promise<SourceWorkshopMap[]> {
+        return readWorkshopMaps((await settings()).workshopMaps);
+    }
+    /** Every map the server can be given: the .bsp files it has, and the Workshop maps added to it. */
+    async function availableMaps(): Promise<string[]> {
+        return [...(await installedMaps(await gameDir())), ...(await workshopLibrary()).map((m) => workshopName(m.id))];
+    }
     async function mapCycleView(): Promise<SourceMapCycle> {
         const game = await gameDir();
-        const installed = await installedMaps(game);
+        const workshop = await workshopLibrary();
+        const installed = [...(await installedMaps(game)), ...workshop.map((m) => workshopName(m.id))];
         const saved = (await settings()).mapCycle;
         const overriddenBy = await userMapCycleFile();
-        if (Array.isArray(saved)) return { maps: saved as string[], custom: true, file: `cfg/${PAPERBOARD_MAPCYCLE}`, installed, overriddenBy };
+        if (Array.isArray(saved)) return { maps: saved as string[], custom: true, file: `cfg/${PAPERBOARD_MAPCYCLE}`, installed, workshop, overriddenBy };
         const read = await readServerCycle(game, overriddenBy ?? DEFAULT_MAPCYCLE);
-        return { maps: read?.maps ?? [], custom: false, file: read?.file ?? null, installed, overriddenBy };
+        return { maps: read?.maps ?? [], custom: false, file: read?.file ?? null, installed, workshop, overriddenBy };
+    }
+    /** A map the server can start on or change to: a .bsp it has, or a Workshop map added to it. */
+    async function mapAvailable(map: string): Promise<boolean> {
+        const id = workshopId(map);
+        if (id) return (await workshopLibrary()).some((m) => m.id === id);
+        return (await findMap(await gameDir(), map)) !== null;
     }
     /** Refuses a rotation set here while the user's own server.cfg picks the map cycle file, which the server follows over it. */
     async function refuseOverriddenCycle() {
@@ -382,7 +398,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("Options patch is required");
                 const next = validateOptions(options, spec.name, patch, await settings());
                 // the starting map is chosen from the installed ones; the Overview offers only those
-                if (Object.hasOwn(patch, "map") && !(await findMap(await gameDir(), mapName(patch.map)))) throw new Error(`${patch.map} is not installed`);
+                if (Object.hasOwn(patch, "map") && !(await mapAvailable(mapName(patch.map)))) throw new Error(`${patch.map} is not installed`);
                 // refuse what a console line can't hold before anything is saved
                 for (const option of options) if (Object.hasOwn(patch, option.id) && (option.cvar || option.kind === "secret") && patch[option.id] !== "") cvarValue(patch[option.id], option.label);
                 const live: string[] = [];
@@ -485,12 +501,39 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (!spec.mapPictures) throw new Error(`${spec.name} has no source of map pictures`);
                 return mapPictures(spec.mapPictures);
             }),
+            action(ids.workshopMaps, `${spec.name} Steam Workshop maps`, () => workshopLibrary()),
+            action(ids.workshopFind, `Search the Steam Workshop for ${spec.name} maps`, async (_ctx, { query }) => {
+                if (typeof query !== "string") throw new Error("Type what to search the Steam Workshop for");
+                return findWorkshopMaps(spec, query, new Set((await workshopLibrary()).map((m) => m.id)));
+            }),
+            action(ids.workshopAdd, `Add a Steam Workshop ${spec.name} map`, async (_ctx, { id }) => {
+                if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
+                if (typeof id !== "string" || !/^[1-9]\d{0,19}$/.test(id)) throw new Error("Choose a Steam Workshop item by its id");
+                // checked before it can be named: the server leaves a bad item as "will not sync" and plays on
+                const map = await workshopMapToAdd(spec, id);
+                const have = await workshopLibrary();
+                await updateSettings({ workshopMaps: [...have.filter((m) => m.id !== id), map] });
+                return workshopLibrary();
+            }),
+            action(ids.workshopRemove, `Remove a Steam Workshop ${spec.name} map`, async (_ctx, { id }) => {
+                if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
+                if (typeof id !== "string") throw new Error("Choose a Steam Workshop item by its id");
+                const have = await workshopLibrary();
+                const found = have.find((m) => m.id === id);
+                if (!found) throw new Error(`${spec.name} has no Steam Workshop map ${id} added`);
+                const saved = await settings();
+                const name = workshopName(id);
+                if (saved.map === name) throw new Error(`${found.title} is the map the server starts on; choose another on the Overview first`);
+                if (Array.isArray(saved.mapCycle) && saved.mapCycle.includes(name)) throw new Error(`${found.title} is in the map rotation; remove it there first`);
+                await updateSettings({ workshopMaps: have.filter((m) => m.id !== id) });
+                return workshopLibrary();
+            }),
             action(ids.mapCycle, `${spec.name} map rotation`, () => mapCycleView()),
             action(ids.mapCycleSet, "Set the map rotation", async (ctx, { maps }) => {
                 if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
                 await refuseOverriddenCycle();
                 // null hands the rotation back to the game's map cycle file
-                await setRotation(ctx, maps === null ? null : checkRotation(maps, await installedMaps(await gameDir())));
+                await setRotation(ctx, maps === null ? null : checkRotation(maps, await availableMaps()));
                 return mapCycleView();
             }),
             // setup's last choice: how the server plays. A mode makes its installed maps the rotation, the chosen map first
@@ -499,7 +542,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
                 const installed = await installedMaps(await gameDir());
                 const map = mapName(raw);
-                if (!installed.includes(map)) throw new Error(`${map} is not installed`);
+                if (!(await mapAvailable(map))) throw new Error(`${map} is not installed`);
                 let rotation: string[] | null = null;
                 if (mode !== null) {
                     const chosen = playModes(spec, installed).find((m) => m.prefix === mode);
@@ -514,7 +557,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             }),
             action(ids.changeMap, "Change map", async (ctx, { map: raw }) => {
                 const map = mapName(raw);
-                if (!(await findMap(await gameDir(), map))) throw new Error(`${map} is not installed`);
+                if (!(await mapAvailable(map))) throw new Error(`${map} is not installed`);
                 const running = online(ctx);
                 await updateSettings({ map });
                 if (running) await rcon().exec(`changelevel ${map}`);
@@ -559,7 +602,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             const executable = path.join(install, binary.executable);
             await fs.access(executable, windows ? fs.constants.F_OK : fs.constants.X_OK);
             const map = mapName(optionValue(options.find((o) => o.id === "map")!, saved));
-            if (!(await findMap(await gameDir(), map))) throw new Error(`The starting map ${map} is not installed; choose another on the Overview`);
+            if (!(await mapAvailable(map))) throw new Error(`The starting map ${map} is not installed; choose another on the Overview`);
 
             // Linux: Source holds its console output in a buffer when it isn't a terminal,
             // links libraries the computer may lack, and loads Steam's client library from ~/.steam/sdk64

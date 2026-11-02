@@ -51,6 +51,8 @@ export function secretsCfg(secrets: { rcon: string; join: string; token: string 
 
 /** Map names as Source takes them: a .bsp's name in the maps folder. */
 export function mapName(value: unknown): string {
+    // a Steam Workshop map is named by its item id; nothing else may carry a slash
+    if (typeof value === "string" && /^workshop\/[1-9]\d{0,19}$/.test(value)) return value;
     if (typeof value !== "string" || !/^[A-Za-z0-9_\-]{1,64}$/.test(value)) throw new Error("Choose a map by its name, such as ctf_2fort");
     return value;
 }
