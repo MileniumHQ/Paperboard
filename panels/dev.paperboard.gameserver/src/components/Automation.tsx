@@ -95,6 +95,14 @@ export default function Automation() {
                                 <For each={HOURS}>{(hour) => <PaperSelectMenuItem value={hour}>{hourLabel(hour)}</PaperSelectMenuItem>}</For>
                             </PaperSelectMenu>
                         </PaperSettingItem>
+                        <Show when={current().canUpdate}>
+                            <PaperSettingItem
+                                title="Update automatically"
+                                description="Installs a new release before the server starts. A running server checks every hour and restarts for one, with 5 minutes' warning when players are on."
+                            >
+                                <PaperToggle checked={current().autoUpdate} disabled={saving()} onChange={(on) => void save({ autoUpdate: on })} />
+                            </PaperSettingItem>
+                        </Show>
                     </PaperSettingList>
                 )}
             </Show>

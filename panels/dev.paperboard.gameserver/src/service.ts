@@ -25,7 +25,7 @@ import { processApi as scopedProcess, LEGACY_DEPRECATION } from "./service/api";
 import { type GameServerState, SERVER_PROC_ID } from "./service/types";
 import { setRecoveryBlock } from "./service/recoveryState";
 import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance } from "./service/lifecycle";
-import { cancelAutomation, readAutomation, scheduleDailyRestart } from "./service/automation";
+import { cancelAutomation, readAutomation, scheduleDailyRestart, scheduleUpdateChecks } from "./service/automation";
 
 import { currentGameService, gameServiceFor } from "./games/service";
 import { assertGameAction, gameFor, games } from "./games";
@@ -243,6 +243,7 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
             await loadServerOptions(scope.ctx);
             await readAutomation();
             scheduleDailyRestart(scope.ctx, restartServerInstance);
+            scheduleUpdateChecks(scope.ctx, restartServerInstance);
             await game.initialize(scope.ctx, running);
             icons.set(server.id, (await game.readIcon?.()) ?? null);
         });

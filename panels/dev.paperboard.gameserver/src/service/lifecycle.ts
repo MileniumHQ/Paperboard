@@ -7,7 +7,7 @@ import { livePortDeps } from "./portDeps";
 import { type GameServerState, appendCapped } from "./types";
 import { loadServerOptions } from "./options";
 import { TRIGGER_IDS } from "./contract";
-import { afterCrash, cancelStopRequest, classifyExit, markStarting, markStopRequested } from "./automation";
+import { afterCrash, cancelStopRequest, classifyExit, markStarting, markStopRequested, updateBeforeStart } from "./automation";
 
 const primaryProcessId = () => currentGameService().primaryProcessId;
 const local = serverLocal(() => ({ lineBuffer: "", readinessTimer: null as ReturnType<typeof setTimeout> | null, readinessDeadline: null as ReturnType<typeof setTimeout> | null, generation: 0, isRestarting: false, stopTimeout: null as ReturnType<typeof setTimeout> | null }));
@@ -125,6 +125,9 @@ export async function startServerInstance(
         // setting refuses to move it
         const moves = await prepareGamePorts(game.ports(ctx, livePortDeps()), livePortDeps());
 
+        // the update installs before the launch reads the server's files; it
+        // holds the game's install flag, so a second start refuses meanwhile
+        const updated = await updateBeforeStart(ctx);
         const launch = await game.prepareLaunch(ctx);
 
         // an install owns the server folder until it activates or rolls
@@ -139,6 +142,7 @@ export async function startServerInstance(
             chatMessages: [],
             serverEntries: [
                 ...carry,
+                ...updated,
                 {
                     type: "info",
                     content: launch.message,

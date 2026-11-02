@@ -7,7 +7,7 @@ import { appendCapped } from "../../service/types";
 import { ACTION_IDS, TRIGGER_IDS } from "../../service/contract";
 import { validateOptions } from "../options";
 import { installedBuild, steamClientLibrary } from "../steam/steamcmd";
-import { steamInstallActions, steamUpdateStatus } from "../steam/installAction";
+import { steamInstall, steamInstallActions, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import {
     ConsoleBuffer, assertHost, exists, gameAction, isLinked, linkFolder, pushChat, readSettings, redact, report,
     serverRoot, serverSecret, settingPort, settled, singleLine, unlinkFolder, updateSettings, writePrivate, type Context,
@@ -331,11 +331,17 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
 
     const online = (ctx: Context) => settled(ctx, spec.name);
     const action = gameAction;
+    const steam: SteamInstallSpec = {
+        game, appId: spec.appId, ids: { info: ids.info, latest: ids.latest, install: ids.install },
+        installDir, flag: local, loadOptions,
+        async afterInstall() { await linkLogs(); await writeConfigs(); },
+    };
 
     return {
         primaryProcessId: PROC, processIds: [PROC],
         backupExclude: ["install"],
-        updateStatus: () => steamUpdateStatus({ appId: spec.appId, installDir }),
+        updateStatus: () => steamUpdateStatus(steam),
+        installUpdate: steamInstall(steam),
         initialState: () => ({ ...initialServerState(), serverSoftware: spec.id, serverPort: String(spec.defaultPort), serverMotd: "" }),
         actions: async () => { const { sharedActions, backupAction } = await import("../../service/actions"); return [...sharedActions, backupAction,
             action(ACTION_IDS.readGameOptions, "Read options", async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; }),
@@ -361,11 +367,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 await loadOptions(ctx);
                 return ctx.state.gameSettings;
             }),
-            ...steamInstallActions({
-                game, appId: spec.appId, ids: { info: ids.info, latest: ids.latest, install: ids.install },
-                installDir, flag: local, loadOptions,
-                async afterInstall() { await linkLogs(); await writeConfigs(); },
-            }),
+            ...steamInstallActions(steam),
             action(ids.players, `${spec.name} players`, async () => {
                 await saveStats();
                 return { seen: await roster().seen(), bans: await roster().bans(), online: [...local().online.values()], admins: (await modsOn()) ? await (await mods()).admins() : null };

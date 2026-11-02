@@ -83,6 +83,8 @@ mock.module("../src/service/api", () => ({
 const { handleProcessData, handleProcessExit, __lifecycleTest } = await import("../src/service/lifecycle");
 const { restartServerInstance, sendServerCommand, sendChatMessage, stopServerInstance } = await import("../src/service/lifecycle");
 const automation = await import("../src/service/automation");
+const { gameServiceFor } = await import("../src/games/service");
+const { startServerInstance } = await import("../src/service/lifecycle");
 const { queryGamerules, setGamerule } = await import("../src/service/gamerules");
 const {
     assertGameruleName,
@@ -486,7 +488,7 @@ describe("crashes", () => {
 
     it("turned off, a crash is reported and the server stays stopped", async () => {
         await automation.writeAutomation(makeCtx(), { restartAfterCrash: false }, async () => {});
-        expect((savedConfig as any).automation).toEqual({ restartAfterCrash: false, dailyRestart: null });
+        expect((savedConfig as any).automation).toEqual({ restartAfterCrash: false, dailyRestart: null, autoUpdate: true });
         jest.useFakeTimers();
         const ctx = makeCtx({ serverStatus: "online" });
         handleProcessExit(ctx, 1);
@@ -501,8 +503,9 @@ describe("daily restart", () => {
     it("takes whole hours only", () => {
         expect(() => automation.validateAutomation({ restartAfterCrash: true, dailyRestart: "04:30" })).toThrow(/whole hour/);
         expect(() => automation.validateAutomation({ restartAfterCrash: true, dailyRestart: "24:00" })).toThrow(/whole hour/);
-        expect(() => automation.validateAutomation({ restartAfterCrash: "yes", dailyRestart: null })).toThrow(/on or off/);
-        expect(automation.validateAutomation({ restartAfterCrash: true, dailyRestart: "04:00" })).toEqual({ restartAfterCrash: true, dailyRestart: "04:00" });
+        expect(() => automation.validateAutomation({ restartAfterCrash: "yes", dailyRestart: null, autoUpdate: true })).toThrow(/on or off/);
+        expect(() => automation.validateAutomation({ restartAfterCrash: true, dailyRestart: null, autoUpdate: "yes" })).toThrow("Update automatically must be on or off");
+        expect(automation.validateAutomation({ restartAfterCrash: true, dailyRestart: "04:00", autoUpdate: false })).toEqual({ restartAfterCrash: true, dailyRestart: "04:00", autoUpdate: false });
     });
 
     it("counts to the next time the hour comes round", () => {
@@ -531,6 +534,98 @@ describe("daily restart", () => {
         jest.advanceTimersByTime(60_000);
         await Promise.resolve();
         expect(restarts).toEqual(["restart"]);
+        automation.cancelAutomation();
+        jest.useRealTimers();
+    });
+});
+
+describe("automatic updates", () => {
+    // the unscoped service is Minecraft's, which can't update itself; these give it a Steam-style update
+    const service = gameServiceFor("minecraft") as any;
+    const calls: string[] = [];
+    let status: { installed: string; latest: string; updateAvailable: boolean } | Error;
+    const canUpdate = () => {
+        service.updateStatus = async () => { calls.push("check"); if (status instanceof Error) throw status; return status; };
+        service.installUpdate = async () => { calls.push(`install, ${starts.length} starts`); };
+    };
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    beforeEach(async () => {
+        calls.length = 0;
+        status = { installed: "1", latest: "2", updateAvailable: true };
+        await automation.writeAutomation(makeCtx(), { restartAfterCrash: true, dailyRestart: null, autoUpdate: true }, async () => {});
+        automation.cancelAutomation();
+    });
+    afterAll(() => { delete service.updateStatus; delete service.installUpdate; });
+
+    it("only a game that can update itself offers the setting", () => {
+        delete service.updateStatus;
+        delete service.installUpdate;
+        expect(automation.automationView(automation.AUTOMATION_DEFAULTS).canUpdate).toBe(false);
+        canUpdate();
+        expect(automation.automationView(automation.AUTOMATION_DEFAULTS).canUpdate).toBe(true);
+    });
+
+    it("a start installs a newer build first and says so in the fresh console", async () => {
+        canUpdate();
+        const ctx = makeCtx({ serverStatus: "offline" });
+        await startServerInstance(ctx);
+        expect(calls).toEqual(["check", "install, 0 starts"]);
+        expect(starts.length).toBe(1);
+        expect(ctx.state.serverEntries.slice(0, 2).map((e: any) => e.content)).toEqual(["[Server] Updating to build 2 before starting.", "[Server] Updated to build 2."]);
+    });
+
+    it("a start with nothing new, or with the setting off, installs nothing", async () => {
+        canUpdate();
+        status = { installed: "2", latest: "2", updateAvailable: false };
+        await startServerInstance(makeCtx({ serverStatus: "offline" }));
+        await automation.writeAutomation(makeCtx(), { autoUpdate: false }, async () => {});
+        status = { installed: "1", latest: "2", updateAvailable: true };
+        await startServerInstance(makeCtx({ serverStatus: "offline" }));
+        expect(calls).toEqual(["check"]);
+        expect(starts.length).toBe(2);
+    });
+
+    it("a check Steam can't answer is said, and the server starts as it is", async () => {
+        canUpdate();
+        status = new Error("SteamCMD exited with code 8");
+        const ctx = makeCtx({ serverStatus: "offline" });
+        await startServerInstance(ctx);
+        expect(starts.length).toBe(1);
+        expect(ctx.state.serverEntries[0]).toEqual({ type: "error", content: "[Server] Could not check for an update, so the server starts as it is: SteamCMD exited with code 8" });
+    });
+
+    it("a running server with players is warned, then restarts for an update", async () => {
+        canUpdate();
+        jest.useFakeTimers();
+        const restarts: string[] = [];
+        const ctx = makeCtx({ serverStatus: "online", onlinePlayers: ["Steve"] });
+        automation.scheduleUpdateChecks(ctx, async () => { restarts.push("restart"); });
+        jest.advanceTimersByTime(automation.UPDATE_CHECK_MS);
+        await flush();
+        expect(calls).toEqual(["check"]);
+        expect(writes.join("")).toContain("An update is out. The server restarts to install it in 5 minutes.");
+        expect(restarts).toEqual([]);
+        jest.advanceTimersByTime(automation.UPDATE_WARNING_MS);
+        await flush();
+        expect(restarts).toEqual(["restart"]);
+        automation.cancelAutomation();
+        jest.useRealTimers();
+    });
+
+    it("an empty server restarts for an update at once, and a stopped one is left alone", async () => {
+        canUpdate();
+        jest.useFakeTimers();
+        const restarts: string[] = [];
+        const ctx = makeCtx({ serverStatus: "offline" });
+        automation.scheduleUpdateChecks(ctx, async () => { restarts.push("restart"); });
+        jest.advanceTimersByTime(automation.UPDATE_CHECK_MS);
+        await flush();
+        expect(calls).toEqual([]);
+        ctx.setState({ serverStatus: "online" });
+        jest.advanceTimersByTime(automation.UPDATE_CHECK_MS);
+        await flush();
+        expect(restarts).toEqual(["restart"]);
+        expect(writes.join("")).not.toContain("An update is out");
         automation.cancelAutomation();
         jest.useRealTimers();
     });
