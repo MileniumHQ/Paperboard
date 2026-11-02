@@ -28,8 +28,8 @@ export interface CraneDaemon {
 }
 
 // the daemon stays alive, so its stdout never ends: read until the port line
-export async function startCrane(bin: string, dir: string): Promise<CraneDaemon> {
-    const proc = Bun.spawn([bin, "--headless", "--host", "127.0.0.1", "--port", "0"], {
+export async function startCrane(bin: string, dir: string, { headless = true } = {}): Promise<CraneDaemon> {
+    const proc = Bun.spawn([bin, ...(headless ? ["--headless"] : []), "--host", "127.0.0.1", "--port", "0"], {
         env: { ...process.env, PAPERBOARD_DIR: dir },
         stdout: "pipe",
         stderr: "pipe",

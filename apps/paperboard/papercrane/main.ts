@@ -59,9 +59,7 @@ async function main(): Promise<void> {
         await import(pathToFileURL(panelService).href);
         return;
     }
-    // a headless daemon is run by a service manager, whose stop or restart
-    // (an update) must not stop the game servers it supervises
-    await startPaperCraneServer({ ...cliOptions, leaveWorkloadsOnSignal: cliOptions.headless === true });
+    await startPaperCraneServer(cliOptions);
 }
 
 const isMainEntry = (import.meta as unknown as { main?: boolean }).main;

@@ -92,7 +92,7 @@ console.log("Git status:", stdout);`}
             </PaperText>
             <PaperText preset="body">
                 Background processes run under their own supervisor, so they keep running if Paperboard crashes. When Paperboard starts again, it reattaches them: call exists with the same ID when your service starts, and subscribe again if it returns true.
-                Quitting Paperboard normally stops them. A headless Paperboard Server that is stopped or restarted by its service manager, as for an update, leaves them running for the next one to reattach.
+                Quitting Paperboard from its menu stops them. A Paperboard Server that is stopped or restarted by a signal, as a service manager does for an update, leaves them running for the next one to reattach.
             </PaperText>
             <PaperText preset="body">
                 Text written to a process reaches it as UTF-8. A program that reads its input in another encoding sets inputEncoding on start: "utf16le" for a .NET program that sets Console.InputEncoding to Unicode on Windows, as Terraria does.

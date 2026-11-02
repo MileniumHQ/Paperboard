@@ -1,8 +1,9 @@
-// Stopping the headless daemon leaves the workloads it supervises running
+// Stopping the daemon, headless or not, leaves the workloads it supervises running
 // (bun test, a real compiled daemon, real supervisors). A service manager
 // stops and restarts the daemon for an update; the SIGTERM handler used to
 // SIGKILL every supervised workload, so a game server lost its world's
-// unsaved progress each time. Supervisors are detached so the next daemon
+// unsaved progress each time, and a daemon started without --headless still
+// did. Supervisors are detached so the next daemon
 // adopts what they keep running.
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import { spawnSync } from "node:child_process";
@@ -65,9 +66,9 @@ async function until(check: () => boolean | Promise<boolean>, what: string) {
     }
 }
 
-test("SIGTERM to the headless daemon leaves a supervised workload running for the next daemon", async () => {
+for (const headless of [true, false]) test(`SIGTERM to the ${headless ? "headless" : "interactive"} daemon leaves a supervised workload running for the next daemon`, async () => {
     const dir = process.env.PAPERBOARD_DIR!;
-    const first = await startCrane(bin, dir);
+    const first = await startCrane(bin, dir, { headless });
     daemons.push(first);
     const firstApi = new CraneTransport({ port: first.port, token: first.token, computerId: "local" });
     transports.push(firstApi);

@@ -282,10 +282,6 @@ export interface ServerOptions {
     remotesFile?: string;
     // mDNS announcement on non-loopback binds (default on)
     advertise?: boolean;
-    // SIGTERM/SIGINT ends the daemon but leaves the supervised workloads
-    // running for the next daemon to adopt, which is what a service manager's
-    // stop or restart (an update) needs. Without it a signal stops them.
-    leaveWorkloadsOnSignal?: boolean;
 }
 
 // handshake file for local clients, written on every listen. Throws: a
@@ -437,10 +433,12 @@ export function startPaperCraneServer(
             const onSignal = () => {
                 removeHandshake();
                 panelServices.stopAll();
-                if (options.leaveWorkloadsOnSignal) {
-                    leavingWorkloads = true;
-                    engine.releaseAllClients();
-                } else engine.killAllClients();
+                // SIGTERM/SIGINT ends the daemon, never the workloads it
+                // supervises: a service manager's stop or restart (an OS
+                // update, a crane update) must not take a game server down.
+                // The next daemon adopts them; only stop() ends them.
+                leavingWorkloads = true;
+                engine.releaseAllClients();
                 try {
                     advertisement?.stop();
                 } catch (err) { logger.debug("[index.ts] advertisement stop failed:", err); }
