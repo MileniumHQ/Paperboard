@@ -3,7 +3,7 @@ import { PaperButton, PaperCenteredInterface, PaperFlex, PaperIcon, PaperMediaCa
 import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { sourceActions, type SourceGameSpec } from "./index";
-import MapCards, { MapPicturesNote, mapChoices } from "./MapCards";
+import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices } from "./MapCards";
 import { playModes } from "./modes";
 import { createMapPictures } from "./useMapPictures";
 
@@ -100,6 +100,7 @@ export default function SourcePlayStep(props: {
                                     Pick a game mode and the server plays its maps in turn, or leave it mixed. You can change this any time on the Maps tab.
                                 </PaperText>
                             </PaperFlex>
+                            <MapPicturesFailure pictures={pictures} />
                             <PaperMediaCardGroup minCardWidth="field-wide">
                                 <For each={modes()}>
                                     {(m) => (
@@ -121,7 +122,7 @@ export default function SourcePlayStep(props: {
                                     onClick={() => pick(null)}
                                 />
                             </PaperMediaCardGroup>
-                            <MapPicturesNote pictures={pictures} />
+                            <MapPicturesCredit pictures={pictures} />
                         </PaperFlex>
                     </Show>
                 </Show>

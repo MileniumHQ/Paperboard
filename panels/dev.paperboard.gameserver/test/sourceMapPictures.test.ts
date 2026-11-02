@@ -102,7 +102,8 @@ test("a wiki that can't be reached is named in the error", async () => {
     const closed = Bun.serve({ port: 0, fetch: () => new Response("") });
     const page = `http://127.0.0.1:${closed.port}/wiki/List_of_maps`;
     closed.stop(true);
-    await expect(mapPictures(source(page))).rejects.toThrow("Couldn't reach Test Wiki for map pictures");
+    // not just "fetch failed": the cause, so the screen says what to look at
+    await expect(mapPictures(source(page))).rejects.toThrow(/Couldn't reach Test Wiki for map pictures: .*(Unable to connect|ECONNREFUSED|refused)/i);
 });
 
 // --- the action a screen calls

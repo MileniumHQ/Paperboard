@@ -33,26 +33,31 @@ export interface MapChoice {
 /** Installed maps as cards, named by the mode their prefix gives. */
 export const mapChoices = (spec: SourceGameSpec, names: readonly string[]): MapChoice[] => names.map((name) => ({ name, mode: mapMode(spec, name) }));
 
-/** Where the pictures come from, or why there are none: the line every screen with map pictures carries. */
-export function MapPicturesNote(props: { pictures: MapPicturesState }) {
+/** Why there are no pictures, where they would be: above what they would illustrate, never below a long grid. */
+export function MapPicturesFailure(props: { pictures: MapPicturesState }) {
     return (
-        <>
-            <Show when={props.pictures.error()}>
-                <PaperQuote variant="warning" icon="image" title="Map pictures unavailable">
-                    <PaperFlex direction="column" gap="half" align="flex-start">
-                        <span>{props.pictures.error()} Maps still work without them.</span>
-                        <PaperButton onClick={() => props.pictures.retry()}>Try again</PaperButton>
-                    </PaperFlex>
-                </PaperQuote>
-            </Show>
-            <Show when={props.pictures.source()}>
-                {(source) => (
-                    <PaperText size={1} color="text-subtle">
-                        Map pictures from <PaperLink href={source().url} target="_blank">{source().name}</PaperLink>.
-                    </PaperText>
-                )}
-            </Show>
-        </>
+        <Show when={props.pictures.error()}>
+            <PaperQuote variant="warning" icon="image" title="Map pictures unavailable">
+                <PaperFlex direction="column" gap="half" align="flex-start">
+                    <span>{props.pictures.error()}</span>
+                    <span>Maps still work without them.</span>
+                    <PaperButton onClick={() => props.pictures.retry()}>Try again</PaperButton>
+                </PaperFlex>
+            </PaperQuote>
+        </Show>
+    );
+}
+
+/** Where the pictures come from. */
+export function MapPicturesCredit(props: { pictures: MapPicturesState }) {
+    return (
+        <Show when={props.pictures.source()}>
+            {(source) => (
+                <PaperText size={1} color="text-subtle">
+                    Map pictures from <PaperLink href={source().url} target="_blank">{source().name}</PaperLink>.
+                </PaperText>
+            )}
+        </Show>
     );
 }
 
@@ -109,6 +114,7 @@ export default function MapCards(props: {
     return (
         <PaperFlex direction="column" gap="half">
             <Show when={!props.bare}>
+            <MapPicturesFailure pictures={props.pictures} />
             <PaperFlex direction="row" gap="half" align="center">
                 <PaperInput fullWidth icon="search" placeholder={props.placeholder ?? "Search maps"} value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
                 <Show when={modes().length > 1}>
@@ -144,7 +150,7 @@ export default function MapCards(props: {
                 </PaperMediaCardGroup>
             </Show>
             <Show when={!props.bare}>
-                <MapPicturesNote pictures={props.pictures} />
+                <MapPicturesCredit pictures={props.pictures} />
             </Show>
         </PaperFlex>
     );

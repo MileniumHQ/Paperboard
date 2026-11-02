@@ -16,7 +16,7 @@ import {
 import { serverBridge, serverLevel, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { mapMode, sourceActions, type SourceGameSpec, type SourceMapCycle } from "./index";
-import MapCards, { MapPicturesNote, mapChoices } from "./MapCards";
+import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices } from "./MapCards";
 import { createMapPictures } from "./useMapPictures";
 import { workshopChoice } from "./useWorkshopMaps";
 import WorkshopPane from "./WorkshopPane";
@@ -163,6 +163,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                 </PaperQuote>
                             )}
                         </Show>
+                        <MapPicturesFailure pictures={pictures} />
                         <Show when={error()}>
                             {(failure) => (
                                 <PaperQuote variant="danger" icon="warning" title={failure().title} onDismiss={() => setError(null)}>
@@ -223,7 +224,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                 </PaperList>
                             </PaperCard>
                         </Show>
-                        <MapPicturesNote pictures={pictures} />
+                        <MapPicturesCredit pictures={pictures} />
                     </PaperFlex>
                 )}
             </Show>

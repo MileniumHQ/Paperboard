@@ -79,7 +79,7 @@ export default function WorkshopPane(props: {
                     <>
                         <Show
                             when={found().items.length > 0}
-                            fallback={<PaperText color="text-subtle">{found().hidden > 0 ? "The Workshop has nothing but items that are not maps for that." : "No Workshop maps matched."}</PaperText>}
+                            fallback={<PaperText size={2} color="text-subtle">{found().hidden > 0 ? "The Workshop has nothing but items that are not maps for that." : "No Workshop maps matched."}</PaperText>}
                         >
                             <MapCards bare maps={choices()} pictures={{ of: () => undefined, source: () => null, error: () => "", retry: () => {} }} disabled={props.disabled} onPick={pick} />
                         </Show>
