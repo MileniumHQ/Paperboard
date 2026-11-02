@@ -11,7 +11,7 @@ import type { GameService } from "../serviceTypes";
 import { loadConfigAndProperties } from "./config";
 import { prepareLaunch } from "./launch";
 import { isInstallRunning } from "./softwareInstall";
-import { commandLine, observeLine, sendChatMessage } from "./observe";
+import { commandLine, observeLine, onReady, sendChatMessage } from "./observe";
 import { portSpecs, portNames } from "./ports";
 import { withSavingPaused, pauseSavingForBackup, recoverPausedSaving, saveWorld } from "./saving";
 
@@ -29,6 +29,9 @@ export const minecraftService: GameService = {
         const { scheduleRepublishDynamicActions, republishDynamicActions } = await import("./actions");
         setPlayerNamesChangedHandler(() => scheduleRepublishDynamicActions(ctx));
         await republishDynamicActions(ctx);
+        // a server adopted from the last service answers who is on and its
+        // live rules again; nothing else asks until it next starts
+        if (running) onReady(ctx);
     },
     async beforeRemove() { await stopLeftoverInstaller(); },
     async dispose() {

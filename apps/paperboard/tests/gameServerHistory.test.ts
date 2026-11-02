@@ -52,12 +52,14 @@ test("a service restart keeps each server's console and chat, and starts a serve
         const servers = ["survival", "creative"].map((id) => ({ id, name: id, game: "minecraft", directory: `${serversDirectory}/${id}`, createdAt: 1, settings: { configured: true, software: "vanilla", version: "1.21.4" } }));
         await config.set({ version: 2, serversDirectory, servers }, PANEL);
         for (const server of servers) await fileApi.write(`${server.directory}/world/level.dat`, server.id, PANEL);
-        const child = `console.log('[Server thread/INFO]: Done (0.1s)!'); for await (const line of console) { if (line === 'villagers') console.log('[14:00:00] [Server thread/INFO]: <Hyper> where are my villagers'); }`;
+        const child = `console.log('[Server thread/INFO]: Done (0.1s)!'); for await (const line of console) { if (line === 'villagers') console.log('[14:00:00] [Server thread/INFO]: <Hyper> where are my villagers'); if (line === 'list') console.log('[14:00:00] [Server thread/INFO]: There are 1 of a max of 20 players online: Hyper'); }`;
         await processApi.start({ id: "survival-mc-server", command: bunExecutable, args: ["-e", child], cwd: await fileApi.getPath(servers[0]!.directory, PANEL) });
         services.init((wss.address() as any).port, undefined, auth);
         await services.waitUntilReady(PANEL);
         const state = async (id: string) => serverStateOf(await actionsApi.call<any>(PANEL, "list-servers"), id);
         expect((await state("survival")).serverStatus).toBe("online");
+        // a server the service adopts is asked who is on, not shown empty until its next start
+        await until(async () => (await state("survival")).onlinePlayers.length === 1, "the adopted server's players");
 
         await actionsApi.call(PANEL, "survival/run-command", { command: "villagers" });
         await until(async () => (await state("survival")).chatMessages.some((m) => m.text.includes("where are my villagers")), "the chat line");
