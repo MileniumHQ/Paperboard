@@ -22,10 +22,11 @@ import {
 import * as nodeFs from "node:fs/promises";
 import { inServer, type ServerScope } from "./service/scope";
 import { processApi as scopedProcess, LEGACY_DEPRECATION } from "./service/api";
-import { type GameServerState, SERVER_PROC_ID } from "./service/types";
+import { type GameServerState, SERVER_PROC_ID, appendCapped } from "./service/types";
 import { setRecoveryBlock } from "./service/recoveryState";
-import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance } from "./service/lifecycle";
+import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance, startServerInstance } from "./service/lifecycle";
 import { cancelAutomation, readAutomation, scheduleDailyRestart, scheduleUpdateChecks } from "./service/automation";
+import { historyWriter, readHistory } from "./service/history";
 
 import { currentGameService, gameServiceFor } from "./games/service";
 import { assertGameAction, gameFor, games } from "./games";
@@ -74,6 +75,10 @@ function updateSaved(change: (current: ServersConfig) => ServersConfig): Promise
     return work;
 }
 const icons = new Map<string, string | null>();
+// each server's console and chat, kept on disk so a service restart (an
+// update, a crash, a reboot) opens with what was last said
+const histories = new Map<string, ReturnType<typeof historyWriter>>();
+const historyFile = (id: string) => fileApi.getPath(`${saved.serversDirectory}/history/${id}.json`, PANEL_ID);
 function publish(changed?: ServerScope): void {
     const servers = saved.servers.map((server): ServerSummary => {
         const scope = entries.get(server.id);
@@ -165,6 +170,7 @@ function createScope(server: StoredServer): ServerScope {
             setState(patch) {
                 state = { ...state, ...(typeof patch === "function" ? patch(state) : patch) };
                 publish(scope);
+                histories.get(server.id)?.changed(state);
             },
             emit: (event, payload) => rootContext.emit(`${server.id}/${event}`, payload),
             emitTrigger(id, output) {
@@ -187,6 +193,10 @@ function createScope(server: StoredServer): ServerScope {
         bindAction: (def) => bind(scope, def),
     };
     entries.set(server.id, scope);
+    histories.set(server.id, historyWriter(() => historyFile(server.id), (err) => {
+        console.error(`[gameserver] the console history of ${server.name} could not be saved:`, err);
+        scope.ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] The console history could not be saved: ${err instanceof Error ? err.message : String(err)}` }) }));
+    }));
     return scope;
 }
 // Player heads were kept on disk beside the servers until they were looked
@@ -227,6 +237,16 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
                     PANEL_ID,
                 );
         }
+        let wasRunning = false;
+        try {
+            const history = await readHistory(await historyFile(server.id));
+            wasRunning = history.running;
+            histories.get(server.id)!.loaded(history);
+            scope.ctx.setState({ serverEntries: history.serverEntries, chatMessages: history.chatMessages });
+        } catch (err) {
+            console.error(`[gameserver] the console history of ${server.name} could not be read:`, err);
+            scope.ctx.setState({ serverEntries: [{ type: "error", content: `[Server] The saved console history could not be read: ${err instanceof Error ? err.message : String(err)}` }] });
+        }
         await inServer(scope, async () => {
             // A server left running keeps its identity and directory on migration.
             // Recovery must never modify that running process's files.
@@ -241,11 +261,20 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
                 scopedProcess.onExit(game.primaryProcessId, (code) => handleProcessExit(scope.ctx, code)),
             );
             await loadServerOptions(scope.ctx);
-            await readAutomation();
+            const automation = await readAutomation();
             scheduleDailyRestart(scope.ctx, restartServerInstance);
             scheduleUpdateChecks(scope.ctx, restartServerInstance);
             await game.initialize(scope.ctx, running);
             icons.set(server.id, (await game.readIcon?.()) ?? null);
+            // the server was running when this service last saw it and nobody
+            // stopped it: it went down while Paperboard was not watching (the
+            // computer restarted, or the system ended it), which is a crash
+            if (wasRunning && !running) {
+                const restart = automation.restartAfterCrash;
+                scope.ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] The server stopped while Paperboard was not running.${restart ? " Starting it again." : ""}` }) }));
+                // a launch that fails says so in the console itself
+                if (restart) void startServerInstance(scope.ctx).catch((err) => console.error(`[gameserver] ${server.name} could not start again:`, err));
+            }
         });
         return scope;
     } catch (err) {
@@ -363,6 +392,10 @@ export const gameServerService = definePanelService({
                         return next;
                     });
                     await inServer(scope, async () => { cancelReadiness(); cancelAutomation(); await currentGameService().dispose(); });
+                    // the history is the server's console, not its files: it goes with the entry
+                    await histories.get(server)!.stop();
+                    histories.delete(server);
+                    await nodeFs.rm(await historyFile(server), { force: true });
                     for (const off of scope.unsubscribe) off();
                     entries.delete(server);
                     icons.delete(server);

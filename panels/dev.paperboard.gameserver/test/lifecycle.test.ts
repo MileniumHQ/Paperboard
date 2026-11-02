@@ -420,8 +420,11 @@ describe("crashes", () => {
         await realWait();
         expect(starts.length).toBe(1);
         expect(ctx.state.serverStatus).toBe("starting");
-        // the fresh console opens with why the server started again
-        expect(ctx.state.serverEntries[0].content).toMatch(/^\[Server\] Restarted after a crash at .+ \(exit code 137\)\.$/);
+        // the crash stays in the console, and the new run opens with why the server started again
+        const lines = ctx.state.serverEntries.map((e: any) => e.content);
+        const restarted = lines.findIndex((line: string) => /^\[Server\] Restarted after a crash at .+ \(exit code 137\)\.$/.test(line));
+        expect(restarted).toBeGreaterThan(lines.indexOf("[Server] The server crashed (exit code 137). Logs has what it printed."));
+        expect(lines.indexOf("[Server] The server crashed (exit code 137). Logs has what it printed.")).toBeGreaterThanOrEqual(0);
     });
 
     it("a Windows crash status is named in hex, as Windows names it", () => {
@@ -575,7 +578,7 @@ describe("automatic updates", () => {
         expect(automation.automationView(automation.AUTOMATION_DEFAULTS).canUpdate).toBe(true);
     });
 
-    it("a start installs a newer build first and says so in the fresh console", async () => {
+    it("a start installs a newer build first and says so in the console", async () => {
         canUpdate();
         const ctx = makeCtx({ serverStatus: "offline" });
         await startServerInstance(ctx);
@@ -728,5 +731,21 @@ describe("gamerule service actions", () => {
             "[12:00:03] [Server thread/INFO]: Gamerule disableRaids is currently set to: true\n",
         );
         expect(ctx.state.gamerules.raids).toBe("false");
+    });
+});
+
+describe("a start keeps what the last run said", () => {
+    it("the console and chat from before the start stay above the new run", async () => {
+        const chat = { id: "chat-1", text: "<Hyper> where are my villagers", timestamp: "05:11:02", sender: "Hyper", content: "where are my villagers" };
+        const ctx = makeCtx({
+            serverStatus: "offline",
+            serverEntries: [{ type: "output", content: "Villager was slain by Zombie" }, { type: "warn", content: "[Server] Process stopped." }],
+            chatMessages: [chat],
+        });
+        await startServerInstance(ctx);
+        expect(ctx.state.serverStatus).toBe("starting");
+        expect(ctx.state.serverEntries.slice(0, 2).map((e: any) => e.content)).toEqual(["Villager was slain by Zombie", "[Server] Process stopped."]);
+        expect(ctx.state.serverEntries.length).toBeGreaterThan(2);
+        expect(ctx.state.chatMessages).toEqual([chat]);
     });
 });

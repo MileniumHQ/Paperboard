@@ -4,7 +4,7 @@ import { currentGame, currentGameService } from "../games/service";
 import { assertRecoverySettled } from "./recoveryState";
 import { prepareGamePorts } from "./ports";
 import { livePortDeps } from "./portDeps";
-import { type GameServerState, appendCapped } from "./types";
+import { type GameServerState, appendCapped, MAX_BUFFERED_ENTRIES } from "./types";
 import { loadServerOptions } from "./options";
 import { TRIGGER_IDS } from "./contract";
 import { afterCrash, cancelStopRequest, classifyExit, markStarting, markStopRequested, updateBeforeStart } from "./automation";
@@ -127,7 +127,7 @@ export async function startServerInstance(
 
         // the update installs before the launch reads the server's files; it
         // holds the game's install flag, so a second start refuses meanwhile
-        const updated = await updateBeforeStart(ctx);
+        await updateBeforeStart(ctx);
         const launch = await game.prepareLaunch(ctx);
 
         // an install owns the server folder until it activates or rolls
@@ -137,21 +137,23 @@ export async function startServerInstance(
         if (currentGameService().isMutating()) {
             throw new Error("A server install is running; start the server once it finishes.");
         }
+        // the last run's console and chat stay above the new one: they are
+        // what a crash, or the players before it, said. An update before the
+        // start has already said its lines into it.
         ctx.setState({
             serverStatus: "starting",
-            chatMessages: [],
             serverEntries: [
+                ...ctx.state.serverEntries,
                 ...carry,
-                ...updated,
                 {
-                    type: "info",
+                    type: "info" as const,
                     content: launch.message,
                 },
                 ...moves.map((move) => ({
                     type: "warn" as const,
                     content: `[Server] Port ${move.from} is taken, so ${move.label} uses ${move.to}.`,
                 })),
-            ],
+            ].slice(-MAX_BUFFERED_ENTRIES),
         });
 
         markStarting();

@@ -349,7 +349,7 @@ export function ConsoleWidget(props: Props) {
                     }));
                 return (
                     <PaperWidget title="Console" icon="terminal" detail={<StatusWord status={s().serverStatus} />} action={open}>
-                        <Show when={s().serverEntries.length > 0} fallback={<PaperWidgetMessage title="No server output since the service started" />}>
+                        <Show when={s().serverEntries.length > 0} fallback={<PaperWidgetMessage title="No server output yet" />}>
                             <PaperWidgetRows rows={rows()} aria-label="Latest server log" />
                         </Show>
                     </PaperWidget>
