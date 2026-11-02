@@ -94,7 +94,7 @@ describe("modscan and SteamCMD", () => {
     let server: ReturnType<typeof Bun.serve>;
     let base: string;
     const catalog = new Map([
-        ["101", ITEM("101", "Big Mod", ["102"])], ["102", ITEM("102", "Big Library")], ["103", ITEM("103", "Lonely Mod")],
+        ["101", { ...ITEM("101", "Big Mod", ["102"]), description: "https://i.imgur.com/W2c5CX6.gif Big Mod! It adds things. https://i.imgur.c" }], ["102", ITEM("102", "Big Library")], ["103", ITEM("103", "Lonely Mod")],
         // an addon whose library has a library of its own
         ["104", ITEM("104", "Storage Addon", ["105"])], ["105", ITEM("105", "Storage", ["106"])], ["106", ITEM("106", "Common Lib")],
     ]);
@@ -123,6 +123,8 @@ describe("modscan and SteamCMD", () => {
         expect(page.meta).toEqual(META);
         const hits = workshopHits(page.items);
         expect(hits.map(h => [h.projectId, h.stat, h.dependencies])).toEqual([["101", "1.2k subscribers", ["102"]], ["102", "1.2k subscribers", undefined]]);
+        // the banner and link addresses authors open with stay off the card
+        expect(hits.map(h => h.description)).toEqual(["Big Mod! It adds things.", "Big Library adds things."]);
         await expect(searchWorkshop("tmodloader", "fail", { base })).rejects.toThrow("Steam Workshop search failed: Steam is down");
         await expect(workshopItems("tmodloader", ["../etc"], { base })).rejects.toThrow("Not a Workshop item id");
     });

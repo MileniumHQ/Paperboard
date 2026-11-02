@@ -65,12 +65,15 @@ function formatSize(bytes: number): string {
 /** Steam's short descriptions are plain text; markdown must not read them as syntax */
 const escapeMarkdown = (text: string) => text.replace(/([\\`*_{}[\]()#+\-.!|>~<])/g, "\\$1");
 
+/** A card's blurb: authors open their short descriptions with banner and link addresses, which say nothing there */
+export const cardDescription = (text: string) => text.replace(/\bhttps?:\/\/\S+/g, " ").replace(/\s+/g, " ").trim();
+
 export const workshopHits = (items: WorkshopItem[]): AddonHit[] =>
     items.map((item) => ({
         projectId: item.id,
         slug: item.id,
         title: item.title,
-        description: item.description,
+        description: cardDescription(item.description),
         iconUrl: item.previewImageUrl ?? undefined,
         dependencies: item.children ?? undefined,
         stat: item.subscriptions === null ? `Updated ${formatDate(item.timeUpdated)}` : `${formatCount(item.subscriptions)} subscribers`,
