@@ -14,13 +14,15 @@ afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
 const fixture = (name: string) => path.join(import.meta.dir, "fixtures", "steam", name);
 const lines = (name: string) => fs.readFileSync(fixture(name), "utf8").split("\n");
 
+// the daemon's config, kept in memory
+let settings: Record<string, unknown> = {};
 // the daemon's process API, run for real as a child so SteamCMD's stand-in prints what a script prints
 const exits = new Map<string, (code: number) => void>();
 const output = new Map<string, (chunk: string) => void>();
 mock.module("../src/service/api", () => ({
     ...paperapi,
     files: { getPath: async () => path.join(root, "server") },
-    config: { get: async () => ({}), set: async () => true },
+    config: { get: async () => settings, set: async (next: Record<string, unknown>) => { settings = next; return true; } },
     processApi: {
         exists: async () => false,
         kill: async () => true,
@@ -39,6 +41,7 @@ mock.module("../src/service/api", () => ({
 mock.module("@mileniumhq/paperapi", () => ({
     ...paperapi,
     fileApi: { getPath: async (...parts: string[]) => path.join(root, ...parts) },
+    secretsApi: { get: async () => ({ found: true, value: "rcon-secret" }), set: async () => true, delete: async () => true },
 }));
 
 const { parseLatestBuild, latestBuild } = await import("../src/games/steam/steamcmd");
@@ -115,4 +118,32 @@ test("TF2 and Palworld each list and serve their newest-build action, and name i
     const action = (await tf2Service.actions()).find((a) => a.id === `${tf2.id}-latest`)!;
     expect(await action.run({} as any, {})).toEqual({ installed: "26000000", latest: "26334371", updateAvailable: true });
     expect(await tf2Service.updateStatus!({} as any)).toEqual({ installed: "26000000", latest: "26334371", updateAvailable: true });
+});
+
+test("a TF2 download leaves setup open for how the server plays, which then finishes it", async () => {
+    // a SteamCMD that downloads: it writes the app manifest where it was told to and says so as SteamCMD does
+    const workspace = path.join(root, ".steam", PANEL_ID);
+    const script = path.join(workspace, "steamcmd", "steamcmd.sh");
+    fs.mkdirSync(path.dirname(script), { recursive: true });
+    fs.writeFileSync(script, `#!/bin/sh
+dir="$2"; app="$6"
+mkdir -p "$dir/steamapps" "$dir/tf/maps" "$dir/tf/cfg"
+printf '"AppState"\n{\n\t"buildid"\t\t"26334371"\n}\n' > "$dir/steamapps/appmanifest_$app.acf"
+: > "$dir/tf/maps/ctf_2fort.bsp"
+echo "Success! App '$app' fully installed."
+`, { mode: 0o755 });
+    fs.rmSync(path.join(root, "server"), { recursive: true, force: true });
+    settings = {};
+    const { inServer } = await import("../src/service/scope");
+    const state: Record<string, unknown> = { serverStatus: "offline" };
+    const ctx = { state, setState: (patch: any) => Object.assign(state, typeof patch === "function" ? patch(state) : patch), emitTrigger: () => {} } as any;
+    const scope = { server: { id: "s-steam-setup", game: tf2.id, directory: "" }, locals: new Map() } as any;
+    const run = (id: string, input: Record<string, unknown> = {}) => inServer(scope, async () => (await tf2Service.actions()).find((a) => a.id === id)!.run(ctx, input));
+
+    await inServer(scope, () => tf2Service.initialize!(ctx, false));
+    await run(`${tf2.id}-install`);
+    expect(settings).toMatchObject({ build: "26334371" });
+    expect(settings.configured).toBeUndefined();
+    await run(`${tf2.id}-play`, { mode: null, map: "ctf_2fort" });
+    expect(settings).toMatchObject({ configured: true, map: "ctf_2fort" });
 });

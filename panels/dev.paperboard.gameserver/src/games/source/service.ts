@@ -393,6 +393,8 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         game, appId: spec.appId, ids: { info: ids.info, latest: ids.latest, install: ids.install },
         installDir, flag: local, loadOptions,
         async afterInstall() { await linkLogs(); await writeConfigs(); },
+        // setup ends with how the server plays (ids.play)
+        setupAfterInstall: true,
     };
 
     return {
@@ -559,7 +561,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                     rotation = checkRotation([map, ...chosen.maps.filter((m) => m !== map)], installed);
                 }
                 if (rotation) await refuseOverriddenCycle();
-                await setRotation(ctx, rotation, { map });
+                await setRotation(ctx, rotation, { map, configured: true });
                 await loadOptions(ctx);
                 return mapCycleView(ctx);
             }),

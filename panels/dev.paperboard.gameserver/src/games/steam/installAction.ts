@@ -12,6 +12,12 @@ export interface SteamInstallSpec {
     /** The game's own setup after each download, such as links and generated settings. */
     afterInstall(): Promise<void>;
     loadOptions(ctx: Context): Promise<void>;
+    /**
+     * Whether setup asks something after the download (a Source game's
+     * mode and map). The server is set up once that is answered, not when
+     * the download ends, so setup left at that step opens there again.
+     */
+    setupAfterInstall?: boolean;
 }
 
 /** Downloads one Steam app with the install's progress in state; any failure shows as an error stage, then throws. */
@@ -60,7 +66,7 @@ export function steamInstall(spec: SteamInstallSpec): (ctx: Context) => Promise<
     return (ctx) => exclusive(ctx, spec.flag(), name, async () => {
         assertHost(spec.game);
         const build = await installWithProgress(ctx, spec.appId, await spec.installDir(), spec.afterInstall);
-        await updateSettings({ configured: true, build });
+        await updateSettings(spec.setupAfterInstall ? { build } : { configured: true, build });
         await spec.loadOptions(ctx);
     });
 }
