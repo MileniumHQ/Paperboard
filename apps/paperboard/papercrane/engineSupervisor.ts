@@ -64,13 +64,17 @@ export interface PreListeners {
 }
 
 // electron-vite bundles the supervisor entry beside the app's main bundle
-// (electron.vite.config.ts), which is the process's main module
+// (electron.vite.config.ts); the main bundle says where that is at launch.
+// require.main can't: Electron's app mode names its main module "electron".
+let desktopEntry: string | null = null;
+export function setDesktopSupervisorEntry(entry: string): void {
+    if (!path.isAbsolute(entry)) throw new Error(`The desktop app's supervisor must be an absolute path: ${entry}`);
+    desktopEntry = entry;
+}
 function desktopSupervisorEntry(): string {
-    const main = typeof require === "undefined" ? undefined : require.main?.filename;
-    if (!main) throw new Error("The desktop app's main module is unknown, so its supervisor can't be found");
-    const entry = path.join(path.dirname(main), "supervisor.js");
-    if (!fs.existsSync(entry)) throw new Error(`The desktop app's supervisor is missing: ${entry}`);
-    return entry;
+    if (!desktopEntry) throw new Error("The desktop app did not say where its supervisor is");
+    if (!fs.existsSync(desktopEntry)) throw new Error(`The desktop app's supervisor is missing: ${desktopEntry}`);
+    return desktopEntry;
 }
 
 export async function spawnSupervisedClient(

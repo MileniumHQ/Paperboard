@@ -44,8 +44,11 @@ import icon from "../../resources/icon.png?asset";
 import { installScreenshotTool } from "./screenshotTool";
 import { installTextEditContextMenu } from "./contextMenu";
 import { relocateElectronData } from "./electronData";
+import { setDesktopSupervisorEntry } from "../../papercrane/engineSupervisor";
 
 const log = logger;
+// workload supervisors run the bundle electron-vite builds beside this one
+setDesktopSupervisorEntry(path.join(__dirname, "supervisor.js"));
 
 let mainWindowRef: BrowserWindow | null = null;
 // communicator teardown, captured when the shell boots; fired in before-quit

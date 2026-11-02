@@ -1,7 +1,15 @@
 // The desktop app's side of starting a workload, run by the real Electron
 // binary in node mode (tests/desktopSupervisor.test.ts). Bundled next to the
 // supervisor entry the way electron-vite bundles the app's main process.
-import { spawnSupervisedClient } from "../../papercrane/engineSupervisor";
+import * as path from "node:path";
+import { setDesktopSupervisorEntry, spawnSupervisedClient } from "../../papercrane/engineSupervisor";
+
+// Electron's app mode names the main module "electron", not this bundle's
+// path; node mode, which runs this test, names the bundle. The app says
+// where its supervisor is, as src/main/index.ts does (from this bundle's
+// own path: Bun's bundler fixes __dirname to the source folder).
+(require as NodeJS.Require).main = { filename: "electron" } as NodeJS.Module;
+setDesktopSupervisorEntry(path.join(path.dirname(process.argv[1]!), "supervisor.js"));
 
 const [id, command, out] = process.argv.slice(2);
 (async () => {
