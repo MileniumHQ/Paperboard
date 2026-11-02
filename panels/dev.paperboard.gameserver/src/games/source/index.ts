@@ -76,6 +76,8 @@ export interface SourceModView {
     on: boolean;
     /** SourceMod loaded with the running server, so plugin changes apply at once */
     active: boolean;
+    /** on, but its files are gone from the server folder, so the next start fails */
+    missing: boolean;
     plugins: SourcePlugin[];
 }
 

@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { consoleLine, isErrorLine, linePlayer, parseLogLine, parseStatus, steamId } from "../src/games/source/log";
 import { SourceRoster } from "../src/games/source/roster";
+import { SourceMod } from "../src/games/source/sourcemod";
 import { connectedMs } from "../src/games/source/service";
 
 // lines as the Team Fortress 2 dedicated server (build 11191711) printed them
@@ -201,5 +202,25 @@ describe("Source RCON", () => {
         await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
         const rcon = new SourceRcon((server.address() as net.AddressInfo).port, "secret", "TF2");
         await expect(rcon.exec("quit")).rejects.toThrow("TF2 closed the RCON connection");
+    });
+});
+
+describe("SourceMod on Mods", () => {
+    test("on without its files is reported, not shown as an empty plugin list", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "sourcemod-view-"));
+        try {
+            const sm = new SourceMod(root);
+            expect(await sm.view(true)).toEqual({ missing: true, plugins: [] });
+            expect(await sm.view(false)).toEqual({ missing: false, plugins: [] });
+            fs.mkdirSync(path.join(root, "addons", "sourcemod", "bin"), { recursive: true });
+            fs.mkdirSync(path.join(root, "addons", "sourcemod", "plugins"), { recursive: true });
+            fs.writeFileSync(path.join(root, "addons", "metamod_x64.vdf"), "");
+            fs.writeFileSync(path.join(root, "addons", "sourcemod", "plugins", "nextmap.smx"), "");
+            const view = await sm.view(true);
+            expect(view.missing).toBe(false);
+            expect(view.plugins.map((p) => p.title)).toEqual(["Nextmap"]);
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
     });
 });

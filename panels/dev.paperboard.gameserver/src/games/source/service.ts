@@ -16,7 +16,7 @@ import type { GameDefinition } from "../types";
 import type { GameService } from "../serviceTypes";
 import { addonStageDir } from "../../core/addonUpload";
 import { SOURCEMOD_PACKAGES, sourceActions, type SourceGameSpec, type SourceModView } from "./index";
-import { pluginFile, SourceMod } from "./sourcemod";
+import { pluginFile, SourceMod, SOURCEMOD_MISSING } from "./sourcemod";
 import { cvarValue, mapName, optionValue, secretsCfg, serverCfg } from "./config";
 import { consoleLine, isErrorLine, linePlayer, parseLogLine, parseStatus, steamId, type SourceLogEvent } from "./log";
 import { SourceRcon, RconError, RconNoAnswer } from "./rcon";
@@ -129,7 +129,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
     async function modsView(ctx: Context): Promise<SourceModView> {
         supportsMods();
         const on = await modsOn();
-        return { on, active: local().modsActive && ctx.state.serverStatus === "online", plugins: on || (await (await mods()).installed()) ? await (await mods()).list() : [] };
+        return { on, active: local().modsActive && ctx.state.serverStatus === "online", ...(await (await mods()).view(on)) };
     }
     async function modChange(ctx: Context, work: (sm: SourceMod) => Promise<void>): Promise<SourceModView> {
         supportsMods();
@@ -155,7 +155,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             return false;
         }
         const sm = await mods();
-        if (!(await sm.installed())) throw new Error("SourceMod is on, but its files are missing from the server folder. Turn it off and on again in Mods to reinstall it.");
+        if (!(await sm.installed())) throw new Error(SOURCEMOD_MISSING);
         await linkFolder(links[0], sm.addons);
         await linkFolder(links[1], sm.cfg);
         return true;

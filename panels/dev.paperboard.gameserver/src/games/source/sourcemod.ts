@@ -55,6 +55,8 @@ const PAPERBOARD_ADMIN = "99:z";
 const LOADER_32 = "metamod.vdf";
 const LOADER_X64 = "metamod_x64.vdf";
 
+export const SOURCEMOD_MISSING = "SourceMod is on, but its files are missing from the server folder. Turn it off and on again in Mods to reinstall it.";
+
 export function pluginFile(value: unknown): string {
     if (typeof value !== "string" || !PLUGIN_FILE.test(value)) throw new Error("Choose a plugin by its .smx file name");
     return value;
@@ -72,6 +74,12 @@ export class SourceMod {
     private get plugins() { return path.join(this.addons, "sourcemod", "plugins"); }
     private get disabled() { return path.join(this.plugins, "disabled"); }
     private get adminsFile() { return path.join(this.addons, "sourcemod", "configs", "admins_simple.ini"); }
+
+    /** What Mods shows: the plugins, and whether SourceMod is on without its files (its next start would fail). */
+    async view(on: boolean): Promise<{ missing: boolean; plugins: SourcePlugin[] }> {
+        const installed = await this.installed();
+        return { missing: on && !installed, plugins: on || installed ? await this.list() : [] };
+    }
 
     /** Both halves are there: Metamod's 64-bit loader and SourceMod's own folder. */
     async installed(): Promise<boolean> {

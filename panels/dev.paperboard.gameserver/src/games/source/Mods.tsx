@@ -99,7 +99,7 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
     return (
         <>
             <PaperPageHeader icon="extension" title="Mods">
-                <Show when={view()?.on}>
+                <Show when={view()?.on && !view()?.missing}>
                     <PaperButton disabled={working() !== null} onClick={() => void uploadPlugins()}>
                         <PaperIcon aria-hidden="true">{working() === "upload" ? "hourglass_top" : upload.icon}</PaperIcon>
                         {upload.label}
@@ -143,7 +143,12 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
                             </PaperQuote>
                         </Show>
 
-                        <Show when={current().on}>
+                        <Show when={current().on && current().missing}>
+                            <PaperQuote variant="danger" icon="error" title="SourceMod's files are missing">
+                                The server won't start with SourceMod on. Turn it off and on again to reinstall it.
+                            </PaperQuote>
+                        </Show>
+                        <Show when={current().on && !current().missing}>
                             <PaperText size={2} weight={700} color="text-subtle">Plugins</PaperText>
                             <PaperSettingList autoHeight>
                                 <For each={current().plugins}>
