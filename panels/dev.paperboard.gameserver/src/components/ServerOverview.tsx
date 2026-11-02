@@ -6,6 +6,7 @@ import {
     PaperIcon,
     PaperSeparator,
     PaperConsole,
+    PaperEmptyState,
     PaperCopyButton,
     PaperCard,
     PaperBadge,
@@ -178,6 +179,13 @@ export default function ServerOverview(props: {
                     showInput={control() !== "none"}
                     placeholder={control() === "broadcast" ? "Message everyone on the server..." : "Enter command..."}
                     prompt={control() === "broadcast" ? "campaign" : "chevron_right"}
+                    empty={
+                        <PaperEmptyState
+                            icon="terminal"
+                            title={serverStatus() === "offline" ? "The server is stopped" : "Nothing printed yet"}
+                            description={serverStatus() === "offline" ? "Start it and what it prints shows up here." : "What the server prints shows up here."}
+                        />
+                    }
                 />
             </PaperCard>
 
