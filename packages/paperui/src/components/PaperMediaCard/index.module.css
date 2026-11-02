@@ -34,6 +34,12 @@
     }
 }
 
+/* the chosen card of a set: the hover border, kept */
+.selected {
+    border-color: var(--paper-primary);
+    box-shadow: 0 0 0 var(--paper-border-width) var(--paper-primary);
+}
+
 .disabled {
     opacity: 0.5;
     pointer-events: none;

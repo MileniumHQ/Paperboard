@@ -34,6 +34,12 @@ export interface PaperMediaCardProps
     badge?: JSX.Element;
     interactive?: boolean;
     disabled?: boolean;
+    /**
+     * This card is the chosen one of a set of cards: its border takes the
+     * primary color and assistive technology hears it pressed. Leave it
+     * unset on cards that open something instead of choosing.
+     */
+    selected?: boolean;
     effect?: boolean;
     /**
      * Render icon images without the framed badge chrome (no background,
@@ -80,6 +86,7 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
         "badge",
         "interactive",
         "disabled",
+        "selected",
         "effect",
         "plainIcon",
         "href",
@@ -143,12 +150,14 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
             role={!isLink() && isInteractive() ? "button" : undefined}
             tabIndex={!isLink() && isInteractive() ? 0 : undefined}
             aria-disabled={local.disabled ? true : undefined}
+            aria-pressed={!isLink() && isInteractive() && local.selected !== undefined ? local.selected : undefined}
             onClick={handleClick}
             onKeyDown={isLink() ? undefined : handleKeyDown}
             class={[
                 styles.card,
                 isInteractive() ? styles.interactive : "",
                 local.disabled ? styles.disabled : "",
+                local.selected ? styles.selected : "",
                 local.plainIcon ? styles.iconPlain : "",
                 local.class,
             ]
@@ -168,6 +177,8 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                             src={local.banner}
                             alt={local.bannerAlt || ""}
                             class={styles.bannerImage}
+                            loading="lazy"
+                            decoding="async"
                         />
                     ) : (
                         local.banner
@@ -175,7 +186,7 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
 
                     <Show when={local.poster}>
                         <div class={styles.posterWrapper}>
-                            <img src={local.poster} alt={local.posterAlt || ""} class={styles.posterImage} />
+                            <img src={local.poster} alt={local.posterAlt || ""} class={styles.posterImage} loading="lazy" decoding="async" />
                         </div>
                     </Show>
 

@@ -130,6 +130,12 @@ export function Example() {
                             <td>Actions placed in the bottom-right corner of the card.</td>
                         </tr>
                         <tr>
+                            <td><PaperCode>selected</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Marks the card as the chosen one of a set: its border takes the primary color and assistive technology hears it pressed. Set it to <PaperCode>false</PaperCode> on the others; leave it unset on cards that open something.</td>
+                        </tr>
+                        <tr>
                             <td><PaperCode>effect</PaperCode></td>
                             <td><PaperCode>boolean</PaperCode></td>
                             <td><PaperCode>true</PaperCode></td>
@@ -161,6 +167,16 @@ export function Example() {
                     <PaperMediaCard icon="extension" title="Extension 2" />
                 </PaperMediaCardGroup>
             </PaperCard>
+            <PaperText preset="body">
+                Choose one of several with <PaperCode>selected</PaperCode>. A banner picture loads when its card scrolls into view, so a long grid of pictures only fetches what is seen.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperMediaCardGroup minCardWidth="field">
+    <For each={maps}>
+        {(map) => <PaperMediaCard banner={map.picture} title={map.name} selected={map.name === chosen()} onClick={() => setChosen(map.name)} />}
+    </For>
+</PaperMediaCardGroup>`}
+            </PaperCode>
             <PaperText preset="body">
                 Pair a banner with a poster to present something with cover art, such as a game to choose.
             </PaperText>

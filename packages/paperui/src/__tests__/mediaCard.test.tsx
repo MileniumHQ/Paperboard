@@ -105,3 +105,23 @@ describe("PaperMediaCard poster", () => {
         expect(container.querySelector('[class*="bodyBesidePoster"]')).toBeNull();
     });
 });
+
+describe("PaperMediaCard selection", () => {
+    it("a chosen card is pressed for assistive technology and a card that only opens something is not", () => {
+        const { getByRole } = render(() => (
+            <>
+                <PaperMediaCard title="Chosen" selected onClick={() => {}} />
+                <PaperMediaCard title="Other" selected={false} onClick={() => {}} />
+                <PaperMediaCard title="Opens" onClick={() => {}} />
+            </>
+        ));
+        expect(getByRole("button", { name: "Chosen" }).getAttribute("aria-pressed")).toBe("true");
+        expect(getByRole("button", { name: "Other" }).getAttribute("aria-pressed")).toBe("false");
+        expect(getByRole("button", { name: "Opens" }).hasAttribute("aria-pressed")).toBe(false);
+    });
+
+    it("banner and poster pictures load as they scroll into view, so a grid of many cards doesn't fetch them all", () => {
+        const { container } = render(() => <PaperMediaCard title="Map" banner="/banner.png" poster="/poster.png" />);
+        for (const src of ["/banner.png", "/poster.png"]) expect(container.querySelector(`img[src="${src}"]`)!.getAttribute("loading")).toBe("lazy");
+    });
+});
