@@ -101,6 +101,33 @@ test("failures are told from library chatter that mentions an error", () => {
     expect(isErrorLine("[S_API FAIL] Tried to access Steam interface SteamUtils010 before SteamAPI_Init succeeded.")).toBe(false);
 });
 
+// every line below was printed by the Team Fortress 2 dedicated server (build 11191711) when it was told to
+// change to a Workshop item that is another game's, a TF2 item that is no map, and one that doesn't exist
+const WORKSHOP_FAILS = [
+    "[TF Workshop] Map filename must be at least 6 characters and not more than 36 characters ending in .bsp",
+    "[TF Workshop] Invalid workshop map name 2815010161 [ {\"modVersionHashes\":[\"FHna8nc62VvsjTL6G0IAMhvHHDM=\"]} ]",
+    "[TF Workshop] Failed to make filename for tracked map, map will not be usuable [ baseName: {\"modVersionHashes\":[\"FHna8nc62VvsjTL6G0IAMhvHHDM=\"]} ]",
+    "[TF Workshop] Map failed to sync, load will not go well :(",
+    "[TF Workshop] Tracked map 148063940 has no filename and will not sync",
+    "[TF Workshop] Error fetching updated information for map id 999",
+    "[TF Workshop] Info lookup failed for workshop file 999 ( EResult 1 )",
+    "CModelLoader::Map_IsValid:  No such map 'maps/workshop/999.bsp'",
+    "Unable to change level!",
+];
+const WORKSHOP_FINE = [
+    "[TF Workshop] Preparing map ID 2936998568",
+    "[TF Workshop] Map ID 2936998568 isn't tracked, adding",
+    "../clientdll/contentupdatecontext.cpp (2086) : Staging library folder not found",
+    "cancel",
+];
+
+test("a Workshop item the server could not sync is a failure in the console, and its progress is not", () => {
+    for (const line of WORKSHOP_FAILS) expect(isErrorLine(line), line).toBe(true);
+    for (const line of WORKSHOP_FINE) expect(isErrorLine(line), line).toBe(false);
+    // the tag alone proves nothing; the words do
+    expect(isErrorLine("[TF Workshop] Map is ready")).toBe(false);
+});
+
 describe("Source RCON", () => {
     const servers: net.Server[] = [];
     afterEach(() => { for (const s of servers.splice(0)) s.close(); });

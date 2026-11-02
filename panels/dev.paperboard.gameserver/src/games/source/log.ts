@@ -135,12 +135,24 @@ export function parseStatus(text: string): SourceStatus {
 }
 
 /**
+ * A game's Steam Workshop writes its lines as "[TF Workshop] <what happened>",
+ * and says in the words whether the item went well.
+ */
+const WORKSHOP_LINE = /^\[[^\]]*Workshop\]\s*(.*)$/i;
+const WORKSHOP_FAILURE = /\b(?:invalid|fail(?:ed|s)?|errors?|will not|must be|no filename|unable|could not|couldn't|cannot|can't)\b/i;
+
+/**
  * Whether a console line reports a failure. Source starts those lines with
  * what failed; mid-line "error" is library chatter such as qhull's precision
- * notes on every map load.
+ * notes on every map load. A Workshop line ("[TF Workshop] Map failed to sync")
+ * is told by what it says, and "No such map" is the engine refusing a level.
  */
 export function isErrorLine(line: string): boolean {
-    return /^(Host_Error|FATAL|ERROR|Error[:!]|Failed|Could not|Couldn't|Unable to)\b/i.test(line.trim());
+    const text = line.trim();
+    if (/^(Host_Error|FATAL|ERROR|Error[:!]|Failed|Could not|Couldn't|Unable to)\b/i.test(text)) return true;
+    if (/^CModelLoader::Map_IsValid:\s+No such map\b/.test(text)) return true;
+    const workshop = WORKSHOP_LINE.exec(text);
+    return workshop !== null && WORKSHOP_FAILURE.test(workshop[1]!);
 }
 
 /** Steam ids as Source writes them: "[U:1:<account>]". */
