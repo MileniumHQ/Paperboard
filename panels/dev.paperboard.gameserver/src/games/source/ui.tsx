@@ -7,6 +7,7 @@ import SteamVersions from "../steam/SteamVersions";
 import { sourceActions, type SourceGameSpec } from "./index";
 import SourceOverview from "./Overview";
 import SourcePlayers from "./Players";
+import SourcePlayStep from "./PlayStep";
 import SourceMaps from "./Maps";
 import SourceMods from "./Mods";
 
@@ -15,7 +16,7 @@ export function sourceUI(spec: SourceGameSpec, game: GameDefinition): GameUI {
     return {
         create(ctx) {
             return {
-                setup: (props) => <SteamSetup name={spec.name} infoAction={ids.info} installAction={ids.install} onComplete={props.onComplete} />,
+                setup: (props) => <SteamSetup name={spec.name} infoAction={ids.info} installAction={ids.install} choose={(register) => <SourcePlayStep spec={spec} register={register} />} onComplete={props.onComplete} />,
                 tab(id) {
                     switch (id) {
                         case "overview": return <SourceOverview spec={spec} game={game} />;

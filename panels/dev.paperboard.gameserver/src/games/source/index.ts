@@ -86,6 +86,7 @@ export const sourceActions = (id: string) => ({
     mapPictures: `${id}-map-pictures`,
     mapCycle: `${id}-map-cycle`,
     mapCycleSet: `${id}-map-cycle-set`,
+    play: `${id}-play`,
     sourcemod: `${id}-sourcemod`,
     sourcemodSet: `${id}-sourcemod-set`,
     plugin: `${id}-plugin`,

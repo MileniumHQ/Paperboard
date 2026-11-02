@@ -20,6 +20,7 @@ import { pluginFile, SourceMod, SOURCEMOD_MISSING } from "./sourcemod";
 import { cvarValue, mapName, optionValue, secretsCfg, serverCfg } from "./config";
 import { cfgMapCycleFile, checkRotation, DEFAULT_MAPCYCLE, findMap, installedMaps, mapCycleFile, PAPERBOARD_MAPCYCLE, readServerCycle } from "./mapcycle";
 import { mapPictures } from "./mapPictures";
+import { playModes } from "./modes";
 import { consoleLine, isErrorLine, linePlayer, parseLogLine, parseStatus, steamId, type SourceLogEvent } from "./log";
 import { SourceRcon, RconError, RconNoAnswer } from "./rcon";
 import { bannedUserCfg, noStats, SourceRoster, type SourceStats } from "./roster";
@@ -131,6 +132,18 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         if (Array.isArray(saved)) return { maps: saved as string[], custom: true, file: `cfg/${PAPERBOARD_MAPCYCLE}`, installed, overriddenBy };
         const read = await readServerCycle(game, overriddenBy ?? DEFAULT_MAPCYCLE);
         return { maps: read?.maps ?? [], custom: false, file: read?.file ?? null, installed, overriddenBy };
+    }
+    /** Refuses a rotation set here while the user's own server.cfg picks the map cycle file, which the server follows over it. */
+    async function refuseOverriddenCycle() {
+        const overriddenBy = await userMapCycleFile();
+        if (overriddenBy) throw new Error(`server.cfg in the server folder sets mapcyclefile to ${overriddenBy}, which the server follows over this page. Remove that line to set the rotation here.`);
+    }
+    /** Saves the rotation (null: the game's own map cycle) with anything saved beside it, and gives it to a running server. */
+    async function setRotation(ctx: Context, rotation: string[] | null, also: Record<string, unknown> = {}) {
+        await updateSettings({ ...also, mapCycle: rotation });
+        if (await exists(await installDir())) await writeConfigs();
+        // a running server reads the cycle file again when it changes, and the variable once
+        if (online(ctx)) await rcon().exec(`mapcyclefile ${rotation ? PAPERBOARD_MAPCYCLE : DEFAULT_MAPCYCLE}`);
     }
     const secretsFile = async () => path.join(await cfgDir(), "paperboard_secrets.cfg");
     async function removeSecrets() { await fs.rm(await secretsFile(), { force: true }); }
@@ -475,14 +488,28 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             action(ids.mapCycle, `${spec.name} map rotation`, () => mapCycleView()),
             action(ids.mapCycleSet, "Set the map rotation", async (ctx, { maps }) => {
                 if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
-                const overriddenBy = await userMapCycleFile();
-                if (overriddenBy) throw new Error(`server.cfg in the server folder sets mapcyclefile to ${overriddenBy}, which the server follows over this page. Remove that line to set the rotation here.`);
+                await refuseOverriddenCycle();
                 // null hands the rotation back to the game's map cycle file
-                const rotation = maps === null ? null : checkRotation(maps, await installedMaps(await gameDir()));
-                await updateSettings({ mapCycle: rotation });
-                if (await exists(await installDir())) await writeConfigs();
-                // a running server reads the cycle file again when it changes, and the variable once
-                if (online(ctx)) await rcon().exec(`mapcyclefile ${rotation ? PAPERBOARD_MAPCYCLE : DEFAULT_MAPCYCLE}`);
+                await setRotation(ctx, maps === null ? null : checkRotation(maps, await installedMaps(await gameDir())));
+                return mapCycleView();
+            }),
+            // setup's last choice: how the server plays. A mode makes its installed maps the rotation, the chosen map first
+            // and the one the server starts on; no mode leaves the rotation to the game's map cycle
+            action(ids.play, "Set how the server plays", async (ctx, { mode, map: raw }) => {
+                if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
+                const installed = await installedMaps(await gameDir());
+                const map = mapName(raw);
+                if (!installed.includes(map)) throw new Error(`${map} is not installed`);
+                let rotation: string[] | null = null;
+                if (mode !== null) {
+                    const chosen = playModes(spec, installed).find((m) => m.prefix === mode);
+                    if (!chosen) throw new Error(`${spec.name} has no installed maps for that mode`);
+                    if (!chosen.maps.includes(map)) throw new Error(`${map} is not a ${chosen.name} map`);
+                    rotation = checkRotation([map, ...chosen.maps.filter((m) => m !== map)], installed);
+                }
+                if (rotation) await refuseOverriddenCycle();
+                await setRotation(ctx, rotation, { map });
+                await loadOptions(ctx);
                 return mapCycleView();
             }),
             action(ids.changeMap, "Change map", async (ctx, { map: raw }) => {

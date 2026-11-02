@@ -83,6 +83,8 @@ export default function MapCards(props: {
     /** wording for the search box */
     placeholder?: string;
     pictures: MapPicturesState;
+    /** leave out each card's mode, when every card has the same one */
+    hideMode?: boolean;
     onPick(name: string): void;
 }) {
     const [query, setQuery] = createSignal("");
@@ -128,7 +130,7 @@ export default function MapCards(props: {
                                 bannerAlt={`${map.title ?? map.name}`}
                                 title={map.title ?? breakable(map.name)}
                                 subtitle={map.title ? map.name : undefined}
-                                description={[map.mode, map.note].filter(Boolean).join(" · ") || undefined}
+                                description={[props.hideMode ? undefined : map.mode, map.note].filter(Boolean).join(" · ") || undefined}
                                 selected={props.value === map.name}
                                 disabled={props.disabled}
                                 onClick={() => props.onPick(map.name)}

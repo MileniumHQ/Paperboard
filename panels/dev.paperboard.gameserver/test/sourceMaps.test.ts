@@ -16,6 +16,7 @@ import { decodePackets, encodePacket } from "../src/games/source/rcon";
 import { serverCfg } from "../src/games/source/config";
 import { cfgMapCycleFile, checkRotation, findMap, installedMaps, mapCycleFile, parseMapCycle, readServerCycle } from "../src/games/source/mapcycle";
 import { sourceActions } from "../src/games/source";
+import { playModes } from "../src/games/source/modes";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "pb-source-maps-"));
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -264,4 +265,78 @@ test("the saved rotation is what the config writer puts in the file, replacing a
     await run("write-game-options", { patch: { hostname: "Maps" } });
     expect(parseMapCycle(read("cfg", "paperboard_mapcycle.txt"))).toEqual(["cp_dustbowl", "ctf_2fort"]);
     expect(read("cfg", "server.cfg")).toContain("mapcyclefile paperboard_mapcycle.txt");
+});
+
+// --- setup asks how the server plays
+
+test("the modes setup offers are the ones the game lists that have an installed map, by name, custom folders included", () => {
+    const installed = ["ctf_2fort", "ctf_turbine", "pl_badwater", "pl_custom", "cp_dustbowl", "zz_unlisted", "2koth_abbey"];
+    expect(playModes(TF2, installed)).toEqual([
+        { prefix: "ctf", name: "Capture the Flag", maps: ["ctf_2fort", "ctf_turbine"] },
+        { prefix: "cp", name: "Control Point", maps: ["cp_dustbowl"] },
+        { prefix: "pl", name: "Payload", maps: ["pl_badwater", "pl_custom"] },
+    ]);
+    expect(playModes(TF2, [])).toEqual([]);
+});
+
+test("picking a mode in setup makes its installed maps the rotation with the chosen one first, starts the server on it, and writes what the server reads", async () => {
+    bsp("ctf_2fort", "ctf_turbine", "ctf_doublecross", "pl_badwater", "cp_dustbowl");
+    await initialize(false);
+
+    const view = await run(ids.play, { mode: "ctf", map: "ctf_turbine" });
+    expect(view).toMatchObject({ maps: ["ctf_turbine", "ctf_2fort", "ctf_doublecross"], custom: true, file: "cfg/paperboard_mapcycle.txt" });
+    expect(settings).toMatchObject({ map: "ctf_turbine", mapCycle: ["ctf_turbine", "ctf_2fort", "ctf_doublecross"] });
+    expect(parseMapCycle(read("cfg", "paperboard_mapcycle.txt"))).toEqual(["ctf_turbine", "ctf_2fort", "ctf_doublecross"]);
+    expect(read("cfg", "server.cfg")).toContain("mapcyclefile paperboard_mapcycle.txt");
+    // the Maps tab and the Overview read the same choice
+    expect(((await run(ids.mapCycle)) as any).maps).toEqual(["ctf_turbine", "ctf_2fort", "ctf_doublecross"]);
+    expect(state.gameSettings).toMatchObject({ map: "ctf_turbine" });
+});
+
+test("a mixed server starts on the chosen map and leaves its rotation to the game's own map cycle", async () => {
+    bsp("ctf_2fort", "pl_badwater");
+    await initialize(false);
+    put(path.join(game, "cfg", "mapcycle_default.txt"), "pl_badwater\nctf_2fort\n");
+    await run(ids.play, { mode: null, map: "pl_badwater" });
+    expect(settings.map).toBe("pl_badwater");
+    expect(settings.mapCycle ?? null).toBeNull();
+    expect(present("cfg", "paperboard_mapcycle.txt")).toBe(false);
+    expect(read("cfg", "server.cfg")).not.toContain("mapcyclefile");
+    expect(await run(ids.mapCycle)).toMatchObject({ custom: false, maps: ["pl_badwater", "ctf_2fort"] });
+});
+
+test("setup's choice is refused, and nothing saved, for a map that isn't installed, isn't of the mode, or a mode with no installed maps", async () => {
+    bsp("ctf_2fort", "pl_badwater");
+    await initialize(false);
+    settings = { map: "ctf_2fort" };
+    for (const [input, reason] of [
+        [{ mode: "ctf", map: "ctf_turbine" }, "ctf_turbine is not installed"],
+        [{ mode: "ctf", map: "pl_badwater" }, "pl_badwater is not a Capture the Flag map"],
+        [{ mode: "koth", map: "ctf_2fort" }, "no installed maps for that mode"],
+        [{ mode: "ctf\nquit", map: "ctf_2fort" }, "no installed maps for that mode"],
+        [{ mode: "ctf", map: "../../etc" }, "Choose a map by its name"],
+    ] as const) await expect(run(ids.play, input)).rejects.toThrow(reason);
+    expect(settings).toEqual({ map: "ctf_2fort" });
+    expect(present("cfg", "paperboard_mapcycle.txt")).toBe(false);
+});
+
+test("a server.cfg that picks the map cycle file refuses a mode's rotation in setup but still takes a mixed start", async () => {
+    bsp("ctf_2fort", "ctf_turbine");
+    await initialize(false);
+    put(path.join(server, "server.cfg"), "mapcyclefile tourney.txt\n");
+    await expect(run(ids.play, { mode: "ctf", map: "ctf_turbine" })).rejects.toThrow("sets mapcyclefile to tourney.txt");
+    expect(settings.map).toBeUndefined();
+    await run(ids.play, { mode: null, map: "ctf_turbine" });
+    expect(settings.map).toBe("ctf_turbine");
+});
+
+test("on a running server the setup choice reaches it over RCON like the Maps tab's", async () => {
+    bsp("ctf_2fort", "ctf_turbine");
+    const rcon = await rconServer();
+    settings = { port: rcon.port };
+    state.serverStatus = "online";
+    await initialize(true);
+    rcon.seen.length = 0;
+    await run(ids.play, { mode: "ctf", map: "ctf_turbine" });
+    expect(rcon.seen).toEqual(["mapcyclefile paperboard_mapcycle.txt"]);
 });
