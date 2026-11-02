@@ -1789,4 +1789,18 @@ export const panelEventActions: ActionDefinition[] = [
         },
         icon: "stop",
     }),
+
+    defineAction({
+        id: TRIGGER_IDS.serverCrashed,
+        name: "When Server Crashes",
+        category: "Events",
+        description: "Fires when the server stops without being asked to, with the exit code it ended with",
+        template: "When the server crashes",
+        writtenOut: "When the server crashes",
+        output: {
+            type: "number",
+            label: "Exit code",
+        },
+        icon: "error",
+    }),
 ];

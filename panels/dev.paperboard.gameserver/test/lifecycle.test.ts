@@ -2,7 +2,7 @@
 // the server — status, presence, chat, gamerule values — comes from
 // handleProcessData/handleProcessExit, so every transition is pinned here:
 // start marker, join/leave player events, gamerule readouts, exit handling.
-import { afterAll, describe, it, expect, mock, beforeEach } from "bun:test";
+import { afterAll, describe, it, expect, mock, beforeEach, jest } from "bun:test";
 import * as nodeFs from "node:fs";
 import * as nodeOs from "node:os";
 import * as nodePath from "node:path";
@@ -81,7 +81,8 @@ mock.module("../src/service/api", () => ({
 }));
 
 const { handleProcessData, handleProcessExit, __lifecycleTest } = await import("../src/service/lifecycle");
-const { restartServerInstance, sendServerCommand, sendChatMessage } = await import("../src/service/lifecycle");
+const { restartServerInstance, sendServerCommand, sendChatMessage, stopServerInstance } = await import("../src/service/lifecycle");
+const automation = await import("../src/service/automation");
 const { queryGamerules, setGamerule } = await import("../src/service/gamerules");
 const {
     assertGameruleName,
@@ -393,6 +394,145 @@ describe("exit handling", () => {
         // exit's own "[Server] Process stopped." entry)
         expect(ctx.state.chatMessages.at(-1)?.text).toBe("<Steve> gg");
         expect(ctx.state.serverEntries.some((e: any) => e.content.includes("<Steve> gg"))).toBe(true);
+    });
+});
+
+describe("crashes", () => {
+    const realWait = async (ms = 30) => { jest.useRealTimers(); await new Promise((resolve) => setTimeout(resolve, ms)); };
+    const crashed = (ctx: any) => ctx.state.serverEntries.filter((e: any) => e.content.includes("crashed")).map((e: any) => e.content);
+    beforeEach(async () => {
+        // a fresh count and the defaults for every case
+        await automation.writeAutomation(makeCtx(), { restartAfterCrash: true, dailyRestart: null }, async () => {});
+        automation.cancelAutomation();
+    });
+
+    it("a server that crashes while running says so and starts again after a pause", async () => {
+        jest.useFakeTimers();
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessExit(ctx, 137);
+        expect(ctx.state.serverStatus).toBe("offline");
+        expect(crashed(ctx)).toEqual(["[Server] The server crashed (exit code 137). Logs has what it printed."]);
+        expect(ctx.triggers).toContainEqual({ id: "server-crashed", output: 137 });
+        expect(starts).toEqual([]);
+        jest.advanceTimersByTime(automation.CRASH_RESTART_DELAY_MS);
+        await realWait();
+        expect(starts.length).toBe(1);
+        expect(ctx.state.serverStatus).toBe("starting");
+        // the fresh console opens with why the server started again
+        expect(ctx.state.serverEntries[0].content).toMatch(/^\[Server\] Restarted after a crash at .+ \(exit code 137\)\.$/);
+    });
+
+    it("stops asked for by Paperboard or from inside the game are not crashes", async () => {
+        const asked = makeCtx({ serverStatus: "online" });
+        await stopServerInstance(asked);
+        handleProcessExit(asked, 143);
+        const inGame = makeCtx({ serverStatus: "online" });
+        handleProcessExit(inGame, 0);
+        await realWait();
+        for (const ctx of [asked, inGame]) {
+            expect(crashed(ctx)).toEqual([]);
+            expect(ctx.triggers.some((t: any) => t.id === "server-crashed")).toBe(false);
+        }
+        expect(starts).toEqual([]);
+    });
+
+    it("Minecraft's crash report makes a clean exit a crash", () => {
+        jest.useFakeTimers();
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessData(ctx, "[12:00:00] [Server thread/ERROR]: This crash report has been saved to: /srv/crash-reports/crash.txt\n");
+        handleProcessData(ctx, "[12:00:00] [Server thread/INFO]: Stopping server\n");
+        handleProcessExit(ctx, 0);
+        expect(crashed(ctx)).toEqual(["[Server] The server crashed (exit code 0). Logs has what it printed."]);
+        automation.cancelAutomation();
+        jest.useRealTimers();
+    });
+
+    it("a player typing the crash line in chat is not a crash", () => {
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessData(ctx, "[12:00:00] [Server thread/INFO]: <Steve> This crash report has been saved to: lol\n");
+        handleProcessExit(ctx, 0);
+        expect(crashed(ctx)).toEqual([]);
+    });
+
+    it("a crash while starting is reported and not restarted", async () => {
+        jest.useFakeTimers();
+        const ctx = makeCtx({ serverStatus: "starting" });
+        handleProcessExit(ctx, 1);
+        expect(crashed(ctx)).toEqual(["[Server] The server crashed while starting (exit code 1). Logs has what it printed."]);
+        jest.advanceTimersByTime(automation.CRASH_RESTART_DELAY_MS * 2);
+        await realWait();
+        expect(starts).toEqual([]);
+    });
+
+    it("three crashes in ten minutes leave the server stopped", async () => {
+        jest.useFakeTimers();
+        const ctx = makeCtx({ serverStatus: "online" });
+        const t0 = Date.now();
+        for (const at of [t0, t0 + 60_000]) {
+            ctx.setState({ serverStatus: "online" });
+            automation.afterCrash(ctx, { whileStarting: false, exitCode: 1 }, async () => { starts.push("restart"); }, at);
+            jest.advanceTimersByTime(automation.CRASH_RESTART_DELAY_MS);
+            ctx.setState({ serverStatus: "offline" });
+        }
+        // the restart timer only starts an offline server, and both restarts ran
+        expect(starts).toEqual([]);
+        ctx.setState({ serverStatus: "offline" });
+        automation.afterCrash(ctx, { whileStarting: false, exitCode: 1 }, async () => { starts.push("restart"); }, t0 + 120_000);
+        jest.advanceTimersByTime(automation.CRASH_RESTART_DELAY_MS);
+        jest.useRealTimers();
+        expect(starts).toEqual([]);
+        expect(ctx.state.serverEntries.at(-1).content).toBe("[Server] It crashed 3 times in 10 minutes, so it was not restarted. Start it once the cause is fixed.");
+    });
+
+    it("turned off, a crash is reported and the server stays stopped", async () => {
+        await automation.writeAutomation(makeCtx(), { restartAfterCrash: false }, async () => {});
+        expect((savedConfig as any).automation).toEqual({ restartAfterCrash: false, dailyRestart: null });
+        jest.useFakeTimers();
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessExit(ctx, 1);
+        jest.advanceTimersByTime(automation.CRASH_RESTART_DELAY_MS * 2);
+        await realWait();
+        expect(crashed(ctx).length).toBe(1);
+        expect(starts).toEqual([]);
+    });
+});
+
+describe("daily restart", () => {
+    it("takes whole hours only", () => {
+        expect(() => automation.validateAutomation({ restartAfterCrash: true, dailyRestart: "04:30" })).toThrow(/whole hour/);
+        expect(() => automation.validateAutomation({ restartAfterCrash: true, dailyRestart: "24:00" })).toThrow(/whole hour/);
+        expect(() => automation.validateAutomation({ restartAfterCrash: "yes", dailyRestart: null })).toThrow(/on or off/);
+        expect(automation.validateAutomation({ restartAfterCrash: true, dailyRestart: "04:00" })).toEqual({ restartAfterCrash: true, dailyRestart: "04:00" });
+    });
+
+    it("counts to the next time the hour comes round", () => {
+        const now = new Date(2026, 10, 1, 3, 30);
+        expect(automation.msUntilHour("04:00", now)).toBe(30 * 60_000);
+        expect(automation.msUntilHour("03:00", now)).toBe(23.5 * 3_600_000);
+    });
+
+    it("warns the players, then restarts the running server", async () => {
+        jest.useFakeTimers();
+        const now = new Date();
+        const hour = `${String((now.getHours() + 2) % 24).padStart(2, "0")}:00`;
+        const due = automation.msUntilHour(hour, now);
+        const restarts: string[] = [];
+        const ctx = makeCtx({ serverStatus: "online", onlinePlayers: ["Steve"] });
+        await automation.writeAutomation(ctx, { restartAfterCrash: true, dailyRestart: hour }, async () => { restarts.push("restart"); });
+        automation.scheduleDailyRestart(ctx, async () => { restarts.push("restart"); }, now);
+        jest.advanceTimersByTime(due - 5 * 60_000);
+        await Promise.resolve();
+        expect(writes.join("")).toContain("The server restarts in 5 minutes.");
+        expect(writes.join("")).not.toContain("1 minute.");
+        jest.advanceTimersByTime(4 * 60_000);
+        await Promise.resolve();
+        expect(writes.join("")).toContain("The server restarts in 1 minute.");
+        expect(restarts).toEqual([]);
+        jest.advanceTimersByTime(60_000);
+        await Promise.resolve();
+        expect(restarts).toEqual(["restart"]);
+        automation.cancelAutomation();
+        jest.useRealTimers();
     });
 });
 

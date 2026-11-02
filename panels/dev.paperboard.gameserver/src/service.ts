@@ -24,7 +24,8 @@ import { inServer, type ServerScope } from "./service/scope";
 import { processApi as scopedProcess, LEGACY_DEPRECATION } from "./service/api";
 import { type GameServerState, SERVER_PROC_ID } from "./service/types";
 import { setRecoveryBlock } from "./service/recoveryState";
-import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness } from "./service/lifecycle";
+import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance } from "./service/lifecycle";
+import { cancelAutomation, readAutomation, scheduleDailyRestart } from "./service/automation";
 
 import { currentGameService, gameServiceFor } from "./games/service";
 import { assertGameAction, gameFor, games } from "./games";
@@ -237,9 +238,11 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
                 ),
             );
             scope.unsubscribe.push(
-                scopedProcess.onExit(game.primaryProcessId, () => handleProcessExit(scope.ctx)),
+                scopedProcess.onExit(game.primaryProcessId, (code) => handleProcessExit(scope.ctx, code)),
             );
             await loadServerOptions(scope.ctx);
+            await readAutomation();
+            scheduleDailyRestart(scope.ctx, restartServerInstance);
             await game.initialize(scope.ctx, running);
             icons.set(server.id, (await game.readIcon?.()) ?? null);
         });
@@ -358,7 +361,7 @@ export const gameServerService = definePanelService({
                         if (next.legacyServer === server) delete next.legacyServer;
                         return next;
                     });
-                    await inServer(scope, async () => { cancelReadiness(); await currentGameService().dispose(); });
+                    await inServer(scope, async () => { cancelReadiness(); cancelAutomation(); await currentGameService().dispose(); });
                     for (const off of scope.unsubscribe) off();
                     entries.delete(server);
                     icons.delete(server);

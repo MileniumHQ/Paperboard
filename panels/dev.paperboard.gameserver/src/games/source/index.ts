@@ -1,6 +1,7 @@
 import type { GameDefinition, GameOption, GameTab } from "../types";
 import { ACTION_IDS as A } from "../../service/contract";
 import { gameArt } from "../art";
+import { AUTOMATION_ACTIONS, AUTOMATION_TAB } from "../automation";
 import { hostRoutes } from "../host";
 import type { SourcePlugin } from "./sourcemod";
 
@@ -100,6 +101,7 @@ export function sourceGame(spec: SourceGameSpec): GameDefinition {
         { id: "files", label: "Files", icon: "folder", group: "Server", owner: "shared", variant: "fill" },
         { id: "logs", label: "Logs", icon: "description", group: "Server", owner: "shared", variant: "fill" },
         { id: "backups", label: "Backups", icon: "backup", group: "Server", owner: "shared" },
+        AUTOMATION_TAB,
         { id: "advanced", label: "Advanced", icon: "settings", group: "Server", owner: "shared" },
     ];
     return {
@@ -115,7 +117,7 @@ export function sourceGame(spec: SourceGameSpec): GameDefinition {
                 control: { kind: "rcon" },
                 widgets: ["status", "console"],
                 packages: [{ id: "steamcmd", purpose: `Downloads and updates the ${spec.name} dedicated server from Steam` }, ...Object.values(spec.libraryPackages ?? {}), ...(spec.sourcemod ? SOURCEMOD_PACKAGES : [])],
-                actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, ...Object.values(ids), A.discardAddonUpload, "backup-server"],
+                actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, ...Object.values(ids), A.discardAddonUpload, "backup-server", ...AUTOMATION_ACTIONS],
                 tabs,
             };
         },

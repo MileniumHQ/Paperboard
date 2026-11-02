@@ -7,6 +7,7 @@ import { livePortDeps } from "./portDeps";
 import { type GameServerState, appendCapped } from "./types";
 import { loadServerOptions } from "./options";
 import { TRIGGER_IDS } from "./contract";
+import { afterCrash, cancelStopRequest, classifyExit, markStarting, markStopRequested } from "./automation";
 
 const primaryProcessId = () => currentGameService().primaryProcessId;
 const local = serverLocal(() => ({ lineBuffer: "", readinessTimer: null as ReturnType<typeof setTimeout> | null, readinessDeadline: null as ReturnType<typeof setTimeout> | null, generation: 0, isRestarting: false, stopTimeout: null as ReturnType<typeof setTimeout> | null }));
@@ -33,6 +34,7 @@ function monitorReadiness(ctx: ServiceContext<GameServerState>): void {
         if (!active()) return;
         clearTimeout(expired); cancelReadiness();
         ctx.setState({ serverEntries: appendCapped(ctx.state.serverEntries, { type: "error", content: `Startup failed: ${err instanceof Error ? err.message : String(err)}` }) });
+        markStopRequested();
         await processApi.kill(primaryProcessId(), "SIGKILL");
     };
     const poll = async () => {
@@ -99,8 +101,10 @@ function releaseServer(ctx: ServiceContext<GameServerState>): Promise<void> | un
     });
 }
 
+/** `carry`: lines the fresh console opens with, as why the server is starting again. */
 export async function startServerInstance(
     ctx: ServiceContext<GameServerState>,
+    carry: GameServerState["serverEntries"] = [],
 ): Promise<void> {
     if (ctx.state.serverStatus !== "offline") return;
     // refused to the caller: a half-settled server folder is not a launch failure
@@ -134,6 +138,7 @@ export async function startServerInstance(
             serverStatus: "starting",
             chatMessages: [],
             serverEntries: [
+                ...carry,
                 {
                     type: "info",
                     content: launch.message,
@@ -145,6 +150,7 @@ export async function startServerInstance(
             ],
         });
 
+        markStarting();
         await processApi.start({
             id: primaryProcessId(),
             command: launch.command.executable,
@@ -176,6 +182,7 @@ export async function stopServerInstance(
     cancelReadiness();
     const curr = ctx.state.serverStatus;
     if (curr === "starting") {
+        markStopRequested();
         processApi.kill(primaryProcessId(), "SIGKILL");
         ctx.setState({
             serverStatus: "offline",
@@ -185,6 +192,7 @@ export async function stopServerInstance(
             }),
         });
     } else if (curr === "online") {
+        markStopRequested();
         ctx.setState({
             serverStatus: "stopping",
             serverEntries: appendCapped(ctx.state.serverEntries, {
@@ -193,7 +201,7 @@ export async function stopServerInstance(
             }),
         });
         try { await currentGameService().stop(ctx); }
-        catch (err) { ctx.setState({ serverStatus: "online" }); throw err; }
+        catch (err) { cancelStopRequest(); ctx.setState({ serverStatus: "online" }); throw err; }
 
         scheduleStopForceKill(ctx, currentGameService().stopTimeoutMs);
     }
@@ -205,6 +213,7 @@ export async function restartServerInstance(
     if (ctx.state.serverStatus !== "online") return;
     cancelReadiness();
     local().isRestarting = true;
+    markStopRequested();
     ctx.setState({
         serverStatus: "restarting",
         serverEntries: appendCapped(
@@ -219,7 +228,7 @@ export async function restartServerInstance(
         ),
     });
     try { await currentGameService().stop(ctx); }
-    catch (err) { local().isRestarting = false; ctx.setState({ serverStatus: "online" }); throw err; }
+    catch (err) { local().isRestarting = false; cancelStopRequest(); ctx.setState({ serverStatus: "online" }); throw err; }
 
     scheduleStopForceKill(ctx, currentGameService().stopTimeoutMs);
 }
@@ -287,7 +296,7 @@ export function sendChatMessage(ctx: ServiceContext<GameServerState>, msg: strin
     return game.sendChat(ctx, msg);
 }
 
-export function handleProcessExit(ctx: ServiceContext<GameServerState>): void {
+export function handleProcessExit(ctx: ServiceContext<GameServerState>, exitCode?: number): void {
     cancelStopForceKill();
     cancelReadiness();
 
@@ -318,7 +327,8 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>): void {
         if (released) void released.then(restart);
         else restart();
     } else {
-        void releaseServer(ctx);
+        const exit = classifyExit(ctx.state.serverStatus, exitCode);
+        const released = releaseServer(ctx);
         ctx.setState({
             serverStatus: "offline",
             onlinePlayers: [],
@@ -330,6 +340,11 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>): void {
             }),
         });
         ctx.emitTrigger(TRIGGER_IDS.serverStopped, true);
+        if (exit.kind === "crashed") {
+            ctx.emitTrigger(TRIGGER_IDS.serverCrashed, exitCode ?? null);
+            // the game takes back what the crashed start set aside before the next one
+            afterCrash(ctx, { whileStarting: exit.whileStarting, exitCode }, (ctx, carry) => (released ?? Promise.resolve()).then(() => startServerInstance(ctx, carry)));
+        }
     }
 }
 

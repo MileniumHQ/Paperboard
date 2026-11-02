@@ -12,6 +12,10 @@ import { applyPendingRuntimeProperties } from "../../service/runtimeProperties";
 import { observeSavingLine } from "./saving";
 import { type GameServerState, SERVER_PROC_ID, appendCapped } from "../../service/types";
 import { TRIGGER_IDS } from "../../service/contract";
+import { noteCrashReport } from "../../service/automation";
+/** What Minecraft prints when it crashes: its crash report, and its watchdog giving up on a frozen server. */
+const CRASH_LINES = ["This crash report has been saved to", "Considering it crashed, server will forcibly shutdown"];
+
 export async function sendChatMessage(
     ctx: ServiceContext<GameServerState>,
     msg: string,
@@ -102,6 +106,8 @@ export function observeLine(ctx: ServiceContext<GameServerState>, line: string, 
     }
 
     const chat = parseChatMessage(line);
+    // the server's own crash lines; a player saying them is chat, not a crash
+    if (!chat && CRASH_LINES.some((text) => clean.includes(text))) noteCrashReport();
     if (chat) {
         ctx.setState({
             chatMessages: appendCapped(ctx.state.chatMessages, chat),

@@ -58,16 +58,16 @@ describe("bundled game modules", () => {
 
     test("Minecraft resolves the existing menu, labels and shared tabs for every loader", () => {
         const expected = {
-            vanilla: ["overview", "chat", "players", "map", "worlds", "gamerules", "datapacks", "resourcepack", "versions", "options", "files", "logs", "backups", "advanced"],
-            paper: ["overview", "chat", "players", "map", "crossplay", "worlds", "gamerules", "datapacks", "resourcepack", "versions", "loader", "plugins", "options", "files", "logs", "backups", "advanced"],
-            fabric: ["overview", "chat", "players", "map", "crossplay", "worlds", "gamerules", "datapacks", "resourcepack", "versions", "loader", "plugins", "modpacks", "options", "files", "logs", "backups", "advanced"],
-            neoforge: ["overview", "chat", "players", "map", "crossplay", "worlds", "gamerules", "datapacks", "resourcepack", "versions", "loader", "plugins", "modpacks", "options", "files", "logs", "backups", "advanced"],
-            forge: ["overview", "chat", "players", "map", "worlds", "gamerules", "datapacks", "resourcepack", "versions", "loader", "plugins", "modpacks", "options", "files", "logs", "backups", "advanced"],
+            vanilla: ["overview", "chat", "players", "map", "worlds", "gamerules", "datapacks", "resourcepack", "versions", "options", "files", "logs", "backups", "automation", "advanced"],
+            paper: ["overview", "chat", "players", "map", "crossplay", "worlds", "gamerules", "datapacks", "resourcepack", "versions", "loader", "plugins", "options", "files", "logs", "backups", "automation", "advanced"],
+            fabric: ["overview", "chat", "players", "map", "crossplay", "worlds", "gamerules", "datapacks", "resourcepack", "versions", "loader", "plugins", "modpacks", "options", "files", "logs", "backups", "automation", "advanced"],
+            neoforge: ["overview", "chat", "players", "map", "crossplay", "worlds", "gamerules", "datapacks", "resourcepack", "versions", "loader", "plugins", "modpacks", "options", "files", "logs", "backups", "automation", "advanced"],
+            forge: ["overview", "chat", "players", "map", "worlds", "gamerules", "datapacks", "resourcepack", "versions", "loader", "plugins", "modpacks", "options", "files", "logs", "backups", "automation", "advanced"],
         };
         for (const software of SOFTWARE_IDS) {
             const features = gameFor("minecraft").describe({ software, version: "1.21.4" });
             expect(features.tabs.map((tab) => tab.id)).toEqual(expected[software]);
-            expect(features.tabs.filter((tab) => tab.owner === "shared").map((tab) => tab.id)).toEqual(["options", "files", "logs", "backups", "advanced"]);
+            expect(features.tabs.filter((tab) => tab.owner === "shared").map((tab) => tab.id)).toEqual(["options", "files", "logs", "backups", "automation", "advanced"]);
             // Options and Advanced are the shared options page over Minecraft's own options
             for (const id of ["options", "advanced"]) expect(features.options.some((option) => (option.tab ?? "options") === id)).toBe(true);
             expect(features.optionsWhileRunning).toBe("next-start");
@@ -100,4 +100,13 @@ describe("server card subtitle", () => {
         expect(serverSubtitle(gameFor("palworld"), { version: "Build 25247047" })).toBe("Palworld Build 25247047");
         expect(serverSubtitle(gameFor("team-fortress-2"), { version: "Build 26334371" })).toBe("Team Fortress 2 Build 26334371");
     });
+});
+
+test("every game has the Automation tab and its actions", () => {
+    for (const game of games) {
+        const software = game.id === "minecraft" ? "paper" : game.id === "terraria" ? "vanilla" : "";
+        const features = game.describe({ software, version: "1.21.4" });
+        expect(features.tabs.some((tab) => tab.id === "automation" && tab.owner === "shared"), game.id).toBe(true);
+        expect(features.actions, game.id).toEqual(expect.arrayContaining(["read-automation", "write-automation"]));
+    }
 });

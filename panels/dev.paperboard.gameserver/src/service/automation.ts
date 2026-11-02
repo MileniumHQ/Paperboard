@@ -1,0 +1,180 @@
+import { config, type ServiceContext } from "./api";
+import { serverLocal } from "./scope";
+import { currentGameService } from "../games/service";
+import { appendCapped, type GameServerState, PANEL_ID } from "./types";
+
+/** What the server does on its own: restart after a crash, and once a day at a set hour. */
+export interface AutomationSettings {
+    restartAfterCrash: boolean;
+    /** "HH:00" on the computer's clock, or null for no daily restart */
+    dailyRestart: string | null;
+}
+export interface AutomationView extends AutomationSettings {
+    /** the computer's time zone, which the daily restart hour is on */
+    timeZone: string;
+}
+
+const KEY = "automation";
+export const AUTOMATION_DEFAULTS: AutomationSettings = { restartAfterCrash: true, dailyRestart: null };
+/** Crashes inside the window that stop the automatic restarts: a server that keeps crashing needs a person. */
+export const CRASH_LIMIT = 3;
+export const CRASH_WINDOW_MS = 10 * 60_000;
+export const CRASH_RESTART_DELAY_MS = 5_000;
+/** Minutes before a daily restart that players are told it is coming. */
+export const RESTART_WARNINGS = [5, 1] as const;
+const HOUR = /^([01]\d|2[0-3]):00$/;
+
+const local = serverLocal(() => ({
+    settings: null as AutomationSettings | null,
+    crashes: [] as number[],
+    stopRequested: false,
+    crashReported: false,
+    crashTimer: null as ReturnType<typeof setTimeout> | null,
+    dailyTimers: [] as ReturnType<typeof setTimeout>[],
+}));
+
+export function parseAutomation(raw: unknown): AutomationSettings {
+    if (raw === undefined || raw === null) return { ...AUTOMATION_DEFAULTS };
+    if (typeof raw !== "object") throw new Error("The saved automation settings are not an object");
+    return validateAutomation({ ...AUTOMATION_DEFAULTS, ...(raw as Record<string, unknown>) });
+}
+
+export function validateAutomation(input: Record<string, unknown>): AutomationSettings {
+    const { restartAfterCrash, dailyRestart } = input;
+    if (typeof restartAfterCrash !== "boolean") throw new Error("Restart after a crash must be on or off");
+    if (dailyRestart !== null && (typeof dailyRestart !== "string" || !HOUR.test(dailyRestart))) throw new Error("The daily restart must be a whole hour, as 04:00");
+    return { restartAfterCrash, dailyRestart };
+}
+
+export async function readAutomation(): Promise<AutomationSettings> {
+    const saved = await config.get<Record<string, unknown>>(PANEL_ID);
+    const settings = parseAutomation(saved?.[KEY]);
+    local().settings = settings;
+    return settings;
+}
+
+export function automationView(settings: AutomationSettings): AutomationView {
+    return { ...settings, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone };
+}
+
+export async function writeAutomation(ctx: ServiceContext<GameServerState>, patch: Record<string, unknown>, restart: (ctx: ServiceContext<GameServerState>) => Promise<void>): Promise<AutomationSettings> {
+    const next = validateAutomation({ ...(await readAutomation()), ...patch });
+    const saved = (await config.get<Record<string, unknown>>(PANEL_ID)) ?? {};
+    await config.set({ ...saved, [KEY]: next }, PANEL_ID);
+    local().settings = next;
+    // a changed setting starts a fresh count: the user is looking at the server
+    local().crashes = [];
+    scheduleDailyRestart(ctx, restart);
+    return next;
+}
+
+/** Paperboard asked the server to stop, so its exit is not a crash. */
+export function markStopRequested(): void { local().stopRequested = true; }
+/** The stop request never reached the server, which keeps running. */
+export function cancelStopRequest(): void { local().stopRequested = false; }
+/** A start clears what the last run left behind. */
+export function markStarting(): void { local().stopRequested = false; local().crashReported = false; }
+/** The game's output said it crashed, as Minecraft's crash report; its exit code may still be 0. */
+export function noteCrashReport(): void { local().crashReported = true; }
+
+export type ExitKind = { kind: "stopped" } | { kind: "crashed"; whileStarting: boolean };
+
+/** Whether an exit was a stop or a crash: a crash is an exit nobody asked for, with an error code or a crash report. */
+export function classifyExit(status: GameServerState["serverStatus"], exitCode: number | undefined): ExitKind {
+    const { stopRequested: requested, crashReported } = local();
+    // an exit settles both: the next run starts clean
+    local().stopRequested = false;
+    local().crashReported = false;
+    if (requested || status === "offline") return { kind: "stopped" };
+    const failed = (exitCode !== undefined && exitCode !== 0) || crashReported;
+    if (!failed) return { kind: "stopped" };
+    return { kind: "crashed", whileStarting: status === "starting" };
+}
+
+/**
+ * Restarts a server that crashed while running, unless it has crashed
+ * CRASH_LIMIT times inside CRASH_WINDOW_MS. A crash while starting never
+ * restarts: the next start fails the same way. Says in the console either way.
+ */
+export function afterCrash(ctx: ServiceContext<GameServerState>, exit: { whileStarting: boolean; exitCode: number | undefined }, start: (ctx: ServiceContext<GameServerState>, carry: GameServerState["serverEntries"]) => Promise<void>, now = Date.now()): void {
+    const code = exit.exitCode === undefined ? "" : ` (exit code ${exit.exitCode})`;
+    const say = (type: "error" | "warn" | "info", content: string) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type, content }) }));
+    say("error", `[Server] The server crashed${exit.whileStarting ? " while starting" : ""}${code}. Logs has what it printed.`);
+    if (exit.whileStarting) return;
+    const settings = local().settings ?? AUTOMATION_DEFAULTS;
+    if (!settings.restartAfterCrash) return;
+    const crashes = [...local().crashes.filter((at) => now - at < CRASH_WINDOW_MS), now];
+    local().crashes = crashes;
+    if (crashes.length >= CRASH_LIMIT) {
+        say("error", `[Server] It crashed ${crashes.length} times in ${CRASH_WINDOW_MS / 60_000} minutes, so it was not restarted. Start it once the cause is fixed.`);
+        local().crashes = [];
+        return;
+    }
+    say("info", `[Server] Restarting in ${CRASH_RESTART_DELAY_MS / 1000} seconds.`);
+    if (local().crashTimer) clearTimeout(local().crashTimer!);
+    const timer = setTimeout(() => {
+        local().crashTimer = null;
+        if (ctx.state.serverStatus !== "offline") return;
+        // the fresh console still says why the server started again
+        const when = new Date(now).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        start(ctx, [{ type: "warn", content: `[Server] Restarted after a crash at ${when}${code}.` }]).catch((err) => say("error", `[Server] Restart after the crash failed: ${err instanceof Error ? err.message : String(err)}`));
+    }, CRASH_RESTART_DELAY_MS);
+    timer.unref?.();
+    local().crashTimer = timer;
+}
+
+/** Milliseconds from `now` to the next "HH:00" on this computer's clock. */
+export function msUntilHour(hour: string, now: Date): number {
+    const next = new Date(now);
+    next.setHours(Number(hour.slice(0, 2)), 0, 0, 0);
+    if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+    return next.getTime() - now.getTime();
+}
+
+function cancelDailyRestart(): void {
+    for (const timer of local().dailyTimers) clearTimeout(timer);
+    local().dailyTimers = [];
+}
+
+/** Drops every pending automatic restart, as when the server is removed. */
+export function cancelAutomation(): void {
+    cancelDailyRestart();
+    if (local().crashTimer) clearTimeout(local().crashTimer!);
+    local().crashTimer = null;
+}
+
+/**
+ * Arms the daily restart: players are warned RESTART_WARNINGS minutes ahead,
+ * then a running server restarts. A server that is not running is left alone.
+ */
+export function scheduleDailyRestart(ctx: ServiceContext<GameServerState>, restart: (ctx: ServiceContext<GameServerState>) => Promise<void>, now = new Date()): void {
+    cancelDailyRestart();
+    const hour = local().settings?.dailyRestart;
+    if (!hour) return;
+    const due = msUntilHour(hour, now);
+    const say = (type: "error" | "info", content: string) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type, content }) }));
+    const at = (ms: number, work: () => Promise<void>) => {
+        if (ms < 0) return;
+        const timer = setTimeout(() => {
+            local().dailyTimers = local().dailyTimers.filter((t) => t !== timer);
+            void work();
+        }, ms);
+        timer.unref?.();
+        local().dailyTimers.push(timer);
+    };
+    for (const minutes of RESTART_WARNINGS) {
+        at(due - minutes * 60_000, async () => {
+            const sendChat = currentGameService().sendChat;
+            if (ctx.state.serverStatus !== "online" || !sendChat || ctx.state.onlinePlayers.length === 0) return;
+            await sendChat(ctx, `The server restarts in ${minutes} minute${minutes === 1 ? "" : "s"}.`)
+                .catch((err) => say("error", `[Server] Could not warn players about the daily restart: ${err instanceof Error ? err.message : String(err)}`));
+        });
+    }
+    at(due, async () => {
+        // the next day's restart is armed before this one runs
+        scheduleDailyRestart(ctx, restart, new Date(Date.now() + 1000));
+        if (ctx.state.serverStatus !== "online") return;
+        say("info", "[Server] Daily restart.");
+        await restart(ctx).catch((err) => say("error", `[Server] The daily restart failed: ${err instanceof Error ? err.message : String(err)}`));
+    });
+}

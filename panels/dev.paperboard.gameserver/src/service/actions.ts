@@ -8,12 +8,36 @@ import { listLogFiles, readLogFile } from "./logs";
 import { currentGameService } from "../games/service";
 import { loadServerOptions } from "./options";
 import { currentServer } from "./scope";
+import { automationView, readAutomation, writeAutomation } from "./automation";
 const loaderDeps = { serverDir: () => fileApi.getPath("", PANEL_ID) };
 export const backupAction = defineAction({
     id: "backup-server", name: "Back up server", description: "Create a named server backup at its chosen destination", category: "Server", inputs: {}, output: { type: "object", label: "Backup" },
     run: async () => { const server = currentServer(); if (!server) throw new Error("Choose a server"); return backupApi.forSource(PANEL_ID, server.server.id).create(); },
 });
 export const sharedActions = [
+    defineAction({
+        id: ACTION_IDS.readAutomation,
+        name: "Read automation",
+        category: "Server",
+        description: "Whether the server restarts after a crash and at what hour it restarts each day",
+        internal: true,
+        inputs: {},
+        output: { type: "object", label: "Automation" },
+        run: async () => automationView(await readAutomation()),
+    }),
+    defineAction({
+        id: ACTION_IDS.writeAutomation,
+        name: "Change automation",
+        category: "Server",
+        description: "Turns the restart after a crash on or off, or sets the daily restart hour",
+        internal: true,
+        inputs: {},
+        output: { type: "object", label: "Automation" },
+        run: async (ctx: ServiceContext<GameServerState>, input: { patch: Record<string, unknown> }) => {
+            if (!input?.patch || typeof input.patch !== "object" || Array.isArray(input.patch)) throw new Error("Give the automation settings to change");
+            return automationView(await writeAutomation(ctx, input.patch, restartServerInstance));
+        },
+    }),
     defineAction({
         id: ACTION_IDS.runCommand,
         name: "Run Command",

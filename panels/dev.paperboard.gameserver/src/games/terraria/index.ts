@@ -1,6 +1,7 @@
 import type { GameDefinition, GameOption, OptionSection } from "../types";
 import { ACTION_IDS as A } from "../../service/contract";
 import { gameArt } from "../art";
+import { AUTOMATION_ACTIONS, AUTOMATION_TAB } from "../automation";
 import { hostRoutes } from "../host";
 import { XNA_4 } from "../windowsRuntime";
 import { softwareName, terrariaSoftware, tmodloaderReleases } from "./catalog";
@@ -49,7 +50,7 @@ export const terraria: GameDefinition = {
         return {
             options, optionsWhileRunning: "locked", backupWhileRunning: "offline", control: { kind: "stdin" }, widgets: ["status", "console"],
             packages: modded ? [{ id: runtime, purpose: ".NET runtime for tModLoader" }] : [XNA_4.package],
-            actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", A.saveWorld, "terraria-motd", "terraria-players", "terraria-kick", "terraria-ban", "terraria-unban", "backup-server", ...(modded ? MOD_ACTIONS : [])],
+            actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", A.saveWorld, "terraria-motd", "terraria-players", "terraria-kick", "terraria-ban", "terraria-unban", "backup-server", ...AUTOMATION_ACTIONS, ...(modded ? MOD_ACTIONS : [])],
             tabs: [
                 { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
                 { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },
@@ -61,6 +62,7 @@ export const terraria: GameDefinition = {
                 { id: "files", label: "Files", icon: "folder", group: "Server", owner: "shared", variant: "fill" },
                 { id: "logs", label: "Logs", icon: "description", group: "Server", owner: "shared", variant: "fill" },
                 { id: "backups", label: "Backups", icon: "backup", group: "Server", owner: "shared" },
+                AUTOMATION_TAB,
             ],
         };
     },

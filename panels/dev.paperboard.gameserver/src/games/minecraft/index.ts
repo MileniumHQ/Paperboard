@@ -1,6 +1,7 @@
 import semver from "semver";
 import type { GameDefinition, GameOptions, GameTab } from "../types";
 import { gameArt } from "../art";
+import { AUTOMATION_TAB } from "../automation";
 import { SOFTWARE, type ServerSoftwareType } from "../../software/catalog";
 import { CROSSPLAY } from "../../software/crossplay";
 import { MODPACK_LOADER } from "../../core/modpack";
@@ -44,6 +45,7 @@ export const minecraft: GameDefinition = {
             tab("files", "Files", "folder", "Server", { owner: "shared", variant: "fill" }),
             tab("logs", "Logs", "description", "Server", { owner: "shared", variant: "fill" }),
             tab("backups", "Backups", "backup", "Server", { owner: "shared" }),
+            AUTOMATION_TAB,
             tab("advanced", "Advanced", "settings", "Server", { owner: "shared" }),
         ];
         // Roster/moderation remains supported independently of the statistics tab.

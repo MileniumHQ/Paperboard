@@ -18,6 +18,7 @@ import { gameFor } from "./games";
 import { gameUIFor } from "./games/ui";
 import Files from "./components/Files";
 import Backups from "./components/Backups";
+import Automation from "./components/Automation";
 import Logs from "./components/Logs";
 import type { PaperFileReveal } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
@@ -62,6 +63,7 @@ export default function App() {
             case "files": return <Files reveal={filesReveal()} />;
             case "logs": return <Logs />;
             case "backups": return <Backups active={activeTab() === id} whileRunning={features().backupWhileRunning} />;
+            case "automation": return <Automation />;
             default: {
                 // any other shared tab lists the game's options placed on it
                 if (!features().options.some((option) => (option.tab ?? "options") === id)) throw new Error(`Shared tab has no renderer: ${id}`);

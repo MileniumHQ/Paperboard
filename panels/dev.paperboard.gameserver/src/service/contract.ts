@@ -14,6 +14,8 @@ export const ACTION_IDS = {
     saveWorld: "save-world",
     readGameOptions: "read-game-options",
     writeGameOptions: "write-game-options",
+    readAutomation: "read-automation",
+    writeAutomation: "write-automation",
     startServer: "start-server",
     stopServer: "stop-server",
     restartServer: "restart-server",
@@ -102,6 +104,7 @@ export const TRIGGER_IDS = {
     playerLeft: "player-left",
     serverStarted: "server-started",
     serverStopped: "server-stopped",
+    serverCrashed: "server-crashed",
 } as const;
 
 export type TriggerId = (typeof TRIGGER_IDS)[keyof typeof TRIGGER_IDS];
