@@ -133,7 +133,7 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
                             disabled={serverStatus() === "offline"}
                         />
                     </PaperFlex>
-                    <PaperButton disabled={!inputVal().trim() || serverStatus() === "offline"}>
+                    <PaperButton type="submit" disabled={!inputVal().trim() || serverStatus() === "offline"}>
                         <PaperIcon>send</PaperIcon>
                         Say
                     </PaperButton>

@@ -84,6 +84,13 @@ try {
     checks.chatFailureTitled = true;
     checks.chatFailureReason = text().includes("The server closed its console");
     checks.chatKeepsMessage = chatInput.value;
+    // the Say button sends, as Enter does: clicked, it is the form's submit
+    const sent = () => calls.filter((c) => c === "s1/say-chat").length;
+    const sentBefore = sent();
+    typeInto(chatInput, "from the button");
+    button("Say")!.click();
+    await wait("the Say button to send", () => sent() > sentBefore);
+    checks.sayButtonSends = true;
     chat();
     checks.calls = calls.filter((c) => c !== "__getState");
 } catch (err) {

@@ -30,6 +30,7 @@ describe("shared overview behavior", () => {
             expect(c.broadcastSent, "a broadcast line is a message, not a command").toEqual(["s1/say-chat"]);
             expect(c.broadcastFailureReason, "a refused broadcast is shown with its reason").toBe(true);
             expect(c.chatKeepsMessage, "an unsent message comes back to the field").toBe("hello world");
+            expect(c.sayButtonSends, "clicking Say sends the message, not only pressing Enter").toBe(true);
             expect(c.calls).toEqual(expect.arrayContaining(["s1/save-world", "s1/run-command", "s1/say-chat"]));
         },
         120_000,
