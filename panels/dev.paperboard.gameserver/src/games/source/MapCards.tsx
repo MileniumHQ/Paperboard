@@ -27,7 +27,7 @@ export interface MapChoice {
     picture?: string;
     /** what it plays as ("Capture the Flag"); the filter chips group by it */
     mode?: string;
-    /** the card's note under the mode */
+    /** a line at the card's foot, as a mod card's stat: "42.7k subscribers", "In the rotation" */
     note?: string;
 }
 
@@ -152,12 +152,12 @@ export default function MapCards(props: {
                             const names = () => mapNames(map, props.pictures);
                             return (
                                 <PaperMediaCard
-                                    effect={false}
                                     banner={map.picture ?? props.pictures.of(map.name) ?? <NoPicture />}
                                     bannerAlt={names().title}
                                     title={breakable(names().title)}
                                     subtitle={names().file ? breakable(names().file!) : undefined}
-                                    description={[props.hideMode ? undefined : map.mode, map.note].filter(Boolean).join(" · ") || undefined}
+                                    description={props.hideMode ? undefined : map.mode}
+                                    footerLeft={map.note ? <PaperText size={2} color="text-subtle">{map.note}</PaperText> : undefined}
                                     selected={props.value === map.name}
                                     disabled={props.disabled}
                                     onClick={() => props.onPick(map.name)}

@@ -142,20 +142,12 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
         if (await save(null, "Rotation not reset")) setResetting(false);
     };
 
-    const status = () => {
-        const current = view();
-        if (!current) return "";
-        if (current.custom) return serverStatus() === "online" ? "The server plays these maps in order, then starts over. Changes apply at once." : "The server plays these maps in order, then starts over, once it starts.";
-        if (current.overriddenBy && current.file) return `The server reads ${current.file}.`;
-        if (current.file) return `The server reads ${current.file}. Edit the rotation to make a copy that Paperboard keeps; that file stays as it is.`;
-        return "The server has no map cycle file, so it plays the map it started on.";
-    };
-
     return (
         <>
             <PaperPageHeader icon="map" title="Maps">
                 <Show when={view()?.custom}>
-                    <PaperButton variant="text" disabled={working() || !editable()} onClick={() => setResetting(true)}>Use the game's map cycle</PaperButton>
+                    <PaperButton variant="outline" disabled={working() || !editable()} onClick={() => setResetting(true)}>Use the game's map cycle</PaperButton>
+                    <PaperButton variant="primary" disabled={working() || !editable() || (addable().length === 0 && !props.spec.workshop)} onClick={() => { setJoined(""); setAdding(true); }}>Add maps</PaperButton>
                 </Show>
                 <Show when={view() && !view()!.custom}>
                     <PaperButton variant="primary" disabled={working() || !editable() || view()!.maps.length === 0} onClick={() => void takeOver()}>Edit rotation</PaperButton>
@@ -173,8 +165,6 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
             <Show when={view()}>
                 {(current) => (
                     <PaperFlex direction="column" gap="full">
-                        <PaperText color="text-subtle">{status()}</PaperText>
-
                         <Show when={current().overriddenBy}>
                             {(file) => (
                                 <PaperQuote variant="warning" icon="info" title="server.cfg picks the map cycle">
@@ -194,12 +184,6 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                             <PaperQuote variant="warning" icon="info" title="Rotation made from the file" onDismiss={() => setNotice("")}>
                                 {notice()}
                             </PaperQuote>
-                        </Show>
-
-                        <Show when={current().custom && editable()}>
-                            <PaperFlex>
-                                <PaperButton variant="primary" disabled={working() || (addable().length === 0 && !props.spec.workshop)} onClick={() => { setJoined(""); setAdding(true); }}>Add maps</PaperButton>
-                            </PaperFlex>
                         </Show>
 
                         <Show
@@ -227,13 +211,13 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                                 <PaperListItem
                                                     value={name}
                                                     icon={<PaperAvatar size="large" shape="square" src={workshopMap(name)?.previewImageUrl ?? pictures.of(name)} alt={names().title} fallbackIcon="map" />}
-                                                    onClose={current().custom && editable() ? () => remove(name) : undefined}
                                                     description={[names().file, !installed().has(name) ? "Not installed" : workshopId(name) ? "Steam Workshop" : label(name), serverLevel() !== null && canonicalMap(serverLevel()!) === name ? "Playing now" : undefined].filter(Boolean).join(" · ")}
                                                     actions={
                                                         <Show when={current().custom && editable()}>
                                                             <PaperFlex direction="row" gap="onefourth" align="center">
                                                                 <PaperButton size="tiny" icon aria-label={`Move ${names().title} up`} disabled={working() || index() === 0} onPointerDown={(e) => e.stopPropagation()} onClick={() => move(name, -1)}>arrow_upward</PaperButton>
                                                                 <PaperButton size="tiny" icon aria-label={`Move ${names().title} down`} disabled={working() || index() === current().maps.length - 1} onPointerDown={(e) => e.stopPropagation()} onClick={() => move(name, 1)}>arrow_downward</PaperButton>
+                                                                <PaperButton size="tiny" icon aria-label={`Remove ${names().title}`} disabled={working()} onPointerDown={(e) => e.stopPropagation()} onClick={() => remove(name)}>close</PaperButton>
                                                             </PaperFlex>
                                                         </Show>
                                                     }

@@ -10,16 +10,21 @@ export interface SourceMode {
     maps: string[];
 }
 
-/** The modes the game lists (`mapModes`) that have an installed map, by name. */
+/**
+ * The modes the game lists (`mapModes`) that have an installed map, by name.
+ * Prefixes one mode goes by (koth and 2koth) make one mode, named by the
+ * first prefix the game lists for it.
+ */
 export function playModes(spec: Pick<SourceGameSpec, "mapModes">, installed: readonly string[]): SourceMode[] {
+    const prefixOf = new Map<string, string>();
+    for (const [prefix, name] of Object.entries(spec.mapModes ?? {})) if (!prefixOf.has(name)) prefixOf.set(name, prefix);
     const modes = new Map<string, SourceMode>();
     for (const map of [...installed].sort()) {
         const name = mapMode(spec, map);
         if (name === undefined) continue;
-        const prefix = map.split("_")[0]!.toLowerCase();
-        const mode = modes.get(prefix) ?? { prefix, name, maps: [] };
+        const mode = modes.get(name) ?? { prefix: prefixOf.get(name)!, name, maps: [] };
         mode.maps.push(map);
-        modes.set(prefix, mode);
+        modes.set(name, mode);
     }
     return [...modes.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

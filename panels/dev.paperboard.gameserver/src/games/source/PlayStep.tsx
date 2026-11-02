@@ -128,7 +128,6 @@ export default function SourcePlayStep(props: {
                                 <For each={modes()}>
                                     {(m) => (
                                         <PaperMediaCard
-                                            effect={false}
                                             banner={pictures.of(showcase(m.maps)!) ?? iconBanner("map")}
                                             bannerAlt={`${m.name}, shown by ${pictures.titleOf(showcase(m.maps)!) ?? showcase(m.maps)}`}
                                             title={m.name}
@@ -138,7 +137,6 @@ export default function SourcePlayStep(props: {
                                     )}
                                 </For>
                                 <PaperMediaCard
-                                    effect={false}
                                     banner={mixedMaps().length > 0 ? mixedMaps().map((name) => pictures.of(name)!) : iconBanner("shuffle")}
                                     bannerAlt={`Mixed, shown by ${mixedMaps().map((name) => pictures.titleOf(name) ?? name).join(", ")}`}
                                     title="Mixed"

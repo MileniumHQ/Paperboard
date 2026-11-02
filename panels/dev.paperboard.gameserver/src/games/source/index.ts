@@ -46,7 +46,7 @@ export interface SourceGameSpec {
     options: readonly SourceOption[];
     /** Class names where the game log's differ from what players call them ("heavyweapons" is the Heavy). */
     roleNames?: Readonly<Record<string, string>>;
-    /** Game mode names by map prefix ("ctf" for ctf_2fort), shown beside each map. */
+    /** Game mode names by map prefix ("ctf" for ctf_2fort), shown beside each map; prefixes of one mode share its name. */
     mapModes?: Readonly<Record<string, string>>;
     /**
      * A wiki page listing the game's maps with a picture each, read at runtime

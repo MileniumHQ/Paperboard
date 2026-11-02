@@ -15,7 +15,7 @@ import * as paperapi from "@mileniumhq/paperapi";
 import { decodePackets, encodePacket } from "../src/games/source/rcon";
 import { serverCfg } from "../src/games/source/config";
 import { cfgMapCycleFile, checkRotation, findMap, installedMaps, mapCycleFile, parseMapCycle, readServerCycle } from "../src/games/source/mapcycle";
-import { sourceActions } from "../src/games/source";
+import { mapMode, sourceActions } from "../src/games/source";
 import { playModes } from "../src/games/source/modes";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "pb-source-maps-"));
@@ -270,13 +270,25 @@ test("the saved rotation is what the config writer puts in the file, replacing a
 // --- setup asks how the server plays
 
 test("the modes setup offers are the ones the game lists that have an installed map, by name, custom folders included", () => {
-    const installed = ["ctf_2fort", "ctf_turbine", "pl_badwater", "pl_custom", "cp_dustbowl", "zz_unlisted", "2koth_abbey"];
+    const installed = ["ctf_2fort", "ctf_turbine", "pl_badwater", "pl_custom", "cp_dustbowl", "zz_unlisted"];
     expect(playModes(TF2, installed)).toEqual([
         { prefix: "ctf", name: "Capture the Flag", maps: ["ctf_2fort", "ctf_turbine"] },
         { prefix: "cp", name: "Control Point", maps: ["cp_dustbowl"] },
         { prefix: "pl", name: "Payload", maps: ["pl_badwater", "pl_custom"] },
     ]);
     expect(playModes(TF2, [])).toEqual([]);
+});
+
+test("TF2's two-point King of the Hill maps (2koth_abbey) are King of the Hill, one mode with the rest, and setup can pick them", async () => {
+    expect(mapMode(TF2, "2koth_abbey")).toBe("King of the Hill");
+    expect(playModes(TF2, ["koth_harvest_final", "2koth_abbey", "ctf_2fort"])).toEqual([
+        { prefix: "ctf", name: "Capture the Flag", maps: ["ctf_2fort"] },
+        { prefix: "koth", name: "King of the Hill", maps: ["2koth_abbey", "koth_harvest_final"] },
+    ]);
+    bsp("koth_harvest_final", "2koth_abbey");
+    await initialize(false);
+    const view = await run(ids.play, { mode: "koth", map: "2koth_abbey" });
+    expect(view).toMatchObject({ maps: ["2koth_abbey", "koth_harvest_final"], custom: true });
 });
 
 test("picking a mode in setup makes its installed maps the rotation with the chosen one first, starts the server on it, and writes what the server reads", async () => {
