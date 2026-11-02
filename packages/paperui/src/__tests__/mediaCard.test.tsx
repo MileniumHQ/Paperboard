@@ -125,3 +125,10 @@ describe("PaperMediaCard selection", () => {
         for (const src of ["/banner.png", "/poster.png"]) expect(container.querySelector(`img[src="${src}"]`)!.getAttribute("loading")).toBe("lazy");
     });
 });
+
+describe("PaperMediaCard title", () => {
+    it("breaks a title with no spaces, such as a map's file name, instead of letting it run out of the card", () => {
+        const { getByText } = render(() => <PaperMediaCard title="arena_lumberyard_event" />);
+        expect(getByText("arena_lumberyard_event").className).toContain("breakWord");
+    });
+});

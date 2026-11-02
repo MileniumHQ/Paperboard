@@ -253,7 +253,7 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
 
                 <div class={styles.headerRow}>
                     <div class={styles.titleColumn}>
-                        <PaperText size={4} weight={700} class={styles.title}>
+                        <PaperText size={4} weight={700} breakWord class={styles.title}>
                             {local.title}
                         </PaperText>
                         <Show when={local.subtitle}>
