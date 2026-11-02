@@ -102,13 +102,18 @@ export function classifyExit(status: GameServerState["serverStatus"], exitCode: 
     return { kind: "crashed", whileStarting: status === "starting" };
 }
 
+/** An exit code as people look it up: Windows crash statuses (0xC0000005) are read in hex, everything else in decimal. */
+function describeExitCode(code: number): string {
+    return code < 0 || code > 0x7fffffff ? `0x${(code >>> 0).toString(16).toUpperCase()}` : String(code);
+}
+
 /**
  * Restarts a server that crashed while running, unless it has crashed
  * CRASH_LIMIT times inside CRASH_WINDOW_MS. A crash while starting never
  * restarts: the next start fails the same way. Says in the console either way.
  */
 export function afterCrash(ctx: ServiceContext<GameServerState>, exit: { whileStarting: boolean; exitCode: number | undefined }, start: (ctx: ServiceContext<GameServerState>, carry: GameServerState["serverEntries"]) => Promise<void>, now = Date.now()): void {
-    const code = exit.exitCode === undefined ? "" : ` (exit code ${exit.exitCode})`;
+    const code = exit.exitCode === undefined ? "" : ` (exit code ${describeExitCode(exit.exitCode)})`;
     const say = (type: "error" | "warn" | "info", content: string) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type, content }) }));
     say("error", `[Server] The server crashed${exit.whileStarting ? " while starting" : ""}${code}. Logs has what it printed.`);
     if (exit.whileStarting) return;

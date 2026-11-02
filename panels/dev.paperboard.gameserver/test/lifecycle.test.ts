@@ -424,6 +424,16 @@ describe("crashes", () => {
         expect(ctx.state.serverEntries[0].content).toMatch(/^\[Server\] Restarted after a crash at .+ \(exit code 137\)\.$/);
     });
 
+    it("a Windows crash status is named in hex, as Windows names it", () => {
+        jest.useFakeTimers();
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessExit(ctx, 0xc0000005);
+        expect(crashed(ctx)).toEqual(["[Server] The server crashed (exit code 0xC0000005). Logs has what it printed."]);
+        expect(ctx.triggers).toContainEqual({ id: "server-crashed", output: 0xc0000005 });
+        automation.cancelAutomation();
+        jest.useRealTimers();
+    });
+
     it("stops asked for by Paperboard or from inside the game are not crashes", async () => {
         const asked = makeCtx({ serverStatus: "online" });
         await stopServerInstance(asked);
