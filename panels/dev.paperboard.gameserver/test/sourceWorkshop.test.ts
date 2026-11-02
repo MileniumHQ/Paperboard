@@ -224,13 +224,37 @@ test("a Workshop map can be removed only while the server neither starts on it n
     await run(ids.workshopAdd, { id: "454116880" });
     await run(ids.workshopAdd, { id: "512422248" });
     await run(ids.changeMap, { map: "workshop/454116880" });
-    await expect(run(ids.workshopRemove, { id: "454116880" })).rejects.toThrow("Discovery is the map the server starts on");
+    await expect(run(ids.workshopRemove, { id: "454116880" })).rejects.toThrow("Discovery was not removed. The server starts on it.");
     await run(ids.changeMap, { map: "ctf_2fort" });
     await run(ids.mapCycleSet, { maps: ["ctf_2fort", "workshop/454116880"] });
-    await expect(run(ids.workshopRemove, { id: "454116880" })).rejects.toThrow("Discovery is in the map rotation");
+    await expect(run(ids.workshopRemove, { id: "454116880" })).rejects.toThrow("Discovery was not removed. It is in the map rotation.");
     await run(ids.mapCycleSet, { maps: ["ctf_2fort"] });
     expect((await run(ids.workshopRemove, { id: "454116880" })).map((m: any) => m.id)).toEqual(["512422248"]);
     await expect(run(ids.workshopRemove, { id: "454116880" })).rejects.toThrow("has no Steam Workshop map 454116880 added");
+});
+
+test("the rotation page is told why a Workshop map can't be removed, in the words the removal itself gives", async () => {
+    bsp("ctf_2fort");
+    await initialize();
+    await run(ids.workshopAdd, { id: "454116880" });
+    await run(ids.workshopAdd, { id: "512422248" });
+    expect((await run(ids.mapCycle)).workshopHeld, "nothing holds either").toEqual({});
+    await run(ids.changeMap, { map: "workshop/454116880" });
+    await run(ids.mapCycleSet, { maps: ["ctf_2fort", "workshop/512422248"] });
+    const held = (await run(ids.mapCycle)).workshopHeld;
+    expect(held).toEqual({ "454116880": "The server starts on it. Choose another map on the Overview first.", "512422248": "It is in the map rotation. Remove it there first." });
+    for (const [id, why] of Object.entries(held)) await expect(run(ids.workshopRemove, { id })).rejects.toThrow(why);
+    // a server playing it holds it too, however it names the map (workshop/<file>.ugc<id>)
+    await run(ids.changeMap, { map: "ctf_2fort" });
+    await run(ids.mapCycleSet, { maps: ["ctf_2fort"] });
+    state.serverStatus = "online";
+    state.serverLevel = "workshop/arena_discovery_rc2.ugc454116880";
+    const playing = "The server is playing it now. Change the map first.";
+    expect((await run(ids.mapCycle)).workshopHeld).toEqual({ "454116880": playing });
+    await expect(run(ids.workshopRemove, { id: "454116880" })).rejects.toThrow(playing);
+    state.serverStatus = "offline";
+    state.serverLevel = null;
+    expect(await run(ids.workshopRemove, { id: "454116880" })).toHaveLength(1);
 });
 
 test("a damaged saved list is a failure, never an empty one", async () => {

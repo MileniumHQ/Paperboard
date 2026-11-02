@@ -40,6 +40,14 @@ describe("source Workshop maps behavior", () => {
             expect(c.askedFor).toEqual({ query: "dustbowl" });
             expect(c.rowSaysWorkshop).toBe(true);
             expect(c.rowPicture).toBe(true);
+            expect(c.heldSaid, "a map the rotation plays says why it can't be removed").toBe(true);
+            expect(c.heldDisabled).toBe(true);
+            expect(c.heldFreed, "out of the rotation it can be removed").toBe(true);
+            expect(c.notRemovedBeforeConfirm, "removing asks first").toBe(true);
+            expect(c.cancelRemovesNothing).toBe(true);
+            expect(c.refusalShown, "a refusal is shown and the map stays").toBe(true);
+            expect(c.removed).toEqual({ id: "454116880" });
+            expect(c.listGone).toBe(true);
         },
         120_000,
     );

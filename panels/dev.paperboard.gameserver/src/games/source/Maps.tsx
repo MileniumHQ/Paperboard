@@ -20,7 +20,7 @@ import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices, mapNames, 
 import { createMapPictures } from "./useMapPictures";
 import { workshopChoice } from "./useWorkshopMaps";
 import WorkshopPane from "./WorkshopPane";
-import { canonicalMap, workshopId, workshopName, type SourceWorkshopHit } from "./workshop";
+import { canonicalMap, workshopId, workshopName, type SourceWorkshopHit, type SourceWorkshopMap } from "./workshop";
 
 // The maps a server plays through, in order. The server reads a map cycle
 // file; until the rotation is edited here that is the game's own or one the
@@ -38,6 +38,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
     const [adding, setAdding] = createSignal(false);
     const [source, setSource] = createSignal<"server" | "workshop">("server");
     const [joined, setJoined] = createSignal("");
+    const [removingWorkshop, setRemovingWorkshop] = createSignal<SourceWorkshopMap | null>(null);
     const pictures = createMapPictures(props.spec);
 
     const load = async () => {
@@ -122,6 +123,20 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
             repeated > 0 ? `${repeated === 1 ? "A map was" : `${repeated} maps were`} listed more than once and play once.` : "",
         ].filter(Boolean).join(" ");
         if (await save(maps, "Rotation not changed") && left) setNotice(left);
+    };
+    /** Takes a Steam Workshop map off the server; the server says when it can't. */
+    const removeWorkshop = async (map: SourceWorkshopMap) => {
+        setWorking(true);
+        setError(null);
+        try {
+            await serverBridge.call(ids.workshopRemove, { id: map.id });
+            setRemovingWorkshop(null);
+            await load();
+        } catch (err) {
+            setError({ title: `${map.title} was not removed`, message: errorMessage(err) });
+        } finally {
+            setWorking(false);
+        }
     };
     const reset = async () => {
         if (await save(null, "Rotation not reset")) setResetting(false);
@@ -231,10 +246,51 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                 </PaperList>
                             </PaperCard>
                         </Show>
+                        <Show when={current().workshop.length > 0}>
+                            <PaperFlex direction="column" gap="half">
+                                <PaperText size={2} weight={700} color="text-subtle">Steam Workshop maps</PaperText>
+                                <PaperCard padding="none">
+                                    <PaperList name="source-workshop-maps" value="" background="surface-raised" borderless fullWidth>
+                                        <For each={current().workshop}>
+                                            {(map) => (
+                                                <PaperListItem
+                                                    value={map.id}
+                                                    icon={<PaperAvatar size="large" shape="square" src={map.previewImageUrl ?? undefined} alt={map.title} fallbackIcon="map" />}
+                                                    description={current().workshopHeld[map.id] ?? "On this server"}
+                                                    actions={<PaperButton variant="text" disabled={working() || !!current().workshopHeld[map.id]} onPointerDown={(e) => e.stopPropagation()} onClick={() => { setError(null); setRemovingWorkshop(map); }}>Remove</PaperButton>}
+                                                >
+                                                    {map.title}
+                                                </PaperListItem>
+                                            )}
+                                        </For>
+                                    </PaperList>
+                                </PaperCard>
+                            </PaperFlex>
+                        </Show>
                         <MapPicturesCredit pictures={pictures} />
                     </PaperFlex>
                 )}
             </Show>
+
+            <PaperModal
+                open={removingWorkshop() !== null}
+                onClose={() => setRemovingWorkshop(null)}
+                title={`Remove ${removingWorkshop()?.title ?? "map"}`}
+                size="small"
+                footer={
+                    <>
+                        <PaperButton variant="text" onClick={() => setRemovingWorkshop(null)}>Cancel</PaperButton>
+                        <PaperButton variant="danger" disabled={working()} onClick={() => { const map = removingWorkshop(); if (map) void removeWorkshop(map); }}>Remove</PaperButton>
+                    </>
+                }
+            >
+                <PaperText preset="body">
+                    {removingWorkshop()?.title} is taken off this server, and you can add it again from the Steam Workshop any time.
+                </PaperText>
+                <Show when={error()}>
+                    <PaperText size={2} color="danger">{error()!.message}</PaperText>
+                </Show>
+            </PaperModal>
 
             <PaperModal
                 open={adding()}

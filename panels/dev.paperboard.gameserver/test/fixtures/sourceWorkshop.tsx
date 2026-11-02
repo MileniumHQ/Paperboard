@@ -21,8 +21,11 @@ let maps = ["ctf_2fort", "cp_dustbowl"];
 let search: (input: any) => unknown = () => ({ items: [{ ...discovery, added: false }, { id: "512422248", title: "MVM Area 52", previewImageUrl: null, tags: ["Mann vs. Machine"], subscribers: 10945, updated: 1, added: false }], hidden: 3, meta });
 let add: (input: any) => unknown = () => library.push(discovery);
 const calls: { action: string; input: any }[] = [];
-const view = () => ({ maps, custom: true, file: "cfg/paperboard_mapcycle.txt", installed: ["ctf_2fort", "cp_dustbowl", ...library.map((m) => `workshop/${m.id}`)], workshop: library, overriddenBy: null });
-
+// the service says why a Workshop map can't go: the map it starts on, or one in the rotation
+let startsOn = "ctf_2fort";
+const heldReason = (m: any) => (startsOn === `workshop/${m.id}` ? "The server starts on it. Choose another map on the Overview first." : maps.includes(`workshop/${m.id}`) ? "It is in the map rotation. Remove it there first." : null);
+const view = () => ({ maps, custom: true, file: "cfg/paperboard_mapcycle.txt", installed: ["ctf_2fort", "cp_dustbowl", ...library.map((m) => `workshop/${m.id}`)], workshop: library, workshopHeld: Object.fromEntries(library.flatMap((m) => (heldReason(m) ? [[m.id, heldReason(m)]] : []))), overriddenBy: null });
+let remove: (input: any) => unknown = (input) => { library = library.filter((m) => m.id !== input.id); return library; };
 const state = {
     servers: [{ id: "s1", name: "Fixture", game: "team-fortress-2", directory: "servers/s1", createdAt: 1, configured: true, icon: null, state: { serverStatus: "offline", serverSoftware: "steam", serverVersion: "", serverPort: "27015", recoveryBlock: null, maxPlayers: 24, playerCount: 0 } }],
     serversError: null,
@@ -36,6 +39,7 @@ actionsApi.call = (async (_panel: string, action: string, input: any) => {
     if (action === "s1/team-fortress-2-map-pictures") return { source: { name: "Test Wiki", url: "https://wiki.example/maps" }, pictures: {}, titles: { ctf_2fort: "2Fort" } };
     if (action === "s1/team-fortress-2-workshop-find") return search(input);
     if (action === "s1/team-fortress-2-workshop-add") { add(input); return library; }
+    if (action === "s1/team-fortress-2-workshop-remove") return remove(input);
     if (action === "s1/team-fortress-2-map-cycle-set") { maps = input.maps; return view(); }
     return {};
 }) as typeof actionsApi.call;
@@ -113,6 +117,44 @@ try {
     checks.rowSaysWorkshop = text().includes("Steam Workshop");
     checks.rowPicture = [...document.querySelectorAll("img")].some((i) => i.getAttribute("src") === discovery.previewImageUrl);
 
+    // the Workshop maps on the server are listed apart from the rotation, each with a way to remove it
+    const workshopRow = () => [...document.querySelectorAll<HTMLElement>("label")].find((l) => l.textContent?.includes("Discovery") && l.querySelector("button")?.textContent?.trim() === "Remove");
+    await wait("the Workshop maps list", () => text().includes("Steam Workshop maps") && Boolean(workshopRow()));
+    // a map the rotation plays can't go, and the row says why instead of just refusing
+    checks.heldSaid = workshopRow()!.textContent!.includes("It is in the map rotation. Remove it there first.");
+    checks.heldDisabled = workshopRow()!.querySelector("button")!.disabled;
+    // taking it out of the rotation frees it
+    const rotationRow = [...document.querySelectorAll<HTMLElement>("label")].find((l) => l.textContent?.includes("Discovery") && !l.querySelector("button")?.textContent?.includes("Remove"))!;
+    [...rotationRow.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.includes("close"))!.click();
+    await wait("the rotation without it", () => !maps.includes("workshop/454116880"));
+    await wait("Remove to open", () => Boolean(workshopRow()) && !workshopRow()!.querySelector("button")!.disabled);
+    checks.heldFreed = workshopRow()!.textContent!.includes("On this server");
+
+    // asked for, it is confirmed first; nothing is removed until it is
+    workshopRow()!.querySelector("button")!.click();
+    await wait("the confirmation", () => text().includes("Remove Discovery") && text().includes("taken off this server"));
+    checks.notRemovedBeforeConfirm = !calls.some((c) => c.action.endsWith("workshop-remove"));
+    button("Cancel")!.click();
+    await wait("the confirmation to close", () => !text().includes("taken off this server"));
+    checks.cancelRemovesNothing = !calls.some((c) => c.action.endsWith("workshop-remove")) && library.length === 1;
+
+    // the service refuses (the server started on it meanwhile): the reason is in the dialog and the map stays
+    remove = () => { throw new Error("Discovery was not removed. The server starts on it. Choose another map on the Overview first."); };
+    workshopRow()!.querySelector("button")!.click();
+    await wait("the confirmation", () => text().includes("taken off this server"));
+    [...document.querySelectorAll<HTMLButtonElement>("button")].filter((b) => b.textContent?.trim() === "Remove").at(-1)!.click();
+    await wait("the refusal", () => text().includes("The server starts on it. Choose another map on the Overview first."));
+    checks.refusalShown = library.length === 1 && Boolean(workshopRow());
+    button("Cancel")!.click();
+
+    // confirmed, it goes, and the list and the server's maps follow
+    remove = (input) => { library = library.filter((m) => m.id !== input.id); return library; };
+    workshopRow()!.querySelector("button")!.click();
+    await wait("the confirmation", () => text().includes("taken off this server"));
+    [...document.querySelectorAll<HTMLButtonElement>("button")].filter((b) => b.textContent?.trim() === "Remove").at(-1)!.click();
+    await wait("the map to go", () => library.length === 0 && !text().includes("Steam Workshop maps"));
+    checks.removed = calls.filter((c) => c.action.endsWith("workshop-remove")).map((c) => c.input).at(-1);
+    checks.listGone = !text().includes("Steam Workshop maps") && !text().includes("Discovery");
 } catch (err) {
     error = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
 }

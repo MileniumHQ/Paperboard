@@ -133,6 +133,8 @@ export interface SourceMapCycle {
     installed: string[];
     /** the Steam Workshop maps added to the server, for their titles and pictures */
     workshop: SourceWorkshopMap[];
+    /** why each of those can't be removed right now, by item id: the server starts on it, cycles through it or is playing it; a map not listed can go */
+    workshopHeld: Record<string, string>;
     /** a mapcyclefile in the server folder's server.cfg, which the server follows over this page; null when none */
     overriddenBy: string | null;
 }

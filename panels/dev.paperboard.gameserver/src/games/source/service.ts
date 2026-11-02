@@ -21,7 +21,7 @@ import { cvarValue, mapName, optionValue, secretsCfg, serverCfg } from "./config
 import { cfgMapCycleFile, checkRotation, DEFAULT_MAPCYCLE, findMap, installedMaps, mapCycleFile, PAPERBOARD_MAPCYCLE, readServerCycle } from "./mapcycle";
 import { mapPictures } from "./mapPictures";
 import { playModes } from "./modes";
-import { findWorkshopMaps, readWorkshopMaps, workshopId, workshopMapToAdd, workshopName, type SourceWorkshopMap } from "./workshop";
+import { canonicalMap, findWorkshopMaps, readWorkshopMaps, workshopId, workshopMapToAdd, workshopName, type SourceWorkshopMap } from "./workshop";
 import { consoleLine, isErrorLine, linePlayer, parseLogLine, parseStatus, steamId, type SourceLogEvent } from "./log";
 import { SourceRcon, RconError, RconNoAnswer } from "./rcon";
 import { bannedUserCfg, noStats, SourceRoster, type SourceStats } from "./roster";
@@ -133,15 +133,25 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
     async function availableMaps(): Promise<string[]> {
         return [...(await installedMaps(await gameDir())), ...(await workshopLibrary()).map((m) => workshopName(m.id))];
     }
-    async function mapCycleView(): Promise<SourceMapCycle> {
+    /** Why a Steam Workshop map can't be removed from the server now, or null: it is the map the server starts on, one it cycles through, or the one it is playing. */
+    function workshopHeldBy(ctx: Context, saved: Record<string, unknown>, map: SourceWorkshopMap): string | null {
+        const name = workshopName(map.id);
+        if (saved.map === name) return "The server starts on it. Choose another map on the Overview first.";
+        if (Array.isArray(saved.mapCycle) && saved.mapCycle.includes(name)) return "It is in the map rotation. Remove it there first.";
+        if (ctx.state.serverStatus !== "offline" && ctx.state.serverLevel && canonicalMap(ctx.state.serverLevel) === name) return "The server is playing it now. Change the map first.";
+        return null;
+    }
+    async function mapCycleView(ctx: Context): Promise<SourceMapCycle> {
         const game = await gameDir();
         const workshop = await workshopLibrary();
         const installed = [...(await installedMaps(game)), ...workshop.map((m) => workshopName(m.id))];
-        const saved = (await settings()).mapCycle;
+        const all = await settings();
+        const saved = all.mapCycle;
         const overriddenBy = await userMapCycleFile();
-        if (Array.isArray(saved)) return { maps: saved as string[], custom: true, file: `cfg/${PAPERBOARD_MAPCYCLE}`, installed, workshop, overriddenBy };
+        const held = Object.fromEntries(workshop.flatMap((m) => { const why = workshopHeldBy(ctx, all, m); return why ? [[m.id, why]] : []; }));
+        if (Array.isArray(saved)) return { maps: saved as string[], custom: true, file: `cfg/${PAPERBOARD_MAPCYCLE}`, installed, workshop, workshopHeld: held, overriddenBy };
         const read = await readServerCycle(game, overriddenBy ?? DEFAULT_MAPCYCLE);
-        return { maps: read?.maps ?? [], custom: false, file: read?.file ?? null, installed, workshop, overriddenBy };
+        return { maps: read?.maps ?? [], custom: false, file: read?.file ?? null, installed, workshop, workshopHeld: held, overriddenBy };
     }
     /** A map the server can start on or change to: a .bsp it has, or a Workshop map added to it. */
     async function mapAvailable(map: string): Promise<boolean> {
@@ -515,26 +525,24 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 await updateSettings({ workshopMaps: [...have.filter((m) => m.id !== id), map] });
                 return workshopLibrary();
             }),
-            action(ids.workshopRemove, `Remove a Steam Workshop ${spec.name} map`, async (_ctx, { id }) => {
+            action(ids.workshopRemove, `Remove a Steam Workshop ${spec.name} map`, async (ctx, { id }) => {
                 if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
                 if (typeof id !== "string") throw new Error("Choose a Steam Workshop item by its id");
                 const have = await workshopLibrary();
                 const found = have.find((m) => m.id === id);
                 if (!found) throw new Error(`${spec.name} has no Steam Workshop map ${id} added`);
-                const saved = await settings();
-                const name = workshopName(id);
-                if (saved.map === name) throw new Error(`${found.title} is the map the server starts on; choose another on the Overview first`);
-                if (Array.isArray(saved.mapCycle) && saved.mapCycle.includes(name)) throw new Error(`${found.title} is in the map rotation; remove it there first`);
+                const held = workshopHeldBy(ctx, await settings(), found);
+                if (held) throw new Error(`${found.title} was not removed. ${held}`);
                 await updateSettings({ workshopMaps: have.filter((m) => m.id !== id) });
                 return workshopLibrary();
             }),
-            action(ids.mapCycle, `${spec.name} map rotation`, () => mapCycleView()),
+            action(ids.mapCycle, `${spec.name} map rotation`, (ctx) => mapCycleView(ctx)),
             action(ids.mapCycleSet, "Set the map rotation", async (ctx, { maps }) => {
                 if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
                 await refuseOverriddenCycle();
                 // null hands the rotation back to the game's map cycle file
                 await setRotation(ctx, maps === null ? null : checkRotation(maps, await availableMaps()));
-                return mapCycleView();
+                return mapCycleView(ctx);
             }),
             // setup's last choice: how the server plays. A mode makes its installed maps the rotation, the chosen map first
             // and the one the server starts on; no mode leaves the rotation to the game's map cycle
@@ -553,7 +561,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (rotation) await refuseOverriddenCycle();
                 await setRotation(ctx, rotation, { map });
                 await loadOptions(ctx);
-                return mapCycleView();
+                return mapCycleView(ctx);
             }),
             action(ids.changeMap, "Change map", async (ctx, { map: raw }) => {
                 const map = mapName(raw);
