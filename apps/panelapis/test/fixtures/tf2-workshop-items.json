@@ -1,0 +1,176 @@
+{
+ "capturedFrom": "POST https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/ (no key), 2026-11-01. Real Team Fortress 2 Workshop items, unmodified. QueryFiles needs a key and could not be captured; the test renames consumer_app_id to consumer_appid, as IPublishedFileService spells it.",
+ "items": [
+  {
+   "publishedfileid": "1597573871",
+   "result": 1,
+   "creator": "76561198227960928",
+   "creator_app_id": 440,
+   "consumer_app_id": 440,
+   "filename": "",
+   "file_size": "8177914",
+   "file_url": "",
+   "hcontent_file": "4453781465262410910",
+   "preview_url": "https://images.steamusercontent.com/ugc/956351032208932309/0937510D24B979F66DDDDBE72B4A5610FF18204D/",
+   "hcontent_preview": "956351032208932309",
+   "title": "Icebowl",
+   "description": "It's dustbowl but with a snow skin.\r\n\r\nOld Submission I planned to make public for Christmas 2018 but never got around to it.\r\n\r\nMerry Christmas.\r\n\r\nCustom content from: https://tf2maps.net/threads/snowycoast-assets.24898/\r\n\r\nIf the custom content is not showing let me know.\r\n\r\nAccess the map open the console and type: workshop/1597573871",
+   "time_created": 1545448089,
+   "time_updated": 1652593654,
+   "visibility": 0,
+   "banned": 0,
+   "ban_reason": "",
+   "subscriptions": 25,
+   "favorited": 5,
+   "lifetime_subscriptions": 52,
+   "lifetime_favorited": 5,
+   "views": 191,
+   "tags": [
+    {
+     "tag": "Smissmas"
+    },
+    {
+     "tag": "Night"
+    },
+    {
+     "tag": "Control Point"
+    }
+   ]
+  },
+  {
+   "publishedfileid": "3829241505",
+   "result": 1,
+   "creator": "76561198839341425",
+   "creator_app_id": 440,
+   "consumer_app_id": 440,
+   "filename": "",
+   "file_size": "15697452",
+   "file_url": "",
+   "hcontent_file": "8991258619014669017",
+   "preview_url": "https://images.steamusercontent.com/ugc/17276018335207666376/B7D1C9C68C73FCACF38130EB41A7A0B2BCBE3FDB/",
+   "hcontent_preview": "17276018335207666376",
+   "title": "Tasmania",
+   "description": "The holidays are here, and the teams have decided on celebrating the classic American tradition: Waging war on the other side of the planet.\r\n\r\nTasmania is a King of the Hill map set in the snowed-over hell of Australia, with a secret cave base owned by both teams, holding a dangerous secret! It's a missile, of course.\r\n\r\n[img]https://i.imgur.com/e1dRRzq.png[/img]\r\n\r\nCredits:\r\nspruce - The mastermind behind it all\r\nDiva Dan - (S)laughter models",
+   "time_created": 1793238725,
+   "time_updated": 1793488019,
+   "visibility": 0,
+   "banned": 0,
+   "ban_reason": "",
+   "subscriptions": 93,
+   "favorited": 40,
+   "lifetime_subscriptions": 107,
+   "lifetime_favorited": 40,
+   "views": 777,
+   "tags": [
+    {
+     "tag": "King of the Hill"
+    },
+    {
+     "tag": "Smissmas"
+    }
+   ]
+  },
+  {
+   "publishedfileid": "3831898650",
+   "result": 1,
+   "creator": "76561198269526429",
+   "creator_app_id": 440,
+   "consumer_app_id": 440,
+   "filename": "",
+   "file_size": "12129068",
+   "preview_url": "https://images.steamusercontent.com/ugc/13615889231887412197/087097CA958E20D9A0991A8D304AD42B95EAF80C/",
+   "hcontent_preview": "13615889231887412197",
+   "title": "Crimson Capo",
+   "description": "Paintable\r\n\r\nStyle 1 Paint All\r\nStyle 2 Paint Rose\r\nStyle 3 Paint Hat\r\n\r\nStyle 2: https://steamcommunity.com/sharedfiles/filedetails/?id=3831903483\r\nStyle 3: https://steamcommunity.com/sharedfiles/filedetails/?id=3831905348",
+   "time_created": 1793559433,
+   "time_updated": 1793563607,
+   "visibility": 0,
+   "banned": 0,
+   "ban_reason": "",
+   "subscriptions": 0,
+   "favorited": 9,
+   "lifetime_subscriptions": 0,
+   "lifetime_favorited": 9,
+   "views": 139,
+   "tags": [
+    {
+     "tag": "Spy"
+    },
+    {
+     "tag": "Headgear"
+    },
+    {
+     "tag": "Smissmas"
+    },
+    {
+     "tag": "Summer"
+    },
+    {
+     "tag": "Certified Compatible"
+    }
+   ]
+  },
+  {
+   "publishedfileid": "1394800885",
+   "result": 1,
+   "creator": "76561197961895140",
+   "creator_app_id": 766,
+   "consumer_app_id": 440,
+   "filename": "1527313634_preview_300px-Pickups.png",
+   "file_size": "66419",
+   "file_url": "https://images.steamusercontent.com/ugc/914673891442512298/41B268FA3EA1CA767D95B56E4C6E0ECC52C189E7/",
+   "hcontent_file": "914673891442512298",
+   "preview_url": "https://images.steamusercontent.com/ugc/914673891442512298/41B268FA3EA1CA767D95B56E4C6E0ECC52C189E7/",
+   "hcontent_preview": "914673891442512298",
+   "title": "Team Fortress 2 《新手指導手冊》",
+   "description": "Team Fortress 2 建立新的攻略\r\n作者: Nokia Se :)\r\n《序》\r\n為了讓各位接觸這款遊戲的新手能夠快速的進入狀況\r\n所以本人發出這篇有著各種基本技巧講解、基本知識的文章\r\n\r\n此篇獻給所有新加入Team Fortress 2的玩家\r\n希望本篇著作可以令你or妳更快速的進入狀況 :)\r\nGood Luck\r\n\r\nFor he or she who are new here. :)\r\n正文開始。\r\n\r\n本目錄最後更動日期:2011/04/27\r\nTF2 Basic Knowledge\r\n(TF2基礎知識)\r\n首先在第一點開始前，TF2也有由全世界的玩家共同維護、付出的維基百科。\r\n你可以在TF2Wiki找到各種資訊，應有盡有！\r\nhttp://wiki.teamfortress.com/wiki/Main_Page/zh-hant\r\n\r\n1.\r\n在遊戲中隊友與隊友之間可以穿越彼此的身體。\r\n不過攻擊將不會穿透隊友，如子彈、火箭、榴彈等，但火焰是個例外。\r\n\r\n2.\r\n在Team Fortress2中傷害造成的判定與一般射擊遊戲的 ＂部位判定制＂不同。\r\n在TF2中是＂距離判定制＂，簡單來說『離目標距離造成的傷害就越大』\r\n\r\n※子彈性攻擊 ＝ 開火點與命中點之間距離 (開槍點與命中點之間的距離)\r\n※爆炸性攻擊 ＝ 爆炸點與受炸點之間的距離 (爆炸的中心點與受炸物之間的距離)\r\n\r\n3.\r\n跳蹲。在跳躍起來的時候按住蹲下縮起自己的腿來跳上更高的地方。\r\n這是幾乎是每款動作射擊遊戲都有的小技巧，這個小技巧在TF2也用得到。\r\n例如當工程師要跳上自己所搭建的補給器上面時就得要透過跳蹲才跳的上去。\r\n\r\n4.\r\n地圖中各個地方都有各種可以補充彈藥、生命值的拾起物(Pickup)。\r\n\r\n玩家可以拾起他們來獲得資源，故也稱補給品。\r\n這些補給品將會在使用後10秒後重生，且重生位置是固定的。\r\n所以知道並記好每張地圖補給品的所在位置將有助作戰及任務的進行。\r\n\r\n小型補給品可以恢復五分之一(20.5%)。\r\n中型補給品可以恢復一半(50%)。\r\n大型補給品則可以恢復全滿(100%)。\r\n不管彈藥方面還是生命值方面的補給品的恢復值都是這樣子計算的。\r\n\r\n例如:\r\n一個原血量300的Heavy使用中型醫療包可以回覆150的血量\r\n則原血量200的Soldier則可以回覆100\r\n\r\n5.\r\n在TF2中有種特殊攻擊稱為Critical Hit (翻譯作暴擊或致命攻擊)\r\n一般來說暴擊給予的傷害都是普通攻擊的300% (三倍)\r\n\r\n被Critical Hit所擊中的角色頭上都會有綠色的『Critical Hit』字樣浮出\r\n\r\n\r\n\r\n\r\n6.\r\n身為據點防守方,\r\n在敵人試著佔領據點時你可以透過一同踏上據點(俗稱踩點)來阻止敵方的佔領動作！\r\n\r\n同樣的，敵方也可以透過一同踏上據點來阻止我方佔領。\r\n當佔領動作遭到阻礙時，先前的佔領進度將不會消失。\r\n若佔領動作無法繼續進行，殘存的佔領進度只會慢慢的消退而不是全部消失。\r\n\r\n6-2.\r\n當一個據點上有著一方的佔領進度時，另一方得要等到先前那一方的佔領進度完全消退後才能開始他們自己那一方的佔領。\r\n\r\n例如:\r\n紅隊目前正在試著佔領一據點，佔領到一半時，紅隊的佔領動作就中斷了。\r\n這時一個籃隊隊員踏上了該點，該藍隊隊員並不能立即開始進行佔領。\r\n得要等到先前紅隊的佔領進度完全消退後才能開始藍隊的佔領進度。\r\n\r\n6-3.\r\n當回合時間已盡不過據點上有佔領殘存的進度的時候。\r\n回合將不會結束造成僵局或者防守方的勝利。\r\n除非地圖時間已盡許久，否則回合通常都會有\"Overtime (延長時間)\"\r\n在這延長時間時所有作戰行為仍繼續進行！\r\n進攻方可以繼續進攻取得勝利，而防守方就得要撐到延長時間結束才能獲勝！\r\n\r\n6-4.\r\n每當一個據點被佔領之後，回合時間將會增加。\r\n對進攻方來說，時間越多就等於有越多時間、機會取得勝利。\r\n而隊防守方來說時間越多失敗的機會就會隨著敵人進攻的機會就越多而越多。\r\n",
+   "time_created": 1527314235,
+   "time_updated": 1527314235,
+   "visibility": 0,
+   "banned": 0,
+   "ban_reason": "",
+   "subscriptions": 0,
+   "favorited": 0,
+   "lifetime_subscriptions": 0,
+   "lifetime_favorited": 0,
+   "views": 38,
+   "tags": [
+    {
+     "tag": "Engineer"
+    },
+    {
+     "tag": "tchinese"
+    },
+    {
+     "tag": "Achievements"
+    }
+   ]
+  },
+  {
+   "publishedfileid": "3832104930",
+   "result": 1,
+   "creator": "76561199797284432",
+   "creator_app_id": 761,
+   "consumer_app_id": 440,
+   "filename": "",
+   "file_size": "0",
+   "file_url": "",
+   "hcontent_file": "18446744073709551615",
+   "preview_url": "",
+   "hcontent_preview": "18446744073709551615",
+   "title": "​",
+   "description": "",
+   "time_created": 1793583705,
+   "time_updated": 1793583705,
+   "visibility": 0,
+   "banned": 0,
+   "ban_reason": "",
+   "subscriptions": 0,
+   "favorited": 0,
+   "lifetime_subscriptions": 0,
+   "lifetime_favorited": 0,
+   "views": 0,
+   "tags": []
+  }
+ ]
+}

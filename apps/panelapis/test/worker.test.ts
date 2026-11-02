@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { build } from "esbuild";
+import tf2Capture from "./fixtures/tf2-workshop-items.json";
 import { Miniflare, convertV4MiniflareOptions, Response as MFResponse } from "miniflare";
 
 const SECRET = "test-only-steam-key-never-real";
@@ -12,6 +13,9 @@ const fixture = {
 };
 // QueryFiles and GetDetails (IPublishedFileService) answer in the same shape.
 const queryFixture = fixture;
+// Real Team Fortress 2 items, spelled as QueryFiles spells them. Where Steam sends an empty list the field is left out here, as the tagless video shows the case.
+const tf2 = Object.fromEntries(tf2Capture.items.map(({ consumer_app_id, creator_app_id, ...rest }: any) => [rest.publishedfileid, { ...rest, consumer_appid: consumer_app_id, creator_appid: creator_app_id }]));
+const withoutTags = ({ tags, ...rest }: any) => rest;
 let script: string;
 beforeAll(async () => {
   const result = await build({ stdin: {
@@ -92,6 +96,36 @@ describe("Modscan HTTP boundary in workerd", () => {
     expect((await request(`${base}/search?sort=updated&page=2&q=hello`)).status).toBe(200);
     expect(calls).toHaveLength(1);
     expect((await (await budget.fetch("https://budget/count")).json() as number[][])[0]![1]).toBe(1);
+  });
+  it("asks Team Fortress 2 searches for ready-to-use items only, and leaves other games unrestricted", async () => {
+    const { request, calls } = await setup({ upstream: url => ({ response: { total: 1, publishedfiledetails: [{ ...fixture, consumer_appid: JSON.parse(url.searchParams.get("input_json")!).appid }] } }) });
+    for (const game of ["tf2", "tmodloader", "garrysmod", "cs2", "palworld"]) {
+      expect((await request(`/modscan/v1/${game}/search?q=map`)).status).toBe(200);
+      const sent = JSON.parse(calls.at(-1)!.url.searchParams.get("input_json")!);
+      expect(sent.filetype).toBe(game === "tf2" ? 18 : undefined);
+      expect(Object.hasOwn(sent, "filetype")).toBe(game === "tf2");
+    }
+  });
+  it("reads real Team Fortress 2 maps, cosmetics, guides and a tagless video from a search", async () => {
+    const real = ["1597573871", "3829241505", "3831898650", "1394800885", "3832104930"];
+    const { request } = await setup({ upstream: () => ({ response: { total: 5, publishedfiledetails: real.map(i => i === "3832104930" ? withoutTags(tf2[i]) : tf2[i]) } }) });
+    const response = await request("/modscan/v1/tf2/search");
+    expect(response.status).toBe(200);
+    const { items } = await response.json() as any;
+    expect(items.map((i: any) => [i.id, i.fileSize, i.tags])).toEqual([
+      ["1597573871", 8177914, ["Smissmas", "Night", "Control Point"]],
+      ["3829241505", 15697452, ["King of the Hill", "Smissmas"]],
+      ["3831898650", 12129068, ["Spy", "Headgear", "Smissmas", "Summer", "Certified Compatible"]],
+      ["1394800885", 66419, ["Engineer", "tchinese", "Achievements"]],
+      ["3832104930", 0, []],
+    ]);
+    expect(items[4].previewImageUrl).toBeNull();
+  });
+  it("still rejects tags that are present but not a list", async () => {
+    const { request } = await setup({ upstream: () => ({ response: { total: 1, publishedfiledetails: [{ ...tf2["3832104930"], tags: "none" }] } }) });
+    const response = await request("/modscan/v1/tf2/search");
+    expect(response.status).toBe(502);
+    expect(await response.text()).toContain("steam_schema");
   });
   it("looks items up with what they require, sending only the ids", async () => {
     const { request, calls } = await setup();

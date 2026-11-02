@@ -5,6 +5,12 @@ export interface Env {
 }
 
 export const GAMES = { tmodloader: 1281930, garrysmod: 4000, tf2: 440, cs2: 730, palworld: 1623730 } as const;
+// What a search is for, where a game's Workshop holds more than its mods. Valve's
+// QueryFiles `filetype` (EPublishedFileInfoMatchingFileType) 18 is "ready to use"
+// items, the Workshop's own section for Team Fortress 2 maps; without it a search
+// also returns the game's cosmetic submissions, guides, art and videos, which
+// the Game Server panel only throws away again. Other games search everything.
+const SEARCH_FILETYPE: Partial<Record<keyof typeof GAMES, number>> = { tf2: 18 };
 const SORTS = { relevance: 12, subscriptions: 9, updated: 19 } as const;
 const META = {
   attribution: "Powered by Steam",
@@ -40,6 +46,8 @@ export interface Item {
   tags: string[]; authorId: string; subscriptions: number | null; favorites: number | null;
   timeUpdated: number; fileSize: number; children: string[] | null; workshopUrl: string;
 }
+// Some items (videos, art) carry no tags, and Steam may leave out an empty list rather than send [].
+function tags(value: unknown): string[] { return value === undefined ? [] : array(value).slice(0, 100).map(t => text(record(t).tag, 100)); }
 function children(value: unknown): string[] { return array(value).map(v => id(record(v).publishedfileid)); }
 // Both IPublishedFileService methods report the game as `consumer_appid`.
 function item(value: unknown, appid: number): Item {
@@ -58,7 +66,7 @@ function item(value: unknown, appid: number): Item {
   }
   return {
     id: itemId, title: text(v.title, 256), description: text(v.short_description ?? v.description, 500),
-    previewImageUrl: preview, tags: array(v.tags).slice(0, 100).map(t => text(record(t).tag, 100)),
+    previewImageUrl: preview, tags: tags(v.tags),
     authorId: id(v.creator), subscriptions: v.subscriptions === undefined ? null : number(v.subscriptions),
     favorites: v.favorited === undefined ? null : number(v.favorited), timeUpdated: number(v.time_updated),
     fileSize: number(v.file_size), children: v.children === undefined ? null : children(v.children),
@@ -135,7 +143,8 @@ export const modscan = {
       if (url.href.length > 4096) throw bad();
       const match = /^\/modscan\/v1\/([a-z0-9]+)\/(search|items|collections\/([1-9]\d{0,19}))$/.exec(url.pathname);
       if (!match || !Object.hasOwn(GAMES, match[1]!)) throw new Failure(404, "not_found", "Unknown Modscan game or endpoint.");
-      const appid = GAMES[match[1] as keyof typeof GAMES];
+      const game = match[1] as keyof typeof GAMES;
+      const appid = GAMES[game];
       const mode = match[2]!;
       const allowed = mode === "search" ? ["q", "page", "sort"] : mode === "items" ? ["ids"] : [];
       for (const key of url.searchParams.keys()) if (!allowed.includes(key) || url.searchParams.getAll(key).length !== 1) throw bad();
@@ -163,7 +172,7 @@ export const modscan = {
       if (cached) return cached;
       let items: Item[]; let total: number | null = null;
       if (mode === "search") {
-        const result = record((await steam(env, "search", { appid, search_text: query, page, query_type: SORTS[sort], numperpage: 20, return_tags: true, return_children: true, return_short_description: true })).response);
+        const result = record((await steam(env, "search", { appid, search_text: query, page, query_type: SORTS[sort], numperpage: 20, return_tags: true, return_children: true, return_short_description: true, ...(SEARCH_FILETYPE[game] === undefined ? {} : { filetype: SEARCH_FILETYPE[game] }) })).response);
         if (result.result !== undefined && number(result.result) !== 1) throw malformed();
         items = array(result.publishedfiledetails).map(v => item(v, appid)); total = number(result.total);
       } else {
