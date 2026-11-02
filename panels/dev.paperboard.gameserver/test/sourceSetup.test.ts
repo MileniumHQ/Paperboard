@@ -26,6 +26,15 @@ describe("source setup behavior", () => {
             expect(c.noPictureNoIcon, "a mode whose maps have no picture has none, not another's").toBeNull();
             expect(c.attribution).toBe(true);
             expect(c.finishWaitsForAMode, "Finish Setup needs a choice").toBe(true);
+            expect(c.mixedTiled, "Mixed is drawn by one map of each of several modes, not a lone symbol").toBe(true);
+            expect(c.mixedDescribed).toBe(true);
+            expect(c.mapNamedByWiki, "a map is called by the wiki's name").toBe(true);
+            expect(c.mapNameFirst, "its real name comes first and its file name second").toBe(true);
+            expect(c.unnamedMapByFile, "a map the wiki doesn't name shows its file name alone").toBe(true);
+            expect(c.modesScrolled, "the modes page is longer than the window, so the test scrolls it").toBe(true);
+            expect(c.stepOpensAtTop, "the next step opens at its title, not scrolled to where the card was").toBe(true);
+            expect(c.sameInset, "both steps start at the same place").toBe(true);
+            expect(c.backOnTitleRow, "the way back to the modes is on the title's row").toBe(true);
             expect(c.mapsOfTheMode, "the starting maps are the mode's").toBe(true);
             expect(c.firstMapChosen).toBe(true);
             expect(c.finishOpen).toBe(true);
@@ -35,6 +44,7 @@ describe("source setup behavior", () => {
             expect(c.refusedStays, "setup does not finish on a refused save").toBe(true);
             expect(c.saved).toEqual([{ mode: "ctf", map: "ctf_turbine" }, { mode: "ctf", map: "ctf_turbine" }]);
             expect(c.mixedAllMaps).toBe(true);
+            expect(c.modeNotRepeated, "the wiki's \"(Control Point)\" is not said twice beside a card's own mode").toBe(true);
             expect(c.mixedDefault, "mixed starts on the game's own default map").toBe(true);
             expect(c.mixedSaved).toEqual([{ mode: null, map: "ctf_2fort" }]);
             expect(c.picturesReason, "a wiki that can't be reached is named where the pictures would be").toBe(true);

@@ -22,6 +22,7 @@ let search: (input: any) => unknown = () => ({ items: [{ ...discovery, added: fa
 let add: (input: any) => unknown = () => library.push(discovery);
 const calls: { action: string; input: any }[] = [];
 const view = () => ({ maps, custom: true, file: "cfg/paperboard_mapcycle.txt", installed: ["ctf_2fort", "cp_dustbowl", ...library.map((m) => `workshop/${m.id}`)], workshop: library, overriddenBy: null });
+
 const state = {
     servers: [{ id: "s1", name: "Fixture", game: "team-fortress-2", directory: "servers/s1", createdAt: 1, configured: true, icon: null, state: { serverStatus: "offline", serverSoftware: "steam", serverVersion: "", serverPort: "27015", recoveryBlock: null, maxPlayers: 24, playerCount: 0 } }],
     serversError: null,
@@ -32,7 +33,7 @@ actionsApi.call = (async (_panel: string, action: string, input: any) => {
     if (action === "__getState") return state;
     calls.push({ action, input });
     if (action === "s1/team-fortress-2-map-cycle") return view();
-    if (action === "s1/team-fortress-2-map-pictures") return { source: { name: "Test Wiki", url: "https://wiki.example/maps" }, pictures: {} };
+    if (action === "s1/team-fortress-2-map-pictures") return { source: { name: "Test Wiki", url: "https://wiki.example/maps" }, pictures: {}, titles: { ctf_2fort: "2Fort" } };
     if (action === "s1/team-fortress-2-workshop-find") return search(input);
     if (action === "s1/team-fortress-2-workshop-add") { add(input); return library; }
     if (action === "s1/team-fortress-2-map-cycle-set") { maps = input.maps; return view(); }
@@ -57,6 +58,11 @@ try {
     const root = document.getElementById("app")!;
     render(() => <PaperProvider><SourceMaps spec={TF2} active={true} /></PaperProvider>, root);
     await wait("the rotation", () => Boolean(button("Add maps")));
+    // a map is called by the wiki's name, its file name and mode beside it; one the wiki doesn't name by its file name
+    const rowOf = (title: string) => [...document.querySelectorAll<HTMLElement>("label")].find((l) => l.textContent?.includes(title));
+    await wait("the wiki's names", () => Boolean(rowOf("2Fort")));
+    checks.rowRealName = rowOf("2Fort")!.textContent!.includes("ctf_2fort · Capture the Flag");
+    checks.rowFileNameAlone = rowOf("cp_dustbowl")!.textContent!.replace(/map/, "").trim().startsWith("cp_dustbowl") && !rowOf("cp_dustbowl")!.textContent!.includes("cp_dustbowl · cp_dustbowl");
 
     // the dialog offers the Workshop beside what is on the server, and asks what is popular
     button("Add maps")!.click();
@@ -106,6 +112,7 @@ try {
     await wait("the rotation list", () => text().includes("Steam Workshop") && text().includes("Discovery"));
     checks.rowSaysWorkshop = text().includes("Steam Workshop");
     checks.rowPicture = [...document.querySelectorAll("img")].some((i) => i.getAttribute("src") === discovery.previewImageUrl);
+
 } catch (err) {
     error = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
 }

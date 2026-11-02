@@ -17,21 +17,38 @@ const MAX_BYTES = 8 * 1024 * 1024;
 
 const MAP_NAME = /^[a-z0-9_]+$/i;
 
-const decode = (text: string) => text.replaceAll("&amp;", "&").replaceAll("&quot;", '"').replaceAll("&#39;", "'");
+const NAMED_ENTITIES: Record<string, string> = { amp: "&", quot: '"', apos: "'", lt: "<", gt: ">", nbsp: " " };
+const decode = (text: string) =>
+    text.replace(/&(?:#(\d+)|#x([0-9a-f]+)|([a-z]+));/gi, (whole, dec?: string, hex?: string, name?: string) => {
+        if (name) return NAMED_ENTITIES[name.toLowerCase()] ?? whole;
+        return String.fromCodePoint(dec ? Number(dec) : parseInt(hex!, 16));
+    });
+/** The words of a table cell: its tags dropped, its entities read, its whitespace gathered. */
+const cellText = (cell: string) => decode(cell.replace(/<[^>]*>/g, "")).replace(/\s+/g, " ").trim();
+
+/** What a wiki's list page shows of its maps, by file name in lower case. */
+export interface ParsedMapList {
+    /** each map's picture */
+    pictures: Record<string, string>;
+    /** each map's real name ("2Fort" for ctf_2fort); a map the page names by its file name has none */
+    titles: Record<string, string>;
+}
 
 /**
- * The picture of each map a wiki list page shows, by file name: the largest
+ * The picture and the real name of each map a wiki list page shows, by file name: the largest
  * rendering the page itself offers in the row's image (its srcset, which for
  * the Official Team Fortress Wiki tops out at 300 pixels). The wiki keeps a
  * thumbnail only at the widths some page has shown (640 pixels exists for
  * three maps in four, 600 for nearly all), so a width asked for beyond what
  * the page offers is a 404 for some maps; the page's own are always there.
- * Pictures must live on the page's own site. Throws when the page lists no map
- * picture, which is what a changed layout looks like.
+ * Pictures must live on the page's own site. The name is the cell beside the
+ * picture's, where the wiki links the map's own page. Throws when the page
+ * lists no map picture, which is what a changed layout looks like.
  */
-export function parseMapPictures(html: string, page: string): Record<string, string> {
+export function parseMapPictures(html: string, page: string): ParsedMapList {
     const origin = new URL(page).origin;
     const pictures: Record<string, string> = {};
+    const titles: Record<string, string> = {};
     for (const row of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)) {
         const cells = row[1]!;
         const codes = [...cells.matchAll(/<code>\s*([^<]*?)\s*<\/code>/g)].map((m) => m[1]!);
@@ -40,10 +57,22 @@ export function parseMapPictures(html: string, page: string): Record<string, str
         if (codes.length !== 1 || !image || !MAP_NAME.test(codes[0]!)) continue;
         const url = largestPicture(decode(image[1]!), image[2] === undefined ? "" : decode(image[2]), page);
         if (url.origin !== origin) throw new Error(`${page} shows the picture of ${codes[0]} from ${url.origin}, which is not its own site`);
-        pictures[codes[0]!.toLowerCase()] ??= url.href;
+        const file = codes[0]!.toLowerCase();
+        pictures[file] ??= url.href;
+        const title = nameBesidePicture(cells);
+        // a page that names a map by its file name has told us nothing the file name doesn't
+        if (title && title.toLowerCase() !== file) titles[file] ??= title;
     }
     if (Object.keys(pictures).length === 0) throw new Error(`${page} lists no map pictures; its layout may have changed`);
-    return pictures;
+    return { pictures, titles };
+}
+
+/** The text of the table cell after the one holding the picture. */
+function nameBesidePicture(row: string): string {
+    const cells = [...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/g)].map((m) => m[1]!);
+    const at = cells.findIndex((cell) => /<img\b/.test(cell));
+    const next = at >= 0 ? cells[at + 1] : undefined;
+    return next === undefined || /<code>/.test(next) ? "" : cellText(next);
 }
 
 /** The src, or the srcset candidate with the highest density or width. */
@@ -74,13 +103,13 @@ async function load(source: SourceMapPictureSource): Promise<SourceMapPictures> 
     if (Number(response.headers.get("content-length") ?? 0) > MAX_BYTES) throw new Error(`${source.name}'s map list is larger than expected`);
     const html = await response.text();
     if (html.length > MAX_BYTES) throw new Error(`${source.name}'s map list is larger than expected`);
-    let pictures: Record<string, string>;
+    let parsed: ParsedMapList;
     try {
-        pictures = parseMapPictures(html, source.page);
+        parsed = parseMapPictures(html, source.page);
     } catch (err) {
         throw new Error(`Couldn't read map pictures from ${source.name}: ${err instanceof Error ? err.message : String(err)}`);
     }
-    return { source: { name: source.name, url: source.page }, pictures };
+    return { source: { name: source.name, url: source.page }, ...parsed };
 }
 
 /** A game's map pictures: from memory when fetched in the last day, else from its wiki, asked once at a time. */

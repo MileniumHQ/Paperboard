@@ -36,7 +36,7 @@ const fixture = fs.readFileSync(path.join(import.meta.dir, "fixtures", "tfwiki-l
 // --- reading the page
 
 test("the real wiki page yields a picture for each of the maps the game ships, at the largest size the page itself offers", () => {
-    const pictures = parseMapPictures(fixture, WIKI);
+    const { pictures } = parseMapPictures(fixture, WIKI);
     expect(Object.keys(pictures).length).toBeGreaterThanOrEqual(238);
     // the row's own 2x rendering, not the 150 pixel thumbnail beside it
     expect(pictures.ctf_2fort).toBe("https://wiki.teamfortress.com/w/images/thumb/a/a1/Ctf_2fort_bridge_ss.png/300px-Ctf_2fort_bridge_ss.png");
@@ -49,6 +49,29 @@ test("the real wiki page yields a picture for each of the maps the game ships, a
     // the prefix rows of the table ("ctf_", "cp_") are not maps
     expect(pictures.ctf_).toBeUndefined();
     expect(Object.keys(pictures).every((name) => /^[a-z0-9_]+$/.test(name) && !name.endsWith("_"))).toBe(true);
+});
+
+test("the real wiki page also gives each map's real name, which the file name is the second line to", () => {
+    const { pictures, titles } = parseMapPictures(fixture, WIKI);
+    expect(titles.ctf_2fort).toBe("2Fort");
+    expect(titles.ctf_2fort_invasion).toBe("2Fort Invasion");
+    expect(titles.cp_dustbowl).toBe("Dustbowl");
+    expect(titles.pl_badwater).toBe("Badwater Basin");
+    expect(titles.koth_viaduct).toBe("Viaduct");
+    // a map the page names by its file name has no other name to show
+    for (const file of ["background01", "devtest", "itemtest", "pass_template"]) expect(titles[file], file).toBeUndefined();
+    // every map with a picture has a real name, except those; none is named by the file name it already has
+    const unnamed = Object.keys(pictures).filter((file) => titles[file] === undefined);
+    expect(unnamed.sort()).toEqual(["background01", "devtest", "itemtest", "pass_template"]);
+    expect(Object.entries(titles).every(([file, title]) => title.toLowerCase() !== file && !/[<>]|&[a-z]+;/.test(title))).toBe(true);
+});
+
+test("a name is the cell beside the picture's, read as text: its tags dropped, its entities decoded", () => {
+    const row = (name: string) => `<table><tr><td><img src="/a.png"></td><td>${name}</td><td>Payload</td><td><code>pl_x</code></td></tr></table>`;
+    expect(parseMapPictures(row('<i><a href="/wiki/X">Tom &amp; Jerry&#39;s &#x41;rena</a></i>\n'), WIKI).titles.pl_x).toBe("Tom & Jerry's Arena");
+    expect(parseMapPictures(row("  "), WIKI).titles.pl_x).toBeUndefined();
+    // the file name's own cell is never taken for a name
+    expect(parseMapPictures('<table><tr><td><img src="/a.png"></td><td><code>pl_x</code></td></tr></table>', WIKI).titles.pl_x).toBeUndefined();
 });
 
 test("a page without map rows is a changed layout, and a picture from another site is refused", () => {
@@ -84,6 +107,7 @@ test("the wiki is asked once however many screens want pictures, with an agent t
     expect(again).toBe(asked[0]);
     expect(again.source).toEqual({ name: "Test Wiki", url: `http://127.0.0.1:${wiki.port}/wiki/List_of_maps` });
     // picture addresses resolve against the page, so they point at the same site
+    expect(again.titles.ctf_2fort, "the service hands the UI the real names with the pictures").toBe("2Fort");
     expect(again.pictures.ctf_2fort).toStartWith(`http://127.0.0.1:${wiki.port}/w/images/thumb/`);
 });
 

@@ -18,6 +18,8 @@ describe("source Workshop maps behavior", () => {
             expect(results.error, "the fixture threw").toBe("");
             const c = results.checks;
             expect(c.uncaught, "nothing may fail out of sight").toEqual([]);
+            expect(c.rowRealName, "a rotation row is titled by the wiki's name, with its file name beside it").toBe(true);
+            expect(c.rowFileNameAlone, "a map the wiki doesn't name is called by its file name").toBe(true);
             expect(c.askedPopular, "an empty search lists what is popular").toEqual({ query: "" });
             expect(c.titles).toBe(true);
             expect(c.pictureOfItsOwn, "a Workshop map shows the Workshop's own picture").toBe("https://images.steamusercontent.com/ugc/discovery/");

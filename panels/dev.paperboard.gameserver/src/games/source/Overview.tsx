@@ -6,7 +6,7 @@ import { errorMessage } from "../../lib/failure";
 import type { GameDefinition } from "../types";
 import { ACTION_IDS as A } from "../../service/contract";
 import { mapMode, sourceActions, type SourceGameSpec } from "./index";
-import MapCards, { mapChoices } from "./MapCards";
+import MapCards, { mapChoices, mapNames } from "./MapCards";
 import { createMapPictures } from "./useMapPictures";
 import { createWorkshopMaps } from "./useWorkshopMaps";
 import { canonicalMap } from "./workshop";
@@ -47,15 +47,19 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
         }
     };
     const label = (name: string) => mapMode(props.spec, name);
+    /** the map as people name it: its Workshop title or real name, the file name beside it, and what it plays as */
+    const detail = () => {
+        const workshopTitle = workshop.titleOf(map());
+        const names = mapNames({ name: map(), title: workshopTitle, mode: label(map()) }, pictures);
+        return [names.title, names.file, workshopTitle ? "Steam Workshop" : label(map())].filter(Boolean).join(" · ");
+    };
 
     return (
         <ServerOverview
             avatar={<PaperAvatar size="xlarge" shape="square" src={props.game.art.icon} alt={props.spec.name} fallbackIcon={props.spec.icon} />}
             detail={
                 <EditableDetail edit="Change map" onEdit={() => void edit()}>
-                    <PaperText color="text-subtle">
-                        {[workshop.titleOf(map()) ?? map(), workshop.titleOf(map()) ? "Steam Workshop" : label(map())].filter(Boolean).join(" · ")}
-                    </PaperText>
+                    <PaperText color="text-subtle">{detail()}</PaperText>
                 </EditableDetail>
             }
             software="Steam"

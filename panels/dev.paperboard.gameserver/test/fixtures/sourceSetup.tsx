@@ -15,7 +15,7 @@ window.addEventListener("unhandledrejection", (e) => uncaught.push(String(e.reas
 window.addEventListener("error", (e) => uncaught.push(String(e.message)));
 
 let installed = ["ctf_2fort", "ctf_turbine", "pl_badwater", "cp_dustbowl", "zz_unlisted"];
-let pictures: () => unknown = () => ({ source: { name: "Test Wiki", url: "https://wiki.example/maps" }, pictures: { ctf_2fort: "https://wiki.example/ctf_2fort.png", cp_dustbowl: "https://wiki.example/cp_dustbowl.png" } });
+let pictures: () => unknown = () => ({ source: { name: "Test Wiki", url: "https://wiki.example/maps" }, pictures: { ctf_2fort: "https://wiki.example/ctf_2fort.png", cp_dustbowl: "https://wiki.example/cp_dustbowl.png" }, titles: { ctf_2fort: "2Fort", cp_dustbowl: "Dustbowl (Control Point)" } });
 let play: (input: any) => unknown = () => ({});
 let mapsFails = "";
 const played: any[] = [];
@@ -45,6 +45,16 @@ const wait = async (what: string, predicate: () => boolean) => {
 const text = () => document.body.innerText;
 const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.includes(label));
 const card = (title: string) => [...document.querySelectorAll<HTMLElement>('[role="button"]')].find((c) => c.querySelector("p, span, div")?.textContent?.trim() === title || c.textContent?.includes(title));
+const heading = (title: string) => [...document.querySelectorAll<HTMLElement>("*")].find((e) => e.children.length === 0 && e.textContent?.trim() === title);
+// the step's own scrolling pane: the real setup fills Paperboard's window and scrolls in it, a modes list runs longer than the window
+let pane: HTMLElement | null = null;
+const scrollingPane = (): HTMLElement => (pane ??= heading("How will it play?")!.closest<HTMLElement>('[class*="interfaceWrapper"]')!);
+// where an element sits in that pane, however far it is scrolled
+const place = (e: Element) => {
+    const r = e.getBoundingClientRect();
+    const at = scrollingPane().getBoundingClientRect();
+    return { left: Math.round(r.left - at.left + scrollingPane().scrollLeft), top: Math.round(r.top - at.top + scrollingPane().scrollTop), middle: Math.round(r.top - at.top + scrollingPane().scrollTop + r.height / 2) };
+};
 const cardImage = (title: string) => card(title)?.querySelector("img")?.getAttribute("src") ?? null;
 
 let error = "";
@@ -72,12 +82,34 @@ try {
     checks.noPictureNoIcon = cardImage("Payload");
     checks.attribution = text().includes("Map pictures from Test Wiki");
     checks.finishWaitsForAMode = button("Finish Setup")!.disabled;
+    // Mixed is drawn by pictures of several modes' maps, not a lone symbol; each is a different map's
+    const mixedTiles = [...card("Mixed")!.querySelectorAll<HTMLImageElement>('[role="img"] img')].map((i) => i.getAttribute("src"));
+    checks.mixedTiled = mixedTiles.length === 2 && new Set(mixedTiles).size === 2 && mixedTiles.includes("https://wiki.example/ctf_2fort.png") && mixedTiles.includes("https://wiki.example/cp_dustbowl.png");
+    checks.mixedDescribed = card("Mixed")!.querySelector('[role="img"]')?.getAttribute("aria-label") === "Mixed, shown by 2Fort, Dustbowl (Control Point)";
+    const modesStep = { heading: place(heading("How will it play?")!), firstCard: place(card("Capture the Flag")!) };
 
     // the starting map, within the mode; the first is already chosen, so Finish is open
+    // (a mode far down the list is picked from a page scrolled to it; the next step still opens at its title)
+    // a short window, so the modes have to be scrolled to
+    scrollingPane().style.maxHeight = "200px";
+    scrollingPane().scrollTop = scrollingPane().scrollHeight;
+    checks.modesScrolled = scrollingPane().scrollTop > 0;
     card("Capture the Flag")!.click();
     await wait("the starting maps", () => Boolean(card("ctf_turbine")));
+    await wait("the step to open at its title", () => scrollingPane().scrollTop === 0);
+    checks.stepOpensAtTop = scrollingPane().scrollTop === 0 && heading("Where does it start?")!.getBoundingClientRect().top >= scrollingPane().getBoundingClientRect().top;
     checks.mapsOfTheMode = !text().includes("pl_badwater") && Boolean(card("ctf_2fort"));
     checks.firstMapChosen = card("ctf_2fort")!.getAttribute("aria-pressed") === "true";
+    // a map is called by the wiki's name with its file name second; one the wiki doesn't name has its file name alone
+    checks.mapNamedByWiki = card("2Fort")?.textContent?.includes("2Fort") === true && card("2Fort")!.textContent!.includes("ctf_2fort");
+    checks.mapNameFirst = [...card("2Fort")!.querySelectorAll("p, span, div")].map((e) => e.textContent?.trim()).filter((t) => t === "2Fort" || t === "ctf_2fort").slice(0, 2).join(",") === "2Fort,ctf_2fort";
+    // (what is left once the picture's own "No picture" note is set aside)
+    const lines = (c: Element) => [...c.querySelectorAll("*")].filter((e) => e.children.length === 0 || e.querySelector("wbr")).map((e) => e.textContent?.trim()).filter((t) => t && t !== "map" && t !== "No picture");
+    checks.unnamedMapByFile = JSON.stringify([...new Set(lines(card("ctf_turbine")!))]) === JSON.stringify(["ctf_turbine"]);
+    // both steps start where the other does, and the way back sits on the title's row, not under it
+    const mapsStep = { heading: place(heading("Where does it start?")!), firstCard: place(card("2Fort")!) };
+    checks.sameInset = modesStep.heading.left === mapsStep.heading.left && modesStep.heading.top === mapsStep.heading.top && modesStep.firstCard.left === mapsStep.firstCard.left;
+    checks.backOnTitleRow = Math.abs(place(button("Change game mode")!).middle - mapsStep.heading.middle) <= 4 && place(button("Change game mode")!).left > mapsStep.heading.left;
     checks.finishOpen = !button("Finish Setup")!.disabled;
     card("ctf_turbine")!.click();
     await wait("the new choice", () => card("ctf_turbine")!.getAttribute("aria-pressed") === "true");
@@ -103,6 +135,8 @@ try {
     card("Mixed")!.click();
     await wait("every map", () => Boolean(card("pl_badwater")));
     checks.mixedAllMaps = Boolean(card("cp_dustbowl")) && Boolean(card("ctf_2fort"));
+    // the wiki tells maps of one name apart by mode; the card shows its mode beside the name, so the name is left plain
+    checks.modeNotRepeated = lines(card("cp_dustbowl")!).includes("Dustbowl") && lines(card("cp_dustbowl")!).includes("Control Point") && !lines(card("cp_dustbowl")!).some((line) => line!.includes("(Control Point)"));
     checks.mixedDefault = card("ctf_2fort")!.getAttribute("aria-pressed") === "true";
     button("Finish Setup")!.click();
     await wait("setup to complete", () => run.completed() === 1);

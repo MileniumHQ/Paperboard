@@ -74,6 +74,8 @@ export interface SourceMapPictureSource {
 export interface SourceMapPictures {
     source: { name: string; url: string };
     pictures: Record<string, string>;
+    /** the maps' real names ("2Fort" for ctf_2fort), by file name in lower case; a map the wiki names by its file name has none */
+    titles: Record<string, string>;
 }
 
 /** The game mode a map's prefix names, if the game lists it. */

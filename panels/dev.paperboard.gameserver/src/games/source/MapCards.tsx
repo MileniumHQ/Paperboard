@@ -15,6 +15,7 @@ import {
 } from "@mileniumhq/paperui";
 import { mapMode, type SourceGameSpec } from "./index";
 import type { MapPicturesState } from "./useMapPictures";
+import { workshopId } from "./workshop";
 
 /** A map to choose, as a card. */
 export interface MapChoice {
@@ -65,10 +66,24 @@ export function MapPicturesCredit(props: { pictures: MapPicturesState }) {
 function NoPicture() {
     return (
         <PaperFlex center fullWidth fullHeight direction="column" gap="onefourth">
-            <PaperIcon>map</PaperIcon>
+            <PaperText size={10} color="text-subtle"><PaperIcon>map</PaperIcon></PaperText>
             <PaperText size={1} color="text-subtle">No picture</PaperText>
         </PaperFlex>
     );
+}
+
+/**
+ * What a map is called to people: its Workshop title, or the real name the
+ * game's wiki gives it ("2Fort"). `file` is the name the server knows it by
+ * when that says something more; a Workshop map's id does not. A map nothing
+ * names, such as one made at home, is called by its file name alone. The wiki
+ * tells two maps of one name apart with their mode ("Well (Control Point)");
+ * everywhere a map is shown its mode is shown beside it, so that is left off.
+ */
+export function mapNames(map: MapChoice, pictures: Pick<MapPicturesState, "titleOf">): { title: string; file?: string } {
+    const named = map.title ?? pictures.titleOf(map.name);
+    const title = named && map.mode && named.endsWith(` (${map.mode})`) ? named.slice(0, -` (${map.mode})`.length) : named;
+    return title ? { title, file: workshopId(map.name) ? undefined : map.name } : { title: map.name };
 }
 
 /** A map's file name, which may break after an underscore instead of mid-word. */
@@ -106,7 +121,7 @@ export default function MapCards(props: {
         const words = query().toLowerCase().split(/\s+/).filter(Boolean);
         return props.maps.filter((map) => {
             if (mode() !== null && modeOf(map) !== mode()) return false;
-            const text = `${map.name} ${map.title ?? ""} ${map.mode ?? ""}`.toLowerCase();
+            const text = `${map.name} ${mapNames(map, props.pictures).title} ${map.mode ?? ""}`.toLowerCase();
             return words.every((word) => text.includes(word));
         });
     });
@@ -133,19 +148,22 @@ export default function MapCards(props: {
             >
                 <PaperMediaCardGroup minCardWidth="field">
                     <For each={shown()}>
-                        {(map) => (
-                            <PaperMediaCard
-                                effect={false}
-                                banner={map.picture ?? props.pictures.of(map.name) ?? <NoPicture />}
-                                bannerAlt={`${map.title ?? map.name}`}
-                                title={map.title ?? breakable(map.name)}
-                                subtitle={map.title ? map.name : undefined}
-                                description={[props.hideMode ? undefined : map.mode, map.note].filter(Boolean).join(" · ") || undefined}
-                                selected={props.value === map.name}
-                                disabled={props.disabled}
-                                onClick={() => props.onPick(map.name)}
-                            />
-                        )}
+                        {(map) => {
+                            const names = () => mapNames(map, props.pictures);
+                            return (
+                                <PaperMediaCard
+                                    effect={false}
+                                    banner={map.picture ?? props.pictures.of(map.name) ?? <NoPicture />}
+                                    bannerAlt={names().title}
+                                    title={breakable(names().title)}
+                                    subtitle={names().file ? breakable(names().file!) : undefined}
+                                    description={[props.hideMode ? undefined : map.mode, map.note].filter(Boolean).join(" · ") || undefined}
+                                    selected={props.value === map.name}
+                                    disabled={props.disabled}
+                                    onClick={() => props.onPick(map.name)}
+                                />
+                            );
+                        }}
                     </For>
                 </PaperMediaCardGroup>
             </Show>

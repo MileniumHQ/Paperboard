@@ -16,7 +16,7 @@ import {
 import { serverBridge, serverLevel, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { mapMode, sourceActions, type SourceGameSpec, type SourceMapCycle } from "./index";
-import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices } from "./MapCards";
+import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices, mapNames, type MapChoice } from "./MapCards";
 import { createMapPictures } from "./useMapPictures";
 import { workshopChoice } from "./useWorkshopMaps";
 import WorkshopPane from "./WorkshopPane";
@@ -72,17 +72,21 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
     const installed = createMemo(() => new Set(view()?.installed ?? []));
     /** the Steam Workshop map a name is, if this server has it */
     const workshopMap = (name: string) => view()?.workshop.find((m) => workshopName(m.id) === canonicalMap(name));
-    const choices = () => addable().map((name) => { const map = workshopMap(name); return map ? workshopChoice(map) : mapChoices(props.spec, [name])[0]!; });
+    /** a map as the screens name it */
+    const choiceOf = (name: string): MapChoice => { const map = workshopMap(name); return map ? workshopChoice(map) : mapChoices(props.spec, [name])[0]!; };
+    const choices = () => addable().map(choiceOf);
+    /** what a person calls a map: its Workshop title or real name, else its file name */
+    const titleOf = (name: string) => mapNames(choiceOf(name), pictures).title;
     const addable = createMemo(() => (view()?.installed ?? []).filter((name) => !view()!.maps.includes(name)));
     const editable = () => !!view() && !view()!.overriddenBy;
 
     const add = (name: string) => {
-        if (name) void save([...view()!.maps, name], `${name} was not added`);
+        if (name) void save([...view()!.maps, name], `${titleOf(name)} was not added`);
     };
     const remove = (name: string) => {
         const maps = view()!.maps.filter((m) => m !== name);
-        if (maps.length === 0) setError({ title: `${name} was not removed`, message: "A rotation needs at least one map. Use the game's map cycle instead to stop choosing." });
-        else void save(maps, `${name} was not removed`);
+        if (maps.length === 0) setError({ title: `${titleOf(name)} was not removed`, message: "A rotation needs at least one map. Use the game's map cycle instead to stop choosing." });
+        else void save(maps, `${titleOf(name)} was not removed`);
     };
     /** A Workshop map chosen in the search: added to the server, then to the rotation. */
     const addFromWorkshop = async (hit: SourceWorkshopHit) => {
@@ -104,7 +108,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
         const maps = [...view()!.maps];
         const from = maps.indexOf(name);
         maps.splice(from + by, 0, ...maps.splice(from, 1));
-        void save(maps, `${name} was not moved`);
+        void save(maps, `${titleOf(name)} was not moved`);
     };
 
     /** Makes the file's rotation Paperboard's, leaving out what the server couldn't play anyway. */
@@ -202,24 +206,27 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                     onReorder={(order) => void save(order.map(String), "Rotation not reordered")}
                                 >
                                     <For each={current().maps}>
-                                        {(name, index) => (
-                                            <PaperListItem
-                                                value={name}
-                                                icon={<PaperAvatar size="large" shape="square" src={workshopMap(name)?.previewImageUrl ?? pictures.of(name)} alt={workshopMap(name)?.title ?? name} fallbackIcon="map" />}
-                                                onClose={current().custom && editable() ? () => remove(name) : undefined}
-                                                description={[!installed().has(name) ? "Not installed" : workshopId(name) ? "Steam Workshop" : label(name), serverLevel() !== null && canonicalMap(serverLevel()!) === name ? "Playing now" : undefined].filter(Boolean).join(" · ")}
-                                                actions={
-                                                    <Show when={current().custom && editable()}>
-                                                        <PaperFlex direction="row" gap="onefourth" align="center">
-                                                            <PaperButton size="tiny" icon aria-label={`Move ${name} up`} disabled={working() || index() === 0} onPointerDown={(e) => e.stopPropagation()} onClick={() => move(name, -1)}>arrow_upward</PaperButton>
-                                                            <PaperButton size="tiny" icon aria-label={`Move ${name} down`} disabled={working() || index() === current().maps.length - 1} onPointerDown={(e) => e.stopPropagation()} onClick={() => move(name, 1)}>arrow_downward</PaperButton>
-                                                        </PaperFlex>
-                                                    </Show>
-                                                }
-                                            >
-                                                {workshopMap(name)?.title ?? name}
-                                            </PaperListItem>
-                                        )}
+                                        {(name, index) => {
+                                            const names = () => mapNames(choiceOf(name), pictures);
+                                            return (
+                                                <PaperListItem
+                                                    value={name}
+                                                    icon={<PaperAvatar size="large" shape="square" src={workshopMap(name)?.previewImageUrl ?? pictures.of(name)} alt={names().title} fallbackIcon="map" />}
+                                                    onClose={current().custom && editable() ? () => remove(name) : undefined}
+                                                    description={[names().file, !installed().has(name) ? "Not installed" : workshopId(name) ? "Steam Workshop" : label(name), serverLevel() !== null && canonicalMap(serverLevel()!) === name ? "Playing now" : undefined].filter(Boolean).join(" · ")}
+                                                    actions={
+                                                        <Show when={current().custom && editable()}>
+                                                            <PaperFlex direction="row" gap="onefourth" align="center">
+                                                                <PaperButton size="tiny" icon aria-label={`Move ${names().title} up`} disabled={working() || index() === 0} onPointerDown={(e) => e.stopPropagation()} onClick={() => move(name, -1)}>arrow_upward</PaperButton>
+                                                                <PaperButton size="tiny" icon aria-label={`Move ${names().title} down`} disabled={working() || index() === current().maps.length - 1} onPointerDown={(e) => e.stopPropagation()} onClick={() => move(name, 1)}>arrow_downward</PaperButton>
+                                                            </PaperFlex>
+                                                        </Show>
+                                                    }
+                                                >
+                                                    {names().title}
+                                                </PaperListItem>
+                                            );
+                                        }}
                                     </For>
                                 </PaperList>
                             </PaperCard>
