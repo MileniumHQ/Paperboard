@@ -83,17 +83,24 @@ function probeUdp(port: number): Promise<NodeJS.ErrnoException | null> {
     });
 }
 
+/** why the system refused to open a port, for people */
+export function portRefusal(err: NodeJS.ErrnoException, port: number, platform: NodeJS.Platform = process.platform): string {
+    if (err.code === "EADDRINUSE") return "another program on this computer is using it";
+    if (err.code === "EACCES") {
+        // Windows keeps ranges of ports for itself (Hyper-V, WSL, Docker), chosen anew at each boot
+        if (platform === "win32") return "Windows keeps it for itself (it sets ports aside for Hyper-V and WSL), or another program holds it";
+        if (port < 1024) return "this computer only lets administrators open ports below 1024";
+    }
+    return `this computer would not open it (${err.code ?? err.message})`;
+}
+
 /** opens and closes the port the way a server would, on every interface */
 export const probeSystemPort: PortProbe = async (port, protocol) => {
     const errors = [
         ...(protocol !== "udp" ? [await probeTcp(port)] : []),
         ...(protocol !== "tcp" ? [await probeUdp(port)] : []),
     ].filter((err): err is NodeJS.ErrnoException => err !== null);
-    const err = errors[0];
-    if (!err) return null;
-    if (err.code === "EADDRINUSE") return "another program on this computer is using it";
-    if (err.code === "EACCES") return "this computer only lets administrators open ports below 1024";
-    return `this computer would not open it (${err.code ?? err.message})`;
+    return errors[0] ? portRefusal(errors[0], port) : null;
 };
 
 export class PortRegistry {

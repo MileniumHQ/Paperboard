@@ -6,7 +6,7 @@ import * as fs from "fs";
 import * as net from "net";
 import * as os from "os";
 import * as path from "path";
-import { PortRegistry } from "../papercrane/ports";
+import { PortRegistry, portRefusal, probeSystemPort } from "../papercrane/ports";
 import { handlePorts } from "../papercrane/rpc/ports";
 
 const dirs: string[] = [];
@@ -102,6 +102,26 @@ describe("before the program starts", () => {
 
     test("prepare needs a claim", async () => {
         await expect(new PortRegistry(dataDir()).prepare(GS, "java")).rejects.toThrow('No port named "java" is claimed');
+    });
+});
+
+describe("why the system won't open a port", () => {
+    // the system's own refusal: a port below 1024, for a user who isn't root
+    const refused = () => new Promise<NodeJS.ErrnoException>((ok, fail) => {
+        const server = net.createServer();
+        server.once("error", ok);
+        server.listen({ port: 1, host: "0.0.0.0" }, () => server.close(() => fail(new Error("port 1 opened"))));
+    });
+
+    test.skipIf(process.platform !== "linux" || process.getuid?.() === 0)("a low port is for administrators", async () => {
+        expect(await probeSystemPort(1, "tcp")).toBe("this computer only lets administrators open ports below 1024");
+    });
+
+    test.skipIf(process.platform !== "linux" || process.getuid?.() === 0)("on Windows the same refusal is a port Windows keeps, at any number", async () => {
+        const err = await refused();
+        expect(err.code).toBe("EACCES");
+        expect(portRefusal(err, 50000, "win32")).toBe("Windows keeps it for itself (it sets ports aside for Hyper-V and WSL), or another program holds it");
+        expect(portRefusal(err, 50000, "darwin")).toBe("this computer would not open it (EACCES)");
     });
 });
 
