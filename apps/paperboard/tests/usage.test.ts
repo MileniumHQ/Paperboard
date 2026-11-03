@@ -9,6 +9,7 @@ import {
     parseLinuxNetDev,
     parseLinuxStat,
     parseNetstat,
+    parseVmStat,
     parsePsTable,
     parseWindowsNetwork,
     parsePsTime,
@@ -130,7 +131,7 @@ describe("usage sampler", () => {
             readCpu: () => ({ busyMs: clock, totalMs: clock * 2 }),
             cores: () => 4,
             totalBytes: () => 16 * GiB,
-            availableBytes: () => 8 * GiB,
+            readAvailable: async () => 8 * GiB,
             now: () => clock,
             sleep: async (ms) => {
                 clock += ms;
@@ -203,6 +204,38 @@ describe("network counter parsers", () => {
         expect(() => parseLinuxNetDev(dev, () => false)).toThrow(/no network adapter/);
         expect(() => parseNetstat("Name Mtu Network Address Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll\nlo0 16384 <Link#1> 1 0 9 1 0 9 0")).toThrow(/no network adapter/);
         expect(() => parseWindowsNetwork("\r\n")).toThrow(/no network adapter/);
+    });
+});
+
+describe("memory readers", () => {
+    // an Intel iMac with 16 GB: Activity Monitor shows 13.3 GB used
+    const vmStat = [
+        "Mach Virtual Memory Statistics: (page size of 4096 bytes)",
+        "Pages free:                                6501.",
+        "Pages active:                           1135547.",
+        "Pages inactive:                         1118325.",
+        "Pages speculative:                        16399.",
+        "Pages wired down:                       1031510.",
+        "Pages purgeable:                           5384.",
+        "File-backed pages:                       822507.",
+        "Anonymous pages:                        1433820.",
+        "Pages occupied by compressor:            885490.",
+    ].join("\n");
+
+    it("counts macOS file cache as available, not just free pages", () => {
+        const used = (1433820 - 5384 + 1031510 + 885490) * 4096;
+        expect(parseVmStat(vmStat, 16 * GiB)).toBe(16 * GiB - used);
+        expect(parseVmStat(vmStat, 16 * GiB)).toBeGreaterThan(3 * GiB);
+    });
+
+    it("uses the page size vm_stat reports (16 KB on Apple silicon)", () => {
+        const bigPages = vmStat.replace("4096", "16384");
+        expect(parseVmStat(bigPages, 64 * GiB)).toBe(64 * GiB - (1433820 - 5384 + 1031510 + 885490) * 16384);
+    });
+
+    it("refuses vm_stat output it can't read", () => {
+        expect(() => parseVmStat(vmStat.replace(/^Anonymous pages.*$/m, ""), 16 * GiB)).toThrow(/Anonymous pages/);
+        expect(() => parseVmStat("nothing", 16 * GiB)).toThrow(/page size/);
     });
 });
 

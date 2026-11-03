@@ -315,6 +315,32 @@ export async function readNetworkCounters(platform = process.platform, exec: Exe
     }
 }
 
+// ─── Memory ──────────────────────────────────────────────────────────────────
+
+/**
+ * vm_stat's pages, as Activity Monitor counts memory: in use is app memory
+ * (anonymous, less purgeable), wired and the compressor's own pages; file
+ * cache and free pages are available. macOS keeps little memory free, so the
+ * free count alone (os.freemem) reads as almost all of it in use.
+ */
+export function parseVmStat(text: string, totalBytes: number): number {
+    const pageSize = Number(/page size of (\d+) bytes/.exec(text)?.[1]);
+    const pages = (label: string): number => {
+        const match = new RegExp(`^${label}:\\s+(\\d+)\\.`, "m").exec(text);
+        if (!match) throw new Error(`vm_stat has no "${label}" line`);
+        return Number(match[1]);
+    };
+    if (!Number.isFinite(pageSize) || pageSize <= 0) throw new Error("vm_stat has no page size");
+    const usedPages = pages("Anonymous pages") - pages("Pages purgeable") + pages("Pages wired down") + pages("Pages occupied by compressor");
+    return Math.min(totalBytes, Math.max(0, totalBytes - usedPages * pageSize));
+}
+
+export async function readAvailableMemory(platform = process.platform, exec: ExecFn = defaultExec): Promise<number> {
+    if (platform === "darwin") return parseVmStat(await exec("vm_stat", []), os.totalmem());
+    // MemAvailable on Linux, available physical memory on Windows
+    return os.freemem();
+}
+
 // ─── Attribution ─────────────────────────────────────────────────────────────
 
 /**
@@ -424,7 +450,7 @@ export interface SamplerDeps {
     readCpu?: () => CpuTimes;
     cores?: () => number;
     totalBytes?: () => number;
-    availableBytes?: () => number;
+    readAvailable?: () => Promise<number>;
     now?: () => number;
     sleep?: (ms: number) => Promise<void>;
 }
@@ -449,7 +475,7 @@ export class UsageSampler {
             readCpu: readCpuTimes,
             cores: () => os.cpus().length || 1,
             totalBytes: () => os.totalmem(),
-            availableBytes: () => os.freemem(),
+            readAvailable: () => readAvailableMemory(),
             now: () => Date.now(),
             sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
             ...deps,
@@ -466,8 +492,9 @@ export class UsageSampler {
     }
 
     private async snapshot(): Promise<Snapshot> {
-        const [table, network, disk] = await Promise.all([
+        const [table, availableBytes, network, disk] = await Promise.all([
             this.deps.readTable(),
+            this.deps.readAvailable(),
             unavailable("network", this.deps.readNetwork()),
             unavailable("disk", this.deps.readDisk()),
         ]);
@@ -480,7 +507,7 @@ export class UsageSampler {
             cpu: this.deps.readCpu(),
             cores: this.deps.cores(),
             totalBytes: this.deps.totalBytes(),
-            availableBytes: this.deps.availableBytes(),
+            availableBytes,
         };
     }
 
