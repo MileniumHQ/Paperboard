@@ -3,8 +3,8 @@ import { app, BrowserWindow } from "electron";
 import { AppUpdateSession, getAppUpdateState, retainAppUpdateState } from "./appUpdateSession";
 import { ManualAppUpdater } from "./manualAppUpdater";
 import { isShellUrl } from "./communication/shellGuard";
-import { AppImageUpdater, MacUpdater, NsisUpdater, type AppUpdater } from "electron-updater";
-import { ElectronAppAdapter } from "electron-updater/out/ElectronAppAdapter";
+import type { AppUpdater } from "electron-updater";
+import { createPlatformUpdater } from "./platformUpdater";
 import { electronDataDir } from "./electronData";
 import { is } from "@electron-toolkit/utils";
 import connectionPool from "./communication/papercrane/ConnectionPool";
@@ -177,25 +177,12 @@ export async function runUpdateOrchestrator(
 
 const appUpdaterLog = getLogger("electron-updater");
 
-// downloads go to <PAPERBOARD_DIR>/local/electron/paperboard-updater, not the
-// platform cache folder (electronData.ts)
-class PaperboardAppAdapter extends ElectronAppAdapter {
-    get baseCachePath(): string {
-        return electronDataDir();
-    }
-}
-
 let autoUpdater: AppUpdater | null = null;
 
-// electron-updater's own autoUpdater, minus deb/rpm/pacman: those installs
-// use ManualAppUpdater
+// downloads go to <PAPERBOARD_DIR>/local/electron/paperboard-updater
 function platformUpdater(): AppUpdater {
     if (autoUpdater) return autoUpdater;
-    const adapter = new PaperboardAppAdapter();
-    const updater =
-        process.platform === "win32" ? new NsisUpdater(undefined, adapter)
-        : process.platform === "darwin" ? new MacUpdater(undefined, adapter)
-        : new AppImageUpdater(undefined, adapter);
+    const updater = createPlatformUpdater(electronDataDir());
     updater.logger = {
         info: (msg: string) => appUpdaterLog.info(String(msg)),
         warn: (msg: string) => appUpdaterLog.warn(String(msg)),
