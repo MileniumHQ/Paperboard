@@ -46,7 +46,9 @@ export async function extractArchive(
                 throw new Error(`Zip entry escapes archive: ${name}`);
             }
         }
-        zip.extractAllTo(dest, true);
+        // keeping each entry's Unix mode keeps a zipped program runnable;
+        // entries without one (zips made on Windows) still come out 0666
+        zip.extractAllTo(dest, true, true);
     } else {
         // raw binary
         const destFile = path.join(destDir, path.basename(archivePath));

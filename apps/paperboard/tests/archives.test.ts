@@ -39,6 +39,22 @@ describe("extractArchive", () => {
         expect(fs.existsSync(path.join(dest, "wrapper", "bin", "tool.exe"))).toBe(true);
     });
 
+    // OpenCode's macOS builds are zips holding the bare program; it has to
+    // come out runnable, as the archive says
+    it.skipIf(process.platform === "win32")("keeps a zipped program runnable", async () => {
+        const zip = new AdmZip();
+        zip.addFile("opencode", Buffer.from("#!/bin/sh\necho ran\n"), "", 0o755);
+        zip.addFile("LICENSE", Buffer.from("x"), "", 0o644);
+        const archive = path.join(tmp, "exec.zip");
+        zip.writeZip(archive);
+        const pkg = path.join(tmp, "execpkg");
+        await extractPackageArchive(archive, pkg, "bin", ".zip");
+        const program = path.join(pkg, "bin", "opencode");
+        expect(fs.statSync(program).mode & 0o777).toBe(0o755);
+        expect(fs.statSync(path.join(pkg, "bin", "LICENSE")).mode & 0o777).toBe(0o644);
+        expect(Bun.spawnSync([program]).stdout.toString()).toBe("ran\n");
+    });
+
     it("rejects zip-slip entries", async () => {
         // plant traversal via byte swap so offsets stay valid
         const zip = new AdmZip();
