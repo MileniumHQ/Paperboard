@@ -111,6 +111,8 @@ export interface BackupSource {
     config: Array<string | { id: string }>;
     processes: string[];
     exclude?: string[];
+    /** File names left out of copies wherever they are, such as a lock a running program holds. May change between definitions. */
+    skip?: string[];
     /** One source may retain the panel's original backup history and schedule. */
     legacy?: boolean;
 }

@@ -69,7 +69,9 @@ await backups.create({ label: "Before updating" });`}
                 config is a path into its config document: strings select properties and an object with id selects an array entry by its stable id.
                 processes names the panel-owned process ids that must stop before a restore. Only that source’s files and selected config value are restored.
                 The service still prepares for a backup and pauses during a copy or restore; its other workload processes keep running.
-                Source definitions cannot change after registration. Removing a workload should disable its schedule with <PaperCode>setSchedule(null)</PaperCode>; its backups stay available.
+                <PaperCode>skip: ["session.lock"]</PaperCode> leaves files with those names out of copies wherever they are, such as a lock a running program holds:
+                Windows refuses to read a locked file, which would fail the whole backup.
+                Source definitions cannot change after registration, except their skip list. Removing a workload should disable its schedule with <PaperCode>setSchedule(null)</PaperCode>; its backups stay available.
             </PaperText>
             <PaperText preset="body">
                 One source may set <PaperCode>legacy: true</PaperCode> to retain the panel’s existing backup location, history and routine schedule.

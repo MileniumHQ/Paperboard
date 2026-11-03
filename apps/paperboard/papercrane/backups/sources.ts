@@ -14,6 +14,8 @@ export interface BackupSource {
     config: ConfigSelector;
     processes: string[];
     exclude?: string[];
+    /** File names left out of copies wherever they are, such as a lock a running program holds. */
+    skip?: string[];
     /** Keep the panel's existing backup history, destination and schedule. */
     legacy?: boolean;
 }
@@ -47,7 +49,9 @@ function validate(raw: BackupSource): void {
         raw.processes.some((v) => typeof v !== "string" || !v || v.length > 128) ||
         (raw.exclude !== undefined &&
             (!Array.isArray(raw.exclude) ||
-                raw.exclude.some((v) => !relative(v) || !v || v.includes("/"))))
+                raw.exclude.some((v) => !relative(v) || !v || v.includes("/")))) ||
+        (raw.skip !== undefined &&
+            (!Array.isArray(raw.skip) || raw.skip.some((v) => !relative(v) || !v || v.includes("/"))))
     )
         throw new Error("Invalid backup source");
 }
@@ -119,15 +123,17 @@ export class BackupSources {
         if (conflict)
             throw new Error("This panel already assigned its legacy backups to another source");
         const source = { ...input, owner, key };
-        // Re-registration on service restart must preserve the exact source.
+        // Re-registration on service restart must preserve the exact source;
+        // only the files skipped in copies may change.
         const previous = sources.find((s) => s.owner === owner && s.id === input.id);
-        if (previous && JSON.stringify(previous) !== JSON.stringify(source))
+        const fixed = ({ skip: _skip, ...rest }: Source) => JSON.stringify(rest);
+        if (previous && fixed(previous) !== fixed(source))
             throw new Error("A backup source cannot change its files or config selector");
-        if (!previous) {
-            sources.push(source);
-            fs.mkdirSync(path.dirname(this.file), { recursive: true });
-            writeFileAtomicSync(this.file, JSON.stringify(sources));
-        }
+        if (previous && JSON.stringify(previous) === JSON.stringify(source)) return;
+        if (previous) sources[sources.indexOf(previous)] = source;
+        else sources.push(source);
+        fs.mkdirSync(path.dirname(this.file), { recursive: true });
+        writeFileAtomicSync(this.file, JSON.stringify(sources));
     }
     owner(key: string): string {
         return this.get(key)?.owner ?? key;
@@ -148,6 +154,7 @@ export class BackupSources {
                     const relative = path.relative(from, file).split(path.sep).join("/");
                     return (
                         !fs.lstatSync(file).isSymbolicLink() &&
+                        !(source.skip ?? []).includes(path.basename(file)) &&
                         !(source.exclude ?? []).some(
                             (dir) => relative === dir || relative.startsWith(`${dir}/`),
                         )

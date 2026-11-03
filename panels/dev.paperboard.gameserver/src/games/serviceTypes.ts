@@ -40,6 +40,8 @@ export interface GameService {
     processIds: readonly string[];
     /** Top-level folders of the server left out of its backups and kept on restore, such as a downloaded game install. */
     backupExclude?: readonly string[];
+    /** File names left out of its backups wherever they are, such as a lock the running server holds. */
+    backupSkip?: readonly string[];
     loadOptions(ctx: Context): Promise<void>;
     prepareLaunch(ctx: Context): Promise<PreparedLaunch>;
     /**

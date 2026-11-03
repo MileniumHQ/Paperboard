@@ -41,6 +41,8 @@ export const minecraftService: GameService = {
     },
     readIcon: () => readServerIcon({ serverDir: () => fileApi.getPath("", PANEL_ID) }),
     processIds: ["mc-server", "mc-installer"],
+    // the running server locks each world's, and Windows won't let a locked file be read
+    backupSkip: ["session.lock"],
     loadOptions: loadConfigAndProperties,
     prepareLaunch,
     isMutating: isInstallRunning,

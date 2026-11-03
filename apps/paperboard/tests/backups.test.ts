@@ -234,6 +234,31 @@ describe("backups on this computer", () => {
         expect((await f.call("backup:status", { panelId: "dev.other.panel", sourceId: "one" }, ID)).code).toBe("FORBIDDEN");
     });
 
+    // a running Minecraft server locks each world's session.lock, and Windows
+    // refuses to read a locked file (EBUSY): the whole copy would fail
+    test("a source's skipped files stay out of its copies wherever they are, and the list may change", async () => {
+        const f = panelFixture();
+        f.writeData("one", { servers: [{ id: "mc", settings: {} }] });
+        const files = f.engine.getFilePath("", ID);
+        for (const world of ["world", "world_nether"]) {
+            fs.mkdirSync(path.join(files, "mc", world), { recursive: true });
+            fs.writeFileSync(path.join(files, "mc", world, "session.lock"), "held");
+            fs.writeFileSync(path.join(files, "mc", world, "level.dat"), world);
+        }
+        const source = { id: "mc", directory: "mc", config: ["servers", { id: "mc" }, "settings"], processes: [] };
+        expect((await f.call("backup:source-define", { panelId: ID, source }, ID)).error).toBeUndefined();
+        // a server added before the list existed takes it on its next start
+        expect((await f.call("backup:source-define", { panelId: ID, source: { ...source, skip: ["session.lock"] } }, ID)).error).toBeUndefined();
+        expect((await f.call("backup:source-define", { panelId: ID, source: { ...source, skip: ["../x"] } }, ID)).error).toContain("Invalid");
+        const backups = new BackupService(f.engine);
+        cleanups.push(() => backups.dispose());
+        const staging = fs.mkdtempSync(path.join(os.tmpdir(), "pb-skip-"));
+        cleanups.push(() => fs.rmSync(staging, { recursive: true, force: true }));
+        await backups.sources.snapshot(backups.sources.resolve(ID, "mc"), staging);
+        const copied = fs.readdirSync(path.join(staging, "files"), { recursive: true }).map(String).sort();
+        expect(copied).toEqual(["world", "world/level.dat", "world_nether", "world_nether/level.dat"].map((p) => p.split("/").join(path.sep)));
+    });
+
     test("a restore that cannot park the config puts the parked files back and restarts the panel", async () => {
         const f = panelFixture();
         f.writeData("one", { n: 1 });
