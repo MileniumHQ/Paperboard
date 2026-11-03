@@ -35,6 +35,18 @@ describe("a workload's environment", () => {
         }
     });
 
+    it("puts Java first on Windows' own search path, keeping the rest of it", () => {
+        const base = { Path: "C:\\Windows\\system32;C:\\Windows", SystemRoot: "C:\\Windows" };
+        const env = workloadEnv({ JAVA_HOME: "C:\\runtimes\\java21" }, "C:\\servers\\mc", {}, base, "win32");
+        expect(Object.keys(env).filter((k) => k.toUpperCase() === "PATH")).toEqual(["Path"]);
+        expect(env.Path).toBe("C:\\runtimes\\java21/bin;C:\\Windows\\system32;C:\\Windows");
+    });
+
+    it("puts Java first on PATH elsewhere", () => {
+        const env = workloadEnv({ JAVA_HOME: "/runtimes/java21" }, "/servers/mc", {}, { PATH: "/usr/bin:/bin" }, "linux");
+        expect(env.PATH).toBe("/runtimes/java21/bin:/usr/bin:/bin");
+    });
+
     it("reaches a child the supervisor starts", async () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), "workload-env-"));
         dirs.push(dir);
