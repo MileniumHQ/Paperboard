@@ -233,6 +233,27 @@ describe("player cap", () => {
     });
 });
 
+describe("replies to a query sent from the console", () => {
+    const entries = (ctx: { state: { serverEntries: { content: string }[] } }) => ctx.state.serverEntries.map((e) => e.content);
+
+    it("show, while the panel's own polls of the same thing stay out", async () => {
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessData(ctx, "[12:00:00] [Server thread/INFO]: There are 0 of a max of 20 players online:\n");
+        expect(entries(ctx).some((line) => line.includes("players online"))).toBe(false);
+
+        await sendServerCommand(ctx as any, "list");
+        handleProcessData(ctx, "[12:00:01] [Server thread/INFO]: There are 0 of a max of 20 players online:\n");
+        expect(entries(ctx).filter((line) => line.includes("players online"))).toHaveLength(1);
+        // one reply per command: the next poll is chatter again
+        handleProcessData(ctx, "[12:00:15] [Server thread/INFO]: There are 0 of a max of 20 players online:\n");
+        expect(entries(ctx).filter((line) => line.includes("players online"))).toHaveLength(1);
+
+        await sendServerCommand(ctx as any, "/gamerule keepInventory");
+        handleProcessData(ctx, "[12:00:16] [Server thread/INFO]: Gamerule keepInventory is currently set to: false\n");
+        expect(entries(ctx).some((line) => line.includes("keepInventory is currently set to"))).toBe(true);
+    });
+});
+
 describe("player events", () => {
     it("a join updates presence, history, and emits player-joined", () => {
         const ctx = makeCtx({ serverStatus: "online" });

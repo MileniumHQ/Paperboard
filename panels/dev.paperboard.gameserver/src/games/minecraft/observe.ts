@@ -13,8 +13,28 @@ import { observeSavingLine } from "./saving";
 import { type GameServerState, SERVER_PROC_ID, appendCapped } from "../../service/types";
 import { TRIGGER_IDS } from "../../service/contract";
 import { noteCrashReport } from "../../service/automation";
+import { serverLocal } from "../../service/scope";
 /** What Minecraft prints when it crashes: its crash report, and its watchdog giving up on a frozen server. */
 const CRASH_LINES = ["This crash report has been saved to", "Considering it crashed, server will forcibly shutdown"];
+
+// The panel's own `list`, `gamerule` and `data get` polls stay out of the
+// console, but the same reply to one sent from the console (or an action)
+// is the answer that was asked for: each such command lets one reply of its
+// kind through, if it comes within a few seconds.
+type QueryKind = "list" | "gamerule" | "data";
+const QUERY_KINDS: readonly string[] = ["list", "gamerule", "data"];
+const ASKED_REPLY_MS = 10_000;
+const local = serverLocal(() => ({ asked: [] as { kind: QueryKind; at: number }[] }));
+
+function takeAsked(kind: QueryKind): boolean {
+    const asked = local().asked;
+    const now = Date.now();
+    while (asked.length && now - asked[0]!.at > ASKED_REPLY_MS) asked.shift();
+    const index = asked.findIndex((entry) => entry.kind === kind);
+    if (index < 0) return false;
+    asked.splice(index, 1);
+    return true;
+}
 
 export async function sendChatMessage(
     ctx: ServiceContext<GameServerState>,
@@ -125,16 +145,17 @@ export function observeLine(ctx: ServiceContext<GameServerState>, line: string, 
     // queues — so a response that arrives after its marker was evicted
     // stays out too. Join/leave lines, chat, errors and real server
     // output still append.
-    const pollResponse =
-        statConsumed ||
-        positionConsumed ||
-        gameruleConsumed ||
-        isPlayerListResponse(clean) ||
-        isStatQueryReply(clean) ||
-        extractPosition(clean) !== undefined ||
-        extractDimension(clean) !== undefined;
+    const pollKind: QueryKind | undefined =
+        gameruleConsumed ? "gamerule"
+        : isPlayerListResponse(clean) ? "list"
+        : statConsumed ||
+            positionConsumed ||
+            isStatQueryReply(clean) ||
+            extractPosition(clean) !== undefined ||
+            extractDimension(clean) !== undefined ? "data"
+        : undefined;
 
-    if (!pollResponse) {
+    if (!pollKind || takeAsked(pollKind)) {
         ctx.setState({
             serverEntries: appendCapped(ctx.state.serverEntries, parseLogLine(line)),
         });
@@ -144,5 +165,8 @@ export function observeLine(ctx: ServiceContext<GameServerState>, line: string, 
 export function commandLine(command: string): string {
     assertSingleLine(String(command), "console command", 500);
     const trimmed = command.trim();
-    return `${trimmed.startsWith("/") ? trimmed.slice(1) : trimmed}\n`;
+    const line = trimmed.startsWith("/") ? trimmed.slice(1) : trimmed;
+    const kind = line.split(/\s/, 1)[0]!.toLowerCase();
+    if (QUERY_KINDS.includes(kind)) local().asked.push({ kind: kind as QueryKind, at: Date.now() });
+    return `${line}\n`;
 }
