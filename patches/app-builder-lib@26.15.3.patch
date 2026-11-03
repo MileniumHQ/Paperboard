@@ -1,0 +1,17 @@
+diff --git a/out/targets/archive.js b/out/targets/archive.js
+index 7b9b6ee474a703bc77e13307c745ca686aef0d62..a9dc2306a217ff2bcfa2193196e8cd5f46ae1718 100644
+--- a/out/targets/archive.js
++++ b/out/targets/archive.js
+@@ -102,6 +102,12 @@ function compute7zCompressArgs(format, options = {}) {
+         args.push(`-mm=${storeOnly ? "Copy" : "Deflate"}`);
+         args.push("-mcu");
+     }
++    // Paperboard: macOS zips are built on Linux too, where the native-zip
++    // branch below never runs; -snl keeps a .framework's symlinks as links
++    // instead of three full copies of Electron Framework
++    if (options.preserveSymlinks) {
++        args.push("-snl");
++    }
+     return args;
+ }
+ // 7z is very fast, so, use ultra compression
