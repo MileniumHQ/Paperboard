@@ -6,6 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import { gamerulesFor, parseGameruleValue } from "../src/core/gamerules";
 import { parseChatMessage } from "../src/lib/logs";
+import { extractJoinedName, extractLeftName, extractListCounts, extractListedNames } from "../src/core/players";
 import { GAMERULES } from "../src/generated/gamerules.generated";
 
 describe("gamerule readouts", () => {
@@ -50,6 +51,17 @@ test("system chat lines keep reaching the Chat tab on 26.3", () => {
     expect(
         parseChatMessage("[00:22:35] [Server thread/INFO]: System chat: There are 0 of a max of 20 players online: "),
     ).toBeNull();
+});
+
+test("the player list and joins read on 26.3", () => {
+    const list = "[21:59:22] [Server thread/INFO]: System chat: There are 1 of a max of 20 players online: Steve";
+    expect(extractListCounts(list)).toEqual({ online: 1, max: 20 });
+    expect(extractListedNames(list)).toEqual(["steve"]);
+    expect(extractListCounts("[21:59:22] [Server thread/INFO]: System chat: There are 0 of a max of 20 players online: ")).toEqual({ online: 0, max: 20 });
+    // a player saying it still can't set the counts
+    expect(extractListCounts("[21:59:22] [Server thread/INFO]: <Steve> System chat: There are 9 of a max of 99 players online")).toBeUndefined();
+    expect(extractJoinedName("[00:22:35] [Server thread/INFO]: System chat: Steve joined the game")).toBe("Steve");
+    expect(extractLeftName("[00:22:35] [Server thread/INFO]: System chat: Steve left the game")).toBe("Steve");
 });
 
 describe("which rules a server accepts", () => {
