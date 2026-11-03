@@ -20,6 +20,9 @@ Object.assign(paperapi.secretsApi, {
     delete: async (key: string) => { vault.delete(key); },
 });
 
+// the panel's own folder, where an offline backup leaves its resume marker
+Object.assign(paperapi.fileApi, { getPath: async (rel: string) => path.join(root, rel) });
+
 // the daemon's process table: a started server stays until the test ends it
 const processes: { id: string; command: string }[] = [];
 let failStart: string | null = null;
@@ -47,7 +50,7 @@ mock.module("../src/service/api", () => ({
 await import("../src/games/service");
 const { startServerInstance, restartServerInstance, handleProcessExit } = await import("../src/service/lifecycle");
 const { inServer } = await import("../src/service/scope");
-const { palworldPlatform } = await import("../src/games/palworld/service");
+const { palworldPlatform, palworldService } = await import("../src/games/palworld/service");
 const scope = { server: { id: "s-pw", game: "palworld", directory: "" }, locals: new Map() } as any;
 
 const TEMPLATE = 'OptionSettings=(ServerName="Default Palworld Server",AdminPassword="",ServerPassword="",RESTAPIEnabled=False,ExpRate=1.000000)\n';
@@ -151,4 +154,17 @@ test("an unreadable settings file is shown in the console, not dropped", () => i
     handleProcessExit(ctx);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(ctx.state.serverEntries.some((e: any) => e.type === "error" && String(e.content).includes("Could not clean up after the server stopped"))).toBe(true);
+}));
+
+test("a Palworld server loads on a computer Palworld doesn't run on, so setup can say why", () => inServer(scope, async () => {
+    const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+    Object.defineProperty(process, "platform", { value: "darwin" });
+    try {
+        const ctx = makeCtx("offline");
+        await palworldService.initialize(ctx, false);
+        await palworldService.loadOptions(ctx);
+        expect(ctx.state.gameSettings.port).toBe(8211);
+    } finally {
+        Object.defineProperty(process, "platform", platform);
+    }
 }));

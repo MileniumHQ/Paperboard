@@ -11,7 +11,7 @@ import { provideWindowsRuntime } from "../windowsRuntimeInstall";
 import { steamInstall, steamInstallActions, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import type { GameService } from "../serviceTypes";
 import {
-    ConsoleBuffer, assertHost, exists, fileStamp, gameAction, linkFolder, offlineBackup, pushChat, readSettings, redact, report,
+    ConsoleBuffer, assertHost, exists, fileStamp, gameAction, hostSupportHere, linkFolder, offlineBackup, pushChat, readSettings, redact, report,
     resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, updateSettings, waitUntil, writePrivate, type Context,
 } from "../serviceKit";
 import { palworld, options, PALWORLD_APP_ID } from "./index";
@@ -62,6 +62,11 @@ const installDir = async () => path.join(await serverRoot(), "install");
 const savedDir = async () => path.join(await serverRoot(), "saved");
 const configFile = async (name: string) => path.join(await savedDir(), "Config", platform().configDir, name);
 const iniFile = () => configFile("PalWorldSettings.ini");
+/**
+ * The settings file, or null on a computer Palworld doesn't run on: there is
+ * none there, and the server still loads so setup can say why.
+ */
+const iniFileHere = async () => (hostSupportHere(palworld).supported ? iniFile() : null);
 const joinPassword = serverSecret(GAME, "join-password");
 const adminPassword = serverSecret(GAME, "admin-password");
 
@@ -99,7 +104,8 @@ async function rewriteIni(values: Record<string, string>): Promise<void> {
  * would be open to anyone.
  */
 const stripSecrets = (): Promise<void> => serialIni(async () => {
-    if (await exists(await iniFile())) await rewriteIni({ AdminPassword: '""', ServerPassword: '""' });
+    const file = await iniFileHere();
+    if (file && (await exists(file))) await rewriteIni({ AdminPassword: '""', ServerPassword: '""' });
 });
 const linkSaved = async () => linkFolder(path.join(await installDir(), "Pal", "Saved"), await savedDir());
 
@@ -109,9 +115,9 @@ const displayVersion = (saved: Record<string, unknown>) =>
 async function loadOptions(ctx: Context) {
     const saved = await readSettings();
     const values: Record<string, unknown> = { port: saved.port ?? DEFAULT_PORT, community: saved.community ?? false };
-    const file = await iniFile();
+    const file = await iniFileHere();
     const template = path.join(await installDir(), "DefaultPalWorldSettings.ini");
-    const source = (await exists(file)) ? file : (await exists(template)) ? template : null;
+    const source = file && (await exists(file)) ? file : (await exists(template)) ? template : null;
     if (source) {
         const entries = parseOptionSettings(await fs.readFile(source, "utf8"));
         for (const option of options) {

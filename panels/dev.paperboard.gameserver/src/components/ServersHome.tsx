@@ -240,7 +240,13 @@ export default function ServersHome(props: { state: ServersState }) {
                     {(error) => (
                         <PaperQuote
                             variant="danger"
-                            title="Server could not be changed"
+                            title={
+                                dialog() === "add"
+                                    ? "Server could not be added"
+                                    : dialog() === "remove"
+                                      ? "Server could not be removed"
+                                      : "Server could not be renamed"
+                            }
                             role="alert"
                         >
                             {error()}
