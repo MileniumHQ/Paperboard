@@ -8,8 +8,9 @@ import {
 } from "../components/settings/AppSettings";
 
 export interface SettingsFailure {
-    /** which way it failed: settings that didn't load leave the defaults showing */
-    kind: "load" | "save";
+    /** which way it failed: settings that didn't load leave the defaults
+     * showing; saved settings the system wouldn't apply are "apply" */
+    kind: "load" | "save" | "apply";
     message: string;
 }
 
@@ -83,7 +84,14 @@ export function useAppSettings() {
         // read this signal, so a successful persist must update it or the UI
         // keeps showing the previous selection.
         setAppSettings(next);
-        notifyAppSettingsChanged();
+        try {
+            const refused = await notifyAppSettingsChanged();
+            if (refused) setSettingsFailure({ kind: "apply", message: refused });
+            else if (settingsFailure()?.kind === "apply") setSettingsFailure(null);
+        } catch (err) {
+            logToMain("error", "Failed to apply app settings:", err);
+            setSettingsFailure({ kind: "apply", message: messageOf(err) });
+        }
     };
 
     return {

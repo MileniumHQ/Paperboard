@@ -25,12 +25,12 @@ export const SHELL_INVOKE_CHANNELS = [
     "panel-permissions-list",
     "panel-permission-set",
     "open-system-privacy",
+    "app-settings-changed",
 ] as const;
 
 export const SHELL_SEND_CHANNELS = [
     "ping",
     "updater-finish",
-    "app-settings-changed",
     "relaunch-for-update",
     "quit-and-install",
     "quit-app",

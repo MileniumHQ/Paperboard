@@ -157,9 +157,10 @@ export const shellApi = {
     getLaunchOptions: (): Promise<LaunchOptions> =>
         requireIpc().invoke<LaunchOptions>("launch-options"),
 };
-// Main applies side effects of freshly persisted settings (theme, title bars, login item)
-export function notifyAppSettingsChanged(): void {
-    requireIpc().send("app-settings-changed");
+// Main applies side effects of freshly persisted settings (theme, title bars,
+// login item); resolves to why Run on startup couldn't be applied, or null
+export function notifyAppSettingsChanged(): Promise<string | null> {
+    return requireIpc().invoke<string | null>("app-settings-changed");
 }
 
 // Forwards renderer errors into the main file logger

@@ -3,6 +3,7 @@ import * as path from "path";
 import * as fs from "fs";
 import type { WebFrameMain } from "electron";
 import { logger } from "../../papercrane/logger";
+import { setRunOnStartup } from "./loginItem";
 import {
     TITLEBAR_OVERLAY_COLORS,
     TITLEBAR_SYMBOL_COLORS,
@@ -53,12 +54,21 @@ export function applyNativeTheme(): void {
     }
 }
 
-export function applyRunOnStartup(): void {
+/** Applies Run on startup; resolves to why the system refused it, or null. */
+export function applyRunOnStartup(): string | null {
     const { runOnStartup } = readAppSettings();
     try {
-        app.setLoginItemSettings({ openAtLogin: runOnStartup });
+        setRunOnStartup(runOnStartup, {
+            platform: process.platform,
+            env: process.env,
+            execPath: process.execPath,
+            get: () => app.getLoginItemSettings(),
+            set: (openAtLogin) => app.setLoginItemSettings({ openAtLogin }),
+        });
+        return null;
     } catch (err: any) {
         logger.warn("[AppSettings] failed to set login item:", err?.message ?? err);
+        return err?.message ?? String(err);
     }
 }
 

@@ -291,6 +291,7 @@ function ensureBrowserHost(): Promise<BrowserHost> {
         });
         const invoke: Record<string, (args: unknown) => unknown> = {};
         for (const channel of SHARED_SHELL_INVOKE_CHANNELS) invoke[channel] = shared[channel];
+        invoke["app-settings-changed"] = () => applySavedAppSettings();
         const host = await startBrowserHost({
             port: browserPortSwitch(),
             rendererDir: path.join(__dirname, "../renderer"),
@@ -298,7 +299,6 @@ function ensureBrowserHost(): Promise<BrowserHost> {
             invoke,
             send: {
                 "renderer-log": (level, message) => logRendererMessage(level, message),
-                "app-settings-changed": () => applySavedAppSettings(),
             },
             servePanel: servePanelAsset,
             panelFiles: {

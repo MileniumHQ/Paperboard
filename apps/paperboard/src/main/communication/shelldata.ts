@@ -50,16 +50,14 @@ function nativeFileDialogs(event: IpcMainInvokeEvent): PanelFileTransferDeps {
     };
 }
 
-// main-side effects of freshly saved settings; browser mode runs the same
-export function applySavedAppSettings(): void {
-    void (async () => {
-        applyNativeTheme();
-        applyRunOnStartup();
-        await broadcastAppSettings().catch((err) => logger.warn("[shelldata] settings broadcast failed:", err));
-        syncTitleBarOverlays();
-    })().catch((err) =>
-        logger.warn("[shelldata] app-settings-changed failed:", err?.message ?? err),
-    );
+// main-side effects of freshly saved settings; browser mode runs the same.
+// Resolves to why Run on startup couldn't be applied, or null.
+export async function applySavedAppSettings(): Promise<string | null> {
+    applyNativeTheme();
+    const loginItemError = applyRunOnStartup();
+    await broadcastAppSettings().catch((err) => logger.warn("[shelldata] settings broadcast failed:", err));
+    syncTitleBarOverlays();
+    return loginItemError;
 }
 
 export default function registerShellIpc(ipcMain: IpcMain) {
@@ -77,16 +75,10 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         return true;
     });
 
-    // settings saved over WS still need main-side side effects.
-    // ipcMain.on does not observe async handler rejections: the async work
-    // runs in an explicit closure with its own catch so a throw outside the
-    // internally-guarded appliers can never become an unobserved rejection.
-    ipcMain.on("app-settings-changed", (event) => {
-        if (isRefusedFrame(event)) {
-            logger.warn('[Shell] PANEL_IPC_REFUSED: channel "app-settings-changed" is shell-only');
-            return;
-        }
-        applySavedAppSettings();
+    // settings saved over WS still need main-side side effects
+    ipcMain.handle("app-settings-changed", (event) => {
+        assertShellFrame(event, "app-settings-changed");
+        return applySavedAppSettings();
     });
 
     // pairing, discovery, folders, version, daemon credentials: the same

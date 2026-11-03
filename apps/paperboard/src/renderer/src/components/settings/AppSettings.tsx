@@ -142,14 +142,16 @@ export default function AppSettings(props: {
                 <PaperQuote
                     variant="danger"
                     icon="warning"
-                    title={failure().kind === "load" ? "Settings not loaded" : "Settings not saved"}
+                    title={{ load: "Settings not loaded", save: "Settings not saved", apply: "Run on startup not applied" }[failure().kind]}
                     role="alert"
                     onDismiss={props.onDismissFailure}
                 >
                     <PaperFlex direction="column" gap="half" align="flex-start">
-                        {failure().kind === "load"
-                            ? `These are the defaults, not your settings: ${failure().message}`
-                            : `Your change was not kept: ${failure().message}`}
+                        {{
+                            load: `These are the defaults, not your settings: ${failure().message}`,
+                            save: `Your change was not kept: ${failure().message}`,
+                            apply: failure().message,
+                        }[failure().kind]}
                         <Show when={failure().kind === "load" && props.onRetryLoad}>
                             <PaperButton size="tiny" onClick={() => props.onRetryLoad?.()}>Retry loading</PaperButton>
                         </Show>
