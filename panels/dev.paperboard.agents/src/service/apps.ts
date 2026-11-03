@@ -395,9 +395,11 @@ export class Apps {
             try {
                 await listen(saved);
             } catch (e) {
-                // that port is someone else's now: the apps move, and their saved data stays at the old origin
-                if (!saved || (e as NodeJS.ErrnoException).code !== "EADDRINUSE") throw e;
-                console.error(`[ai] the apps' port ${saved} is taken; they move to a new one`);
+                // that port is someone else's now, or the system keeps it (Windows reserves ranges of
+                // ports anew at each boot): the apps move, and their saved data stays at the old origin
+                const code = (e as NodeJS.ErrnoException).code;
+                if (!saved || (code !== "EADDRINUSE" && code !== "EACCES")) throw e;
+                console.error(`[ai] the apps' port ${saved} can't be opened (${code}); they move to a new one`);
                 await listen(0);
             }
             this.server = server;

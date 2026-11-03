@@ -285,6 +285,18 @@ describe("the agent's apps", () => {
         cleanups.push(() => again.close());
         expect((await again.toolset().call("start_app", { name: "keep" })).text).toContain(`http://keep.localhost:${port}/`);
     });
+
+    // Windows reserves ranges of ports anew at each boot and refuses them with EACCES; here a
+    // port below 1024 is refused the same way
+    test.skipIf(process.platform === "win32" || process.getuid?.() === 0)("the apps move when the system won't open their port", async () => {
+        const { storage, home } = await setup();
+        fs.writeFileSync(path.join(storage, "apps.json"), JSON.stringify({ port: 1 }));
+        const apps = new Apps(options(storage, home).o);
+        cleanups.push(() => apps.close());
+        expect((await apps.toolset().call("start_app", { ...about, name: "moved" })).isError).toBeUndefined();
+        expect(apps.port).toBeGreaterThan(1024);
+        expect(JSON.parse(fs.readFileSync(path.join(storage, "apps.json"), "utf8")).port).toBe(apps.port);
+    });
 });
 
 describe("the user's side of the apps", () => {
