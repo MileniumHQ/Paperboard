@@ -28,10 +28,11 @@
 }
 
 /* Spacers around the column: they share the free space, so whatever the
-   step shows sits in the middle of the page. */
+   step shows sits in the middle of the page, and give up their margin
+   before the page has to scroll. */
 .above,
 .below {
-    flex: 1 0 var(--agents-column-margin);
+    flex: 1 1 var(--agents-column-margin);
 }
 
 /* the face and its bubble, side by side */
