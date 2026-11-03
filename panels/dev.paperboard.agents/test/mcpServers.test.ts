@@ -27,7 +27,7 @@ function setup(initial: unknown = null) {
     const views: ToolsView[] = [];
     let clock = 1_000_000;
     const deps: ServersDeps = {
-        host: { start: (o) => procs.start(o), write: (id, d) => procs.write(id, d), kill: procs.kill, exists: procs.exists, onStdout: procs.onStdout, onStderr: procs.onStderr, onExit: procs.onExit, which: (c) => (c === "server" ? "/usr/bin/server" : null) },
+        host: { start: (o) => procs.start(o), write: (id, d) => procs.write(id, d), kill: procs.kill, exists: procs.exists, onStdout: procs.onStdout, onStderr: procs.onStderr, onExit: procs.onExit, findProgram: (c, args) => (c === "server" ? { command: "/usr/bin/server", args: [...args] } : null) },
         store: { read: async () => stored, write: async (c) => void (writes.push(c), (stored = c)) },
         vault,
         onChange: (v) => views.push(v),

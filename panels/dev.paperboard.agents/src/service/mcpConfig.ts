@@ -87,7 +87,8 @@ export function parseServer(raw: unknown): ServerSpec {
         if (/[\r\n]/.test(command)) fail("the command is one program, not a script");
         if (command.startsWith("-")) fail("the command can't start with a dash");
         // "npx -y foo" in one field is the usual mistake: the arguments go in their own list
-        if (/\s/.test(command) && !command.startsWith("/")) fail("the command is just the program; put its arguments in the argument list");
+        // a full path may have spaces in it: /Applications/My Server, C:\Program Files\nodejs\node.exe
+        if (/\s/.test(command) && !/^(\/|[A-Za-z]:[\\/]|\\\\)/.test(command)) fail("the command is just the program; put its arguments in the argument list");
         const rawArgs = raw.args === undefined ? [] : raw.args;
         if (!Array.isArray(rawArgs)) return fail("arguments are a list");
         if (rawArgs.length > L.args) fail(`at most ${L.args} arguments`);

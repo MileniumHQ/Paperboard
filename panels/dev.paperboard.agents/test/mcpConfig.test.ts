@@ -16,6 +16,7 @@ describe("a stdio server is an argv array", () => {
         expect(() => parseServer(stdio({ command: "--version" }))).toThrow(/dash/);
         // an absolute path may hold a space
         expect(parseServer(stdio({ command: "/opt/my tools/server" })).transport).toBe("stdio");
+        expect(parseServer(stdio({ command: "C:\\Program Files\\nodejs\\node.exe" })).command).toBe("C:\\Program Files\\nodejs\\node.exe");
     });
 
     test("arguments are bounded text", () => {

@@ -44,7 +44,8 @@ import { toolbox, type Toolbox } from "./toolsets";
 import { Asker } from "./ask";
 import { flowActions, type ConversationChoice, type MessageReceived } from "./flowActions";
 import type { ActionDefinition } from "@mileniumhq/paperapi";
-export { which } from "./which";
+export { findProgram } from "./which";
+import type { Launch } from "./which";
 
 /** What the tool servers and the actions toolset need from the daemon. */
 export interface ToolsHost {
@@ -68,7 +69,7 @@ export interface AppHost extends Omit<ComputerHost, "packages">, Omit<TurnHost, 
     writeSettings(s: Settings): Promise<void>;
     exec(command: string, args: string[], o?: { timeoutMs?: number; env?: Record<string, string> }): Promise<{ stdout: string; stderr: string; exitCode: number }>;
     /** a program on PATH: for the user's own tool servers; the brains are packages, never looked for here */
-    which(command: string): string | null;
+    findProgram(command: string, args: readonly string[]): Launch | null;
     /** register an action again, as it is now: the flow actions' conversation dropdown follows the history */
     registerAction(def: ActionDefinition): Promise<void>;
 }
@@ -128,7 +129,7 @@ export class AiApp {
         this.memory = new Memory({ dir: path.join(root, "memory"), onChange: (memory) => this.ctx.setState({ memory }) });
         const t = this.host.tools;
         this.servers = new McpServers({
-            host: { start: this.host.start, write: t.write, kill: this.host.kill, exists: this.host.exists, onStdout: this.host.onStdout, onStderr: this.host.onStderr, onExit: this.host.onExit, which: this.host.which },
+            host: { start: this.host.start, write: t.write, kill: this.host.kill, exists: this.host.exists, onStdout: this.host.onStdout, onStderr: this.host.onStderr, onExit: this.host.onExit, findProgram: this.host.findProgram },
             store: { read: t.readTools, write: t.writeTools },
             vault: t.vault,
             onChange: (view) => this.ctx.emit(TOOLS_EVENT, view),

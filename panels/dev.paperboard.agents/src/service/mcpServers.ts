@@ -5,7 +5,7 @@
 // stops: always awaited, never assumed. A failed server stays failed, with
 // its reason, until it is restarted or the next turn retries it.
 
-import path from "node:path";
+import type { Launch } from "./which";
 import { PANEL_ID } from "../contract";
 import {
     TOOL_LIMITS as L,
@@ -31,7 +31,7 @@ export interface Vault {
 }
 
 export interface ServersDeps {
-    host: ProcessHost & { which(command: string): string | null };
+    host: ProcessHost & { findProgram(command: string, args: readonly string[]): Launch | null };
     store: { read(): Promise<unknown>; write(c: ToolsConfig): Promise<void> };
     vault: Vault;
     fetch?: typeof fetch;
@@ -237,9 +237,9 @@ export class McpServers {
         };
         if (spec.transport === "http") return new HttpWire({ url: spec.url, headers: await values(spec.headers), fetch: this.deps.fetch });
         const env = await values(spec.env);
-        const command = path.isAbsolute(spec.command) ? spec.command : this.deps.host.which(spec.command);
-        if (!command) throw new Error(`"${spec.command}" isn't installed on this computer`);
-        return StdioWire.start(this.deps.host, { id: processId(spec.name), command, args: spec.args, env });
+        const launch = this.deps.host.findProgram(spec.command, spec.args);
+        if (!launch) throw new Error(`"${spec.command}" isn't installed on this computer`);
+        return StdioWire.start(this.deps.host, { id: processId(spec.name), command: launch.command, args: launch.args, env });
     }
 
     private changed() {

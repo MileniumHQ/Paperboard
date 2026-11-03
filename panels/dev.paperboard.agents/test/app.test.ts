@@ -73,7 +73,7 @@ describe("the service's agent", () => {
             storageDir: async () => dir,
             readSettings: readSettings ?? (async () => saved),
             writeSettings: async (s) => void writes.push(s),
-            which: (c) => (installed.includes(c) ? `/usr/bin/${c}` : null),
+            findProgram: (c, args) => (installed.includes(c) ? { command: `/usr/bin/${c}`, args: [...args] } : null),
             registerAction: async () => {},
             tools: {
                 write: async () => {},

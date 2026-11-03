@@ -58,7 +58,7 @@ async function start(settings: Settings | null = PIP) {
         storageDir: async () => dir,
         readSettings: async () => settings,
         writeSettings: async () => {},
-        which: (c) => `/usr/bin/${c}`,
+        findProgram: (c, args) => ({ command: `/usr/bin/${c}`, args: [...args] }),
         registerAction: async (def) => void registered.push(def),
         tools: {
             write: procs.write,

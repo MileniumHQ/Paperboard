@@ -1,7 +1,7 @@
 import { actionsApi, configApi, defineAction, definePanelService, fileApi, packageApi, processApi, secretsApi, type ActionDefinition } from "@mileniumhq/paperapi";
 import { DEFAULT_STATE, PANEL_ID, UI_ACTION_IDS, type AiState } from "./contract";
 import { TOOLS_ACTION_IDS } from "./toolsContract";
-import { AiApp, which, type AppHost } from "./service/app";
+import { AiApp, findProgram, type AppHost } from "./service/app";
 
 // the tool servers and the actions switch: another document, so one never overwrites the other
 const TOOLS_PATH = "tools.json";
@@ -29,7 +29,7 @@ const host: AppHost = {
     storageDir: () => fileApi.getPath("", PANEL_ID),
     readSettings: () => configApi.get(PANEL_ID),
     writeSettings: (s) => configApi.set(s, PANEL_ID),
-    which,
+    findProgram,
     tools: {
         write: (id, data) => processApi.write(id, data),
         readTools: () => configApi.get(PANEL_ID, TOOLS_PATH),
