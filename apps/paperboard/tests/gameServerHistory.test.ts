@@ -87,7 +87,7 @@ test("a service restart keeps each server's console and chat, and starts a serve
         expect(creative.serverEntries.some((e) => String(e.content).includes("not running"))).toBe(false);
     } finally {
         await services.stopService(PANEL);
-        await engine.killProcess("survival-mc-server", "SIGKILL").catch(() => {});
+        await engine.killProcess("survival-mc-server", "SIGKILL");
         process.execPath = bunExecutable;
         backups.dispose();
         closeTransport("local");
