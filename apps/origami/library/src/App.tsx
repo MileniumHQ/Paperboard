@@ -14,6 +14,7 @@ import {
     PaperFlex,
     PaperMediaCard,
     PaperMediaCardGroup,
+    PaperPage,
     PaperText,
     getVarCss,
 } from "@mileniumhq/paperui";
@@ -54,13 +55,14 @@ const rootStyle = {
     padding: getVarCss("uigap-double"),
 } as const;
 
-const columnStyle = {
-    "max-width": getVarCss("page-width"),
-    margin: "0 auto",
-    display: "flex",
-    "flex-direction": "column",
-    gap: getVarCss("uigap"),
+// the grid scrolls edge to edge; its PaperPage column brings the same
+// width and gutter as Settings and the panel pages
+const gridScrollStyle = {
+    flex: "1",
     width: "100%",
+    height: "100%",
+    "overflow-y": "auto",
+    "overflow-x": "hidden",
     "box-sizing": "border-box",
 } as const;
 
@@ -259,8 +261,8 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
         <Show
             when={selectedPanel()}
             fallback={
-                <div style={rootStyle}>
-                    <div style={columnStyle}>
+                <div style={gridScrollStyle}>
+                    <PaperPage>
                     {/* a panel URL that doesn't resolve is its own page, never
                         the grid: loading, unavailable and unknown differ */}
                     <Show
@@ -390,7 +392,7 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
                             </For>
                         </PaperMediaCardGroup>
                     </Show>
-                    </div>
+                    </PaperPage>
                 </div>
             }
         >
