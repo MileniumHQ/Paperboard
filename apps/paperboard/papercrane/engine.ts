@@ -13,6 +13,7 @@ import { PanelManifest } from "./types";
 import {
     ProgressCallback,
     streamToFileWithProgress,
+    hashFile,
     moveFileSafe,
     resolveSecureTargetPath,
     openResolvedFile,
@@ -79,6 +80,9 @@ export interface PackageInstallOutcome {
 }
 
 const MAX_STAGED_PACKAGES = 64;
+
+// the algorithms a file:download checksum may name
+export const DOWNLOAD_CHECKSUM_ALGORITHMS = ["sha1", "sha256", "sha512"];
 
 // bounded payloads: file reads refuse past 16 MiB (larger blobs stream via
 // file:download), config payloads past 1 MiB serialized
@@ -921,6 +925,20 @@ export class PaperCraneEngine {
         } = {},
         onProgress?: ProgressCallback,
     ): Promise<string> {
+        // a checksum the daemon cannot check is refused before any network:
+        // ignoring it would install bytes nobody verified
+        const checksum = options.checksum;
+        const algorithm = checksum ? String(checksum.algorithm).toLowerCase() : undefined;
+        if (checksum) {
+            if (!algorithm || !DOWNLOAD_CHECKSUM_ALGORITHMS.includes(algorithm)) {
+                throw new Error(
+                    `Download refused: checksum algorithm ${JSON.stringify(checksum.algorithm)} is not supported (use ${DOWNLOAD_CHECKSUM_ALGORITHMS.join(", ")})`,
+                );
+            }
+            if (typeof checksum.value !== "string" || !checksum.value) {
+                throw new Error(`Download refused: the ${algorithm} checksum has no value`);
+            }
+        }
         const finalDest = this.resolveSecureTargetPath(targetPath, appId);
         const tempPath = `${finalDest}.tmp-${Date.now()}`;
         const dir = path.dirname(finalDest);
@@ -931,15 +949,12 @@ export class PaperCraneEngine {
                 url,
                 tempPath,
                 onProgress,
-                options.sha1 ||
-                    (options.checksum?.algorithm === "sha1"
-                        ? options.checksum.value
-                        : undefined),
-                options.sha256 ||
-                    (options.checksum?.algorithm === "sha256"
-                        ? options.checksum.value
-                        : undefined),
+                options.sha1 || (algorithm === "sha1" ? checksum!.value : undefined),
+                options.sha256 || (algorithm === "sha256" ? checksum!.value : undefined),
             );
+            if (algorithm === "sha512" && (await hashFile(tempPath, "sha512")) !== checksum!.value.toLowerCase()) {
+                throw new Error("SHA512 mismatch");
+            }
 
             await moveFileSafe(tempPath, finalDest);
             onProgress?.({ stage: "completed", percent: 100 });

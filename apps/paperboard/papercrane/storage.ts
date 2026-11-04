@@ -710,6 +710,13 @@ export async function streamToFileWithProgress(
 }
 let activeDownloads = 0;
 
+// the hex digest of a file on disk, read as a stream
+export async function hashFile(filePath: string, algorithm: string): Promise<string> {
+    const hash = crypto.createHash(algorithm);
+    await pipeline(fs.createReadStream(filePath), hash);
+    return hash.digest("hex");
+}
+
 // Safely moves a file across filesystems or partitions
 export async function moveFileSafe(src: string, dest: string): Promise<void> {
     try {

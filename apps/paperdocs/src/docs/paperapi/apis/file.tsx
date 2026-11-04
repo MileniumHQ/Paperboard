@@ -70,8 +70,8 @@ interface FileDownloadOptions {
     appId: string;
     sha1?: string;
     sha256?: string;
-    /** the same check in one field; only "sha1" and "sha256" are checked */
-    checksum?: { algorithm: "sha1" | "sha256" | "md5" | string; value: string };
+    /** a hex digest by algorithm; any other algorithm is refused */
+    checksum?: { algorithm: "sha1" | "sha256" | "sha512"; value: string };
     onProgress?: (progress: FileDownloadProgress) => void;
 }
 
@@ -89,7 +89,7 @@ interface FileDownloadProgress {
                 <li>The daemon downloads the file, and the call has no timeout.</li>
                 <li>Only <PaperCode>http:</PaperCode> and <PaperCode>https:</PaperCode> URLs are fetched. Give a checksum for anything the panel will run.</li>
                 <li>The file arrives under a temporary name and replaces <PaperCode>targetPath</PaperCode> only once it is complete and its checksum matches. A failed download leaves the old file alone.</li>
-                <li>A checksum with an <PaperCode>algorithm</PaperCode> other than <PaperCode>sha1</PaperCode> or <PaperCode>sha256</PaperCode> is not checked.</li>
+                <li><PaperCode>checksum</PaperCode> checks <PaperCode>sha1</PaperCode>, <PaperCode>sha256</PaperCode> or <PaperCode>sha512</PaperCode>. Any other <PaperCode>algorithm</PaperCode> rejects the call before anything is fetched.</li>
                 <li>Limits: 2 GiB per file, 8 downloads at once on the computer, 45 seconds without data, 30 minutes in all.</li>
                 <li>Resolves with the absolute path of the downloaded file.</li>
             </PaperTextList>
@@ -165,8 +165,10 @@ interface ImportedFile {
                     <tr><td><PaperCode>Access denied: symbolic link in storage path for &lt;panel&gt;</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>The path passes through a link.</td></tr>
                     <tr><td><PaperCode>Cross-panel access refused: credential is scoped to "&lt;panel&gt;"</PaperCode></td><td><PaperCode>FORBIDDEN</PaperCode></td><td>Another panel's <PaperCode>appId</PaperCode>.</td></tr>
                     <tr><td><PaperCode>Download refused: only http(s) URLs are downloaded, not &lt;scheme&gt;</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>A <PaperCode>file:</PaperCode>, <PaperCode>ftp:</PaperCode> or other URL.</td></tr>
+                    <tr><td><PaperCode>Download refused: checksum algorithm "&lt;algorithm&gt;" is not supported (use sha1, sha256, sha512)</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>A <PaperCode>checksum</PaperCode> naming another algorithm, such as <PaperCode>md5</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>Download refused: the &lt;algorithm&gt; checksum has no value</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>A <PaperCode>checksum</PaperCode> with an empty <PaperCode>value</PaperCode>.</td></tr>
                     <tr><td><PaperCode>Download failed (HTTP &lt;status&gt;)</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>The server answered with an error.</td></tr>
-                    <tr><td><PaperCode>SHA1 mismatch</PaperCode>, <PaperCode>SHA256 mismatch</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>The file is not the one the checksum names.</td></tr>
+                    <tr><td><PaperCode>SHA1 mismatch</PaperCode>, <PaperCode>SHA256 mismatch</PaperCode>, <PaperCode>SHA512 mismatch</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>The file is not the one the checksum names.</td></tr>
                     <tr><td><PaperCode>Too many concurrent downloads (max 8)</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>Eight downloads are running.</td></tr>
                     <tr><td><PaperCode>Download exceeds 2 GiB cap</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>The file is too large.</td></tr>
                     <tr><td><PaperCode>Download connection timed out</PaperCode>, <PaperCode>Download stalled</PaperCode>, <PaperCode>Download exceeded lifetime deadline</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>No data for 45 seconds, or 30 minutes in all.</td></tr>

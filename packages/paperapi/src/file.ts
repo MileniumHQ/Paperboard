@@ -24,8 +24,9 @@ export interface FileDownloadOptions {
     appId: string;
     sha1?: string;
     sha256?: string;
+    /** any other algorithm is refused before the download starts */
     checksum?: {
-        algorithm: "sha1" | "sha256" | "md5" | string;
+        algorithm: "sha1" | "sha256" | "sha512";
         value: string;
     };
     onProgress?: (progress: FileDownloadProgress) => void;
