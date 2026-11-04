@@ -170,7 +170,8 @@ test("Bot Creator over the real daemon: the old bot becomes a project, old block
             // polls, files and typing reach the channel; a bad one never does
             const call = (action: string, inputs: unknown) => actionsApi.call<any>(BOT, `${id}/${action}`, inputs);
             expect(await call("send-poll", { channel: "300000000000000001", question: "Best cookie?", answers: "Chocolate chip\nOatmeal" })).toBe("600000000000000002");
-            await expect(call("send-poll", { channel: "300000000000000001", question: "Best cookie?", answers: "" })).rejects.toThrow(/at least one answer/);
+            await expect(call("send-poll", { channel: "300000000000000001", question: "Best cookie?", answers: "" })).rejects.toThrow('"Answers" is required');
+            await expect(call("send-poll", { channel: "300000000000000001", question: "Best cookie?", answers: "\n \n" })).rejects.toThrow(/at least one answer/);
             expect(await call("get-poll-results", { channel: "300000000000000001", message: "700000000000000001" })).toEqual({
                 question: "Best cookie?", closed: false, answers: [{ text: "Chocolate chip", votes: 3 }, { text: "Oatmeal", votes: 1 }],
             });

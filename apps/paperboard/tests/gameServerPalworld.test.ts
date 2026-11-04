@@ -213,7 +213,7 @@ test("Palworld through daemon: REST control with a vaulted admin password, optio
         const text = JSON.stringify(stopped);
         assert(text.includes("Wire Palworld") && !text.includes(admin) && !text.includes("join-secret"), "A stopped server's ini showed its passwords");
         await refuses("palworld-ban", { userId: "steam_76561190000000002" }, /Start the server to ban/, "A stopped server took a ban Palworld would have to write");
-        await refuses("write-server-file", { path: "install/PalServer.sh", content: "rm -rf /" }, /managed by Updates/, "The install was writable through Files");
+        await refuses("write-server-file", { path: "install/PalServer.sh", text: "rm -rf /", version: "read" }, /managed by Updates/, "The install was writable through Files");
         console.log("Palworld wire: REST readiness, vaulted admin password, ini options, players, kick/ban/unban, announce, save proof, backup without install, graceful stop");
     } finally {
         await services.stopService(PANEL);

@@ -300,7 +300,7 @@ test("Team Fortress 2 through daemon: RCON control with a vaulted password, cfgs
         mods = await call<any>("team-fortress-2-sourcemod-set", { on: false });
         assert(!mods.on && mods.active && fs.lstatSync(path.join(install, "tf/addons")).isSymbolicLink(), "SourceMod was pulled from the running server");
 
-        await refuses("write-server-file", { path: "install/tf/cfg/server.cfg", content: "rcon_password x" }, /managed by Updates/, "The install was writable through Files");
+        await refuses("write-server-file", { path: "install/tf/cfg/server.cfg", text: "rcon_password x", version: "read" }, /managed by Updates/, "The install was writable through Files");
         await call("stop-server");
         await until(async () => !(await processApi.exists(proc)), "graceful shutdown", 30_000);
         await until(async () => (await state()).serverStatus === "offline", "offline state");
