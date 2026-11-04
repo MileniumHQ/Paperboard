@@ -2,7 +2,7 @@
     "name": "Game Server",
     "id": "dev.paperboard.gameserver",
     "version": "0.3.0",
-    "description": "Dedicated Minecraft and Terraria server manager",
+    "description": "Host Minecraft, Terraria, Palworld and Team Fortress 2 servers",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
     "service": "./dist/service.js",
@@ -79,53 +79,73 @@
             }
         ],
         "services": [
-            { "name": "Re-Logic / Terraria", "detail": "Verified vanilla dedicated-server downloads from terraria.org" },
-            { "name": "tModLoader", "detail": "Verified tModLoader server downloads from GitHub" },
-            { "name": "Microsoft .NET", "detail": "The runtime tModLoader runs on" },
-            { "name": "Steam Workshop", "detail": "Finding and downloading tModLoader mods, through Paperboard's modscan and SteamCMD" },
             {
                 "name": "Mojang",
-                "detail": "Downloading vanilla servers and player skins"
+                "detail": "Downloading vanilla Minecraft servers and player skins"
             },
             {
                 "name": "PaperMC",
                 "detail": "Downloading Paper servers"
             },
             {
-                "name": "Fabric",
-                "detail": "Downloading the Fabric loader"
-            },
-            {
-                "name": "NeoForged",
-                "detail": "Downloading the NeoForge installer"
-            },
-            {
-                "name": "Minecraft Forge",
-                "detail": "Downloading the Forge installer"
+                "name": "Fabric, NeoForged and Minecraft Forge",
+                "detail": "Downloading mod loaders"
             },
             {
                 "name": "Modrinth",
-                "detail": "Finding plugins and mods"
+                "detail": "Finding plugins, mods and modpacks"
             },
             {
                 "name": "GeyserMC",
-                "detail": "Downloading Floodgate, and Bedrock players' Xbox accounts and skins"
+                "detail": "Downloading Geyser and Floodgate, and Bedrock players' Xbox accounts and skins"
+            },
+            {
+                "name": "Re-Logic / Terraria",
+                "detail": "Verified vanilla Terraria server downloads from terraria.org"
+            },
+            {
+                "name": "tModLoader",
+                "detail": "Verified tModLoader server downloads from GitHub"
+            },
+            {
+                "name": "Steam",
+                "detail": "Downloading and updating Palworld and Team Fortress 2 servers, and Workshop items, through SteamCMD"
+            },
+            {
+                "name": "Steam Workshop",
+                "detail": "Finding tModLoader mods and Team Fortress 2 maps, through Paperboard's modscan"
+            },
+            {
+                "name": "Team Fortress Wiki",
+                "detail": "Map pictures for Team Fortress 2"
             }
         ],
         "credits": [
             {
                 "name": "prismarine-nbt",
-                "detail": "Reading world data"
+                "detail": "Reading Minecraft world data"
+            },
+            {
+                "name": "SourceMod and Metamod:Source",
+                "detail": "Plugins for Team Fortress 2 servers"
+            },
+            {
+                "name": "Microsoft .NET",
+                "detail": "The runtime tModLoader runs on"
             }
         ],
         "requirements": [
             {
+                "name": "Computer",
+                "detail": "Minecraft on Linux, macOS or Windows. Terraria, Palworld and Team Fortress 2 on Linux or Windows, x64"
+            },
+            {
                 "name": "Storage",
-                "detail": "4 GB"
+                "detail": "4 GB, plus the server's own download"
             },
             {
                 "name": "RAM",
-                "detail": "8 GB"
+                "detail": "8 GB, 16 GB for Palworld"
             },
             {
                 "name": "CPU",
