@@ -11,7 +11,7 @@ import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
 import { copyText } from "../../utils/clipboard";
 
-import { highlightCode } from "../../utils/highlight";
+import { escapeHtml, highlightCode } from "../../utils/highlight";
 import tokens from "../shared/codeTokens.module.css";
 
 export interface PaperCodeProps extends JSX.HTMLAttributes<HTMLElement> {
@@ -56,9 +56,12 @@ export function PaperCode(props: ParentProps<PaperCodeProps>) {
         resetTimer = setTimeout(() => setCopied("idle"), 2000);
     };
 
+    // Inline code is mostly prose identifiers and messages, so it is only
+    // highlighted when it names a language; a block defaults to TSX.
     const highlightedHTML = () => {
         const text = getCodeText();
         const effectiveLang = local.language || local.lang;
+        if (!local.block && !effectiveLang) return escapeHtml(text);
         return highlightCode(text, effectiveLang);
     };
 

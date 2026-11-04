@@ -31,4 +31,19 @@ describe("PaperCode copy", () => {
         ));
         expect(container.querySelector("pre")?.getAttribute("data-language")).toBe("tsx");
     });
+
+    test("inline code without a language is plain text, not highlighted", () => {
+        const { container } = render(() => <PaperCode>Timed out with no response</PaperCode>);
+        const code = container.querySelector("code");
+        expect(code?.textContent).toBe("Timed out with no response");
+        expect(code?.querySelector(".token")).toBeNull();
+    });
+    test("inline code with a language is highlighted", () => {
+        const { container } = render(() => <PaperCode language="tsx">const a = 1;</PaperCode>);
+        expect(container.querySelector("code .token")).not.toBeNull();
+    });
+    test("a text block is shown as written", () => {
+        const { container } = render(() => <PaperCode block language="text">return with as</PaperCode>);
+        expect(container.querySelector("pre code .token")).toBeNull();
+    });
 });

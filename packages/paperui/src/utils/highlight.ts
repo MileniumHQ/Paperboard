@@ -24,13 +24,18 @@ export function grammarFor(language: string | undefined): Prism.Grammar | null {
     return Prism.languages[language.toLowerCase()] ?? null;
 }
 
+/** language ids that mean "no highlighting": the text is shown as written */
+const PLAIN_LANGUAGES = new Set(["text", "plain", "plaintext", "txt"]);
+
 /**
- * Highlighted HTML for PaperCode. An unknown language falls back to TSX so
- * snippets without a language still get some colour.
+ * Highlighted HTML for PaperCode. A block with no language or an unknown one
+ * is highlighted as TSX; `text` (or `plain`, `plaintext`, `txt`) is shown
+ * without highlighting.
  */
 export function highlightCode(code: string, lang?: string): string {
     if (!code) return "";
     const language = (lang ?? "tsx").toLowerCase();
+    if (PLAIN_LANGUAGES.has(language)) return escapeHtml(code);
     const grammar =
         Prism.languages[language] ||
         Prism.languages.tsx ||
