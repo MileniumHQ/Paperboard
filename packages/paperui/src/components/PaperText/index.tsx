@@ -1,10 +1,11 @@
 import styles from "./index.module.css";
-import { splitProps, createSignal, Show, type JSX } from "solid-js";
+import { splitProps, createSignal, onCleanup, Show, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
 import type { PaperColor, PaperTextPreset } from "../../types";
 import { resolveColor, getVarCss } from "../../utils/theme";
+import { copyText } from "../../utils/clipboard";
 
 export interface PaperTextProps extends JSX.HTMLAttributes<HTMLElement> {
     weight?: number;
@@ -64,21 +65,22 @@ export function PaperText(props: PaperTextProps) {
         "style",
     ]);
 
-    const [copied, setCopied] = createSignal(false);
+    const [copied, setCopied] = createSignal<"idle" | "copied" | "failed">("idle");
+    let resetTimer: ReturnType<typeof setTimeout> | undefined;
+    onCleanup(() => clearTimeout(resetTimer));
 
     const handleCopyAnchor = async (e: MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
         if (!rest.id) return;
         const url = `${window.location.origin}${window.location.pathname}#${rest.id}`;
-        try {
-            await navigator.clipboard.writeText(url);
-            window.history.pushState(null, "", `#${rest.id}`);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
-            console.error("Failed to copy anchor link to clipboard", err);
-        }
+        // copyText falls back to execCommand where the async clipboard is
+        // denied, and reports a failure the button then shows
+        const ok = await copyText(url);
+        if (ok) window.history.pushState(null, "", `#${rest.id}`);
+        setCopied(ok ? "copied" : "failed");
+        clearTimeout(resetTimer);
+        resetTimer = setTimeout(() => setCopied("idle"), 2000);
     };
 
     const presetValues = () =>
@@ -151,9 +153,15 @@ export function PaperText(props: PaperTextProps) {
                     variant="text"
                     class={styles.anchorLink}
                     onClick={handleCopyAnchor}
-                    title={copied() ? "Copied link!" : "Copy link"}>
+                    title={
+                        copied() === "copied"
+                            ? "Copied link"
+                            : copied() === "failed"
+                              ? "Copy failed"
+                              : "Copy link"
+                    }>
                     <PaperIcon zeroHeight>
-                        {copied() ? "check" : "link"}
+                        {copied() === "copied" ? "check" : copied() === "failed" ? "error" : "link"}
                     </PaperIcon>
                 </PaperButton>
             </Show>
