@@ -394,8 +394,8 @@ function checkOne(def: InputLimits, value: unknown, name: string): string | unde
 
 /**
  * The first limit this value breaks, as a sentence naming the input, or
- * undefined. An empty value breaks none (`required` is the editor's own
- * check). `isUnknown` marks values that are only known when the flow runs
+ * undefined. An empty value breaks none (`checkRequiredActionInput` is
+ * the check for that). `isUnknown` marks values that are only known when the flow runs
  * (the editor's variable references): they are skipped, and a list counts
  * only its known items.
  */
@@ -422,13 +422,27 @@ export function checkActionInput(
     return checkOne(def, value, name);
 }
 
-/** Refuses a call whose inputs break a declared limit. */
+/**
+ * The sentence for a required input the call left empty, or undefined. A
+ * list with no non-empty item is empty. The flow editor marks these fields
+ * itself, so `checkActionInput` leaves them out; a call is refused for them.
+ */
+export function checkRequiredActionInput(
+    def: Pick<ActionParamDefinition, "label" | "required">,
+    value: unknown,
+): string | undefined {
+    if (!def.required) return undefined;
+    const empty = Array.isArray(value) ? value.every(isBlankValue) : isBlankValue(value);
+    return empty ? `"${def.label || "This input"}" is required` : undefined;
+}
+
+/** Refuses a call that leaves a required input empty or breaks a declared limit. */
 export function assertActionInputs(
     inputs: Record<string, ActionParamDefinition> | undefined,
     values: Record<string, unknown> | undefined,
 ): void {
     for (const [key, def] of Object.entries(inputs || {})) {
-        const problem = checkActionInput(def, values?.[key]);
+        const problem = checkRequiredActionInput(def, values?.[key]) ?? checkActionInput(def, values?.[key]);
         if (problem) throw new Error(problem);
     }
 }

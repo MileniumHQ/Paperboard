@@ -155,7 +155,7 @@ interface RegisterOptions {
                     <tr><td><PaperCode>placeholder</PaperCode></td><td><PaperCode>string</PaperCode></td><td>The empty field's text: the kind of value, such as <PaperCode>Text</PaperCode> or <PaperCode>Channel ID</PaperCode>.</td></tr>
                     <tr><td><PaperCode>description</PaperCode></td><td><PaperCode>string</PaperCode></td><td>More about the value.</td></tr>
                     <tr><td><PaperCode>default</PaperCode></td><td><PaperCode>any</PaperCode></td><td>The value a new block starts with.</td></tr>
-                    <tr><td><PaperCode>required</PaperCode>, <PaperCode>optional</PaperCode></td><td><PaperCode>boolean</PaperCode></td><td>For the flow editor. The SDK does not refuse a call that leaves a required input empty, so check it in <PaperCode>run</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>required</PaperCode>, <PaperCode>optional</PaperCode></td><td><PaperCode>boolean</PaperCode></td><td><PaperCode>required</PaperCode> marks the empty field on the block, and the SDK refuses a call that leaves it empty. <PaperCode>optional</PaperCode> is for the flow editor.</td></tr>
                     <tr><td><PaperCode>options</PaperCode></td><td><PaperCode>{"{ label: string; value: any }[]"}</PaperCode></td><td>Makes the field a dropdown.</td></tr>
                     <tr><td><PaperCode>allowEmpty</PaperCode>, <PaperCode>emptyLabel</PaperCode></td><td><PaperCode>boolean</PaperCode>, <PaperCode>string</PaperCode></td><td>Adds an unselected entry to the dropdown, named <PaperCode>emptyLabel</PaperCode>. On a match input it means any value.</td></tr>
                     <tr><td><PaperCode>multiline</PaperCode></td><td><PaperCode>boolean</PaperCode></td><td>A wrapping field for long text.</td></tr>
@@ -169,6 +169,7 @@ interface RegisterOptions {
                 The flow editor shows a broken limit on the block before the flow runs, and the SDK refuses a call that breaks one before <PaperCode>run</PaperCode> starts.
                 An empty value breaks no limit. The errors name the input by its label: <PaperCode>"Days" must be a number</PaperCode>, <PaperCode>must be a whole number</PaperCode>, <PaperCode>must be at least 1</PaperCode>, <PaperCode>must be at most 7</PaperCode>, <PaperCode>"City" holds at most 64 characters (it has 70)</PaperCode>, <PaperCode>holds at most 5 items (it has 6)</PaperCode>.
                 The same check is exported as <PaperCode>checkActionInput(def, value)</PaperCode>, which returns the sentence or <PaperCode>undefined</PaperCode>.
+                A call that leaves a <PaperCode>required</PaperCode> input empty is refused with <PaperCode>"City" is required</PaperCode>. Empty is a missing value, <PaperCode>null</PaperCode>, <PaperCode>""</PaperCode>, or a list with no item that is not empty. That check is exported as <PaperCode>checkRequiredActionInput(def, value)</PaperCode>.
             </PaperText>
 
             <PaperText preset="subheader" as="h3" id="categories">Categories</PaperText>
