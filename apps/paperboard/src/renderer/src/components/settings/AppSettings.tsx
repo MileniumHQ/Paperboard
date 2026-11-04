@@ -87,7 +87,7 @@ const LICENSE_TEXTS: Record<LicenseKind, string> = {
 };
 
 const UPDATE_NOTE = "Updates every panel, package, and computer, then restarts Paperboard.";
-const QUIT_NOTE = "Panels keep running on their computers.";
+const QUIT_NOTE = "Stops the panels on this computer, unless its server daemon runs as a service. Panels on other computers keep running.";
 
 const updateEverything = () => shellIpc().send("relaunch-for-update");
 const quitApp = () => shellIpc().send("quit-app");
