@@ -32,7 +32,7 @@
     height: var(--paper-control-size-large);
     border-radius: var(--paper-border-radius);
     background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
-    color: var(--paper-primary-deep);
+    color: var(--paper-primary-ink);
     font-size: var(--paper-icon-size-large);
     flex-shrink: 0;
 }

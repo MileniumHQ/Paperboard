@@ -5,6 +5,9 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
+    /* in a scrolling column the page is at least as tall as the view, so an
+       empty state under the header can sit in the middle of what's left */
+    flex-grow: 1;
 }
 
 .PaperPage.wide {

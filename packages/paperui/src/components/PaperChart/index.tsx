@@ -195,14 +195,16 @@ function PartsChart(props: PaperChartPartsProps) {
         const readings = parts().map((p) => `${p.segment.label} ${p.detail}`);
         return readings.length > 0 ? `${local.label}: ${readings.join(", ")}` : local.label;
     };
-    // each slice starts where the one before it ended
+    // each slice starts where the one before it ended. A share no wider
+    // than the gaps between slices would draw as a hairline tick, so it is
+    // left off the ring; the legend and the label still name it.
     const slices = () => {
         let start = 0;
-        return parts().map((part) => {
+        return parts().flatMap((part) => {
             const length = part.fraction * 100;
-            const slice = { part, start, length: length > SLICE_GAP * 2 ? length - SLICE_GAP : length };
+            const slice = { part, start, length: length - SLICE_GAP };
             start += length;
-            return slice;
+            return length > SLICE_GAP * 2 ? [slice] : [];
         });
     };
 

@@ -4,7 +4,9 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: var(--paper-surface-raised);
+    /* the wizard takes its container's surface: a modal's raised card, or
+       the page itself when a panel shows it full screen */
+    background: transparent;
 }
 
 .wizardSteps {

@@ -267,6 +267,7 @@ export function Example() {
             <PaperText preset="body">
                 The chart is exposed to assistive devices as one image. Its name is the label followed by every segment's reading, or every series' latest reading.
                 Segments never draw past the whole, and a share above zero but under one percent reads as &lt;1%.
+                A donut leaves off a share too thin to show past the gaps between slices, so it never draws a hairline tick. The legend and the label still name it.
                 A line needs two readings before it is drawn. Readings outside min and max are drawn at the edge, and values that are not numbers are skipped.
                 Donut and bar segments ease to their new size when values change, except under reduced motion.
             </PaperText>

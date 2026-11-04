@@ -86,6 +86,12 @@ export default function ColorsDoc() {
                         <td><PaperSwatch color="var(--paper-extra-3)" /></td>
                     </tr>
                     <tr>
+                        <td><PaperCode>--paper-primary-ink</PaperCode></td>
+                        <td><PaperCode>--paper-primary-deep</PaperCode> (light), lifted blue (dark)</td>
+                        <td>Primary as text or a glyph on a tinted fill, readable in both themes. Use deep only for bevel edges.</td>
+                        <td><PaperSwatch color="var(--paper-primary-ink)" /></td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>--paper-on-color</PaperCode></td>
                         <td><PaperCode>#ffffff</PaperCode></td>
                         <td>Text and icon color drawn over solid color fills</td>

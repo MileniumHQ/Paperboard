@@ -22,6 +22,24 @@ describe("PaperChart", () => {
         expect(slices.map((s) => s.getAttribute("stroke-dashoffset"))).toEqual(["0", "-50"]);
     });
 
+    test("a share too thin to see past the gaps is left off the ring but kept in the legend", () => {
+        const thin = [
+            { label: "Other apps", value: 50 },
+            { label: "Paperboard", value: 0.5 },
+            { label: "Terminal", value: 0.2 },
+        ];
+        const { container } = render(() => (
+            <>
+                <PaperChart label="CPU" segments={thin} total={100} />
+                <PaperChartLegend segments={thin} total={100} />
+            </>
+        ));
+        const slices = [...container.querySelectorAll("circle[pathLength]")];
+        expect(slices.map((s) => s.getAttribute("stroke-dasharray"))).toEqual(["49.2 50.8"]);
+        expect(container.querySelectorAll("li")).toHaveLength(3);
+        expect(screen.getByRole("img").getAttribute("aria-label")).toContain("Paperboard");
+    });
+
     test("segments take the palette in order unless they name a color", () => {
         const { container } = render(() => <PaperChart label="Memory" segments={segments} />);
         const slices = [...container.querySelectorAll<SVGCircleElement>("circle[pathLength]")];

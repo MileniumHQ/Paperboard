@@ -45,7 +45,7 @@
 }
 
 .itemIcon {
-    color: var(--paper-primary-deep);
+    color: var(--paper-primary-ink);
     font-size: var(--paper-icon-size-huge);
 }
 

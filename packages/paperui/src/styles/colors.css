@@ -7,6 +7,10 @@
     --paper-primary-deep: #1764bc;
     --paper-brand: var(--paper-primary);
     --paper-brand-deep: var(--paper-primary-deep);
+    /* the action color as text or a glyph on a tinted fill or a plain
+       surface: deep on light, lifted on dark, so it reads in both themes.
+       deep stays the darker edge colour for 3D bevels. */
+    --paper-primary-ink: var(--paper-primary-deep);
     --paper-success: #0d9d0d;
     --paper-success-deep: #0a7a0a;
     --paper-danger: #e73648;
@@ -61,12 +65,17 @@
     --paper-os-linux: #fcc624;
     --paper-os-unknown: #888888;
 
+    /* light ramp: the canvas is a pale sheet, white cards lift off it, and
+       the chrome around it (top bar, rail, sidebar) is sunken one shade
+       greyer. Dark mirrors the same logic with luminance reversed. */
     --paper-surface-raised: #ffffff;
     --paper-surface: #f6f8fa;
-    --paper-surface-inset: #eceff3;
-    --paper-surface-sunken: #e2e6eb;
-    --paper-surface-app: #d8dce2;
+    --paper-surface-app: #eef0f3;
+    --paper-surface-inset: #e7eaee;
+    --paper-surface-sunken: #e2e5ea;
     --paper-surface-element: #cdd3db;
+    /* a text field's fill: a white sheet on light, a recessed well on dark */
+    --paper-field: #ffffff;
 
     /* subtle: nested separators; border: the standard divider; strong:
        emphasized edges; emphasis: drop targets and table rules. All must
@@ -78,8 +87,8 @@
 
     --paper-text: #0f1319;
     --paper-text-muted: #2e3440;
-    --paper-text-subtle: #5b6371;
-    --paper-text-faint: #8b93a2;
+    --paper-text-subtle: #525a68;
+    --paper-text-faint: #6e7684;
 
     /* the tone opposite the theme background, for tints and mixes */
     --paper-contrast: #000000;
@@ -98,6 +107,7 @@
         --paper-surface-raised: #27282b;
         --paper-surface-inset: #0f1011;
         --paper-surface-element: #323337;
+        --paper-field: #1a1b1e;
 
         /* dividers must clear the surfaces above them (surface #202124,
            raised #27282b), so these sit well above the background ramp */
@@ -109,9 +119,10 @@
         --paper-text: #f5f5f5;
         --paper-text-muted: #d4d4d4;
         --paper-text-subtle: #a1a1a1;
-        --paper-text-faint: #737373;
+        --paper-text-faint: #858585;
 
         --paper-contrast: #ffffff;
+        --paper-primary-ink: #6fadf2;
 
         --paper-scrim: rgba(0, 0, 0, 0.6);
     }
@@ -119,12 +130,17 @@
 
 [data-paperui-theme="light"],
 [data-theme="light"] {
+    /* light ramp: the canvas is a pale sheet, white cards lift off it, and
+       the chrome around it (top bar, rail, sidebar) is sunken one shade
+       greyer. Dark mirrors the same logic with luminance reversed. */
     --paper-surface-raised: #ffffff;
     --paper-surface: #f6f8fa;
-    --paper-surface-inset: #eceff3;
-    --paper-surface-sunken: #e2e6eb;
-    --paper-surface-app: #d8dce2;
+    --paper-surface-app: #eef0f3;
+    --paper-surface-inset: #e7eaee;
+    --paper-surface-sunken: #e2e5ea;
     --paper-surface-element: #cdd3db;
+    /* a text field's fill: a white sheet on light, a recessed well on dark */
+    --paper-field: #ffffff;
 
     --paper-border-subtle: #d2d6dd;
     --paper-border: #c4c9d2;
@@ -133,10 +149,11 @@
 
     --paper-text: #0f1319;
     --paper-text-muted: #2e3440;
-    --paper-text-subtle: #5b6371;
-    --paper-text-faint: #8b93a2;
+    --paper-text-subtle: #525a68;
+    --paper-text-faint: #6e7684;
 
     --paper-contrast: #000000;
+    --paper-primary-ink: var(--paper-primary-deep);
 }
 
 [data-paperui-theme="dark"],
@@ -148,6 +165,7 @@
     --paper-surface-raised: #27282b;
     --paper-surface-inset: #0f1011;
     --paper-surface-element: #323337;
+    --paper-field: #1a1b1e;
 
     --paper-border-subtle: #33353a;
     --paper-border: #3a3c40;
@@ -157,7 +175,8 @@
     --paper-text: #f5f5f5;
     --paper-text-muted: #d4d4d4;
     --paper-text-subtle: #a1a1a1;
-    --paper-text-faint: #737373;
+    --paper-text-faint: #858585;
 
     --paper-contrast: #ffffff;
+    --paper-primary-ink: #6fadf2;
 }

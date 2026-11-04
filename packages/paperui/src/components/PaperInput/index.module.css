@@ -93,7 +93,7 @@
     font-size: var(--paper-text-size-3);
     cursor: text;
     outline: none;
-    background: var(--paper-field-well);
+    background: var(--paper-field);
     color: var(--paper-text);
     -webkit-user-select: text;
     user-select: text;
@@ -187,7 +187,7 @@
     padding: 0 calc(var(--paper-uigap) - var(--paper-uigap-onefourth));
     border: var(--paper-border-width) solid var(--paper-border);
     border-radius: inherit;
-    background: var(--paper-field-well);
+    background: var(--paper-field);
     pointer-events: none;
     min-width: 0;
     transition: var(--paper-medium-transition) border-color;

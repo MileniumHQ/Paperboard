@@ -18,7 +18,8 @@ export default function SurfacesDoc() {
 
             <PaperText preset="subheader" id="surface-elevation">Surface elevation</PaperText>
             <PaperText preset="body">
-                Surfaces stack in order of increasing visual luminance:
+                Content sits on the canvas and cards lift off it. The chrome around the content (top bar, rail,
+                sidebar) is sunken: one shade greyer than the canvas in light, one shade lighter in dark.
             </PaperText>
 
             <PaperTable>
@@ -33,14 +34,14 @@ export default function SurfacesDoc() {
                 <tbody>
                     <tr>
                         <td><PaperCode>--paper-surface-app</PaperCode></td>
-                        <td>Base canvas window background</td>
-                        <td>#d8dce2</td>
+                        <td>The content canvas every page sits on</td>
+                        <td>#eef0f3</td>
                         <td>#141517</td>
                     </tr>
                     <tr>
                         <td><PaperCode>--paper-surface-sunken</PaperCode></td>
-                        <td>Recessed side navigation or panel background</td>
-                        <td>#e2e6eb</td>
+                        <td>Chrome: top bar, rail, and source-list sidebars</td>
+                        <td>#e2e5ea</td>
                         <td>#1a1b1e</td>
                     </tr>
                     <tr>
@@ -58,7 +59,7 @@ export default function SurfacesDoc() {
                     <tr>
                         <td><PaperCode>--paper-surface-inset</PaperCode></td>
                         <td>Recessed wells beneath canvas depth</td>
-                        <td>#eceff3</td>
+                        <td>#e7eaee</td>
                         <td>#0f1011</td>
                     </tr>
                     <tr>
@@ -66,6 +67,12 @@ export default function SurfacesDoc() {
                         <td>Interactive control fill surface</td>
                         <td>#cdd3db</td>
                         <td>#323337</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-field</PaperCode></td>
+                        <td>Text field fill: a white sheet on light, a recessed well on dark</td>
+                        <td>#ffffff</td>
+                        <td>#1a1b1e</td>
                     </tr>
                 </tbody>
             </PaperTable>

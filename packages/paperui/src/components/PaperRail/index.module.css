@@ -9,7 +9,8 @@
     width: fit-content;
     min-height: 100%;
     border-right: var(--paper-border-width) solid var(--paper-border);
-    background: var(--paper-surface-raised);
+    /* the rail is chrome, on the same sunken surface as a source list */
+    background: var(--paper-surface-sunken);
 }
 
 .PaperRail.withLabels {
@@ -27,7 +28,7 @@
     justify-content: center;
     align-items: center;
     border: 0;
-    border-radius: var(--paper-border-radius-half);
+    border-radius: var(--paper-border-radius);
     outline: var(--paper-thick-border-width) solid transparent;
     cursor: pointer;
     transition:
@@ -86,12 +87,12 @@
 
 @media (hover: hover) {
     .PaperRailItem:hover {
-        background: var(--paper-surface);
+        background: color-mix(in srgb, var(--paper-contrast) 5%, transparent);
     }
 }
 @media (hover: none) {
     .PaperRailItem:active {
-        background: var(--paper-surface);
+        background: color-mix(in srgb, var(--paper-contrast) 5%, transparent);
     }
 }
 
@@ -106,12 +107,17 @@
     transition: color var(--paper-short-transition);
 }
 
-.PaperRailItem.selected {
-    outline: var(--paper-thick-border-width) solid var(--paper-primary);
+/* selected lifts onto a raised sheet, the same mark PaperList uses */
+.PaperRailItem.selected,
+.PaperRailItem.selected:hover {
+    background: var(--paper-surface-raised);
+    box-shadow:
+        var(--paper-element-shadow),
+        inset 0 0 0 var(--paper-border-width) var(--paper-border-subtle);
 }
 
 .PaperRailItem.selected .railIcon {
-    color: var(--paper-primary-deep);
+    color: var(--paper-primary-ink);
 }
 
 .railAction {

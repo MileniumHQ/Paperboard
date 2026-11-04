@@ -21,7 +21,9 @@
     height: var(--paper-control-size-tiny);
     width: calc(var(--paper-control-size-tiny) * 2);
     border-radius: var(--paper-border-radius-half);
-    background: var(--paper-surface-element);
+    /* the off track is a shade of whatever it sits on, so it reads as a
+       well in both themes instead of matching the surface */
+    background: color-mix(in srgb, var(--paper-border-emphasis) 50%, var(--paper-surface-raised));
     /* an inner edge so the track reads as a switch even when the fill
        blends with the surface (and after the disabled grayscale) */
     box-shadow: inset 0 0 0 var(--paper-border-width) var(--paper-border-strong);

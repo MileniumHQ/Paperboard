@@ -65,7 +65,7 @@ export function PaperPage(props: ParentProps<PaperPageProps>) {
     const pageStyle = () => ({
         // width names the column here, not a size token
         ...resolveLayoutStyles(layout, layoutCtx),
-        padding: resolveSpacing(local.padding ?? "full"),
+        padding: resolveSpacing(local.padding ?? "double"),
         gap: resolveSpacing(local.gap ?? "full"),
         ...(typeof local.style === "object" ? local.style : {}),
     });

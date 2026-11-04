@@ -77,14 +77,14 @@ export default function TypographyDoc() {
                     <tr>
                         <td><PaperCode>--paper-text-subtle</PaperCode></td>
                         <td>Lower contrast captions and metadata tags</td>
-                        <td>#5b6371</td>
+                        <td>#525a68</td>
                         <td>#a1a1a1</td>
                     </tr>
                     <tr>
                         <td><PaperCode>--paper-text-faint</PaperCode></td>
                         <td>Lowest contrast placeholder and inactive hints</td>
-                        <td>#8b93a2</td>
-                        <td>#737373</td>
+                        <td>#6e7684</td>
+                        <td>#858585</td>
                     </tr>
                 </tbody>
             </PaperTable>

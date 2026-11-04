@@ -126,7 +126,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: var(--paper-primary-deep);
+    color: var(--paper-primary-ink);
     flex-shrink: 0;
 }
 

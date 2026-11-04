@@ -75,7 +75,7 @@ export function Example() {
                         <tr>
                             <td><PaperCode>padding</PaperCode></td>
                             <td><PaperCode>PaperSpacing</PaperCode></td>
-                            <td><PaperCode>"full"</PaperCode></td>
+                            <td><PaperCode>"double"</PaperCode></td>
                             <td>Internal padding using token sizes: none, half, full, double, triple.</td>
                         </tr>
                         <tr>

@@ -7,7 +7,7 @@
     box-sizing: border-box;
     border: var(--paper-border-width) solid var(--paper-border);
     border-radius: var(--paper-border-radius);
-    background: var(--paper-surface);
+    background: var(--paper-surface-raised);
     overflow-y: auto;
 }
 
@@ -24,21 +24,15 @@
     border-radius: 0;
 }
 
-.PaperSettingItem:nth-child(odd) {
-    background: var(--paper-surface-raised);
-}
-
-.PaperSettingItem:nth-child(even) {
-    background: var(--paper-surface);
-}
-
 .PaperSettingItem {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--paper-uigap);
     padding: var(--paper-inset);
-    border-bottom: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface-raised);
+    /* one quiet rule between rows; the card's own edge does the framing */
+    border-bottom: var(--paper-border-width) solid var(--paper-border-subtle);
 }
 
 .PaperSettingItem:last-child {

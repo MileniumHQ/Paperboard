@@ -86,34 +86,34 @@
 
 @media (hover: hover) {
     .PaperMenuItem:hover {
-        color: var(--paper-primary-deep);
+        color: var(--paper-primary-ink);
         background: color-mix(in srgb, var(--paper-primary) 5%, transparent);
     }
 }
 @media (hover: none) {
     .PaperMenuItem:active {
-        color: var(--paper-primary-deep);
+        color: var(--paper-primary-ink);
         background: color-mix(in srgb, var(--paper-primary) 5%, transparent);
     }
 }
 
 .PaperMenuItem.selected .menuIcon {
-    color: var(--paper-primary-deep);
+    color: var(--paper-primary-ink);
 }
 @media (hover: hover) {
     .PaperMenuItem:hover .menuIcon {
-        color: var(--paper-primary-deep);
+        color: var(--paper-primary-ink);
     }
 }
 @media (hover: none) {
     .PaperMenuItem:active .menuIcon {
-        color: var(--paper-primary-deep);
+        color: var(--paper-primary-ink);
     }
 }
 
 .PaperMenuItem.selected {
     background: color-mix(in srgb, var(--paper-primary) 10%, transparent);
-    color: var(--paper-primary-deep);
+    color: var(--paper-primary-ink);
 }
 
 .PaperMenuSection {

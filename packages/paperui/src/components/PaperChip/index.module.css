@@ -35,7 +35,7 @@
 .PaperChip.selected {
     background: color-mix(in srgb, var(--paper-primary) 12%, transparent);
     border-color: color-mix(in srgb, var(--paper-primary) 40%, transparent);
-    color: var(--paper-primary-deep);
+    color: var(--paper-primary-ink);
 }
 
 @media (hover: hover) {

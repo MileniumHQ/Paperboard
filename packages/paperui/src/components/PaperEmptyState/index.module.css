@@ -8,6 +8,9 @@
     box-sizing: border-box;
     width: 100%;
     text-align: center;
+    /* in a column (a page under its header) it takes the space left over
+       and sits in the middle of it, not pinned under the header */
+    flex: 1 0 auto;
 }
 
 .icon {

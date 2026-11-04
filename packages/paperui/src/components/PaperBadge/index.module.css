@@ -22,7 +22,9 @@
 
 .variantRole {
     background: color-mix(in srgb, var(--role-base) 12%, transparent);
-    color: var(--role-base);
+    /* the role colour pulled toward the theme's text tone: darker on
+       light, lighter on dark, so small caps stay readable on the tint */
+    color: color-mix(in srgb, var(--role-base) 70%, var(--paper-contrast));
     border: var(--paper-border-width) solid
         color-mix(in srgb, var(--role-base) 30%, transparent);
 }

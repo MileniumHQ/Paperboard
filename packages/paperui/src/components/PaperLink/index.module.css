@@ -13,13 +13,13 @@
 
 @media (hover: hover) {
     .PaperLink:hover {
-        color: var(--paper-primary-deep);
+        color: var(--paper-primary-ink);
         text-decoration: underline;
     }
 }
 @media (hover: none) {
     .PaperLink:active {
-        color: var(--paper-primary-deep);
+        color: var(--paper-primary-ink);
         text-decoration: underline;
     }
 }
