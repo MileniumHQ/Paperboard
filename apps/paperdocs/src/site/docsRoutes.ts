@@ -4,7 +4,7 @@ import {
     subsectionsFor,
 } from "../docs/structure";
 
-// Every docs page the site prerenders, derived from src/docs/index.json. This
+// Every docs page the site prerenders, derived from src/docs/docsIndex.ts. This
 // is the single route registry for the docs half of the static build: the SSR
 // renderer, the prerender script, and the tests all read it. The landing
 // ("/docs/") and each section root ("/docs/<section>/") are real pages; a
@@ -17,6 +17,8 @@ export interface DocsRouteMeta {
     section?: string;
     pageKey?: string;
     landing?: boolean;
+    /** A section root shows its first page; the page's own URL is canonical. */
+    canonical?: string;
 }
 
 const BASE_DESCRIPTION =
@@ -26,7 +28,7 @@ export function docsRoutes(): DocsRouteMeta[] {
     const routes: DocsRouteMeta[] = [
         {
             path: "/docs/",
-            title: "PaperDocs",
+            title: "Paperboard Docs",
             description: BASE_DESCRIPTION,
             landing: true,
         },
@@ -41,17 +43,18 @@ export function docsRoutes(): DocsRouteMeta[] {
         if (first) {
             routes.push({
                 path: `/docs/${section}/`,
-                title: `${first.name} | Paperboard Docs`,
+                title: `${first.name} | ${meta.name} | Paperboard Docs`,
                 description,
                 section,
                 pageKey: first.pageKey,
+                canonical: `/docs/${section}/${first.pageKey}/`,
             });
         }
 
         for (const page of pages) {
             routes.push({
                 path: `/docs/${section}/${page.pageKey}/`,
-                title: `${page.name} | Paperboard Docs`,
+                title: `${page.name} | ${meta.name} | Paperboard Docs`,
                 description,
                 section,
                 pageKey: page.pageKey,

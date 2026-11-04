@@ -3,7 +3,7 @@ const escape = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').r
 
 /** One metadata contract for marketing pages, docs, and the rest of the site. */
 export function siteMetadata(page, path) {
-    const url = origin + path;
+    const url = origin + (page.canonical ?? path);
     // A page with its own image (a blog post's hero) gets the large card;
     // everything else shares the square logo as a small card.
     const image = page.image ? new URL(page.image.src, origin).href : origin + '/paperboard.png';
@@ -19,6 +19,7 @@ export function siteMetadata(page, path) {
     return `<title>${escape(page.title)}</title>
         <meta name="description" content="${escape(page.description)}" />
         <link rel="canonical" href="${escape(url)}" />
+        ${page.markdown ? `<link rel="alternate" type="text/markdown" href="${escape(origin + page.markdown)}" />` : ''}
         <link rel="icon" type="image/png" href="/paperboard.png" />
         <link rel="apple-touch-icon" href="/paperboard.png" />
         ${path === '/404.html' ? '<meta name="robots" content="noindex" />' : ''}

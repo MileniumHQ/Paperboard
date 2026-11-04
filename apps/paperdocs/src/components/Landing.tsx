@@ -1,107 +1,155 @@
 import {
     PaperButton,
+    PaperCard,
+    PaperCode,
     PaperEffect,
+    PaperFlex,
     PaperIcon,
+    PaperLink,
     PaperMediaCard,
     PaperMediaCardGroup,
-    PaperSeparator,
     PaperText,
 } from "@mileniumhq/paperui";
-import { For, Show } from "solid-js";
+import { For } from "solid-js";
 import { metaSections, sectionKeys } from "../utils/routeUtils";
 import { docsPath, withBase } from "../utils/base";
 import styles from "./landing.module.css";
 
-// Entrance stagger is capped so a growing section list never stretches the
-// page intro.
-const STAGGER_STEP_MS = 60;
-const STAGGER_MAX_MS = 300;
-
-function sectionCard(key: string, index: number) {
-    const meta = metaSections[key];
-    return (
-        <div
-            class={styles.cardEnter}
-            style={{
-                "animation-delay": `${Math.min(index * STAGGER_STEP_MS, STAGGER_MAX_MS)}ms`,
-            }}
-        >
-            <PaperMediaCard
-                plainIcon
-                icon={meta.image ? withBase(meta.image) : meta.icon || "description"}
-                title={meta.name}
-                description={meta.description}
-                href={docsPath(key)}
-            />
-        </div>
-    );
-}
-
+// The docs home: the four sections, then the two ways in that most readers
+// want (make a panel, or hand the docs to an agent), then how panels reach
+// the Panel Library.
 export function Landing() {
-    const primaryKeys = () =>
-        sectionKeys.filter((key) => metaSections[key].group !== "dev");
-    const devKeys = () =>
-        sectionKeys.filter((key) => metaSections[key].group === "dev");
-
     return (
-        <div class={styles.landing}>
-            <div class={styles.hero}>
-                <PaperText
-                    rounded
-                    preset="headline"
-                    as="h1"
-                    class={styles.heroTitle}
-                >
-                    Learn. Build. Create.
+        <main class={styles.landing}>
+            <PaperFlex
+                direction="column"
+                align="center"
+                gap="half"
+                class={styles.hero}
+            >
+                <PaperText rounded preset="headline" as="h1" class={styles.flush}>
+                    Paperboard Docs
                 </PaperText>
                 <PaperText
                     rounded
                     preset="subtitle"
                     color="text-subtle"
                     as="p"
-                    class={styles.heroSubtitle}
+                    class={styles.flush}
                 >
-                    Welcome to the PaperDocs.
+                    Run Paperboard, build panels for it, and look up every API
+                    and component.
                 </PaperText>
+            </PaperFlex>
+
+            <div class={styles.column}>
+                <PaperMediaCardGroup minCardWidth="220px">
+                    <For each={sectionKeys}>
+                        {(key) => {
+                            const meta = metaSections[key];
+                            return (
+                                <div class={styles.enter}>
+                                    <PaperMediaCard
+                                        plainIcon
+                                        icon={withBase(meta.image)}
+                                        title={meta.name}
+                                        description={meta.description}
+                                        href={docsPath(key)}
+                                    />
+                                </div>
+                            );
+                        }}
+                    </For>
+                </PaperMediaCardGroup>
+
+                <div class={styles.pair}>
+                    <PaperCard padding="double" gap="full">
+                        <PaperFlex direction="column" gap="half">
+                            <PaperText preset="title" as="h2" class={styles.flush}>
+                                Make your first panel
+                            </PaperText>
+                            <PaperText preset="body" color="text-subtle" as="p" class={styles.flush}>
+                                One command writes a working panel with a
+                                service, a Home widget, and tests. The tutorial
+                                takes it from there to running inside
+                                Paperboard.
+                            </PaperText>
+                        </PaperFlex>
+                        <PaperCode block language="sh">
+                            npm create @mileniumhq/panel
+                        </PaperCode>
+                        <PaperFlex direction="row" gap="half" wrap>
+                            <PaperEffect variant="primary">
+                                <PaperButton
+                                    variant="primary"
+                                    href={docsPath("guides", "first-panel")}
+                                >
+                                    Start the tutorial
+                                </PaperButton>
+                            </PaperEffect>
+                            <PaperButton
+                                variant="text"
+                                href={docsPath("guides", "checklist")}
+                            >
+                                Panel checklist
+                            </PaperButton>
+                        </PaperFlex>
+                    </PaperCard>
+
+                    <PaperCard padding="double" gap="full">
+                        <PaperFlex direction="column" gap="half">
+                            <PaperText preset="title" as="h2" class={styles.flush}>
+                                Docs for agents
+                            </PaperText>
+                            <PaperText preset="body" color="text-subtle" as="p" class={styles.flush}>
+                                Every page is also plain Markdown. Give your
+                                coding agent the index and it can build a panel
+                                without reading Paperboard's source.
+                            </PaperText>
+                        </PaperFlex>
+                        <PaperCode block language="text">
+                            https://paperboard.dev/llms.txt
+                        </PaperCode>
+                        <PaperFlex direction="row" gap="half" wrap>
+                            <PaperButton href="/llms.txt">Open llms.txt</PaperButton>
+                            <PaperButton
+                                variant="text"
+                                href={docsPath("guides", "agents")}
+                            >
+                                Build with an agent
+                            </PaperButton>
+                        </PaperFlex>
+                    </PaperCard>
+                </div>
+
+                <PaperCard padding="double">
+                    <PaperFlex direction="row" gap="full" align="center">
+                        <PaperIcon aria-hidden="true">verified</PaperIcon>
+                        <PaperText preset="body" as="p" class={styles.flush}>
+                            Panels run with full trust on your computers, so
+                            the Panel Library only lists panels reviewed with
+                            the Paperboard team.{" "}
+                            <PaperLink href={docsPath("guides", "panel-library")}>
+                                How to get a panel listed
+                            </PaperLink>
+                        </PaperText>
+                    </PaperFlex>
+                </PaperCard>
             </div>
-            <div class={styles.cards}>
-                <For each={primaryKeys()}>
-                    {(key) => sectionCard(key, sectionKeys.indexOf(key))}
-                </For>
-                <Show when={devKeys().length > 0}>
-                    <PaperSeparator />
-                    <PaperMediaCardGroup minCardWidth="200px">
-                        <For each={devKeys()}>
-                            {(key) =>
-                                sectionCard(key, sectionKeys.indexOf(key))
-                            }
-                        </For>
-                    </PaperMediaCardGroup>
-                </Show>
-            </div>
-            <div class={styles.download}>
-                <PaperText
-                    rounded
-                    preset="title"
-                    as="h2"
-                    class={styles.downloadPrompt}
-                >
+
+            <PaperFlex direction="column" align="center" gap="full">
+                <PaperText rounded preset="title" as="h2" class={styles.flush}>
                     Looking for a download?
                 </PaperText>
                 <PaperEffect variant="primary">
-                    <PaperButton
-                        size="large"
-                        href="https://paperboard.dev"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                    >
-                        paperboard.dev
+                    <PaperButton size="large" href="/downloads/">
+                        Download Paperboard
                         <PaperIcon zeroHeight aria-hidden="true">
-                            north_east
+                            download
                         </PaperIcon>
                     </PaperButton>
                 </PaperEffect>
-            </div>
-        </div>
+            </PaperFlex>
+        </main>
     );
 }

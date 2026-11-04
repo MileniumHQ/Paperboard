@@ -27,12 +27,10 @@ export function Sidebar(props: SidebarProps) {
                                 {(p) => (
                                     <PaperMenuItem
                                         value={p.pageKey}
-                                        onClick={() => {
-                                            window.location.href = docsPath(
-                                                props.section,
-                                                p.pageKey,
-                                            );
-                                        }}
+                                        href={docsPath(
+                                            props.section,
+                                            p.pageKey,
+                                        )}
                                     >
                                         {p.name}
                                     </PaperMenuItem>

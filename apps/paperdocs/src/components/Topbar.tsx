@@ -85,7 +85,7 @@ export function Topbar(props: TopbarProps) {
     const brandImage = () =>
         withBase(
             sectionMeta()
-                ? `/${props.section}.png`
+                ? sectionMeta()!.image
                 : isSite()
                   ? BRAND.logo
                   : "/paperdocs.png",
@@ -105,7 +105,7 @@ export function Topbar(props: TopbarProps) {
                 align="center"
             >
                 <a class="topbar-brand" href={brandHref()}>
-                    <img src={brandImage()} class="logo" />
+                    <img src={brandImage()} class="logo" alt="" />
                     <Show
                         when={isWordmark()}
                         fallback={

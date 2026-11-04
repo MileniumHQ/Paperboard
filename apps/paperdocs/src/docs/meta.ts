@@ -1,4 +1,4 @@
-import index from "./index.json";
+import { docsIndex as index } from "./docsIndex";
 import type { SectionMeta } from "../types/docs";
 
 // Section metadata is plain JSON so non-Vite consumers (the site prerender

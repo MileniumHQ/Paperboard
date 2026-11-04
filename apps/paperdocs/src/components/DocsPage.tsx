@@ -38,13 +38,6 @@ export function DocsPage(props: DocsPageProps) {
     );
     const valid = () => known() && siblings().current !== null;
 
-    // Each docs page is its own document title, which the SPA shell cannot
-    // set at build time.
-    createEffect(() => {
-        const page = siblings().current;
-        document.title = page ? `${page.name} | Paperboard Docs` : "PaperDocs";
-    });
-
     // Sorted pages → the component for the current page. Eagerly bundled, so
     // there is nothing to await and no Suspense boundary.
     const Doc = createMemo(() => {
@@ -174,7 +167,13 @@ export function DocsPage(props: DocsPageProps) {
                         <Show when={Doc()}>
                             {(Component) => {
                                 const Doc = Component();
-                                return <Dynamic component={Doc} />;
+                                // the article is what the build exports as
+                                // the page's Markdown (scripts/docs-markdown.mjs)
+                                return (
+                                    <article class="docs-article">
+                                        <Dynamic component={Doc} />
+                                    </article>
+                                );
                             }}
                         </Show>
 
@@ -193,12 +192,10 @@ export function DocsPage(props: DocsPageProps) {
                                         value={`prev-${siblings().prev!.pageKey}`}
                                         icon="arrow_back"
                                         description={siblings().prev!.name}
-                                        onClick={() => {
-                                            window.location.href = docsPath(
-                                                props.section,
-                                                siblings().prev!.pageKey,
-                                            );
-                                        }}
+                                        href={docsPath(
+                                            props.section,
+                                            siblings().prev!.pageKey,
+                                        )}
                                     >
                                         Back
                                     </PaperSelectorItem>
@@ -209,12 +206,10 @@ export function DocsPage(props: DocsPageProps) {
                                         icon="arrow_forward"
                                         reverse
                                         description={siblings().next!.name}
-                                        onClick={() => {
-                                            window.location.href = docsPath(
-                                                props.section,
-                                                siblings().next!.pageKey,
-                                            );
-                                        }}
+                                        href={docsPath(
+                                            props.section,
+                                            siblings().next!.pageKey,
+                                        )}
                                     >
                                         Next
                                     </PaperSelectorItem>

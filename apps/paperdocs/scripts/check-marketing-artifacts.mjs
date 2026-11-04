@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 const dist = new URL("../dist/", import.meta.url);
 const read = (name) => readFile(new URL(name, dist), "utf8");
 // Whitespace is collapsed before matching so a disclaimer sentence that the
@@ -106,4 +106,23 @@ for (const slug of ["actions", "game-server", "bot-creator", "ai"]) {
         await readFile(new URL(`.${match[1]}`, dist));
     }
 }
-console.log("verified the landing and learn documents, their disclaimers, published assets, metadata, and scroll scripts");
+// Every image a docs page points at is in the build: a section logo or icon
+// that 404s shows as a broken image in the top bar.
+async function docsPages(dir) {
+    const pages = [];
+    for (const entry of await readdir(new URL(dir, dist), { withFileTypes: true })) {
+        if (entry.isDirectory()) pages.push(...(await docsPages(`${dir}${entry.name}/`)));
+        else if (entry.name === "index.html") pages.push(`${dir}${entry.name}`);
+    }
+    return pages;
+}
+for (const page of await docsPages("docs/")) {
+    const raw = await read(page);
+    for (const match of raw.matchAll(/<img\b[^>]*\ssrc="(\/[^"#?]+)"/g)) {
+        await readFile(new URL(`.${match[1]}`, dist)).catch(() => {
+            throw new Error(`${page} shows ${match[1]}, which is not in the build`);
+        });
+    }
+}
+
+console.log("verified the landing, learn and docs documents, their disclaimers, published assets, metadata, and scroll scripts");

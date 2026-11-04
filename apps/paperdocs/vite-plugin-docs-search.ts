@@ -115,9 +115,16 @@ function extractPage(
 
 function buildIndex(root: string): SearchRecord[] {
     const docsRoot = join(root, "src", "docs");
-    const index = JSON.parse(
-        readFileSync(join(docsRoot, "index.json"), "utf8"),
+    // Mirrors src/docs/docsIndex.ts: sections.json plus <section>/pages.json.
+    const sections = JSON.parse(
+        readFileSync(join(docsRoot, "sections.json"), "utf8"),
     ) as Record<string, any>;
+    const index: Record<string, any> = { meta: { sections } };
+    for (const key of Object.keys(sections)) {
+        index[key] = JSON.parse(
+            readFileSync(join(docsRoot, key, "pages.json"), "utf8"),
+        );
+    }
 
     const refs = new Map<string, PageRef>();
     for (const [sectionKey, sectionData] of Object.entries(index)) {

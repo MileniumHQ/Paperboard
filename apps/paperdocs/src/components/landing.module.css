@@ -12,48 +12,53 @@
 }
 
 .hero {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--paper-uigap-half);
     text-align: center;
-    max-width: calc(var(--paper-uigap) * 40);
+    max-width: var(--paper-size-panel);
     animation: landingrise var(--paper-medium-transition)
         var(--paper-ease-emphasized) both;
 }
 
-.heroTitle {
+/* headings and paragraphs here are laid out by their flex gaps, not margins */
+.flush {
     margin: 0;
 }
 
-.heroSubtitle {
-    margin: 0;
-}
-
-.cards {
+.column {
     width: 100%;
-    max-width: var(--paper-size-panel);
+    max-width: var(--paper-size-panel-wide);
     display: flex;
     flex-direction: column;
     gap: var(--paper-uigap-double);
 }
 
-.cardEnter {
+.enter {
+    display: flex;
     animation: landingrise var(--paper-medium-transition)
         var(--paper-ease-emphasized) backwards;
 }
 
-.download {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--paper-uigap);
-    max-width: var(--paper-size-panel);
-    text-align: center;
+/* the section cards arrive one after another */
+.enter:nth-child(2) {
+    animation-delay: calc(var(--paper-short-transition) / 2);
 }
 
-.downloadPrompt {
-    margin: 0;
+.enter:nth-child(3) {
+    animation-delay: var(--paper-short-transition);
+}
+
+.enter:nth-child(n + 4) {
+    animation-delay: calc(var(--paper-short-transition) * 1.5);
+}
+
+.enter > * {
+    flex: 1;
+}
+
+/* the two ways in sit side by side, and stack on a narrow screen */
+.pair {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--paper-size-field-wide)), 1fr));
+    gap: var(--paper-uigap-double);
 }
 
 @keyframes landingrise {
@@ -72,7 +77,7 @@
 
 @media (prefers-reduced-motion: reduce) {
     .hero,
-    .cardEnter {
+    .enter {
         animation: none;
     }
 }

@@ -7,10 +7,14 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
     DOCS_ALIASES,
+    docsRoutes,
+    metaSections,
     paths,
     render,
     renderNotFound,
+    subsectionsFor,
 } from "../dist-ssr/entry-server.js";
+import { docsPageMarkdown, markdownPath } from "./docs-markdown.mjs";
 
 // Prerenders every root page, docs page, and the landing into dist/. Run after
 // the two Vite builds:
@@ -31,6 +35,14 @@ function escapeHtml(value) {
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;");
+}
+
+const ORIGIN = "https://paperboard.dev";
+
+// A Markdown page names its canonical URL first, so a pasted page still says
+// where it came from.
+function withSource(markdown, path) {
+    return `<!-- Source: ${ORIGIN}${path} -->\n\n${markdown}`;
 }
 
 function isDocsPath(path) {
@@ -194,10 +206,26 @@ function assertRendered(path, html, landing) {
     }
 }
 
+// Each docs page also ships as Markdown for agents; its lead's first sentence
+// is the page's description everywhere (meta tags, llms.txt).
+const docsByPath = new Map(docsRoutes().map((route) => [route.path, route]));
+const docsPages = new Map();
+
 const imageVariants = [];
 for (const path of paths) {
     const page = render(path);
     assertRendered(path, page.html, page.landing || page.learn);
+    const docsRoute = docsByPath.get(path);
+    if (docsRoute?.pageKey) {
+        const pagePath = docsRoute.canonical ?? path;
+        const md = docsPageMarkdown(page.html, path);
+        page.description = md.description;
+        page.markdown = markdownPath(pagePath);
+        if (!docsRoute.canonical) {
+            docsPages.set(path, { ...md, route: docsRoute });
+            await writeFile(join(dist, page.markdown), withSource(md.markdown, path));
+        }
+    }
     if (page.landing) {
         // The landing's link contents come from the shared nav source; a build
         // that drops them means the Solid port drifted from src/site/links.ts.
@@ -245,10 +273,37 @@ for (const alias of DOCS_ALIASES) {
     console.log(`alias ${alias.path} -> ${alias.target}`);
 }
 
+// The agent-facing index (https://llmstxt.org): every docs page, grouped by
+// section, linking its Markdown. llms-full.txt is every page in one file.
+const llms = [
+    "# Paperboard",
+    "",
+    "> Paperboard is a desktop app and server daemon for running self-hosted programs, extended by panels. These docs cover using Paperboard, building panels (guides), the PaperAPI runtime, and the PaperUI component library. Every page is also available as Markdown at its URL with `.md` in place of the trailing slash.",
+    "",
+];
+const llmsFull = [];
+for (const [section, meta] of Object.entries(metaSections)) {
+    llms.push(`## ${meta.name}`, "", meta.description, "");
+    for (const sub of subsectionsFor(section)) {
+        for (const p of sub.pages) {
+            const path = `/docs/${section}/${p.pageKey}/`;
+            const doc = docsPages.get(path);
+            if (!doc) throw new Error(`paperdocs: ${path} has no Markdown export`);
+            llms.push(`- [${meta.name} / ${sub.name} / ${p.name}](${ORIGIN}${markdownPath(path)}): ${doc.description}`);
+            llmsFull.push(withSource(doc.markdown, path));
+        }
+    }
+    llms.push("");
+}
+await writeFile(join(dist, "llms.txt"), llms.join("\n"));
+await writeFile(join(dist, "llms-full.txt"), llmsFull.join("\n---\n\n"));
+console.log(`llms: ${docsPages.size} docs pages exported as Markdown`);
+
 // Sitemap. paths already covers the landing, the root pages, and every docs
 // page (including section roots and the docs landing). Learn pages come from the same route list.
-const ORIGIN = "https://paperboard.dev";
-const sitemapUrls = paths;
+// Section roots repeat their first page, which is the canonical URL, so they
+// stay out of the sitemap.
+const sitemapUrls = paths.filter((path) => !docsByPath.get(path)?.canonical);
 const sitemap = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',

@@ -1,0 +1,26 @@
+{
+    "paperboard": {
+        "name": "Paperboard",
+        "icon": "dashboard",
+        "image": "/paperboard.png",
+        "description": "Install Paperboard, connect computers, and run the server daemon."
+    },
+    "guides": {
+        "name": "Guides",
+        "icon": "school",
+        "image": "/paperdocs.png",
+        "description": "Build a panel from an empty folder to the Panel Library."
+    },
+    "paperapi": {
+        "name": "PaperAPI",
+        "icon": "api",
+        "image": "/paperapi.png",
+        "description": "The panel runtime: manifest, services, actions, and host APIs."
+    },
+    "paperui": {
+        "name": "PaperUI",
+        "icon": "palette",
+        "image": "/paperui.png",
+        "description": "The components, templates, and tokens panels are built from."
+    }
+}

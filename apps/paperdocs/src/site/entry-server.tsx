@@ -17,6 +17,8 @@ export interface RenderedPage {
     landing?: boolean;
     /** Learn pages share marketing chrome with ordinary document scrolling. */
     learn?: boolean;
+    /** The canonical URL path when it differs from the rendered path. */
+    canonical?: string;
     /** A learn page's `--paper-site-accent`, set on <html> so the document
         canvas (painted past the page on mobile scroll) takes the panel color. */
     accent?: string;
@@ -55,7 +57,12 @@ export function render(path: string): RenderedPage {
                 <App pathname={docs.path} />
             </div>
         ));
-        return { title: docs.title, description: docs.description, html };
+        return {
+            title: docs.title,
+            description: docs.description,
+            canonical: docs.canonical,
+            html,
+        };
     }
 
     const route = SITE_ROUTES.find((candidate) => candidate.path === path);
@@ -98,4 +105,5 @@ export const paths = [
     ...docsRoutes().map((route) => route.path),
 ];
 
-export { DOCS_ALIASES } from "./docsRoutes";
+export { DOCS_ALIASES, docsRoutes } from "./docsRoutes";
+export { metaSections, subsectionsFor } from "../docs/structure";

@@ -5,7 +5,7 @@ import { LEARN_PANELS } from "./learn/panels";
 // One source of link contents for the two chrome implementations: the docs
 // SPA (Solid components) and the static root site (landing HTML injected at
 // build time, prerendered pages rendered from these values). Docs sections
-// come from src/docs/index.json so a new section lands in both menus.
+// come from src/docs/sections.json so a new section lands in both menus.
 export const BRAND = nav.brand;
 export const LEARN_LINKS = LEARN_PANELS.map(panel => ({
     label: panel.name, href: `/${panel.slug}`, image: panel.icon, description: panel.summary,

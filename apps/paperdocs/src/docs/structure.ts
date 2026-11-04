@@ -1,8 +1,8 @@
-import index from "./index.json";
+import { docsIndex as index } from "./docsIndex";
 import { metaSections } from "./meta";
 import type { Page, Subsection } from "../types/docs";
 
-// Pure docs structure: index.json plus section metadata, with no Vite-only
+// Pure docs structure: the docs index plus section metadata, with no Vite-only
 // imports. The prerender script and tests read routes from here, while
 // routeUtils adds the eagerly bundled page components on top.
 

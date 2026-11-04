@@ -15,6 +15,13 @@
     scroll-margin-top: 75px;
 }
 
+/* Pages use real headings and paragraphs (STYLE.md) for search engines and
+   the Markdown export; spacing comes from the page's flex gaps, so the
+   browser's default margins are removed. */
+.docs-article :is(h1, h2, h3, h4, p) {
+    margin: 0;
+}
+
 @media (max-width: 900px) {
     /* Docs run single column: the sidebar stacks above the content and the
        table of contents steps aside. */

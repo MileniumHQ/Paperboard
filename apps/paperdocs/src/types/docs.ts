@@ -16,7 +16,8 @@ export interface Subsection {
 export interface SectionMeta {
     name: string;
     icon?: string;
-    image?: string;
+    /** The section's logo: its card on the docs home and its top bar brand. */
+    image: string;
     description?: string;
     /** Sections sharing a group render together after the primary ones. */
     group?: string;
