@@ -75,7 +75,6 @@ export default function ServicePage() {
                         <PaperInput
                             fullWidth
                             label="Name"
-                            placeholder="Ada"
                             value={name()}
                             onInput={(e) => setName(e.currentTarget.value)}
                             onKeyDown={(e) => {

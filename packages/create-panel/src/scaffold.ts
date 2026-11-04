@@ -300,6 +300,9 @@ function usage(cli: CliOptions): string[] {
         "  --no-widget            no Home widget",
         "  --no-store             no store listing starter",
         "  -h, --help             show this",
+        "",
+        "Exits 0 when the panel is made, 1 when it cannot be, 2 for a command line it cannot read.",
+        "Guides: https://paperboard.dev/docs/guides/",
     ];
 }
 
@@ -378,6 +381,9 @@ async function promptChoices(
     return { id, displayName, description, publisher, features: { service, widget, store } };
 }
 
+/** Exit code for a command line the scaffolder cannot read, as paperapi uses. */
+export const EXIT_USAGE = 2;
+
 export async function runCli(cli: CliOptions): Promise<number> {
     const log = cli.log ?? ((line: string) => console.log(line));
     let parsed;
@@ -386,7 +392,7 @@ export async function runCli(cli: CliOptions): Promise<number> {
     } catch (err) {
         console.error(`${cli.command}: ${(err as Error).message}`);
         console.error(`Try ${cli.command} --help`);
-        return 1;
+        return EXIT_USAGE;
     }
     const { values, positionals } = parsed;
     if (values.help) {
@@ -419,7 +425,7 @@ export async function runCli(cli: CliOptions): Promise<number> {
             if (!process.stdin.isTTY) {
                 console.error(`Usage: ${cli.command} <panel-id> [Display Name]`);
                 console.error(`Example: ${cli.command} dev.paperboard.my-panel "My Panel"`);
-                return 1;
+                return EXIT_USAGE;
             }
             rl = readline.createInterface({ input: process.stdin, output: process.stdout });
             ask = terminalAsk(rl);
@@ -453,19 +459,14 @@ export async function runCli(cli: CliOptions): Promise<number> {
 
     log(`Created ${files.length} files in ${where}/ (${made.length ? made.join(", ") : "UI only"})`);
     log("");
-    log("Next steps (panels build and test with Bun, https://bun.sh):");
-    if (cli.mode === "workspace") {
-        log(`  1. bun install                # link workspace deps`);
-        log(`  2. cd ${where}`);
-        log(`  3. bun run build              # typecheck, then the page${choices.features.widget ? ", widget" : ""}${choices.features.service ? " and service" : ""} bundles`);
-        log(`  4. bun test                   # unit tests and the UI standards guard`);
-        log(`  5. bunx paperapi link         # load it in Paperboard`);
-    } else {
-        log(`  1. cd ${where} && bun install`);
-        log(`  2. bun run build              # typecheck, then the page${choices.features.widget ? ", widget" : ""}${choices.features.service ? " and service" : ""} bundles`);
-        log(`  3. bun test                   # unit tests and the UI standards guard`);
-        log(`  4. npx @mileniumhq/paperapi link   # load it in Paperboard`);
-    }
-    log(`  Then add branding/icon.png and point manifest.json's "icon" at it.`);
+    const bundles = `the page${choices.features.widget ? ", widget" : ""}${choices.features.service ? " and service" : ""} bundles`;
+    log("Next (panels build and test with Bun, https://bun.sh):");
+    log(`  cd ${where}`);
+    log(`  bun install          # ${cli.mode === "workspace" ? "links the workspace libraries" : "the panel's dependencies"}`);
+    log(`  bun run build        # typecheck, then ${bundles}`);
+    log(`  bunx paperapi link   # Paperboard runs the panel from this folder`);
+    log("");
+    log("Its README.md has what comes after: tests, paperapi doctor, monitor and restart, and publishing.");
+    log("Guides: https://paperboard.dev/docs/guides/");
     return 0;
 }

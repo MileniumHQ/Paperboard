@@ -4,15 +4,31 @@ __PANEL_DESC__
 
 A [Paperboard](https://paperboard.dev) panel, built with SolidJS and PaperUI.
 
+## Run it
+
 ```sh
-bun install
-bun run build   # typecheck, then the page, the widget and the service bundles
-bun test        # hermetic unit tests and the UI standards guard
+bun install          # the panel's dependencies
+bun run build        # typecheck, then the page, widget and service bundles
+bunx paperapi link   # Paperboard runs the panel from this folder
 ```
 
-Load it into Paperboard while you work on it with `paperapi link` (see
-<https://paperboard.dev/paperapi>). After a build, restart the panel from its
-menu in Paperboard to pick up a new service.
+After a change, run `bun run build` again, then `bunx paperapi restart` (or
+restart the panel from its menu in Paperboard) to run the new build.
+
+## When something is off
+
+- `bunx paperapi doctor` checks the manifest, the build, the link and that
+  Paperboard is running, and says what to run for anything that is not right.
+- `bunx paperapi monitor --panel __PANEL_ID__` shows every call the panel
+  makes and receives as it happens: how long it took and how it went.
+<!-- @if service -->
+- `bunx paperapi call __PANEL_ID__ greet '{"name":"Ada"}'` calls one of the
+  service's actions from the terminal; `bunx paperapi call __PANEL_ID__`
+  lists them.
+<!-- @endif -->
+- `bun test` runs the unit tests and the UI standards guard.
+
+The guides for building panels are at <https://paperboard.dev/docs/guides/>.
 
 ## What is here
 
@@ -31,6 +47,8 @@ menu in Paperboard to pick up a new service.
 - `store/about.md` is the long description on the panel's library page.
 <!-- @endif -->
 - `test/uiStandards.test.ts` keeps inline styles out of the UI.
+- `test/hermetic.ts` keeps the tests off the network and off your real
+  Paperboard data.
 
 Before you publish, add `branding/icon.png` and point the manifest's `icon` at
 it, and add screenshots to `store`.

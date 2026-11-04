@@ -15,7 +15,7 @@ const actions = [
         description: "Greets a person by name",
         template: "Greet {name}",
         inputs: {
-            name: { type: "string", label: "Name", placeholder: "Ada", required: true },
+            name: { type: "string", label: "Name", placeholder: "Name", required: true },
         },
         output: { type: "string", label: "Greeting" },
         icon: "waving_hand",

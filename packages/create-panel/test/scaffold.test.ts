@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, relative } from "path";
 import { applyFeatureMarkers, DEFAULT_FEATURES, runCli, scaffoldPanel, TEMPLATE_DIR, type PanelFeatures } from "../src/scaffold";
 import paperapiPackage from "../../paperapi/package.json";
 import paperuiPackage from "../../paperui/package.json";
@@ -235,6 +235,41 @@ describe("applyFeatureMarkers", () => {
     });
 });
 
+describe("the service a panel starts with", () => {
+    it("gives an action input the kind of value as its placeholder, not an example", () => {
+        const { targetDir } = scaffoldPanel({ mode: "standalone", id: "dev.paperboard.inputs", parentDir });
+        const service = readFileSync(join(targetDir, "src/service.ts"), "utf8");
+        const placeholders = [...service.matchAll(/placeholder: "([^"]*)"/g)].map((m) => m[1]);
+        expect(placeholders).toEqual(["Name"]);
+    });
+});
+
+describe("the README a panel starts with", () => {
+    const readme = (features: Partial<PanelFeatures>) => {
+        const { targetDir } = scaffoldPanel({ mode: "standalone", id: "dev.paperboard.readme", features, parentDir });
+        return readFileSync(join(targetDir, "README.md"), "utf8");
+    };
+
+    it("gives the next three commands, in order, and points at the guides", () => {
+        const text = readme({});
+        const block = text.slice(text.indexOf("```sh") + 5, text.indexOf("```", text.indexOf("```sh") + 5));
+        expect(block.trim().split("\n").map((line) => line.replace(/\s+#.*$/, ""))).toEqual(["bun install", "bun run build", "bunx paperapi link"]);
+        expect(text).toContain("https://paperboard.dev/docs/guides/");
+        expect(text).not.toContain("paperboard.dev/paperapi");
+    });
+
+    it("names the commands for when something is off, for this panel", () => {
+        const text = readme({});
+        expect(text).toContain("bunx paperapi doctor");
+        expect(text).toContain("bunx paperapi restart");
+        expect(text).toContain("bunx paperapi monitor --panel dev.paperboard.readme");
+        expect(text).toContain("bunx paperapi call dev.paperboard.readme greet");
+        // a panel with no service has no actions to call
+        rmSync(join(parentDir, "dev.paperboard.readme"), { recursive: true });
+        expect(readme({ service: false, widget: false })).not.toContain("paperapi call");
+    });
+});
+
 describe("runCli", () => {
     const run = async (argv: string[], answers: string[] = [], mode: "standalone" | "workspace" = "standalone") => {
         const lines: string[] = [];
@@ -318,6 +353,17 @@ describe("runCli", () => {
         const help = await run(["--help"]);
         expect(help.code).toBe(0);
         expect(help.lines.join("\n")).toContain("--no-service");
-        expect(await run(["--bogus"])).toMatchObject({ code: 1 });
+        // a command line it cannot read exits 2, as paperapi's does
+        expect(await run(["--bogus"])).toMatchObject({ code: 2 });
+    });
+
+    it("ends with the three commands that run the panel, and where the guides are", async () => {
+        const { code, lines } = await run(["dev.paperboard.next"]);
+        expect(code).toBe(0);
+        const text = lines.join("\n");
+        const commands = lines.map((line) => line.trim().replace(/\s+#.*$/, "")).filter((line) => /^(cd|bun|bunx) /.test(line));
+        expect(commands).toEqual([`cd ${relative(process.cwd(), join(parentDir, "dev.paperboard.next"))}`, "bun install", "bun run build", "bunx paperapi link"]);
+        expect(text).toContain("https://paperboard.dev/docs/guides/");
+        expect(text).not.toContain("npx");
     });
 });

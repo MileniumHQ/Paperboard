@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "paperboard-package-consumer-"));
@@ -77,7 +77,17 @@ render(() => <PaperProvider><PaperButton>Consumer</PaperButton></PaperProvider>,
     run("node", [path.join(panel, "node_modules", ".bin", "paperapi"), "link"], panel);
     const linked = path.join(tmp, "data", "panels", "dev.paperboard.my-panel");
     if (fs.realpathSync(linked) !== fs.realpathSync(panel)) throw new Error(`paperapi link did not link the scaffolded panel at ${linked}`);
-    console.log("Package artifacts: exports exist; SDK ESM/CJS imports, packed Solid/Vite consumer build, and packed create-panel scaffold/install/test/build/link passed");
+    // doctor holds the build and the link to what Paperboard looks for; no
+    // Paperboard runs here, so that is the one problem it may report
+    const doctor = spawnSync("node", [path.join(panel, "node_modules", ".bin", "paperapi"), "doctor", "--json"], {
+        cwd: panel, encoding: "utf8", timeout: 60_000, env: { ...process.env, PAPERBOARD_DIR: path.join(tmp, "data") },
+    });
+    const report = JSON.parse(doctor.stdout);
+    const failing = report.checks.filter((check) => check.status !== "ok" && check.name !== "Paperboard" && check.name !== "Service");
+    if (doctor.status !== 1 || failing.length > 0 || report.problems !== 1) {
+        throw new Error(`paperapi doctor found problems in the scaffolded panel (exit ${doctor.status}): ${JSON.stringify(report.checks)}`);
+    }
+    console.log("Package artifacts: exports exist; SDK ESM/CJS imports, packed Solid/Vite consumer build, and packed create-panel scaffold/install/test/build/link/doctor passed");
 } catch (err) {
     console.error("Package consumer check failed:", err.message, err.stdout?.toString(), err.stderr?.toString());
     process.exitCode = 1;
