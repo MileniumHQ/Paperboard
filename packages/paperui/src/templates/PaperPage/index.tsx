@@ -3,7 +3,6 @@ import { splitProps, type JSX, type ParentProps } from "solid-js";
 import { resolveSpacing } from "../../utils/theme";
 import {
     resolveLayoutStyles,
-    usePaperLayout,
     type PaperLayoutProps,
 } from "../../contexts/layout";
 import type { PaperSpacing } from "../../types";
@@ -13,7 +12,7 @@ export type PaperPageWidth = "standard" | "wide" | "full";
 export interface PaperPageProps
     extends JSX.HTMLAttributes<HTMLDivElement>,
         Omit<PaperLayoutProps, "width"> {
-    /** column width; standard keeps content readable at 62rem */
+    /** column width; standard keeps content readable at 992px (--paper-page-width) */
     width?: PaperPageWidth;
     padding?: PaperSpacing;
     gap?: PaperSpacing;
@@ -25,7 +24,6 @@ export interface PaperPageProps
  * gapped, and centered.
  */
 export function PaperPage(props: ParentProps<PaperPageProps>) {
-    const layoutCtx = usePaperLayout();
     // layout props split apart: the style getter must never read children,
     // or every restyle would build the page's contents again
     const [local, layout, rest] = splitProps(props, [
@@ -64,7 +62,7 @@ export function PaperPage(props: ParentProps<PaperPageProps>) {
 
     const pageStyle = () => ({
         // width names the column here, not a size token
-        ...resolveLayoutStyles(layout, layoutCtx),
+        ...resolveLayoutStyles(layout),
         padding: resolveSpacing(local.padding ?? "double"),
         gap: resolveSpacing(local.gap ?? "full"),
         ...(typeof local.style === "object" ? local.style : {}),

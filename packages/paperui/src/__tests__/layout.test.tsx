@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createSignal } from "solid-js";
 import { render } from "@solidjs/testing-library";
 import { PaperFlex } from "../templates/PaperFlex";
+import { resolveLayoutStyles } from "../contexts/layout";
 import { PaperText } from "../components/PaperText";
 import { PaperSettingList } from "../templates/PaperSettingList";
 import { PaperList, PaperListItem } from "../components/PaperList";
@@ -167,5 +168,13 @@ describe("PaperLayout and Components Layout Enhancements", () => {
 
         expect(getByRole("button", { name: "More actions" })).toBeTruthy();
         expect(getByText("Item 1")).toBeTruthy();
+    });
+});
+
+describe("resolveLayoutStyles", () => {
+    it("gives the same styles in any parent, and takes no parent context", () => {
+        expect(resolveLayoutStyles({ flex: true, minWidth: 0 })).toEqual({ flex: "1 1 0%", "min-width": "0px" });
+        // @ts-expect-error a parent context changes nothing, so it is not a parameter
+        resolveLayoutStyles({}, { direction: "row" });
     });
 });

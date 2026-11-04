@@ -4,7 +4,6 @@ import { resolveSpacing } from "../../utils/theme";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import {
     resolveLayoutStyles,
-    usePaperLayout,
     type PaperLayoutProps,
 } from "../../contexts/layout";
 import type { PaperSpacing, PaperRole } from "../../types";
@@ -38,7 +37,6 @@ export interface PaperCardProps
  * as PaperFlex.
  */
 export function PaperCard(props: ParentProps<PaperCardProps>) {
-    const layoutCtx = usePaperLayout();
     const [local, rest] = splitProps(props, [
         "surface",
         "padding",
@@ -90,7 +88,7 @@ export function PaperCard(props: ParentProps<PaperCardProps>) {
             // a growing card must also be able to shrink, or it overflows
             ...(local.grow && local.shrink === undefined ? { "flex-shrink": 1 } : {}),
             ...(isPaperRole(local.accent) ? roleVars(local.accent) : {}),
-            ...resolveLayoutStyles(local, layoutCtx),
+            ...resolveLayoutStyles(local),
             ...(axisPadding
                 ? {
                       "padding-left": paddingX,

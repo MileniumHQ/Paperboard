@@ -38,13 +38,10 @@ export function usePaperLayout() {
     return useContext(PaperLayoutContext);
 }
 
-export function resolveLayoutStyles(
-    props: PaperLayoutProps,
-    ctx?: PaperLayoutContextValue,
-): JSX.CSSProperties {
+/** Turns layout props into inline styles. The same props give the same
+ *  styles in any parent: nothing here reads the parent's direction. */
+export function resolveLayoutStyles(props: PaperLayoutProps): JSX.CSSProperties {
     const styles: JSX.CSSProperties = {};
-
-    const isColumn = ctx?.direction === "column" || ctx?.direction === "column-reverse";
 
     if (props.flex !== undefined) {
         if (props.flex === true) {

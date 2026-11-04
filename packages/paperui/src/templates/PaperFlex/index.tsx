@@ -10,7 +10,6 @@ import type { PaperSpacing, PaperBackgroundSurface } from "../../types";
 import { resolveSpacing, resolveBackground } from "../../utils/theme";
 import {
     PaperLayoutContext,
-    usePaperLayout,
     resolveLayoutStyles,
     type PaperLayoutProps,
     type PaperLayoutContextValue,
@@ -40,7 +39,6 @@ export interface PaperFlexProps
 
 export function PaperFlex(props: ParentProps<PaperFlexProps>) {
     let containerRef: HTMLDivElement | undefined;
-    const parentLayoutCtx = usePaperLayout();
 
     const [local, rest] = splitProps(props, [
         "direction",
@@ -155,7 +153,7 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
             ? resolveBackground(local.background)
             : undefined;
 
-        const layoutStyle = resolveLayoutStyles(local, parentLayoutCtx);
+        const layoutStyle = resolveLayoutStyles(local);
 
         const base: JSX.CSSProperties = {
             // the hidden attribute hides it, as it would any element: the
