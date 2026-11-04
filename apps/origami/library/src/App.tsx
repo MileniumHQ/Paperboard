@@ -50,7 +50,8 @@ const rootStyle = {
     "overflow-y": "auto",
     "overflow-x": "hidden",
     "box-sizing": "border-box",
-    padding: getVarCss("uigap"),
+    // the same gutter as a PaperPage, so the Library lines up with panels
+    padding: getVarCss("uigap-double"),
 } as const;
 
 const columnStyle = {
@@ -355,7 +356,9 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
                                         description={panel.description}
                                         badge={
                                             panel.isInstalled ? (
-                                                <PaperBadge variant="success">
+                                                // a quiet mark: most cards carry it,
+                                                // so it mustn't be the loudest thing on them
+                                                <PaperBadge variant="monochrome" icon="check">
                                                     Installed
                                                 </PaperBadge>
                                             ) : undefined
