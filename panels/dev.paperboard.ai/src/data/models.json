@@ -158,9 +158,31 @@
     "recursive": {
       "name": "Recursive",
       "icon": null
+    },
+    "xiaomi": {
+      "name": "Xiaomi MiMo",
+      "icon": "xiaomimimo"
     }
   },
   "models": [
+    {
+      "name": "mimo-v2.6",
+      "maker": "xiaomi",
+      "description": "MiMo-V2.6-Distill-Qwen-9B is Xiaomi MiMo's 9B model for code and agent workflows.",
+      "capabilities": [
+        "thinking",
+        "tools",
+        "vision"
+      ],
+      "pulls": 7131,
+      "tags": [
+        {
+          "tag": "9b",
+          "bytes": 6600000000,
+          "context": 262144
+        }
+      ]
+    },
     {
       "name": "lfm3",
       "maker": "liquid",

@@ -1,7 +1,7 @@
 {
     "name": "AI",
     "id": "dev.paperboard.ai",
-    "version": "0.2.3",
+    "version": "0.2.4",
     "description": "Chat with local models",
     "publisher": "Paperboard",
     "unlisted": true,
