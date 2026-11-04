@@ -50,27 +50,32 @@
             {
                 "light": "./store/1-light.png",
                 "dark": "./store/1-dark.png",
-                "alt": "Overview"
+                "alt": "Several bots, each with its own token, commands and project"
             },
             {
                 "light": "./store/2-light.png",
                 "dark": "./store/2-dark.png",
-                "alt": "Servers your bot is in"
+                "alt": "A bot's health and its latest messages"
             },
             {
                 "light": "./store/3-light.png",
                 "dark": "./store/3-dark.png",
-                "alt": "Slash commands"
+                "alt": "The servers a bot is in"
             },
             {
                 "light": "./store/4-light.png",
                 "dark": "./store/4-dark.png",
-                "alt": "Server details"
+                "alt": "A server's channels and roles, finding members and sending a message"
             },
             {
                 "light": "./store/5-light.png",
                 "dark": "./store/5-dark.png",
-                "alt": "Menus and modals, built in Actions"
+                "alt": "Slash commands the bot registers with Discord"
+            },
+            {
+                "light": "./store/6-light.png",
+                "dark": "./store/6-dark.png",
+                "alt": "Polls, files and scheduled events as Actions blocks in a bot's project"
             }
         ],
         "services": [
