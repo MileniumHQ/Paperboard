@@ -63,6 +63,11 @@ export * from "./templates/PaperWidget";
 
 export * from "./contexts/layout";
 export * from "./contexts/panel";
+export {
+    PaperSettingListContext,
+    useSettingListValue,
+    type PaperSettingListContextValue,
+} from "./contexts/settingList";
 
 export * from "./utils/theme";
 export * from "./utils/ansi";

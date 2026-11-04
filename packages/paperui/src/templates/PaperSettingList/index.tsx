@@ -9,6 +9,7 @@ import {
 } from "solid-js";
 import { PaperText } from "../../components/PaperText";
 import { PaperFlex } from "../PaperFlex";
+import { PaperSettingListContext } from "../../contexts/settingList";
 
 export interface PaperSettingListProps
     extends JSX.HTMLAttributes<HTMLDivElement> {
@@ -56,6 +57,10 @@ export function PaperSettingList(props: ParentProps<PaperSettingListProps>) {
                 ? target.checked
                 : target.value;
 
+        // a text field fires input then change, and a PaperToggle both at
+        // once: the second event of one edit carries nothing new
+        if (dataStore()[target.name] === val) return;
+
         const nextData = {
             ...dataStore(),
             [target.name]: val,
@@ -94,17 +99,19 @@ export function PaperSettingList(props: ParentProps<PaperSettingListProps>) {
     };
 
     return (
-        <div
-            ref={containerRef}
-            {...rest}
-            class={className()}
-            classList={local.classList}
-            style={dynamicStyle()}
-            onInput={handleFormEvent}
-            onChange={handleFormEvent}
-        >
-            {local.children}
-        </div>
+        <PaperSettingListContext.Provider value={{ valueOf: (name) => dataStore()[name] }}>
+            <div
+                ref={containerRef}
+                {...rest}
+                class={className()}
+                classList={local.classList}
+                style={dynamicStyle()}
+                onInput={handleFormEvent}
+                onChange={handleFormEvent}
+            >
+                {local.children}
+            </div>
+        </PaperSettingListContext.Provider>
     );
 }
 

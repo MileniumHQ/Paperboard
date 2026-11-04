@@ -5,7 +5,7 @@ import {
     fireEvent,
     within,
 } from "@solidjs/testing-library";
-import { createSignal } from "solid-js";
+import { createSignal, For } from "solid-js";
 import { PaperSelectMenu, PaperSelectMenuItem } from "../components/PaperSelectMenu";
 
 // The trigger and the always-mounted option menu can share label text —
@@ -376,5 +376,32 @@ describe("PaperSelectMenu", () => {
             fireEvent.click(getTrigger());
             expect(within(getListbox()).queryByRole("searchbox")).toBeNull();
         });
+    });
+});
+
+describe("PaperSelectMenu options that change", () => {
+    test("an option whose value changes labels the trigger under its new value", () => {
+        const [value, setValue] = createSignal("old");
+        render(() => (
+            <PaperSelectMenu name="m" value="new">
+                <PaperSelectMenuItem value={value()}>Option</PaperSelectMenuItem>
+            </PaperSelectMenu>
+        ));
+        expect(getTrigger().textContent).not.toContain("Option");
+        setValue("new");
+        expect(within(getTrigger()).getByText("Option")).toBeDefined();
+    });
+
+    test("an option added after the menu mounts labels the trigger", () => {
+        const [options, setOptions] = createSignal(["a"]);
+        render(() => (
+            <PaperSelectMenu name="m" value="b">
+                <For each={options()}>
+                    {(o) => <PaperSelectMenuItem value={o}>{`Option ${o}`}</PaperSelectMenuItem>}
+                </For>
+            </PaperSelectMenu>
+        ));
+        setOptions(["a", "b"]);
+        expect(within(getTrigger()).getByText("Option b")).toBeDefined();
     });
 });

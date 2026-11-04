@@ -1,6 +1,7 @@
 import styles from "./index.module.css";
 import { splitProps, Show, createSignal, createEffect, createUniqueId, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
+import { useSettingListText } from "../../contexts/settingList";
 
 /**
  * `ref` is re-declared because the multiline form hands back a textarea, which
@@ -59,7 +60,13 @@ export function PaperInput(props: PaperInputProps) {
         }
     });
 
-    const currentValue = () => (local.value !== undefined ? String(local.value) : internalValue());
+    // in a PaperSettingList, the list's record holds the value
+    const listValue = useSettingListText(() => rest.name, "PaperInput");
+    const currentValue = () => {
+        if (local.value !== undefined) return String(local.value);
+        const fromList = listValue();
+        return fromList !== undefined ? String(fromList) : internalValue();
+    };
 
     const isInvalid = () => {
         if (local.invalid !== undefined) return local.invalid;

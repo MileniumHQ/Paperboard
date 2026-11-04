@@ -10,12 +10,13 @@ import "../../styles/styles.css";
 
 const out = { checks: {} as Record<string, unknown>, error: "" };
 const heard: boolean[] = [];
+const toggled: boolean[] = [];
 
 const dispose = render(() => (
     <PaperSettingList autoHeight onValueChange={(next) => heard.push(next.reducedMotion)}>
         <label>
             Reduce motion
-            <PaperToggle name="reducedMotion" />
+            <PaperToggle name="reducedMotion" onChange={(next) => toggled.push(next)} />
         </label>
     </PaperSettingList>
 ), document.getElementById("app")!);
@@ -25,11 +26,13 @@ try {
     const input = toggle.querySelector("input")!;
     // a tap lands on the knob, not the switch's own box
     toggle.querySelector<HTMLElement>("div")!.click();
-    out.checks.afterSwitch = { lastHeard: heard.at(-1), heardOld: heard.includes(false), checked: input.checked, ariaChecked: toggle.getAttribute("aria-checked") };
+    out.checks.afterSwitch = { lastHeard: heard.at(-1), heardOld: heard.includes(false), toggled: [...toggled], checked: input.checked, ariaChecked: toggle.getAttribute("aria-checked") };
     heard.length = 0;
-    // the row's text still toggles it, through the label
+    toggled.length = 0;
+    // the row's text still toggles it, through the label, and the switch
+    // hears it as one change like a tap on the switch
     document.querySelector("label")!.click();
-    out.checks.afterLabelText = { lastHeard: heard.at(-1), checked: input.checked };
+    out.checks.afterLabelText = { heard: [...heard], toggled: [...toggled], checked: input.checked, ariaChecked: toggle.getAttribute("aria-checked") };
 } catch (error) {
     out.error = String(error);
 } finally {

@@ -19,8 +19,8 @@ describe("PaperToggle in a label in a real browser", () => {
             if (!chrome) return;
             const { checks, error } = await runFixture(chrome, "src/__tests__/fixtures/toggleLabelFixture.html");
             expect(error, "the fixture threw").toBe("");
-            expect(checks.afterSwitch, "the label flipped the switch back").toEqual({ lastHeard: true, heardOld: false, checked: true, ariaChecked: "true" });
-            expect(checks.afterLabelText, "the label's text no longer toggles the switch").toEqual({ lastHeard: false, checked: false });
+            expect(checks.afterSwitch, "the label flipped the switch back").toEqual({ lastHeard: true, heardOld: false, toggled: [true], checked: true, ariaChecked: "true" });
+            expect(checks.afterLabelText, "the label's text does not toggle the switch once, through onChange").toEqual({ heard: [false], toggled: [false], checked: false, ariaChecked: "false" });
         },
         60_000,
     );

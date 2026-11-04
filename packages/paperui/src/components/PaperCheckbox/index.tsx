@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import { splitProps, createSignal, Show, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { haptic } from "../../utils/haptics";
+import { useSettingListChecked } from "../../contexts/settingList";
 
 export interface PaperCheckboxProps
     extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "onChange"> {
@@ -30,7 +31,9 @@ export function PaperCheckbox(props: PaperCheckboxProps) {
         local.defaultChecked ?? false,
     );
 
-    const isChecked = () => local.checked ?? internalChecked();
+    // in a PaperSettingList, the list's record holds the state
+    const listChecked = useSettingListChecked(() => rest.name, "PaperCheckbox");
+    const isChecked = () => local.checked ?? listChecked() ?? internalChecked();
 
     const handleToggle = () => {
         if (local.disabled) return;

@@ -7,7 +7,6 @@ import {
     createContext,
     useContext,
     onCleanup,
-    onMount,
     Show,
     createEffect,
     type ParentProps,
@@ -22,6 +21,7 @@ import {
     type SelectionProviderProps,
 } from "../contexts/selection";
 import { useContextMenu } from "../PaperContextMenu";
+import { useSettingListText } from "../../contexts/settingList";
 
 interface RegisteredOption {
     value: string | number;
@@ -73,10 +73,13 @@ export function PaperSelectMenu(props: ParentProps<PaperSelectMenuProps>) {
         "children",
     ]);
 
+    // in a PaperSettingList, the list's record holds the value
+    const listValue = useSettingListText(() => local.name, "PaperSelectMenu");
+
     return (
         <SelectionProvider
             name={local.name}
-            value={local.value}
+            value={local.value ?? listValue()}
             defaultValue={local.defaultValue}
             onValueChange={local.onValueChange}
         >
@@ -399,9 +402,12 @@ export function PaperSelectMenuItem(
         return q === "" || fits(q, haystack());
     };
 
-    onMount(() => {
-        menu?.register({ value: local.value, label, icon: () => local.icon, matches });
-        onCleanup(() => menu?.unregister(local.value));
+    // registered under its current value: an option whose value changes
+    // leaves its old entry and labels the trigger under the new one
+    createEffect(() => {
+        const value = local.value;
+        menu?.register({ value, label, icon: () => local.icon, matches });
+        onCleanup(() => menu?.unregister(value));
     });
 
     // filtered out: still registered, so a selected option keeps its label on the trigger

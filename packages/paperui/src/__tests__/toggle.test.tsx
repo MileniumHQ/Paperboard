@@ -93,3 +93,28 @@ describe("PaperToggle - Accessibility & State Tests", () => {
         expect(toggle.getAttribute("aria-checked")).toBe("false");
     });
 });
+
+describe("PaperToggle title and label", () => {
+    test("a title is the switch's tooltip, not the hidden checkbox's", () => {
+        const { getByRole } = render(() => <PaperToggle title="Toggle" aria-label="Enabled" />);
+        const toggle = getByRole("switch");
+        expect(toggle.getAttribute("title")).toBe("Toggle");
+        expect(toggle.querySelector("input")?.hasAttribute("title")).toBe(false);
+    });
+
+    test("the text of a wrapping label toggles it once, through onChange", () => {
+        const onChange = vi.fn();
+        const { getByRole, getByText } = render(() => (
+            <label>
+                Enabled
+                <PaperToggle onChange={onChange} />
+            </label>
+        ));
+        const toggle = getByRole("switch");
+        getByText("Enabled").click();
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenCalledWith(true);
+        expect(toggle.getAttribute("aria-checked")).toBe("true");
+        expect(toggle.querySelector("input")!.checked).toBe(true);
+    });
+});

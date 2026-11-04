@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import { splitProps, createSignal, Show, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { haptic } from "../../utils/haptics";
+import { useSettingListChecked } from "../../contexts/settingList";
 
 export interface PaperToggleProps
     extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "onChange"> {
@@ -27,25 +28,19 @@ export function PaperToggle(props: PaperToggleProps) {
         "aria-label",
         "aria-labelledby",
         "aria-describedby",
+        // the tooltip belongs on the switch people point at
+        "title",
     ]);
 
     const [internalChecked, setInternalChecked] = createSignal(
         local.defaultChecked ?? false
     );
 
-    const isChecked = () => local.checked ?? internalChecked();
+    // in a PaperSettingList, the list's record holds the state
+    const listChecked = useSettingListChecked(() => rest.name, "PaperToggle");
+    const isChecked = () => local.checked ?? listChecked() ?? internalChecked();
 
-    const handleToggle = (e?: MouseEvent) => {
-        // A wrapping label forwards its activation to the hidden checkbox,
-        // whose click then bubbles back here. Toggling on both passes would
-        // cancel out and leave the switch stuck.
-        if (e?.target === inputRef) return;
-        // Browsers send a click on the switch on to that checkbox as well, and
-        // the checkbox would flip back and report the old value. Cancelling
-        // the click cancels the label's activation.
-        e?.preventDefault();
-        if (local.disabled) return;
-        const next = !isChecked();
+    const flip = (next: boolean) => {
         haptic(next ? "medium" : "light");
 
         setIsAnimating(true);
@@ -54,13 +49,30 @@ export function PaperToggle(props: PaperToggleProps) {
         if (local.checked === undefined) {
             setInternalChecked(next);
         }
+    };
 
+    const handleToggle = (e?: MouseEvent) => {
+        // A wrapping label's text sends its click to the hidden checkbox. The
+        // browser has already flipped it, and fires its change event once
+        // this click is done: the switch follows the checkbox.
+        if (e && e.target === inputRef) {
+            flip(inputRef.checked);
+            local.onChange?.(inputRef.checked);
+            return;
+        }
+        // A click on the switch: a wrapping label would send it on to the
+        // hidden checkbox, which would flip back and report the old value.
+        // Cancelling the click cancels the label's activation, and the
+        // switch flips the checkbox itself.
+        e?.preventDefault();
+        if (local.disabled) return;
+        const next = !isChecked();
+        flip(next);
         if (inputRef) {
             inputRef.checked = next;
             inputRef.dispatchEvent(new Event("change", { bubbles: true }));
             inputRef.dispatchEvent(new Event("input", { bubbles: true }));
         }
-
         local.onChange?.(next);
     };
 
@@ -78,6 +90,7 @@ export function PaperToggle(props: PaperToggleProps) {
             aria-label={local["aria-label"]}
             aria-labelledby={local["aria-labelledby"]}
             aria-describedby={local["aria-describedby"]}
+            title={local.title}
             tabIndex={local.disabled ? -1 : 0}
             class={[
                 styles.PaperToggle,
