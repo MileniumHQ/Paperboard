@@ -38,7 +38,8 @@ panelsApi.uninstall(panelId: string, scope?: string, options?: { deleteData?: bo
 /** uninstall, keeping the data */
 panelsApi.remove(panelId: string, scope?: string): Promise<boolean>;
 /** Paperboard only */
-panelsApi.install(panelId: string, scope?: string): Promise<unknown>;`}
+/** resolves with the installed panel's manifest */
+panelsApi.install(panelId: string, scope?: string): Promise<PanelItem>;`}
             </PaperCode>
             <PaperTable>
                 <thead>

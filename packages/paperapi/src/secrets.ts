@@ -11,13 +11,14 @@ function assertVaultArg(value: unknown, what: string): asserts value is string {
 // Arguments are validated here, at the client-owned boundary, so a missing
 // argument fails loudly instead of riding the wire as `undefined`.
 export const secretsApi = {
-    set: (name: string, value: string, panelId: string): Promise<void> => {
+    /** resolves with true once the secret is stored; a refused one rejects */
+    set: (name: string, value: string, panelId: string): Promise<true> => {
         assertVaultArg(name, "secret name");
         assertVaultArg(panelId, "panelId");
         if (typeof value !== "string") {
             throw new Error("[paperapi] secrets API requires a string secret value");
         }
-        return invoke<void>("secrets-set", { name, value, panelId });
+        return invoke<true>("secrets-set", { name, value, panelId });
     },
 
     get: (name: string, panelId: string): Promise<{ found: boolean; value: string | null }> => {

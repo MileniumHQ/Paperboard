@@ -39,8 +39,9 @@ export const panelsApi = {
         }
     },
 
-    install: (panelId: string, scope?: string): Promise<boolean> =>
-        invokeIn<boolean>(scope, "panel-install", panelId),
+    /** resolves with the installed panel's manifest */
+    install: (panelId: string, scope?: string): Promise<PanelItem> =>
+        invokeIn<PanelItem>(scope, "panel-install", panelId),
     /**
      * Removes the panel's code. Config, files and saved credentials are
      * kept unless `deleteData` is explicitly true.

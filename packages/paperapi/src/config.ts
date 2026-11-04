@@ -45,8 +45,9 @@ function requireConfigId(id: unknown): string {
 export const config = {
     get: <T = any>(id: string, path?: string, scope?: string): Promise<T> =>
         invokeIn<T>(scope, "config-get", { id: requireConfigId(id), path }),
-    set: (data: any, id: string, path?: string, scope?: string): Promise<void> =>
-        invokeIn<void>(scope, "config-set", { id: requireConfigId(id), data, path }),
+    /** resolves with true once the value is written; a failed write rejects */
+    set: (data: any, id: string, path?: string, scope?: string): Promise<true> =>
+        invokeIn<true>(scope, "config-set", { id: requireConfigId(id), data, path }),
 };
 
 export const configApi = config;
