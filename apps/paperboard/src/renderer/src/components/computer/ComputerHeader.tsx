@@ -134,8 +134,9 @@ const ComputerHeader: Component<ComputerHeaderProps> = (props) => {
     return (
         <PaperFlex
             direction="column"
-            background="surface-sunken"
+            background="surface-inset"
             shrink={0}
+            class={styles.header}
         >
             <PaperList
                 name="computer-system-selection"

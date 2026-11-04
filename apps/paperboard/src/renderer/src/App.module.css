@@ -45,7 +45,7 @@
 /* the header and list sit on the border colour, so the gap between
  * them reads as a rule */
 .computerColumn {
-    background: var(--paper-border-subtle);
+    background: var(--paper-border);
 }
 
 .panelList {
