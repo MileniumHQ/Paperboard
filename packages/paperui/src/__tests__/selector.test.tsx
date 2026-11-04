@@ -74,4 +74,17 @@ describe("PaperSelector & SelectionRadioInput Accessibility Tests", () => {
         expect(values()).toEqual(["opt2"]);
         expect(boxes[0].checked).toBe(false);
     });
+    test("an item with href is a link, with no radio input", () => {
+        const { container } = render(() => (
+            <PaperSelector name="pager" horizontal>
+                <PaperSelectorItem value="next" href="/next/" description="Next page">
+                    Next
+                </PaperSelectorItem>
+            </PaperSelector>
+        ));
+        const link = container.querySelector("a");
+        expect(link?.getAttribute("href")).toBe("/next/");
+        expect(link?.textContent).toContain("Next page");
+        expect(container.querySelector("input[type=radio]")).toBeNull();
+    });
 });

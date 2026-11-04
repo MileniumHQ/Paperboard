@@ -279,6 +279,10 @@ export interface PaperMenuItemProps
     icon?: JSX.Element | string;
     disabled?: boolean;
     level?: number;
+    /** Renders the entry as a link to this URL instead of a radio choice.
+        The menu's `value` still marks the matching entry as the current
+        page (`aria-current="page"`). */
+    href?: string;
 }
 
 export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
@@ -292,6 +296,7 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
         "classList",
         "children",
         "style",
+        "href",
     ]);
 
     const { isSelected, select } = useSelectionItem(local.value, local.disabled);
@@ -334,23 +339,8 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
         ...(typeof local.style === "object" ? local.style : {}),
     });
 
-    return (
-        <label
-            tabIndex={local.disabled ? -1 : 0}
-            class={className()}
-            classList={local.classList}
-            style={style()}
-            onClick={activate}
-            onKeyDown={(e) => {
-                if (!local.disabled && (e.key === "Enter" || e.key === " ")) {
-                    e.preventDefault();
-                    select();
-                    activate();
-                }
-            }}
-        >
-            <SelectionRadioInput {...rest} value={local.value} disabled={local.disabled} />
-
+    const content = () => (
+        <>
             <Show when={local.icon}>
                 {typeof local.icon === "string" ? (
                     <PaperIcon class={styles.menuIcon} zeroHeight>
@@ -371,6 +361,43 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
                     </PaperText>
                 </Show>
             </div>
-        </label>
+        </>
+    );
+
+    return (
+        <Show
+            when={local.href === undefined}
+            fallback={
+                <a
+                    href={local.disabled ? undefined : local.href}
+                    aria-disabled={local.disabled ? "true" : undefined}
+                    aria-current={isSelected() ? "page" : undefined}
+                    class={[className(), styles.link].join(" ")}
+                    classList={local.classList}
+                    style={style()}
+                    onClick={activate}
+                >
+                    {content()}
+                </a>
+            }
+        >
+            <label
+                tabIndex={local.disabled ? -1 : 0}
+                class={className()}
+                classList={local.classList}
+                style={style()}
+                onClick={activate}
+                onKeyDown={(e) => {
+                    if (!local.disabled && (e.key === "Enter" || e.key === " ")) {
+                        e.preventDefault();
+                        select();
+                        activate();
+                    }
+                }}
+            >
+                <SelectionRadioInput {...rest} value={local.value} disabled={local.disabled} />
+                {content()}
+            </label>
+        </Show>
     );
 }

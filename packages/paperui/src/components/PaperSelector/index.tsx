@@ -71,6 +71,8 @@ export interface PaperSelectorItemProps
     disabled?: boolean;
     colorless?: boolean;
     reverse?: boolean;
+    /** Renders the item as a link to this URL instead of a radio choice. */
+    href?: string;
 }
 
 export function PaperSelectorItem(props: ParentProps<PaperSelectorItemProps>) {
@@ -84,6 +86,7 @@ export function PaperSelectorItem(props: ParentProps<PaperSelectorItemProps>) {
         "class",
         "classList",
         "children",
+        "href",
     ]);
 
     const { isSelected } = useSelectionItem(local.value, local.disabled);
@@ -98,6 +101,31 @@ export function PaperSelectorItem(props: ParentProps<PaperSelectorItemProps>) {
             .filter(Boolean)
             .join(" ");
 
+    const content = () => (
+        <>
+            <Show when={local.icon}>
+                {typeof local.icon === "string" ? (
+                    <PaperIcon class={styles.itemIcon} zeroHeight>
+                        {local.icon}
+                    </PaperIcon>
+                ) : (
+                    <span class={styles.itemIcon}>{local.icon}</span>
+                )}
+            </Show>
+
+            <div class={styles.itemText}>
+                <PaperText class={styles.itemTitle} size={3} weight={500}>
+                    {local.children}
+                </PaperText>
+                <Show when={local.description}>
+                    <PaperText class={styles.itemDescription} size={1} weight={600}>
+                        {local.description}
+                    </PaperText>
+                </Show>
+            </div>
+        </>
+    );
+
     return (
         <PaperEffect
             colorless={local.colorless ?? !isSelected()}
@@ -105,30 +133,23 @@ export function PaperSelectorItem(props: ParentProps<PaperSelectorItemProps>) {
             class={className()}
             classList={local.classList}
         >
-            <label class={styles.itemInner}>
-                <SelectionRadioInput {...rest} value={local.value} disabled={local.disabled} />
-
-                <Show when={local.icon}>
-                    {typeof local.icon === "string" ? (
-                        <PaperIcon class={styles.itemIcon} zeroHeight>
-                            {local.icon}
-                        </PaperIcon>
-                    ) : (
-                        <span class={styles.itemIcon}>{local.icon}</span>
-                    )}
-                </Show>
-
-                <div class={styles.itemText}>
-                    <PaperText class={styles.itemTitle} size={3} weight={500}>
-                        {local.children}
-                    </PaperText>
-                    <Show when={local.description}>
-                        <PaperText class={styles.itemDescription} size={1} weight={600}>
-                            {local.description}
-                        </PaperText>
-                    </Show>
-                </div>
-            </label>
+            <Show
+                when={local.href === undefined}
+                fallback={
+                    <a
+                        class={[styles.itemInner, styles.link].join(" ")}
+                        href={local.disabled ? undefined : local.href}
+                        aria-disabled={local.disabled ? "true" : undefined}
+                    >
+                        {content()}
+                    </a>
+                }
+            >
+                <label class={styles.itemInner}>
+                    <SelectionRadioInput {...rest} value={local.value} disabled={local.disabled} />
+                    {content()}
+                </label>
+            </Show>
         </PaperEffect>
     );
 }

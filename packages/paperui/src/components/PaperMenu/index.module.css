@@ -49,6 +49,11 @@
     color: var(--paper-text-subtle);
 }
 
+/* a link entry looks like any other entry */
+.link {
+    text-decoration: none;
+}
+
 .PaperMenuItem,
 .PaperMenuItem * {
     transition:

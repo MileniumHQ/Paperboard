@@ -95,4 +95,18 @@ describe("PaperMenu embedded", () => {
         const menu = container.querySelector("[class*='PaperMenu']");
         expect(menu?.className.includes("embedded")).toBe(true);
     });
+    test("an entry with href is a link, and the menu value marks the current page", () => {
+        const { container } = render(() => (
+            <PaperMenu name="links" value="b">
+                <PaperMenuItem value="a" href="/a/">A</PaperMenuItem>
+                <PaperMenuItem value="b" href="/b/">B</PaperMenuItem>
+            </PaperMenu>
+        ));
+        const links = container.querySelectorAll("a");
+        expect(links.length).toBe(2);
+        expect(links[0].getAttribute("href")).toBe("/a/");
+        expect(links[0].getAttribute("aria-current")).toBeNull();
+        expect(links[1].getAttribute("aria-current")).toBe("page");
+        expect(container.querySelector("input[type=radio]")).toBeNull();
+    });
 });

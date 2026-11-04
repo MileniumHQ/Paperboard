@@ -115,6 +115,7 @@ export function PaperCode(props: ParentProps<PaperCodeProps>) {
                 <pre
                     {...rest}
                     ref={local.ref as any}
+                    data-language={local.language || local.lang || undefined}
                     class={[styles.PaperCodeBlock, tokens.tokens, local.class]
                         .filter(Boolean)
                         .join(" ")}
