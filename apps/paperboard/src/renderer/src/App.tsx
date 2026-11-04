@@ -1012,7 +1012,7 @@ const App: Component = () => {
                 onClose={() => setIsSetupOpen(false)}
                 noHeader
                 noPadding
-                size="medium"
+                size="large"
             >
                 <Show when={setupShown()} keyed>
                     <ComputerSetupWizard

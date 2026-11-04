@@ -224,8 +224,13 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
             <WizardStepRouter />
 
             <PaperWizardStep index={0} canProceed={method() !== ""}>
-                <PaperFlex align="center" fullWidth fullHeight padding="double">
-                    <PaperFlex direction="column" gap="full" fullWidth>
+                <PaperFlex center fullWidth fullHeight padding="full">
+                    <PaperFlex
+                        direction="column"
+                        gap="full"
+                        fullWidth
+                        maxWidth="panel-small"
+                    >
                         <PaperFlex direction="column" gap="half">
                             <PaperText preset="title">
                                 Connect a Computer
@@ -279,8 +284,13 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
             </PaperWizardStep>
 
             <PaperWizardStep index={1} canProceed={isReachable()}>
-                <PaperFlex align="center" fullWidth fullHeight padding="double">
-                    <PaperFlex direction="column" gap="full" fullWidth>
+                <PaperFlex center fullWidth fullHeight padding="full">
+                    <PaperFlex
+                        direction="column"
+                        gap="full"
+                        fullWidth
+                        maxWidth="panel-small"
+                    >
                         <PaperFlex direction="column" gap="half">
                             <PaperText preset="title">
                                 Computer Details
@@ -331,8 +341,13 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
             </PaperWizardStep>
 
             <PaperWizardStep index={2} canProceed={canProceedFromStep2()}>
-                <PaperFlex align="center" fullWidth fullHeight padding="double">
-                    <PaperFlex direction="column" gap="full" fullWidth>
+                <PaperFlex center fullWidth fullHeight padding="full">
+                    <PaperFlex
+                        direction="column"
+                        gap="full"
+                        fullWidth
+                        maxWidth="panel-small"
+                    >
                         <PaperFlex direction="column" gap="half">
                             <PaperText preset="title">
                                 Pairing Verification
