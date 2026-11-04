@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { splitProps, Show, type JSX } from "solid-js";
+import { createSignal, splitProps, Show, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import type { PaperRole } from "../../types";
@@ -43,14 +43,19 @@ export function PaperAvatar(props: PaperAvatarProps) {
         "style",
     ]);
 
+    // the src that failed to load: it shows the fallback glyph until the
+    // src changes to one that may load
+    const [failedSrc, setFailedSrc] = createSignal<string>();
+    const image = () => (local.src && local.src !== failedSrc() ? local.src : undefined);
+
     const className = () =>
         [
             styles.PaperAvatar,
             styles[local.size ?? "medium"],
             local.shape === "square" ? styles.square : "",
             local.shape === "sharp" ? styles.sharp : "",
-            local.src ? "" : styles.chip,
-            !local.src && local.accent ? styles.accent : "",
+            image() ? "" : styles.chip,
+            !image() && local.accent ? styles.accent : "",
             local.onEdit ? styles.editable : "",
             local.class,
         ]
@@ -68,14 +73,21 @@ export function PaperAvatar(props: PaperAvatarProps) {
             }}
         >
             <Show
-                when={local.src}
+                when={image()}
                 fallback={
                     <PaperIcon class={styles.fallback}>
                         {local.fallbackIcon || "person"}
                     </PaperIcon>
                 }
             >
-                <img src={local.src} alt={local.alt || ""} class={styles.image} />
+                {(src) => (
+                    <img
+                        src={src()}
+                        alt={local.alt || ""}
+                        class={styles.image}
+                        onError={() => setFailedSrc(src())}
+                    />
+                )}
             </Show>
             <Show when={local.onEdit}>
                 {(onEdit) => (

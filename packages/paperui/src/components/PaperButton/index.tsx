@@ -37,7 +37,12 @@ export function PaperButton(props: PaperButtonProps) {
         "href",
         "target",
         "rel",
+        "onClick",
     ]);
+
+    // a disabled anchor drops its href: without one it is not a link, so it
+    // cannot be followed, focused, or clicked into its handler
+    const inertLink = () => Boolean(local.href && local.disabled);
 
     const className = () =>
         [
@@ -66,7 +71,7 @@ export function PaperButton(props: PaperButtonProps) {
         <Dynamic
             component={local.href ? "a" : "button"}
             type={local.href ? undefined : (local.type ?? "button")}
-            href={local.href}
+            href={inertLink() ? undefined : local.href}
             target={local.target}
             rel={local.rel}
             {...rest}
@@ -78,6 +83,8 @@ export function PaperButton(props: PaperButtonProps) {
                 ...(typeof local.style === "object" ? local.style : {}),
             }}
             disabled={local.href ? undefined : local.disabled}
+            aria-disabled={inertLink() ? "true" : undefined}
+            onClick={inertLink() ? undefined : local.onClick}
             aria-label={ariaLabel()}
         >
             {local.icon && typeof local.children === "string" ? (

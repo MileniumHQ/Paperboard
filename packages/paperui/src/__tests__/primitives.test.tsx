@@ -1,7 +1,9 @@
 import { describe, test, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { render } from "@solidjs/testing-library";
+import { render, fireEvent } from "@solidjs/testing-library";
+import { createSignal } from "solid-js";
+import { PaperEffect } from "../components/PaperEffect";
 import { PaperAvatar } from "../components/PaperAvatar";
 import { PaperButton } from "../components/PaperButton";
 import { PaperEmptyState } from "../components/PaperEmptyState";
@@ -54,6 +56,18 @@ describe("PaperAvatar", () => {
         expect(container.firstElementChild!.className).not.toContain("chip");
     });
 
+    test("an image that fails to load shows the fallback glyph on its chip", () => {
+        const [src, setSrc] = createSignal("https://cdn.example/missing.png");
+        const { container } = render(() => <PaperAvatar src={src()} fallbackIcon="dns" />);
+        fireEvent.error(container.querySelector("img")!);
+        expect(container.querySelector("img")).toBeNull();
+        expect(container.textContent).toContain("dns");
+        expect(container.firstElementChild!.className).toContain("chip");
+        // a new src gets its own try
+        setSrc("https://cdn.example/b.png");
+        expect(container.querySelector("img")?.getAttribute("src")).toBe("https://cdn.example/b.png");
+    });
+
     test("paints the surface chip behind the fallback glyph", () => {
         const { container } = render(() => <PaperAvatar fallbackIcon="dns" />);
         expect(container.firstElementChild!.className).toContain("chip");
@@ -103,6 +117,36 @@ describe("PaperButton", () => {
         expect(el.className).toContain("PaperButton");
     });
 
+    test("a disabled anchor cannot be followed or clicked", () => {
+        const onClick = vi.fn();
+        const { getByRole, getByText } = render(() => (
+            <PaperButton href="/next/" disabled onClick={onClick}>
+                Button
+            </PaperButton>
+        ));
+        const anchor = getByText("Button").closest("a")!;
+        expect(anchor.hasAttribute("href")).toBe(false);
+        expect(anchor.getAttribute("aria-disabled")).toBe("true");
+        expect(anchor.className).toContain("disabled");
+        anchor.click();
+        expect(onClick).not.toHaveBeenCalled();
+        expect(() => getByRole("link")).toThrow();
+    });
+
+    test("an enabled anchor keeps its href and its click handler", () => {
+        const onClick = vi.fn((e: MouseEvent) => e.preventDefault());
+        const { getByRole } = render(() => (
+            <PaperButton href="/next/" onClick={onClick}>
+                Button
+            </PaperButton>
+        ));
+        const anchor = getByRole("link", { name: "Button" });
+        expect(anchor.getAttribute("href")).toBe("/next/");
+        expect(anchor.hasAttribute("aria-disabled")).toBe(false);
+        anchor.click();
+        expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
     test("an anchor button sizes like a button", () => {
         // <button> is border-box by default and <a> is not, so a full-width
         // href button (Continue with Google) ran its padding past its parent
@@ -143,6 +187,19 @@ describe("PaperButton", () => {
         } finally {
             style.remove();
         }
+    });
+});
+
+describe("PaperEffect", () => {
+    test("applies a style object next to its role colors", () => {
+        const { container } = render(() => (
+            <PaperEffect variant="danger" style={{ "max-width": "50%" }}>
+                Effect
+            </PaperEffect>
+        ));
+        const el = container.firstElementChild as HTMLElement;
+        expect(el.style.maxWidth).toBe("50%");
+        expect(el.style.getPropertyValue("--role-base")).not.toBe("");
     });
 });
 

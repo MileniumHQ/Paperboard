@@ -61,7 +61,10 @@ export function PaperEffect(props: PaperEffectProps) {
             {...rest}
             class={className()}
             classList={local.classList}
-            style={roleStyle()}
+            style={{
+                ...roleStyle(),
+                ...(typeof local.style === "object" ? local.style : {}),
+            }}
             on:pointerdown={onPress}
             on:pointerup={onRelease}
             on:pointercancel={onCancel}
