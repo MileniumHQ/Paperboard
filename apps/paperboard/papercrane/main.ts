@@ -9,9 +9,9 @@
 // host, so a GUI import can never shadow the embedded daemon and a test
 // import can never boot a server.
 import { pathToFileURL } from "url";
-import { parseCliArgs, startPaperCraneServer } from "./index";
+import { startPaperCraneServer } from "./index";
+import { CliHandledExit, CliUsageError, EXIT, parseCli } from "./cli";
 import { consoleRelayArgs, runConsoleRelay } from "./consoleRelay";
-import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
 
 // clean one-line startup failures instead of raw stacks
@@ -25,7 +25,20 @@ function fatalCliError(err: any): never {
     } else {
         console.error(`[Paperboard Server] Failed to start: ${msg}`);
     }
-    process.exit(1);
+    process.exit(EXIT.FAILURE);
+}
+
+// a command that finishes (status, pair, the service commands): its
+// failure is the message alone, then exit 1
+async function finish(command: () => Promise<number>): Promise<void> {
+    let code: number;
+    try {
+        code = await command();
+    } catch (err) {
+        console.error((err as Error)?.message || String(err));
+        code = EXIT.FAILURE;
+    }
+    process.exit(code);
 }
 
 async function main(): Promise<void> {
@@ -36,30 +49,48 @@ async function main(): Promise<void> {
         runConsoleRelay(relay.command, relay.args);
         return;
     }
-    let cliOptions;
+    // a wrong command line was printed with its usage; nothing starts
+    let command;
     try {
-        cliOptions = parseCliArgs();
+        command = parseCli(process.argv);
     } catch (err) {
-        logger.debug("[Paperboard Server] CLI parse failed, starting with defaults:", err);
-        cliOptions = {};
+        if (err instanceof CliHandledExit || err instanceof CliUsageError) process.exit(err.exitCode);
+        throw err;
     }
-    const supervise = (cliOptions as { supervise?: unknown }).supervise;
-    if (typeof supervise === "string" && supervise) {
-        const { runSupervisor } = await import("./supervisor");
-        await runSupervisor(supervise);
-        return;
+    switch (command.kind) {
+        case "supervise": {
+            const { runSupervisor } = await import("./supervisor");
+            await runSupervisor(command.procId);
+            return;
+        }
+        // Compiled-binary service mode: the daemon re-invokes itself to run
+        // an installed panel's service module in its own process, so a
+        // remote needs no separate Node/Bun. The parent daemon owns this
+        // child (kill by PID). No server is started here; the service opens
+        // its own socket and exits when the daemon stops it.
+        case "panel-service":
+            await import(pathToFileURL(command.module).href);
+            return;
+        case "status": {
+            const { runStatus } = await import("./localControl");
+            return finish(() => runStatus(command.json));
+        }
+        case "pair": {
+            const { runPair } = await import("./localControl");
+            return finish(runPair);
+        }
+        case "install-service": {
+            const { installService } = await import("./serviceInstall");
+            return finish(() => installService(command));
+        }
+        case "uninstall-service": {
+            const { uninstallService } = await import("./serviceInstall");
+            return finish(() => uninstallService(command.target));
+        }
+        case "serve":
+            await startPaperCraneServer(command.options);
+            return;
     }
-    // Compiled-binary service mode: the daemon re-invokes itself to run an
-    // installed panel's service module in its own process, so a remote needs
-    // no separate Node/Bun. The parent daemon owns this child (kill by PID).
-    // No server is started here; the service opens its own socket and exits
-    // when the daemon stops it.
-    const panelService = (cliOptions as { panelService?: unknown }).panelService;
-    if (typeof panelService === "string" && panelService) {
-        await import(pathToFileURL(panelService).href);
-        return;
-    }
-    await startPaperCraneServer(cliOptions);
 }
 
 const isMainEntry = (import.meta as unknown as { main?: boolean }).main;

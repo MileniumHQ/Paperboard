@@ -287,11 +287,13 @@ export interface ServerOptions {
 // handshake file for local clients, written on every listen. Throws: a
 // daemon whose handshake was not written is unreachable to its own host,
 // so startup fails instead of reporting a ready server nobody can find.
-function writeCraneJson(file: string, port: number, token: string | null, startId: string) {
+// pid and listen are for `papercrane status`, which reports the address
+// other computers use (port is this computer's own loopback port)
+function writeCraneJson(file: string, port: number, token: string | null, startId: string, listen: { host: string; port: number; secure: boolean }) {
     ensurePrivateDir(path.dirname(file));
     writeFileAtomicSync(
         file,
-        JSON.stringify({ port, token, startId }, null, 2),
+        JSON.stringify({ port, token, startId, pid: process.pid, listen }, null, 2),
         { mode: 0o600 },
     );
 }
@@ -554,7 +556,7 @@ export function startPaperCraneServer(
                 // the handshake comes first: nothing starts behind a daemon
                 // its own host cannot find
                 try {
-                    writeCraneJson(handshakeFile, localPort, staticToken, startId);
+                    writeCraneJson(handshakeFile, localPort, staticToken, startId, { host, port: actualPort, secure: tlsIdentity !== null });
                 } catch (err) {
                     logger.error("[Paperboard Server] could not write the crane.json handshake; not starting:", err);
                     for (const client of wss.clients) client.terminate();
@@ -654,40 +656,8 @@ export function startPaperCraneServer(
     });
 }
 
-import { Command } from "commander";
-
-export function parseCliArgs(argv: string[] = process.argv): ServerOptions & { supervise?: string; panelService?: string } {
-    const program = new Command();
-    program
-        .name("papercrane")
-        .allowUnknownOption(false)
-        .option("--no-auth", "disable authentication")
-        .option("--headless", "run without TUI/pairing UI")
-        .option("--start-pairing", "show a pairing code at launch (otherwise press p)")
-        .option("--port <number>", "listen port", (v) => Number(v))
-        .option("--host <host>", "listen host")
-        .option("--allow-registry-override", "honor ORIGAMI_REGISTRY_URL even in production")
-        .option("--supervise <procId>", "run as supervisor for procId")
-        .option("--panel-service <path>", "run a panel's service module (internal)");
-    program.parse(argv);
-    const opts = program.opts();
-    const options: ServerOptions & { supervise?: string; panelService?: string } = {};
-    // --no-auth surfaces as opts.auth === false, check both spellings
-    if (opts.auth === false || opts.noAuth) options.noAuth = true;
-    if (opts.headless) options.headless = true;
-    if (opts.startPairing) options.startPairing = true;
-    if (typeof opts.port === "number" && Number.isFinite(opts.port)) {
-        options.port = opts.port;
-    }
-    if (typeof opts.host === "string" && opts.host) options.host = opts.host;
-    if (typeof opts.supervise === "string" && opts.supervise) {
-        (options as any).supervise = opts.supervise;
-    }
-    if (typeof opts.panelService === "string" && opts.panelService) {
-        options.panelService = opts.panelService;
-    }
-    return options;
-}
+// the command line lives in ./cli.ts; re-exported for existing importers
+export { parseCliArgs } from "./cli";
 // Entry lives in ./main.ts (import.meta.main gate): importing this module
 // — from Electron, from tests, from anywhere — never autostarts a server.
 // The old main-module detection heuristic died with the split, and the

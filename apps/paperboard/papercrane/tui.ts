@@ -49,10 +49,15 @@ export class PaperCraneTui {
             }
         });
 
+        // pairing opens and closes from the keys below and from `papercrane
+        // pair` (system:pairing-*), so the screen follows the events
+        this.auth.on("pairingStarted", () => this.render());
+
         this.auth.on("pairingCancelled", (reason: string) => {
-            if (reason !== "too-many-failures") return;
             this.render();
-            console.log("\n  [x] Pairing ended after too many wrong codes. Press [p] for a new code.\n");
+            if (reason === "too-many-failures") {
+                console.log("\n  [x] Pairing ended after too many wrong codes. Press [p] for a new code.\n");
+            }
         });
 
         this.auth.on("revoked", (client: AuthorizedToken) => {
@@ -106,14 +111,12 @@ export class PaperCraneTui {
             if (this.auth.isPairingActive()) {
                 if (key.name === "c") {
                     this.auth.cancelPairing();
-                    this.render();
                 } else if (key.name === "s" || key.name === "q") {
                     this.stop();
                 }
             } else {
                 if (key.name === "p") {
                     this.auth.startPairing();
-                    this.render();
                 } else if (key.name === "r") {
                     const clients = this.visibleClients();
                     if (clients.length === 0) {

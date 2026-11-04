@@ -18,11 +18,14 @@ describe("parseCliArgs", () => {
         expect(parseCliArgs([...base]).noAuth).toBeUndefined();
     });
     it("parses port/host/headless/start-pairing", () => {
-        const o = parseCliArgs([...base, "--port", "51749", "--host", "127.0.0.1", "--headless", "--start-pairing"]);
+        // --start-pairing and --headless together is refused (craneCli.test.ts):
+        // headless has no screen to show the code on
+        const o = parseCliArgs([...base, "--port", "51749", "--host", "127.0.0.1", "--headless"]);
         expect(o.port).toBe(51749);
         expect(o.host).toBe("127.0.0.1");
         expect(o.headless).toBe(true);
-        expect(o.startPairing).toBe(true);
+        expect(parseCliArgs([...base, "--start-pairing"]).startPairing).toBe(true);
+        expect(parseCliArgs([...base, "serve", "--port", "0"]).port).toBe(0);
     });
 
     it("index has no CLI autostart heuristic (entry lives in main.ts)", async () => {

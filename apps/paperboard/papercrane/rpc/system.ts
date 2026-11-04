@@ -84,6 +84,29 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
             reply(id, await usageSampler.sample(() => usageRoots(ctx)));
             return true;
         }
+        // pairing a new computer, for `papercrane pair` on a daemon that has
+        // no interactive screen. Minting a host credential is host
+        // equipment: a panel token never opens it.
+        case "system:pairing-start":
+        case "system:pairing-status":
+        case "system:pairing-cancel": {
+            if (ctx.callerPanelId()) throw forbidden(`${action} is host-only`);
+            if (ctx.auth.noAuth) throw forbidden("Pairing is off: this daemon runs with --no-auth");
+            if (action === "system:pairing-start") reply(id, { code: ctx.auth.startPairing() });
+            else if (action === "system:pairing-cancel") {
+                const wasActive = ctx.auth.isPairingActive();
+                if (wasActive) ctx.auth.cancelPairing();
+                reply(id, { cancelled: wasActive });
+            } else {
+                reply(id, {
+                    active: ctx.auth.isPairingActive(),
+                    computers: ctx.auth.getAuthorizedClients()
+                        .filter((c) => c.clientName !== "host" && !c.panelId)
+                        .map((c) => ({ name: c.clientName, pairedAt: c.pairedAt })),
+                });
+            }
+            return true;
+        }
         case "system:update": {
             const { downloadUrl, sha256, version, signature } = params ?? {};
             // replacing the daemon binary is host equipment, never panel
