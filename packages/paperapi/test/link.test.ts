@@ -4,7 +4,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { linkAllPanels, linkPanel } from "../src/link";
+import { linkAllPanels, linkPanel, unlinkPanel } from "../src/link";
 
 let homeTmp: string;
 let sourceDir: string;
@@ -102,5 +102,27 @@ describe("linkAllPanels", () => {
         const forced = linkAllPanels(panelsRoot, { force: true });
         expect(forced.skipped).toEqual([]);
         expect(forced.linked[0].id).toBe("dev.test.conflict");
+    });
+});
+
+describe("a link whose folder moved away", () => {
+    test("is replaced by linking again", () => {
+        const panelsDir = path.join(homeTmp, "panels");
+        fs.mkdirSync(panelsDir, { recursive: true });
+        fs.symlinkSync(path.join(homeTmp, "moved-away"), path.join(panelsDir, "dev.test.link"), "dir");
+
+        const res = linkPanel({ targetDir: sourceDir });
+
+        expect(fs.readlinkSync(res.linkPath)).toBe(sourceDir);
+    });
+
+    test("is removed by unlink", () => {
+        const panelsDir = path.join(homeTmp, "panels");
+        fs.mkdirSync(panelsDir, { recursive: true });
+        const link = path.join(panelsDir, "dev.test.link");
+        fs.symlinkSync(path.join(homeTmp, "moved-away"), link, "dir");
+
+        expect(unlinkPanel("dev.test.link")).toBe(true);
+        expect(() => fs.lstatSync(link)).toThrow(/ENOENT/);
     });
 });

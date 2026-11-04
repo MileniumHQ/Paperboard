@@ -1,30 +1,22 @@
 import path from "path";
 import fs from "fs";
-import os from "os";
 import { requirePanelId } from "./panelIdentity";
 import { debugErr } from "./debug";
-
-// dev-link target root. Same root variable the transport handshake uses
-// (PAPERBOARD_DIR, see ws.ts), so a machine with a relocated .paperboard
-// links into the same tree the daemon scans.
-function getPanelsDir(): string {
-    const root =
-        process.env.PAPERBOARD_DIR ||
-        path.join(typeof os.homedir === "function" ? os.homedir() : "", ".paperboard");
-    return path.join(root, "panels");
-}
+import { panelsDir as getPanelsDir } from "./cli/paths";
 
 export interface LinkOptions {
     targetDir?: string;
     force?: boolean;
 }
 
-// links a local panel folder into ~/.paperboard/panels for live dev
+// links a local panel folder into the data folder's panels/ for live dev
 export function linkPanel(options: LinkOptions = {}): {
     id: string;
     name: string;
     sourcePath: string;
     linkPath: string;
+    /** whether the manifest declares a background service */
+    hasService: boolean;
 } {
     const panelsDir = getPanelsDir();
     const sourcePath = path.resolve(options.targetDir || process.cwd());
@@ -43,8 +35,9 @@ export function linkPanel(options: LinkOptions = {}): {
 
     const linkPath = path.join(panelsDir, manifest.id);
 
-    if (fs.existsSync(linkPath)) {
-        const lstat = fs.lstatSync(linkPath);
+    // lstat, not exists: a link whose folder moved away is still in the way
+    const lstat = lstatOrNull(linkPath);
+    if (lstat) {
         if (lstat.isSymbolicLink()) {
             fs.unlinkSync(linkPath);
         } else if (lstat.isDirectory()) {
@@ -53,8 +46,10 @@ export function linkPanel(options: LinkOptions = {}): {
                 // no copy of the replaced directory is retained
                 fs.rmSync(linkPath, { recursive: true, force: true });
             } else {
-                throw new Error(`Destination ${linkPath} already exists. Use --force to replace it.`);
+                throw new Error(`An installed copy of ${manifest.id} already exists at ${linkPath}. Use --force to replace it with this folder.`);
             }
+        } else {
+            throw new Error(`${linkPath} is a file, not a panel; remove it first`);
         }
     }
 
@@ -65,7 +60,17 @@ export function linkPanel(options: LinkOptions = {}): {
         name: manifest.name || manifest.id,
         sourcePath,
         linkPath,
+        hasService: typeof manifest.service === "string" && manifest.service.length > 0,
     };
+}
+
+function lstatOrNull(target: string): fs.Stats | null {
+    try {
+        return fs.lstatSync(target);
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw err;
+    }
 }
 
 export interface LinkAllResult {
@@ -105,9 +110,8 @@ export function unlinkPanel(panelId: string): boolean {
     requirePanelId(panelId);
     const panelsDir = getPanelsDir();
     const linkPath = path.join(panelsDir, panelId);
-    if (!fs.existsSync(linkPath)) return false;
-
-    const lstat = fs.lstatSync(linkPath);
+    const lstat = lstatOrNull(linkPath);
+    if (!lstat) return false;
     if (lstat.isSymbolicLink()) {
         fs.unlinkSync(linkPath);
         return true;

@@ -11,6 +11,8 @@ export interface PackOptions {
     targetDir?: string;
     outputDir?: string;
     autoBuild?: boolean;
+    /** Progress lines; defaults to the console. */
+    log?: (line: string) => void;
 }
 
 export interface PackResult {
@@ -27,6 +29,7 @@ export interface PackResult {
 
 // packages a panel project into a release archive
 export function packPanel(options: PackOptions = {}): PackResult {
+    const log = options.log ?? ((line: string) => console.log(line));
     const panelDir = path.resolve(options.targetDir || process.cwd());
     const manifestPath = path.join(panelDir, "manifest.json");
 
@@ -62,11 +65,13 @@ export function packPanel(options: PackOptions = {}): PackResult {
     // auto-build when entry is missing
     if (!fs.existsSync(baseAbsolutePath)) {
         if (options.autoBuild !== false) {
-            console.log(`[Packager] Building panel in ${panelDir}...`);
+            log(`Building ${manifest.id} (bun run build)…`);
+            // the build's own output goes to stderr: stdout is the caller's
             const buildRes = spawnSync("bun", ["run", "build"], {
                 cwd: panelDir,
-                stdio: "inherit",
+                stdio: ["inherit", 2, "inherit"],
             });
+            if (buildRes.error) throw new Error(`Couldn't run bun run build: ${buildRes.error.message}`);
             if (buildRes.status !== 0) {
                 throw new Error(`Build failed with exit code ${buildRes.status}`);
             }
@@ -121,7 +126,7 @@ export function packPanel(options: PackOptions = {}): PackResult {
     if (fs.existsSync(path.join(panelDir, "branding"))) addEntry("branding");
     else if (fs.existsSync(path.join(panelDir, "icon.png"))) addEntry("icon.png");
 
-    console.log(`[Packager] Archiving into ${archiveName}...`);
+    log(`Archiving ${entriesToPack.join(", ")}…`);
     tar.create(
         {
             gzip: true,
@@ -140,7 +145,6 @@ export function packPanel(options: PackOptions = {}): PackResult {
     const sha256 = crypto.createHash("sha256").update(archiveBuffer).digest("hex");
     const sizeBytes = archiveBuffer.length;
 
-    console.log(`[Packager] Packed ${manifest.id}@${version} (${(sizeBytes / 1024).toFixed(1)} KB)`);
 
     return {
         id: manifest.id,
