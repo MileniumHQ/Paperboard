@@ -37,6 +37,7 @@ import { ErrorCode } from "./protocol";
 import { resolveRegistryUrl } from "./util";
 import { requireReleaseOrder } from "./releasePolicy";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
+import type { MonitorLifecycle } from "../../../packages/paperapi/src/monitorProtocol";
 import { fetchRegistryRecord } from "./registryRecord";
 import { RELEASE_PUBLIC_KEY, releaseMessage, requireReleaseSignature } from "./releaseSignature";
 
@@ -546,13 +547,14 @@ export class PaperCraneEngine {
                 onData: subscriber ? undefined : onData,
                 onExit: (code) => {
                     this.clients.delete(id);
-                    this.workloadEnded(id);
+                    this.workloadEnded(id, code);
                     if (!subscriber) onExit?.(code);
                 },
                 attach: (client) => this.wireStreams(id, client),
             },
         );
         this.clientCommands.set(id, shell);
+        this.announceWorkload(id, "started");
     }
 
     public writeTerminal(id: string, data: string): void {
@@ -663,7 +665,7 @@ export class PaperCraneEngine {
                     onStderr: subscriber ? undefined : onStderr,
                     onExit: (exitCode: number) => {
                         this.clients.delete(id);
-                        this.workloadEnded(id);
+                        this.workloadEnded(id, exitCode);
                         resolveExit({ exitCode });
                         if (!subscriber) options.onExit?.(exitCode);
                     },
@@ -673,6 +675,7 @@ export class PaperCraneEngine {
         this.clientCommands.set(id, command);
         if (inputless) this.inputless.add(id);
         else this.inputless.delete(id);
+        this.announceWorkload(id, "started");
         return { completion };
     }
 
@@ -840,10 +843,10 @@ export class PaperCraneEngine {
                 this.clients.set(id, client);
                 this.clientCommands.set(id, typeof command === "string" ? command : null);
                 if (noStdin === true) this.inputless.add(id);
-                client.on("exit", () => {
+                client.on("exit", (code: number | null) => {
                     if (this.clients.get(id) !== client) return;
                     this.clients.delete(id);
-                    this.workloadEnded(id);
+                    this.workloadEnded(id, code);
                 });
             } else {
                 client.destroy();
@@ -1140,7 +1143,8 @@ export class PaperCraneEngine {
     }
 
     // a workload is gone: its runtime may now be free to update
-    private workloadEnded(id: string): void {
+    private workloadEnded(id: string, code: number | null): void {
+        this.announceWorkload(id, "exited", code);
         this.clientCommands.delete(id);
         this.inputless.delete(id);
         this.forgetClientOwner(id);
@@ -1627,6 +1631,29 @@ export class PaperCraneEngine {
         }
     }
 
+    private readonly lifecycleListeners = new Set<(change: MonitorLifecycle) => void>();
+
+    /** Hears every panel service and workload start and exit from now on
+     * (the traffic monitor); returns the unsubscribe. */
+    public onLifecycle(listener: (change: MonitorLifecycle) => void): () => void {
+        this.lifecycleListeners.add(listener);
+        const offServices = this.services.onLifecycle(listener);
+        return () => {
+            this.lifecycleListeners.delete(listener);
+            offServices();
+        };
+    }
+
+    private announceWorkload(id: string, state: "started" | "exited", code?: number | null): void {
+        if (this.lifecycleListeners.size === 0) return;
+        const panel = this.clientOwner(id);
+        for (const listener of this.lifecycleListeners) {
+            try {
+                listener({ type: "workload", id, panel, state, ...(state === "exited" ? { code: code ?? null } : {}) });
+            } catch (err) { logger.error(`[engine] lifecycle listener failed for ${id}`, err); }
+        }
+    }
+
     private readonly dataDeletedListeners = new Set<(panelId: string) => void | Promise<void>>();
 
     /** runs `listener` when an uninstall deletes a panel's data; returns the
@@ -1803,9 +1830,10 @@ export class PaperCraneEngine {
     }
 
     private async stopOwnedClient(id: string, client: SupervisedProcessClient, signal = "SIGTERM"): Promise<void> {
+        let exitCode: number | null = null;
         if (client.isConnected()) {
             let exited = false;
-            const onExit = () => { exited = true; };
+            const onExit = (code: number | null) => { exited = true; exitCode = code; };
             client.on("exit", onExit);
             try {
                 client.kill(signal);
@@ -1820,7 +1848,7 @@ export class PaperCraneEngine {
         }
         client.destroy();
         this.clients.delete(id);
-        this.workloadEnded(id);
+        this.workloadEnded(id, exitCode);
     }
 
     public async getConfig(id: string, configPath?: string): Promise<any> {

@@ -7,6 +7,9 @@ import { getPaperboardDir } from "./paths";
 import { validatePanelManifest } from "./storage";
 import { isPanelId, requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import type { PaperCraneAuth } from "./auth";
+import type { MonitorLifecycle, MonitorServiceRecord } from "../../../packages/paperapi/src/monitorProtocol";
+
+type ServiceChange = Omit<MonitorServiceRecord, "type" | "at" | "panel">;
 
 interface RunningService {
     process: cp.ChildProcess;
@@ -63,7 +66,23 @@ export class PanelServicesManager {
     private services = new Map<string, RunningService>();
     private auth: PaperCraneAuth | null = null;
     private port = 45464;
+    // who hears about services starting, getting ready, exiting and failing
+    // (the traffic monitor); empty unless someone is watching
+    private lifecycleListeners = new Set<(change: MonitorLifecycle) => void>();
     constructor(private baseDir = getPaperboardDir()) {}
+
+    /** Hears every service state change from now on; returns the unsubscribe. */
+    public onLifecycle(listener: (change: MonitorLifecycle) => void): () => void {
+        this.lifecycleListeners.add(listener);
+        return () => this.lifecycleListeners.delete(listener);
+    }
+    private announce(panel: string, change: ServiceChange): void {
+        for (const listener of this.lifecycleListeners) {
+            try {
+                listener({ type: "service", panel, ...change });
+            } catch (err) { logger.error(`[services] lifecycle listener failed for ${panel}`, err); }
+        }
+    }
 
     public init(port: number, _hostToken?: string, auth?: PaperCraneAuth): void {
         this.port = port;
@@ -121,9 +140,11 @@ export class PanelServicesManager {
         const entry: RunningService = { process: child, state: "starting", ready, rejectReady,
             exited: new Promise<void>((resolve) => { resolveExit = resolve; }), stopped: false, crashCount, startedAt: Date.now() };
         this.services.set(id, entry);
+        this.announce(id, { state: "starting", ...(child.pid !== undefined ? { pid: child.pid } : {}) });
         entry.readyTimer = setTimeout(() => {
             entry.state = "failed";
             entry.stopped = true;
+            this.announce(id, { state: "failed", error: `did not report ready within 20s` });
             rejectReady(new Error(`Service ${id} did not report ready within 20s`));
             child.kill("SIGKILL");
         }, 20_000);
@@ -141,13 +162,20 @@ export class PanelServicesManager {
             entry.beforeBackup = message.beforeBackup === true;
             entry.beforeRestore = message.beforeRestore === true;
             entry.state = "ready";
+            this.announce(id, { state: "ready", ...(child.pid !== undefined ? { pid: child.pid } : {}) });
             resolveReady();
         });
         child.stdout?.on("data", (chunk: Buffer) => logger.info(`[service:${id}] ${chunk.toString("utf8").slice(0, 65536)}`));
         child.stderr?.on("data", (chunk: Buffer) => logger.warn(`[service:${id}] ${chunk.toString("utf8").slice(0, 65536)}`));
-        child.on("error", (err) => { entry.state = "failed"; rejectReady(err); logger.error(`[services] ${id} process error`, err); });
+        child.on("error", (err) => {
+            entry.state = "failed";
+            this.announce(id, { state: "failed", error: err.message });
+            rejectReady(err);
+            logger.error(`[services] ${id} process error`, err);
+        });
         child.once("close", (code) => {
             clearTimeout(entry.readyTimer);
+            this.announce(id, { state: entry.stopped ? "stopped" : "exited", code });
             entry.backupPrepare?.settle(new Error(`Service ${id} exited while getting ready for a backup`));
             resolveExit();
             rejectReady(new Error(`Service ${id} exited before readiness (code ${code})`));

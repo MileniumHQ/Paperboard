@@ -23,6 +23,9 @@ import { PROTOCOL_VERSION, ErrorCode } from "./protocol";
 import { rpcErrorCode, assertPanelId, assertStr } from "./rpc/params";
 import { requireHost } from "./principal";
 import { isLoopbackHost } from "./discovery";
+import { TrafficMonitor } from "./monitor";
+import { secretsMatch } from "./secretCompare";
+import { MONITOR_PROTOCOL, MONITOR_SUBSCRIBE, MONITOR_UNSUBSCRIBE } from "../../../packages/paperapi/src/monitorProtocol";
 
 // strict origin allowlist, exact hostname match
 export function isAllowedOrigin(origin: string): boolean {
@@ -159,6 +162,8 @@ export function setupWebSocketServer(
         };
     };
     let inFlightTotal = 0;
+    // the traffic tap behind `paperapi monitor`; inert until a host subscribes
+    const monitor = new TrafficMonitor((listener) => engine.onLifecycle(listener), sendBounded);
     wss.options.maxPayload = Math.min(wss.options.maxPayload ?? MAX_WS_PAYLOAD, MAX_WS_PAYLOAD);
     const revokeSockets = (sockets?: Set<WebSocket>) => {
         for (const socket of sockets ?? []) {
@@ -178,6 +183,7 @@ export function setupWebSocketServer(
         byPanel.clear();
         socketSubscriptions.clear();
         eventSubscribers.clear();
+        monitor.clear();
     });
 
     wss.on("connection", (ws: WebSocket, req: any) => {
@@ -301,8 +307,9 @@ export function setupWebSocketServer(
             const recipients = new Set<WebSocket>();
             for (const client of eventSubscribers.get(event) ?? []) recipients.add(client);
             for (const client of eventSubscribers.get("*") ?? []) recipients.add(client);
-            if (recipients.size === 0) return;
+            if (recipients.size === 0 && !monitor.active) return;
             const msg = JSON.stringify({ type: "event", event, payload });
+            monitor.event(authedPanelId, event, msg, recipients.size);
             for (const client of recipients) {
                 if (client.readyState !== WebSocket.OPEN) continue;
                 if (!sendBounded(client, msg)) client.close(4429, "Slow event consumer");
@@ -316,6 +323,7 @@ export function setupWebSocketServer(
             unindex(byPanel, authedPanelId);
             unindexSubscriptions(ws);
             socketSubscriptions.delete(ws);
+            monitor.unsubscribe(ws);
             engine.detachStreams(ws);
             const registryChanged = actionsRegistry.handleSocketClose(ws);
             if (registryChanged) {
@@ -341,6 +349,9 @@ export function setupWebSocketServer(
             inFlightTotal++;
             // kept for the catch below so failures always answer
             let failedId: unknown = null;
+            // records this request's answer for the monitor, once; null
+            // while nobody watches, so an unwatched daemon builds nothing
+            let tapAnswer: ((error?: string, code?: string) => void) | null = null;
             try {
                 let text = raw.toString("utf8");
                 const maybe = JSON.parse(text);
@@ -524,12 +535,21 @@ export function setupWebSocketServer(
                     failedId = (msg as any)?.id ?? null;
                 } catch (err) { logger.debug("[ws.ts] op failed:", err) }
                 const { id, action, params } = msg;
+                if (monitor.active) {
+                    const at = Date.now();
+                    const started = performance.now();
+                    tapAnswer = (error, code) => {
+                        tapAnswer = null;
+                        monitor.rpc({ panel: authedPanelId, method: action, params, at, started, error: error ?? undefined, code });
+                    };
+                }
 
                 const reply = (
                     result: any,
                     error?: string,
                     code?: string,
                 ) => {
+                    tapAnswer?.(error, code);
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send(
                             JSON.stringify({
@@ -561,6 +581,7 @@ export function setupWebSocketServer(
                         error?: string,
                         code?: string,
                     ) => {
+                        if (rid === id) tapAnswer?.(error, code);
                         if (ws.readyState === WebSocket.OPEN) {
                             ws.send(
                                 JSON.stringify({
@@ -742,6 +763,28 @@ export function setupWebSocketServer(
                     return;
                 }
 
+                // the traffic monitor sees every panel's calls, so it is for
+                // this computer's own host credential (local/crane.json)
+                // only: never a panel, a relay, or a paired computer's token
+                if (action === MONITOR_SUBSCRIBE) {
+                    const hostToken = options.staticToken;
+                    const local = !!hostToken && !!authedToken && authedPanelId === null &&
+                        authedRelayTo === null && secretsMatch(authedToken, hostToken);
+                    if (!local) {
+                        reply(null, `${MONITOR_SUBSCRIBE} needs this computer's own host credential (local/crane.json)`, ErrorCode.FORBIDDEN);
+                        return;
+                    }
+                    const panelId = params?.panelId === undefined ? null : assertPanelId(params.panelId);
+                    reply({ success: true, protocol: MONITOR_PROTOCOL });
+                    monitor.subscribe(ws, panelId);
+                    return;
+                }
+                if (action === MONITOR_UNSUBSCRIBE) {
+                    monitor.unsubscribe(ws);
+                    reply({ success: true });
+                    return;
+                }
+
                 if (
                     (await handleTerminal(action, id, params, rpcCtx)) ||
                     (await handleProcess(action, id, params, rpcCtx)) ||
@@ -762,14 +805,17 @@ export function setupWebSocketServer(
                 // malformed calls (rpc/params.ts asserts) get a typed
                 // INVALID_PARAMS; everything else is INTERNAL.
                 try {
+                    const error = `Request failed: ${err?.message || "internal error"}`;
+                    const code = rpcErrorCode(err);
+                    tapAnswer?.(error, code);
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send(
                             JSON.stringify({
                                 type: "response",
                                 id: failedId,
                                 result: null,
-                                error: `Request failed: ${err?.message || "internal error"}`,
-                                code: rpcErrorCode(err),
+                                error,
+                                code,
                             }),
                         );
                     }
