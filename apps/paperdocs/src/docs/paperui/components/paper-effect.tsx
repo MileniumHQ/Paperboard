@@ -84,7 +84,7 @@ export function Example() {
                         <td><PaperCode>disabled</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td><PaperCode>false</PaperCode></td>
-                        <td>Sits the element pressed in, flush with its edge, with no hover lift and a default cursor. A wrapped control that is disabled does the same.</td>
+                        <td>Disables hover and active transforms and switches cursor to default.</td>
                     </tr>
                 </tbody>
             </PaperTable>
