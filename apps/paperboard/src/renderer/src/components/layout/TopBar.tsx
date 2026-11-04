@@ -90,7 +90,7 @@ const TopBar: Component<{
                 <PaperText
                     weight={800}
                     size={2}
-                    color="text-subtle"
+                    color="text-muted"
                     class={styles.title}
                 >
                     Paperboard

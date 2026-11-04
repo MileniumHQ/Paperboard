@@ -1,7 +1,3 @@
-.header {
-    border-bottom: var(--paper-border-width) solid var(--paper-border);
-}
-
 /* the computer and the library sit on the header's own surface */
 .tabs {
     width: 100%;
@@ -11,13 +7,19 @@
 }
 
 .computerItem {
-    background-color: var(--paper-surface-inset) !important;
-    /* Keep the OS tint over PaperList's hover and selected backgrounds. */
+    /* The OS tint is the computer's identity, not a selection: it rests on
+       the sidebar itself and only lifts onto paper when chosen, like any
+       other row. Kept over PaperList's hover and selected backgrounds. */
+    background-color: transparent !important;
     background-image: linear-gradient(
         135deg,
         color-mix(in srgb, var(--computer-os-color) 22%, transparent) 0%,
         transparent 100%
     ) !important;
+}
+
+.computerItem:has(input:checked) {
+    background-color: var(--paper-surface-raised) !important;
 }
 
 .computerItem::after {

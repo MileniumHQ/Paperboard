@@ -25,7 +25,8 @@ export interface ComputerSetupWizardProps {
 export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     props,
 ) => {
-    const [method, setMethod] = createSignal("custom");
+    // nothing is chosen until the person chooses, or a computer is found
+    const [method, setMethod] = createSignal("");
     const [host, setHost] = createSignal("");
     const [port, setPort] = createSignal("45464");
     const [name, setName] = createSignal("");
@@ -180,7 +181,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     let hasAutoSelected = false;
     createEffect(() => {
         const list = discovered();
-        if (list.length > 0 && !hasAutoSelected && method() === "custom" && !host()) {
+        if (list.length > 0 && !hasAutoSelected && method() === "" && !host()) {
             hasAutoSelected = true;
             const first = list[0];
             handleMethodChange(suggestionKey(first));
@@ -222,21 +223,16 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
         >
             <WizardStepRouter />
 
-            <PaperWizardStep index={0}>
-                <PaperFlex center fullWidth fullHeight padding="full">
-                    <PaperFlex
-                        direction="column"
-                        gap="full"
-                        fullWidth
-                        maxWidth="panel-small"
-                    >
+            <PaperWizardStep index={0} canProceed={method() !== ""}>
+                <PaperFlex align="center" fullWidth fullHeight padding="double">
+                    <PaperFlex direction="column" gap="full" fullWidth>
                         <PaperFlex direction="column" gap="half">
                             <PaperText preset="title">
                                 Connect a Computer
                             </PaperText>
                             <PaperText preset="text">
-                                Select how you want to discover and pair with
-                                your computer.
+                                Choose a computer found on your network, or
+                                connect to one by its address.
                             </PaperText>
                         </PaperFlex>
 
@@ -267,23 +263,24 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             <PaperSelectorItem
                                 value="custom"
                                 icon="router"
-                                description="Manually type an IP address for a computer not shown here."
+                                description="Type the address of a computer that isn't listed."
                             >
                                 Custom IP
                             </PaperSelectorItem>
                         </PaperSelector>
+
+                        <Show when={!discoveryError() && discovered().length === 0}>
+                            <PaperText preset="hint">
+                                Looking for computers on your network. They show up here as they're found.
+                            </PaperText>
+                        </Show>
                     </PaperFlex>
                 </PaperFlex>
             </PaperWizardStep>
 
             <PaperWizardStep index={1} canProceed={isReachable()}>
-                <PaperFlex center fullWidth fullHeight padding="full">
-                    <PaperFlex
-                        direction="column"
-                        gap="full"
-                        fullWidth
-                        maxWidth="panel-small"
-                    >
+                <PaperFlex align="center" fullWidth fullHeight padding="double">
+                    <PaperFlex direction="column" gap="full" fullWidth>
                         <PaperFlex direction="column" gap="half">
                             <PaperText preset="title">
                                 Computer Details
@@ -334,13 +331,8 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
             </PaperWizardStep>
 
             <PaperWizardStep index={2} canProceed={canProceedFromStep2()}>
-                <PaperFlex center fullWidth fullHeight padding="full">
-                    <PaperFlex
-                        direction="column"
-                        gap="full"
-                        fullWidth
-                        maxWidth="panel-small"
-                    >
+                <PaperFlex align="center" fullWidth fullHeight padding="double">
+                    <PaperFlex direction="column" gap="full" fullWidth>
                         <PaperFlex direction="column" gap="half">
                             <PaperText preset="title">
                                 Pairing Verification

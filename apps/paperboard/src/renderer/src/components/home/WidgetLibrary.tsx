@@ -22,6 +22,7 @@ import { type ComputerInfo, logToMain, panelUrl } from "../../lib/shell";
 import type { LoadQueue } from "../../lib/loadQueue";
 import { BUILTIN_WIDGETS, BuiltinView, builtinWidget } from "./builtins";
 import PanelWidgetFrame, { type FrameFacts } from "./PanelWidgetFrame";
+import paperboardIcon from "../../assets/Paperboard.png";
 import styles from "./Home.module.css";
 
 /** One widget, at one size, ready to place. */
@@ -164,11 +165,12 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
                             onValueChange={(key) => openSource(String(key))}
                             fullWidth
                             borderless
+                            background="transparent"
                             scrollable="y"
                         >
                             <SourceRow
                                 key="paperboard"
-                                icon={<PaperIcon>widgets</PaperIcon>}
+                                icon={<PaperIcon src={paperboardIcon} alt="" />}
                                 name="Paperboard"
                                 detail={BUILTIN_WIDGETS.filter((w) => !w.unlisted).map((w) => w.declaration.name).join(", ")}
                             />

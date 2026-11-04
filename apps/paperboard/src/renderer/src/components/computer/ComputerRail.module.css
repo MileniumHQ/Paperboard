@@ -11,6 +11,11 @@
     margin: var(--paper-uigap-third) auto;
 }
 
+/* settings, and the update notice under it, rest at the rail's foot */
+.rail .foot {
+    margin-top: auto;
+}
+
 .updateAction.updateAvailable,
 .updateAction.updateAvailable:active {
     color: var(--paper-success);

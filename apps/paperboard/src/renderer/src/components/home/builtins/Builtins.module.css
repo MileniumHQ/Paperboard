@@ -201,8 +201,10 @@
     overflow: hidden;
 }
 
+/* the legend takes the rows it has, and the ring and trend grow into
+   the rest, so a short legend never leaves the bottom of the tile empty */
 .usageTall .legendBox {
-    flex: 1 1 0;
+    flex: 0 1 auto;
     justify-content: flex-start;
 }
 

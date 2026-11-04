@@ -18,6 +18,7 @@ import {
     computeGeometry,
     findFreeSpot,
     findPhoneSpot,
+    fitBesideGallery,
     fitCanvas,
     FLOOR_CELL,
     HOME_LAYOUT_COMPUTER,
@@ -36,6 +37,7 @@ import {
     snapToGrid,
     snapToPhone,
     stepPlacement,
+    usedColumns,
     usedPages,
     usedRows,
     withoutEmptyPages,
@@ -60,6 +62,8 @@ const OFFSCREEN_UNLOAD_MS = 30_000;
 // releases them until Home is shown again.
 const HIDDEN_SUSPEND_MS = 5 * 60_000;
 const SAVE_DEBOUNCE_MS = 250;
+// empty columns kept in view beside the widgets while the gallery is open
+const GALLERY_SPARE_COLUMNS = 2;
 const DRAG_THRESHOLD_PX = 4;
 const AUTOSCROLL_EDGE_PX = 48;
 const AUTOSCROLL_STEP_PX = 16;
@@ -250,11 +254,21 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const gridWidth = () => (phone ? pages() * pageWidth() : geometry().across * geometry().cell);
     // a gallery left open on a hidden Home is released with Home's widgets
     const galleryOpen = () => editing() && loadState() === "ready" && !suspended();
+    // The gallery floats over Home's right edge. Home keeps its size while
+    // its widgets, and a spare column pair to drop beside them, clear it.
+    const keptWidth = () => Math.min(geometry().across, usedColumns(items()) + GALLERY_SPARE_COLUMNS) * geometry().cell;
     const fitted = createMemo(() =>
         phone
             ? { scale: 1, left: 0, width: gridWidth() }
-            : fitCanvas(gridWidth(), viewport().width - (galleryOpen() ? galleryWidth() : 0)),
+            : galleryOpen()
+              ? fitBesideGallery(gridWidth(), keptWidth(), viewport().width, viewport().width - galleryWidth())
+              : fitCanvas(gridWidth(), viewport().width),
     );
+    // columns not under the gallery, where an added widget can be seen landing
+    const visibleAcross = () =>
+        galleryOpen() && !phone
+            ? Math.max(1, Math.floor((viewport().width - galleryWidth() - gridLeft()) / (geometry().cell * scale())))
+            : geometry().across;
     const scale = () => fitted().scale;
     const gridLeft = () => fitted().left;
     // a spare row to drop into while editing; never fewer than reach the
@@ -500,7 +514,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
         const size = parseWidgetSize(entry.size);
         if (!size) return;
         // a phone fills the page on screen first
-        const spot = phone ? findPhoneSpot(items(), size, phoneRows(), page()) : findFreeSpot(items(), size, geometry().across);
+        const spot = phone ? findPhoneSpot(items(), size, phoneRows(), page()) : findFreeSpot(items(), size, Math.min(geometry().across, visibleAcross()));
         if (!spot) return;
         addAt(entry, spot);
         if (phone) queueMicrotask(() => showPage(pageOf(spot)));
@@ -868,11 +882,11 @@ const HomeView: Component<HomeViewProps> = (props) => {
                     data-paper-no-swipe-back={editing() ? "" : undefined}
                     onScroll={onScroll}
                 >
-                    <div class={styles.stage} style={{ height: `${gridHeight() * scale()}px`, width: `${fitted().width + (galleryOpen() && !phone ? galleryWidth() : 0)}px` }}>
+                    <div class={styles.stage} style={{ height: `${gridHeight() * scale()}px`, width: `${fitted().width}px` }}>
                     <div
                         ref={grid}
                         class={styles.grid}
-                        classList={{ [styles.easing]: easing(), [styles.dots]: !phone }}
+                        classList={{ [styles.easing]: easing(), [styles.dots]: !phone && editing() }}
                         style={{
                             width: `${gridWidth()}px`,
                             height: `${gridHeight()}px`,

@@ -180,7 +180,7 @@ export default function AppSettings(props: {
             <PaperPageHeader
                 icon="settings"
                 title="App Settings"
-                subtitle="Appearance, startup, updates, and licenses."
+                subtitle={isBrowserShell() ? "Appearance, startup, and licenses." : "Appearance, startup, updates, and licenses."}
             />
             {failureNotice}
 
@@ -240,7 +240,7 @@ export default function AppSettings(props: {
                     title="Tutorial"
                     description="Walk through what Paperboard can do again."
                 >
-                    <PaperButton onClick={props.onShowTutorial}>
+                    <PaperButton variant="outline" onClick={props.onShowTutorial}>
                         <PaperIcon>school</PaperIcon>
                         Show tutorial
                     </PaperButton>
@@ -289,7 +289,7 @@ export default function AppSettings(props: {
                     description="Your Paperboard experience"
                 >
                     <PaperButton
-                        size="small"
+                        variant="outline"
                         onClick={() => viewLicense("paperboard")}
                         aria-label="View PolyForm Noncommercial 1.0.0 license"
                     >
@@ -298,7 +298,7 @@ export default function AppSettings(props: {
                 </PaperSettingItem>
                 <PaperSettingItem title="MIT license" description="Applies to SDKs">
                     <PaperButton
-                        size="small"
+                        variant="outline"
                         onClick={() => viewLicense("mit")}
                         aria-label="View MIT license"
                     >

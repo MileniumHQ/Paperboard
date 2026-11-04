@@ -13,8 +13,9 @@ const LandingView: Component<LandingViewProps> = (props) => {
     return (
         <PaperFlex center fullWidth fullHeight>
             <PaperEmptyState
+                icon="computer"
                 title={props.computer?.name || "This Computer"}
-                description="Select a panel from the sidebar or open the panel library to get started."
+                description="Choose a panel from the sidebar, or find more in the Panel Library."
             />
         </PaperFlex>
     );

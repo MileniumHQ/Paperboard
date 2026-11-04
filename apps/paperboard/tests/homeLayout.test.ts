@@ -6,7 +6,10 @@ import {
     canPlace,
     computeGeometry,
     findFreeSpot,
+    fitBesideGallery,
     fitCanvas,
+    MIN_CANVAS_SCALE,
+    usedColumns,
     MAX_CELL,
     MAX_CELLS_ACROSS,
     MIN_CELL,
@@ -144,6 +147,27 @@ describe("fitCanvas", () => {
 
     it("has nothing to scale before Home is measured", () => {
         expect(fitCanvas(0, 0)).toEqual({ scale: 1, left: 0, width: 0 });
+    });
+});
+
+describe("fitBesideGallery", () => {
+    // the gallery floats over Home's right edge while it's edited
+    it("keeps Home at full size when its widgets clear the gallery", () => {
+        // 1200 px of grid, widgets in the first 400 px, 800 px left beside a 400 px gallery
+        expect(fitBesideGallery(1200, 400, 1200, 800)).toEqual(fitCanvas(1200, 1200));
+    });
+
+    it("shrinks just enough for widgets that would slide under it", () => {
+        expect(fitBesideGallery(1200, 1000, 1200, 800)).toEqual({ scale: 0.8, left: 0, width: 960 });
+    });
+
+    it("never shrinks past what can be read", () => {
+        expect(fitBesideGallery(1200, 1200, 1200, 100).scale).toBe(MIN_CANVAS_SCALE);
+    });
+
+    it("counts the columns its widgets reach", () => {
+        expect(usedColumns([])).toBe(0);
+        expect(usedColumns([item({ x: 3, size: "2x2" }), item({ x: 0, size: "4x2" })])).toBe(5);
     });
 });
 

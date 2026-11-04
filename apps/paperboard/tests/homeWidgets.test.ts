@@ -104,7 +104,7 @@ describe("usage chart", () => {
 describe("a new Home", () => {
     it("starts with built-in widgets that form a valid, non-overlapping layout", () => {
         const items = defaultHomeItems("local");
-        expect(items.map((i) => i.widgetId)).toEqual(["clock", "cpu", "memory"]);
+        expect(items.map((i) => i.widgetId)).toEqual(["clock", "disk", "computers", "cpu", "memory", "network", "panels"]);
         expect(parseHomeLayout(JSON.parse(JSON.stringify(serializeHomeLayout(items))))).toEqual(items);
         for (const item of items) expect(canPlace(items, placementOf(item), item.id)).toBe(true);
     });

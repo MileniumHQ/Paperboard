@@ -5,7 +5,7 @@
     height: 100%;
     position: relative;
     overflow: hidden;
-    background: var(--paper-surface-sunken);
+    background: var(--paper-surface-app);
 }
 
 /* Home stays mounted while another layer shows */
@@ -51,8 +51,8 @@
     transition: transform var(--paper-mid-transition) var(--paper-ease-symmetric);
 }
 
-/* the dot grid: evenly spaced, four to a cell, so an empty spot shows
-   the shape of what fits there */
+/* the dot grid, shown while editing: evenly spaced, four to a cell, so an
+   empty spot shows the shape of what fits there */
 .dots {
     --dot: color-mix(in srgb, var(--paper-contrast) 22%, transparent);
     --dot-r: var(--paper-thick-border-width);
@@ -262,9 +262,11 @@
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
-    background: var(--paper-surface);
+    /* one sheet of paper over Home, its header and list on the same surface */
+    background: var(--paper-surface-raised);
     border: var(--paper-border-width) solid var(--paper-border);
     border-radius: var(--paper-border-radius);
+    box-shadow: var(--paper-element-shadow);
     overflow: hidden;
 }
 

@@ -11,7 +11,7 @@ export const TITLEBAR_HEIGHT = 38;
 
 export const TITLEBAR_OVERLAY_COLORS = {
     dark: "#1a1b1e",
-    light: "#e2e6eb",
+    light: "#e2e5ea",
 } as const;
 
 export const TITLEBAR_SYMBOL_COLORS = {

@@ -38,7 +38,7 @@ const PANEL_COLORS = [
 const PAPERBOARD_COLOR = "var(--paper-primary)";
 const MORE_PANELS_COLOR = "var(--paper-success)";
 const OTHER_COLOR = "var(--paper-border-emphasis)";
-const FREE_COLOR = "var(--paper-surface-inset)";
+const FREE_COLOR = "var(--paper-surface-element)";
 
 export function formatBytes(bytes: number): string {
     const units = ["B", "KB", "MB", "GB", "TB"];

@@ -69,11 +69,11 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
                     onClick={() => props.onRetryLoad?.()}
                 />
             </Show>
-            <PaperSeparator class={styles.separator} />
             <PaperRailItem
                 value="__settings"
                 icon="settings"
                 label="Settings"
+                class={styles.foot}
             />
             <Show when={props.showUpdate && ["downloading", "ready", "failed", "manual"].includes(props.updateState?.status ?? "")}>
                 <PaperRailAction

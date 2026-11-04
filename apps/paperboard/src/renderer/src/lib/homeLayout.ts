@@ -185,6 +185,31 @@ export function fitCanvas(gridWidth: number, room: number): { scale: number; lef
     return { scale, left, width: left + gridWidth * scale };
 }
 
+/** Columns the layout uses: its rightmost widget's right edge. */
+export function usedColumns(items: HomeItem[]): number {
+    return items.reduce((max, item) => Math.max(max, item.x + sizeOf(item).w), 0);
+}
+
+/**
+ * How the canvas is drawn while the gallery floats over its right edge.
+ * Home keeps the size `fitCanvas` gives it in the whole `viewport` when
+ * the widgets, and `keptWidth` px of them, still clear the gallery in `room`;
+ * only when they would slide under it does it shrink, from the left edge,
+ * just enough for them to show. Opening the gallery on a sparse Home moves
+ * nothing.
+ */
+export function fitBesideGallery(
+    gridWidth: number,
+    keptWidth: number,
+    viewport: number,
+    room: number,
+): { scale: number; left: number; width: number } {
+    const whole = fitCanvas(gridWidth, viewport);
+    if (keptWidth <= 0 || whole.left + keptWidth * whole.scale <= room) return whole;
+    const scale = Math.min(whole.scale, Math.max(MIN_CANVAS_SCALE, Math.max(room, 0) / keptWidth));
+    return { scale, left: 0, width: gridWidth * scale };
+}
+
 /** Rows the layout needs: its lowest widget, plus `extra`. */
 export function usedRows(items: HomeItem[], extra: number): number {
     const rows = items.reduce((max, item) => Math.max(max, item.y + sizeOf(item).h), 1);
