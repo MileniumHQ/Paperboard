@@ -67,19 +67,21 @@ export default function ServersHome(props: { state: ServersState }) {
             setBusy(false);
         }
     };
+    const newServer = () => (
+        <PaperEffect variant="success">
+            <PaperButton variant="success" disabled={Boolean(props.state.serversError)} onClick={() => ask("add")}>
+                <PaperIcon>add</PaperIcon>
+                New server
+            </PaperButton>
+        </PaperEffect>
+    );
+
     return (
         <PaperFlex fullWidth fullHeight overflowY="auto">
             <PaperPage width="wide">
                 <PaperPageHeader icon="dns" title="Servers">
-                    <PaperEffect variant="success">
-                        <PaperButton
-                            variant="success"
-                            disabled={Boolean(props.state.serversError)}
-                            onClick={() => ask("add")}
-                        >
-                            <PaperIcon>add</PaperIcon>New server
-                        </PaperButton>
-                    </PaperEffect>
+                    {/* an empty page offers this in its empty state instead */}
+                    <Show when={props.state.servers.length > 0}>{newServer()}</Show>
                 </PaperPageHeader>
                 <Show when={props.state.serversError}>
                     {(error) => (
@@ -96,13 +98,7 @@ export default function ServersHome(props: { state: ServersState }) {
                             title="No servers yet"
                             description="Choose a game, set up a server, and invite your friends."
                         >
-                            <PaperButton
-                                variant="primary"
-                                disabled={Boolean(props.state.serversError)}
-                                onClick={() => ask("add")}
-                            >
-                                New server
-                            </PaperButton>
+                            {newServer()}
                         </PaperEmptyState>
                     }
                 >

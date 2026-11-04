@@ -73,7 +73,7 @@
     font-size: var(--paper-text-size-1);
     font-weight: var(--paper-weight-bold);
     text-transform: uppercase;
-    color: var(--paper-primary-deep);
+    color: var(--paper-primary-ink);
     background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
     border-radius: var(--paper-border-radius);
     padding: 0 var(--paper-uigap-half);
@@ -142,7 +142,7 @@
     font-size: var(--paper-text-size-3);
     width: var(--paper-icon-size-tiny);
     height: var(--paper-icon-size-tiny);
-    color: var(--paper-primary-deep);
+    color: var(--paper-primary-ink);
     flex-shrink: 0;
 }
 

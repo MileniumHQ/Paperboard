@@ -53,16 +53,21 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
         if (bot) act(bot);
     };
 
+    const newBot = () => (
+        <PaperEffect variant="success">
+            <PaperButton variant="success" disabled={!bots.ready() || Boolean(bots.state().botsError)} onClick={() => setAdding(true)}>
+                <PaperIcon>add</PaperIcon>
+                New bot
+            </PaperButton>
+        </PaperEffect>
+    );
+
     return (
         <PaperFlex fullWidth fullHeight overflowY="auto">
             <PaperPage width="wide">
                 <PaperPageHeader icon="smart_toy" title="Bots">
-                    <PaperEffect variant="success">
-                        <PaperButton variant="success" disabled={!bots.ready() || Boolean(bots.state().botsError)} onClick={() => setAdding(true)}>
-                            <PaperIcon>add</PaperIcon>
-                            New bot
-                        </PaperButton>
-                    </PaperEffect>
+                    {/* an empty page offers this in its empty state instead */}
+                    <Show when={bots.list().length > 0}>{newBot()}</Show>
                 </PaperPageHeader>
                 <Show when={failure()}>
                     {(f) => (
@@ -92,7 +97,7 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
                         when={bots.list().length > 0}
                         fallback={
                             <PaperEmptyState icon="smart_toy" title="No bots yet" description="All a bot needs is a token from the Discord Developer Portal. Then decide what it does in Actions.">
-                                <PaperButton variant="primary" disabled={Boolean(bots.state().botsError)} onClick={() => setAdding(true)}>New bot</PaperButton>
+                                {newBot()}
                             </PaperEmptyState>
                         }
                     >

@@ -69,7 +69,9 @@
     padding: var(--paper-uigap) var(--paper-uigap-sixfourths);
     border-radius: calc(var(--paper-border-radius) * 1.5) calc(var(--paper-border-radius) * 1.5)
         calc(var(--paper-border-radius) * 1.5) var(--paper-border-radius-half);
-    background: var(--paper-surface-sunken);
+    /* raised off the page like a card, so its edge reads in both themes */
+    background: var(--paper-surface-raised);
+    box-shadow: var(--paper-element-shadow);
     font-family: var(--paper-font-family-rounded);
     font-size: var(--paper-text-size-3);
     line-height: var(--paper-leading-normal);

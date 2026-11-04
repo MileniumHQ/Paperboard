@@ -195,7 +195,8 @@ function Scenes(props: {
         });
     };
 
-    // the Next button appears only when the scene is revealed and its answer is in
+    // the Next button appears with the scene, so the way forward is always in
+    // view, and it works once the scene's answer is in
     const ready = () => {
         if (!revealed()) return false;
         switch (wizard.currentStep()) {
@@ -216,7 +217,7 @@ function Scenes(props: {
         }
     };
     createEffect(() => {
-        wizard.setOptionsShown(ready());
+        wizard.setOptionsShown(revealed());
         wizard.setCanProceed(ready());
     });
 

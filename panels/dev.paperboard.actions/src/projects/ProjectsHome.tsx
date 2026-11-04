@@ -66,16 +66,21 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
     const clock = setInterval(() => setNow(Date.now()), 60_000);
     onCleanup(() => clearInterval(clock));
 
+    const newProject = () => (
+        <PaperEffect variant="success">
+            <PaperButton variant="success" disabled={working() || !projects.ready()} onClick={() => void create()}>
+                <PaperIcon>add</PaperIcon>
+                New project
+            </PaperButton>
+        </PaperEffect>
+    );
+
     return (
         <PaperFlex fullWidth fullHeight overflowY="auto">
             <PaperPage width="wide">
                 <PaperPageHeader icon="account_tree" title="Projects">
-                    <PaperEffect variant="success">
-                        <PaperButton variant="success" disabled={working() || !projects.ready()} onClick={() => void create()}>
-                            <PaperIcon>add</PaperIcon>
-                            New project
-                        </PaperButton>
-                    </PaperEffect>
+                    {/* an empty page offers this in its empty state instead */}
+                    <Show when={projects.kept().length > 0}>{newProject()}</Show>
                 </PaperPageHeader>
                 <Show when={failure()}>
                     {(f) => (
@@ -105,7 +110,7 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                         when={projects.kept().length > 0}
                         fallback={
                             <PaperEmptyState icon="account_tree" title="No projects yet" description="A project holds flows that run when something happens, like a message or a button on Home.">
-                                <PaperButton variant="primary" disabled={working()} onClick={() => void create()}>New project</PaperButton>
+                                {newProject()}
                             </PaperEmptyState>
                         }
                     >
