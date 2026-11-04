@@ -21,6 +21,8 @@ const targets: Array<{ file: string; pattern: RegExp }> = [
   { file: "packages/paperapi/package.json", pattern: JSON_VERSION },
   { file: "packages/paperui/package.json", pattern: JSON_VERSION },
   { file: "packages/create-panel/package.json", pattern: JSON_VERSION },
+  // the npx launcher runs daemons this version or newer
+  { file: "packages/crane-launcher/package.json", pattern: JSON_VERSION },
   { file: "panels/dev.paperboard.gameserver/src/lib/userAgent.ts", pattern: USER_AGENT },
 ];
 

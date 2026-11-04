@@ -1,0 +1,44 @@
+{
+    "name": "@mileniumhq/paperboard",
+    "version": "0.3.0",
+    "type": "module",
+    "description": "Run the Paperboard server daemon: npx @mileniumhq/paperboard serve",
+    "bin": {
+        "paperboard": "./dist/cli.js"
+    },
+    "files": [
+        "dist"
+    ],
+    "engines": {
+        "node": ">=18"
+    },
+    "scripts": {
+        "build": "tsc --noEmit && bun build ./src/cli.ts --outfile dist/cli.js --target=node",
+        "test": "bun run build && bun test ./test",
+        "prepublishOnly": "bun run build"
+    },
+    "devDependencies": {
+        "@types/node": "^22.20.5",
+        "@types/semver": "^7.8.0",
+        "adm-zip": "^0.6.1",
+        "semver": "^7.8.5",
+        "tar": "^7.5.22",
+        "typescript": "~6.0.3"
+    },
+    "keywords": [
+        "paperboard",
+        "server",
+        "self-hosted"
+    ],
+    "author": "Paperboard <https://paperboard.dev>",
+    "homepage": "https://paperboard.dev",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/MileniumHQ/Paperboard.git",
+        "directory": "packages/crane-launcher"
+    },
+    "license": "PolyForm-Noncommercial-1.0.0",
+    "publishConfig": {
+        "access": "public"
+    }
+}

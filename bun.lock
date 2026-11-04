@@ -120,6 +120,21 @@
         "typescript": "^5",
       },
     },
+    "packages/crane-launcher": {
+      "name": "@mileniumhq/paperboard",
+      "version": "0.3.0",
+      "bin": {
+        "paperboard": "./dist/cli.js",
+      },
+      "devDependencies": {
+        "@types/node": "^22.20.5",
+        "@types/semver": "^7.8.0",
+        "adm-zip": "^0.6.1",
+        "semver": "^7.8.5",
+        "tar": "^7.5.22",
+        "typescript": "~6.0.3",
+      },
+    },
     "packages/create-panel": {
       "name": "@mileniumhq/create-panel",
       "version": "0.3.0",
@@ -550,6 +565,8 @@
     "@mileniumhq/create-panel": ["@mileniumhq/create-panel@workspace:packages/create-panel"],
 
     "@mileniumhq/paperapi": ["@mileniumhq/paperapi@workspace:packages/paperapi"],
+
+    "@mileniumhq/paperboard": ["@mileniumhq/paperboard@workspace:packages/crane-launcher"],
 
     "@mileniumhq/paperui": ["@mileniumhq/paperui@workspace:packages/paperui"],
 

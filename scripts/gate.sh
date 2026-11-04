@@ -13,6 +13,8 @@
 #   check (scripts/check-app-styling.sh): literal sizes, colors, motion,
 #   z-index and the like that have a PaperUI token. It warns, never fails.
 #     create-panel   panel scaffolder: build, tests, silent-catches
+#     crane-launcher @mileniumhq/paperboard (npx launcher for the daemon):
+#                    build, tests, silent-catches
 #     paperboard     desktop app: typechecks, tests, lint, silent-catches
 #     paperdocs      docs site: tests, build
 #     origami        registry worker: typecheck, tests, silent-catches
@@ -55,7 +57,7 @@ run_in() {
 # Every selectable target. The *-build names are prerequisites, not
 # user-facing: they exist so a filtered run can pull in the shared library
 # artifact a consumer needs without running that library's whole suite.
-KNOWN_TARGETS="packages paperapi paperui create-panel paperapi-build paperui-build create-panel-build paperboard paperdocs origami origami-library pbd scripts actions agents ai botcreator gameserver terminal"
+KNOWN_TARGETS="packages paperapi paperui create-panel crane-launcher paperapi-build paperui-build create-panel-build paperboard paperdocs origami origami-library pbd scripts actions agents ai botcreator gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the
@@ -172,6 +174,8 @@ gstep paperui "paperui styling invariant" bash "$ROOT/scripts/check-paperui-styl
 gstep paperui "paperui silent-catches" run_in "$ROOT/packages/paperui" bash "$CATCH" src
 gstep create-panel "create-panel tests" run_in "$ROOT/packages/create-panel" bun run test
 gstep create-panel "create-panel silent-catches" run_in "$ROOT/packages/create-panel" bash "$CATCH" src bin test template
+gstep crane-launcher "crane-launcher tests" run_in "$ROOT/packages/crane-launcher" bun run test
+gstep crane-launcher "crane-launcher silent-catches" run_in "$ROOT/packages/crane-launcher" bash "$CATCH" src test
 
 # ── registry service: typecheck plus its worker suite (the library division
 # has its own vitest suite below; `bun test ./test` scopes bun to the worker) ─
