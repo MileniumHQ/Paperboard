@@ -175,7 +175,7 @@ export function scaffoldPanel(options: ScaffoldOptions): ScaffoldResult {
         throw new Error("panels in the Paperboard repo are published by Paperboard: omit the publisher");
     }
     if (existsSync(targetDir)) {
-        throw new Error(`"${targetDir}" already exists — pick another id or remove it first`);
+        throw new Error(`"${targetDir}" already exists. Pick another id or remove it first`);
     }
     if (!existsSync(templateDir)) {
         throw new Error(`template dir missing: ${templateDir}`);
@@ -351,7 +351,7 @@ async function promptChoices(
             continue;
         }
         if (existsSync(resolve(cli.parentDir, answer))) {
-            console.error(`  ${answer}/ already exists — pick another id`);
+            console.error(`  ${answer}/ already exists. Pick another id`);
             continue;
         }
         id = answer;

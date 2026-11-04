@@ -3,17 +3,17 @@ import { PaperProvider } from "@mileniumhq/paperui";
 import App from "./App";
 
 const root = document.getElementById("app");
+// a page with nothing to render into is broken: say so instead of a blank panel
+if (!root) throw new Error('index.html has no element with id "app" to render the panel into');
 
-if (root) {
-    // every panel is its own document: without the provider there is no
-    // .paperui-root / [data-paperui-theme] contract, so scoped scrollbars,
-    // selection rules, disabled treatment and forced theming all drop out
-    render(
-        () => (
-            <PaperProvider fullWidth fullHeight>
-                <App />
-            </PaperProvider>
-        ),
-        root,
-    );
-}
+// every panel is its own document: without the provider there is no
+// .paperui-root / [data-paperui-theme] contract, so scoped scrollbars,
+// selection rules, disabled treatment and forced theming all drop out
+render(
+    () => (
+        <PaperProvider fullWidth fullHeight>
+            <App />
+        </PaperProvider>
+    ),
+    root,
+);

@@ -190,10 +190,26 @@ describe("scaffoldPanel", () => {
         expect(existsSync(join(parentDir, "settings"))).toBe(false);
     });
 
+    it("fails loudly when the page has no element to render into", () => {
+        const { targetDir } = scaffoldPanel({ mode: "standalone", id: "dev.paperboard.root", parentDir });
+        const entry = readFileSync(join(targetDir, "src", "index.tsx"), "utf8");
+        expect(entry).toContain(`if (!root) throw new Error('index.html has no element with id "app" to render the panel into');`);
+        expect(entry.includes("if (root)")).toBe(false);
+    });
+
+    it("writes no ellipsis or dash character into any file", () => {
+        const { targetDir } = scaffoldPanel({ mode: "standalone", id: "dev.paperboard.plain", parentDir });
+        for (const file of allFiles(targetDir)) {
+            if (/\.(png|jpe?g|webp|ico)$/.test(file)) continue;
+            const text = readFileSync(file, "utf8");
+            expect([relative(targetDir, file), /[\u2026\u2013\u2014]/.test(text)]).toEqual([relative(targetDir, file), false]);
+        }
+    });
+
     it("refuses to write over an existing directory", () => {
         mkdirSync(join(parentDir, "dev.paperboard.taken"));
         expect(() => scaffoldPanel({ mode: "standalone", id: "dev.paperboard.taken", parentDir })).toThrow(
-            /already exists/,
+            `"${join(parentDir, "dev.paperboard.taken")}" already exists. Pick another id or remove it first`,
         );
         expect(existsSync(join(parentDir, "dev.paperboard.taken"))).toBe(true);
     });

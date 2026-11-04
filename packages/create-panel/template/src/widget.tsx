@@ -43,7 +43,7 @@ function Greetings(props: { widget: WidgetContext }) {
                     </PaperWidgetMessage>
                 }
             >
-                <Show when={count() !== null} fallback={<PaperWidgetMessage title="Loading…" />}>
+                <Show when={count() !== null} fallback={<PaperWidgetMessage title="Loading" />}>
                     <PaperWidgetStat value={count()!} caption="greetings" aria-live="polite" />
                 </Show>
             </Show>
