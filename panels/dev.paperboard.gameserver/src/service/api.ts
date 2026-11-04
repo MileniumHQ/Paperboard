@@ -23,6 +23,7 @@ export const config: typeof rawConfig = {
         const scope = currentServer();
         if (!scope) return rawConfig.set(...args);
         await scope.saveSettings(args[0] as Record<string, unknown>);
+        return true as const;
     },
 };
 export const processApi = new Proxy(rawProcess, {
