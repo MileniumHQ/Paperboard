@@ -2,7 +2,7 @@
     "name": "Game Server",
     "id": "dev.paperboard.gameserver",
     "version": "0.3.0",
-    "description": "Host Minecraft, Terraria, Palworld and Team Fortress 2 servers",
+    "description": "Host and manage dedicated servers for your games",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
     "service": "./dist/service.js",
