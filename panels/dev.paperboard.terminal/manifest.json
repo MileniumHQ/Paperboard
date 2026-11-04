@@ -27,22 +27,17 @@
             {
                 "light": "./store/1-light.png",
                 "dark": "./store/1-dark.png",
-                "alt": "System info at a glance"
+                "alt": "Tabs for each job, here working in a git project"
             },
             {
                 "light": "./store/2-light.png",
                 "dark": "./store/2-dark.png",
-                "alt": "Saved commands from the tab bar"
+                "alt": "Saved commands, one click from the tab bar"
             },
             {
                 "light": "./store/3-light.png",
                 "dark": "./store/3-dark.png",
-                "alt": "Work with git"
-            },
-            {
-                "light": "./store/4-light.png",
-                "dark": "./store/4-dark.png",
-                "alt": "Any command-line tool"
+                "alt": "A clean shell, ready for any command-line tool"
             }
         ],
         "credits": [
