@@ -53,6 +53,27 @@ describe.if(supported)("install-service --dry-run", () => {
         expect(fs.existsSync(dataDir)).toBe(false);
     });
 
+    test("a data directory chosen with PAPERBOARD_DIR goes into the service, and --data-dir wins over it", () => {
+        const fromEnv = path.join(root, "env data");
+        const fromFlag = path.join(root, "flag data");
+        const viaEnv = crane(["install-service", "--dry-run", "--name", "papercrane-dry-env"], { PAPERBOARD_DIR: fromEnv });
+        expect(viaEnv.err).toBe("");
+        expect(viaEnv.code).toBe(0);
+        const viaFlag = crane(["install-service", "--dry-run", "--name", "papercrane-dry-env", "--data-dir", fromFlag], { PAPERBOARD_DIR: fromEnv });
+        expect(viaFlag.code).toBe(0);
+        if (process.platform === "linux") {
+            expect(viaEnv.out).toContain(`--data-dir "${fromEnv}"`);
+            expect(viaEnv.out).toContain(`# Paperboard data: ${fromEnv}`);
+            expect(viaFlag.out).toContain(`--data-dir "${fromFlag}"`);
+            expect(viaFlag.out.includes(fromEnv)).toBe(false);
+        } else {
+            expect(viaEnv.out).toContain(`<string>${fromEnv}</string>`);
+            expect(viaFlag.out).toContain(`<string>${fromFlag}</string>`);
+            expect(viaFlag.out.includes(fromEnv)).toBe(false);
+        }
+        expect(fs.existsSync(fromEnv)).toBe(false);
+    });
+
     test("a system service needs root", () => {
         if (process.getuid?.() === 0) return;
         const { code, err } = crane(["install-service", "--system", "--run-as", os.userInfo().username]);

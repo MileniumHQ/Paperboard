@@ -108,7 +108,7 @@ It is running (PID 48211) on https://192.168.1.50:45464.
                 <tbody>
                     <tr><td><PaperCode>--port &lt;port&gt;</PaperCode></td><td>The port to listen on. Default <PaperCode>45464</PaperCode>.</td></tr>
                     <tr><td><PaperCode>--host &lt;address&gt;</PaperCode></td><td>The address to listen on. Default <PaperCode>0.0.0.0</PaperCode>, every network. <PaperCode>127.0.0.1</PaperCode> keeps it to this computer.</td></tr>
-                    <tr><td><PaperCode>--data-dir &lt;path&gt;</PaperCode></td><td>Where the daemon keeps its data. Default <PaperCode>~/.paperboard</PaperCode> of the account it runs as.</td></tr>
+                    <tr><td><PaperCode>--data-dir &lt;path&gt;</PaperCode></td><td>Where the daemon keeps its data. Without it, the folder in <PaperCode>PAPERBOARD_DIR</PaperCode> when that is set in your terminal, else <PaperCode>~/.paperboard</PaperCode> of the account it runs as.</td></tr>
                     <tr><td><PaperCode>--name &lt;name&gt;</PaperCode></td><td>The service name, default <PaperCode>papercrane</PaperCode>. Give each daemon its own name, port and data directory to run more than one.</td></tr>
                     <tr><td><PaperCode>--dry-run</PaperCode></td><td>Prints the service file and the commands it would run, and changes nothing.</td></tr>
                 </tbody>

@@ -122,6 +122,15 @@ function applyDataDir(opts: Record<string, unknown>, env: NodeJS.ProcessEnv): vo
     if (typeof opts.dataDir === "string") env.PAPERBOARD_DIR = opts.dataDir;
 }
 
+// the service's daemon does not see this shell's environment: a data
+// directory chosen with PAPERBOARD_DIR, like one chosen with --data-dir, is
+// written into the service as --data-dir. --data-dir wins over the variable
+function serviceDataDir(opts: Record<string, unknown>, env: NodeJS.ProcessEnv): { dataDir?: string } {
+    if (typeof opts.dataDir === "string") return { dataDir: opts.dataDir };
+    if (env.PAPERBOARD_DIR) return { dataDir: parseDataDir(env.PAPERBOARD_DIR) };
+    return {};
+}
+
 function serveOptions(opts: Record<string, unknown>, env: NodeJS.ProcessEnv): ServeOptions {
     if (opts.headless && opts.startPairing) {
         throw new InvalidArgumentError("--start-pairing shows a code on the interactive screen, which --headless turns off. Run `papercrane pair` while the daemon is running instead.");
@@ -248,7 +257,7 @@ ${ENVIRONMENT_HELP}`);
         program
             .command("install-service")
             .summary("run the daemon in the background, starting with the computer")
-            .description("Install the daemon as a service (systemd on Linux, launchd on macOS), enable it and start it. It runs with --headless, and stopping or restarting it leaves game servers and other workloads running for the next daemon to adopt. Running it again updates the service."),
+            .description("Install the daemon as a service (systemd on Linux, launchd on macOS), enable it and start it. It runs with --headless, and stopping or restarting it leaves game servers and other workloads running for the next daemon to adopt. Running it again updates the service. Its data directory is --data-dir, else PAPERBOARD_DIR, else ~/.paperboard of the account it runs as."),
         { env: false },
     ))
         .addOption(new Option("--run-as <user>", "with --system: the account the daemon runs as (default: the user who ran sudo)").argParser(parseUserName))
@@ -260,7 +269,7 @@ ${ENVIRONMENT_HELP}`);
                 serve: {
                     ...(typeof opts.port === "number" ? { port: opts.port } : {}),
                     ...(typeof opts.host === "string" ? { host: opts.host } : {}),
-                    ...(typeof opts.dataDir === "string" ? { dataDir: opts.dataDir } : {}),
+                    ...serviceDataDir(opts, env),
                 },
                 ...(typeof opts.runAs === "string" ? { runAs: opts.runAs } : {}),
             });
