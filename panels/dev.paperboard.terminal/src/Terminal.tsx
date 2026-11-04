@@ -51,7 +51,8 @@ export function TerminalComponent(props: TerminalComponentProps) {
     let containerRef!: HTMLDivElement;
 
     onMount(() => {
-        const bg = token("surface-app");
+        // the screen is the paper its active tab sits on
+        const bg = token("surface-raised");
         const fg = token("text");
         const blue = token("primary");
         const red = token("danger");

@@ -310,6 +310,10 @@ function Scenes(props: {
                         onInput={(e) => props.setName(e.currentTarget.value)}
                         maxLength={LIMITS.name}
                     />
+                    {/* the suggestion is only a suggestion: say why Next waits */}
+                    <Show when={props.name().length === 0}>
+                        <PaperText preset="hint">Type a name to continue.</PaperText>
+                    </Show>
                 </Reveal>
             </PaperWizardStep>
 

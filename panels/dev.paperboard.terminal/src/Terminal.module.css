@@ -22,7 +22,7 @@
     display: flex;
     flex-direction: column;
     padding: var(--paper-uigap);
-    background: var(--paper-surface-app);
+    background: var(--paper-surface-raised);
     color: var(--paper-text);
 }
 
