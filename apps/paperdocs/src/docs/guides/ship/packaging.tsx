@@ -73,7 +73,7 @@ export default function PackagingGuideDoc() {
             <PaperText preset="subheader" as="h2" id="pack">Pack it</PaperText>
             <PaperCode block language="sh">
 {`$ bunx paperapi pack
-Archiving manifest.json, dist, branding...
+Archiving manifest.json, dist, branding
 ✓ Packed dev.example.weather 0.2.0 · 996.8 KB
 out/dev.example.weather-0.2.0.tar.gz
 sha256 aafa8802d83c160b9cd81a93693ea79f3ae1d4a29410b559e3902cc7b5158ca1`}

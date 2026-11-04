@@ -4,7 +4,8 @@
 // commands that need a running daemon are proved against a real one in
 // apps/paperboard/tests/trafficMonitor.test.ts.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { spawnSync } from "child_process";
+import { spawn, spawnSync } from "child_process";
+import { once } from "events";
 import * as fs from "fs";
 import * as net from "net";
 import * as os from "os";
@@ -210,6 +211,27 @@ describe("doctor", () => {
         expect(result.code).toBe(1);
         expect(result.stdout).toContain(`there is no manifest.json in ${root}`);
     });
+
+    // `paperapi doctor | head`: the reader closes stdout before the report
+    // ends, and the command used to crash on the write with EPIPE
+    test("stops quietly with its own exit code when the reader closes stdout", async () => {
+        writePanel();
+        const expected = run(["doctor", panel]).code;
+        for (const runtime of [process.execPath, "node"]) {
+            const script = runtime === "node" ? path.resolve(path.dirname(CLI), "../dist/cli.js") : CLI;
+            if (runtime === "node" && !fs.existsSync(script)) throw new Error(`build the CLI first: ${script} is missing`);
+            const env: Record<string, string | undefined> = { ...process.env, PAPERBOARD_DIR: data, NO_COLOR: "1" };
+            delete env.FORCE_COLOR;
+            const child = spawn(runtime, [script, "doctor", panel], { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
+            // nothing reads stdout: every write the command makes fails
+            child.stdout.destroy();
+            let stderr = "";
+            child.stderr.on("data", (chunk) => (stderr += chunk));
+            const [code] = (await once(child, "close")) as [number | null];
+            expect(stderr.includes("EPIPE")).toBe(false);
+            expect([runtime, code]).toEqual([runtime, expected]);
+        }
+    });
 });
 
 describe("pack", () => {
@@ -218,6 +240,9 @@ describe("pack", () => {
         const packed = run(["pack", panel, "--out", path.join(root, "out")]);
         expect(packed.code).toBe(0);
         expect(packed.stderr).toContain(`✓ Packed ${ID} 0.1.0`);
+        // plain text a terminal and a log both show: no ellipsis character
+        expect(packed.stderr).toContain("Archiving manifest.json, dist\n");
+        expect(packed.stderr.includes("\u2026")).toBe(false);
         // shown relative to where the developer is
         expect(packed.stdout).toMatch(new RegExp(`^out/${ID}-0\\.1\\.0\\.tar\\.gz\\nsha256 [a-f0-9]{64}\\n$`));
 

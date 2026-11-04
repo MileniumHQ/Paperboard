@@ -77,9 +77,23 @@ export class Output {
         this.err = painter(colorEnabled(stderr, env));
     }
 
+    private stdoutOpen = true;
+
+    /** the reader of stdout went away: results from here on are dropped */
+    readerClosed(): void {
+        this.stdoutOpen = false;
+    }
+
     /** a result line, on stdout */
     line(text = ""): void {
-        this.stdout.write(`${text}\n`);
+        if (!this.stdoutOpen) return;
+        try {
+            this.stdout.write(`${text}\n`);
+        } catch (err) {
+            // Bun reports a closed pipe from write itself, Node as an event
+            if ((err as NodeJS.ErrnoException)?.code !== "EPIPE") throw err;
+            this.readerClosed();
+        }
     }
 
     /** a progress or status line, on stderr */

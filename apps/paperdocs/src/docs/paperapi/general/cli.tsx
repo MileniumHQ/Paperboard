@@ -404,7 +404,7 @@ stdin consoleInput inputEncoding allowDowngrade deleteData targetPath path cwd c
             <PaperText preset="subheader" as="h3" id="monitor-lifetime">When the monitor stops</PaperText>
             <PaperTextList>
                 <li>Only a connection holding this computer's host token may watch. The daemon refuses a panel credential.</li>
-                <li>When Paperboard stops or restarts, the monitor prints <PaperCode>Paperboard went away (&lt;reason&gt;). Waiting for it to come back...</PaperCode>, retries every second, and prints <PaperCode>Watching again</PaperCode> once it is back.</li>
+                <li>When Paperboard stops or restarts, the monitor prints <PaperCode>Paperboard went away (&lt;reason&gt;). Waiting for it to come back.</PaperCode>, retries every second, and prints <PaperCode>Watching again</PaperCode> once it is back.</li>
                 <li>A monitor that reads too slowly is cut off by the daemon rather than fed a feed with holes in it. That, and a refused credential, end the command with <PaperCode>Paperboard ended the monitor: &lt;reason&gt;</PaperCode> and exit 1.</li>
                 <li>Ctrl+C ends it with exit 0.</li>
             </PaperTextList>
@@ -412,7 +412,7 @@ stdin consoleInput inputEncoding allowDowngrade deleteData targetPath path cwd c
             <PaperText preset="subheader" as="h2" id="pack">pack</PaperText>
             <PaperCode block language="sh">
 {`$ bunx paperapi pack
-Archiving manifest.json, dist...
+Archiving manifest.json, dist
 ✓ Packed dev.example.weather 1.0.0 · 35.0 KB
 /home/ada/code/weather/out/dev.example.weather-1.0.0.tar.gz
 sha256 08cad371ad5ed1e5b6b4b858859cb1cee5a7875b9ce6bb7e152f2428fe7c4eee`}

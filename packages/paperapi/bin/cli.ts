@@ -15,6 +15,15 @@ import packageJson from "../package.json";
 
 const output = new Output();
 
+// a reader that stops early (`paperapi doctor | head`) closes stdout: the
+// rest of the result has nowhere to go, and that is the reader's choice,
+// not a crash. The command still finishes and exits with its own code.
+// Any other stdout failure stays loud.
+process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code !== "EPIPE") throw err;
+    output.readerClosed();
+});
+
 // every command body runs through here: one place turns a failure into its
 // message, its fix and its exit code
 function command<A extends unknown[]>(body: (...args: A) => number | Promise<number>): (...args: A) => Promise<void> {

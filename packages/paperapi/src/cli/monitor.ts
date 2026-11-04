@@ -184,7 +184,7 @@ export async function runMonitor(options: MonitorOptions, output: Output, stop: 
         if (REFUSED_CLOSE_CODES.has(outcome.code)) {
             throw new CliError(`Paperboard ended the monitor: ${outcome.reason || `code ${outcome.code}`}`);
         }
-        output.note(output.err.yellow(`Paperboard went away (${outcome.reason || `code ${outcome.code}`}). Waiting for it to come back…`));
+        output.note(output.err.yellow(`Paperboard went away (${outcome.reason || `code ${outcome.code}`}). Waiting for it to come back.`));
         let lastProblem = "";
         for (;;) {
             let timer: ReturnType<typeof setTimeout> | undefined;
