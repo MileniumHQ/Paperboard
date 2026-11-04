@@ -533,6 +533,8 @@ export class PaperCraneEngine {
         logger.debug(`[Paperboard Server] creating terminal ${id} (shell=${shell} cwd=${resolvedCwd})`);
         if (subscriber) this.subscribeStreams(id, subscriber, { data: onData, exit: onExit });
 
+        let announced = false;
+        let exited = false;
         await spawnSupervisedClient(
             id,
             {
@@ -551,14 +553,24 @@ export class PaperCraneEngine {
                 onData: subscriber ? undefined : onData,
                 onExit: (code) => {
                     this.clients.delete(id);
+                    // a shell can exit before its spawn resolves: it still
+                    // started first, and nothing of it is kept
+                    if (!announced) {
+                        announced = true;
+                        this.announceWorkload(id, "started");
+                    }
+                    exited = true;
                     this.workloadEnded(id, code);
                     if (!subscriber) onExit?.(code);
                 },
                 attach: (client) => this.wireStreams(id, client),
             },
         );
-        this.clientCommands.set(id, shell);
-        this.announceWorkload(id, "started");
+        if (!exited) this.clientCommands.set(id, shell);
+        if (!announced) {
+            announced = true;
+            this.announceWorkload(id, "started");
+        }
     }
 
     public writeTerminal(id: string, data: string): void {
@@ -649,6 +661,8 @@ export class PaperCraneEngine {
         // a Windows console input takes no writes: the process is inputless,
         // recorded as such so a daemon that adopts it refuses writes too
         const inputless = options.stdin === false || (options.consoleInput === true && process.platform === "win32");
+        let announced = false;
+        let exited = false;
         await spawnSupervisedClient(
                 id,
                 {
@@ -669,6 +683,13 @@ export class PaperCraneEngine {
                     onStderr: subscriber ? undefined : onStderr,
                     onExit: (exitCode: number) => {
                         this.clients.delete(id);
+                        // a process can exit before its spawn resolves: it
+                        // still started first, and nothing of it is kept
+                        if (!announced) {
+                            announced = true;
+                            this.announceWorkload(id, "started");
+                        }
+                        exited = true;
                         this.workloadEnded(id, exitCode);
                         resolveExit({ exitCode });
                         if (!subscriber) options.onExit?.(exitCode);
@@ -676,10 +697,15 @@ export class PaperCraneEngine {
                     attach: (client) => this.wireStreams(id, client),
                 },
             );
-        this.clientCommands.set(id, command);
-        if (inputless) this.inputless.add(id);
-        else this.inputless.delete(id);
-        this.announceWorkload(id, "started");
+        if (!exited) {
+            this.clientCommands.set(id, command);
+            if (inputless) this.inputless.add(id);
+            else this.inputless.delete(id);
+        }
+        if (!announced) {
+            announced = true;
+            this.announceWorkload(id, "started");
+        }
         return { completion };
     }
 

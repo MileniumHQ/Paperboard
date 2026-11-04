@@ -220,6 +220,23 @@ test("the monitor prints each call, event, service and process change as it happ
     expect(await monitor.proc.exited).toBe(0);
 }, 60_000);
 
+test("a workload that exits at once is still shown starting before it exits", async () => {
+    const monitor = startMonitor([]);
+    await watching(monitor);
+    const panel = await panelTransport(ID);
+    // a process that exits at once can report its exit before its start
+    // resolves; several at a time make that ordering race show
+    const ids = Array.from({ length: 12 }, (_, i) => `order-probe-${i}`);
+    await Promise.all(ids.map((id) => panel.call("process:run", { id, command: "/bin/sh", args: ["-c", "exit 3"] })));
+    const workloads = () => monitor.records().filter((r) => r.type === "workload") as { id: string; state: string }[];
+    await until(() => workloads().filter((r) => r.state === "exited").length === ids.length, `every probe to exit (got ${monitor.stdout()})`);
+    for (const id of ids) {
+        expect(workloads().filter((r) => r.id === id).map((r) => r.state)).toEqual(["started", "exited"]);
+    }
+    monitor.proc.kill("SIGINT");
+    expect(await monitor.proc.exited).toBe(0);
+}, 60_000);
+
 test("doctor is satisfied once the service answers", () => {
     const run = cli(["doctor", source]);
     expect(run.stdout).toContain("✓ Service     answering, with 1 action registered");
