@@ -223,7 +223,7 @@ export function Example() {
             <PaperText preset="subheader" as="h3" id="links">Links</PaperText>
             <PaperTextList>
                 <li>With <PaperCode>href</PaperCode> an item is an <PaperCode>a</PaperCode> drawn like the others. There is no input, and following it never calls <PaperCode>onValueChange</PaperCode>.</li>
-                <li>The selector's <PaperCode>value</PaperCode> still draws the matching item as chosen. A link item has no <PaperCode>aria-current</PaperCode>, so use <PaperLink href="/docs/paperui/papermenu/">PaperMenu</PaperLink> for page navigation.</li>
+                <li>The selector's <PaperCode>value</PaperCode> still draws the matching item as chosen, and gives that link <PaperCode>aria-current="page"</PaperCode>.</li>
                 <li>A disabled link loses its <PaperCode>href</PaperCode> and gets <PaperCode>aria-disabled="true"</PaperCode>.</li>
             </PaperTextList>
 

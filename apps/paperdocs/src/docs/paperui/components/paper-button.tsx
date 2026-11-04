@@ -155,7 +155,7 @@ export function Example() {
             <PaperText preset="subheader" as="h3" id="anchors">Anchors</PaperText>
             <PaperText preset="body" as="p">
                 With <PaperCode>href</PaperCode> the element is an anchor, and <PaperCode>onClick</PaperCode> still runs on it.
-                An anchor cannot be disabled. <PaperCode>disabled</PaperCode> dims it and shows the not-allowed cursor, but the link still navigates, so render a button instead when the action can be unavailable.
+                A disabled anchor drops its <PaperCode>href</PaperCode> and sets <PaperCode>aria-disabled="true"</PaperCode>. It is dimmed, cannot be followed or focused, and its <PaperCode>onClick</PaperCode> does not run.
             </PaperText>
 
             <PaperText preset="subheader" as="h3" id="states">States</PaperText>

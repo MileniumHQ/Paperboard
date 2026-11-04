@@ -140,7 +140,7 @@ export function Example() {
                         <td><PaperCode>label</PaperCode></td>
                         <td><PaperCode>JSX.Element | string</PaperCode></td>
                         <td>No default</td>
-                        <td>The item's name. A string label also becomes the item's tooltip and <PaperCode>aria-label</PaperCode>. An element label is only drawn when labels are shown.</td>
+                        <td>The item's name. A string label also becomes the item's tooltip and <PaperCode>aria-label</PaperCode>, unless you pass <PaperCode>title</PaperCode> or <PaperCode>aria-label</PaperCode> yourself. An element label is only drawn when labels are shown.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>showLabel</PaperCode></td>
@@ -200,7 +200,7 @@ export function Example() {
                         <td><PaperCode>label</PaperCode></td>
                         <td><PaperCode>JSX.Element | string</PaperCode></td>
                         <td>No default</td>
-                        <td>A string label is the tooltip and the default <PaperCode>aria-label</PaperCode>. Pass <PaperCode>aria-label</PaperCode> yourself for an element label.</td>
+                        <td>A string label is the default tooltip and the default <PaperCode>aria-label</PaperCode>. A <PaperCode>title</PaperCode> or <PaperCode>aria-label</PaperCode> you pass wins. Pass <PaperCode>aria-label</PaperCode> yourself for an element label.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>showLabel</PaperCode></td>

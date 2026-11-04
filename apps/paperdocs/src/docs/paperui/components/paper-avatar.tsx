@@ -92,7 +92,7 @@ export function Example() {
                         <td><PaperCode>fallbackIcon</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td><PaperCode>"person"</PaperCode></td>
-                        <td>Material icon name drawn on the tile when <PaperCode>src</PaperCode> is missing.</td>
+                        <td>Material icon name drawn on the tile when <PaperCode>src</PaperCode> is missing or fails to load.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>accent</PaperCode></td>
@@ -124,7 +124,7 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
                 <li>The fallback tile has a surface background. An image avatar has none, so transparent pixels in the image show the page behind it.</li>
-                <li>The fallback applies only when <PaperCode>src</PaperCode> is falsy. An image that fails to load leaves a broken image in place: the avatar does not swap to the icon. Resolve the URL before you pass it, and omit <PaperCode>src</PaperCode> when you have none.</li>
+                <li>An image that fails to load is replaced by the fallback icon on its tile. A new <PaperCode>src</PaperCode> is tried again.</li>
                 <li>The fallback icon is hidden from assistive technology. A fallback avatar has no accessible name, so put the name in nearby text.</li>
                 <li>With <PaperCode>onEdit</PaperCode> the edit button is a real <PaperCode>button</PaperCode> and takes keyboard focus. It is invisible until hovered or focused.</li>
                 <li>The avatar never shrinks inside a flex row.</li>

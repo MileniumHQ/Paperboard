@@ -177,6 +177,7 @@ export function Example() {
                 <li>A field with no <PaperCode>label</PaperCode> has no accessible name of its own. Give it an <PaperCode>aria-label</PaperCode> or an <PaperCode>id</PaperCode> that a <PaperCode>label</PaperCode> element points at.</li>
                 <li>Validation is visual. A field that fails <PaperCode>validate</PaperCode> still submits and still fires its events, so check the value again before you act on it, and tell the user what is wrong.</li>
                 <li>The browser's own constraints, such as <PaperCode>required</PaperCode> and <PaperCode>pattern</PaperCode>, also draw the error styling when they fail.</li>
+                <li>In a <PaperLink href="/docs/paperui/papersettinglist/">PaperSettingList</PaperLink>, a named field without <PaperCode>value</PaperCode> takes its value from the list's record.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>

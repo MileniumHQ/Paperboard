@@ -189,8 +189,8 @@ export function Example() {
                     <tr>
                         <td><PaperCode>value</PaperCode></td>
                         <td><PaperCode>string | number</PaperCode></td>
-                        <td>The children, as text</td>
-                        <td>The item's identity for keyboard highlight and <PaperCode>initialHighlight</PaperCode>. It is also part of the element id. Set it when the label is not plain text, and keep it unique within the menu.</td>
+                        <td>The children, when they are text</td>
+                        <td>The item's identity for keyboard highlight and <PaperCode>initialHighlight</PaperCode>. It is also part of the element id. Keep it unique within the menu. An item whose label is not text and has no <PaperCode>value</PaperCode> gets a generated one, which <PaperCode>initialHighlight</PaperCode> cannot name.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>onClick</PaperCode></td>
@@ -238,7 +238,7 @@ export function Example() {
                         <td><PaperCode>checked</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td>No default (off)</td>
-                        <td>Draws a trailing check mark, for menus that choose a current value. It does not set <PaperCode>aria-checked</PaperCode>.</td>
+                        <td>Draws a trailing check mark, for menus that choose a current value. Setting it, even to <PaperCode>false</PaperCode>, makes the item a <PaperCode>menuitemcheckbox</PaperCode> with <PaperCode>aria-checked</PaperCode>.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -400,7 +400,7 @@ menu.setPlacement(placement: ContextMenuPlacement): void;`}
                 </tbody>
             </PaperTable>
             <PaperTextList>
-                <li>Items have <PaperCode>role="menuitem"</PaperCode>. A submenu row has <PaperCode>aria-haspopup="menu"</PaperCode> and <PaperCode>aria-expanded</PaperCode>. A closed, kept-mounted menu has <PaperCode>aria-hidden</PaperCode>.</li>
+                <li>Items have <PaperCode>role="menuitem"</PaperCode>, and an item with <PaperCode>checked</PaperCode> has <PaperCode>role="menuitemcheckbox"</PaperCode> and <PaperCode>aria-checked</PaperCode>. A submenu row has <PaperCode>aria-haspopup="menu"</PaperCode> and <PaperCode>aria-expanded</PaperCode>. A closed, kept-mounted menu has <PaperCode>aria-hidden</PaperCode>.</li>
                 <li>Pointer hover highlights an item. Pressing and dragging across items highlights as you move, so a menu opened on press can be released over an item.</li>
                 <li>A text field inside the menu keeps its own Space, Home, End, Left, and Right keys.</li>
                 <li>A submenu opens on hover, on tap, or with the Right arrow. It flips to the left or upward when it has no room.</li>

@@ -392,7 +392,7 @@ export function Done() {
 
             <PaperText preset="subheader" as="h2" id="layout-context">Layout context</PaperText>
             <PaperText preset="body" as="p">
-                <PaperLink href="/docs/paperui/paperflex/">PaperFlex</PaperLink> tells its children which way it lays out, so a child's layout props resolve against the right axis.
+                <PaperLink href="/docs/paperui/paperflex/">PaperFlex</PaperLink> tells its children which way it lays out.
                 Build a component that takes the shared layout props with these.
             </PaperText>
             <PaperTable>
@@ -412,8 +412,8 @@ export function Done() {
                         <td>The context and its reader. The value is <PaperCode>PaperLayoutContextValue</PaperCode>: <PaperCode>{'{ direction?: "row" | "column" | "row-reverse" | "column-reverse"; parentIsFlex?: boolean }'}</PaperCode>. <PaperCode>usePaperLayout()</PaperCode> returns <PaperCode>undefined</PaperCode> outside a PaperFlex.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>resolveLayoutStyles(props, ctx?)</PaperCode></td>
-                        <td>Turns layout props into a <PaperCode>JSX.CSSProperties</PaperCode> object, the way PaperFlex does. Pass <PaperCode>usePaperLayout()</PaperCode> as the context.</td>
+                        <td><PaperCode>resolveLayoutStyles(props)</PaperCode></td>
+                        <td>Turns layout props into a <PaperCode>JSX.CSSProperties</PaperCode> object, the way PaperFlex does. The same props give the same styles in any parent.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -456,6 +456,55 @@ export function PhoneHint() {
         <Show when={panel?.compact?.()}>
             <PaperText preset="hint">Tap an entry to open it.</PaperText>
         </Show>
+    );
+}`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h2" id="setting-list-context">Setting list context</PaperText>
+            <PaperText preset="body" as="p">
+                <PaperLink href="/docs/paperui/papersettinglist/">PaperSettingList</PaperLink> provides its record to the controls inside it, which is how its <PaperCode>value</PaperCode> and <PaperCode>defaultValue</PaperCode> fill them.
+                A custom control reads the record the same way.
+            </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Export</th>
+                        <th>Effect</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>useSettingListValue(name)</PaperCode></td>
+                        <td>Takes <PaperCode>{"() => string | undefined"}</PaperCode>, the control's name, and returns <PaperCode>{"() => unknown"}</PaperCode>: the record's value for that name. It is <PaperCode>undefined</PaperCode> outside a list, without a name, and when the record has no value (or <PaperCode>null</PaperCode>) for it. Check the type yourself.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>PaperSettingListContext</PaperCode></td>
+                        <td>The context itself. Its value is <PaperCode>PaperSettingListContextValue</PaperCode>: <PaperCode>{"{ valueOf: (name: string) => unknown }"}</PaperCode>.</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+            <PaperText preset="body" as="p">
+                The list hears a change through the bubbling <PaperCode>input</PaperCode> and <PaperCode>change</PaperCode> events of a named native control. Give your control one, as PaperToggle gives its hidden checkbox, and dispatch those events when it changes.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { PaperButton, useSettingListValue } from "@mileniumhq/paperui";
+
+export function Level(props: { name: string }) {
+    const level = useSettingListValue(() => props.name);
+    let input: HTMLInputElement | undefined;
+
+    const raise = () => {
+        if (!input) return;
+        input.value = String(Number(level() ?? 0) + 1);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+
+    return (
+        <>
+            <input ref={input} type="hidden" name={props.name} value={String(level() ?? 0)} />
+            <PaperButton onClick={raise}>Level {String(level() ?? 0)}</PaperButton>
+        </>
     );
 }`}
             </PaperCode>

@@ -195,7 +195,7 @@ export function Example() {
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                Any other prop goes to the hidden radio input, not to the visible entry. With <PaperCode>href</PaperCode> those props are not applied.
+                Any other prop goes to the hidden radio input, not to the visible entry. With <PaperCode>href</PaperCode> they go to the <PaperCode>a</PaperCode>, and its <PaperCode>onClick</PaperCode> runs on a click unless the entry is disabled.
             </PaperText>
 
             <PaperText preset="subheader" as="h3" id="section-props">PaperMenuSection</PaperText>
@@ -266,7 +266,7 @@ export function Example() {
                 <li>With <PaperCode>href</PaperCode> an entry is an <PaperCode>a</PaperCode> that looks like any other. There is no radio input, and choosing it never calls <PaperCode>onValueChange</PaperCode>. The browser or your router navigates.</li>
                 <li>The menu's <PaperCode>value</PaperCode> still marks the matching entry, and gives it <PaperCode>aria-current="page"</PaperCode>. Derive <PaperCode>value</PaperCode> from the current location.</li>
                 <li>A disabled link loses its <PaperCode>href</PaperCode>, gets <PaperCode>aria-disabled="true"</PaperCode>, and is not focusable.</li>
-                <li>Link entries are reached with Tab. The arrow keys move between non-link entries and collapsible headers only.</li>
+                <li>Link entries are reached with Tab and the arrow keys, like the other entries.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="keyboard">Keyboard</PaperText>

@@ -214,9 +214,9 @@ export function Example() {
 
             <PaperText preset="subheader" as="h3" id="anchor-links">Anchor links</PaperText>
             <PaperTextList>
-                <li>Text with an <PaperCode>id</PaperCode> gets a small link button after its content. Pressing it copies the page's address with <PaperCode>#id</PaperCode> to the clipboard and adds the hash to the history. The button's tooltip reads "Copy link", then "Copied link!" for two seconds.</li>
+                <li>Text with an <PaperCode>id</PaperCode> gets a small link button after its content. Pressing it copies the page's address with <PaperCode>#id</PaperCode> to the clipboard and adds the hash to the history. The button's tooltip reads "Copy link", then "Copied link" with a check icon for two seconds.</li>
                 <li>This is how the headings in these docs get their links. Give an <PaperCode>id</PaperCode> to text only when you want that button.</li>
-                <li>If the clipboard refuses, the failure is written to the console and the button gives no other sign.</li>
+                <li>When the async clipboard is unavailable or refuses, the copy falls back to the document's copy command. If that fails too, the button shows an error icon and the tooltip "Copy failed" for two seconds, and the hash is not added.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>

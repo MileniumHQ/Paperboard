@@ -101,6 +101,12 @@ export function Example() {
                         <td>The switch's accessible name. It is placed on the switch itself, not on the hidden checkbox, as are <PaperCode>aria-labelledby</PaperCode> and <PaperCode>aria-describedby</PaperCode>.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>title</PaperCode></td>
+                        <td><PaperCode>string</PaperCode></td>
+                        <td>No default</td>
+                        <td>The switch's tooltip, placed on the switch itself.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>name</PaperCode>, <PaperCode>value</PaperCode>, <PaperCode>id</PaperCode>, <PaperCode>form</PaperCode></td>
                         <td>Input props</td>
                         <td>No default</td>
@@ -121,8 +127,8 @@ export function Example() {
                 <li>The switch is one tab stop. A disabled switch has <PaperCode>tabindex="-1"</PaperCode>.</li>
                 <li><PaperCode>aria-checked</PaperCode> follows the state.</li>
                 <li>On a flip, the hidden checkbox is set and fires bubbling <PaperCode>change</PaperCode> and <PaperCode>input</PaperCode> events, so a parent that listens for them, such as a form handler, sees the change. A haptic tap plays where the device supports it.</li>
-                <li>A switch inside a <PaperCode>label</PaperCode> changes once when you press the switch.</li>
-                <li>The hidden checkbox is zero-sized, so <PaperCode>title</PaperCode> and other props that depend on a visible input show nothing on the switch. Use <PaperCode>aria-label</PaperCode> for its name.</li>
+                <li>A switch inside a <PaperCode>label</PaperCode> changes once when you press the switch, and once when you press the label's text. Both call <PaperCode>onChange</PaperCode>.</li>
+                <li>In a <PaperLink href="/docs/paperui/papersettinglist/">PaperSettingList</PaperLink>, a named switch without <PaperCode>checked</PaperCode> takes its state from the list's record.</li>
                 <li>Handlers are yours: PaperToggle does not catch errors thrown by <PaperCode>onChange</PaperCode>. When saving can fail, show the failure to the user and put the state back.</li>
             </PaperTextList>
 

@@ -123,6 +123,7 @@ export function Example() {
                 <li>A toggle plays the light haptic on touch devices.</li>
                 <li>There is no indeterminate state.</li>
                 <li>The box and <PaperCode>aria-checked</PaperCode> follow <PaperCode>checked</PaperCode> when you set it. <PaperCode>onChange</PaperCode> reports the requested state and you decide whether to apply it.</li>
+                <li>In a <PaperLink href="/docs/paperui/papersettinglist/">PaperSettingList</PaperLink>, a named checkbox without <PaperCode>checked</PaperCode> takes its state from the list's record.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>

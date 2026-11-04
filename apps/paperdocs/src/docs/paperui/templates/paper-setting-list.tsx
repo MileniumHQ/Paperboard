@@ -105,19 +105,19 @@ export function Settings() {
                         <td><PaperCode>value</PaperCode></td>
                         <td><PaperCode>Record&lt;string, any&gt;</PaperCode></td>
                         <td>No default</td>
-                        <td>Replaces the record that <PaperCode>onValueChange</PaperCode> reports. See Named controls.</td>
+                        <td>The record. It fills the named controls and is the base of what <PaperCode>onValueChange</PaperCode> reports. Setting it makes the list controlled: update it from <PaperCode>onValueChange</PaperCode>. See Named controls.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>defaultValue</PaperCode></td>
                         <td><PaperCode>Record&lt;string, any&gt;</PaperCode></td>
                         <td><PaperCode>{`{}`}</PaperCode></td>
-                        <td>The record at the start, when <PaperCode>value</PaperCode> is not set.</td>
+                        <td>The record at the start, when <PaperCode>value</PaperCode> is not set. It fills the named controls.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>onValueChange</PaperCode></td>
                         <td><PaperCode>(values: Record&lt;string, any&gt;) =&gt; void</PaperCode></td>
                         <td>No default</td>
-                        <td>Called with the whole record after a named control changes.</td>
+                        <td>Called with the whole record after a named control's value changes.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode>, <PaperCode>style</PaperCode></td>
@@ -187,8 +187,10 @@ export function Settings() {
             <PaperTextList>
                 <li>A checkbox contributes its <PaperCode>checked</PaperCode> boolean. Every other control contributes its <PaperCode>value</PaperCode> string, so a number input gives <PaperCode>"8"</PaperCode>, not <PaperCode>8</PaperCode>.</li>
                 <li>A control with no <PaperCode>name</PaperCode> is ignored.</li>
-                <li>A text field fires <PaperCode>input</PaperCode> while typing and <PaperCode>change</PaperCode> on blur, and a <PaperLink href="/docs/paperui/papertoggle/">PaperToggle</PaperLink> fires both at once, so <PaperCode>onValueChange</PaperCode> can run twice for one edit.</li>
-                <li>The record never writes back into the controls. <PaperCode>value</PaperCode> and <PaperCode>defaultValue</PaperCode> only set what the record contains, so set each control's own value or checked state yourself.</li>
+                <li>An event that leaves the control's value as the record has it is ignored, so one edit calls <PaperCode>onValueChange</PaperCode> once. A text field fires <PaperCode>input</PaperCode> while typing and <PaperCode>change</PaperCode> on blur, and a <PaperLink href="/docs/paperui/papertoggle/">PaperToggle</PaperLink> fires both at once.</li>
+                <li>The record fills the named <PaperLink href="/docs/paperui/papertoggle/">PaperToggle</PaperLink>, <PaperLink href="/docs/paperui/papercheckbox/">PaperCheckbox</PaperLink>, <PaperLink href="/docs/paperui/paperinput/">PaperInput</PaperLink> and <PaperLink href="/docs/paperui/paperselectmenu/">PaperSelectMenu</PaperLink> inside the list. A control's own <PaperCode>checked</PaperCode> or <PaperCode>value</PaperCode> wins over the record, and a key the record does not have (or holds as <PaperCode>null</PaperCode>) leaves the control to its own state.</li>
+                <li>A toggle or checkbox takes a boolean, and an input or select menu takes a string or a number. A value of another type throws a <PaperCode>TypeError</PaperCode> that names the key.</li>
+                <li>A native <PaperCode>input</PaperCode>, <PaperCode>select</PaperCode> or <PaperCode>textarea</PaperCode> is not filled: set its value yourself. A custom control reads the record with <PaperCode>useSettingListValue</PaperCode>, described in <PaperLink href="/docs/paperui/utilities/">Utilities</PaperLink>.</li>
                 <li>First-party panels handle each control's change directly, as in Usage. Use <PaperCode>onValueChange</PaperCode> when one handler should see every setting.</li>
             </PaperTextList>
 
@@ -208,12 +210,12 @@ export function Network() {
     const [values, setValues] = createSignal<Record<string, unknown>>({ host: "localhost", secure: false });
 
     return (
-        <PaperSettingList defaultValue={values()} onValueChange={setValues} autoHeight>
+        <PaperSettingList value={values()} onValueChange={setValues} autoHeight>
             <PaperSettingItem title="Host" description="The address to connect to.">
-                <PaperInput name="host" label="Host" value={String(values().host)} />
+                <PaperInput name="host" label="Host" />
             </PaperSettingItem>
             <PaperSettingItem title="Secure" description="Use an encrypted connection.">
-                <PaperToggle name="secure" checked={Boolean(values().secure)} />
+                <PaperToggle name="secure" />
             </PaperSettingItem>
         </PaperSettingList>
     );

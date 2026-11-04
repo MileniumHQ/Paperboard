@@ -196,7 +196,8 @@ export function Example() {
             <PaperTextList>
                 <li>The trigger is a button with <PaperCode>aria-haspopup="listbox"</PaperCode> and <PaperCode>aria-expanded</PaperCode>. It shows the chosen option's icon and label, the placeholder, or, for a value with no matching option, the value as text.</li>
                 <li>The list opens below the trigger, at least as wide as the trigger, in a portal so no clipping parent cuts it off. It has <PaperCode>role="listbox"</PaperCode>, and each option <PaperCode>role="option"</PaperCode> with <PaperCode>aria-selected</PaperCode>.</li>
-                <li>Options stay in the page while the list is closed, so the trigger can show the chosen option's label before the first open.</li>
+                <li>Options stay in the page while the list is closed, so the trigger can show the chosen option's label before the first open. An option added later, or one whose <PaperCode>value</PaperCode> changes, labels the trigger under its current value.</li>
+                <li>In a <PaperLink href="/docs/paperui/papersettinglist/">PaperSettingList</PaperLink>, a named menu without <PaperCode>value</PaperCode> takes its value from the list's record.</li>
                 <li>Choosing an option calls <PaperCode>onValueChange</PaperCode> and closes the list. With <PaperCode>value</PaperCode> set, nothing changes until your signal does.</li>
                 <li>The chosen option is highlighted when the list opens.</li>
             </PaperTextList>

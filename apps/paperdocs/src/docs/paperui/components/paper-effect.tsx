@@ -106,16 +106,13 @@ export function Example() {
                         <td>The control to lift, usually one PaperButton.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode></td>
+                        <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode>, <PaperCode>style</PaperCode></td>
                         <td>Solid props</td>
                         <td>No default</td>
-                        <td>Added to the root.</td>
+                        <td>Added to the root. An object <PaperCode>style</PaperCode> is merged after the role colors from <PaperCode>variant</PaperCode>.</td>
                     </tr>
                 </tbody>
             </PaperTable>
-            <PaperText preset="body" as="p">
-                A <PaperCode>style</PaperCode> prop is accepted by the type but not applied.
-            </PaperText>
 
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>

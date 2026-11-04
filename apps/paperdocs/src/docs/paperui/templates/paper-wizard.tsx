@@ -205,13 +205,13 @@ export function Example() {
             <PaperText preset="subheader" as="h3" id="data">Collecting data</PaperText>
             <PaperText preset="body" as="p">
                 Next is a submit button. Submitting reads the form with <PaperCode>FormData</PaperCode> and merges every named field into the record, replacing earlier keys of the same name, then moves on.
+                Back reads the form the same way before it moves.
                 Enter in a text field submits too.
             </PaperText>
             <PaperTextList>
-                <li>Field values are strings (or <PaperCode>File</PaperCode> objects). Convert numbers yourself.</li>
+                <li>A named checkbox, including a <PaperLink href="/docs/paperui/papertoggle/">PaperToggle</PaperLink>'s, gives its checked state as <PaperCode>true</PaperCode> or <PaperCode>false</PaperCode>. A disabled one is not read.</li>
+                <li>Other field values are strings (or <PaperCode>File</PaperCode> objects). Convert numbers yourself.</li>
                 <li>Only the active step is in the document, so only its fields are read. Earlier steps' values stay in the record.</li>
-                <li>An unchecked checkbox sends nothing, so its key keeps its previous value. Store a boolean with <PaperCode>setStepData</PaperCode> from <PaperCode>useWizard()</PaperCode> instead of relying on the form.</li>
-                <li>Back does not read the form. Edits typed on the active step are lost when the user goes back, unless you stored them with <PaperCode>setStepData</PaperCode>.</li>
                 <li>Values that are not form fields, such as a picked item, go in with <PaperCode>setStepData("key", value)</PaperCode> or <PaperCode>setStepData({"{ key: value }"})</PaperCode>.</li>
             </PaperTextList>
 
@@ -256,7 +256,7 @@ import type { WizardContextType } from "@mileniumhq/paperui";`}
                     <tr>
                         <td><PaperCode>prevStep</PaperCode></td>
                         <td><PaperCode>() =&gt; void</PaperCode></td>
-                        <td>Moves back. Does nothing on the first step.</td>
+                        <td>Reads the form into the record, as the Back button does, and moves back. Does nothing on the first step.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>setCurrentStep</PaperCode></td>
