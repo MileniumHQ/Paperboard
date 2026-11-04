@@ -270,7 +270,7 @@ const PanelPage: Component<PanelPageProps> = (props) => {
 
             <section class={styles.facts} aria-label="Details">
                 <Fact label="Publisher">{publisherLabel(props.panel)}</Fact>
-                <Fact label="Size">{size() ?? "Unknown"}</Fact>
+                <Show when={size()}>{(known) => <Fact label="Size">{known()}</Fact>}</Show>
                 <Fact label={props.panel.isInstalled ? "Installed" : "Version"}>
                     {props.panel.version ? `v${props.panel.version}` : "Unknown"}
                 </Fact>

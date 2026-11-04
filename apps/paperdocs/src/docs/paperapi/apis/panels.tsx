@@ -95,8 +95,8 @@ panelsApi.install(panelId: string, scope?: string): Promise<unknown>;`}
     latestVersion?: string;
     archiveBytes?: number;
     store?: StoreListing;
+    /** registry only: the release date, formatted for display */
     updatedAt?: string;
-    size?: string;
     isInstalled?: boolean;
     installedVersion?: string;
     /** "dev" for a panel linked with paperapi link */
@@ -109,7 +109,7 @@ panelsApi.install(panelId: string, scope?: string): Promise<unknown>;`}
 }`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                In <PaperCode>registry</PaperCode>, an entry with no size or date gets <PaperCode>size: "Unknown"</PaperCode> and <PaperCode>updatedAt: "Recently"</PaperCode>. Check <PaperCode>archiveBytes</PaperCode> for a real size.
+                In <PaperCode>registry</PaperCode>, a field the registry does not give is absent, never filled in. <PaperCode>archiveBytes</PaperCode> is the size of the newest release in bytes.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="registry">Registry</PaperText>

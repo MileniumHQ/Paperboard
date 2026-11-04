@@ -20,7 +20,7 @@ export interface PanelItem {
     downloadUrl?: string;
     description?: string;
     publisher?: string;
-    size?: string;
+    /** the registry's release date, formatted for display; absent when the registry gives none */
     updatedAt?: string;
     isInstalled?: boolean;
     // "dev" = symlinked from a working tree; registry installs carry none
@@ -60,6 +60,14 @@ export interface RegistryPanelRecord {
     };
 }
 
+// a registry date as a person reads it; an unparseable one is no date
+function releaseDate(value: string | undefined): string | undefined {
+    if (!value) return undefined;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return undefined;
+    return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
 /**
  * Merges a registry index with the installed panels for one computer.
  * `registryBase` is the origin the library addresses archives/icons from
@@ -81,6 +89,7 @@ export function mergeRegistryWithInstalled(
         if (!record || typeof record !== "object") continue;
         const localPanel = installedMap.get(id);
         const store = parseStoreListing(record.store);
+        const updatedAt = releaseDate(record.updatedAt) ?? localPanel?.updatedAt;
         panels.push({
             id,
             name: localPanel?.name || record.name || id,
@@ -101,14 +110,9 @@ export function mergeRegistryWithInstalled(
             iconUrl: record.iconUrl || `${base}/panel/${id}/icon`,
             downloadUrl:
                 record.downloadUrl || `${base}/panel/${id}/download`,
-            size: localPanel?.size || "Unknown",
-            updatedAt: record.updatedAt
-                ? new Date(record.updatedAt).toLocaleDateString(undefined, {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                  })
-                : localPanel?.updatedAt || "Recently",
+            // facts the registry does not give stay absent: a card shows
+            // nothing rather than a made-up "Unknown" or "Recently"
+            ...(updatedAt ? { updatedAt } : {}),
             ...(typeof record.sizeBytes === "number" &&
             Number.isFinite(record.sizeBytes) &&
             record.sizeBytes >= 0

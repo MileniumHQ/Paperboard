@@ -211,7 +211,10 @@ describe("PanelLibraryApp", () => {
         await screen.findByRole("heading", { level: 1, name: "Alpha" });
         expect(screen.queryByRole("heading", { name: "Services used" })).toBeNull();
         expect(screen.queryByRole("region", { name: "Screenshots" })).toBeNull();
-        expect(screen.getByText("Unknown")).toBeDefined();
+        // a size the registry does not give is not shown, never "Unknown"
+        expect(screen.queryByText("Size")).toBeNull();
+        expect(screen.queryByText("Unknown")).toBeNull();
+        expect(screen.getByText("Publisher")).toBeDefined();
         bridge.dispose();
     });
 

@@ -21,8 +21,6 @@ test("registry-only panels address their archive and icon relative to the librar
             icon: undefined,
             iconUrl: "/panel/panel.a/icon",
             downloadUrl: "/panel/panel.a/download",
-            size: "Unknown",
-            updatedAt: "Recently",
             isInstalled: false,
             installedVersion: undefined,
             installSource: undefined,
@@ -146,4 +144,22 @@ test("an installed panel in the registry keeps its widgets and service from its 
     );
     expect(panel.widgets).toEqual(widgets);
     expect(panel.service).toBe("./dist/service.js");
+});
+
+test("a registry record with no date or an unreadable one leaves updatedAt absent", () => {
+    const panels = mergeRegistryWithInstalled(
+        {
+            "panel.a": { name: "A" },
+            "panel.b": { name: "B", updatedAt: "not a date" },
+            "panel.c": { name: "C", updatedAt: "2026-10-30T12:00:00Z" },
+        },
+        [],
+        "",
+    );
+    expect("updatedAt" in panels[0]).toBe(false);
+    expect("updatedAt" in panels[1]).toBe(false);
+    expect("size" in panels[0]).toBe(false);
+    expect(panels[2].updatedAt).toBe(
+        new Date("2026-10-30T12:00:00Z").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }),
+    );
 });
