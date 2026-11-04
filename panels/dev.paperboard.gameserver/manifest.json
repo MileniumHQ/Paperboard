@@ -50,32 +50,42 @@
             {
                 "light": "./store/1-light.png",
                 "dark": "./store/1-dark.png",
-                "alt": "Overview"
+                "alt": "Servers for Minecraft, Terraria, Palworld and Team Fortress 2"
             },
             {
                 "light": "./store/2-light.png",
                 "dark": "./store/2-dark.png",
-                "alt": "Live world map"
+                "alt": "A Minecraft server's overview and live console"
             },
             {
                 "light": "./store/3-light.png",
                 "dark": "./store/3-dark.png",
-                "alt": "Players"
+                "alt": "Live map of a Minecraft world"
             },
             {
                 "light": "./store/4-light.png",
                 "dark": "./store/4-dark.png",
-                "alt": "Plugins and mods"
+                "alt": "Players with their stats, whitelist and operator controls"
             },
             {
                 "light": "./store/5-light.png",
                 "dark": "./store/5-dark.png",
-                "alt": "Install a modpack"
+                "alt": "Plugins installed from Modrinth"
             },
             {
                 "light": "./store/6-light.png",
                 "dark": "./store/6-dark.png",
-                "alt": "Back up on a schedule"
+                "alt": "Picking Team Fortress 2 maps for the rotation"
+            },
+            {
+                "light": "./store/7-light.png",
+                "dark": "./store/7-dark.png",
+                "alt": "Palworld server options"
+            },
+            {
+                "light": "./store/8-light.png",
+                "dark": "./store/8-dark.png",
+                "alt": "Backups on a schedule, kept on this computer"
             }
         ],
         "services": [
