@@ -21,6 +21,12 @@ export interface SelectionProviderProps {
     onValuesChange?: (values: (string | number)[]) => void;
 }
 
+/** The selection props of a single-choice container (a menu, a rail). */
+export type SingleSelectionProviderProps = Omit<
+    SelectionProviderProps,
+    "multiple" | "values" | "defaultValues" | "onValuesChange"
+>;
+
 export interface SelectionContextType {
     name: Accessor<string>;
     multiple: Accessor<boolean>;

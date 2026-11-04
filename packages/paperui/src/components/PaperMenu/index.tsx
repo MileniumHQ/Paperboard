@@ -17,8 +17,9 @@ import {
     SelectionProvider,
     SelectionRadioInput,
     useSelectionItem,
-    type SelectionProviderProps,
+    type SingleSelectionProviderProps,
 } from "../contexts/selection";
+import { callEventHandler } from "../../utils/events";
 
 import type { PaperSpacing } from "../../types";
 import { resolveSpacing } from "../../utils/theme";
@@ -34,7 +35,7 @@ export function useMenuLevel() {
 
 export type PaperMenuSpacing = boolean | PaperSpacing;
 
-export type PaperMenuProps = SelectionProviderProps &
+export type PaperMenuProps = SingleSelectionProviderProps &
     JSX.HTMLAttributes<HTMLDivElement> & {
         direction?: "horizontal" | "vertical";
         horizontal?: boolean;
@@ -99,7 +100,7 @@ export function PaperMenu(props: ParentProps<PaperMenuProps>) {
         if (!menuRef) return;
         const focusables = Array.from(
             menuRef.querySelectorAll<HTMLElement>(
-                `label.${styles.PaperMenuItem}:not(.${styles.disabled}), .${styles.sectionHeader}[tabindex="0"]`
+                `.${styles.PaperMenuItem}:not(.${styles.disabled}), .${styles.sectionHeader}[tabindex="0"]`
             )
         );
         if (focusables.length === 0) return;
@@ -297,6 +298,7 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
         "children",
         "style",
         "href",
+        "onClick",
     ]);
 
     const { isSelected, select } = useSelectionItem(local.value, local.disabled);
@@ -369,13 +371,23 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
             when={local.href === undefined}
             fallback={
                 <a
+                    {...(rest as JSX.AnchorHTMLAttributes<HTMLAnchorElement>)}
                     href={local.disabled ? undefined : local.href}
                     aria-disabled={local.disabled ? "true" : undefined}
                     aria-current={isSelected() ? "page" : undefined}
                     class={[className(), styles.link].join(" ")}
                     classList={local.classList}
                     style={style()}
-                    onClick={activate}
+                    onClick={(e) => {
+                        if (local.disabled) return;
+                        // the props are typed for the radio choice; on a
+                        // link entry the handler's currentTarget is the link
+                        callEventHandler(
+                            local.onClick as unknown as JSX.EventHandlerUnion<HTMLAnchorElement, MouseEvent>,
+                            e,
+                        );
+                        activate();
+                    }}
                 >
                     {content()}
                 </a>
@@ -395,7 +407,12 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
                     }
                 }}
             >
-                <SelectionRadioInput {...rest} value={local.value} disabled={local.disabled} />
+                <SelectionRadioInput
+                    {...rest}
+                    onClick={local.onClick}
+                    value={local.value}
+                    disabled={local.disabled}
+                />
                 {content()}
             </label>
         </Show>

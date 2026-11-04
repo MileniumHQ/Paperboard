@@ -257,8 +257,9 @@ describe("PaperAudio", () => {
 
         fireEvent.click(more);
         fireEvent.click(screen.getByText("Playback speed"));
-        const item = screen.getByText("1.5x").closest("[role='menuitem']")!;
+        const item = screen.getByText("1.5x").closest("[role='menuitemcheckbox']")!;
         expect(item.querySelector("[class*='itemCheck']")).toBeTruthy();
+        expect(item.getAttribute("aria-checked")).toBe("true");
     });
 });
 

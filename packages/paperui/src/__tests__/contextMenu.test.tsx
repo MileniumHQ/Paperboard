@@ -105,6 +105,47 @@ describe("PaperContextMenu - Keyboard & Scroll Dismissal Tests", () => {
 
         expect(screen.getByText("check")).toBeDefined();
     });
+
+    test("an item with checked is a menuitemcheckbox that states its state", () => {
+        render(() => (
+            <PaperContextMenu open={true}>
+                <PaperContextMenuItem value="a" checked>
+                    Alpha
+                </PaperContextMenuItem>
+                <PaperContextMenuItem value="b" checked={false}>
+                    Beta
+                </PaperContextMenuItem>
+                <PaperContextMenuItem value="c">Gamma</PaperContextMenuItem>
+            </PaperContextMenu>
+        ));
+        const on = screen.getByText("Alpha").closest("[role='menuitemcheckbox']")!;
+        expect(on.getAttribute("aria-checked")).toBe("true");
+        const off = screen.getByText("Beta").closest("[role='menuitemcheckbox']")!;
+        expect(off.getAttribute("aria-checked")).toBe("false");
+        const plain = screen.getByText("Gamma").closest("[role='menuitem']")!;
+        expect(plain.hasAttribute("aria-checked")).toBe(false);
+    });
+
+    test("an item whose label is not text gets its own identity, not [object Object]", () => {
+        render(() => (
+            <PaperContextMenu open={true}>
+                <PaperContextMenuItem>
+                    <strong>Alpha</strong>
+                </PaperContextMenuItem>
+                <PaperContextMenuItem>
+                    <strong>Beta</strong>
+                </PaperContextMenuItem>
+                <PaperContextMenuItem>Gamma</PaperContextMenuItem>
+            </PaperContextMenu>
+        ));
+        const alpha = screen.getByText("Alpha").closest("[role='menuitem']")!;
+        const beta = screen.getByText("Beta").closest("[role='menuitem']")!;
+        expect(alpha.id).not.toContain("object");
+        expect(alpha.getAttribute("data-context-item")).not.toBe(beta.getAttribute("data-context-item"));
+        expect(alpha.id).not.toBe(beta.id);
+        // a text label is still its own value
+        expect(screen.getByText("Gamma").closest("[role='menuitem']")!.getAttribute("data-context-item")).toBe("Gamma");
+    });
 });
 
 describe("PaperContextMenu - submenu keyboard navigation", () => {

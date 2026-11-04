@@ -140,6 +140,7 @@ export function PaperSelectorItem(props: ParentProps<PaperSelectorItemProps>) {
                         class={[styles.itemInner, styles.link].join(" ")}
                         href={local.disabled ? undefined : local.href}
                         aria-disabled={local.disabled ? "true" : undefined}
+                        aria-current={isSelected() ? "page" : undefined}
                     >
                         {content()}
                     </a>

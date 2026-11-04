@@ -1,8 +1,9 @@
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, vi } from "vitest";
 import { render, fireEvent, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { PaperMenu, PaperMenuSection, PaperMenuItem } from "../components/PaperMenu";
 import { PaperSpacer } from "../components/PaperSpacer";
+import { PaperRail, PaperRailItem } from "../components/PaperRail";
 
 describe("PaperMenu & PaperMenuSection Tests", () => {
     test("renders PaperMenu with collapsible sections and toggles visibility on click", async () => {
@@ -108,5 +109,68 @@ describe("PaperMenu embedded", () => {
         expect(links[0].getAttribute("aria-current")).toBeNull();
         expect(links[1].getAttribute("aria-current")).toBe("page");
         expect(container.querySelector("input[type=radio]")).toBeNull();
+    });
+});
+
+describe("PaperMenu link entries", () => {
+    test("arrow keys move through link entries as well as choices", () => {
+        const { getByText } = render(() => (
+            <PaperMenu name="mixed" value="a">
+                <PaperMenuItem value="a">A</PaperMenuItem>
+                <PaperMenuItem value="b" href="/b/">B</PaperMenuItem>
+                <PaperMenuItem value="c" href="/c/" disabled>C</PaperMenuItem>
+                <PaperMenuItem value="d">D</PaperMenuItem>
+            </PaperMenu>
+        ));
+        const first = getByText("A").closest("label")!;
+        first.focus();
+        fireEvent.keyDown(first, { key: "ArrowDown" });
+        expect(document.activeElement).toBe(getByText("B").closest("a"));
+        // a disabled link is skipped, like a disabled choice
+        fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+        expect(document.activeElement).toBe(getByText("D").closest("label"));
+    });
+
+    test("a link entry passes its other props to the link", () => {
+        const onClick = vi.fn((e: MouseEvent) => e.preventDefault());
+        const { getByText } = render(() => (
+            <PaperMenu name="links" value="a">
+                <PaperMenuItem value="a" href="/a/" id="entry-a" data-entry="a" onClick={onClick}>
+                    A
+                </PaperMenuItem>
+            </PaperMenu>
+        ));
+        const link = getByText("A").closest("a")!;
+        expect(link.id).toBe("entry-a");
+        expect(link.getAttribute("data-entry")).toBe("a");
+        link.click();
+        expect(onClick).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("single-choice containers", () => {
+    test("PaperMenu and PaperRail do not take the multiple-choice props", () => {
+        // these props would land on the div as attributes: the types refuse them
+        // @ts-expect-error PaperMenu chooses one entry
+        const menu = () => <PaperMenu name="m" multiple values={["a"]} />;
+        // @ts-expect-error PaperRail chooses one item
+        const rail = () => <PaperRail name="r" multiple defaultValues={["a"]} />;
+        expect(typeof menu).toBe("function");
+        expect(typeof rail).toBe("function");
+    });
+});
+
+describe("PaperRailItem naming", () => {
+    test("a caller's aria-label and title win over the label", () => {
+        const { getByRole } = render(() => (
+            <PaperRail name="rail" value="a">
+                <PaperRailItem value="a" icon="home" label="Home" aria-label="Go home" title="Home page" />
+                <PaperRailItem value="b" icon="settings" label="Settings" />
+            </PaperRail>
+        ));
+        const home = getByRole("radio", { name: "Go home" });
+        expect(home.getAttribute("title")).toBe("Home page");
+        const settings = getByRole("radio", { name: "Settings" });
+        expect(settings.getAttribute("title")).toBe("Settings");
     });
 });

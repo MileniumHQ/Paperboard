@@ -7,6 +7,7 @@ import {
     createSignal,
     createEffect,
     createUniqueId,
+    children as resolveChildren,
     onCleanup,
     splitProps,
     Show,
@@ -681,7 +682,15 @@ export function PaperContextMenuItem(
 
     const ctx = useContextMenu();
     const subCtx = useContext(SubMenuLevelContext);
-    const itemValue = () => String(local.value ?? local.children);
+    // resolved once: the label is rendered from this, and read for the value
+    const label = resolveChildren(() => local.children);
+    // a label that is not text has no readable identity: the item gets an id
+    const generatedValue = `item-${createUniqueId()}`;
+    const itemValue = () => {
+        if (local.value !== undefined) return String(local.value);
+        const text = label();
+        return typeof text === "string" || typeof text === "number" ? String(text) : generatedValue;
+    };
 
     const isHighlighted = () => ctx?.highlightedItem() === itemValue();
 
@@ -700,7 +709,8 @@ export function PaperContextMenuItem(
     return (
         <MenuItem
             id={`paper-menuitem-${itemValue()}`}
-            role="menuitem"
+            role={local.checked === undefined ? "menuitem" : "menuitemcheckbox"}
+            aria-checked={local.checked === undefined ? undefined : local.checked}
             data-context-item={itemValue()}
             data-disabled={local.disabled ? "true" : "false"}
             tabIndex={-1}
@@ -725,7 +735,7 @@ export function PaperContextMenuItem(
                 }
             }}
         >
-            {local.children}
+            {label()}
         </MenuItem>
     );
 }

@@ -73,7 +73,7 @@ const CONTROLS = [
     "summary",
     "[contenteditable]",
     "[tabindex]",
-    ...["button", "link", "switch", "checkbox", "radio", "tab", "menuitem", "option", "slider", "textbox", "combobox"].map(
+    ...["button", "link", "switch", "checkbox", "radio", "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "option", "slider", "textbox", "combobox"].map(
         (role) => `[role="${role}"]`,
     ),
 ].join(",");

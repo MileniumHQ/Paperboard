@@ -87,4 +87,16 @@ describe("PaperSelector & SelectionRadioInput Accessibility Tests", () => {
         expect(link?.textContent).toContain("Next page");
         expect(container.querySelector("input[type=radio]")).toBeNull();
     });
+
+    test("a selected link item marks the current page", () => {
+        const { container } = render(() => (
+            <PaperSelector name="pages" value="b">
+                <PaperSelectorItem value="a" href="/a/">A</PaperSelectorItem>
+                <PaperSelectorItem value="b" href="/b/">B</PaperSelectorItem>
+            </PaperSelector>
+        ));
+        const links = container.querySelectorAll("a");
+        expect(links[0].getAttribute("aria-current")).toBeNull();
+        expect(links[1].getAttribute("aria-current")).toBe("page");
+    });
 });

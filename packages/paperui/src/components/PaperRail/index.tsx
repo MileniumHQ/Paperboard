@@ -4,12 +4,12 @@ import { PaperIcon } from "../PaperIcon";
 import {
     SelectionProvider,
     useSelectionItem,
-    type SelectionProviderProps,
+    type SingleSelectionProviderProps,
 } from "../contexts/selection";
 
 const RailContext = createContext<{ showLabels?: boolean }>();
 
-export type PaperRailProps = SelectionProviderProps &
+export type PaperRailProps = SingleSelectionProviderProps &
     JSX.HTMLAttributes<HTMLDivElement> & {
         showLabels?: boolean;
     };
@@ -81,6 +81,8 @@ export function PaperRailItem(props: PaperRailItemProps) {
         "classList",
         "onClick",
         "onKeyDown",
+        "aria-label",
+        "title",
     ]);
 
     const { isSelected, select } = useSelectionItem(
@@ -88,6 +90,8 @@ export function PaperRailItem(props: PaperRailItemProps) {
         local.disabled,
     );
     const shouldShowLabel = () => local.showLabel ?? railCtx?.showLabels ?? false;
+    // a text label names the item, unless the caller names it themselves
+    const textLabel = () => (typeof local.label === "string" ? local.label : undefined);
 
     const className = () =>
         [
@@ -113,13 +117,13 @@ export function PaperRailItem(props: PaperRailItemProps) {
         <div
             {...rest}
             role="radio"
-            aria-label={typeof local.label === "string" ? local.label : undefined}
+            aria-label={local["aria-label"] ?? textLabel()}
             aria-checked={isSelected()}
             aria-disabled={local.disabled || undefined}
             tabIndex={local.disabled ? -1 : 0}
             class={className()}
             classList={local.classList}
-            title={typeof local.label === "string" ? local.label : undefined}
+            title={local.title ?? textLabel()}
             onClick={activate}
             onKeyDown={(e) => {
                 if (
@@ -163,6 +167,7 @@ export function PaperRailAction(props: PaperRailActionProps) {
         "showLabel",
         "class",
         "classList",
+        "title",
     ]);
 
     const shouldShowLabel = () => local.showLabel ?? railCtx?.showLabels ?? false;
@@ -184,7 +189,7 @@ export function PaperRailAction(props: PaperRailActionProps) {
             {...rest}
             class={className()}
             classList={local.classList}
-            title={typeof local.label === "string" ? local.label : undefined}
+            title={local.title ?? (typeof local.label === "string" ? local.label : undefined)}
         >
             {typeof local.icon === "string" ? (
                 <PaperIcon aria-hidden="true" class={styles.railIcon} zeroHeight>
