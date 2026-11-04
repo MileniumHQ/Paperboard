@@ -14,6 +14,8 @@ afterAll(() => nodeFs.rmSync(serverDir, { recursive: true, force: true }));
 
 const writes: string[] = [];
 const kills: string[] = [];
+// set by a test to make the daemon refuse the next kill
+let killError: Error | null = null;
 const starts: string[] = [];
 let savedConfig: Record<string, unknown> = {};
 const configSets: Record<string, unknown>[] = [];
@@ -36,7 +38,8 @@ mock.module("../src/service/api", () => ({
         write: (_id: string, data: string) => {
             writes.push(data);
         },
-        kill: (_id: string, sig: string) => {
+        kill: async (_id: string, sig: string) => {
+            if (killError) throw killError;
             kills.push(sig);
         },
         exists: async () => false,
@@ -131,6 +134,7 @@ function makeCtx(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
     writes.length = 0;
     kills.length = 0;
+    killError = null;
     starts.length = 0;
     configSets.length = 0;
     savedConfig = {};
@@ -165,6 +169,15 @@ describe("stop force-kill tracking", () => {
         // the kill must never land in a session that exited cleanly
         await new Promise((resolve) => setTimeout(resolve, 30));
         expect(kills).toEqual([]);
+    });
+});
+
+describe("stop while starting", () => {
+    it("a refused kill fails the stop and leaves the server marked starting", async () => {
+        const ctx = makeCtx({ serverStatus: "starting" });
+        killError = new Error("No such process");
+        await expect(stopServerInstance(ctx)).rejects.toThrow("No such process");
+        expect(ctx.state.serverStatus).toBe("starting");
     });
 });
 

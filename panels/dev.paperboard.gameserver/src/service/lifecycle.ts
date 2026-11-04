@@ -201,7 +201,7 @@ export async function stopServerInstance(
     const curr = ctx.state.serverStatus;
     if (curr === "starting") {
         markStopRequested();
-        processApi.kill(primaryProcessId(), "SIGKILL");
+        await processApi.kill(primaryProcessId(), "SIGKILL");
         ctx.setState({
             serverStatus: "offline",
             serverEntries: appendCapped(ctx.state.serverEntries, {
