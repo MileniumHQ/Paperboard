@@ -64,7 +64,7 @@ interface ProcessRunResult {
             <PaperTextList>
                 <li><PaperCode>exec</PaperCode> collects the output and resolves with it trimmed, once the command exits. Each stream keeps at most <PaperCode>execBufferCapBytes</PaperCode>, 10 MiB by default.</li>
                 <li><PaperCode>exec</PaperCode> rejects with <PaperCode>RUN_TIMEOUT: "&lt;command&gt;" exceeded &lt;n&gt;ms and was killed</PaperCode> after <PaperCode>timeoutMs</PaperCode>, 30 seconds by default.</li>
-                <li><PaperCode>run</PaperCode> streams the output to the callbacks. After <PaperCode>timeoutMs</PaperCode>, 30 seconds by default, it sends <PaperCode>SIGTERM</PaperCode> and resolves with <PaperCode>{"{ exitCode: -1, code: \"RUN_TIMEOUT\" }"}</PaperCode>. Pass <PaperCode>null</PaperCode> to wait with no deadline.</li>
+                <li><PaperCode>run</PaperCode> streams the output to the callbacks. After <PaperCode>timeoutMs</PaperCode>, 30 seconds by default, it sends <PaperCode>SIGTERM</PaperCode> and resolves with <PaperCode>{"{ exitCode: -1, code: \"RUN_TIMEOUT\" }"}</PaperCode>. When the daemon refuses that kill, it rejects with <PaperCode>"&lt;command&gt;" timed out after &lt;n&gt; ms and could not be stopped: &lt;reason&gt;</PaperCode>. Pass <PaperCode>null</PaperCode> to wait with no deadline.</li>
                 <li>A command that exits with an error code resolves; check <PaperCode>exitCode</PaperCode>.</li>
                 <li>A command that isn't found resolves with <PaperCode>exitCode: -2</PaperCode> and <PaperCode>[Process Error] Executable not found in $PATH: "&lt;command&gt;"</PaperCode> on standard error.</li>
                 <li>The command runs directly, not through a shell, so pipes, <PaperCode>&amp;&amp;</PaperCode> and globs are not read. To run a shell line, use <PaperLink href="/docs/paperapi/shell/">resolveOneShotShell</PaperLink>.</li>
@@ -105,7 +105,7 @@ interface ProcessStartOptions {
                 <li>Subscribe with <PaperCode>onData</PaperCode> and the others before <PaperCode>start</PaperCode> to see the first lines. Each returns the function that unsubscribes.</li>
                 <li>Subscribing with <PaperCode>onData</PaperCode>, <PaperCode>onStdout</PaperCode> or <PaperCode>onStderr</PaperCode> attaches the connection to the process, so a new page or a restarted service sees the output of a process that was already running. <PaperCode>attach</PaperCode> does the same with no callback. After a reconnect, the SDK attaches again.</li>
                 <li><PaperCode>write</PaperCode> sends text as it is, with no newline added, at most 64 KB a call.</li>
-                <li><PaperCode>kill</PaperCode> sends the signal, <PaperCode>SIGTERM</PaperCode> by default. It resolves even when the id is not running, and logs a refused kill to the console.</li>
+                <li><PaperCode>kill</PaperCode> sends the signal, <PaperCode>SIGTERM</PaperCode> by default. It resolves when the id is not running. Rejects with the daemon's reason when the kill is refused.</li>
                 <li>Installing or updating a panel stops every process it owns.</li>
             </PaperTextList>
 

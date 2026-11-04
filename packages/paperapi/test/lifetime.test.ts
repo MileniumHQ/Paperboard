@@ -343,7 +343,8 @@ describe("stream attach refcounting", () => {
 
         // destroy the resource while the subscription remains: the daemon
         // is told, the transport untracks, and the ledger drops
-        send("terminal-destroy", { id: "t-d" });
+        // never answered: the afterEach teardown closes the transport
+        send("terminal-destroy", { id: "t-d" }).catch(() => undefined);
         await sleep(10);
 
         // a fresh subscription attaches again (no stale-count shortcut)

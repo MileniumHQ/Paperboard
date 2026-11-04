@@ -91,16 +91,36 @@ describe("process.run timeout", () => {
         const runFrame = LAST().frames().find((f) => f.action === "process:run")!;
         LAST().receive({ type: "response", id: runFrame.id, result: { success: true } });
 
-        // the caller's bounded promise resolves as a timeout — not a silent hang
-        const outcome = await result;
-        expect(outcome.code).toBe("RUN_TIMEOUT");
-        expect(outcome.exitCode).toBe(-1);
-
-        // the child was killed, by id, via SIGTERM through the daemon rpc
+        // the child is killed, by id, via SIGTERM through the daemon rpc
         await waitFor(() => LAST().frames().some((f) => f.action === "process:kill"));
         const killFrame = LAST().frames().find((f) => f.action === "process:kill")!;
         expect(killFrame.params.id).toBe(runFrame.params.id);
         expect(killFrame.params.signal).toBe("SIGTERM");
+        LAST().receive({ type: "response", id: killFrame.id, result: { success: true } });
+
+        // the caller's bounded promise resolves as a timeout — not a silent hang
+        const outcome = await result;
+        expect(outcome.code).toBe("RUN_TIMEOUT");
+        expect(outcome.exitCode).toBe(-1);
+    });
+
+    test("a timeout whose kill the daemon refuses rejects the run: the child lives on", async () => {
+        const connecting = initPaperApi({ port: 1237, token: "tok" });
+        await waitFor(() => MockWebSocket.instances.length > 0);
+        LAST().open();
+        await connecting;
+
+        const result = processApi.run({ command: "sleep", args: ["60"] }, 25);
+
+        await waitFor(() => LAST().frames().some((f) => f.action === "process:run"));
+        const runFrame = LAST().frames().find((f) => f.action === "process:run")!;
+        LAST().receive({ type: "response", id: runFrame.id, result: { success: true } });
+
+        await waitFor(() => LAST().frames().some((f) => f.action === "process:kill"));
+        const killFrame = LAST().frames().find((f) => f.action === "process:kill")!;
+        LAST().receive({ type: "response", id: killFrame.id, error: "Operation not permitted" });
+
+        await expect(result).rejects.toThrow('"sleep" timed out after 25 ms and could not be stopped: Operation not permitted');
     });
 
     test("normal child exit resolves with its real exit code and no kill frame", async () => {
@@ -138,7 +158,9 @@ describe("process.run timeout", () => {
         const runFrame = LAST().frames().find((f) => f.action === "process:run")!;
         LAST().receive({ type: "response", id: runFrame.id, result: { success: true } });
 
-        await expect(result).rejects.toThrow(/RUN_TIMEOUT/);
         await waitFor(() => LAST().frames().some((f) => f.action === "process:kill"));
+        const killFrame = LAST().frames().find((f) => f.action === "process:kill")!;
+        LAST().receive({ type: "response", id: killFrame.id, result: { success: true } });
+        await expect(result).rejects.toThrow(/RUN_TIMEOUT/);
     });
 });

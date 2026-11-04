@@ -484,9 +484,8 @@ export async function invoke<T = unknown>(
     return invokeIn<T>(undefined, channel, ...args);
 }
 
-// fire-and-forget channels log failures, never drop them; the returned
-// promise is already failure-caught, so callers MAY await it (e.g.
-// terminal.create) but existing fire-and-forget callers keep working
+// every channel rejects with the daemon's reason: a shell that could not
+// start, or a process that would not die, must reach the caller that asked
 export function send(channel: string, ...args: unknown[]): Promise<void> {
     const t = getTransport();
     switch (channel) {
@@ -495,8 +494,7 @@ export function send(channel: string, ...args: unknown[]): Promise<void> {
             return t
                 .ensureConnected()
                 .then(() => t.call("term:create", p))
-                .then(() => t.trackTerminal(p.id))
-                .catch((err) => debugErr(`terminal-create ${p?.id}`, err));
+                .then(() => t.trackTerminal(p.id));
         }
         // a refused keystroke or resize must reach the terminal that sent
         // it, which can say the session is gone and retry
@@ -510,9 +508,7 @@ export function send(channel: string, ...args: unknown[]): Promise<void> {
             // the resource is gone: the ledger dies with it, so a later
             // resubscribe attaches fresh instead of seeing a stale count
             dropAttachmentLedger("terminal", id, t);
-            return t.call("term:destroy", { id }).catch((err) =>
-                debugErr(`terminal-destroy ${id}`, err),
-            );
+            return t.call("term:destroy", { id }).then(() => undefined);
         }
         case "process-write":
             // the caller decides what a failed write means (a console line
@@ -522,9 +518,7 @@ export function send(channel: string, ...args: unknown[]): Promise<void> {
             const { id } = args[0] as any;
             t.untrackProcess(id);
             dropAttachmentLedger("process", id, t);
-            return t.call("process:kill", args[0] as any).catch((err) =>
-                debugErr(`process-kill ${id}`, err),
-            );
+            return t.call("process:kill", args[0] as any).then(() => undefined);
         }
         default:
             throw new Error(`[paperapi] IPC channel not allowed: ${channel}`);

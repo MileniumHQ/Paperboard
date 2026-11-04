@@ -113,16 +113,24 @@ export const processApi = {
             if (off) unsubscribers.push(off);
         }
 
-        const exitPromise = new Promise<ProcessRunResult>((resolve) => {
+        const exitPromise = new Promise<ProcessRunResult>((resolve, reject) => {
             // bounded: a timeout must kill the child it started, not quietly
-            // leave it running while reporting a synthetic exit code; null
-            // timeout waits for the real exit
+            // leave it running while reporting a synthetic exit code; a kill
+            // the daemon refused rejects the run, since the child lives on.
+            // null timeout waits for the real exit
             const timer =
                 timeoutMs === null
                     ? null
                     : setTimeout(() => {
-                          send("process-kill", { id, signal: "SIGTERM" });
-                          resolve({ exitCode: -1, code: "RUN_TIMEOUT" });
+                          send("process-kill", { id, signal: "SIGTERM" }).then(
+                              () => resolve({ exitCode: -1, code: "RUN_TIMEOUT" }),
+                              (err) =>
+                                  reject(
+                                      new Error(
+                                          `"${options.command}" timed out after ${timeoutMs} ms and could not be stopped: ${err instanceof Error ? err.message : String(err)}`,
+                                      ),
+                                  ),
+                          );
                       }, timeoutMs);
 
             const off = on(`process-exit:${id}`, (_event: unknown, payload: any) => {

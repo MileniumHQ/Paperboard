@@ -223,7 +223,9 @@ describe("send returns a bounded promise", () => {
         expect(typeof write.then).toBe("function");
         // never answered: the afterEach teardown closes the transport
         write.catch(() => undefined);
-        expect(typeof processApi.kill("p1").then).toBe("function");
+        const kill = processApi.kill("p1");
+        expect(typeof kill.then).toBe("function");
+        kill.catch(() => undefined);
     });
 });
 

@@ -27,7 +27,6 @@ const stopExit = terminalApi.onExit(id, (exitCode) => showEnded(exitCode));
 
 if (!(await terminalApi.exists(id))) {
     await terminalApi.create(id, { cols: term.cols, rows: term.rows });
-    if (!(await terminalApi.exists(id))) throw new Error("The shell did not start; the console has the reason");
 }
 
 term.onData((keys) => terminalApi.write(id, keys).catch((err) => showError(err.message)));
@@ -55,7 +54,7 @@ terminalApi.onExit(id: string, callback: (exitCode?: number) => void): () => voi
                 <tbody>
                     <tr>
                         <td><PaperCode>create</PaperCode></td>
-                        <td>Starts the shell, 80 by 24 unless <PaperCode>cols</PaperCode> and <PaperCode>rows</PaperCode> say otherwise. It resolves even when the shell could not start, and logs the reason to the console with <PaperCode>[transport] terminal-create &lt;id&gt;</PaperCode>. Check <PaperCode>exists</PaperCode> after it, as the sample does.</td>
+                        <td>Starts the shell, 80 by 24 unless <PaperCode>cols</PaperCode> and <PaperCode>rows</PaperCode> say otherwise. Rejects with the daemon's reason when the shell could not start.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>write</PaperCode></td>
@@ -67,7 +66,7 @@ terminalApi.onExit(id: string, callback: (exitCode?: number) => void): () => voi
                     </tr>
                     <tr>
                         <td><PaperCode>destroy</PaperCode></td>
-                        <td>Ends the shell. It resolves even when that fails, and logs the reason to the console.</td>
+                        <td>Ends the shell. Resolves when the shell has already ended. Rejects with the daemon's reason when the shell would not stop.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>onData</PaperCode></td>
