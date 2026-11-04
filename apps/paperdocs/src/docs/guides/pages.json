@@ -1,0 +1,82 @@
+{
+    "subsections": {
+        "start": {
+            "name": "Start here",
+            "icon": "flag",
+            "pages": {
+                "overview": {
+                    "name": "Build a panel",
+                    "index": 0
+                },
+                "first-panel": {
+                    "name": "Your first panel",
+                    "index": 1
+                },
+                "anatomy": {
+                    "name": "Anatomy of a panel",
+                    "index": 2
+                }
+            }
+        },
+        "build": {
+            "name": "Build",
+            "icon": "construction",
+            "pages": {
+                "dev-loop": {
+                    "name": "The development loop",
+                    "index": 0
+                },
+                "services": {
+                    "name": "Services and state",
+                    "index": 1
+                },
+                "ui": {
+                    "name": "Design the interface",
+                    "index": 2
+                },
+                "errors": {
+                    "name": "Show every failure",
+                    "index": 3
+                },
+                "settings-and-secrets": {
+                    "name": "Settings and secrets",
+                    "index": 4
+                },
+                "actions": {
+                    "name": "Expose actions",
+                    "index": 5
+                },
+                "widgets": {
+                    "name": "Add a Home widget",
+                    "index": 6
+                }
+            }
+        },
+        "ship": {
+            "name": "Ship",
+            "icon": "local_shipping",
+            "pages": {
+                "testing": {
+                    "name": "Test a panel",
+                    "index": 0
+                },
+                "checklist": {
+                    "name": "Panel checklist",
+                    "index": 1
+                },
+                "packaging": {
+                    "name": "Package a panel",
+                    "index": 2
+                },
+                "panel-library": {
+                    "name": "Get into the Panel Library",
+                    "index": 3
+                },
+                "agents": {
+                    "name": "Build with an agent",
+                    "index": 4
+                }
+            }
+        }
+    }
+}
