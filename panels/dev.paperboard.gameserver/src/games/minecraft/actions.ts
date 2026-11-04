@@ -880,7 +880,7 @@ export const panelActions: ActionDefinition[] = [
         template: "Set loader setting {id} to {value}",
         inputs: {
             id: { type: "string", label: "Setting", required: true },
-            value: { type: "string", label: "Value", required: true },
+            value: { type: "string", label: "Value" },
         },
         output: { type: "object", label: "Written" },
         quick: false,
@@ -916,7 +916,7 @@ export const panelActions: ActionDefinition[] = [
         template: "Set crossplay setting {id} to {value}",
         inputs: {
             id: { type: "string", label: "Setting", required: true },
-            value: { type: "string", label: "Value", required: true },
+            value: { type: "string", label: "Value" },
         },
         output: { type: "object", label: "Written" },
         quick: false,

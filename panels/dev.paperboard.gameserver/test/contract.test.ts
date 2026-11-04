@@ -172,3 +172,22 @@ test("a config patch cannot rewrite what is installed", async () => {
         );
     }
 });
+
+// Saving an empty file and clearing a text setting are real edits. The SDK
+// refuses a call that leaves a required input empty, so these inputs must not
+// be required, or the Files tab and the settings forms could never send "".
+test("inputs that may legitimately be empty are not required", async () => {
+    const { checkRequiredActionInput } = await import("@mileniumhq/paperapi");
+    const emptyAllowed: Record<string, string[]> = {
+        [ACTION_IDS.writeServerFile]: ["text"],
+        [ACTION_IDS.writeLoaderSetting]: ["value"],
+        [ACTION_IDS.writeCrossplaySetting]: ["value"],
+    };
+    for (const [id, keys] of Object.entries(emptyAllowed)) {
+        const action = panelActions.find((a) => a.id === id);
+        expect(action).toBeDefined();
+        for (const key of keys) {
+            expect(checkRequiredActionInput(action!.inputs![key]!, "")).toBeUndefined();
+        }
+    }
+});

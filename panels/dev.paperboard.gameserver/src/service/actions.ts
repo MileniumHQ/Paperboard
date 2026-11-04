@@ -225,7 +225,7 @@ export const sharedActions = [
         template: "Save server file {path}",
         inputs: {
             path: { type: "string", label: "File", required: true },
-            text: { type: "string", label: "Contents", required: true },
+            text: { type: "string", label: "Contents" },
             version: { type: "string", label: "Version read", required: true },
         },
         output: { type: "object", label: "Saved" },
