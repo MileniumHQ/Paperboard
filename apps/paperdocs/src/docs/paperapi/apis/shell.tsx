@@ -1,78 +1,81 @@
 import {
     PaperCode,
     PaperFlex,
+    PaperLink,
     PaperTable,
     PaperText,
+    PaperTextList,
 } from "@mileniumhq/paperui";
 
 export default function ShellApiDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
-            <PaperText preset="header">Shell API</PaperText>
-            <PaperText preset="body">
-                resolveOneShotShell resolves the platform-appropriate shell binary and base arguments for one-shot command execution.
-                Reach for resolveOneShotShell when running terminal setup scripts or user-provided shell snippets.
-                The utility provides consistent argument array structures across Windows, macOS, and Linux hosts.
+            <PaperText preset="header" as="h1">resolveOneShotShell</PaperText>
+            <PaperText preset="body" as="p">
+                resolveOneShotShell names the system shell that runs one command line, with the arguments that go before it, for the computer the panel runs on.
+                It is a plain function with no daemon call, so it works on a panel page, in a widget and in a service.
+                Use it when a command line written by the person, such as a start-up script, has to run as one string.
             </PaperText>
 
-            <PaperText preset="subheader" id="overview">Overview</PaperText>
-            <PaperText preset="body">
-                Import resolveOneShotShell or detectHostPlatform from @mileniumhq/paperapi.
-                Append your command string to baseArgs and pass the resulting array to processApi.run.
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
             <PaperCode block language="tsx">
-{`import { resolveOneShotShell, processApi } from "@mileniumhq/paperapi";
+{`// in the service
+import { processApi, resolveOneShotShell } from "@mileniumhq/paperapi";
 
 const shell = resolveOneShotShell();
-const args = [...shell.baseArgs, "echo $USER"];
-
-const { stdout } = await processApi.exec(shell.command, args);
-console.log(stdout);`}
+const result = await processApi.exec(shell.command, [...shell.baseArgs, settings.startScript]);
+if (result.exitCode !== 0) throw new Error(\`Start script failed: \${result.stderr}\`);`}
             </PaperCode>
-
-            <PaperText preset="subheader" id="methods-and-signatures">Methods and signatures</PaperText>
-            <PaperText preset="body">
-                The module exports the following platform resolution functions:
+            <PaperText preset="body" as="p">
+                The command line goes in as one argument after <PaperCode>baseArgs</PaperCode>. Nothing else parses it, so it needs no extra quoting.
             </PaperText>
 
+            <PaperText preset="subheader" as="h2" id="api">API</PaperText>
+            <PaperCode block language="tsx">
+{`resolveOneShotShell(platform?: string): OneShotShell;
+detectHostPlatform(): HostPlatformName;
+
+type HostPlatformName = "win32" | "darwin" | "linux";
+
+interface OneShotShell {
+    command: string;
+    baseArgs: string[];
+}`}
+            </PaperCode>
             <PaperTable>
                 <thead>
                     <tr>
-                        <th>Function</th>
-                        <th>Signature</th>
-                        <th>Description</th>
+                        <th>Platform</th>
+                        <th>command</th>
+                        <th>baseArgs</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td><PaperCode>resolveOneShotShell</PaperCode></td>
-                        <td><PaperCode>resolveOneShotShell(platform?): OneShotShell</PaperCode></td>
-                        <td>Returns the command string and baseArgs array for the detected or specified platform.</td>
+                        <td><PaperCode>"win32"</PaperCode></td>
+                        <td><PaperCode>cmd.exe</PaperCode></td>
+                        <td><PaperCode>["/d", "/s", "/c"]</PaperCode>: skip AutoRun, keep the command line's quotes as written, and run it.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>detectHostPlatform</PaperCode></td>
-                        <td><PaperCode>detectHostPlatform(): "win32" | "darwin" | "linux"</PaperCode></td>
-                        <td>Detects the current host operating system platform without requiring Node typings.</td>
+                        <td>Anything else</td>
+                        <td><PaperCode>sh</PaperCode></td>
+                        <td><PaperCode>["-c"]</PaperCode></td>
                     </tr>
                 </tbody>
             </PaperTable>
 
-            <PaperText preset="subheader" id="behavior">Behavior</PaperText>
-            <PaperText preset="body">
-                On Windows platforms, the resolver returns command: "cmd.exe" and baseArgs: ["/d", "/s", "/c"].
-                On Linux, macOS, and unknown systems, it returns command: "sh" and baseArgs: ["-c"].
-                The resolution guarantees array-based process spawning without string escaping issues.
-            </PaperText>
-
-            <PaperText preset="subheader" id="recipes">Recipes</PaperText>
-            <PaperText preset="body">
-                Inspect host platform to conditionally adjust command parameters.
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="platform">Platform</PaperText>
+            <PaperTextList>
+                <li>With no <PaperCode>platform</PaperCode>, <PaperCode>resolveOneShotShell</PaperCode> uses <PaperCode>detectHostPlatform()</PaperCode>.</li>
+                <li><PaperCode>detectHostPlatform</PaperCode> reads <PaperCode>process.platform</PaperCode> where the code runs. That is right in a service, which runs on the panel's computer.</li>
+                <li>A panel page and a widget have no <PaperCode>process</PaperCode>, and there <PaperCode>detectHostPlatform</PaperCode> returns <PaperCode>"linux"</PaperCode> whatever the computer is. Pass the platform from <PaperLink href="/docs/paperapi/system/#api">systemApi.getInfo()</PaperLink> instead:</li>
+            </PaperTextList>
             <PaperCode block language="tsx">
-{`import { detectHostPlatform } from "@mileniumhq/paperapi";
+{`// on a panel page
+import { resolveOneShotShell, systemApi } from "@mileniumhq/paperapi";
 
-const platform = detectHostPlatform();
-const clearCmd = platform === "win32" ? "cls" : "clear";`}
+const { os } = await systemApi.getInfo();
+const shell = resolveOneShotShell(os === "windows" ? "win32" : os);`}
             </PaperCode>
         </PaperFlex>
     );

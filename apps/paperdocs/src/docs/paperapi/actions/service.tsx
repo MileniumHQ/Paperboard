@@ -1,172 +1,248 @@
 import {
     PaperCode,
     PaperFlex,
+    PaperLink,
     PaperTable,
     PaperText,
+    PaperTextList,
 } from "@mileniumhq/paperui";
 
 export default function ServiceApiDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
-            <PaperText preset="header">Service API</PaperText>
-            <PaperText preset="body">
-                definePanelService initializes a daemon-supervised background process for a Paperboard panel.
-                Reach for definePanelService in src/service.ts to maintain state, expose RPC actions, and supervise long-running workloads.
-                The runtime handles state hydration actions, delta synchronizations, and lifecycle readiness handshakes.
+            <PaperText preset="header" as="h1">definePanelService</PaperText>
+            <PaperText preset="body" as="p">
+                definePanelService is the entry point of a panel's service: it registers the panel's actions, holds its state, and tells the daemon it is ready.
+                The Paperboard server daemon runs the service as a background process that keeps going while the Paperboard window is closed.
+                Give a panel a service when it owns something long-lived: a server, a bot, a schedule, a connection.
             </PaperText>
 
-            <PaperText preset="subheader" id="overview">Overview</PaperText>
-            <PaperText preset="body">
-                Invoke definePanelService at the top level of your service entry script.
-                Specify initial state, action handlers, and an optional asynchronous onInit hook.
+            <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
+            <PaperText preset="body" as="p">
+                Name the built file in the manifest's <PaperCode>service</PaperCode> field, such as <PaperCode>./dist/service.js</PaperCode>, and call <PaperCode>definePanelService</PaperCode> once at its top level.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { definePanelService } from "@mileniumhq/paperapi";
+{`import { definePanelService, secretsApi } from "@mileniumhq/paperapi";
 
-interface ServiceState {
-    status: string;
-    uptime: number;
+const PANEL_ID = "dev.example.weather";
+
+interface WeatherState {
+    lastCity: string;
 }
 
 const service = definePanelService({
-    state: { status: "idle", uptime: 0 },
-    actions: {
-        start: async (ctx) => {
-            ctx.setState({ status: "running" });
-            return true;
+    id: PANEL_ID,
+    state: { lastCity: "" } as WeatherState,
+    actions: [
+        {
+            id: "forecast",
+            name: "Get forecast",
+            description: "Returns today's high and low for a city",
+            inputs: { city: { type: "string", label: "City", placeholder: "City", required: true, maxLength: 64 } },
+            output: "object",
+            run: async (ctx, inputs: { city: string }) => {
+                const key = await secretsApi.get("apiKey", PANEL_ID);
+                if (!key.found) throw new Error("Add an API key in the Weather panel first");
+                ctx.setState({ lastCity: inputs.city });
+                return { city: inputs.city, high: 21, low: 12 };
+            },
         },
-        getStatus: async (ctx) => {
-            return ctx.state.status;
-        }
-    },
+    ],
     onInit: async (ctx) => {
-        console.log("Service initialized");
-    }
-});`}
+        console.log(\`Weather service ready, last city: \${ctx.state.lastCity || "none"}\`);
+    },
+});
+
+export default service;`}
             </PaperCode>
 
-            <PaperText preset="body">
-                Use beforeBackup to save or quiesce data before copying it. Use beforeRestore to
-                stop owned processes gracefully before files are replaced. Both receive the service
-                context and an options object with an optional sourceId for a named backup source.
-                A rejected hook fails the operation visibly. The daemon stops the service during
-                copying/replacement and starts it again afterwards if it was active; owned process
-                restart policy belongs to the panel, and should not be stored in a restored snapshot.
-                These hooks apply to all backup destinations and scheduled backups use beforeBackup.
-            </PaperText>
-
-            <PaperText preset="subheader" id="configuration-options">Configuration options</PaperText>
-            <PaperText preset="body">
-                definePanelService accepts the following options:
-            </PaperText>
-
+            <PaperText preset="subheader" as="h2" id="api">API</PaperText>
+            <PaperCode block language="tsx">
+{`function definePanelService<TState extends Record<string, any>, TActions>(
+    options: DefinePanelServiceOptions<TState, TActions>,
+): {
+    panelId: string;
+    /** resolves once every action is registered and onInit has finished */
+    ready: Promise<void>;
+    ctx: ServiceContext<TState>;
+    getState(): TState;
+    setState(patchOrUpdater: Partial<TState> | ((prev: TState) => Partial<TState>)): void;
+};`}
+            </PaperCode>
             <PaperTable>
                 <thead>
                     <tr>
                         <th>Option</th>
                         <th>Type</th>
                         <th>Default</th>
-                        <th>Description</th>
+                        <th>What changes</th>
                     </tr>
                 </thead>
                 <tbody>
+                    <tr>
+                        <td><PaperCode>id</PaperCode></td>
+                        <td><PaperCode>string</PaperCode></td>
+                        <td><PaperCode>getPanelId()</PaperCode>, the id the daemon started the service with</td>
+                        <td>The panel the service registers its actions under.</td>
+                    </tr>
                     <tr>
                         <td><PaperCode>state</PaperCode></td>
                         <td><PaperCode>TState</PaperCode></td>
                         <td><PaperCode>{"{}"}</PaperCode></td>
-                        <td>Initial dictionary defining the service state.</td>
+                        <td>The starting state. It lives in memory: save what must survive a restart with <PaperLink href="/docs/paperapi/config/">configApi</PaperLink>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>actions</PaperCode></td>
-                        <td><PaperCode>TActions | ActionDefinition[]</PaperCode></td>
-                        <td><PaperCode>undefined</PaperCode></td>
-                        <td>Dictionary of action handler functions or structured ActionDefinition schemas.</td>
+                        <td><PaperCode>ActionDefinition[]</PaperCode> or <PaperCode>Record&lt;string, (ctx, inputs, options) =&gt; any&gt;</PaperCode></td>
+                        <td>No default (no actions)</td>
+                        <td>The array form registers each definition with its schema, as <PaperLink href="/docs/paperapi/actions/#definitions">actionsApi.register</PaperLink> does, with <PaperCode>run(ctx, inputs)</PaperCode> receiving the service context. The map form registers plain handlers by name, with no schema, as <PaperCode>handler(ctx, inputs, options)</PaperCode>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>types</PaperCode></td>
                         <td><PaperCode>CustomTypeDefinition[]</PaperCode></td>
-                        <td><PaperCode>undefined</PaperCode></td>
-                        <td>Custom data types your actions name. Each type's <PaperCode>name</PaperCode>, <PaperCode>icon</PaperCode> and <PaperCode>base</PaperCode> travel with the actions that use it, so the Actions editor labels and draws those values, and offers a text-based type wherever text fits.</td>
+                        <td>No default</td>
+                        <td>Custom data types the actions name, defined before they register. See <PaperLink href="/docs/paperapi/actions/#types">Types</PaperLink>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>categories</PaperCode></td>
                         <td><PaperCode>ActionCategoryDefinition[]</PaperCode></td>
-                        <td><PaperCode>undefined</PaperCode></td>
-                        <td>Category sorting and icon metadata for exposed actions.</td>
+                        <td>No default</td>
+                        <td>Icon and order for the categories actions name by string. An action with <PaperCode>category: "Forecasts"</PaperCode> gets the entry whose <PaperCode>name</PaperCode> is <PaperCode>"Forecasts"</PaperCode>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>widgetChoices</PaperCode></td>
-                        <td><PaperCode>Record&lt;string, Record&lt;string, (ctx: ServiceContext) =&gt; WidgetChoice[] | Promise&lt;WidgetChoice[]&gt;&gt;&gt;</PaperCode></td>
-                        <td><PaperCode>undefined</PaperCode></td>
-                        <td>What each widget option's dropdown offers in Home's widget gallery, by widget id then option id. See Widgets.</td>
+                        <td><PaperCode>Record&lt;widgetId, Record&lt;optionId, (ctx) =&gt; WidgetChoice[]&gt;&gt;</PaperCode></td>
+                        <td>No default</td>
+                        <td>What each widget option's dropdown offers in Home's gallery. See <PaperLink href="/docs/paperapi/widgets/#widget-choices">Widgets</PaperLink>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>onInit</PaperCode></td>
-                        <td><PaperCode>(ctx: ServiceContext) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
-                        <td><PaperCode>undefined</PaperCode></td>
-                        <td>Lifecycle callback executed after action registration completes.</td>
+                        <td><PaperCode>(ctx) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
+                        <td>No default</td>
+                        <td>Runs after every action is registered. The service reports ready once it resolves, so do start-up work here: load config, reconnect, adopt running processes.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>beforeBackup</PaperCode></td>
-                        <td><PaperCode>(ctx: ServiceContext) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
-                        <td><PaperCode>undefined</PaperCode></td>
-                        <td>Gets the service ready for a backup of its panel's data, while it still runs. The service is then stopped, the data copied, and the service started again, so undo the preparation when it starts. Throwing refuses the backup. See Backups.</td>
+                        <td><PaperCode>(ctx, options: {"{ sourceId?: string }"}) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
+                        <td>No default (the service is stopped for the copy, with no warning)</td>
+                        <td>Called before a backup copies the panel's data. Write out what is in memory and make running programs stop writing. Throwing refuses the backup. <PaperCode>sourceId</PaperCode> names the backup source being copied, and is absent for a whole-panel backup.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>beforeRestore</PaperCode></td>
+                        <td><PaperCode>(ctx, options: {"{ sourceId?: string }"}) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
+                        <td>No default</td>
+                        <td>Called before a restore replaces the panel's data. Stop the programs that hold the data open. Throwing refuses the restore with the thrown message.</td>
                     </tr>
                 </tbody>
             </PaperTable>
 
-            <PaperText preset="subheader" id="service-context">Service context</PaperText>
-            <PaperText preset="body">
-                Action handlers and onInit receive a ServiceContext object:
-            </PaperText>
-
+            <PaperText preset="subheader" as="h3" id="service-context">ServiceContext</PaperText>
+            <PaperCode block language="tsx">
+{`interface ServiceContext<TState> {
+    /** the current state; always the latest value */
+    readonly state: TState;
+    setState(patchOrUpdater: Partial<TState> | ((prev: TState) => Partial<TState>)): void;
+    /** broadcasts an event from this panel */
+    emit(event: string, payload?: unknown): void;
+    /** fires one of this panel's triggers, starting the flows built on it */
+    emitTrigger<T = any>(triggerId: string, output: T): void;
+}`}
+            </PaperCode>
             <PaperTable>
                 <thead>
                     <tr>
-                        <th>Context member</th>
-                        <th>Type</th>
-                        <th>Description</th>
+                        <th>Member</th>
+                        <th>Behavior</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td><PaperCode>state</PaperCode></td>
-                        <td><PaperCode>TState</PaperCode></td>
-                        <td>Read-only accessor for the current state snapshot.</td>
-                    </tr>
-                    <tr>
                         <td><PaperCode>setState</PaperCode></td>
-                        <td><PaperCode>(patchOrUpdater) =&gt; void</PaperCode></td>
-                        <td>Updates state values and dispatches synchronization events to connected UI bridges.</td>
+                        <td>Merges the patch into the state, one level deep, then sends the patch to every <PaperLink href="/docs/paperapi/bridge/">panel bridge</PaperLink> as the <PaperCode>__stateChanged</PaperCode> event. One send is in flight at a time: patches made while it travels are merged into the next one, so a service that sets state hundreds of times a second sends far fewer events.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>emit</PaperCode></td>
-                        <td><PaperCode>(event, payload?) =&gt; void</PaperCode></td>
-                        <td>Dispatches a custom event scoped to this panel.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>emitTrigger</PaperCode></td>
-                        <td><PaperCode>(triggerId, output) =&gt; void</PaperCode></td>
-                        <td>Emits an automation trigger payload to active platform flows.</td>
+                        <td><PaperCode>emit</PaperCode>, <PaperCode>emitTrigger</PaperCode></td>
+                        <td>Return at once. A failure is logged to the service's standard error with <PaperCode>{"[Service:<id>] Failed to emit"}</PaperCode>; call <PaperLink href="/docs/paperapi/actions/">actionsApi.emit</PaperLink> directly to await and handle it.</td>
                     </tr>
                 </tbody>
             </PaperTable>
-
-            <PaperText preset="subheader" id="behavior">Behavior</PaperText>
-            <PaperText preset="body">
-                definePanelService automatically registers an internal action named state:get to hydrate UI bridges.
-                Once onInit completes, the process sends a paperboard:service-ready message to the parent daemon.
+            <PaperText preset="body" as="p">
+                The service registers the internal action <PaperCode>__getState</PaperCode>, which returns the whole state once the service is ready. Bridges call it to hydrate.
+                With <PaperCode>widgetChoices</PaperCode>, it also registers the internal <PaperCode>__widgetChoices</PaperCode>.
             </PaperText>
 
-            <PaperText preset="subheader" id="recipes">Recipes</PaperText>
-            <PaperText preset="body">
-                Use functional updaters in setState when modifying state based on prior values.
+            <PaperText preset="subheader" as="h2" id="lifecycle">Lifecycle</PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Event</th>
+                        <th>What the daemon does</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Start</td>
+                        <td>Starts every installed service when the daemon starts, except those whose manifest sets <PaperCode>autostart: false</PaperCode>. Also starts the service after an install or update, and on a restart. A newly linked panel's service starts on the next <PaperCode>paperapi restart</PaperCode>.</td>
+                    </tr>
+                    <tr>
+                        <td>Runtime</td>
+                        <td>Runs the script with the daemon's own runtime: Node, Bun, or the Bun built into the released daemon binary. The working directory is the panel folder. Write a service that runs on both Node and Bun.</td>
+                    </tr>
+                    <tr>
+                        <td>Ready</td>
+                        <td>Waits for the service to report ready, which <PaperCode>definePanelService</PaperCode> does once its actions are registered and <PaperCode>onInit</PaperCode> resolves. A service that has not reported within 20 seconds is killed and marked failed, with <PaperCode>did not report ready within 20s</PaperCode>, and is not restarted.</td>
+                    </tr>
+                    <tr>
+                        <td>Crash</td>
+                        <td>Restarts it after 1, 2, 4, 8, then 10 seconds. A crash counts as consecutive when the service ran for less than 30 seconds. After the sixth consecutive crash, the daemon stops restarting it until the next restart or daemon start.</td>
+                    </tr>
+                    <tr>
+                        <td>Stop</td>
+                        <td>Sends <PaperCode>SIGTERM</PaperCode>, then <PaperCode>SIGKILL</PaperCode> after 3 seconds. A service still alive 3 seconds after that fails the stop with <PaperCode>Service &lt;id&gt; did not exit; refusing to remove its files</PaperCode>.</td>
+                    </tr>
+                    <tr>
+                        <td>Output</td>
+                        <td>Writes standard output and standard error to the daemon log, prefixed <PaperCode>{"[service:<id>]"}</PaperCode>, at most 64 KB per chunk.</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+            <PaperText preset="body" as="p">
+                Processes the service started through <PaperLink href="/docs/paperapi/process/">processApi</PaperLink> are not the service's children: they keep running through a service restart, a crash and a daemon restart.
+                In <PaperCode>onInit</PaperCode>, check <PaperCode>processApi.exists</PaperCode> and <PaperCode>processApi.attach</PaperCode> to pick them up again.
             </PaperText>
-            <PaperCode block language="tsx">
-{`ctx.setState((prev) => ({
-    uptime: prev.uptime + 1
-}));`}
-            </PaperCode>
+
+            <PaperText preset="subheader" as="h2" id="environment">Environment</PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Variable</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>PAPERBOARD_PANEL_ID</PaperCode></td><td>The panel id.</td></tr>
+                    <tr><td><PaperCode>PAPERCRANE_PANEL_TOKEN</PaperCode></td><td>The panel's scoped credential. Never log it.</td></tr>
+                    <tr><td><PaperCode>PAPERCRANE_PORT</PaperCode></td><td>The daemon's port on <PaperCode>127.0.0.1</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>PAPERBOARD_DIR</PaperCode></td><td>The Paperboard data folder. Read and write the panel's data through the APIs, not through this path.</td></tr>
+                </tbody>
+            </PaperTable>
+            <PaperText preset="body" as="p">
+                The rest of the daemon's environment is passed through, except the host's <PaperCode>PAPERCRANE_TOKEN</PaperCode>, which is removed.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
+            <PaperTextList>
+                <li>A definition that breaks a rule throws when it registers, before anything reaches the daemon. See <PaperLink href="/docs/paperapi/actions/#definition-rules">definition rules</PaperLink>.</li>
+                <li>When a registration or <PaperCode>onInit</PaperCode> fails, <PaperCode>ready</PaperCode> rejects, the error is logged as <PaperCode>{"[Service:<id>] initialization failed:"}</PaperCode>, and the service never reports ready, so the daemon kills it after 20 seconds.</li>
+                <li>An error thrown by an action's <PaperCode>run</PaperCode> rejects the caller's <PaperCode>actionsApi.call</PaperCode> with the same message. Throw sentences the person using the panel can act on.</li>
+                <li>A <PaperCode>beforeBackup</PaperCode> that throws refuses the backup with <PaperCode>The panel could not get ready for a backup: &lt;message&gt;</PaperCode>. A <PaperCode>beforeRestore</PaperCode> that throws refuses the restore with its own message.</li>
+                <li>The daemon waits at most 5 minutes for either hook, then fails with <PaperCode>Service &lt;id&gt; did not get ready for the backup within 300 s</PaperCode>. The hooks run only while the service is ready; a stopped or failed service is not asked.</li>
+                <li>A state sync that fails is logged as <PaperCode>{"[Service:<id>] Failed to sync state:"}</PaperCode>, and open bridges miss that patch until they call <PaperCode>refreshState</PaperCode>.</li>
+            </PaperTextList>
+
+            <PaperText preset="body" as="p">
+                Next: <PaperLink href="/docs/paperapi/bridge/">read the state from the panel page</PaperLink>.
+            </PaperText>
         </PaperFlex>
     );
 }

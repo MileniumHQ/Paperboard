@@ -1,269 +1,290 @@
 import {
     PaperCode,
     PaperFlex,
+    PaperLink,
     PaperTable,
     PaperText,
+    PaperTextList,
 } from "@mileniumhq/paperui";
 
 export default function WidgetsDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
-            <PaperText preset="header">Widgets</PaperText>
-            <PaperText preset="body">
-                A widget is a small live view a panel offers for Home, the first tab of Paperboard.
-                A panel declares its widgets in its manifest and draws them from one page, widget.html, with defineWidgets.
-                People choose a widget and a size from the widget gallery and place it anywhere on Home.
+            <PaperText preset="header" as="h1">defineWidgets</PaperText>
+            <PaperText preset="body" as="p">
+                defineWidgets mounts a panel's Home widgets from its widget page, dist/widget.html, one placed widget per frame.
+                The manifest declares each widget's id, name and sizes, and the service can supply the choices made when someone places it.
+                Reach for a widget to show one live fact or one action of the panel without opening it.
             </PaperText>
-            <PaperText preset="subheader" id="overview">Overview</PaperText>
-            <PaperText preset="body">
-                Declare each widget in manifest.json with an id, a name, and the sizes it is designed for. Sizes are in Home grid cells, width by height. The first is the default.
+
+            <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
+            <PaperText preset="body" as="p">
+                Declare the widget in <PaperCode>manifest.json</PaperCode>:
             </PaperText>
             <PaperCode block language="json">
 {`{
-  "id": "com.example.status",
-  "name": "Status",
-  "version": "0.1.0",
-  "widgets": [
-    { "id": "status", "name": "Server status", "description": "Uptime at a glance", "sizes": ["2x1", "2x2"] }
-  ]
+    "id": "dev.example.weather",
+    "name": "Weather",
+    "version": "1.0.0",
+    "service": "./dist/service.js",
+    "widgets": [
+        {
+            "id": "forecast",
+            "name": "Forecast",
+            "description": "Today's high and low for one city",
+            "sizes": ["2x1", "2x2"],
+            "options": [{ "id": "city", "label": "City" }]
+        }
+    ]
 }`}
             </PaperCode>
-            <PaperText preset="body">
-                Build a page to dist/widget.html beside the panel's main page. It calls defineWidgets once with a mount function for each widget id.
+            <PaperText preset="body" as="p">
+                Build a second page, <PaperCode>widget.html</PaperCode>, next to <PaperCode>index.html</PaperCode>. With Vite, add both to <PaperCode>build.rollupOptions.input</PaperCode>:
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { defineConfig } from "vite";
+import solidPlugin from "vite-plugin-solid";
+
+export default defineConfig({
+    plugins: [solidPlugin()],
+    build: {
+        rollupOptions: {
+            input: { index: "index.html", widget: "widget.html" },
+        },
+    },
+});`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                The widget page's script calls <PaperCode>defineWidgets</PaperCode> with one mount function per declared widget id. This one reads the service's state through a <PaperLink href="/docs/paperapi/bridge/">panel bridge</PaperLink> and draws it with <PaperLink href="/docs/paperui/paperwidget/">PaperWidget</PaperLink>:
             </PaperText>
             <PaperCode block language="tsx">
 {`import { render } from "solid-js/web";
-import { defineWidgets, type WidgetContext } from "@mileniumhq/paperapi";
+import { createSignal, onCleanup, Show } from "solid-js";
+import { PaperProvider, PaperWidget, PaperWidgetStat } from "@mileniumhq/paperui";
+import { createPanelBridge, defineWidgets, type WidgetContext } from "@mileniumhq/paperapi";
+import "@mileniumhq/paperui/style.css";
 
-function Status(props: { widget: WidgetContext }) {
-    return <button onClick={() => props.widget.openPanel()}>Open</button>;
+const PANEL_ID = "dev.example.weather";
+
+interface WeatherState {
+    forecasts: Record<string, { high: number; low: number }>;
+}
+
+function Forecast(props: { widget: WidgetContext }) {
+    const city = props.widget.options.city;
+    const bridge = createPanelBridge<WeatherState>({ panelId: PANEL_ID, defaultState: { forecasts: {} } });
+    const [state, setState] = createSignal(bridge.getState());
+    const [error, setError] = createSignal("");
+    const off = bridge.onStateChange((_patch, full) => setState({ ...full }));
+    bridge.refreshState().then(
+        (full) => setState({ ...full }),
+        (err) => setError(err instanceof Error ? err.message : String(err)),
+    );
+    onCleanup(() => {
+        off();
+        bridge.dispose();
+    });
+
+    const forecast = () => (city ? state().forecasts[city] : undefined);
+
+    return (
+        <PaperWidget title="Forecast" icon="partly_cloudy_day">
+            <Show when={!error()} fallback={<PaperWidgetStat value="Unavailable" caption={error()} tone="danger" role="alert" />}>
+                <Show when={forecast()} fallback={<PaperWidgetStat value="No forecast" caption={\`\${city} is no longer in the panel\`} tone="warning" />}>
+                    {(today) => <PaperWidgetStat value={\`\${today().high}°\`} caption={\`\${city}, low \${today().low}°\`} />}
+                </Show>
+            </Show>
+        </PaperWidget>
+    );
 }
 
 defineWidgets({
-    status: (root, widget) => render(() => <Status widget={widget} />, root),
+    forecast: (root, widget) =>
+        render(
+            () => (
+                <PaperProvider fullWidth fullHeight>
+                    <Forecast widget={widget} />
+                </PaperProvider>
+            ),
+            root,
+        ),
 });`}
             </PaperCode>
-            <PaperText preset="subheader" id="manifest-rules">Manifest rules</PaperText>
+            <PaperText preset="body" as="p">
+                The service supplies the City dropdown that Home's widget gallery shows:
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { definePanelService } from "@mileniumhq/paperapi";
+
+definePanelService({
+    id: "dev.example.weather",
+    state: { cities: ["Oslo", "Lima"], forecasts: {} as Record<string, { high: number; low: number }> },
+    widgetChoices: {
+        forecast: {
+            city: (ctx) => ctx.state.cities.map((city) => ({ value: city, label: city })),
+        },
+    },
+});`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h2" id="declaration">Manifest declaration</PaperText>
             <PaperTable>
                 <thead>
                     <tr>
                         <th>Field</th>
                         <th>Type</th>
-                        <th>Description</th>
+                        <th>Default</th>
+                        <th>Rule and effect</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
+                        <td><PaperCode>widgets</PaperCode></td>
+                        <td><PaperCode>WidgetDeclaration[]</PaperCode></td>
+                        <td>No default (no widgets)</td>
+                        <td>At most 8 per panel.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>id</PaperCode></td>
-                        <td>string</td>
-                        <td>Lowercase letters, digits and hyphens, up to 32 characters, starting with a letter or digit. Unique within the panel.</td>
+                        <td><PaperCode>string</PaperCode></td>
+                        <td>Required</td>
+                        <td>Lowercase letters, digits and <PaperCode>-</PaperCode>, starting with a letter or digit, up to 32 characters. Unique in the panel. The key of its mount function.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>name</PaperCode></td>
-                        <td>string</td>
-                        <td>Shown in the widget gallery. Up to 64 characters.</td>
+                        <td><PaperCode>string</PaperCode></td>
+                        <td>Required</td>
+                        <td>At most 64 characters, not blank. Shown in Home's widget gallery.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>description</PaperCode></td>
-                        <td>string</td>
-                        <td>Optional line under the name in the gallery. Up to 256 characters.</td>
+                        <td><PaperCode>string</PaperCode></td>
+                        <td>No default</td>
+                        <td>At most 256 characters. Shown in the gallery under the name.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>sizes</PaperCode></td>
-                        <td>string[]</td>
-                        <td>One to four sizes such as 2x1, each at most 4 cells wide and 4 cells tall, with no repeats.</td>
+                        <td><PaperCode>string[]</PaperCode></td>
+                        <td>Required</td>
+                        <td>1 to 4 sizes in grid cells, written <PaperCode>"WxH"</PaperCode> from <PaperCode>"1x1"</PaperCode> to <PaperCode>"4x4"</PaperCode>, each once. The first is the size a new placement gets.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>options</PaperCode></td>
-                        <td>&#123; id, label &#125;[]</td>
-                        <td>Optional. Up to 2 choices made in the gallery before the widget is placed. Each id follows the widget id rules and is unique within the widget; each label is up to 64 characters.</td>
+                        <td><PaperCode>WidgetOptionDeclaration[]</PaperCode></td>
+                        <td>No default (nothing to choose)</td>
+                        <td>At most 2. Each is <PaperCode>{"{ id, label }"}</PaperCode>: an id with the widget id rule, unique in the widget, and a label of at most 64 characters, not blank. The gallery shows one dropdown per option before the widget is placed.</td>
                     </tr>
                 </tbody>
             </PaperTable>
-            <PaperText preset="body">
-                A panel declares at most 8 widgets. A manifest that breaks a rule is refused when the panel is packed, with a message naming the first widget at fault.
-                Packing also fails when the manifest declares widgets and dist/widget.html does not exist.
+            <PaperText preset="body" as="p">
+                The daemon and <PaperCode>paperapi pack</PaperCode> check the same rules. A broken declaration makes the daemon refuse the whole manifest with <PaperCode>Invalid widgets in manifest for &lt;id&gt;: &lt;reason&gt;</PaperCode>, such as <PaperCode>{"widget \"forecast\" size \"5x1\" must look like \"2x1\", at most 4x4"}</PaperCode>.
+                The packer also refuses widgets when <PaperCode>dist/widget.html</PaperCode> does not exist.
             </PaperText>
-            <PaperText preset="subheader" id="options">Options</PaperText>
-            <PaperText preset="body">
-                An option is a choice made when the widget is added to Home: which workflow a Run button runs, which server a status card shows.
-                The gallery shows a dropdown for each declared option under the size choices, and the live preview follows what is picked.
-                The choice is fixed for that placement. To change it, people remove the widget and add it again, the same as size.
-            </PaperText>
-            <PaperText preset="body">
-                The dropdown's entries come from the panel's service, through widgetChoices in definePanelService. The gallery asks each time it shows the widget, so the list is current.
-                The widget cannot be added until every option has a value. If the service fails, the card says so and offers Retry; if it offers nothing, the card says there is nothing to choose yet.
-            </PaperText>
-            <PaperCode block language="json">
-{`{ "id": "run", "name": "Run button", "sizes": ["1x1"], "options": [{ "id": "workflow", "label": "Workflow" }] }`}
-            </PaperCode>
-            <PaperCode block language="ts">
-{`// service.ts
-definePanelService({
-    id: PANEL_ID,
-    state: { workflows: [] as { id: string; name: string }[] },
-    widgetChoices: {
-        run: {
-            workflow: (ctx) => ctx.state.workflows.map((w) => ({ value: w.id, label: w.name })),
-        },
-    },
-});
 
-// widget.html
-defineWidgets({
-    run: (root, widget) => {
-        const workflowId = widget.options.workflow;
-        // ...
-    },
-});`}
+            <PaperText preset="subheader" as="h2" id="api">API</PaperText>
+            <PaperText preset="body" as="p">
+                Context: widget page. Call <PaperCode>defineWidgets</PaperCode> once, at the top level of the widget page's script.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`function defineWidgets(widgets: Record<string, WidgetMount>): void;
+
+type WidgetMount = (root: HTMLElement, widget: WidgetContext) => (() => void) | void;
+
+interface WidgetContext {
+    readonly panelId: string;
+    /** which declared widget this frame shows */
+    readonly widgetId: string;
+    /** this placement on Home; two copies of one widget get two ids */
+    readonly instanceId: string;
+    /** what was chosen in the gallery, by option id; fixed for the frame's life */
+    readonly options: Readonly<Record<string, string>>;
+    /** current size in grid cells, one of the declared sizes */
+    size(): { w: number; h: number };
+    /** false while Home is hidden or the widget is scrolled away */
+    visible(): boolean;
+    onResize(callback: (size: { w: number; h: number }) => void): () => void;
+    onVisibilityChange(callback: (visible: boolean) => void): () => void;
+    /** asks the shell to open this widget's panel */
+    openPanel(): void;
+}`}
             </PaperCode>
-            <PaperText preset="body">
-                A choice can stop existing after it was placed, such as a deleted workflow. The widget still receives the old value, so show that it is gone and refuse it in the service rather than guessing another.
-                A dropdown offers at most 64 choices; each value is a non-empty string of up to 128 characters, unique in the list, with a label of up to 64 characters. A list that breaks a rule is refused whole, never trimmed.
-            </PaperText>
-            <PaperText preset="subheader" id="methods-and-signatures">Methods and signatures</PaperText>
-            <PaperTable>
-                <thead>
-                    <tr>
-                        <th>Export</th>
-                        <th>Signature</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><PaperCode>defineWidgets</PaperCode></td>
-                        <td><PaperCode>defineWidgets(widgets: Record&lt;string, WidgetMount&gt;): void</PaperCode></td>
-                        <td>Registers the mount function for each widget id. Call it once per page.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>WidgetMount</PaperCode></td>
-                        <td><PaperCode>(root: HTMLElement, widget: WidgetContext) =&gt; (() =&gt; void) | void</PaperCode></td>
-                        <td>Draws a widget into root. The function it returns is called when the widget goes away.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>validateWidgetDeclarations</PaperCode></td>
-                        <td><PaperCode>validateWidgetDeclarations(raw: unknown): WidgetDeclaration[]</PaperCode></td>
-                        <td>Returns a manifest's widget declarations, or throws naming the first one that breaks the rules. A missing field means no widgets.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>parseWidgetSize</PaperCode></td>
-                        <td><PaperCode>parseWidgetSize(value: unknown): WidgetSize | null</PaperCode></td>
-                        <td>Turns 2x1 into &#123; w: 2, h: 1 &#125;. Returns null for anything larger than the grid allows.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>parseWidgetChoices</PaperCode></td>
-                        <td><PaperCode>parseWidgetChoices(raw: unknown): WidgetChoice[]</PaperCode></td>
-                        <td>Returns the choices a service offers for one option, or throws naming what is wrong with them.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>getWidgetChoices</PaperCode></td>
-                        <td><PaperCode>getWidgetChoices(computerId, panelId, widgetId, optionId): Promise&lt;WidgetChoice[]&gt;</PaperCode></td>
-                        <td>Asks one panel's service on one computer what an option offers. Paperboard's gallery uses it; panels do not need it.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>isWidgetId</PaperCode></td>
-                        <td><PaperCode>isWidgetId(value: unknown): value is string</PaperCode></td>
-                        <td>Whether a value is a valid widget id.</td>
-                    </tr>
-                </tbody>
-            </PaperTable>
-            <PaperText preset="body">
-                The mount function receives a WidgetContext for its placement on Home.
-            </PaperText>
             <PaperTable>
                 <thead>
                     <tr>
                         <th>Member</th>
-                        <th>Type</th>
-                        <th>Description</th>
+                        <th>What it does</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td><PaperCode>panelId</PaperCode></td>
-                        <td><PaperCode>string</PaperCode></td>
-                        <td>The panel this widget belongs to.</td>
+                        <td><PaperCode>root</PaperCode></td>
+                        <td>A <PaperCode>div</PaperCode> PaperAPI appends to <PaperCode>body</PaperCode>, fixed to fill the frame with overflow hidden. Render into it.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>widgetId</PaperCode></td>
-                        <td><PaperCode>string</PaperCode></td>
-                        <td>Which declared widget this frame shows.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>instanceId</PaperCode></td>
-                        <td><PaperCode>string</PaperCode></td>
-                        <td>This placement on Home. Two copies of one widget get two ids.</td>
+                        <td>The mount's return value</td>
+                        <td>A cleanup function, called when the page unloads. Solid's <PaperCode>render</PaperCode> returns one.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>options</PaperCode></td>
-                        <td><PaperCode>Readonly&lt;Record&lt;string, string&gt;&gt;</PaperCode></td>
-                        <td>What was chosen in the gallery, by option id. Empty when the widget declares no options. Fixed for the frame's life.</td>
+                        <td>The <PaperCode>value</PaperCode> of each choice made in the gallery. An option nothing was chosen for is absent. A chosen value can stop existing later, such as a deleted city, so handle a value the panel no longer knows.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>size()</PaperCode></td>
-                        <td><PaperCode>WidgetSize</PaperCode></td>
-                        <td>The current size in grid cells, one of the sizes the manifest declares.</td>
+                        <td><PaperCode>onResize</PaperCode>, <PaperCode>onVisibilityChange</PaperCode></td>
+                        <td>Called only when the value changes. Each returns an unsubscribe function. At most 64 listeners of each kind; the next throws <PaperCode>Too many widget listeners; unsubscribe unused ones</PaperCode>.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>visible()</PaperCode></td>
-                        <td><PaperCode>boolean</PaperCode></td>
-                        <td>False while Home is hidden or the widget is scrolled out of view.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>onResize(callback)</PaperCode></td>
-                        <td><PaperCode>() =&gt; void</PaperCode></td>
-                        <td>Calls back when the size changes. Returns a function that unsubscribes.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>onVisibilityChange(callback)</PaperCode></td>
-                        <td><PaperCode>() =&gt; void</PaperCode></td>
-                        <td>Calls back when the widget becomes visible or hidden. Returns a function that unsubscribes.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>openPanel()</PaperCode></td>
-                        <td><PaperCode>void</PaperCode></td>
-                        <td>Asks Paperboard to open this widget's panel.</td>
+                        <td><PaperCode>visible</PaperCode></td>
+                        <td>Pause timers and polling while it is false.</td>
                     </tr>
                 </tbody>
             </PaperTable>
-            <PaperText preset="body">
-                The constants WIDGET_ENTRY (widget.html), WIDGET_MAX_WIDTH (4), WIDGET_MAX_HEIGHT (4), MAX_WIDGETS_PER_PANEL (8), MAX_SIZES_PER_WIDGET (4), MAX_OPTIONS_PER_WIDGET (2), MAX_WIDGET_CHOICES (64) and MAX_WIDGET_OPTION_VALUE_LENGTH (128) are exported for tools that check manifests.
-                Each PanelItem returned by the Panels API carries the installed manifest's declarations in its widgets field.
-            </PaperText>
-            <PaperText preset="subheader" id="behavior">Behavior</PaperText>
-            <PaperText preset="body">
-                One frame shows one widget instance, on the panel's own origin. Paperboard tells the page which widget to mount, and reports the widget as loaded once its mount function has run.
-                Before that, the frame proves it is connected: through the panel's service when the manifest declares one, or with an authenticated connection to the computer when it does not, so a panel without a service can still offer widgets.
-                When the panel is updated or restarted, its widgets load again, so they never keep running the old code.
-                Home loads a few widget frames at a time and releases frames that stay out of view, so a mount function may run again later for the same placement.
-                defineWidgets throws when it is called twice, when a key is not a valid widget id, or when a value is not a function.
-                Each of onResize and onVisibilityChange holds at most 64 listeners. Subscribing past that throws, so unsubscribe listeners that are no longer needed.
-            </PaperText>
-            <PaperText preset="subheader" id="recipes">Recipes</PaperText>
-            <PaperText preset="body">
-                Pause timers and polling while the widget cannot be seen. A widget that keeps working while hidden spends the computer's CPU on nothing.
+
+            <PaperText preset="subheader" as="h3" id="widget-choices">Choices from the service</PaperText>
+            <PaperText preset="body" as="p">
+                Context: service. <PaperCode>definePanelService</PaperCode>'s <PaperCode>widgetChoices</PaperCode> maps a widget id, then an option id, to a function returning the dropdown's entries. Home asks for them each time the gallery shows the widget, and waits at most 10 seconds.
             </PaperText>
             <PaperCode block language="tsx">
-{`defineWidgets({
-    clock: (root, widget) => {
-        let timer: ReturnType<typeof setInterval> | undefined;
-        const draw = () => { root.textContent = new Date().toLocaleTimeString(); };
-        const sync = () => {
-            clearInterval(timer);
-            if (!widget.visible()) return;
-            draw();
-            timer = setInterval(draw, 1000);
-        };
-        const stop = widget.onVisibilityChange(sync);
-        sync();
-        return () => {
-            stop();
-            clearInterval(timer);
-        };
-    },
-});`}
+{`interface WidgetChoice {
+    /** what the widget gets in options; 1 to 128 characters, unique in the list */
+    value: string;
+    /** what the dropdown shows; at most 64 characters, not blank */
+    label: string;
+}
+
+widgetChoices?: Record<string, Record<string, (ctx: ServiceContext<TState>) => WidgetChoice[] | Promise<WidgetChoice[]>>>;`}
             </PaperCode>
+            <PaperText preset="body" as="p">
+                A list holds at most 64 choices. The service checks its answer before it leaves and Home checks it again, so a broken list fails with its reason, such as <PaperCode>{"widget choice \"Oslo\" is offered twice"}</PaperCode>.
+                A widget or option the service has no function for fails with <PaperCode>{"This panel's service offers no choices for widget \"<widget>\" option \"<option>\""}</PaperCode>.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
+            <PaperTextList>
+                <li>Home loads <PaperCode>widget.html</PaperCode> from the panel's origin, which serves <PaperCode>dist/widget.html</PaperCode>. Every widget of the panel shares that page, and each frame mounts the one widget the shell names.</li>
+                <li>A widget frame goes through the same start-up check as the panel page, plus the mount: the shell keeps it covered until the service answers, the widget is mounted, bridges are hydrated and it has painted. See <PaperLink href="/docs/paperapi/connection/#readiness">Readiness</PaperLink>.</li>
+                <li>The widget page holds the same credential as the panel page and can call every API, except the windows the shell opens for a panel page: <PaperCode>fileApi.exportFile</PaperCode> and the imports, and <PaperCode>backupApi.chooseLocation</PaperCode>. Call <PaperCode>openPanel()</PaperCode> for those.</li>
+                <li>A back swipe in a widget stays in the widget.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Error</th>
+                        <th>When</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>defineWidgets can only be called once per page</PaperCode></td><td>A second call.</td></tr>
+                    <tr><td><PaperCode>{"\"<key>\" is not a widget id; use lowercase letters, digits and dashes"}</PaperCode></td><td>A key breaks the widget id rule.</td></tr>
+                    <tr><td><PaperCode>{"widget \"<id>\" must be a mount function"}</PaperCode></td><td>A value is not a function.</td></tr>
+                    <tr><td><PaperCode>{"This panel's widget page does not define \"<id>\""}</PaperCode></td><td>The shell asked for a widget the page has no mount function for. The frame shows this as its failure.</td></tr>
+                </tbody>
+            </PaperTable>
+            <PaperText preset="body" as="p">
+                The limits are exported: <PaperCode>MAX_WIDGETS_PER_PANEL</PaperCode>, <PaperCode>MAX_SIZES_PER_WIDGET</PaperCode>, <PaperCode>MAX_OPTIONS_PER_WIDGET</PaperCode>, <PaperCode>WIDGET_MAX_WIDTH</PaperCode>, <PaperCode>WIDGET_MAX_HEIGHT</PaperCode>, <PaperCode>MAX_WIDGET_CHOICES</PaperCode>, with <PaperCode>validateWidgetDeclarations</PaperCode> and <PaperCode>parseWidgetChoices</PaperCode>.
+                Next: <PaperLink href="/docs/paperapi/bridge/">createPanelBridge</PaperLink>.
+            </PaperText>
         </PaperFlex>
     );
 }

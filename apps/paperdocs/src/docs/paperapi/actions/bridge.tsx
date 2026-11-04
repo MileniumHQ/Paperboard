@@ -1,128 +1,193 @@
 import {
     PaperCode,
     PaperFlex,
+    PaperLink,
     PaperTable,
     PaperText,
+    PaperTextList,
 } from "@mileniumhq/paperui";
 
 export default function BridgeApiDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
-            <PaperText preset="header">Bridge API</PaperText>
-            <PaperText preset="body">
-                createPanelBridge connects a frontend SolidJS panel interface to its backend daemon service.
-                Reach for createPanelBridge in your panel UI root to consume reactive service state and invoke backend actions.
-                The bridge provides automatic initial hydration, delta synchronization, and proxy action execution.
+            <PaperText preset="header" as="h1">createPanelBridge</PaperText>
+            <PaperText preset="body" as="p">
+                createPanelBridge connects a panel page or widget to its own service: it keeps a copy of the service's state and calls the service's actions.
+                Create one in the panel's interface wherever it shows what the <PaperLink href="/docs/paperapi/service/">service</PaperLink> holds.
+                The bridge works on a panel page and in a widget. A service has no bridge: it owns the state.
             </PaperText>
 
-            <PaperText preset="subheader" id="overview">Overview</PaperText>
-            <PaperText preset="body">
-                Instantiate the bridge in your frontend components.
-                Access the current state, listen for delta updates, and call service actions directly through bridge.actions.
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
             <PaperCode block language="tsx">
 {`import { createPanelBridge } from "@mileniumhq/paperapi";
-import { createSignal, onCleanup } from "solid-js";
+import { PaperButton, PaperFlex, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { createSignal, onCleanup, Show } from "solid-js";
 
-interface PanelState {
-    running: boolean;
-    count: number;
+interface WeatherState {
+    lastCity: string;
 }
 
-interface PanelActions {
-    start: () => Promise<void>;
-    stop: () => Promise<void>;
+interface Forecast {
+    city: string;
+    high: number;
+    low: number;
 }
 
-export function PanelView() {
-    const bridge = createPanelBridge<PanelState, PanelActions>({
-        defaultState: { running: false, count: 0 },
+interface WeatherActions {
+    forecast(inputs: { city: string }): Promise<Forecast>;
+}
+
+export function WeatherView() {
+    const bridge = createPanelBridge<WeatherState, WeatherActions>({
+        defaultState: { lastCity: "" },
     });
-
     const [state, setState] = createSignal(bridge.getState());
-    const unsub = bridge.onStateChange((_patch, full) => setState(full));
+    const [forecast, setForecast] = createSignal<Forecast>();
+    const [failure, setFailure] = createSignal("");
 
+    const stop = bridge.onStateChange((_patch, full) => setState(full));
     onCleanup(() => {
-        unsub();
+        stop();
         bridge.dispose();
     });
 
+    const load = async () => {
+        setFailure("");
+        try {
+            setForecast(await bridge.actions.forecast({ city: "Lisbon" }));
+        } catch (err) {
+            setFailure(err instanceof Error ? err.message : String(err));
+        }
+    };
+
     return (
-        <button onClick={() => bridge.actions.start()}>
-            {state().running ? "Stop" : "Start"}
-        </button>
+        <PaperFlex direction="column" gap="full">
+            <PaperText preset="body">Last city: {state().lastCity || "none yet"}</PaperText>
+            <Show when={forecast()}>
+                {(f) => <PaperText preset="body">{f().city}: {f().high}° / {f().low}°</PaperText>}
+            </Show>
+            <Show when={failure()}>
+                <PaperQuote variant="danger" icon="error" title="No forecast" onDismiss={() => setFailure("")}>
+                    {failure()}
+                </PaperQuote>
+            </Show>
+            <PaperButton variant="primary" onClick={load}>Get forecast</PaperButton>
+        </PaperFlex>
     );
 }`}
             </PaperCode>
 
-            <PaperText preset="subheader" id="bridge-methods">Bridge methods</PaperText>
-            <PaperText preset="body">
-                createPanelBridge returns an object with state accessors, action proxies, and cleanup routines:
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="api">API</PaperText>
+            <PaperCode block language="tsx">
+{`function createPanelBridge<
+    TState extends Record<string, any> = Record<string, any>,
+    TActions extends Record<string, (...args: any[]) => Promise<any>> = Record<string, (...args: any[]) => Promise<any>>,
+>(options?: PanelBridgeOptions<TState>): PanelBridge<TState, TActions>;
 
+interface PanelBridgeOptions<TState> {
+    /** defaults to getPanelId(), the panel the page belongs to */
+    panelId?: string;
+    /** the state before the first answer from the service; defaults to {} */
+    defaultState?: TState;
+}`}
+            </PaperCode>
             <PaperTable>
                 <thead>
                     <tr>
                         <th>Member</th>
                         <th>Type</th>
-                        <th>Description</th>
+                        <th>Behavior</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
+                        <td><PaperCode>panelId</PaperCode></td>
+                        <td><PaperCode>string</PaperCode></td>
+                        <td>The panel whose service the bridge talks to.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>getState()</PaperCode></td>
-                        <td><PaperCode>() =&gt; TState</PaperCode></td>
-                        <td>Returns the latest local snapshot of service state.</td>
+                        <td><PaperCode>TState</PaperCode></td>
+                        <td>The bridge's copy of the state. It starts as <PaperCode>defaultState</PaperCode> and changes as the service sends patches.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>onStateChange(cb)</PaperCode></td>
+                        <td><PaperCode>(cb: (patch: Partial&lt;TState&gt;, full: TState) =&gt; void) =&gt; () =&gt; void</PaperCode></td>
+                        <td>Calls <PaperCode>cb</PaperCode> after every patch and every refresh, with what changed and the whole copy. Returns the function that stops it.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>refreshState()</PaperCode></td>
                         <td><PaperCode>() =&gt; Promise&lt;TState&gt;</PaperCode></td>
-                        <td>Forces an immediate state hydration request to the service over RPC.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>onStateChange(cb)</PaperCode></td>
-                        <td><PaperCode>(cb: (patch, full) =&gt; void) =&gt; () =&gt; void</PaperCode></td>
-                        <td>Registers a listener invoked when the backend service updates state. Returns an unsubscriber.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>actions</PaperCode></td>
-                        <td><PaperCode>TActions</PaperCode></td>
-                        <td>Proxy object mapping action method calls to actionsApi.call invocations.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>call(action, ...args)</PaperCode></td>
-                        <td><PaperCode>&lt;R&gt;(action: string, ...args: any[]) =&gt; Promise&lt;R&gt;</PaperCode></td>
-                        <td>Explicitly calls a named action on the service without using the proxy. The last argument may be <PaperCode>{"{ timeoutMs }"}</PaperCode> — numeric up to 60 s, or <PaperCode>null</PaperCode> to wait for long work.</td>
+                        <td>Asks the service for its whole state, merges it into the copy and resolves with the copy. Rejects with the call's error, such as a service that is not running.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>getStatus()</PaperCode></td>
                         <td><PaperCode>() =&gt; {"{ ready: boolean; error?: string }"}</PaperCode></td>
-                        <td>Reports whether initial state hydration completed successfully.</td>
+                        <td>The result of the last refresh: <PaperCode>ready</PaperCode> is true when it succeeded, and <PaperCode>error</PaperCode> holds its message when it failed.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>actions</PaperCode></td>
+                        <td><PaperCode>TActions</PaperCode></td>
+                        <td>A proxy: <PaperCode>bridge.actions.forecast(inputs, options)</PaperCode> is <PaperCode>actionsApi.call(panelId, "forecast", inputs, options)</PaperCode>. Any name works, so a misspelled one rejects at call time with <PaperCode>not registered or unavailable</PaperCode>.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>call(name, inputs?, options?)</PaperCode></td>
+                        <td><PaperCode>&lt;R&gt;(actionName: string, ...args: any[]) =&gt; Promise&lt;R&gt;</PaperCode></td>
+                        <td>The same call by name. <PaperCode>options</PaperCode> is an <PaperLink href="/docs/paperapi/actions/#calling">ActionCallOptions</PaperLink>, for a longer timeout.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>dispose()</PaperCode></td>
                         <td><PaperCode>() =&gt; void</PaperCode></td>
-                        <td>Tears down hydrator registrations and event subscriptions to prevent memory leaks.</td>
+                        <td>Stops listening for patches and drops every callback. Call it when the component that made the bridge goes away.</td>
                     </tr>
                 </tbody>
             </PaperTable>
 
-            <PaperText preset="subheader" id="behavior">Behavior</PaperText>
-            <PaperText preset="body">
-                When a panel mounts, createPanelBridge registers a hydrator with the platform frame manager.
-                If the background service is still booting, initial hydration defers and resolves once the service signals readiness.
-                State updates dispatched by the service via setState arrive as lightweight delta patches.
+            <PaperText preset="subheader" as="h2" id="state-sync">State sync</PaperText>
+            <PaperTextList ordered>
+                <li>On creation, the bridge subscribes to the service's <PaperCode>__stateChanged</PaperCode> event and asks for the whole state with the internal <PaperCode>__getState</PaperCode> action.</li>
+                <li>Each <PaperCode>setState</PaperCode> in the service arrives as a patch. The bridge merges it into its copy, one level deep, and calls every <PaperCode>onStateChange</PaperCode> callback.</li>
+                <li>The copy is not a reactive store. Each merge replaces it with a new object, so put <PaperCode>full</PaperCode> into a signal from <PaperCode>onStateChange</PaperCode>, as the sample does, for the page to update.</li>
+                <li>Patches sent while the page was disconnected are lost. After a reconnect, call <PaperCode>refreshState()</PaperCode> to catch up.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="readiness">Readiness</PaperText>
+            <PaperText preset="body" as="p">
+                Before the shell shows a panel with a service, it waits for the service to answer and for every bridge the page made to refresh.
+                A bridge whose first refresh fails makes the shell show the failure in place of the panel. Create bridges when the page loads, so they take part.
+                See <PaperLink href="/docs/paperapi/connection/#readiness">Readiness</PaperLink> for the whole sequence.
             </PaperText>
 
-            <PaperText preset="subheader" id="recipes">Recipes</PaperText>
-            <PaperText preset="body">
-                Ensure bridge.dispose() runs when your root component unmounts.
+            <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Error</th>
+                        <th>Cause</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>Too many panel bridges; dispose unused bridges</PaperCode></td>
+                        <td>The page holds 128 bridges. Thrown by <PaperCode>createPanelBridge</PaperCode>.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>Action "&lt;name&gt;" on panel "&lt;id&gt;" is not registered or unavailable</PaperCode></td>
+                        <td>The service is not running, has not registered the action yet, or the name is wrong.</td>
+                    </tr>
+                    <tr>
+                        <td>The action's own message</td>
+                        <td>The service's handler threw. The call rejects with the same text.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>PaperCrane 'actions:call' timed out</PaperCode></td>
+                        <td>The action ran longer than the call's timeout, 30 seconds unless <PaperCode>timeoutMs</PaperCode> says otherwise.</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+            <PaperText preset="body" as="p">
+                The first refresh's failure is logged to the console at debug level and kept in <PaperCode>getStatus().error</PaperCode>. Read it there to show why the state is missing.
             </PaperText>
-            <PaperCode block language="tsx">
-{`onCleanup(() => {
-    bridge.dispose();
-});`}
-            </PaperCode>
         </PaperFlex>
     );
 }

@@ -1,250 +1,180 @@
 import {
     PaperCode,
     PaperFlex,
+    PaperLink,
     PaperTable,
     PaperText,
+    PaperTextList,
 } from "@mileniumhq/paperui";
 
 export default function FileApiDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
-            <PaperText preset="header">File API</PaperText>
-            <PaperText preset="body">
-                fileApi manages a panel's file storage: text file reading and writing, checksummed downloads, and exporting and importing files between panel storage and the user's machine.
-                Reach for fileApi when downloading assets, storing local caches, reading persistent working files, or exporting and importing a file.
-                Every operation stays inside the named panel's storage folder.
+            <PaperText preset="header" as="h1">fileApi</PaperText>
+            <PaperText preset="body" as="p">
+                fileApi reads, writes and downloads files in the panel's own storage folder, and moves files between that folder and the person's computer.
+                Storage and downloads work on a panel page, in a widget and in a service. Export and import open a system dialog, so they work only on a panel page.
+                Paths are relative to the panel's folder. Nothing outside it can be named.
             </PaperText>
 
-            <PaperText preset="subheader" id="overview">Overview</PaperText>
-            <PaperText preset="body">
-                Import fileApi or files from @mileniumhq/paperapi.
-                Call file operations with paths relative to the panel storage root.
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
             <PaperCode block language="tsx">
 {`import { fileApi } from "@mileniumhq/paperapi";
 
-const PANEL_ID = "dev.example.panel";
+const PANEL_ID = "dev.example.weather";
 
-// Write a text file into panel storage (the panel id is always explicit)
-await fileApi.write("data/log.txt", "Operation started", PANEL_ID);
+await fileApi.write("history/lisbon.json", JSON.stringify(readings), PANEL_ID);
+const text = await fileApi.read("history/lisbon.json", PANEL_ID);
+if (text === null) throw new Error("No history saved for Lisbon yet");
 
-// Check file existence
-const exists = await fileApi.exists("data/log.txt", PANEL_ID);
-
-// Read file contents
-const content = await fileApi.read("data/log.txt", PANEL_ID);`}
-            </PaperCode>
-
-            <PaperText preset="subheader" id="methods-and-signatures">Methods and signatures</PaperText>
-            <PaperText preset="body">
-                The module provides the following file system methods:
-            </PaperText>
-
-            <PaperTable>
-                <thead>
-                    <tr>
-                        <th>Method</th>
-                        <th>Signature</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><PaperCode>read</PaperCode></td>
-                        <td><PaperCode>read(targetPath, appId): Promise&lt;string | null&gt;</PaperCode></td>
-                        <td>Reads a UTF-8 text file from panel storage. Returns null if missing.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>write</PaperCode></td>
-                        <td><PaperCode>write(targetPath, content, appId): Promise&lt;string&gt;</PaperCode></td>
-                        <td>Writes string content to a file, creating parent directories as needed.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>exists</PaperCode></td>
-                        <td><PaperCode>exists(targetPath, appId): Promise&lt;boolean&gt;</PaperCode></td>
-                        <td>Checks whether the specified file exists.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>delete</PaperCode></td>
-                        <td><PaperCode>delete(targetPath, appId): Promise&lt;boolean&gt;</PaperCode></td>
-                        <td>Deletes a file from panel storage.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>getPath</PaperCode></td>
-                        <td><PaperCode>getPath(targetPath, appId): Promise&lt;string&gt;</PaperCode></td>
-                        <td>Resolves the absolute host file path for a panel-relative path.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>clear</PaperCode></td>
-                        <td><PaperCode>clear(appId): Promise&lt;boolean&gt;</PaperCode></td>
-                        <td>Removes all files stored within the panel directory.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>download</PaperCode></td>
-                        <td><PaperCode>download(options): Promise&lt;string&gt;</PaperCode></td>
-                        <td>Streams a remote URL to disk with progress tracking and SHA-256 verification.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>exportFile</PaperCode></td>
-                        <td><PaperCode>exportFile(sourcePath, appId, options?): Promise&lt;ExportFileResult&gt;</PaperCode></td>
-                        <td>Asks the user where to save a copy of a file from panel storage, then copies it there.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>importFile</PaperCode></td>
-                        <td><PaperCode>importFile(targetPath, appId, options?): Promise&lt;ImportFileResult&gt;</PaperCode></td>
-                        <td>Asks the user for a file, then copies it into panel storage at targetPath.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>importFiles</PaperCode></td>
-                        <td><PaperCode>importFiles(targetDir, appId, options?): Promise&lt;ImportFilesResult&gt;</PaperCode></td>
-                        <td>Asks the user for one or more files, then copies each into the panel storage folder targetDir under its own name.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>importFolder</PaperCode></td>
-                        <td><PaperCode>importFolder(targetDir, appId): Promise&lt;ImportFolderResult&gt;</PaperCode></td>
-                        <td>Asks the user for a folder, then copies it and everything in it into targetDir/&lt;folder name&gt; in panel storage.</td>
-                    </tr>
-                </tbody>
-            </PaperTable>
-
-            <PaperText preset="subheader" id="behavior">Behavior</PaperText>
-            <PaperText preset="body">
-                All file paths resolve within ~/.paperboard/files/{"<panelId>"}/.
-                Every call names the panel whose storage it touches; a missing or invalid panel id is refused before any request. Path traversal attempts that escape the panel folder are rejected with security errors.
-                Downloads verify checksums before committing the temporary file to its final destination.
-            </PaperText>
-
-            <PaperText preset="subheader" id="exporting-and-importing-files">Exporting and importing files</PaperText>
-            <PaperText preset="body">
-                Call exportFile to hand the user a file from panel storage, such as a report or a backup. Call importFile to take a file from the user into panel storage, such as a settings file or a restore.
-                Paperboard owns the picker window. The panel names a path in its own storage and never sees a path on the user's disk.
-                Call both from a click handler in the panel page. A widget page cannot export or import.
-            </PaperText>
-            <PaperCode block language="tsx">
-{`import { FileTransferError, fileApi } from "@mileniumhq/paperapi";
-
-const PANEL_ID = "dev.example.panel";
-const filters = [{ name: "Archive", extensions: ["zip"] }];
-
-const exported = await fileApi.exportFile("exports/data.zip", PANEL_ID, { suggestedName: "data.zip", filters });
-if (exported.status === "exported") console.log(\`Saved \${exported.bytes} bytes as \${exported.name}\`);
-
-try {
-    const imported = await fileApi.importFile("imports/data.zip", PANEL_ID, { filters });
-    if (imported.status === "imported") console.log(\`Received \${imported.name}\`);
-} catch (err) {
-    if (err instanceof FileTransferError && err.code === "too-large") console.log("The file is over the limit");
-    else throw err;
-}
-
-const many = await fileApi.importFiles("imports/batch", PANEL_ID, { filters });
-if (many.status === "imported") console.log(many.files.map((file) => file.name));
-
-const folder = await fileApi.importFolder("imports/batch", PANEL_ID);
-if (folder.status === "imported") console.log(\`Copied \${folder.files.length} files into imports/batch/\${folder.name}\`);`}
-            </PaperCode>
-
-            <PaperText preset="subheader" id="export-and-import-options">Export and import options</PaperText>
-            <PaperTable>
-                <thead>
-                    <tr>
-                        <th>Option</th>
-                        <th>Type</th>
-                        <th>Default</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><PaperCode>suggestedName</PaperCode></td>
-                        <td><PaperCode>string</PaperCode></td>
-                        <td>The source file's name</td>
-                        <td>exportFile only. The file name the picker starts with. Slashes are refused.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>filters</PaperCode></td>
-                        <td><PaperCode>FileTypeFilter[]</PaperCode></td>
-                        <td>No filters, any file</td>
-                        <td>Each filter is <PaperCode>{"{ name, extensions }"}</PaperCode>. Write extensions without the dot, letters and digits only. At most 16 filters of at most 32 extensions each.</td>
-                    </tr>
-                </tbody>
-            </PaperTable>
-
-            <PaperText preset="subheader" id="export-and-import-results">Export and import results</PaperText>
-            <PaperText preset="body">
-                Both methods resolve with what the user did and throw a FileTransferError when the copy fails. A canceled picker resolves with <PaperCode>{"{ status: \"canceled\" }"}</PaperCode> and changes no file.
-                A finished exportFile resolves with <PaperCode>{"{ status: \"exported\", name, bytes }"}</PaperCode> and a finished importFile with <PaperCode>{"{ status: \"imported\", name, bytes }"}</PaperCode>. The name is the file name the user picked, without its folder.
-                importFiles resolves with <PaperCode>{"{ status: \"imported\", name, bytes, files }"}</PaperCode> and importFolder with the same shape, where name is the folder's name. Each entry of files is <PaperCode>{"{ name, bytes }"}</PaperCode>: a file's own name, or for a folder its path below the folder, separated by slashes.
-            </PaperText>
-            <PaperTable>
-                <thead>
-                    <tr>
-                        <th>FileTransferError code</th>
-                        <th>Meaning</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><PaperCode>invalid-request</PaperCode></td>
-                        <td>The path, file name, or filters are malformed, or the panel id is not the panel that asked.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>busy</PaperCode></td>
-                        <td>This panel already has an export or import running, or Paperboard is running four transfers.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>not-found</PaperCode></td>
-                        <td>exportFile: the source file does not exist. The picker never opens.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>too-large</PaperCode></td>
-                        <td>The file is over the size limit for its direction.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>unreachable</PaperCode></td>
-                        <td>The panel's computer is not connected, or it stopped answering during the copy.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>unsupported</PaperCode></td>
-                        <td>The browser running Paperboard in browser mode cannot pick a save location.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>unavailable</PaperCode></td>
-                        <td>The page is a widget, or it is not shown inside Paperboard.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>failed</PaperCode></td>
-                        <td>Any other failure. The message says what happened.</td>
-                    </tr>
-                </tbody>
-            </PaperTable>
-
-            <PaperText preset="subheader" id="export-and-import-behavior">Export and import behavior</PaperText>
-            <PaperText preset="body">
-                The picker opens on the machine showing Paperboard. When the panel runs on another computer, the file travels between that computer's panel storage and this machine.
-                An export writes the picked location only after the whole file arrives. A broken transfer leaves an existing file at that location as it was.
-                An import replaces targetPath only after the whole file arrives, and creates its parent folders. The computer that stores the file checks that targetPath stays inside the panel's storage.
-                importFiles and importFolder copy one file at a time the same way. If a later file fails, the files before it stay in targetDir and the error names the file that failed and how many had arrived, so copy into a scratch folder and move the result into place once the call resolves.
-                A folder copy is refused before anything is copied when the folder holds a link or another file that is not a regular file, holds no files, holds more than 5,000 files, or is over 2 GiB in total. Empty subfolders are not copied. importFiles refuses the same limits for the files chosen, and two chosen files with one name.
-                exportFile copies files up to 2 GiB. importFile copies files up to the receiving computer's upload limit, 512 MiB unless PAPERCRANE_DAV_MAX_UPLOAD sets another byte count.
-                One export or import per panel runs at a time. A second call while one is open throws <PaperCode>busy</PaperCode>.
-            </PaperText>
-
-            <PaperText preset="subheader" id="recipes">Recipes</PaperText>
-            <PaperText preset="body">
-                Download a remote asset with a checksum and progress callback.
-            </PaperText>
-            <PaperCode block language="tsx">
-{`await fileApi.download({
-    url: "https://example.com/asset.zip",
-    targetPath: "downloads/asset.zip",
+const radar = await fileApi.download({
+    url: "https://example.com/radar.png",
+    targetPath: "cache/radar.png",
     appId: PANEL_ID,
-    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    onProgress: (p) => {
-        console.log(\`Download: \${p.percent}%\`);
-    }
+    sha256: expectedSha256,
+    onProgress: (p) => setProgress(p.percent),
 });`}
             </PaperCode>
+
+            <PaperText preset="subheader" as="h2" id="storage">Storage</PaperText>
+            <PaperCode block language="tsx">
+{`/** the absolute path on disk; "" is the folder itself */
+fileApi.getPath(targetPath: string, appId: string): Promise<string>;
+fileApi.exists(targetPath: string, appId: string): Promise<boolean>;
+/** creates parent folders; resolves with the absolute path */
+fileApi.write(targetPath: string, content: string, appId: string): Promise<string>;
+/** null when there is no such file */
+fileApi.read(targetPath: string, appId: string): Promise<string | null>;
+/** true when a file was deleted; false for a folder or a missing file */
+fileApi.delete(targetPath: string, appId: string): Promise<boolean>;
+/** deletes the whole storage folder */
+fileApi.clear(appId: string): Promise<true>;`}
+            </PaperCode>
+            <PaperTextList>
+                <li>The folder is <PaperCode>files/&lt;panelId&gt;/</PaperCode> in the Paperboard data folder. <PaperCode>appId</PaperCode> is the panel id, and only the caller's own.</li>
+                <li><PaperCode>read</PaperCode> and <PaperCode>write</PaperCode> handle UTF-8 text, at most 16 MiB a write. For larger or binary files, use <PaperCode>download</PaperCode>, or the path from <PaperCode>getPath</PaperCode> with Node's <PaperCode>fs</PaperCode> in the service.</li>
+                <li>A path that climbs out of the folder, or passes through a symbolic link, is refused.</li>
+                <li><PaperCode>delete</PaperCode> removes files only. <PaperCode>clear</PaperCode> removes the folder and everything in it.</li>
+                <li>Backups include the folder. See <PaperLink href="/docs/paperapi/backups/">backupApi</PaperLink>.</li>
+                <li>For a panel shown from another computer, the folder and every path are on that computer.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="downloads">Downloads</PaperText>
+            <PaperCode block language="tsx">
+{`fileApi.download(opts: FileDownloadOptions): Promise<string>;
+
+interface FileDownloadOptions {
+    url: string;
+    /** where the file goes in the panel's folder */
+    targetPath: string;
+    appId: string;
+    sha1?: string;
+    sha256?: string;
+    /** the same check in one field; only "sha1" and "sha256" are checked */
+    checksum?: { algorithm: "sha1" | "sha256" | "md5" | string; value: string };
+    onProgress?: (progress: FileDownloadProgress) => void;
+}
+
+interface FileDownloadProgress {
+    downloadId: string;
+    stage: "starting" | "downloading" | "verifying" | "completed" | "error";
+    percent: number;
+    bytesLoaded?: number;
+    bytesTotal?: number;
+    /** the failure, on the "error" stage */
+    message?: string;
+}`}
+            </PaperCode>
+            <PaperTextList>
+                <li>The daemon downloads the file, and the call has no timeout.</li>
+                <li>Only <PaperCode>http:</PaperCode> and <PaperCode>https:</PaperCode> URLs are fetched. Give a checksum for anything the panel will run.</li>
+                <li>The file arrives under a temporary name and replaces <PaperCode>targetPath</PaperCode> only once it is complete and its checksum matches. A failed download leaves the old file alone.</li>
+                <li>A checksum with an <PaperCode>algorithm</PaperCode> other than <PaperCode>sha1</PaperCode> or <PaperCode>sha256</PaperCode> is not checked.</li>
+                <li>Limits: 2 GiB per file, 8 downloads at once on the computer, 45 seconds without data, 30 minutes in all.</li>
+                <li>Resolves with the absolute path of the downloaded file.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="export-and-import">Export and import</PaperText>
+            <PaperCode block language="tsx">
+{`fileApi.exportFile(sourcePath: string, appId: string, options?: ExportFileOptions): Promise<ExportFileResult>;
+fileApi.importFile(targetPath: string, appId: string, options?: ImportFileOptions): Promise<ImportFileResult>;
+fileApi.importFiles(targetDir: string, appId: string, options?: ImportFileOptions): Promise<ImportFilesResult>;
+fileApi.importFolder(targetDir: string, appId: string): Promise<ImportFolderResult>;
+
+interface ExportFileOptions {
+    /** the name the dialog starts with; defaults to the source file's */
+    suggestedName?: string;
+    filters?: FileTypeFilter[];
+}
+interface ImportFileOptions {
+    filters?: FileTypeFilter[];
+}
+interface FileTypeFilter {
+    /** the label the dialog shows, such as "Backups" */
+    name: string;
+    /** extensions without the dot, such as ["zip"] */
+    extensions: string[];
+}
+
+type ExportFileResult = { status: "exported"; name: string; bytes: number } | { status: "canceled" };
+type ImportFileResult = { status: "imported"; name: string; bytes: number } | { status: "canceled" };
+type ImportFilesResult = { status: "imported"; files: ImportedFile[]; bytes: number } | { status: "canceled" };
+type ImportFolderResult = { status: "imported"; name: string; files: ImportedFile[]; bytes: number } | { status: "canceled" };
+interface ImportedFile {
+    /** the file's name, or its path below the chosen folder */
+    name: string;
+    bytes: number;
+}`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                The shell opens the system dialog and copies the file. The panel names only the path in its own folder, and never learns where the person picked or saved.
+                A canceled dialog resolves with <PaperCode>{"{ status: \"canceled\" }"}</PaperCode>; it is not an error.
+            </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Call</th>
+                        <th>What it copies</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>exportFile</PaperCode></td><td>One file from the panel's folder to where the person chooses. At most 2 GiB.</td></tr>
+                    <tr><td><PaperCode>importFile</PaperCode></td><td>One chosen file to <PaperCode>targetPath</PaperCode>, replacing what was there once it fully arrives.</td></tr>
+                    <tr><td><PaperCode>importFiles</PaperCode></td><td>One or more chosen files into the folder <PaperCode>targetDir</PaperCode>, each under its own name. Files already copied stay if a later one fails.</td></tr>
+                    <tr><td><PaperCode>importFolder</PaperCode></td><td>A chosen folder and everything in it into <PaperCode>targetDir/&lt;folder name&gt;</PaperCode>. A folder with a link in it is refused before anything is copied.</td></tr>
+                </tbody>
+            </PaperTable>
+            <PaperText preset="body" as="p">
+                An import holds at most 5000 files and 2 GiB in all.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
+            <PaperText preset="body" as="p">
+                Export and import reject with a <PaperCode>FileTransferError</PaperCode>, whose <PaperCode>code</PaperCode> is <PaperCode>invalid-request</PaperCode>, <PaperCode>busy</PaperCode>, <PaperCode>not-found</PaperCode>, <PaperCode>too-large</PaperCode>, <PaperCode>unreachable</PaperCode>, <PaperCode>unsupported</PaperCode>, <PaperCode>unavailable</PaperCode> or <PaperCode>failed</PaperCode>.
+            </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Error</th>
+                        <th>Code</th>
+                        <th>Cause</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>Access denied: path traverses outside assigned storage for &lt;panel&gt;</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>A path with <PaperCode>..</PaperCode> that leaves the folder.</td></tr>
+                    <tr><td><PaperCode>Access denied: symbolic link in storage path for &lt;panel&gt;</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>The path passes through a link.</td></tr>
+                    <tr><td><PaperCode>Cross-panel access refused: credential is scoped to "&lt;panel&gt;"</PaperCode></td><td><PaperCode>FORBIDDEN</PaperCode></td><td>Another panel's <PaperCode>appId</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>Download refused: only http(s) URLs are downloaded, not &lt;scheme&gt;</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>A <PaperCode>file:</PaperCode>, <PaperCode>ftp:</PaperCode> or other URL.</td></tr>
+                    <tr><td><PaperCode>Download failed (HTTP &lt;status&gt;)</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>The server answered with an error.</td></tr>
+                    <tr><td><PaperCode>SHA1 mismatch</PaperCode>, <PaperCode>SHA256 mismatch</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>The file is not the one the checksum names.</td></tr>
+                    <tr><td><PaperCode>Too many concurrent downloads (max 8)</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>Eight downloads are running.</td></tr>
+                    <tr><td><PaperCode>Download exceeds 2 GiB cap</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>The file is too large.</td></tr>
+                    <tr><td><PaperCode>Download connection timed out</PaperCode>, <PaperCode>Download stalled</PaperCode>, <PaperCode>Download exceeded lifetime deadline</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>No data for 45 seconds, or 30 minutes in all.</td></tr>
+                    <tr><td><PaperCode>Exporting and importing files needs a panel shown in Paperboard</PaperCode></td><td><PaperCode>unavailable</PaperCode></td><td>Called from a service, or from a page outside the shell.</td></tr>
+                    <tr><td><PaperCode>A widget cannot export or import files; open its panel instead</PaperCode></td><td><PaperCode>unavailable</PaperCode></td><td>Called from a widget.</td></tr>
+                    <tr><td><PaperCode>An export or import is already running</PaperCode></td><td><PaperCode>busy</PaperCode></td><td>The page started a second one before the first finished.</td></tr>
+                </tbody>
+            </PaperTable>
         </PaperFlex>
     );
 }

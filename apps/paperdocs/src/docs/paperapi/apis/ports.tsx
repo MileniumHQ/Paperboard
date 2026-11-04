@@ -3,153 +3,151 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
+    PaperTextList,
 } from "@mileniumhq/paperui";
 
 export default function PortsApiDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
-            <PaperText preset="header">Ports API</PaperText>
-            <PaperText preset="body">
-                portApi gives the network ports a panel's program opens on the computer.
-                A panel claims a port by a name of its own and Paperboard decides its number. It never gives a number another claim holds or another program on the computer is using.
-                When the number a panel asks for is taken, the user's setting decides what happens: Paperboard refuses with an error that says who has it, or gives the next free port.
-                Reach for portApi when your program listens on a fixed port people connect to, such as a game server. A program that is only reached through Paperboard can listen on a random port and needs no claim.
+            <PaperText preset="header" as="h1">portApi</PaperText>
+            <PaperText preset="body" as="p">
+                portApi gives each network port a panel's programs open a number on the computer, so two panels never pick the same one.
+                It works on a panel page, in a widget and in a service. Each computer's settings in Paperboard list its claims by label, under Ports.
+                Claim every port a server the panel runs listens on.
             </PaperText>
 
-            <PaperText preset="subheader" id="overview">Overview</PaperText>
-            <PaperText preset="body">
-                Import portApi from @mileniumhq/paperapi. Every call names the panel explicitly.
-                Claim the port your program's config asks for, check it with prepare right before the program starts, and write the number prepare returns into the config.
-                Never assume the number you asked for is the one you got.
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
             <PaperCode block language="tsx">
-{`import { portApi } from "@mileniumhq/paperapi";
+{`import { portApi, processApi } from "@mileniumhq/paperapi";
 
-const PANEL_ID = "dev.example.panel";
+const PANEL_ID = "dev.example.weather";
 
-async function start() {
-    const wanted = await readPortFromConfig();
-    await portApi.claim(PANEL_ID, { name: "game", label: "Example Server", protocol: "tcp", preferred: wanted });
-    // throws, saying who has it, when the port is taken and the user's setting refuses to move it
-    const { port } = await portApi.prepare(PANEL_ID, "game");
-    if (port !== wanted) await writePortToConfig(port);
-    await startProgram();
-}`}
+// once, when the person sets the relay up
+await portApi.claim(PANEL_ID, { name: "relay", label: "Weather relay", protocol: "tcp", preferred: 8080 });
+
+// every time, right before the program starts
+const { port } = await portApi.prepare(PANEL_ID, "relay");
+await processApi.start({ id: "weather-relay", command: relayPath, args: ["--port", String(port)] });`}
             </PaperCode>
 
-            <PaperText preset="subheader" id="methods-and-signatures">Methods and signatures</PaperText>
+            <PaperText preset="subheader" as="h2" id="api">API</PaperText>
+            <PaperCode block language="tsx">
+{`portApi.claim(appId: string, request: PortRequest, scope?: string): Promise<PortClaim>;
+portApi.prepare(appId: string, name: string, scope?: string): Promise<PortClaim>;
+portApi.release(appId: string, name: string, scope?: string): Promise<void>;
+portApi.list(appId: string, scope?: string): Promise<PortClaim[]>;
+
+type PortProtocol = "tcp" | "udp" | "tcp+udp";
+
+interface PortRequest {
+    /** the panel's own name for it: a lowercase letter or digit, then letters, digits and dashes; at most 32 */
+    name: string;
+    /** who holds it, for people: at most 80 characters */
+    label: string;
+    protocol: PortProtocol;
+    /** the number the panel wants, 1 to 65535 */
+    preferred: number;
+}
+
+interface PortClaim {
+    panelId: string;
+    name: string;
+    label: string;
+    protocol: PortProtocol;
+    /** the number the program opens */
+    port: number;
+}`}
+            </PaperCode>
             <PaperTable>
                 <thead>
                     <tr>
-                        <th>Method</th>
-                        <th>Signature</th>
-                        <th>Description</th>
+                        <th>Call</th>
+                        <th>Behavior</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td><PaperCode>claim</PaperCode></td>
-                        <td><PaperCode>claim(appId, request): Promise&lt;PortClaim&gt;</PaperCode></td>
-                        <td>Gives the named port a number. A claim the panel already holds at <PaperCode>preferred</PaperCode> is returned as it is.</td>
+                        <td>Gives the name a number: <PaperCode>preferred</PaperCode> when it is free, otherwise as the policy says. A name that already holds <PaperCode>preferred</PaperCode> with the same protocol keeps it with no check, and takes the new label.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>prepare</PaperCode></td>
-                        <td><PaperCode>prepare(appId, name): Promise&lt;PortClaim&gt;</PaperCode></td>
-                        <td>Checks a claimed port against the computer again, right before the program opens it. Refuses or moves a port something took since it was claimed.</td>
+                        <td>Checks the claimed number again, since another program may have taken it since, and refuses or moves it as the policy says. Call it right before the program starts, while the panel's own program is not running yet, and give the program the number it returns.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>release</PaperCode></td>
-                        <td><PaperCode>release(appId, name): Promise&lt;void&gt;</PaperCode></td>
-                        <td>Gives the port back. Releasing a port the panel does not hold does nothing.</td>
+                        <td>Gives the number back. Releasing a name that holds nothing does nothing.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>list</PaperCode></td>
-                        <td><PaperCode>list(appId): Promise&lt;PortClaim[]&gt;</PaperCode></td>
-                        <td>The ports the panel holds.</td>
+                        <td>The panel's claims.</td>
                     </tr>
                 </tbody>
             </PaperTable>
+            <PaperText preset="body" as="p">
+                <PaperCode>appId</PaperCode> is the panel id, and only the caller's own. <PaperCode>scope</PaperCode> is the computer to claim on, the one the document was granted by default.
+            </PaperText>
 
-            <PaperText preset="subheader" id="requests-and-claims">Requests and claims</PaperText>
+            <PaperText preset="subheader" as="h2" id="taken-ports">Taken ports</PaperText>
+            <PaperText preset="body" as="p">
+                A port is taken when another claim holds it, or when the daemon can't open it on every interface the way a server would.
+                The person picks what happens then with the computer's <PaperCode>Refuse taken ports</PaperCode> setting:
+            </PaperText>
             <PaperTable>
                 <thead>
                     <tr>
-                        <th>Field</th>
-                        <th>Type</th>
-                        <th>Description</th>
+                        <th>Policy</th>
+                        <th>What happens</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td><PaperCode>name</PaperCode></td>
-                        <td><PaperCode>string</PaperCode></td>
-                        <td>The panel's own name for the port, unique per panel. Lowercase letters, digits and dashes, at most 32.</td>
+                        <td><PaperCode>next-free</PaperCode> (default)</td>
+                        <td>The claim moves to the first free port of the next 100. When all of them are taken, the call is refused.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>label</PaperCode></td>
-                        <td><PaperCode>string</PaperCode></td>
-                        <td>Who holds the port, for people, such as "Game Server (Java)". At most 80 characters. Errors and the computer's Computer Info page show it.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>protocol</PaperCode></td>
-                        <td><PaperCode>"tcp" | "udp" | "tcp+udp"</PaperCode></td>
-                        <td>What the program opens. A port is checked for each protocol it names.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>preferred</PaperCode></td>
-                        <td><PaperCode>number</PaperCode></td>
-                        <td>The request's number, 1 to 65535. Pass the one your program's config holds.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>port</PaperCode></td>
-                        <td><PaperCode>number</PaperCode></td>
-                        <td>On a claim: the number the port has. Write it into your program's config.</td>
+                        <td><PaperCode>refuse</PaperCode></td>
+                        <td>The call is refused, and the error names who holds the port.</td>
                     </tr>
                 </tbody>
             </PaperTable>
-
-            <PaperText preset="subheader" id="taken-ports">Taken ports</PaperText>
-            <PaperText preset="body">
-                A port is taken when another claim holds it, from any panel, or when another program on the computer has it open.
-                By default Paperboard gives the next free port, looking up to 100 past the one asked for. With Refuse taken ports on, in the Ports section of the computer's Computer Info page, claim and prepare throw instead.
-                The error names the port and who has it, such as "Game Server (Java) can't use port 25565: another program on this computer is using it." Show it to the user as it is.
-                Ports below 1024 need administrator rights on most computers, so a claim of one usually fails.
+            <PaperText preset="body" as="p">
+                Show the refusal to the person: it says which port, and why, in their words.
             </PaperText>
+            <PaperTextList>
+                <li><PaperCode>another program on this computer is using it</PaperCode></li>
+                <li><PaperCode>&lt;label&gt; has it</PaperCode>, for another panel's claim</li>
+                <li><PaperCode>this computer only lets administrators open ports below 1024</PaperCode></li>
+                <li><PaperCode>Windows keeps it for itself (it sets ports aside for Hyper-V and WSL), or another program holds it</PaperCode></li>
+            </PaperTextList>
 
-            <PaperText preset="subheader" id="errors">Errors</PaperText>
+            <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
+            <PaperTextList>
+                <li>Claims are kept in <PaperCode>ports.json</PaperCode> in the Paperboard data folder, and survive restarts.</li>
+                <li>A claim stays when the panel is uninstalled and goes when the uninstall deletes the panel's data.</li>
+                <li>Claims are made one at a time on each computer, so two panels claiming at once never get the same number.</li>
+                <li><PaperCode>portSettingsApi.all</PaperCode> and <PaperCode>portSettingsApi.setPolicy</PaperCode> read and change every claim and the policy. They belong to the computer's settings, and a panel's call is refused.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
             <PaperTable>
                 <thead>
                     <tr>
+                        <th>Error</th>
                         <th>Code</th>
-                        <th>Meaning</th>
+                        <th>Cause</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td><PaperCode>CONFLICT</PaperCode></td>
-                        <td>The port is taken and the user's setting refuses to move it, or no port within 100 of it is free.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>NOT_FOUND</PaperCode></td>
-                        <td>prepare named a port the panel has not claimed.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>FORBIDDEN</PaperCode></td>
-                        <td>The appId names another panel than the caller's.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>INVALID_PARAMS</PaperCode></td>
-                        <td>A name, label, protocol or port is not one claim accepts.</td>
-                    </tr>
+                    <tr><td><PaperCode>&lt;label&gt; can't use port &lt;n&gt;: &lt;reason&gt;.</PaperCode></td><td><PaperCode>CONFLICT</PaperCode></td><td>The port is taken and the policy is <PaperCode>refuse</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>&lt;label&gt; can't use port &lt;n&gt; (&lt;reason&gt;), and ports &lt;n+1&gt; to &lt;m&gt; are taken too.</PaperCode></td><td><PaperCode>CONFLICT</PaperCode></td><td>The port and the next 100 are taken.</td></tr>
+                    <tr><td><PaperCode>No port named "&lt;name&gt;" is claimed; claim it first.</PaperCode></td><td><PaperCode>NOT_FOUND</PaperCode></td><td><PaperCode>prepare</PaperCode> before <PaperCode>claim</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>Invalid port name: "&lt;name&gt;"</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>A name outside the rule.</td></tr>
+                    <tr><td><PaperCode>A port needs a label of at most 80 characters</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>An empty or long label.</td></tr>
+                    <tr><td><PaperCode>Invalid protocol: "&lt;value&gt;"</PaperCode>, <PaperCode>Invalid port: &lt;value&gt;</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>A protocol other than the three, or a number outside 1 to 65535.</td></tr>
+                    <tr><td><PaperCode>ports:all is host-only</PaperCode></td><td><PaperCode>FORBIDDEN</PaperCode></td><td>A panel called <PaperCode>portSettingsApi</PaperCode>.</td></tr>
                 </tbody>
             </PaperTable>
-
-            <PaperText preset="subheader" id="behavior">Behavior</PaperText>
-            <PaperText preset="body">
-                claim does not check a port the panel already holds at the same number, because the panel's own program may be using it. Call prepare only while that program is stopped.
-                Claims are kept across restarts of the computer's Paperboard Server. Uninstalling a panel and deleting its data releases its ports; uninstalling it and keeping its data keeps them for a reinstall.
-                A claim reserves a number in Paperboard; it does not open the port. Another program can still take it while yours is stopped, which prepare catches.
-            </PaperText>
         </PaperFlex>
     );
 }

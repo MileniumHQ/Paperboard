@@ -3,184 +3,126 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
+    PaperTextList,
 } from "@mileniumhq/paperui";
 
 export default function PackageApiDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
-            <PaperText preset="header">Package API</PaperText>
-            <PaperText preset="body">
-                packageApi manages installation, verification, and filesystem
-                paths for system tool packages and binaries. Reach for
-                packageApi when downloading precompiled runtimes, game server
-                binaries, or CLI utilities. The package manager tracks download
-                stages, extraction, and verification hashes.
+            <PaperText preset="header" as="h1">packageApi</PaperText>
+            <PaperText preset="body" as="p">
+                packageApi installs runtimes and tools, such as Java, from the Paperboard registry onto the computer the panel runs on.
+                It works on a panel page, in a widget and in a service. Packages are shared by every panel on the computer.
+                Install a package the panel needs instead of asking the person to set it up.
             </PaperText>
 
-            <PaperText preset="body">
-                A panel that manages several game servers can describe runtime
-                requirements per game and version, then resolve those package
-                ids through the same API. Runtimes are shared; each server keeps
-                its own saves, settings and launch configuration. Game Server's
-                Minecraft module uses this boundary for Java.
-            </PaperText>
-
-            <PaperText preset="body">
-                The steamcmd package supplies Valve's bootstrap under bin/ on
-                Linux, macOS and Windows x64. Copy it to a mutable workspace
-                before running it: SteamCMD self-updates beside its executable.
-                Linux requires the host's 32-bit libc (lib32-glibc or
-                libc6-i386). No arm64 SteamCMD platform is advertised.
-                The proton package supplies standalone GE-Proton on Linux x64
-                and arm64, with bin/proton and its relative runtime tree. It
-                does not require the Steam client. These packages are published
-                by Origami's operator updaters; installing them does not add
-                game launch or server management behavior to a panel.
-            </PaperText>
-
-            <PaperText preset="body">
-                The opencode, codex and claude-code packages supply the Agents
-                panel's command line tools, with the executable under bin/
-                (bin/opencode, bin/codex, bin/claude; .exe on Windows). They
-                are the vendors' own unmodified builds, downloaded from the
-                vendors' release hosts and checked against a signed sha256.
-                Linux builds for opencode and claude-code need glibc, and
-                opencode's x64 build is the baseline one that runs without
-                AVX2. Installing a package does not sign anyone in; each tool
-                keeps its own credentials.
-            </PaperText>
-
-            <PaperText preset="body">
-                Tar packages preserve relative symbolic links, including chains
-                and links to later archive members. The daemon checks their full
-                targets before extraction and after recipe moves. Absolute or
-                escaping links, loops, special files, and writes through linked
-                directories fail installation. Extraction warnings or missing
-                members also fail installation instead of publishing a partial
-                package.
-            </PaperText>
-
-            <PaperText preset="subheader" id="overview">
-                Overview
-            </PaperText>
-            <PaperText preset="body">
-                Import packageApi or packages from @mileniumhq/paperapi.
-                Verify package installation state or initiate downloads with
-                stage tracking.
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
             <PaperCode block language="tsx">
-                {`import { packageApi } from "@mileniumhq/paperapi";
+{`// in the service
+import { packageApi, processApi } from "@mileniumhq/paperapi";
 
-// Verify if a package is installed
-const installed = await packageApi.isInstalled("java-25");
-
-if (!installed) {
-    // Download and extract package
-    await packageApi.download("java-25", (progress) => {
-        console.log(progress.stage, progress.percent);
-    });
-}`}
+if (!(await packageApi.isInstalled("java"))) {
+    await packageApi.download("java", (p) => setStatus(\`\${p.stage} \${p.percent}%\`));
+}
+const bin = await packageApi.getPath("java");
+const java = process.platform === "win32" ? \`\${bin}\\\\java.exe\` : \`\${bin}/java\`;
+const result = await processApi.exec(java, ["-version"]);`}
             </PaperCode>
 
-            <PaperText preset="subheader" id="methods-and-signatures">
-                Methods and signatures
-            </PaperText>
-            <PaperText preset="body">
-                The module provides the following tool management methods:
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="api">API</PaperText>
+            <PaperCode block language="tsx">
+{`packageApi.download(packageName: string, onProgress?: (progress: PackageProgress) => void): Promise<string>;
+packageApi.isInstalled(packageName: string, version?: string): Promise<boolean>;
+packageApi.getPath(packageName: string): Promise<string>;
+packageApi.getIndex(): Promise<Record<string, InstalledPackageRecord | string>>;
+packageApi.pendingUpdates(): Promise<PendingPackageUpdate[]>;
 
+interface PackageProgress {
+    stage: "checking" | "downloading" | "verifying" | "extracting" | "completed" | "error";
+    percent: number;
+    bytesLoaded?: number;
+    bytesTotal?: number;
+    message?: string;
+}
+
+interface InstalledPackageRecord {
+    version?: string;
+    installedAt?: string;
+    path?: string;
+    [key: string]: unknown;
+}
+
+interface PendingPackageUpdate {
+    name: string;
+    version: string;
+    /** the caller's processes still running the installed release */
+    blockedBy: Array<{ processId: string; owner: string | null }>;
+    error?: string;
+}`}
+            </PaperCode>
             <PaperTable>
                 <thead>
                     <tr>
-                        <th>Method</th>
-                        <th>Signature</th>
-                        <th>Description</th>
+                        <th>Call</th>
+                        <th>Behavior</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td>
-                            <PaperCode>isInstalled</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>
-                                isInstalled(name, version?):
-                                Promise&lt;boolean&gt;
-                            </PaperCode>
-                        </td>
-                        <td>
-                            Returns true if the tool package exists in the
-                            daemon tool storage.
-                        </td>
+                        <td><PaperCode>download</PaperCode></td>
+                        <td>Installs the registry's current release for this computer's system and processor, or updates to it. Resolves with the package's folder. A release that is already installed resolves at once. The call has no timeout.</td>
                     </tr>
                     <tr>
-                        <td>
-                            <PaperCode>download</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>
-                                download(name, onProgress?):
-                                Promise&lt;string&gt;
-                            </PaperCode>
-                        </td>
-                        <td>
-                            Downloads, verifies, and unpacks the named package.
-                            Returns the binary path.
-                        </td>
+                        <td><PaperCode>isInstalled</PaperCode></td>
+                        <td>True when the package is installed with a <PaperCode>bin</PaperCode> folder. With <PaperCode>version</PaperCode>, also checks that it is that version. <PaperCode>"latest"</PaperCode> means any version.</td>
                     </tr>
                     <tr>
-                        <td>
-                            <PaperCode>getPath</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>
-                                getPath(name): Promise&lt;string&gt;
-                            </PaperCode>
-                        </td>
-                        <td>
-                            Resolves the absolute path to the package binary
-                            executable.
-                        </td>
+                        <td><PaperCode>getPath</PaperCode></td>
+                        <td>The package's <PaperCode>bin</PaperCode> folder, found up to 4 levels down. It returns a path even when the package is not installed, so call <PaperCode>isInstalled</PaperCode> first.</td>
                     </tr>
                     <tr>
-                        <td>
-                            <PaperCode>getIndex</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>
-                                getIndex(): Promise&lt;Record&lt;string,
-                                any&gt;&gt;
-                            </PaperCode>
-                        </td>
-                        <td>
-                            Returns an inventory of installed tool packages and
-                            their versions.
-                        </td>
+                        <td><PaperCode>getIndex</PaperCode></td>
+                        <td>Every installed package, keyed by name.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>pendingUpdates</PaperCode></td>
+                        <td>Updates the caller's own processes hold back. See below.</td>
                     </tr>
                 </tbody>
             </PaperTable>
 
-            <PaperText preset="subheader" id="behavior">
-                Behavior
-            </PaperText>
-            <PaperText preset="body">
-                Downloads dispatch events through stages: checking, downloading,
-                verifying, extracting, and completed. Unpacking is performed
-                inside isolated tool directories managed by the Paperboard
-                daemon.
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="updates">Updates</PaperText>
+            <PaperTextList>
+                <li>A package update is downloaded and verified while the old release keeps running. It replaces the old release only when no process runs from it.</li>
+                <li>Until then, <PaperCode>download</PaperCode> resolves and the update waits. <PaperCode>pendingUpdates</PaperCode> lists it with the caller's processes that hold it back, and only those.</li>
+                <li>Stop those processes, and the next start installs the update before the process runs.</li>
+                <li>A release older than the installed one is refused. Only Paperboard itself can downgrade a package.</li>
+            </PaperTextList>
 
-            <PaperText preset="subheader" id="recipes">
-                Recipes
-            </PaperText>
-            <PaperText preset="body">
-                Query the filesystem path to execute an installed utility
-                binary.
-            </PaperText>
-            <PaperCode block language="tsx">
-                {`const binaryPath = await packageApi.getPath("java-25");
-console.log("Binary location:", binaryPath);`}
-            </PaperCode>
+            <PaperText preset="subheader" as="h2" id="trust">Trust</PaperText>
+            <PaperTextList>
+                <li>The daemon fetches the package's record from the registry it installs panels from, and refuses a release the Paperboard release key did not sign, or whose sha256 does not match the signed one.</li>
+                <li>A release that unpacks without a <PaperCode>bin</PaperCode> folder is removed and refused.</li>
+                <li>Packages live in <PaperCode>packages/&lt;name&gt;</PaperCode> in the Paperboard data folder. Uninstalling a panel leaves them, since other panels may use them.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Error</th>
+                        <th>Cause</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>Install refused for package "&lt;name&gt;": registry record unavailable (&lt;reason&gt;)</PaperCode></td><td>The registry is unreachable, or has no package of that name.</td></tr>
+                    <tr><td><PaperCode>No download available for &lt;name&gt; on &lt;os&gt;-&lt;arch&gt;</PaperCode></td><td>The package has no release for this system, such as <PaperCode>linux-arm64</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>An operation on &lt;name&gt; is already running</PaperCode></td><td>Another install of the same package is running.</td></tr>
+                    <tr><td><PaperCode>Too many concurrent installs</PaperCode></td><td>Eight installs are running.</td></tr>
+                    <tr><td><PaperCode>Package &lt;name&gt; extracted but no usable binary directory was found. Removed partial install.</PaperCode></td><td>The release has no <PaperCode>bin</PaperCode> folder.</td></tr>
+                    <tr><td><PaperCode>Release rollback refused: &lt;version&gt; is not newer than &lt;installed&gt;</PaperCode></td><td>The registry's release is older than the installed one.</td></tr>
+                </tbody>
+            </PaperTable>
         </PaperFlex>
     );
 }

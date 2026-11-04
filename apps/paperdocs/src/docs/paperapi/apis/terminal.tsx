@@ -1,116 +1,100 @@
 import {
     PaperCode,
     PaperFlex,
+    PaperLink,
     PaperTable,
     PaperText,
+    PaperTextList,
 } from "@mileniumhq/paperui";
 
 export default function TerminalApiDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
-            <PaperText preset="header">Terminal API</PaperText>
-            <PaperText preset="body">
-                terminalApi allocates and manages interactive pseudoterminals with keystroke streaming and viewport resizing.
-                Reach for terminalApi when implementing web terminal consoles, interactive debug shells, or SSH sessions.
-                The API connects frontend xterm instances with background pty processes over WebSocket channels.
+            <PaperText preset="header" as="h1">terminalApi</PaperText>
+            <PaperText preset="body" as="p">
+                terminalApi opens an interactive shell on the computer the panel runs on, in a pseudo-terminal the daemon keeps running.
+                It works on a panel page, in a widget and in a service, and pairs with a terminal view such as xterm.js on the page.
+                For a program the panel drives itself, use <PaperLink href="/docs/paperapi/process/">processApi</PaperLink> instead.
             </PaperText>
 
-            <PaperText preset="subheader" id="overview">Overview</PaperText>
-            <PaperText preset="body">
-                Import terminalApi or terminal from @mileniumhq/paperapi.
-                Create a terminal instance using an explicit identifier and subscribe to data events.
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
             <PaperCode block language="tsx">
 {`import { terminalApi } from "@mileniumhq/paperapi";
 
-const termId = "main-shell";
+const id = "weather-shell";
+const stopData = terminalApi.onData(id, (text) => term.write(text));
+const stopExit = terminalApi.onExit(id, (exitCode) => showEnded(exitCode));
 
-// Create a new pseudoterminal
-await terminalApi.create(termId, { cols: 80, rows: 24 });
+if (!(await terminalApi.exists(id))) {
+    await terminalApi.create(id, { cols: term.cols, rows: term.rows });
+    if (!(await terminalApi.exists(id))) throw new Error("The shell did not start; the console has the reason");
+}
 
-// Stream incoming terminal data
-const unsub = terminalApi.onData(termId, (data) => {
-    process.stdout.write(data);
-});
-
-// Write input keystrokes
-await terminalApi.write(termId, "ls -la\\n");`}
+term.onData((keys) => terminalApi.write(id, keys).catch((err) => showError(err.message)));
+term.onResize(({ cols, rows }) => terminalApi.resize(id, cols, rows).catch((err) => showError(err.message)));`}
             </PaperCode>
 
-            <PaperText preset="subheader" id="methods-and-signatures">Methods and signatures</PaperText>
-            <PaperText preset="body">
-                The module provides the following pseudoterminal methods:
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="api">API</PaperText>
+            <PaperCode block language="tsx">
+{`terminalApi.create(id: string, options?: { cols?: number; rows?: number; cwd?: string; env?: Record<string, string> }): Promise<void>;
+terminalApi.exists(id: string): Promise<boolean>;
+terminalApi.write(id: string, data: string): Promise<void>;
+terminalApi.resize(id: string, cols: number, rows: number): Promise<void>;
+terminalApi.destroy(id: string): Promise<void>;
 
+terminalApi.onData(id: string, callback: (text: string) => void): () => void;
+terminalApi.onExit(id: string, callback: (exitCode?: number) => void): () => void;`}
+            </PaperCode>
             <PaperTable>
                 <thead>
                     <tr>
-                        <th>Method</th>
-                        <th>Signature</th>
-                        <th>Description</th>
+                        <th>Call</th>
+                        <th>Behavior</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td><PaperCode>create</PaperCode></td>
-                        <td><PaperCode>create(id, options?): Promise&lt;void&gt;</PaperCode></td>
-                        <td>Allocates a pty child process. Accepts cols, rows, cwd, and env variables.</td>
+                        <td>Starts the shell, 80 by 24 unless <PaperCode>cols</PaperCode> and <PaperCode>rows</PaperCode> say otherwise. It resolves even when the shell could not start, and logs the reason to the console with <PaperCode>[transport] terminal-create &lt;id&gt;</PaperCode>. Check <PaperCode>exists</PaperCode> after it, as the sample does.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>write</PaperCode></td>
-                        <td><PaperCode>write(id, data): Promise&lt;void&gt;</PaperCode></td>
-                        <td>Sends input text or control characters to the terminal stdin. Rejects when the daemon refuses it, for example a session that is gone.</td>
+                        <td>Sends keystrokes as they are, at most 64 KB a call. Rejects with <PaperCode>Terminal "&lt;id&gt;" is not running</PaperCode> once the shell has ended.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>resize</PaperCode></td>
-                        <td><PaperCode>resize(id, cols, rows): Promise&lt;void&gt;</PaperCode></td>
-                        <td>Notifies the pty process of viewport row and column dimension changes. Rejects when the daemon refuses it.</td>
+                        <td>Changes the size the shell sees. A shell that has ended ignores it.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>destroy</PaperCode></td>
-                        <td><PaperCode>destroy(id): Promise&lt;void&gt;</PaperCode></td>
-                        <td>Terminates the pty child process and cleans up daemon socket resources.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>exists</PaperCode></td>
-                        <td><PaperCode>exists(id): Promise&lt;boolean&gt;</PaperCode></td>
-                        <td>Checks whether the specified terminal instance is active.</td>
+                        <td>Ends the shell. It resolves even when that fails, and logs the reason to the console.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>onData</PaperCode></td>
-                        <td><PaperCode>onData(id, callback): () =&gt; void</PaperCode></td>
-                        <td>Subscribes to raw text and ANSI stream output. Returns an unsubscriber.</td>
+                        <td>Subscribes to the output, and attaches the connection to a shell that was already running. Each callback returns the function that unsubscribes.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>onExit</PaperCode></td>
-                        <td><PaperCode>onExit(id, callback): () =&gt; void</PaperCode></td>
-                        <td>Subscribes to terminal session exit events. Returns an unsubscriber.</td>
+                        <td>Calls back with the shell's exit code when it ends.</td>
                     </tr>
                 </tbody>
             </PaperTable>
 
-            <PaperText preset="subheader" id="behavior">Behavior</PaperText>
-            <PaperText preset="body">
-                Terminal identity is supplied as an explicit argument to prevent options objects from clobbering identifiers.
-                Subscriptions are scoped to individual terminal session channels to avoid broadcast overhead.
-            </PaperText>
-            <PaperText preset="body">
-                Every window or service that subscribes with <PaperCode>onData</PaperCode> receives each chunk once, including the one that
-                created the terminal. A subscription follows the id, not one shell: subscribe before <PaperCode>create</PaperCode>, or keep
-                a subscription while a shell exits and is created again, and the new shell streams to it.
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
+            <PaperTextList>
+                <li>The shell is <PaperCode>powershell.exe</PaperCode> on Windows. On macOS it is <PaperCode>/bin/zsh</PaperCode>, then <PaperCode>/bin/bash</PaperCode>, then <PaperCode>/bin/sh</PaperCode>. On Linux it is <PaperCode>$SHELL</PaperCode>, then bash, then <PaperCode>/bin/sh</PaperCode>.</li>
+                <li><PaperCode>cwd</PaperCode> defaults to the home folder of the account running the daemon.</li>
+                <li>The shell keeps running when the page closes and when the daemon restarts. Open the page again, subscribe with <PaperCode>onData</PaperCode>, and it picks up where it was.</li>
+                <li>The id belongs to the panel that created it, at most 128 characters. Another panel's calls with that id are refused.</li>
+                <li><PaperCode>env</PaperCode> follows the same rules as a process: at most 128 entries, and no credential keys. See <PaperLink href="/docs/paperapi/process/#environment">Environment</PaperLink>.</li>
+                <li>A terminal runs whatever the person types with the daemon account's rights. Show it only to the person who owns the computer.</li>
+            </PaperTextList>
 
-            <PaperText preset="subheader" id="recipes">Recipes</PaperText>
-            <PaperText preset="body">
-                Synchronize dimensions when the browser window or terminal container resizes.
+            <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
+            <PaperText preset="body" as="p">
+                <PaperCode>create</PaperCode> and <PaperCode>destroy</PaperCode> never reject. Their failures reach only the console, such as <PaperCode>Process &lt;id&gt; is already running</PaperCode> for a second <PaperCode>create</PaperCode>, <PaperCode>spawn cwd does not exist: &lt;path&gt;</PaperCode>, or a refused credential key in <PaperCode>env</PaperCode>.
+                <PaperCode>write</PaperCode> rejects with <PaperCode>Terminal "&lt;id&gt;" is not running</PaperCode>. <PaperCode>write</PaperCode>, <PaperCode>resize</PaperCode> and <PaperCode>exists</PaperCode> reject with <PaperCode>"&lt;id&gt;" belongs to another panel</PaperCode> (<PaperCode>FORBIDDEN</PaperCode>) for another panel's id.
             </PaperText>
-            <PaperCode block language="tsx">
-{`window.addEventListener("resize", () => {
-    terminalApi
-        .resize("main-shell", terminal.cols, terminal.rows)
-        .catch((err) => terminal.write(\`Resize failed: \${err.message}\\r\\n\`));
-});`}
-            </PaperCode>
         </PaperFlex>
     );
 }

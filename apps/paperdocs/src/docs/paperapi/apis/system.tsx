@@ -3,237 +3,125 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
+    PaperTextList,
 } from "@mileniumhq/paperui";
 
 export default function SystemApiDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
-            <PaperText preset="header">System API</PaperText>
-            <PaperText preset="body">
-                systemApi queries host operating system metrics and GPUs, triggers notifications, captures screenshots, and manages audio levels.
-                Reach for systemApi when displaying device diagnostics, alerting users of background tasks, or reading host IP addresses.
-                The API communicates directly with host daemon endpoints scoped to the active computer.
+            <PaperText preset="header" as="h1">systemApi</PaperText>
+            <PaperText preset="body" as="p">
+                systemApi describes the computer the panel runs on: its system, its address on the network, and its graphics cards.
+                It works on a panel page, in a widget and in a service, and answers for the computer the daemon runs on, not the one showing the page.
+                Use it to pick the right download, show where a server can be reached, or check a GPU before starting a model.
             </PaperText>
 
-            <PaperText preset="subheader" id="overview">Overview</PaperText>
-            <PaperText preset="body">
-                Import systemApi or system from @mileniumhq/paperapi.
-                Query system details or trigger desktop alerts with straightforward async calls.
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
             <PaperCode block language="tsx">
 {`import { systemApi } from "@mileniumhq/paperapi";
 
-// Retrieve host system information
 const info = await systemApi.getInfo();
-console.log(info.hostname, info.os, info.arch);
+const address = \`\${info.ip}:25565\`;
 
-// Dispatch a desktop notification
-await systemApi.notify("Task completed", "Backup archive created successfully.");`}
+const report = await systemApi.getGpus();
+const vram = Math.max(0, ...report.gpus.map((gpu) => gpu.memoryTotalBytes ?? 0));
+if (report.errors.length > 0) {
+    setNotice(\`The GPU list may be incomplete: \${report.errors.join("; ")}\`);
+}`}
             </PaperCode>
 
-            <PaperText preset="subheader" id="methods-and-signatures">Methods and signatures</PaperText>
-            <PaperText preset="body">
-                The module provides the following system functions:
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="api">API</PaperText>
+            <PaperCode block language="tsx">
+{`systemApi.getInfo(): Promise<SystemInfo>;
+systemApi.getLocalIP(): Promise<string>;
+systemApi.getGpus(): Promise<GpuReport>;
+/** Paperboard only */
+systemApi.getUsage(computerId?: string): Promise<UsageReport>;
 
+interface SystemInfo {
+    /** "papercrane" */
+    service: string;
+    /** the daemon's version */
+    version: string;
+    hostname: string;
+    /** "linux", "macos" or "windows" */
+    os: string;
+    osVersion?: string;
+    /** Linux: the distribution, such as "arch" and "Arch Linux" */
+    distroId?: string;
+    distroName?: string;
+    /** "x64" or "arm64" */
+    arch: string;
+    /** the same address getLocalIP returns */
+    ip: string;
+    /** the account the daemon runs as */
+    username?: string;
+}
+
+interface GpuReport {
+    gpus: GpuInfo[];
+    /** probes that failed; when not empty, gpus may be incomplete */
+    errors: string[];
+}
+
+interface GpuInfo {
+    name: string;
+    vendor: "nvidia" | "amd" | "intel" | "apple" | "other";
+    /** dedicated memory, or system memory when unifiedMemory is true */
+    memoryTotalBytes?: number;
+    memoryFreeBytes?: number;
+    /** the GPU shares system memory, as on Apple silicon */
+    unifiedMemory?: boolean;
+    driver?: string;
+    /** where the facts came from: "nvidia-smi", "sysfs", "system_profiler" or "registry" */
+    source: string;
+}`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                An example <PaperCode>getInfo</PaperCode> answer:
+            </PaperText>
+            <PaperCode block language="json">
+{`{
+    "service": "papercrane",
+    "version": "0.3.0",
+    "hostname": "workstation",
+    "os": "linux",
+    "osVersion": "rolling",
+    "distroId": "arch",
+    "distroName": "Arch Linux",
+    "arch": "x64",
+    "ip": "192.168.1.20",
+    "username": "alex"
+}`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
+            <PaperTextList>
+                <li><PaperCode>getLocalIP</PaperCode> returns the computer's first private IPv4 address, such as <PaperCode>192.168.1.20</PaperCode>. Without one, it returns the first other external IPv4 address, and without that, <PaperCode>127.0.0.1</PaperCode>.</li>
+                <li>Other devices on the same network reach the computer at that address. Devices outside it need the router's public address and a forwarded port.</li>
+                <li><PaperCode>getGpus</PaperCode> asks the system each time. A probe that fails, such as a missing <PaperCode>nvidia-smi</PaperCode>, adds to <PaperCode>errors</PaperCode> instead of failing the call.</li>
+                <li><PaperCode>getUsage</PaperCode> reports CPU, memory, disk and network use split by panel, for Paperboard's computer page. A panel's call is refused with <PaperCode>system:usage is host-only</PaperCode> (<PaperCode>FORBIDDEN</PaperCode>).</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="unavailable-methods">Unavailable methods</PaperText>
+            <PaperText preset="body" as="p">
+                The SDK declares five more methods that the daemon does not answer. Each one rejects with <PaperCode>NOT_FOUND</PaperCode>, so don't build on them.
+            </PaperText>
             <PaperTable>
                 <thead>
                     <tr>
                         <th>Method</th>
-                        <th>Signature</th>
-                        <th>Description</th>
+                        <th>Error</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td><PaperCode>getInfo</PaperCode></td>
-                        <td><PaperCode>getInfo(): Promise&lt;SystemInfo&gt;</PaperCode></td>
-                        <td>Returns host operating system details, hostname, distro, architecture, and username.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>getLocalIP</PaperCode></td>
-                        <td><PaperCode>getLocalIP(): Promise&lt;string&gt;</PaperCode></td>
-                        <td>Resolves the primary LAN IPv4 address of the host machine.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>getGpus</PaperCode></td>
-                        <td><PaperCode>getGpus(): Promise&lt;GpuReport&gt;</PaperCode></td>
-                        <td>Lists the host's GPUs with their memory, when the OS reports it. See <PaperCode>GPU inventory</PaperCode> below.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>getUsage</PaperCode></td>
-                        <td><PaperCode>getUsage(computerId?): Promise&lt;UsageReport&gt;</PaperCode></td>
-                        <td>Reports a computer's CPU and memory use, split by panel. See <PaperCode>Usage</PaperCode> below.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>notify</PaperCode></td>
-                        <td><PaperCode>notify(title, message): Promise&lt;unknown&gt;</PaperCode></td>
-                        <td>Dispatches a desktop notification through the host notification daemon.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>screenshot</PaperCode></td>
-                        <td><PaperCode>screenshot(savePath): Promise&lt;string&gt;</PaperCode></td>
-                        <td>Captures a screen image and writes it to the specified file path.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>setVolume</PaperCode></td>
-                        <td><PaperCode>setVolume(volume): Promise&lt;number&gt;</PaperCode></td>
-                        <td>Adjusts output audio volume (0 to 100).</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>setMuted</PaperCode></td>
-                        <td><PaperCode>setMuted(muted): Promise&lt;boolean&gt;</PaperCode></td>
-                        <td>Mutes or unmutes host audio output.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>beep</PaperCode></td>
-                        <td><PaperCode>beep(): Promise&lt;unknown&gt;</PaperCode></td>
-                        <td>Plays an alert bell tone through the host audio output.</td>
-                    </tr>
+                    <tr><td><PaperCode>notify(title, message)</PaperCode></td><td><PaperCode>Unknown action: system:notify</PaperCode></td></tr>
+                    <tr><td><PaperCode>screenshot(savePath)</PaperCode></td><td><PaperCode>Unknown action: system:screenshot</PaperCode></td></tr>
+                    <tr><td><PaperCode>setVolume(volume)</PaperCode></td><td><PaperCode>Unknown action: system:set-volume</PaperCode></td></tr>
+                    <tr><td><PaperCode>setMuted(muted)</PaperCode></td><td><PaperCode>Unknown action: system:set-muted</PaperCode></td></tr>
+                    <tr><td><PaperCode>beep()</PaperCode></td><td><PaperCode>Unknown action: system:beep</PaperCode></td></tr>
                 </tbody>
             </PaperTable>
-
-            <PaperText preset="subheader" id="gpu-inventory">GPU inventory</PaperText>
-            <PaperText preset="body">
-                getGpus reads the GPUs of the computer the transport is scoped to. Each probe is read-only and has a five-second limit.
-                When a probe fails, its message goes in errors and the list may be incomplete. An empty gpus array with no errors means the host has no GPU to report.
-                Treat those two cases differently: "could not look" is not "nothing there".
-            </PaperText>
-            <PaperCode block language="tsx">
-{`interface GpuReport {
-    gpus: GpuInfo[];
-    errors: string[]; // failed probes; non-empty means gpus may be incomplete
-}
-
-interface GpuInfo {
-    name: string;                  // "Radeon RX 7700 XT / 7800 XT"
-    vendor: "nvidia" | "amd" | "intel" | "apple" | "other";
-    memoryTotalBytes?: number;     // absent when the OS does not say
-    memoryFreeBytes?: number;
-    unifiedMemory?: boolean;       // true on Apple Silicon: memory is system RAM
-    driver?: string;
-    source: string;                // "nvidia-smi" | "sysfs" | "system_profiler" | "registry"
-}`}
-            </PaperCode>
-            <PaperTable>
-                <thead>
-                    <tr>
-                        <th>Host</th>
-                        <th>Source</th>
-                        <th>Memory</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>Linux</td>
-                        <td><PaperCode>nvidia-smi</PaperCode> for NVIDIA, then <PaperCode>/sys/class/drm</PaperCode> for everything else. Names come from <PaperCode>pci.ids</PaperCode>.</td>
-                        <td>Total and free for NVIDIA and AMD (amdgpu). Intel integrated graphics report none.</td>
-                    </tr>
-                    <tr>
-                        <td>macOS</td>
-                        <td><PaperCode>system_profiler SPDisplaysDataType</PaperCode></td>
-                        <td>Apple Silicon reports system RAM with unifiedMemory. Discrete GPUs report their VRAM.</td>
-                    </tr>
-                    <tr>
-                        <td>Windows</td>
-                        <td><PaperCode>nvidia-smi</PaperCode> for NVIDIA, then the display adapter registry class</td>
-                        <td>Total from the 64-bit <PaperCode>HardwareInformation.qwMemorySize</PaperCode>, which has no 4 GiB cap. Free memory comes only from nvidia-smi.</td>
-                    </tr>
-                </tbody>
-            </PaperTable>
-            <PaperCode block language="tsx">
-{`const { gpus, errors } = await systemApi.getGpus();
-const best = gpus
-    .filter((gpu) => gpu.memoryTotalBytes)
-    .sort((a, b) => b.memoryTotalBytes! - a.memoryTotalBytes!)[0];
-
-if (best) {
-    console.log(\`\${best.name}: \${(best.memoryTotalBytes! / 2 ** 30).toFixed(1)} GiB\`);
-} else if (errors.length > 0) {
-    console.warn("GPU inventory unavailable:", errors);
-} else {
-    console.log("No GPU reported; models will run on the CPU");
-}`}
-            </PaperCode>
-
-            <PaperText preset="subheader" id="usage">Usage</PaperText>
-            <PaperText preset="body">
-                getUsage reports how a computer's CPU and memory are being used, and by whom: Paperboard itself, each panel, and everything else.
-                It also reports the disk holding Paperboard's data, network traffic, and uptime.
-                It is for the Paperboard app. A panel's scoped token is refused.
-                CPU is measured between two readings, so cpu is null, and each group's cpuPercent is null, until an interval has been measured.
-            </PaperText>
-            <PaperCode block language="tsx">
-{`interface UsageReport {
-    sampledAt: number;
-    memory: { totalBytes: number; availableBytes: number; otherBytes: number };
-    cpu: { cores: number; idlePercent: number; otherPercent: number } | null;
-    groups: UsageGroup[];
-    disk?: { totalBytes: number; freeBytes: number } | null;
-    network?: { receivePerSecond: number; sendPerSecond: number } | null;
-    uptimeSeconds?: number;
-}
-
-interface UsageGroup {
-    id: string;
-    kind: "paperboard" | "panel";
-    memoryBytes: number;
-    cpuPercent: number | null;
-}`}
-            </PaperCode>
-            <PaperTable>
-                <thead>
-                    <tr>
-                        <th>Field</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><PaperCode>memory.otherBytes</PaperCode></td>
-                        <td>Memory in use by everything that is not Paperboard or a panel.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>cpu.idlePercent</PaperCode>, <PaperCode>cpu.otherPercent</PaperCode></td>
-                        <td>Shares of the whole computer, every core together, from 0 to 100.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>disk</PaperCode></td>
-                        <td>The drive holding Paperboard's data. null when the computer can't read it.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>network</PaperCode></td>
-                        <td>Bytes per second received and sent over the physical network adapters, measured between two readings. null until an interval has been measured, after a counter reset, or when the computer can't read it.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>uptimeSeconds</PaperCode></td>
-                        <td>How long the computer has been running.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>groups[].id</PaperCode></td>
-                        <td>paperboard, or a panel id.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>groups[].cpuPercent</PaperCode></td>
-                        <td>Share of the whole computer from 0 to 100, or null until measured.</td>
-                    </tr>
-                </tbody>
-            </PaperTable>
-
-            <PaperText preset="subheader" id="behavior">Behavior</PaperText>
-            <PaperText preset="body">
-                System operations run against the computer to which the active transport session is scoped.
-                Notification requests fall back gracefully if notification daemons are unavailable on headless hosts.
-            </PaperText>
-
-            <PaperText preset="subheader" id="recipes">Recipes</PaperText>
-            <PaperText preset="body">
-                Read host network IP to configure remote game servers or local web listeners.
-            </PaperText>
-            <PaperCode block language="tsx">
-{`const localIp = await systemApi.getLocalIP();
-console.log(\`Connect client to http://\${localIp}:8080\`);`}
-            </PaperCode>
         </PaperFlex>
     );
 }

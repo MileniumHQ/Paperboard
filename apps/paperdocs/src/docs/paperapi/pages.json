@@ -1,0 +1,97 @@
+{
+    "subsections": {
+        "general": {
+            "name": "General",
+            "icon": "info",
+            "pages": {
+                "overview": {
+                    "name": "Overview",
+                    "index": 0
+                },
+                "connection": {
+                    "name": "Connection and identity",
+                    "index": 1
+                },
+                "cli": {
+                    "name": "PaperAPI CLI",
+                    "index": 2
+                },
+                "manifest": {
+                    "name": "Panel manifest",
+                    "index": 3
+                },
+                "store-listing": {
+                    "name": "Store listing",
+                    "index": 4
+                },
+                "widgets": {
+                    "name": "Widgets",
+                    "index": 5
+                },
+                "tutorials": {
+                    "name": "Tutorials",
+                    "index": 6
+                }
+            }
+        },
+        "actions": {
+            "name": "Actions",
+            "icon": "bolt",
+            "sort": "alphabetical",
+            "pages": {
+                "actions": {
+                    "name": "Actions API"
+                },
+                "bridge": {
+                    "name": "Bridge API"
+                },
+                "service": {
+                    "name": "Service API"
+                }
+            }
+        },
+        "apis": {
+            "name": "APIs",
+            "icon": "code",
+            "sort": "alphabetical",
+            "pages": {
+                "backups": {
+                    "name": "Backups API"
+                },
+                "config": {
+                    "name": "Config API"
+                },
+                "file": {
+                    "name": "File API"
+                },
+                "package": {
+                    "name": "Package API"
+                },
+                "panels": {
+                    "name": "Panels API"
+                },
+                "permissions": {
+                    "name": "Permissions"
+                },
+                "ports": {
+                    "name": "Ports API"
+                },
+                "process": {
+                    "name": "Process API"
+                },
+                "secrets": {
+                    "name": "Secrets API"
+                },
+                "shell": {
+                    "name": "Shell API"
+                },
+                "system": {
+                    "name": "System API"
+                },
+                "terminal": {
+                    "name": "Terminal API"
+                }
+            }
+        }
+    }
+}

@@ -1,255 +1,394 @@
 import {
     PaperCode,
     PaperFlex,
+    PaperLink,
     PaperTable,
     PaperText,
+    PaperTextList,
 } from "@mileniumhq/paperui";
 
 export default function ActionsApiDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
-            <PaperText preset="header">Actions API</PaperText>
-            <PaperText preset="body">
-                actionsApi exposes an inter-panel RPC registry and typed event dispatcher across Paperboard panels.
-                Reach for actionsApi when registering callable methods, emitting triggers for automation flows, or invoking peer panel services.
-                Every action call carries explicit panel identity and validates schemas at the boundary.
+            <PaperText preset="header" as="h1">actionsApi</PaperText>
+            <PaperText preset="body" as="p">
+                actionsApi registers a panel's actions, calls other panels' actions, and sends events and triggers between panels.
+                An action with a schema becomes a block in the Actions panel's flow builder and a tool the Agents panel can call.
+                It works in every context, and most panels register their actions from the service through <PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink>.
             </PaperText>
 
-            <PaperText preset="subheader" id="overview">Overview</PaperText>
-            <PaperText preset="body">
-                Import actionsApi or its alias actions from @mileniumhq/paperapi.
-                Register RPC handlers within backend services and invoke them from frontend interfaces or automation flows.
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
             <PaperCode block language="tsx">
 {`import { actionsApi } from "@mileniumhq/paperapi";
 
-// Call an action registered on a target panel
-const result = await actionsApi.call<string>(
-    "dev.paperboard.terminal",
-    "executeCommand",
-    { command: "uptime" }
-);`}
+// call another panel's action, from a page or a service
+const forecast = await actionsApi.call<{ high: number; low: number }>(
+    "dev.example.weather",
+    "forecast",
+    { city: "Lisbon" },
+);
+
+// hear another panel's trigger
+const stop = actionsApi.onTrigger("dev.example.weather", "storm-warning", (output) => {
+    console.log("Storm warning", output);
+});`}
             </PaperCode>
 
-            <PaperText preset="subheader" id="methods-and-signatures">Methods and signatures</PaperText>
-            <PaperText preset="body">
-                The module exports the following registry and execution functions:
-            </PaperText>
+            <PaperText preset="subheader" as="h2" id="calling">Calling</PaperText>
+            <PaperCode block language="tsx">
+{`actionsApi.call<T = unknown>(
+    targetPanel: string,
+    actionName: string,
+    inputs?: any,
+    options?: ActionCallOptions,
+): Promise<T>;
 
+interface ActionCallOptions {
+    /** default 30000; at most 60000; null waits with no deadline */
+    timeoutMs?: number | null;
+    /** every other field reaches the handler as its options argument */
+    [key: string]: unknown;
+}`}
+            </PaperCode>
+            <PaperTextList>
+                <li>Resolves with what the handler returned, and rejects with the message the handler threw.</li>
+                <li>Any panel can call any other panel's action, except one whose schema sets <PaperCode>internal</PaperCode>: those answer only their own panel.</li>
+                <li>Use <PaperCode>timeoutMs: null</PaperCode> for work that runs longer than a minute, such as installing a runtime. A caller may have at most 1000 calls waiting at once.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="definitions">Definitions</PaperText>
+            <PaperText preset="body" as="p">
+                An action is an <PaperCode>ActionDefinition</PaperCode>: a schema that describes the block, and a <PaperCode>run</PaperCode> function, or a <PaperCode>listen</PaperCode> function for an action that fires.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`actionsApi.register(
+    actionOrName: string | ActionDefinition,
+    handler?: (inputs: any, options?: Record<string, unknown>) => any,
+    panelId?: string,
+    options?: RegisterOptions,
+): Promise<void>;
+
+actionsApi.registerMultiple(
+    actions: ActionDefinition[] | Record<string, (inputs: any, options?: Record<string, unknown>) => any>,
+    panelId?: string,
+): Promise<void>;
+
+actionsApi.unregister(actionName: string, panelId?: string): Promise<void>;
+
+/** returns def; fills template from writtenOut */
+actionsApi.defineAction<TInputs, TOutput>(def: ActionDefinition<TInputs, TOutput>): ActionDefinition<TInputs, TOutput>;
+
+interface RegisterOptions {
+    internal?: boolean;
+    name?: string;
+    description?: string;
+    /** registers into a project, as "project/action" */
+    project?: string;
+}`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                The definition form validates the definition, checks each call's inputs against their limits, then calls <PaperCode>run({"{ panelId }"}, inputs)</PaperCode>.
+                The name form registers a plain handler with no schema, or with the small schema <PaperCode>options</PaperCode> describes. It suits actions a panel's own pages call.
+                <PaperCode>panelId</PaperCode> defaults to the current panel.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`await actionsApi.register({
+    id: "forecast",
+    name: "Get forecast",
+    description: "Returns today's high and low for a city",
+    template: "Get the forecast for {city}",
+    category: "Forecasts",
+    icon: "partly_cloudy_day",
+    inputs: {
+        city: { type: "string", label: "City", placeholder: "City", maxLength: 64 },
+        days: { type: "number", label: "Days", placeholder: "Number", default: 1, min: 1, max: 7, integer: true },
+    },
+    output: "object",
+    outputFields: { high: "number", low: "number" },
+    run: async (_ctx, inputs: { city: string; days: number }) => fetchForecast(inputs.city, inputs.days),
+});`}
+            </PaperCode>
             <PaperTable>
                 <thead>
                     <tr>
-                        <th>Method</th>
-                        <th>Signature</th>
-                        <th>Description</th>
+                        <th>Field</th>
+                        <th>Type</th>
+                        <th>What it does</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>id</PaperCode></td><td><PaperCode>string</PaperCode></td><td>Required. The name the action is called by, at most 256 characters. A slash makes it a project's action, <PaperCode>project/action</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>name</PaperCode></td><td><PaperCode>string</PaperCode></td><td>Required. The block's title in the library.</td></tr>
+                    <tr><td><PaperCode>description</PaperCode></td><td><PaperCode>string</PaperCode></td><td>Required. What the action does, for the library and for agents.</td></tr>
+                    <tr><td><PaperCode>template</PaperCode>, <PaperCode>writtenOut</PaperCode></td><td><PaperCode>string</PaperCode></td><td>The sentence the block shows, with each <PaperCode>{"{input}"}</PaperCode> replaced by that input's field. Either one fills the other. Without one, the block shows its name followed by its inputs.</td></tr>
+                    <tr><td><PaperCode>category</PaperCode></td><td><PaperCode>string | ActionCategoryDefinition</PaperCode></td><td>The section of the library the block sits in. Actions with none go under <PaperCode>General</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>icon</PaperCode></td><td><PaperCode>string</PaperCode></td><td>A Material Symbols name for the block.</td></tr>
+                    <tr><td><PaperCode>inputs</PaperCode></td><td><PaperCode>Record&lt;string, ActionParamDefinition&gt;</PaperCode></td><td>The values the block asks for, keyed by the name <PaperCode>run</PaperCode> reads. See <PaperLink href="/docs/paperapi/actions/#inputs">Inputs</PaperLink>.</td></tr>
+                    <tr><td><PaperCode>output</PaperCode></td><td><PaperCode>DataType | {"{ type, label?, description? }"}</PaperCode></td><td>The type of what <PaperCode>run</PaperCode> returns, or of what an event action fires.</td></tr>
+                    <tr><td><PaperCode>outputFields</PaperCode></td><td><PaperCode>Record&lt;string, DataType | ActionOutputFieldDefinition&gt;</PaperCode></td><td>Named fields of an object output. The flow builder offers each one as a typed variable.</td></tr>
+                    <tr><td><PaperCode>internal</PaperCode></td><td><PaperCode>boolean</PaperCode></td><td>Out of the library and the Agents panel, and refused to other panels. For calls between a panel's own pages and service.</td></tr>
+                    <tr><td><PaperCode>hidden</PaperCode></td><td><PaperCode>boolean</PaperCode></td><td>Out of the library, but callable by any panel and offered to the Agents panel. For actions too involved to be a block.</td></tr>
+                    <tr><td><PaperCode>deprecated</PaperCode></td><td><PaperCode>string</PaperCode></td><td>Still runs, but the library stops offering it and every placed block shows this text. Say what to use instead.</td></tr>
+                    <tr><td><PaperCode>match</PaperCode></td><td><PaperCode>ActionMatchDefinition | ActionMatchDefinition[]</PaperCode></td><td>Event actions only. See <PaperLink href="/docs/paperapi/actions/#matching">Matching</PaperLink>.</td></tr>
+                    <tr><td><PaperCode>quick</PaperCode></td><td><PaperCode>boolean</PaperCode></td><td>Kept in the registry. No part of Paperboard reads it.</td></tr>
+                    <tr><td><PaperCode>run</PaperCode></td><td><PaperCode>(ctx, inputs) =&gt; TOutput | Promise&lt;TOutput&gt;</PaperCode></td><td>Runs on a call. Its return value is the call's result.</td></tr>
+                    <tr><td><PaperCode>listen</PaperCode></td><td><PaperCode>(ctx, emit: (output) =&gt; void) =&gt; () =&gt; void</PaperCode></td><td>Makes an event action: called once at registration, and each <PaperCode>emit(output)</PaperCode> fires the action as a trigger.</td></tr>
+                </tbody>
+            </PaperTable>
+            <PaperText preset="body" as="p">
+                An action with no <PaperCode>run</PaperCode> is an event action: the SDK sets <PaperCode>eventOnly</PaperCode> on its schema, the library shows it as a trigger, and a call to it rejects with <PaperCode>Action "&lt;id&gt;" fires as an event and is not callable</PaperCode>.
+                The SDK also sets <PaperCode>types</PaperCode> to every custom type the schema names.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h3" id="inputs">Inputs</PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Type</th>
+                        <th>What it does</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>type</PaperCode></td><td><PaperCode>DataType</PaperCode></td><td>Required. <PaperCode>string</PaperCode>, <PaperCode>number</PaperCode>, <PaperCode>boolean</PaperCode>, <PaperCode>object</PaperCode>, <PaperCode>file</PaperCode>, <PaperCode>void</PaperCode>, <PaperCode>any</PaperCode>, a custom type id, or <PaperCode>list&lt;type&gt;</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>label</PaperCode></td><td><PaperCode>string</PaperCode></td><td>Required. The field's name on the block, and the name in limit errors.</td></tr>
+                    <tr><td><PaperCode>placeholder</PaperCode></td><td><PaperCode>string</PaperCode></td><td>The empty field's text: the kind of value, such as <PaperCode>Text</PaperCode> or <PaperCode>Channel ID</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>description</PaperCode></td><td><PaperCode>string</PaperCode></td><td>More about the value.</td></tr>
+                    <tr><td><PaperCode>default</PaperCode></td><td><PaperCode>any</PaperCode></td><td>The value a new block starts with.</td></tr>
+                    <tr><td><PaperCode>required</PaperCode>, <PaperCode>optional</PaperCode></td><td><PaperCode>boolean</PaperCode></td><td>For the flow editor. The SDK does not refuse a call that leaves a required input empty, so check it in <PaperCode>run</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>options</PaperCode></td><td><PaperCode>{"{ label: string; value: any }[]"}</PaperCode></td><td>Makes the field a dropdown.</td></tr>
+                    <tr><td><PaperCode>allowEmpty</PaperCode>, <PaperCode>emptyLabel</PaperCode></td><td><PaperCode>boolean</PaperCode>, <PaperCode>string</PaperCode></td><td>Adds an unselected entry to the dropdown, named <PaperCode>emptyLabel</PaperCode>. On a match input it means any value.</td></tr>
+                    <tr><td><PaperCode>multiline</PaperCode></td><td><PaperCode>boolean</PaperCode></td><td>A wrapping field for long text.</td></tr>
+                    <tr><td><PaperCode>typeName</PaperCode></td><td><PaperCode>string</PaperCode></td><td>The type badge's text, in place of the type id.</td></tr>
+                    <tr><td><PaperCode>min</PaperCode>, <PaperCode>max</PaperCode>, <PaperCode>integer</PaperCode></td><td><PaperCode>number</PaperCode>, <PaperCode>boolean</PaperCode></td><td>Limits on a number. Any of them makes the value a number.</td></tr>
+                    <tr><td><PaperCode>maxLength</PaperCode></td><td><PaperCode>number</PaperCode></td><td>Most characters in a text value.</td></tr>
+                    <tr><td><PaperCode>maxItems</PaperCode></td><td><PaperCode>number</PaperCode></td><td>Most items in a list. The other limits apply to each item.</td></tr>
+                </tbody>
+            </PaperTable>
+            <PaperText preset="body" as="p">
+                The flow editor shows a broken limit on the block before the flow runs, and the SDK refuses a call that breaks one before <PaperCode>run</PaperCode> starts.
+                An empty value breaks no limit. The errors name the input by its label: <PaperCode>"Days" must be a number</PaperCode>, <PaperCode>must be a whole number</PaperCode>, <PaperCode>must be at least 1</PaperCode>, <PaperCode>must be at most 7</PaperCode>, <PaperCode>"City" holds at most 64 characters (it has 70)</PaperCode>, <PaperCode>holds at most 5 items (it has 6)</PaperCode>.
+                The same check is exported as <PaperCode>checkActionInput(def, value)</PaperCode>, which returns the sentence or <PaperCode>undefined</PaperCode>.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h3" id="categories">Categories</PaperText>
+            <PaperCode block language="tsx">
+{`interface ActionCategoryDefinition {
+    name: string;
+    /** a Material Symbols name for the section */
+    icon?: string;
+    /** lower sorts first; categories without one sort by name after */
+    order?: number;
+}`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                Give <PaperCode>category</PaperCode> a string to name the section only, or the object for its icon and order.
+                With <PaperCode>definePanelService</PaperCode>, list the objects once in its <PaperCode>categories</PaperCode> option and use the names in each action.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h3" id="types">Types</PaperText>
+            <PaperCode block language="tsx">
+{`actionsApi.defineType(def: CustomTypeDefinition): CustomTypeDefinition;
+actionsApi.listTypes(): CustomTypeDefinition[];
+actionsApi.isTypeCompatible(outputType: DataType, inputType: DataType): boolean;
+
+interface CustomTypeDefinition {
+    id: string;
+    /** what the flow builder calls values of this type, such as "Channel" */
+    name: string;
+    description?: string;
+    icon?: string;
+    /** the primitive it is stored as */
+    base: "string" | "number" | "boolean" | "object" | "file" | "void" | "any";
+    /** the field shown when the value becomes text */
+    defaultField?: string;
+    /** how the value becomes text; stays in this program */
+    toString?: (value: any) => string;
+    fields?: Record<string, { type: DataType; label?: string; description?: string; optional?: boolean }>;
+}`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                A custom type lets the flow builder connect only matching values, and offer an object's fields as variables.
+                Types live in the program that defines them: define them before registering the actions that name them, and the SDK copies each one, without <PaperCode>toString</PaperCode>, into those actions' schemas.
+                <PaperCode>listTypes</PaperCode> and <PaperCode>isTypeCompatible</PaperCode> see only this program's types. A type is compatible with its <PaperCode>base</PaperCode>, <PaperCode>any</PaperCode> matches every type, and <PaperCode>list&lt;a&gt;</PaperCode> matches <PaperCode>list&lt;b&gt;</PaperCode> when <PaperCode>a</PaperCode> matches <PaperCode>b</PaperCode>.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h3" id="matching">Matching</PaperText>
+            <PaperCode block language="tsx">
+{`interface ActionMatchDefinition {
+    /** the payload field to compare, dotted paths allowed; "$" is the whole payload */
+    field: string;
+    /** the input whose value the field must equal */
+    input: string;
+}`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                Without <PaperCode>match</PaperCode>, an event action starts every flow built on it. With rules, a flow starts only when every rule holds: the payload's <PaperCode>field</PaperCode> equals the value the flow's block set for <PaperCode>input</PaperCode>.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h3" id="definition-rules">Definition rules</PaperText>
+            <PaperText preset="body" as="p">
+                <PaperCode>register</PaperCode> throws before anything is sent when a definition breaks one. <PaperCode>validateActionDefinition(def)</PaperCode> runs the same check.
+            </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Error</th>
+                        <th>Cause</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>An action definition requires an id</PaperCode></td><td>No <PaperCode>id</PaperCode>, or an empty one.</td></tr>
+                    <tr><td><PaperCode>declares both run and listen; an action either executes or fires, never both</PaperCode></td><td>Both functions.</td></tr>
+                    <tr><td><PaperCode>declares match rules but is callable</PaperCode></td><td><PaperCode>match</PaperCode> with <PaperCode>run</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>declares a match rule without a payload field</PaperCode></td><td>An empty <PaperCode>field</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>declares a match on undeclared input "&lt;key&gt;"</PaperCode></td><td>A rule's <PaperCode>input</PaperCode> is not in <PaperCode>inputs</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>input "&lt;key&gt;" declares a min that is not a number</PaperCode></td><td>A <PaperCode>min</PaperCode> or <PaperCode>max</PaperCode> that is not a finite number.</td></tr>
+                    <tr><td><PaperCode>input "&lt;key&gt;" declares a maxLength that is not a whole number</PaperCode></td><td>A negative or fractional <PaperCode>maxLength</PaperCode> or <PaperCode>maxItems</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>input "&lt;key&gt;" declares a min above its max</PaperCode></td><td><PaperCode>min</PaperCode> over <PaperCode>max</PaperCode>.</td></tr>
+                </tbody>
+            </PaperTable>
+
+            <PaperText preset="subheader" as="h2" id="events-and-triggers">Events and triggers</PaperText>
+            <PaperCode block language="tsx">
+{`actionsApi.emit(eventName: string, payload?: unknown, panelId?: string): Promise<void>;
+actionsApi.emitTrigger<T>(triggerId: string, output: T, panelId?: string): Promise<void>;
+
+actionsApi.on(event: string, callback: (payload: any) => void): () => void;
+actionsApi.on(panelId: string, event: string, callback: (payload: any) => void): () => void;
+
+actionsApi.onTrigger<T>(trigger: string, callback: (output: T, event: TriggerEventPayload<T>) => void): () => void;
+actionsApi.onTrigger<T>(panelId: string, trigger: string, callback: (output: T, event: TriggerEventPayload<T>) => void): () => void;
+
+interface TriggerEventPayload<T> {
+    panelId: string;
+    trigger: string;
+    output: T;
+}`}
+            </PaperCode>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Kind</th>
+                        <th>Who hears it</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td><PaperCode>call</PaperCode></td>
-                        <td><PaperCode>call&lt;T&gt;(targetPanel, actionName, inputs?, options?): Promise&lt;T&gt;</PaperCode></td>
-                        <td>Calls an RPC action registered on a target panel and resolves its returned value. <PaperCode>options.timeoutMs</PaperCode> overrides the 30 s default (numeric up to 60 s, or <PaperCode>null</PaperCode> to wait for long work).</td>
+                        <td>Event (<PaperCode>emit</PaperCode>)</td>
+                        <td>Every page and service on this computer subscribed with <PaperCode>on</PaperCode> to that panel and event. The payload arrives as sent. Bridges use the <PaperCode>__stateChanged</PaperCode> event.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>register</PaperCode></td>
-                        <td><PaperCode>register(actionOrName, handler?, panelId?, options?): Promise&lt;void&gt;</PaperCode></td>
-                        <td>Registers an action handler and its schema definition on the current panel.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>registerMultiple</PaperCode></td>
-                        <td><PaperCode>registerMultiple(actionsMap, panelId?): Promise&lt;void&gt;</PaperCode></td>
-                        <td>Registers a batch of action handlers or ActionDefinition records.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>unregister</PaperCode></td>
-                        <td><PaperCode>unregister(actionName, panelId?): Promise&lt;void&gt;</PaperCode></td>
-                        <td>Removes an action handler from the panel registry.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>emit</PaperCode></td>
-                        <td><PaperCode>emit(eventName, payload?, panelId?): Promise&lt;void&gt;</PaperCode></td>
-                        <td>Broadcasts a scoped event from the current panel context.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>emitTrigger</PaperCode></td>
-                        <td><PaperCode>emitTrigger&lt;T&gt;(triggerId, output, panelId?): Promise&lt;void&gt;</PaperCode></td>
-                        <td>Dispatches a flow trigger event with typed output values.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>on</PaperCode></td>
-                        <td><PaperCode>on(panelOrEvent, eventOrCallback, maybeCallback?): () =&gt; void</PaperCode></td>
-                        <td>Subscribes to panel events. Returns an unsubscribe teardown function.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>onTrigger</PaperCode></td>
-                        <td><PaperCode>onTrigger&lt;T&gt;(panelOrTrigger, triggerOrCallback, maybeCallback?): () =&gt; void</PaperCode></td>
-                        <td>Subscribes to trigger executions. Returns an unsubscribe teardown function.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>list</PaperCode></td>
-                        <td><PaperCode>list(filterPanelId?): Promise&lt;ActionInfo[]&gt;</PaperCode></td>
-                        <td>Queries registered action schemas across active panels. A project's action carries its <PaperCode>project</PaperCode>.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>defineProject</PaperCode></td>
-                        <td><PaperCode>defineProject(project, panelId?): Promise&lt;ActionProjectHandle&gt;</PaperCode></td>
-                        <td>Defines (or renames) one of the panel's projects and returns a handle that registers, calls and fires that project's actions.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>project</PaperCode></td>
-                        <td><PaperCode>project(projectId, panelId?): ActionProjectHandle</PaperCode></td>
-                        <td>A handle for a project already defined, without a round trip.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>removeProject</PaperCode></td>
-                        <td><PaperCode>removeProject(projectId, panelId?): Promise&lt;void&gt;</PaperCode></td>
-                        <td>Removes a project and every action in it.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>listProjects</PaperCode></td>
-                        <td><PaperCode>listProjects(filterPanelId?): Promise&lt;ProjectInfo[]&gt;</PaperCode></td>
-                        <td>Every defined project: its panel, id, name and icon.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>projectActionId</PaperCode></td>
-                        <td><PaperCode>projectActionId(project, action): string</PaperCode></td>
-                        <td>The id a project's action is registered, called and fired under: <PaperCode>project/action</PaperCode>.</td>
+                        <td>Trigger (<PaperCode>emitTrigger</PaperCode>)</td>
+                        <td>Every subscriber through <PaperCode>onTrigger</PaperCode>, and the Actions panel, which starts the flows built on the event action of that id. Fire a trigger from the event action's <PaperCode>listen</PaperCode>, or by its id from anywhere in the panel.</td>
                     </tr>
                 </tbody>
             </PaperTable>
+            <PaperTextList>
+                <li>A panel sends events and triggers only under its own id. Naming another panel is refused with <PaperCode>FORBIDDEN</PaperCode>.</li>
+                <li>Any panel can listen to any panel's events and triggers.</li>
+                <li>The two-argument forms listen to the current panel, and throw when its id can't be found. Pass the panel id to listen to another panel.</li>
+                <li><PaperCode>"*"</PaperCode> is refused as a panel or a name: <PaperCode>actions.on does not accept "*"</PaperCode>.</li>
+                <li>Subscriptions survive a reconnect. What was sent while the connection was down is lost.</li>
+                <li>The returned function stops listening.</li>
+            </PaperTextList>
 
-            <PaperText preset="subheader" id="behavior">Behavior</PaperText>
-            <PaperText preset="body">
-                Action subscriptions are scoped to explicit panel and event identifiers.
-                Wildcard subscriptions using "*" are refused: subscribe to an explicit panel id and event name.
-                Every subscription returns a disposal function to guarantee bounded listener lifetimes.
-            </PaperText>
-
-            <PaperText preset="subheader" id="timeouts">Timeouts</PaperText>
-            <PaperText preset="body">
-                An action call waits at most 30 seconds by default. Pass options.timeoutMs to change it:
-                a numeric value up to 60_000 is honored, a larger one is refused with a typed error, and
-                null waits for completion. Use null for an action that legitimately runs long — an install
-                or a large download — and prefer acknowledging the work and reporting progress through
-                panel state over holding the call open. Long calls still count against the transport's
-                1000-outstanding-call cap.
+            <PaperText preset="subheader" as="h2" id="projects">Projects</PaperText>
+            <PaperText preset="body" as="p">
+                A project is a named set of a panel's actions, such as one game server or one bot. The library's project picker shows each project's blocks apart.
+                Each action in a project is its own action, registered as <PaperCode>project/action</PaperCode>.
             </PaperText>
             <PaperCode block language="tsx">
-{`// wait for a slow install instead of failing at 30 s
-await actionsApi.call("dev.example.runtime", "install", { version: "1.2.0" }, {
-    timeoutMs: null,
-});`}
-            </PaperCode>
+{`actionsApi.defineProject(project: ProjectDefinition, panelId?: string): Promise<ActionProjectHandle>;
+/** a handle on a project this panel defined, with no call to the daemon */
+actionsApi.project(projectId: string, panelId?: string): ActionProjectHandle;
+actionsApi.removeProject(projectId: string, panelId?: string): Promise<void>;
+actionsApi.listProjects(filterPanelId?: string): Promise<ProjectInfo[]>;
 
-            <PaperText preset="subheader" id="input-limits">Input limits</PaperText>
-            <PaperText preset="body">
-                An input can declare limits on its value: min, max and integer for numbers,
-                maxLength for text, and maxItems for a list (min, max and maxLength then apply to each
-                item). The flow editor shows a broken limit on the block as soon as the typed value
-                breaks it, before the flow runs. A variable is only known when the flow runs, so the SDK
-                checks the call itself and refuses one that breaks a limit before run sees it. Keep
-                checks that span several inputs (a minimum above a maximum) in run.
-            </PaperText>
-            <PaperCode block language="tsx">
-{`defineAction({
-    id: "create-select-menu",
-    name: "Create Select Menu",
-    description: "Builds a dropdown",
-    inputs: {
-        options: { type: "list<string>", label: "Options", maxItems: 25, maxLength: 100 },
-        maxValues: { type: "number", label: "Maximum picks", integer: true, min: 1, max: 25 },
-    },
-    run: async (ctx, inputs) => buildMenu(inputs),
-});`}
-            </PaperCode>
-
-            <PaperText preset="subheader" id="projects">Projects</PaperText>
-            <PaperText preset="body">Game Server gives each server its own project, using its stable server id. Choose that project’s blocks to target that server. Project-less blocks from before several servers are deprecated forwarders to the migrated server until v0.5. Status, players, console and MOTD widgets choose a Server independently.</PaperText>
-            <PaperText preset="body">
-                A panel that runs several of one thing (game servers, bots) can keep each one's actions
-                in a project. A project's action is registered as project/action, so survival/send and
-                creative/send are two separate actions: flows, triggers and calls treat them as if the
-                projects shared nothing. Build them from one definition in your own code. The Actions
-                library shows a panel's global actions and one project's at a time, with a dropdown to
-                switch. A panel without projects needs none of this; bare action ids stay global.
-            </PaperText>
-            <PaperText preset="body">
-                Projects come and go while the panel runs. Removing one removes its actions, and so does
-                the panel's connection closing; a flow that uses them then fails with the reason. Only
-                the connection that defined a project can register into it.
-            </PaperText>
-            <PaperCode block language="tsx">
-{`import { actionsApi, defineAction } from "@mileniumhq/paperapi";
-
-const sendMessage = (server: Server) => defineAction({
-    id: "send",
-    name: "Send Message",
-    description: \`Says something in \${server.name}'s chat\`,
-    inputs: { text: { type: "string", label: "Text", required: true } },
-    run: async (ctx, inputs) => server.say(inputs.text),
-});
-
-// a global action: not in any project
-await actionsApi.register(createServerAction);
-
-for (const server of servers) {
-    const project = await actionsApi.defineProject({ id: server.id, name: server.name, icon: "dns" });
-    await project.register(sendMessage(server)); // "<server.id>/send"
+interface ProjectDefinition {
+    /** a letter or digit, then letters, digits, ".", "_" and "-"; at most 64 */
+    id: string;
+    /** at most 128 characters */
+    name: string;
+    icon?: string;
 }
 
-// renamed and deleted later, at any time
-await actionsApi.project(server.id).update({ name: "Survival (old)" });
-await actionsApi.removeProject(server.id);`}
+interface ActionProjectHandle {
+    readonly id: string;
+    readonly panelId: string;
+    actionId(action: string): string;
+    register(actionOrName: string | ActionDefinition, handler?: (inputs: any) => any, options?: Omit<RegisterOptions, "project">): Promise<void>;
+    registerMultiple(defs: ActionDefinition[]): Promise<void>;
+    unregister(action: string): Promise<void>;
+    emitTrigger<T>(trigger: string, output: T): Promise<void>;
+    call<T>(action: string, inputs?: any, options?: ActionCallOptions): Promise<T>;
+    /** renames the project or changes its icon */
+    update(project: Omit<ProjectDefinition, "id">): Promise<void>;
+    /** removes the project and every action in it */
+    remove(): Promise<void>;
+}`}
             </PaperCode>
-
-            <PaperText preset="subheader" id="hidden">Actions for programs</PaperText>
-            <PaperText preset="body">
-                Set hidden on an action that programs use but a person wouldn't place as a block, such as
-                one taking a whole flow as an object. The Actions library leaves it out; it stays listed
-                and callable, and the Agents panel offers it. Use internal instead for an action only the
-                panel itself may call.
-            </PaperText>
-
-            <PaperText preset="subheader" id="deprecated">Retiring an action</PaperText>
-            <PaperText preset="body">
-                Set deprecated on an action definition to a message saying what to use instead and
-                when the action goes away. The action keeps running for flows that already use it,
-                the Actions library stops offering it, and every block already placed shows the
-                message. Pair it with a TODO(remove after vX) marker and remove the action in that
-                release.
-            </PaperText>
             <PaperCode block language="tsx">
-{`defineAction({
-    id: "defer-interaction",
-    name: "Defer Interaction",
-    description: "Shows that the bot is thinking about a slash command",
-    deprecated: "No longer needed: interactions are acknowledged automatically. Remove this step; it stops working after v0.3.",
-    run: async (ctx, inputs) => { /* still works meanwhile */ },
+{`const lobby = await actionsApi.defineProject({ id: "lobby", name: "Lobby server", icon: "dns" });
+await lobby.register({
+    id: "say",
+    name: "Say",
+    description: "Sends a chat message to the server",
+    inputs: { text: { type: "string", label: "Text", placeholder: "Text" } },
+    run: async (_ctx, inputs: { text: string }) => sendChat("lobby", inputs.text),
 });`}
             </PaperCode>
-            <PaperText preset="subheader" id="recipes">Recipes</PaperText>
-            <PaperText preset="body">
-                Define typed trigger events that start automation flows in Paperboard.
+            <PaperText preset="body" as="p">
+                A project belongs to the connection that defined it, and its actions register only from that connection. A flow block of a removed project fails when it runs.
             </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="listing">Listing</PaperText>
             <PaperCode block language="tsx">
-{`import { actionsApi, defineAction } from "@mileniumhq/paperapi";
+{`actionsApi.list(filterPanelId?: string): Promise<ActionInfo[]>;
+actionsApi.onRegistryChange(callback: (change?: any) => void): () => void;
 
-const playerJoinedAction = defineAction({
-    id: "player-joined",
-    name: "Player Joined",
-    description: "Fires when a player connects to the server.",
-    outputFields: {
-        username: { type: "string", label: "Player Username" }
-    },
-    listen: (ctx, emit) => {
-        const handler = (name: string) => emit({ username: name });
-        server.on("join", handler);
-        return () => server.off("join", handler);
-    }
-});
-
-await actionsApi.register(playerJoinedAction);`}
+interface ActionInfo {
+    panelId: string;
+    /** a project's actions are "project/action" */
+    action: string;
+    project?: string;
+    schema?: ActionSchema;
+}`}
             </PaperCode>
+            <PaperText preset="body" as="p">
+                <PaperCode>list</PaperCode> returns every registered action on this computer, internal and event actions included, so filter by the schema's flags.
+                <PaperCode>onRegistryChange</PaperCode> calls back whenever an action or project is registered or removed.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="registration-lifetime">Registration lifetime</PaperText>
+            <PaperTextList>
+                <li>An action belongs to the connection that registered it. When that page or service closes, its actions go away, and calls to them reject with <PaperCode>not registered or unavailable</PaperCode>.</li>
+                <li>After a reconnect, the SDK registers the actions again.</li>
+                <li>Registering a name another connection holds is refused with <PaperCode>CONFLICT</PaperCode>, so a panel's page and its service can't both register <PaperCode>forecast</PaperCode>.</li>
+                <li>A connection holds at most 1024 actions and 256 projects, and a schema is at most 64 KB.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Error</th>
+                        <th>Code</th>
+                        <th>Cause</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>Action "&lt;name&gt;" on panel "&lt;id&gt;" is not registered or unavailable</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>Nothing registered that name, or its connection closed.</td></tr>
+                    <tr><td><PaperCode>Action "&lt;name&gt;" is internal to panel "&lt;id&gt;"</PaperCode></td><td><PaperCode>FORBIDDEN</PaperCode></td><td>Another panel called an internal action.</td></tr>
+                    <tr><td><PaperCode>Parameter "timeoutMs" exceeds 60000 ms cap</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>A <PaperCode>timeoutMs</PaperCode> over a minute. Use <PaperCode>null</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>PaperCrane 'actions:call' timed out</PaperCode>, or <PaperCode>Action call "&lt;id&gt;:&lt;name&gt;" timed out after &lt;n&gt;ms</PaperCode></td><td>No code, or <PaperCode>INTERNAL</PaperCode></td><td>The handler did not answer in time. The SDK and the daemon both time the call, and the first to give up answers.</td></tr>
+                    <tr><td><PaperCode>Registry namespace is owned by another socket</PaperCode></td><td><PaperCode>CONFLICT</PaperCode></td><td>Another connection registered that name.</td></tr>
+                    <tr><td><PaperCode>Project "&lt;project&gt;" is not defined for panel "&lt;id&gt;" on this connection</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>A <PaperCode>project/action</PaperCode> id for a project this connection did not define.</td></tr>
+                    <tr><td><PaperCode>"&lt;project&gt;" is not a valid project id</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>A project id outside the rule.</td></tr>
+                    <tr><td><PaperCode>Cannot register action without a panel context (panel ID not found)</PaperCode></td><td>No code</td><td>No panel id was passed or found.</td></tr>
+                    <tr><td>The handler's message</td><td><PaperCode>INTERNAL</PaperCode></td><td>The handler threw, or an input broke a limit.</td></tr>
+                </tbody>
+            </PaperTable>
         </PaperFlex>
     );
 }
