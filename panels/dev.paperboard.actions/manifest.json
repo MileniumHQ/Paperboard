@@ -44,17 +44,22 @@
             {
                 "light": "./store/1-light.png",
                 "dark": "./store/1-dark.png",
-                "alt": "Overview"
+                "alt": "A Discord bot's flows: a movie night poll and event, suggestions, dice and a welcome DM"
             },
             {
                 "light": "./store/2-light.png",
                 "dark": "./store/2-dark.png",
-                "alt": "Build Discord menus and modals"
+                "alt": "Projects, each with its own flows and on/off switch"
             },
             {
                 "light": "./store/3-light.png",
                 "dark": "./store/3-dark.png",
-                "alt": "Export, import and back up flows"
+                "alt": "The Library, switching between Bot Creator's bots for their blocks"
+            },
+            {
+                "light": "./store/4-light.png",
+                "dark": "./store/4-dark.png",
+                "alt": "The Project menu, apart from File, Backup and Insert"
             }
         ]
     }
