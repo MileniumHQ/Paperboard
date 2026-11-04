@@ -1,135 +1,148 @@
 import {
     PaperCode,
     PaperFlex,
+    PaperLink,
     PaperTable,
     PaperText,
+    PaperTextList,
 } from "@mileniumhq/paperui";
 
 export default function MotionDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
-            <PaperText preset="header">Motion and effects</PaperText>
-            <PaperText preset="body">
-                PaperUI defines transition timings, easing bezier curves, and reduced motion overrides.
-                Reach for these variables when animating custom state transitions or dialog overlays.
-                The motion system honors user accessibility preferences by collapsing animation durations to zero.
+            <PaperText preset="header" as="h1">Motion and effects</PaperText>
+            <PaperText preset="body" as="p">
+                PaperUI animates with five durations and five easing curves, and dims, blurs, and scales with named steps.
+                Components apply these for you, and a panel built from components inherits them, including the switch to no motion.
+                Read a token yourself only for an element PaperUI has no component for.
             </PaperText>
 
-            <PaperText preset="subheader" id="transition-durations">Transition durations</PaperText>
-            <PaperText preset="body">
-                Duration tokens provide standard pacing steps:
-            </PaperText>
-
-            <PaperTable>
-                <thead>
-                    <tr>
-                        <th>Variable</th>
-                        <th>Standard value</th>
-                        <th>Reduced motion value</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><PaperCode>--paper-tiny-transition</PaperCode></td>
-                        <td>0.15s</td>
-                        <td>0s</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>--paper-short-transition</PaperCode></td>
-                        <td>0.2s</td>
-                        <td>0s</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>--paper-mid-transition</PaperCode></td>
-                        <td>0.3s</td>
-                        <td>0s</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>--paper-medium-transition</PaperCode></td>
-                        <td>0.4s</td>
-                        <td>0s</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>--paper-long-transition</PaperCode></td>
-                        <td>0.6s</td>
-                        <td>0s</td>
-                    </tr>
-                </tbody>
-            </PaperTable>
-
-            <PaperText preset="subheader" id="easing-curves">Easing curves</PaperText>
-            <PaperText preset="body">
-                Cubic bezier timing functions:
-            </PaperText>
-
-            <PaperTable>
-                <thead>
-                    <tr>
-                        <th>Variable</th>
-                        <th>Bezier value</th>
-                        <th>Application</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><PaperCode>--paper-ease-standard</PaperCode></td>
-                        <td>cubic-bezier(0.2, 0, 0, 1)</td>
-                        <td>General interface state transitions</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>--paper-ease-emphasized</PaperCode></td>
-                        <td>cubic-bezier(0.16, 1, 0.3, 1)</td>
-                        <td>Entering dialogs and emphasis popups</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>--paper-ease-symmetric</PaperCode></td>
-                        <td>cubic-bezier(0.2, 0, 0.2, 1)</td>
-                        <td>Two-way toggles and balance adjustments</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>--paper-ease-slide</PaperCode></td>
-                        <td>cubic-bezier(0.7, 0, 0.2, 1)</td>
-                        <td>Sliding drawer movements</td>
-                    </tr>
-                </tbody>
-            </PaperTable>
-
-            <PaperText preset="subheader" id="transform-scales">Transform scales</PaperText>
-            <PaperText preset="body">
-                Scale factors for press, hover and emphasis feedback. Pair them with a duration and easing token.
-            </PaperText>
-
+            <PaperText preset="subheader" as="h2" id="durations">Durations</PaperText>
             <PaperTable>
                 <thead>
                     <tr>
                         <th>Variable</th>
                         <th>Value</th>
-                        <th>Application</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td><PaperCode>--paper-scale-press</PaperCode></td>
-                        <td>0.98</td>
-                        <td>Menus and popovers entering, pressed controls</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>--paper-scale-hover</PaperCode></td>
-                        <td>1.03</td>
-                        <td>Hover lift on cards and previews</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>--paper-scale-emphasis</PaperCode></td>
-                        <td>1.2</td>
-                        <td>Drop targets that are about to accept</td>
-                    </tr>
+                    <tr><td><PaperCode>--paper-tiny-transition</PaperCode></td><td>0.15s</td></tr>
+                    <tr><td><PaperCode>--paper-short-transition</PaperCode></td><td>0.2s</td></tr>
+                    <tr><td><PaperCode>--paper-mid-transition</PaperCode></td><td>0.3s</td></tr>
+                    <tr><td><PaperCode>--paper-medium-transition</PaperCode></td><td>0.4s</td></tr>
+                    <tr><td><PaperCode>--paper-long-transition</PaperCode></td><td>0.6s</td></tr>
                 </tbody>
             </PaperTable>
 
-            <PaperText preset="subheader" id="reduced-motion-contract">Reduced motion contract</PaperText>
-            <PaperText preset="body">
-                When the system reports prefers-reduced-motion: reduce or when data-paperui-motion="reduced" is set on the document, all transition variables collapse to 0s.
-                All backdrop blur filters are disabled to eliminate motion overhead.
+            <PaperText preset="subheader" as="h2" id="easing">Easing</PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Variable</th>
+                        <th>Curve</th>
+                        <th>Shape</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>--paper-ease-standard</PaperCode></td><td><PaperCode>cubic-bezier(0.2, 0, 0, 1)</PaperCode></td><td>A quick start and a long settle. Lists, select menus, and widgets use it.</td></tr>
+                    <tr><td><PaperCode>--paper-ease-emphasized</PaperCode></td><td><PaperCode>cubic-bezier(0.16, 1, 0.3, 1)</PaperCode></td><td>A stronger settle for things that arrive: modals, slide pages, wizard steps, and PaperPresence.</td></tr>
+                    <tr><td><PaperCode>--paper-ease-symmetric</PaperCode></td><td><PaperCode>cubic-bezier(0.2, 0, 0.2, 1)</PaperCode></td><td>Even acceleration and deceleration. Loaders, progress bars, and charts use it.</td></tr>
+                    <tr><td><PaperCode>--paper-ease-slide</PaperCode></td><td><PaperCode>cubic-bezier(0.7, 0, 0.2, 1)</PaperCode></td><td>A slow start and a firm landing. The toggle uses it.</td></tr>
+                    <tr><td><PaperCode>--paper-ease-indeterminate</PaperCode></td><td><PaperCode>cubic-bezier(0.4, 0, 0.6, 1)</PaperCode></td><td>The curve of an indeterminate progress bar.</td></tr>
+                </tbody>
+            </PaperTable>
+
+            <PaperText preset="subheader" as="h2" id="reduced-motion">Reduced motion</PaperText>
+            <PaperText preset="body" as="p">
+                Motion switches off in two ways, and both set every duration above to <PaperCode>0s</PaperCode> and the blur variables to <PaperCode>blur(0)</PaperCode>.
+            </PaperText>
+            <PaperTextList>
+                <li>The operating system's <PaperCode>prefers-reduced-motion: reduce</PaperCode> setting applies on <PaperCode>:root</PaperCode>.</li>
+                <li>An ancestor with <PaperCode>data-paperui-motion="reduced"</PaperCode> applies to its subtree, and also cuts every transition and animation in it to 0.01 milliseconds, runs animations once, and removes backdrop filters. Paperboard writes this attribute on a panel's <PaperCode>html</PaperCode> element: <PaperCode>"reduced"</PaperCode> when the user turns on reduced motion in Paperboard's settings, <PaperCode>"auto"</PaperCode> otherwise.</li>
+            </PaperTextList>
+            <PaperText preset="body" as="p">
+                Under reduced motion <PaperLink href="/docs/paperui/papereffect/">PaperEffect</PaperLink> stops moving on hover and press, and <PaperLink href="/docs/paperui/paperpresence/">PaperPresence</PaperLink> removes an element at once instead of waiting for its exit animation.
+            </PaperText>
+            <PaperText preset="body" as="p">
+                Animate your own elements with the duration variables so they obey the same switch.
+                Code that animates in script asks <PaperCode>prefersReducedMotion(el?: Element): boolean</PaperCode>, exported from PaperUI and documented on <PaperLink href="/docs/paperui/paperpresence/">PaperPresence</PaperLink>.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { prefersReducedMotion } from "@mileniumhq/paperui";
+
+export function scrollToEnd(el: HTMLElement) {
+    el.scrollTo({
+        top: el.scrollHeight,
+        behavior: prefersReducedMotion(el) ? "auto" : "smooth",
+    });
+}`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h2" id="blur">Blur</PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Variable</th>
+                        <th>Value</th>
+                        <th>Use</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>--paper-blur-light</PaperCode></td><td><PaperCode>blur(5px)</PaperCode></td><td>The backdrop behind a modal.</td></tr>
+                    <tr><td><PaperCode>--paper-blur-medium</PaperCode></td><td><PaperCode>blur(10px)</PaperCode></td><td>A stronger blur.</td></tr>
+                    <tr><td><PaperCode>--paper-blur-heavy</PaperCode></td><td><PaperCode>blur(15px)</PaperCode></td><td>The strongest blur.</td></tr>
+                </tbody>
+            </PaperTable>
+
+            <PaperText preset="subheader" as="h2" id="opacity">Opacity</PaperText>
+            <PaperText preset="body" as="p">
+                States that dim an element, rather than recolor it, use these steps.
+                Disabled controls inside a provider take <PaperCode>--paper-opacity-disabled</PaperCode> and a grayscale filter, and ignore pointer input.
+            </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Variable</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>--paper-opacity-faint</PaperCode></td><td>0.35</td></tr>
+                    <tr><td><PaperCode>--paper-opacity-dim</PaperCode></td><td>0.5</td></tr>
+                    <tr><td><PaperCode>--paper-opacity-disabled</PaperCode></td><td>0.6</td></tr>
+                    <tr><td><PaperCode>--paper-opacity-muted</PaperCode></td><td>0.65</td></tr>
+                    <tr><td><PaperCode>--paper-opacity-soft</PaperCode></td><td>0.85</td></tr>
+                </tbody>
+            </PaperTable>
+
+            <PaperText preset="subheader" as="h2" id="scale">Scale</PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Variable</th>
+                        <th>Value</th>
+                        <th>Use</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>--paper-scale-press</PaperCode></td><td>0.98</td><td>An element being pressed.</td></tr>
+                    <tr><td><PaperCode>--paper-scale-hover</PaperCode></td><td>1.03</td><td>An element under the pointer.</td></tr>
+                    <tr><td><PaperCode>--paper-scale-emphasis</PaperCode></td><td>1.2</td><td>A momentary emphasis.</td></tr>
+                </tbody>
+            </PaperTable>
+
+            <PaperText preset="subheader" as="h2" id="paper-effect">The paper effect</PaperText>
+            <PaperText preset="body" as="p">
+                The tactile press, a colored shadow offset behind a control that travels as it is pressed, is a component, not a token.
+                Wrap a control in <PaperLink href="/docs/paperui/papereffect/">PaperEffect</PaperLink> and set its <PaperCode>variant</PaperCode> to a <PaperLink href="/docs/paperui/colors/">color role</PaperLink>.
+                The shadow's offset is one quarter of a gap (<PaperCode>--paper-uigap-onefourth</PaperCode>).
+                On a touch screen a press that ends on the control also plays a short haptic, described in <PaperLink href="/docs/paperui/utilities/#haptics">Utilities</PaperLink>.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="other">Appearing and leaving</PaperText>
+            <PaperText preset="body" as="p">
+                Mount and unmount an element with an animation through <PaperLink href="/docs/paperui/paperpresence/">PaperPresence</PaperLink>, which offers the presets <PaperCode>fade</PaperCode>, <PaperCode>pop</PaperCode>, <PaperCode>slide-up</PaperCode>, <PaperCode>slide-down</PaperCode>, <PaperCode>slide-start</PaperCode>, and <PaperCode>slide-end</PaperCode>.
+                Write no keyframes of your own.
             </PaperText>
         </PaperFlex>
     );

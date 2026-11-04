@@ -2,116 +2,268 @@ import {
     PaperCard,
     PaperCode,
     PaperFlex,
+    PaperLink,
     PaperLoader,
+    PaperLoaderGroup,
     PaperTable,
     PaperText,
+    PaperTextList,
 } from "@mileniumhq/paperui";
 
 export default function PaperLoaderDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
-            <PaperText preset="header">PaperLoader</PaperText>
-            <PaperText preset="body">
-                PaperLoader renders a circular progress indicator displaying percentage completion, indeterminate spinning, or terminal statuses.
-                Reach for PaperLoader when waiting on network requests, background downloads, or packaging operations.
-                The indicator displays smooth transitions between progress arcs and terminal completion marks.
+            <PaperText preset="header" as="h1">PaperLoader</PaperText>
+            <PaperText preset="body" as="p">
+                PaperLoader is a ring that shows the progress of one task, with an optional label beside it.
+                Use it for a wait you cannot cover with content, such as a first load or an install step, in five states from spinning to finished or failed.
+                Use <PaperLink href="/docs/paperui/paperprogress/">PaperProgress</PaperLink> for a bar inside a row or a toolbar instead.
             </PaperText>
 
-            <PaperText preset="subheader" id="overview">Overview</PaperText>
-            <PaperText preset="body">
-                Set loaderStatus to "loading" with a percent number, or use "indeterminate" when duration is unknown.
-                Provide an optional label to explain the current background task.
+            <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
+            <PaperText preset="body" as="p">
+                <PaperCode>loaderStatus</PaperCode> is the only required prop.
+                Pass <PaperCode>"indeterminate"</PaperCode> when you do not know how long the wait is, and <PaperCode>"loading"</PaperCode> with <PaperCode>percent</PaperCode> when you do.
             </PaperText>
+            <PaperCard data-docs-demo padding="double" surface="front">
+                <PaperFlex direction="column" gap="full">
+                    <PaperLoader loaderStatus="indeterminate" label="Loading servers" />
+                    <PaperLoader loaderStatus="loading" percent={60} label="Downloading" />
+                </PaperFlex>
+            </PaperCard>
             <PaperCode block language="tsx">
-{`import { PaperLoader, PaperCard, PaperFlex } from "@mileniumhq/paperui";
+{`import { PaperFlex, PaperLoader } from "@mileniumhq/paperui";
 
 export function Example() {
     return (
-        <PaperCard padding="double" surface="front">
-            <PaperFlex direction="row" gap="double" align="center">
-                <PaperLoader loaderStatus="loading" percent={65} label="65%" />
-                <PaperLoader loaderStatus="indeterminate" label="Syncing" />
-                <PaperLoader loaderStatus="success" label="Complete" />
-                <PaperLoader loaderStatus="error" label="Failed" />
-            </PaperFlex>
-        </PaperCard>
+        <PaperFlex direction="column" gap="full">
+            <PaperLoader loaderStatus="indeterminate" label="Loading servers" />
+            <PaperLoader loaderStatus="loading" percent={60} label="Downloading" />
+        </PaperFlex>
     );
 }`}
             </PaperCode>
 
-            <PaperCard padding="double" surface="front">
-                <PaperFlex direction="row" gap="double" align="center">
-                    <PaperLoader loaderStatus="loading" percent={65} label="65%" />
-                    <PaperLoader loaderStatus="indeterminate" label="Syncing" />
-                    <PaperLoader loaderStatus="success" label="Complete" />
-                    <PaperLoader loaderStatus="error" label="Failed" />
-                </PaperFlex>
-            </PaperCard>
-
-            <PaperText preset="subheader" id="props-and-variants">Props and variants</PaperText>
-            <PaperText preset="body">
-                PaperLoader accepts the following configuration properties:
+            <PaperText preset="subheader" as="h2" id="props">Props</PaperText>
+            <PaperText preset="subheader" as="h3" id="loader-props">PaperLoader</PaperText>
+            <PaperText preset="body" as="p">
+                PaperLoaderProps extends <PaperCode>JSX.HTMLAttributes&lt;HTMLDivElement&gt;</PaperCode>.
+                Other props land on the wrapping <PaperCode>div</PaperCode>.
             </PaperText>
             <PaperTable>
-                    <thead>
-                        <tr>
-                            <th>Prop</th>
-                            <th>Type</th>
-                            <th>Default</th>
-                            <th>Description</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><PaperCode>loaderStatus</PaperCode></td>
-                            <td><PaperCode>"loading" | "indeterminate" | "success" | "error" | "waiting"</PaperCode></td>
-                            <td>No default</td>
-                            <td>Current lifecycle state of the loader indicator.</td>
-                        </tr>
-                        <tr>
-                            <td><PaperCode>percent</PaperCode></td>
-                            <td><PaperCode>number</PaperCode></td>
-                            <td><PaperCode>0</PaperCode></td>
-                            <td>Completion percentage between 0 and 100 for determinate progress.</td>
-                        </tr>
-                        <tr>
-                            <td><PaperCode>size</PaperCode></td>
-                            <td><PaperCode>"small" | "medium" | "large"</PaperCode></td>
-                            <td><PaperCode>"medium"</PaperCode></td>
-                            <td>Diameter size preset for the circular track.</td>
-                        </tr>
-                        <tr>
-                            <td><PaperCode>label</PaperCode></td>
-                            <td><PaperCode>JSX.Element | string</PaperCode></td>
-                            <td><PaperCode>undefined</PaperCode></td>
-                            <td>Status caption rendered next to the indicator.</td>
-                        </tr>
-                        <tr>
-                            <td><PaperCode>delay</PaperCode></td>
-                            <td><PaperCode>number</PaperCode></td>
-                            <td><PaperCode>undefined</PaperCode></td>
-                            <td>Milliseconds to wait before appearing, so a short wait never flashes a loader.</td>
-                        </tr>
-                    </tbody>
-                </PaperTable>
+                <thead>
+                    <tr>
+                        <th>Prop</th>
+                        <th>Type</th>
+                        <th>Default</th>
+                        <th>Effect</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>loaderStatus</PaperCode></td>
+                        <td><PaperCode>LoaderStatus</PaperCode></td>
+                        <td>No default (required)</td>
+                        <td>The state, one of <PaperCode>"loading"</PaperCode>, <PaperCode>"indeterminate"</PaperCode>, <PaperCode>"success"</PaperCode>, <PaperCode>"error"</PaperCode>, or <PaperCode>"waiting"</PaperCode>. See States.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>percent</PaperCode></td>
+                        <td><PaperCode>number</PaperCode></td>
+                        <td><PaperCode>0</PaperCode></td>
+                        <td>How much of the ring is filled, from 0 to 100. Values outside the range are clamped. Only <PaperCode>"loading"</PaperCode> reads it for the fill.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>size</PaperCode></td>
+                        <td><PaperCode>PaperLoaderSize</PaperCode></td>
+                        <td><PaperCode>"medium"</PaperCode></td>
+                        <td><PaperCode>"small"</PaperCode>, <PaperCode>"medium"</PaperCode>, or <PaperCode>"large"</PaperCode>. The ring takes the size of an icon, a medium control, or a large control. A small loader also shrinks its label.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>label</PaperCode></td>
+                        <td><PaperCode>JSX.Element | string</PaperCode></td>
+                        <td>No default</td>
+                        <td>Text beside the ring. Without it only the ring shows.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>delay</PaperCode></td>
+                        <td><PaperCode>number</PaperCode></td>
+                        <td>No default (shows at once)</td>
+                        <td>Milliseconds to wait before the loader appears. A wait that ends sooner never flashes a loader. It is read once, when the loader is created.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode>, <PaperCode>style</PaperCode></td>
+                        <td>Solid props</td>
+                        <td>No default</td>
+                        <td><PaperCode>classList</PaperCode> and an object <PaperCode>style</PaperCode> are added to the wrapper. <PaperCode>class</PaperCode> is added to the ring itself. A string <PaperCode>style</PaperCode> is ignored.</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+            <PaperText preset="body" as="p">
+                <PaperCode>LoaderStatus</PaperCode> and <PaperCode>PaperLoaderSize</PaperCode> are exported from <PaperCode>@mileniumhq/paperui</PaperCode>:
+            </PaperText>
+            <PaperCode block language="ts">
+{`type LoaderStatus = "loading" | "indeterminate" | "success" | "error" | "waiting";
+type PaperLoaderSize = "small" | "medium" | "large";`}
+            </PaperCode>
 
-            <PaperText preset="subheader" id="behavior">Behavior</PaperText>
-            <PaperText preset="body">
-                Determinate and indeterminate states use distinct SVG path definitions to prevent rotation snapping during state changes.
-                Terminal states ("success" and "error") fill the circle and display status colors.
-                Give an indeterminate loader a <PaperCode>delay</PaperCode> when the wait is usually instant, such as loading local state; it renders nothing until the delay passes.
+            <PaperText preset="subheader" as="h3" id="group-props">PaperLoaderGroup</PaperText>
+            <PaperText preset="body" as="p">
+                PaperLoaderGroup stacks loaders in a column at a fixed width, so a list of steps lines up.
+                It takes <PaperCode>JSX.HTMLAttributes&lt;HTMLDivElement&gt;</PaperCode> and children, and has no props of its own.
             </PaperText>
 
-            <PaperText preset="subheader" id="recipes">Recipes</PaperText>
-            <PaperText preset="body">
-                Use the small size variant within table cells and dense list rows.
+            <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
+            <PaperText preset="subheader" as="h3" id="states">States</PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>What shows</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>"loading"</PaperCode></td>
+                        <td>A primary-colored arc filled to <PaperCode>percent</PaperCode>. At 0 the arc is hidden and only the track shows. Changes animate.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"indeterminate"</PaperCode></td>
+                        <td>A short arc that spins. <PaperCode>percent</PaperCode> is ignored. Moving to or from another status cross-fades.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"success"</PaperCode></td>
+                        <td>A full success-colored ring with a check mark filling the center, and a one-time ripple.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"error"</PaperCode></td>
+                        <td>A danger-colored ring with a close mark filling the center.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"waiting"</PaperCode></td>
+                        <td>The whole loader at half opacity, for a step that has not started. It shows an arc only if <PaperCode>percent</PaperCode> is above 0.</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+
+            <PaperText preset="subheader" as="h3" id="delay">Delay</PaperText>
+            <PaperTextList>
+                <li>With <PaperCode>delay</PaperCode> the component renders nothing until the timer fires, so the loader and its label are absent from the page, not hidden.</li>
+                <li>The timer is cleared when the loader is removed. A later change to <PaperCode>delay</PaperCode> does not restart it.</li>
+                <li>Pick a delay of a few hundred milliseconds for a request that is usually fast. The gameserver panel uses 400 for its server list.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h3" id="accessibility">Accessibility</PaperText>
+            <PaperText preset="body" as="p">
+                The ring is an SVG with no role and no live region.
+                The label is the only text an assistive technology reads, so write a label that names the task, such as "Loading servers", rather than leaving a bare ring.
+                When a loader fails, show the failure in text too, with <PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink>.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
+            <PaperText preset="subheader" as="h3" id="statuses">All statuses</PaperText>
+            <PaperCard data-docs-demo padding="double" surface="front">
+                <PaperLoaderGroup>
+                    <PaperLoader loaderStatus="waiting" label="Waiting" />
+                    <PaperLoader loaderStatus="indeterminate" label="Indeterminate" />
+                    <PaperLoader loaderStatus="loading" percent={40} label="Loading" />
+                    <PaperLoader loaderStatus="success" label="Success" />
+                    <PaperLoader loaderStatus="error" label="Error" />
+                </PaperLoaderGroup>
+            </PaperCard>
+            <PaperCode block language="tsx">
+{`import { PaperLoader, PaperLoaderGroup } from "@mileniumhq/paperui";
+
+<PaperLoaderGroup>
+    <PaperLoader loaderStatus="waiting" label="Waiting" />
+    <PaperLoader loaderStatus="indeterminate" label="Indeterminate" />
+    <PaperLoader loaderStatus="loading" percent={40} label="Loading" />
+    <PaperLoader loaderStatus="success" label="Success" />
+    <PaperLoader loaderStatus="error" label="Error" />
+</PaperLoaderGroup>`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="sizes">Sizes</PaperText>
+            <PaperCard data-docs-demo padding="double" surface="front">
+                <PaperFlex direction="column" gap="full">
+                    <PaperLoader size="small" loaderStatus="indeterminate" label="Small" />
+                    <PaperLoader size="medium" loaderStatus="indeterminate" label="Medium" />
+                    <PaperLoader size="large" loaderStatus="indeterminate" label="Large" />
+                </PaperFlex>
+            </PaperCard>
+            <PaperCode block language="tsx">
+{`<PaperFlex direction="column" gap="full">
+    <PaperLoader size="small" loaderStatus="indeterminate" label="Small" />
+    <PaperLoader size="medium" loaderStatus="indeterminate" label="Medium" />
+    <PaperLoader size="large" loaderStatus="indeterminate" label="Large" />
+</PaperFlex>`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="first-load">First load with a delay</PaperText>
+            <PaperText preset="body" as="p">
+                Show the loader as the <PaperCode>fallback</PaperCode> of a <PaperCode>Show</PaperCode> that waits for data.
+                The delay keeps a fast response from flashing a spinner.
+                A failed load needs its own branch, because the loader has no error of its own to show a reason.
             </PaperText>
             <PaperCode block language="tsx">
-{`<PaperLoader size="small" loaderStatus="indeterminate" label="Checking" />`}
+{`import { createResource, Show } from "solid-js";
+import { PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
+
+async function readServers(): Promise<string[]> {
+    const response = await fetch("/servers.json");
+    if (!response.ok) throw new Error("The server list could not be read");
+    return response.json();
+}
+
+export function Servers() {
+    const [servers] = createResource(readServers);
+
+    return (
+        <Show
+            when={!servers.error}
+            fallback={<PaperQuote variant="danger">{servers.error.message}</PaperQuote>}
+        >
+            <Show
+                when={servers()}
+                fallback={<PaperLoader loaderStatus="indeterminate" delay={400} label="Loading servers" />}
+            >
+                {(list) => <PaperText preset="body" as="p">{list().length} servers</PaperText>}
+            </Show>
+        </Show>
+    );
+}`}
             </PaperCode>
-            <PaperCard padding="double" surface="front">
-                <PaperLoader size="small" loaderStatus="indeterminate" label="Checking" />
-            </PaperCard>
+
+            <PaperText preset="subheader" as="h3" id="install-steps">Install steps</PaperText>
+            <PaperText preset="body" as="p">
+                One loader per step in a <PaperCode>PaperLoaderGroup</PaperCode>, each bound to its own signals.
+                The gameserver panel's install screen works this way, with the amount downloaded in the label.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { For, type Accessor } from "solid-js";
+import { PaperLoader, PaperLoaderGroup, type LoaderStatus } from "@mileniumhq/paperui";
+
+interface Step {
+    label: string;
+    percent: Accessor<number>;
+    status: Accessor<LoaderStatus>;
+}
+
+export function InstallSteps(props: { steps: Step[] }) {
+    return (
+        <PaperLoaderGroup>
+            <For each={props.steps}>
+                {(step) => (
+                    <PaperLoader
+                        percent={step.percent()}
+                        loaderStatus={step.status()}
+                        label={step.label}
+                    />
+                )}
+            </For>
+        </PaperLoaderGroup>
+    );
+}`}
+            </PaperCode>
         </PaperFlex>
     );
 }

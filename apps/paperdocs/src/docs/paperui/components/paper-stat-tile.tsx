@@ -3,125 +3,147 @@ import {
     PaperCode,
     PaperFlex,
     PaperGrid,
+    PaperLink,
     PaperStatTile,
     PaperTable,
     PaperText,
+    PaperTextList,
 } from "@mileniumhq/paperui";
 
 export default function PaperStatTileDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
-            <PaperText preset="header">PaperStatTile</PaperText>
-            <PaperText preset="body">
-                PaperStatTile renders a single metric readout: an icon chip, a value, a label, and an optional meter.
-                Reach for PaperStatTile when laying out player, plugin, world, or service statistics.
-                The tile is the shared building block behind stat panels so no panel hand-rolls its own tile.
+            <PaperText preset="header" as="h1">PaperStatTile</PaperText>
+            <PaperText preset="body" as="p">
+                PaperStatTile shows one metric: an icon, a large value, a label, and an optional meter.
+                Use it for a row of readings such as health, memory, or players online.
+                For a list of many labelled values, use <PaperLink href="/docs/paperui/paperkeyvaluelist/">PaperKeyValueList</PaperLink>.
             </PaperText>
 
-            <PaperText preset="subheader" id="overview">Overview</PaperText>
-            <PaperText preset="body">
-                Pass icon, label, and value. Add a tone to tint the icon chip, and an optional meter for bounded values such as health or food.
-                Stack tiles in a PaperGrid to build responsive stat panels.
+            <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
+            <PaperText preset="body" as="p">
+                <PaperCode>label</PaperCode> and <PaperCode>value</PaperCode> are required.
+                Lay several tiles out with <PaperLink href="/docs/paperui/papergrid/">PaperGrid</PaperLink>.
             </PaperText>
+            <PaperCard data-docs-demo padding="double" surface="front">
+                <PaperGrid min="field">
+                    <PaperStatTile icon="favorite" label="Health" value="18" tone="danger" meter={{ value: 18, max: 20 }} />
+                    <PaperStatTile icon="restaurant" label="Food" value="12" tone="warning" meter={{ value: 12, max: 20 }} />
+                    <PaperStatTile icon="group" label="Players" value="4" />
+                </PaperGrid>
+            </PaperCard>
             <PaperCode block language="tsx">
-{`import { PaperStatTile, PaperGrid, PaperCard } from "@mileniumhq/paperui";
+{`import { PaperGrid, PaperStatTile } from "@mileniumhq/paperui";
 
 export function Example() {
     return (
-        <PaperCard padding="double" surface="front">
-            <PaperGrid columns={3}>
-                <PaperStatTile icon="favorite" label="Health" value="18 / 20" tone="danger" meter={{ value: 18, max: 20 }} />
-                <PaperStatTile icon="restaurant" label="Food" value="16 / 20" tone="warning" meter={{ value: 16, max: 20 }} />
-                <PaperStatTile icon="diamond" label="Blocks mined" value="48,210" />
-            </PaperGrid>
-        </PaperCard>
+        <PaperGrid min="field">
+            <PaperStatTile icon="favorite" label="Health" value="18" tone="danger" meter={{ value: 18, max: 20 }} />
+            <PaperStatTile icon="restaurant" label="Food" value="12" tone="warning" meter={{ value: 12, max: 20 }} />
+            <PaperStatTile icon="group" label="Players" value="4" />
+        </PaperGrid>
     );
 }`}
             </PaperCode>
 
-            <PaperCard padding="double" surface="front">
-                <PaperGrid columns={3}>
-                    <PaperStatTile icon="favorite" label="Health" value="18 / 20" tone="danger" meter={{ value: 18, max: 20 }} />
-                    <PaperStatTile icon="restaurant" label="Food" value="16 / 20" tone="warning" meter={{ value: 16, max: 20 }} />
-                    <PaperStatTile icon="diamond" label="Blocks mined" value="48,210" />
-                </PaperGrid>
-            </PaperCard>
-
-            <PaperText preset="subheader" id="props-and-variants">Props and variants</PaperText>
-            <PaperText preset="body">
-                PaperStatTile accepts content and tone properties alongside standard div attributes.
+            <PaperText preset="subheader" as="h2" id="props">Props</PaperText>
+            <PaperText preset="body" as="p">
+                PaperStatTileProps extends <PaperCode>JSX.HTMLAttributes&lt;HTMLDivElement&gt;</PaperCode>.
+                Other props land on the tile's <PaperCode>div</PaperCode>.
             </PaperText>
             <PaperTable>
-                    <thead>
-                        <tr>
-                            <th>Prop</th>
-                            <th>Type</th>
-                            <th>Default</th>
-                            <th>Description</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><PaperCode>icon</PaperCode></td>
-                            <td><PaperCode>JSX.Element | string</PaperCode></td>
-                            <td><PaperCode>undefined</PaperCode></td>
-                            <td>Leading icon in the chip. String values render via PaperIcon.</td>
-                        </tr>
-                        <tr>
-                            <td><PaperCode>label</PaperCode></td>
-                            <td><PaperCode>JSX.Element | string</PaperCode></td>
-                            <td><PaperCode>required</PaperCode></td>
-                            <td>Caption under the value describing the metric.</td>
-                        </tr>
-                        <tr>
-                            <td><PaperCode>value</PaperCode></td>
-                            <td><PaperCode>JSX.Element | string</PaperCode></td>
-                            <td><PaperCode>required</PaperCode></td>
-                            <td>The metric readout, already formatted by the caller.</td>
-                        </tr>
-                        <tr>
-                            <td><PaperCode>tone</PaperCode></td>
-                            <td><PaperCode>PaperRole</PaperCode></td>
-                            <td><PaperCode>undefined</PaperCode></td>
-                            <td>Tints the icon chip and defaults the meter color.</td>
-                        </tr>
-                        <tr>
-                            <td><PaperCode>meter</PaperCode></td>
-                            <td><PaperCode>{ "{ value, max, variant? }" }</PaperCode></td>
-                            <td><PaperCode>undefined</PaperCode></td>
-                            <td>Optional bounded meter rendered under the value; variant overrides the tone.</td>
-                        </tr>
-                    </tbody>
-                </PaperTable>
+                <thead>
+                    <tr>
+                        <th>Prop</th>
+                        <th>Type</th>
+                        <th>Default</th>
+                        <th>Effect</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>value</PaperCode></td>
+                        <td><PaperCode>JSX.Element | string</PaperCode></td>
+                        <td>No default (required)</td>
+                        <td>The reading, in large bold text. Format numbers yourself. Render the tile only when a reading exists.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>label</PaperCode></td>
+                        <td><PaperCode>JSX.Element | string</PaperCode></td>
+                        <td>No default (required)</td>
+                        <td>What the value measures, in small subdued text under it.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>icon</PaperCode></td>
+                        <td><PaperCode>JSX.Element | string</PaperCode></td>
+                        <td>No default (no icon)</td>
+                        <td>A leading icon. A string is a Material icon name. An element is placed unchanged.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>tone</PaperCode></td>
+                        <td><PaperCode>PaperRole</PaperCode></td>
+                        <td>No default (neutral)</td>
+                        <td>Tints the icon with the role's deep color, and the meter unless the meter sets its own variant. One of <PaperCode>"primary"</PaperCode>, <PaperCode>"brand"</PaperCode>, <PaperCode>"success"</PaperCode>, <PaperCode>"danger"</PaperCode>, <PaperCode>"warning"</PaperCode>, <PaperCode>"attention"</PaperCode>, <PaperCode>"extra-1"</PaperCode>, <PaperCode>"extra-2"</PaperCode>, or <PaperCode>"extra-3"</PaperCode>.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>meter</PaperCode></td>
+                        <td><PaperCode>PaperStatTileMeter</PaperCode></td>
+                        <td>No default (no meter)</td>
+                        <td>A <PaperLink href="/docs/paperui/paperprogress/">PaperProgress</PaperLink> bar under the label. See PaperStatTileMeter.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode>, <PaperCode>style</PaperCode></td>
+                        <td>Solid props</td>
+                        <td>No default</td>
+                        <td>Added to the tile. An object <PaperCode>style</PaperCode> is merged after the component's own.</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
 
-            <PaperText preset="subheader" id="behavior">Behavior</PaperText>
-            <PaperText preset="body">
-                The meter renders a PaperProgress, which exposes progressbar semantics to assistive devices.
-                A tone sets the shared role variables on the tile, so the icon chip and meter stay in step.
+            <PaperText preset="subheader" as="h3" id="meter">PaperStatTileMeter</PaperText>
+            <PaperText preset="body" as="p">
+                The shape of <PaperCode>meter</PaperCode>, exported from <PaperCode>@mileniumhq/paperui</PaperCode>:
             </PaperText>
+            <PaperCode block language="ts">
+{`interface PaperStatTileMeter {
+    value: number; // how much, from 0 to max
+    max: number; // the value that fills the bar
+    variant?: PaperRole; // the bar's color, defaulting to the tile's tone
+}`}
+            </PaperCode>
 
-            <PaperText preset="subheader" id="recipes">Recipes</PaperText>
-            <PaperText preset="body">
-                Let the meter variant differ from the tile tone when the value is critical, such as low health.
+            <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
+            <PaperTextList>
+                <li>The tile is a raised, bordered box that takes the width of its cell.</li>
+                <li>The tile is not interactive. For a clickable summary, use <PaperLink href="/docs/paperui/papermediacard/">PaperMediaCard</PaperLink>.</li>
+                <li>The meter follows <PaperLink href="/docs/paperui/paperprogress/">PaperProgress</PaperLink>: <PaperCode>value</PaperCode> is clamped to the bar, a <PaperCode>max</PaperCode> of 0 or less is read as 100, and it is a <PaperCode>progressbar</PaperCode> with no name of its own. The value and label above it carry the meaning.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
+            <PaperText preset="subheader" as="h3" id="live-readings">Readings that may be missing</PaperText>
+            <PaperText preset="body" as="p">
+                Render a tile only when its reading exists, and give the meter the same condition.
             </PaperText>
             <PaperCode block language="tsx">
-{`<PaperStatTile
-    icon="favorite"
-    label="Health"
-    value="4 / 20"
-    tone="warning"
-    meter={{ value: 4, max: 20, variant: "danger" }}
-/>`}
-            </PaperCode>
-            <PaperCard padding="double" surface="front">
+{`import { Show } from "solid-js";
+import { PaperGrid, PaperStatTile } from "@mileniumhq/paperui";
+
+export function Vitals(props: { health: number | undefined }) {
+    return (
+        <PaperGrid min="field">
+            <Show when={props.health !== undefined}>
                 <PaperStatTile
                     icon="favorite"
                     label="Health"
-                    value="4 / 20"
-                    tone="warning"
-                    meter={{ value: 4, max: 20, variant: "danger" }}
+                    value={String(props.health)}
+                    tone="danger"
+                    meter={{ value: props.health!, max: 20 }}
                 />
-            </PaperCard>
+            </Show>
+        </PaperGrid>
+    );
+}`}
+            </PaperCode>
         </PaperFlex>
     );
 }

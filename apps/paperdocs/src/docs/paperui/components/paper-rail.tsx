@@ -1,116 +1,259 @@
+import { createSignal } from "solid-js";
 import {
     PaperCard,
     PaperCode,
     PaperFlex,
+    PaperLink,
     PaperRail,
     PaperRailAction,
     PaperRailItem,
     PaperTable,
     PaperText,
+    PaperTextList,
 } from "@mileniumhq/paperui";
 
 export default function PaperRailDoc() {
+    const [view, setView] = createSignal<string | number>("home");
+
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
-            <PaperText preset="header">PaperRail</PaperText>
-            <PaperText preset="body">
-                PaperRail provides a compact icon navigation rail for switching primary view modes in dense layouts.
-                Reach for PaperRail when building compact vertical toolbars or workspace view selectors.
-                The rail supports icon-only presentations, compact labels, and standalone action triggers.
+            <PaperText preset="header" as="h1">PaperRail</PaperText>
+            <PaperText preset="body" as="p">
+                PaperRail is a narrow vertical strip of icon buttons where one is selected, with optional labels under the icons.
+                Use it for switching between a few categories or tools beside a larger area, when a full-width sidebar would take too much room.
+                For a sidebar of text entries with descriptions and sections, use <PaperLink href="/docs/paperui/papermenu/">PaperMenu</PaperLink>.
             </PaperText>
 
-            <PaperText preset="subheader" id="overview">Overview</PaperText>
-            <PaperText preset="body">
-                Assemble navigation destinations using PaperRailItem and standalone buttons with PaperRailAction.
-                Manage the active destination using value and onValueChange props.
+            <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
+            <PaperText preset="body" as="p">
+                <PaperCode>name</PaperCode> is required.
+                Give each <PaperCode>PaperRailItem</PaperCode> a unique <PaperCode>value</PaperCode>, an <PaperCode>icon</PaperCode>, and a string <PaperCode>label</PaperCode>, which names it for assistive technology.
             </PaperText>
+            <PaperCard data-docs-demo padding="double" surface="front">
+                <PaperRail name="docs-rail" value={view()} onValueChange={setView}>
+                    <PaperRailItem value="home" icon="home" label="Home" />
+                    <PaperRailItem value="search" icon="search" label="Search" />
+                    <PaperRailItem value="settings" icon="settings" label="Settings" />
+                    <PaperRailItem value="locked" icon="lock" label="Locked" disabled />
+                </PaperRail>
+            </PaperCard>
             <PaperCode block language="tsx">
-{`import { PaperRail, PaperRailItem, PaperRailAction, PaperCard } from "@mileniumhq/paperui";
+{`import { createSignal } from "solid-js";
+import { PaperRail, PaperRailItem } from "@mileniumhq/paperui";
 
 export function Example() {
+    const [view, setView] = createSignal<string | number>("home");
+
     return (
-        <PaperCard padding="double" surface="front">
-                <PaperRail name="nav-rail" defaultValue="files" showLabels>
-                <PaperRailItem value="files" icon="folder" label="Files" />
-                <PaperRailItem value="terminal" icon="terminal" label="Terminal" />
-                <PaperRailAction icon="settings" label="Settings" />
-            </PaperRail>
-        </PaperCard>
+        <PaperRail name="docs-rail" value={view()} onValueChange={setView}>
+            <PaperRailItem value="home" icon="home" label="Home" />
+            <PaperRailItem value="search" icon="search" label="Search" />
+            <PaperRailItem value="settings" icon="settings" label="Settings" />
+            <PaperRailItem value="locked" icon="lock" label="Locked" disabled />
+        </PaperRail>
     );
 }`}
             </PaperCode>
 
-            <PaperCard padding="double" surface="front">
-            <PaperRail name="nav-rail" defaultValue="files" showLabels>
-                    <PaperRailItem value="files" icon="folder" label="Files" />
-                    <PaperRailItem value="terminal" icon="terminal" label="Terminal" />
-                    <PaperRailAction icon="settings" label="Settings" />
-                </PaperRail>
-            </PaperCard>
-
-            <PaperText preset="subheader" id="props-and-variants">Props and variants</PaperText>
-            <PaperText preset="body">
-                PaperRail accepts the following configuration properties:
+            <PaperText preset="subheader" as="h2" id="props">Props</PaperText>
+            <PaperText preset="subheader" as="h3" id="rail-props">PaperRail</PaperText>
+            <PaperText preset="body" as="p">
+                PaperRailProps extends <PaperCode>JSX.HTMLAttributes&lt;HTMLDivElement&gt;</PaperCode>.
+                Other props land on the rail's <PaperCode>div</PaperCode>.
             </PaperText>
             <PaperTable>
-                    <thead>
-                        <tr>
-                            <th>Prop</th>
-                            <th>Type</th>
-                            <th>Default</th>
-                            <th>Description</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><PaperCode>name</PaperCode></td>
-                            <td><PaperCode>string</PaperCode></td>
-                            <td>No default</td>
-                            <td>Form group name identifying the radio selection context.</td>
-                        </tr>
-                        <tr>
-                            <td><PaperCode>value</PaperCode></td>
-                            <td><PaperCode>string | number</PaperCode></td>
-                            <td><PaperCode>undefined</PaperCode></td>
-                            <td>Currently active selected destination value.</td>
-                        </tr>
-                        <tr>
-                            <td><PaperCode>defaultValue</PaperCode></td>
-                            <td><PaperCode>string | number</PaperCode></td>
-                            <td><PaperCode>undefined</PaperCode></td>
-                            <td>Initial selected destination for uncontrolled operation.</td>
-                        </tr>
-                        <tr>
-                            <td><PaperCode>showLabels</PaperCode></td>
-                            <td><PaperCode>boolean</PaperCode></td>
-                            <td><PaperCode>false</PaperCode></td>
-                            <td>Displays text labels beneath icons across rail items.</td>
-                        </tr>
-                    </tbody>
-                </PaperTable>
+                <thead>
+                    <tr>
+                        <th>Prop</th>
+                        <th>Type</th>
+                        <th>Default</th>
+                        <th>Effect</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>name</PaperCode></td>
+                        <td><PaperCode>string</PaperCode></td>
+                        <td>No default (required)</td>
+                        <td>Identifies the group of items. Use a distinct name for each rail on a page.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>value</PaperCode></td>
+                        <td><PaperCode>string | number</PaperCode></td>
+                        <td>No default</td>
+                        <td>The selected item's <PaperCode>value</PaperCode>. Setting it makes the rail controlled: it changes only when you change it.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>defaultValue</PaperCode></td>
+                        <td><PaperCode>string | number</PaperCode></td>
+                        <td>No default (none selected)</td>
+                        <td>The starting item of an uncontrolled rail.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>onValueChange</PaperCode></td>
+                        <td><PaperCode>(value: string | number) =&gt; void</PaperCode></td>
+                        <td>No default</td>
+                        <td>Called with the chosen item's <PaperCode>value</PaperCode>, even when it was already selected.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>showLabels</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>No default (off)</td>
+                        <td>Draws each item's <PaperCode>label</PaperCode> under its icon, in wider items. An item's own <PaperCode>showLabel</PaperCode> wins.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode></td>
+                        <td>Solid props</td>
+                        <td>No default</td>
+                        <td>Added to the rail.</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
 
-            <PaperText preset="subheader" id="behavior">Behavior</PaperText>
-            <PaperText preset="body">
-                PaperRailItem elements use role="radio" with aria-checked bindings for accessibility.
-                Pressing Space or Enter activates the focused destination.
+            <PaperText preset="subheader" as="h3" id="item-props">PaperRailItem</PaperText>
+            <PaperText preset="body" as="p">
+                PaperRailItemProps extends <PaperCode>JSX.HTMLAttributes&lt;HTMLDivElement&gt;</PaperCode>.
             </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Prop</th>
+                        <th>Type</th>
+                        <th>Default</th>
+                        <th>Effect</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>value</PaperCode></td>
+                        <td><PaperCode>string | number</PaperCode></td>
+                        <td>No default (required)</td>
+                        <td>The item's identity, compared with the rail's <PaperCode>value</PaperCode>. Keep it unique within the rail.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>icon</PaperCode></td>
+                        <td><PaperCode>JSX.Element | string</PaperCode></td>
+                        <td>No default (required)</td>
+                        <td>A string is a Material icon name. An element is drawn in the icon's place, such as a <PaperLink href="/docs/paperui/papericon/">PaperIcon</PaperLink> with an image.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>label</PaperCode></td>
+                        <td><PaperCode>JSX.Element | string</PaperCode></td>
+                        <td>No default</td>
+                        <td>The item's name. A string label also becomes the item's tooltip and <PaperCode>aria-label</PaperCode>. An element label is only drawn when labels are shown.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>showLabel</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>The rail's <PaperCode>showLabels</PaperCode></td>
+                        <td>Draws this item's label under its icon.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>disabled</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>No default (off)</td>
+                        <td>Dims the item, ignores choosing, and removes it from the tab order.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>onClick</PaperCode></td>
+                        <td>Click handler</td>
+                        <td>No default</td>
+                        <td>Runs after the item is chosen. Not called when disabled.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>onKeyDown</PaperCode></td>
+                        <td>Key handler</td>
+                        <td>No default</td>
+                        <td>Runs after the item handles Enter and Space.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode></td>
+                        <td>Solid props</td>
+                        <td>No default</td>
+                        <td>Added to the item.</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
 
-            <PaperText preset="subheader" id="recipes">Recipes</PaperText>
-            <PaperText preset="body">
-                Omit showLabels for an ultra-compact icon strip.
+            <PaperText preset="subheader" as="h3" id="action-props">PaperRailAction</PaperText>
+            <PaperText preset="body" as="p">
+                PaperRailAction is a button that looks like a rail item but is never selected, for a command that sits in the rail, such as Add.
+                Its props extend <PaperCode>JSX.ButtonHTMLAttributes&lt;HTMLButtonElement&gt;</PaperCode>, so <PaperCode>onClick</PaperCode> and <PaperCode>disabled</PaperCode> work as on a button.
             </PaperText>
-            <PaperCode block language="tsx">
-{`<PaperRail name="home-rail" defaultValue="home">
-    <PaperRailItem value="home" icon="home" label="Home" />
-    <PaperRailItem value="search" icon="search" label="Search" />
-</PaperRail>`}
-            </PaperCode>
-            <PaperCard padding="double" surface="front">
-                <PaperRail name="home-rail" defaultValue="home">
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Prop</th>
+                        <th>Type</th>
+                        <th>Default</th>
+                        <th>Effect</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>icon</PaperCode></td>
+                        <td><PaperCode>JSX.Element | string</PaperCode></td>
+                        <td>No default (required)</td>
+                        <td>A string is a Material icon name.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>label</PaperCode></td>
+                        <td><PaperCode>JSX.Element | string</PaperCode></td>
+                        <td>No default</td>
+                        <td>A string label is the tooltip and the default <PaperCode>aria-label</PaperCode>. Pass <PaperCode>aria-label</PaperCode> yourself for an element label.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>showLabel</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>The rail's <PaperCode>showLabels</PaperCode></td>
+                        <td>Draws the label under the icon.</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+
+            <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
+            <PaperText preset="subheader" as="h3" id="selection">Selecting an item</PaperText>
+            <PaperTextList>
+                <li>A click, or Enter or Space on a focused item, selects it and calls <PaperCode>onValueChange</PaperCode>. The selected item draws a primary outline and a primary icon.</li>
+                <li>Controlled and uncontrolled work as in a form: with <PaperCode>value</PaperCode> set, the selection changes only when your signal does.</li>
+                <li>The rail is a fit-content column with a right divider and a raised surface. It grows with its items and does not scroll by itself: place it in a container that scrolls.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h3" id="accessibility">Accessibility</PaperText>
+            <PaperTextList>
+                <li>Each item is a <PaperCode>div</PaperCode> with <PaperCode>role="radio"</PaperCode> and <PaperCode>aria-checked</PaperCode>. The rail itself has no role.</li>
+                <li>Every enabled item is a tab stop. The arrow keys do not move between items.</li>
+                <li>A string icon is hidden from assistive technology. The name comes from a string <PaperCode>label</PaperCode>, so always pass one, even when labels are not shown.</li>
+                <li>An item with an element label and no string label has no accessible name.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
+            <PaperText preset="subheader" as="h3" id="labels">Rail with labels</PaperText>
+            <PaperText preset="body" as="p">
+                The Actions panel's action library is a rail of categories with <PaperCode>showLabels</PaperCode>.
+            </PaperText>
+            <PaperCard data-docs-demo padding="double" surface="front">
+                <PaperRail name="docs-rail-labels" showLabels defaultValue="home">
                     <PaperRailItem value="home" icon="home" label="Home" />
-                    <PaperRailItem value="search" icon="search" label="Search" />
+                    <PaperRailItem value="files" icon="folder" label="Files" />
+                    <PaperRailAction icon="add" label="Add" onClick={() => undefined} />
                 </PaperRail>
             </PaperCard>
+            <PaperCode block language="tsx">
+{`import { PaperRail, PaperRailAction, PaperRailItem } from "@mileniumhq/paperui";
+
+<PaperRail name="docs-rail-labels" showLabels defaultValue="home">
+    <PaperRailItem value="home" icon="home" label="Home" />
+    <PaperRailItem value="files" icon="folder" label="Files" />
+    <PaperRailAction icon="add" label="Add" onClick={() => undefined} />
+</PaperRail>`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="neighbors">Choosing a neighbor</PaperText>
+            <PaperTextList>
+                <li>Entries with text, descriptions, or sections belong in <PaperLink href="/docs/paperui/papermenu/">PaperMenu</PaperLink>.</li>
+                <li>A choice inside a page, as cards or a list, is <PaperLink href="/docs/paperui/paperselector/">PaperSelector</PaperLink>.</li>
+            </PaperTextList>
         </PaperFlex>
     );
 }
