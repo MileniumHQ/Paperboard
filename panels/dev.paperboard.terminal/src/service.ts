@@ -242,7 +242,9 @@ let savedCommandsCtx: Ctx | null = null;
 
 export const savedCommands = new SavedCommands({
     load: () => config.get(PANEL_ID, SAVED_COMMANDS_FILE),
-    save: (doc) => config.set(doc, PANEL_ID, SAVED_COMMANDS_FILE),
+    save: async (doc) => {
+        await config.set(doc, PANEL_ID, SAVED_COMMANDS_FILE);
+    },
     // user-saved text through the platform one-shot shell, argv form: the
     // command is one argument, never spliced into another shell string
     start: async (procId, command) => {
