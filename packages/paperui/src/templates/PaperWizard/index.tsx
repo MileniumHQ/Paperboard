@@ -118,8 +118,28 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
         }
     };
 
+    let formRef: HTMLFormElement | undefined;
+
+    // What the current step's fields hold. A checkbox (a PaperToggle's too)
+    // gives its checked boolean, so an unchecked one records false instead
+    // of leaving the key out; every other field gives what FormData gives.
+    const collectForm = (form: HTMLFormElement) => {
+        const harvested: Record<string, any> = { ...wizardData() };
+        new FormData(form).forEach((val, key) => {
+            harvested[key] = val;
+        });
+        for (const el of Array.from(form.elements)) {
+            if (el instanceof HTMLInputElement && el.type === "checkbox" && el.name && !el.disabled) {
+                harvested[el.name] = el.checked;
+            }
+        }
+        setStepData(harvested);
+    };
+
     const prevStep = () => {
         if (!isFirstStep()) {
+            // the step's fields unmount when it leaves: keep what they hold
+            if (formRef) collectForm(formRef);
             const prevIdx = currentStep() - 1;
             setCurrentStep(prevIdx);
             local.onStepChange?.(prevIdx, wizardData());
@@ -128,12 +148,7 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
 
     const handleFormSubmit = (e: SubmitEvent) => {
         e.preventDefault();
-        const formData = new FormData(e.currentTarget as HTMLFormElement);
-        const harvested: Record<string, any> = { ...wizardData() };
-        formData.forEach((val, key) => {
-            harvested[key] = val;
-        });
-        setStepData(harvested);
+        collectForm(e.currentTarget as HTMLFormElement);
 
         nextStep();
     };
@@ -172,7 +187,7 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
 
     return (
         <WizardContext.Provider value={contextValue}>
-            <form {...rest} class={className()} classList={local.classList} onSubmit={handleFormSubmit}>
+            <form ref={formRef} {...rest} class={className()} classList={local.classList} onSubmit={handleFormSubmit}>
                 <div class={styles.wizardSteps}>
                     {local.children}
                 </div>

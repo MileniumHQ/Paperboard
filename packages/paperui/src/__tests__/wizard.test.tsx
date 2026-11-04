@@ -1,4 +1,4 @@
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@solidjs/testing-library";
 import { PaperWizard, PaperWizardStep } from "../templates/PaperWizard";
 
@@ -40,5 +40,39 @@ describe("PaperWizardStep hideBack", () => {
         fireEvent.click(screen.getByRole("button", { name: /Back/ }));
         expect(await screen.findByText("Two")).toBeTruthy();
         expect(screen.queryByRole("button", { name: /Back/ })).toBeNull();
+    });
+});
+
+describe("PaperWizard collected data", () => {
+    test("an unchecked checkbox records false, a checked one true", () => {
+        const onComplete = vi.fn();
+        render(() => (
+            <PaperWizard onComplete={onComplete}>
+                <PaperWizardStep index={0}>
+                    <input type="checkbox" name="agree" />
+                    <input type="checkbox" name="subscribe" checked />
+                    <input name="host" value="localhost" />
+                </PaperWizardStep>
+            </PaperWizard>
+        ));
+        fireEvent.click(screen.getByRole("button", { name: /Finish/ }));
+        expect(onComplete).toHaveBeenCalledWith({ agree: false, subscribe: true, host: "localhost" });
+    });
+
+    test("Back keeps what the step's fields hold", async () => {
+        const onStepChange = vi.fn();
+        render(() => (
+            <PaperWizard onStepChange={onStepChange}>
+                <PaperWizardStep index={0}>One</PaperWizardStep>
+                <PaperWizardStep index={1}>
+                    <input name="host" value="localhost" />
+                </PaperWizardStep>
+            </PaperWizard>
+        ));
+        fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+        const field = (await screen.findByRole("textbox")) as HTMLInputElement;
+        field.value = "example.com";
+        fireEvent.click(screen.getByRole("button", { name: /Back/ }));
+        expect(onStepChange).toHaveBeenLastCalledWith(0, { host: "example.com" });
     });
 });
