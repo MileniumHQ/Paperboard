@@ -1,0 +1,72 @@
+{
+    "subsections": {
+        "start": {
+            "name": "Getting started",
+            "icon": "rocket_launch",
+            "pages": {
+                "overview": {
+                    "name": "What is Paperboard",
+                    "index": 0
+                },
+                "install": {
+                    "name": "Install Paperboard",
+                    "index": 1
+                },
+                "panels": {
+                    "name": "Install and manage panels",
+                    "index": 2
+                }
+            }
+        },
+        "computers": {
+            "name": "Computers",
+            "icon": "dns",
+            "pages": {
+                "server-daemon": {
+                    "name": "Install the server daemon",
+                    "index": 0
+                },
+                "connect": {
+                    "name": "Connect a computer",
+                    "index": 1
+                },
+                "run-as-service": {
+                    "name": "Run the daemon as a service",
+                    "index": 2
+                },
+                "daemon-cli": {
+                    "name": "Server daemon reference",
+                    "index": 3
+                }
+            }
+        },
+        "data": {
+            "name": "Your data",
+            "icon": "folder",
+            "pages": {
+                "data-directory": {
+                    "name": "The data directory",
+                    "index": 0
+                },
+                "backups": {
+                    "name": "Backups",
+                    "index": 1
+                },
+                "security": {
+                    "name": "Security and trust",
+                    "index": 2
+                }
+            }
+        },
+        "help": {
+            "name": "Help",
+            "icon": "help",
+            "pages": {
+                "troubleshooting": {
+                    "name": "Troubleshooting",
+                    "index": 0
+                }
+            }
+        }
+    }
+}
