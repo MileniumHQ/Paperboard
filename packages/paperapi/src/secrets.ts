@@ -34,8 +34,8 @@ export const secretsApi = {
 
     // names only, never values, and only the calling panel's keys: there
     // is no cross-panel widening flag on the wire
-    list: (panelId?: string): Promise<string[]> => {
-        if (panelId !== undefined) assertVaultArg(panelId, "panelId");
+    list: (panelId: string): Promise<string[]> => {
+        assertVaultArg(panelId, "panelId");
         return invoke<string[]>("secrets-list", { panelId });
     },
 

@@ -31,9 +31,8 @@ describe("CredentialStore", () => {
     it("lists names only, never widened past the addressed panel", () => {
         store.set("aaa", "v", "dev.test.list");
         store.set("bbb", "v", "dev.test.list2");
-        expect(store.list("dev.test.list")).toEqual(["dev.test.list/aaa"]);
-        expect(store.list("dev.test.list2")).toEqual(["dev.test.list2/bbb"]);
-        expect(store.list("dev.test.list").every((k) => /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(k))).toBe(true);
+        expect(store.list("dev.test.list")).toEqual(["aaa"]);
+        expect(store.list("dev.test.list2")).toEqual(["bbb"]);
     });
 
     it("rejects invalid panel ids at the boundary", () => {
@@ -116,7 +115,7 @@ describe("Engine integration", () => {
         const engine = new PaperCraneEngine(etmp);
         engine.setSecret("tok", "v", "dev.test.panel");
         expect(engine.getSecret("tok", "dev.test.panel")).toEqual({ found: true, value: "v" });
-        expect(engine.listSecrets("dev.test.panel")).toEqual(["dev.test.panel/tok"]);
+        expect(engine.listSecrets("dev.test.panel")).toEqual(["tok"]);
         await engine.uninstallPanel("dev.test.panel");
         expect(engine.getSecret("tok", "dev.test.panel")).toEqual({ found: true, value: "v" });
         fs.rmSync(etmp, { recursive: true, force: true });

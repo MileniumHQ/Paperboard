@@ -6,7 +6,7 @@ const RESULT = {
     "secrets-set": { success: true },
     "secrets-get": { found: true, value: "tok" },
     "secrets-delete": { deleted: true },
-    "secrets-list": { keys: ["dev.a/tok"] },
+    "secrets-list": { keys: ["tok"] },
     "secrets-purge": { purged: 1 },
 };
 
@@ -27,7 +27,7 @@ describe("secrets route bindings", () => {
             value: "tok",
         });
         expect(unwrap(WS_INVOKE["secrets-delete"], RESULT["secrets-delete"])).toBe(true);
-        expect(unwrap(WS_INVOKE["secrets-list"], RESULT["secrets-list"])).toEqual(["dev.a/tok"]);
+        expect(unwrap(WS_INVOKE["secrets-list"], RESULT["secrets-list"])).toEqual(["tok"]);
         expect(unwrap(WS_INVOKE["secrets-purge"], RESULT["secrets-purge"])).toBe(1);
     });
 

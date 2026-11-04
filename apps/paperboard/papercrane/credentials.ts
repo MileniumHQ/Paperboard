@@ -140,16 +140,17 @@ export class CredentialStore {
         return existed;
     }
 
-    // names only, never values, and only one panel's keys: the wire (and
-    // every caller) resolves identity explicitly, no cross-panel widening
-    public list(panelId?: string): string[] {
-        const panel = panelId !== undefined ? this.validatePanelId(panelId) : null;
-        const keys: string[] = [];
+    // names only, never values, and only one panel's names: the wire (and
+    // every caller) resolves identity explicitly, no cross-panel widening.
+    // The names are the ones the panel set, without the vault's panel prefix
+    public list(panelId: string): string[] {
+        const panel = this.validatePanelId(panelId);
+        const prefix = secretKey(panel, "");
+        const names: string[] = [];
         for (const key of this.secrets.keys()) {
-            if (panel !== null && key.split("/")[0] !== panel) continue;
-            keys.push(key);
+            if (key.startsWith(prefix)) names.push(key.slice(prefix.length));
         }
-        return keys.sort();
+        return names.sort();
     }
 
     public purge(panelId: string): number {

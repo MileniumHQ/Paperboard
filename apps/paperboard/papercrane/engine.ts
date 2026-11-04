@@ -1901,7 +1901,7 @@ export class PaperCraneEngine {
         return this.credentialsStore.delete(name, panelId);
     }
 
-    public listSecrets(panelId?: string): string[] {
+    public listSecrets(panelId: string): string[] {
         return this.credentialsStore.list(panelId);
     }
 
