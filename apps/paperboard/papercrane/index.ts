@@ -29,6 +29,7 @@ import { loadOrCreateTlsIdentity, type TlsIdentity } from "./tlsIdentity";
 import { logger } from "./logger";
 import { PanelServicesManager } from "./panelServices";
 import { backupServiceFor } from "./rpc/backups";
+import { readDaemonStatus } from "./localControl";
 
 export * from "./types";
 export * from "./engine";
@@ -311,8 +312,39 @@ export interface ServerInstance {
     stop: () => void;
 }
 
-export function startPaperCraneServer(
+// One daemon per data directory. A second one would overwrite crane.json,
+// hiding the first from every local client, and delete it on exit. Only a
+// daemon that proves it holds this folder's token counts: a stale crane.json
+// whose port another program now answers on owns nothing.
+async function refuseRunningDaemon(): Promise<void> {
+    let status: Awaited<ReturnType<typeof readDaemonStatus>>;
+    try {
+        status = await readDaemonStatus();
+    } catch (err) {
+        logger.warn(
+            `[Paperboard Server] ${craneHandshakePath()} names no daemon that answers for this data directory (${(err as Error)?.message ?? err}); starting a new one.`,
+        );
+        return;
+    }
+    if (!status.running) return;
+    throw new Error(
+        `A Paperboard server daemon is already running for ${status.dataDir}${status.pid !== undefined ? ` (PID ${status.pid})` : ""}. Stop it first, or start this one with another --data-dir.`,
+    );
+}
+
+export async function startPaperCraneServer(
     options: ServerOptions = {},
+): Promise<ServerInstance> {
+    const host = options.host ?? DEFAULT_HOST;
+    if (options.noAuth && !isLoopbackHost(host)) {
+        throw new Error(`--no-auth only runs on a loopback host, not ${host}`);
+    }
+    await refuseRunningDaemon();
+    return listenPaperCraneServer(options);
+}
+
+function listenPaperCraneServer(
+    options: ServerOptions,
 ): Promise<ServerInstance> {
     return new Promise((resolve, reject) => {
         ensureNativeHelpersExecutable();
@@ -338,11 +370,8 @@ export function startPaperCraneServer(
 
         // Reachable from other computers = TLS with this computer's pinned
         // identity. Plaintext exists only on loopback, for local clients.
+        // startPaperCraneServer already refused --no-auth off loopback
         const loopbackOnly = isLoopbackHost(host);
-        if (noAuth && !loopbackOnly) {
-            reject(new Error(`--no-auth only runs on a loopback host, not ${host}`));
-            return;
-        }
         if (noAuth) {
             console.warn("[Paperboard Server] WARNING: --no-auth disables authentication. Any local program can control this daemon and its data. Use only for development on a trusted, single-user machine.");
         }
@@ -519,12 +548,16 @@ export function startPaperCraneServer(
                         tryStart(currentPort);
                         return;
                     }
-                    // Port is held by a foreign, non-PaperCrane application
-                    const friendly =
-                        `[Paperboard Server] Port ${currentPort} is already in use by another application.\n` +
-                        `  Run with --port <number> to choose a different port, or free up port ${currentPort} first.`;
-                    console.error(friendly);
-                    reject(new Error(friendly));
+                    // Port is held by a foreign, non-PaperCrane application.
+                    // The caller prints it (main.ts fatalCliError) or shows it
+                    // (the desktop app): printing it here too said it twice
+                    reject(Object.assign(
+                        new Error(
+                            `Port ${currentPort} is already in use by another application.\n` +
+                            `  Run with --port <number> to choose a different port, or free up port ${currentPort} first.`,
+                        ),
+                        { code: "EADDRINUSE", port: currentPort },
+                    ));
                 } else {
                     reject(err);
                 }

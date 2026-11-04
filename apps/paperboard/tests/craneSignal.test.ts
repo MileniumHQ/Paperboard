@@ -92,4 +92,9 @@ for (const headless of [true, false]) test(`SIGTERM to the ${headless ? "headles
 
     await secondApi.call("process:kill", { id: ID });
     await until(() => !alive(meta.childPid), "the workload to stop when it is told to");
+
+    // one daemon per data directory: the next run starts its own
+    secondApi.close();
+    second.proc.kill("SIGTERM");
+    expect(await second.proc.exited).toBe(0);
 }, 90_000);

@@ -65,6 +65,10 @@ export default function TroubleshootingDoc() {
             <PaperText preset="body" as="p">
                 <PaperCode>install-service</PaperCode> found a daemon you started by hand for the same data directory. Stop it (press <PaperCode>s</PaperCode> on its screen), then install the service again.
             </PaperText>
+            <PaperText preset="body" as="p">
+                <PaperCode>papercrane</PaperCode> says the same and exits 1 when you start a second daemon for a data directory that already has one running, with the running daemon's PID.
+                Only one daemon runs for each data directory. Use the one that is running, stop it first, or start the new one with another <PaperCode>--data-dir</PaperCode>.
+            </PaperText>
 
             <PaperText preset="title" as="h3" id="needs-root">A --system service needs root, or This is running as root</PaperText>
             <PaperText preset="body" as="p">

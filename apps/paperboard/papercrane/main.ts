@@ -17,7 +17,10 @@ import { getPaperboardDir } from "./paths";
 // clean one-line startup failures instead of raw stacks
 function fatalCliError(err: any): never {
     const msg = err?.message || String(err);
-    if (err?.code === "EADDRINUSE") {
+    if (err?.code === "EADDRINUSE" && typeof err?.port === "number") {
+        // the daemon's own message names the port and the way out
+        console.error(`[Paperboard Server] ${msg}`);
+    } else if (err?.code === "EADDRINUSE") {
         console.error(`[Paperboard Server] Port is already in use. Another Paperboard Server may be running, or pass --port <n>.`);
     } else if (/EACCES|EPERM|permission/i.test(msg)) {
         console.error(`[Paperboard Server] Cannot start: ${msg}`);

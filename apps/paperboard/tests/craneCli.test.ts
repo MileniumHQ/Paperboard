@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { once } from "node:events";
+import net from "node:net";
 import { WebSocket } from "ws";
 import pkg from "../package.json";
 
@@ -81,6 +82,25 @@ describe("a wrong command line", () => {
         expect(code).toBe(2);
         expect(err).toContain("papercrane pair");
     }, 15_000);
+});
+
+describe("a port another program holds", () => {
+    test("says so once, naming the port, and exits 1", async () => {
+        const holder = net.createServer();
+        holder.listen(0, "127.0.0.1");
+        await once(holder, "listening");
+        const port = (holder.address() as net.AddressInfo).port;
+        try {
+            const { code, out, err } = await cli(["--headless", "--host", "127.0.0.1", "--port", String(port)]);
+            expect(code).toBe(1);
+            const message = `[Paperboard Server] Port ${port} is already in use by another application.\n  Run with --port <number> to choose a different port, or free up port ${port} first.\n`;
+            expect(err.split(`is already in use`).length - 1).toBe(1);
+            expect(err.endsWith(message)).toBe(true);
+            expect(out.includes("Listening on")).toBe(false);
+        } finally {
+            holder.close();
+        }
+    });
 });
 
 describe("help and version", () => {

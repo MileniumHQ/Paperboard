@@ -63,15 +63,21 @@ test("an embedded restart rejects the previous daemon token", async () => {
 test("stop removes only its own crane.json and tears down its exit hooks", async () => {
     const before = ["exit", "SIGTERM", "SIGINT"].map(signal => process.listenerCount(signal));
     const first = await startPaperCraneServer({ host: "127.0.0.1", port: 0, headless: true, advertise: false });
-    let second: Awaited<ReturnType<typeof startPaperCraneServer>> | undefined;
     try {
-        second = await startPaperCraneServer({ host: "127.0.0.1", port: 0, headless: true, advertise: false });
+        // a second daemon for this data directory is refused and leaves the
+        // first one's crane.json alone
+        await expect(startPaperCraneServer({ host: "127.0.0.1", port: 0, headless: true, advertise: false }))
+            .rejects.toThrow(/already running for/);
+        expect(readCraneHandshake()?.port).toBe(first.localPort);
+        // a crane.json some other start wrote is not this daemon's to delete
+        const own = fs.readFileSync(craneHandshakePath(), "utf8");
+        const other = JSON.stringify({ ...JSON.parse(own), startId: "another-start" });
+        fs.writeFileSync(craneHandshakePath(), other);
         first.stop();
-        expect(readCraneHandshake()?.port).toBe(second.localPort);
-        second.stop();
-        expect(fs.existsSync(craneHandshakePath())).toBe(false);
+        expect(fs.readFileSync(craneHandshakePath(), "utf8")).toBe(other);
+        fs.rmSync(craneHandshakePath());
         expect(["exit", "SIGTERM", "SIGINT"].map(signal => process.listenerCount(signal))).toEqual(before);
-    } finally { first.stop(); second?.stop(); }
+    } finally { first.stop(); }
 });
 
 test("a verified local daemon is reused without starting another embedded daemon", async () => {
