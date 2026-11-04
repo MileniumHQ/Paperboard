@@ -2,7 +2,9 @@
     display: block;
     width: 100%;
     height: calc(var(--paper-thickest-border-width) * 2);
-    background: var(--paper-surface-inset);
+    /* a tint of whatever it sits on, the same as a chart track, so it never
+       reads as a hole through a card in dark */
+    background: color-mix(in srgb, var(--paper-contrast) 8%, transparent);
     border: none;
     border-radius: var(--paper-thickest-border-width);
     overflow: hidden;

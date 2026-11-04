@@ -53,7 +53,8 @@
     width: 100%;
     height: calc(var(--paper-thickest-border-width) * 2);
     border-radius: var(--paper-thickest-border-width);
-    background: var(--paper-surface-inset);
+    /* the same tint of the card as a donut's track */
+    background: color-mix(in srgb, var(--paper-contrast) 8%, transparent);
     overflow: hidden;
 }
 

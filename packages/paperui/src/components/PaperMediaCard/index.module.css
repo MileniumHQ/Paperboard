@@ -12,7 +12,8 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    background: var(--paper-surface);
+    /* the same paper as every other card in the shell */
+    background: var(--paper-surface-raised);
     border: var(--paper-border-width) solid var(--paper-border);
     border-radius: var(--paper-border-radius);
     overflow: hidden;
@@ -93,8 +94,8 @@
     width: var(--paper-control-size-large);
     height: var(--paper-control-size-large);
     border-radius: var(--paper-border-radius);
-    background: var(--paper-surface);
-    border: var(--paper-thick-border-width) solid var(--paper-surface);
+    background: var(--paper-surface-raised);
+    border: var(--paper-thick-border-width) solid var(--paper-surface-raised);
     box-shadow: var(--paper-element-shadow);
     display: flex;
     align-items: center;
