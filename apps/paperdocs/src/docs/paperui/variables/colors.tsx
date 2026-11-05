@@ -286,6 +286,7 @@ export default function ColorsDoc() {
                     <tr><td><PaperCode>--paper-panel-ai</PaperCode></td><td><PaperCode>#00f5d4</PaperCode></td></tr>
                     <tr><td><PaperCode>--paper-panel-actions</PaperCode></td><td><PaperCode>#2454bd</PaperCode></td></tr>
                     <tr><td><PaperCode>--paper-panel-botcreator</PaperCode></td><td><PaperCode>#5865f2</PaperCode></td></tr>
+                    <tr><td><PaperCode>--paper-panel-agents</PaperCode></td><td><PaperCode>#43bb79</PaperCode></td></tr>
                     <tr><td><PaperCode>--paper-marketing-ink</PaperCode></td><td><PaperCode>#080c12</PaperCode></td></tr>
                     <tr><td><PaperCode>--paper-face-verity</PaperCode></td><td><PaperCode>#ffd60a</PaperCode>, with <PaperCode>--paper-face-verity-ink</PaperCode> <PaperCode>#000000</PaperCode> for its features</td></tr>
                 </tbody>
