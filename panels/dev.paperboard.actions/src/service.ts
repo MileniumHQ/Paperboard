@@ -563,7 +563,9 @@ function projectDocument(projectId: string) {
             await config.set(saved, ACTIONS_PANEL_ID, projectCanvasPath(projectId));
         },
         // TODO(remove after v0.4): with the update in removedSteps.ts
-        backup: (saved) => config.set(saved, ACTIONS_PANEL_ID, `projects/${projectId}.before-0.3.json`),
+        backup: async (saved) => {
+            await config.set(saved, ACTIONS_PANEL_ID, `projects/${projectId}.before-0.3.json`);
+        },
         validate: validateCanvas,
         apply: async (canvas) => {
             const project = projects.get(projectId);

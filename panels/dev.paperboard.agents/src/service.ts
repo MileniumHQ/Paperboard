@@ -28,19 +28,25 @@ const host: AppHost = {
     },
     storageDir: () => fileApi.getPath("", PANEL_ID),
     readSettings: () => configApi.get(PANEL_ID),
-    writeSettings: (s) => configApi.set(s, PANEL_ID),
+    writeSettings: async (s) => {
+        await configApi.set(s, PANEL_ID);
+    },
     findProgram,
     tools: {
         write: (id, data) => processApi.write(id, data),
         readTools: () => configApi.get(PANEL_ID, TOOLS_PATH),
-        writeTools: (c) => configApi.set(c, PANEL_ID, TOOLS_PATH),
+        writeTools: async (c) => {
+            await configApi.set(c, PANEL_ID, TOOLS_PATH);
+        },
         // this panel's vault entries only, the panel id explicit on every call
         vault: {
             get: async (name) => {
                 const r = await secretsApi.get(name, PANEL_ID);
                 return r.found ? r.value : null;
             },
-            set: (name, value) => secretsApi.set(name, value, PANEL_ID),
+            set: async (name, value) => {
+                await secretsApi.set(name, value, PANEL_ID);
+            },
             delete: (name) => secretsApi.delete(name, PANEL_ID),
             list: () => secretsApi.list(PANEL_ID),
         },
