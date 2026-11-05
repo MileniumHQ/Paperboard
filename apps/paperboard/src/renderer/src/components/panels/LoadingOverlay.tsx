@@ -10,6 +10,11 @@ import styles from "./frame.module.css";
 export interface LoadingOverlayProps {
     /** Accessible name for the bar; never rendered as visible text. */
     label?: string;
+    /** How far along, from 0 to 1; the bar moves on its own without it. */
+    value?: number;
+    /** Shown under the bar when the wait needs explaining, such as a backup. */
+    title?: string;
+    detail?: string;
     /** When set, replaces the loader with the failure and its recovery. */
     error?: string;
     retryLabel?: string;
@@ -30,8 +35,15 @@ const LoadingOverlay: Component<LoadingOverlayProps> = (props) => (
         <Show when={!props.error}>
             <PaperProgress
                 aria-label={props.label ?? "Loading"}
+                value={props.value === undefined ? undefined : props.value * 100}
                 class={styles.overlayProgress}
             />
+        </Show>
+        <Show when={!props.error && props.title}>
+            <PaperText preset="label">{props.title}</PaperText>
+        </Show>
+        <Show when={!props.error && props.detail}>
+            <PaperText preset="hint">{props.detail}</PaperText>
         </Show>
         <Show when={props.error}>
             <PaperText preset="error" role="alert">{props.error}</PaperText>
