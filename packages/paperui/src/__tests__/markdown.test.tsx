@@ -152,4 +152,77 @@ describe("PaperMarkdown", () => {
         expect(container.querySelector("img")).toBeNull();
         expect(container.textContent).toContain("web");
     });
+
+    describe("allowHtml", () => {
+        // the shape of a real Modrinth project body: HTML blocks between Markdown
+        const body = [
+            '<h2 align="center">Fast <b>Chunks</b></h2>',
+            "",
+            '<p align="center"><a href="https://modrinth.com/mod/x"><img src="https://cdn.modrinth.com/badge.png" alt="Badge" width="120" height="x"></a> &amp; friends</p>',
+            "",
+            "Plain **Markdown** with an <b>inline</b> tag and a<br>break.",
+            "",
+            "<ul>",
+            "<li>first",
+            "<li>second</li>",
+            "</ul>",
+            "",
+            '<div onclick="alert(1)" style="color: red"><script>alert(1)</script><style>p { color: red }</style><!-- note -->Kept text</div>',
+            "",
+            '<a href="javascript:alert(1)">bad link</a> <iframe src="https://www.youtube.com/embed/abc"></iframe>',
+        ].join("\n");
+
+        it("draws HTML as PaperUI elements, with nothing that runs or styles", () => {
+            const { container, getByText } = render(() => <PaperMarkdown text={body} allowHtml allowImages />);
+
+            expect(container.textContent).not.toContain("<");
+            expect(container.querySelector("h2")?.textContent).toBe("Fast Chunks");
+            expect(container.querySelector("h2 strong")?.textContent).toBe("Chunks");
+            expect(container.querySelector("h2")?.hasAttribute("align")).toBe(false);
+
+            const badge = container.querySelector("img")!;
+            expect(badge.getAttribute("src")).toBe("https://cdn.modrinth.com/badge.png");
+            expect(badge.getAttribute("width")).toBe("120");
+            expect(badge.hasAttribute("height")).toBe(false);
+            expect(badge.closest("a")?.getAttribute("href")).toBe("https://modrinth.com/mod/x");
+            expect(container.textContent).toContain("& friends");
+
+            expect(getByText("inline").tagName).toBe("STRONG");
+            expect(getByText("Markdown").tagName).toBe("STRONG");
+            expect(container.querySelector("p br")).not.toBeNull();
+
+            const items = [...container.querySelectorAll("li")].map((li) => li.textContent?.trim());
+            expect(items).toEqual(["first", "second"]);
+
+            expect(container.querySelector("script, style, iframe, [onclick], [style*='red']")).toBeNull();
+            expect(container.textContent).not.toContain("alert");
+            expect(container.textContent).not.toContain("note");
+            expect(container.textContent).toContain("Kept text");
+
+            expect(container.querySelector("a[href^='javascript']")).toBeNull();
+            expect(container.textContent).toContain("bad link");
+            expect(container.querySelector("a[href='https://www.youtube.com/embed/abc']")).not.toBeNull();
+        });
+
+        it("keeps an image's height when it gives no width", () => {
+            const { container } = render(() => (
+                <PaperMarkdown text={'<img src="https://cdn.modrinth.com/b.webp" alt="Badge" height="42">'} allowHtml allowImages />
+            ));
+            const image = container.querySelector("img")!;
+            expect(image.style.height).toBe("42px");
+            expect(image.style.width).toBe("auto");
+        });
+
+        it("still hides images the caller did not allow", () => {
+            const { container } = render(() => <PaperMarkdown text={body} allowHtml />);
+            expect(container.querySelector("img")).toBeNull();
+            expect(container.textContent).toContain("Badge");
+        });
+
+        it("is off by default: HTML shows as its source", () => {
+            const { container } = render(() => <PaperMarkdown text={'<h2 align="center">Title</h2>'} />);
+            expect(container.querySelector("h2")).toBeNull();
+            expect(container.textContent).toContain('<h2 align="center">Title</h2>');
+        });
+    });
 });

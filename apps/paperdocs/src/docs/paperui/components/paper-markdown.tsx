@@ -98,6 +98,12 @@ export function Example() {
                         <td>Draws <PaperCode>![alt](src)</PaperCode> as an image. Off, an image shows its alt text. A remote image tells its server who is reading, so turn this on only for sources you trust.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>allowHtml</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>No default (off)</td>
+                        <td>Draws HTML in the source as the same components Markdown gets. Off, HTML shows as its source. See HTML.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>renderImage</PaperCode></td>
                         <td><PaperCode>(image: MarkdownImage) =&gt; JSX.Element | undefined</PaperCode></td>
                         <td>No default</td>
@@ -181,10 +187,27 @@ export function Example() {
                     </tr>
                     <tr>
                         <td>Raw HTML</td>
-                        <td>Its source, as text. A <PaperCode>script</PaperCode> tag in the Markdown is visible characters.</td>
+                        <td>Its source, as text, unless <PaperCode>allowHtml</PaperCode> is on. A <PaperCode>script</PaperCode> tag in the Markdown is visible characters.</td>
                     </tr>
                 </tbody>
             </PaperTable>
+
+            <PaperText preset="subheader" as="h3" id="html">HTML</PaperText>
+            <PaperText preset="body" as="p">
+                Many READMEs and catalog pages, such as Modrinth's, mix HTML into their Markdown for centered images, headings, and badges.
+                Turn on <PaperCode>allowHtml</PaperCode> to draw it.
+                The HTML is read by PaperMarkdown itself, never by the browser, so it works the same when a page is rendered on a server.
+            </PaperText>
+            <PaperTextList>
+                <li>Headings, paragraphs, lists, quotes, <PaperCode>pre</PaperCode>, tables, and rules become the same components as their Markdown.</li>
+                <li><PaperCode>b</PaperCode>, <PaperCode>i</PaperCode>, <PaperCode>s</PaperCode>, <PaperCode>u</PaperCode>, <PaperCode>sup</PaperCode>, <PaperCode>sub</PaperCode>, and similar tags keep their formatting. <PaperCode>code</PaperCode> becomes PaperCode, and <PaperCode>details</PaperCode> stays a disclosure.</li>
+                <li>Links and images follow the same rules as Markdown, including <PaperCode>allowImages</PaperCode> and <PaperCode>renderImage</PaperCode>. An image keeps a <PaperCode>width</PaperCode> or <PaperCode>height</PaperCode> given in pixels.</li>
+                <li>No other attribute is kept: no <PaperCode>style</PaperCode>, <PaperCode>class</PaperCode>, <PaperCode>align</PaperCode>, or event handler. Containers such as <PaperCode>div</PaperCode> and <PaperCode>center</PaperCode> keep only their content.</li>
+                <li><PaperCode>script</PaperCode>, <PaperCode>style</PaperCode>, <PaperCode>svg</PaperCode>, comments, and similar code are dropped with their content. An <PaperCode>iframe</PaperCode>, <PaperCode>video</PaperCode>, or <PaperCode>audio</PaperCode> becomes a link to its address.</li>
+            </PaperTextList>
+            <PaperCode block language="tsx">
+{`<PaperMarkdown text={project.body} allowHtml allowImages />`}
+            </PaperCode>
 
             <PaperText preset="subheader" as="h3" id="headings">Headings</PaperText>
             <PaperText preset="body" as="p">

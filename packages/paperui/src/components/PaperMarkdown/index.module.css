@@ -48,3 +48,20 @@
     display: block;
     max-width: 100%;
 }
+
+/* allowHtml: a container's blocks stack with the same gap as the root's;
+   min-width keeps a wide table or image from stretching the column */
+.html {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+}
+
+.PaperMarkdown summary {
+    cursor: pointer;
+}
+
+.PaperMarkdown details > .html {
+    margin-top: var(--paper-uigap-half);
+}
