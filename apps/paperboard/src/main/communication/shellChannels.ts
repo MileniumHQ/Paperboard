@@ -20,6 +20,8 @@ export const SHELL_INVOKE_CHANNELS = [
     "open-update-download",
     "panel-file-export",
     "panel-file-import",
+    "panel-loopback-redirect",
+    "panel-loopback-redirect-cancel",
     "backup-gdrive-connect",
     "panel-permission-answer",
     "panel-permissions-list",

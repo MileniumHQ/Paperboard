@@ -13,6 +13,7 @@ export * from "./identity";
 export * from "./secrets";
 export * from "./backups";
 export * from "./ports";
+export * from "./loopback";
 export { SWIPE_BACK_MESSAGE, swipeBackMessage, type SwipeBackMessage } from "./swipeBack";
 export { HAPTIC_MESSAGE, hapticMessage, type HapticMessage } from "./haptics";
 export * from "./package";

@@ -6,6 +6,7 @@ import LoadingOverlay from "./LoadingOverlay";
 import styles from "./frame.module.css";
 import { panelUrl } from "../../lib/shell";
 import { FILE_TRANSFER_RESULT, parseFileTransferMessage, runPanelFileTransfer } from "../../lib/panelFileTransfer";
+import { createFrameLoopbackRedirects, LOOPBACK_REDIRECT_CANCEL, LOOPBACK_REDIRECT_REQUEST, LOOPBACK_REDIRECT_RESULT, parseLoopbackRedirectMessage } from "../../lib/panelLoopbackRedirect";
 import BackupLocationChooser, { type BackupLocationChoice } from "../backups/BackupLocationChooser";
 import { BACKUP_LOCATION_REQUEST, BACKUP_LOCATION_RESULT, parseBackupLocationRequest } from "../../lib/backupLocationRequest";
 
@@ -70,6 +71,8 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
         setReady(false); setFailure("");
         if (frame) frame.src = panelUrl(computerId, panelId, `?_r=${reload}&generation=${generation}`);
         const timer = setTimeout(() => setFailure("The panel did not finish connecting to its service."), 25_000);
+        // a sign-in redirect this document asked the shell to catch
+        const loopback = createFrameLoopbackRedirects(computerId);
         const receive = (event: MessageEvent) => {
             if (event.source !== frame?.contentWindow || event.data?.generation !== generation) return;
             if (event.data.type === "paperboard:ready" && event.data.panelId === panelId) {
@@ -94,6 +97,15 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
                 };
                 if (request.refused) answer({ status: "failed", message: request.refused });
                 else setChooser({ requestId: request.requestId, sourceId: request.sourceId, generation: current, target });
+            } else if (event.data.type === LOOPBACK_REDIRECT_REQUEST || event.data.type === LOOPBACK_REDIRECT_CANCEL) {
+                // a sign-in redirect to catch on this device, or one to stop catching
+                const message = parseLoopbackRedirectMessage(event.data);
+                const target = frame?.contentWindow;
+                if (!message) return;
+                if (message.kind === "cancel") loopback.cancel(message.requestId);
+                else if (target) void loopback.request(message.requestId, message.redirectUri).then((result) => {
+                    target.postMessage({ type: LOOPBACK_REDIRECT_RESULT, generation: current, requestId: message.requestId, result }, "*");
+                });
             } else {
                 // a save or open dialog, answered on the frame that asked
                 const request = parseFileTransferMessage(event.data);
@@ -107,7 +119,8 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
         window.addEventListener("message", receive);
         // a reloaded document asked nothing; its open window closes unanswered
         // a document that goes mid-swipe leaves its page where it was, not half dragged
-        onCleanup(() => { if (frame) swipeFromFrame(frame, { phase: "cancel", dx: 0, velocity: 0 }); clearTimeout(timer); window.removeEventListener("message", receive); setChooser(null); });
+        // and its sign-in redirect stops being caught
+        onCleanup(() => { if (frame) swipeFromFrame(frame, { phase: "cancel", dx: 0, velocity: 0 }); clearTimeout(timer); window.removeEventListener("message", receive); setChooser(null); loopback.closeAll(); });
     });
     onMount(() => { if (frame) frame.src = panelUrl(computerId, panelId, `?_r=${props.reload}&generation=${generation}`); });
     return <div class={styles.panelLayer} classList={{ [styles.away]: !props.current }}>

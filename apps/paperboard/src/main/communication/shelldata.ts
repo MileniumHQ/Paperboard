@@ -1,7 +1,7 @@
 // shell-only IPC; data operations flow through daemon.
 // Every handler below validates event.senderFrame.url via shellGuard:
 // panel:// origins get a typed PANEL_IPC_REFUSED, never an answer.
-import { type IpcMain, type IpcMainInvokeEvent, BrowserWindow, app, clipboard, dialog, nativeTheme, shell } from "electron";
+import { type IpcMain, type IpcMainInvokeEvent, type WebContents, BrowserWindow, app, clipboard, dialog, nativeTheme, shell } from "electron";
 import { broadcastAppSettings, syncTitleBarOverlays, applyNativeTheme, applyRunOnStartup } from "../appSettings";
 import * as fs from "fs";
 import * as path from "path";
@@ -17,7 +17,9 @@ import { runPanelImport, runPanelExport, type PanelFileTransferDeps } from "../p
 import { poolEndpoint } from "../panelFileEndpoint";
 import type { FileTypeFilter } from "../../shared/fileTransfer";
 import { paperboardGoogleClient, signInToGoogleDrive } from "../googleOAuth";
-import { googleSignInPage } from "../googleSignInPage";
+import { googleSignInPage, loopbackRedirectPage } from "../googleSignInPage";
+import { catchLoopbackRedirect, LoopbackRedirectFailure } from "../loopbackRedirect";
+import type { PanelLoopbackRedirectResult } from "../../shared/loopbackRedirect";
 import connectionPool from "./papercrane/ConnectionPool";
 import { launchOptionsFromArgv } from "../../shared/launchOptions";
 import { answerPanelPermissionAsk, openSystemPrivacySettings, panelPermissionStore } from "../panelPermissionHost";
@@ -48,6 +50,36 @@ function nativeFileDialogs(event: IpcMainInvokeEvent): PanelFileTransferDeps {
             return result.canceled ? null : result.filePaths;
         },
     };
+}
+
+// open loopback redirect listeners by the shell window that asked and the
+// shell's own id for the request; a window that reloads or closes stops its
+// listeners, since no frame is left to hand the redirect to
+const loopbackRequests = new Map<number, Map<string, AbortController>>();
+
+function loopbackRequestsOf(sender: WebContents): Map<string, AbortController> {
+    let open = loopbackRequests.get(sender.id);
+    if (!open) {
+        const mine = new Map<string, AbortController>();
+        open = mine;
+        loopbackRequests.set(sender.id, mine);
+        const stopAll = () => {
+            for (const controller of mine.values()) controller.abort();
+            mine.clear();
+        };
+        sender.once("destroyed", () => {
+            stopAll();
+            loopbackRequests.delete(sender.id);
+        });
+        sender.on("did-navigate", stopAll);
+    }
+    return open;
+}
+
+function loopbackRequestId(args: unknown): string {
+    const id = (args as { requestId?: unknown } | null)?.requestId;
+    if (typeof id !== "string" || !id || id.length > 128) throw new Error("Invalid parameter: requestId");
+    return id;
 }
 
 // main-side effects of freshly saved settings; browser mode runs the same.
@@ -128,6 +160,34 @@ export default function registerShellIpc(ipcMain: IpcMain) {
     ipcMain.handle("panel-file-import", (event, args) => {
         assertShellFrame(event, "panel-file-import");
         return runPanelImport(args, nativeFileDialogs(event));
+    });
+
+    // a panel's sign-in redirect to localhost, caught on this device; the
+    // renderer already decided the panel runs on another computer
+    ipcMain.handle("panel-loopback-redirect", async (event, args): Promise<PanelLoopbackRedirectResult> => {
+        assertShellFrame(event, "panel-loopback-redirect");
+        const requestId = loopbackRequestId(args);
+        const open = loopbackRequestsOf(event.sender);
+        if (open.has(requestId)) throw new Error(`Loopback redirect request ${requestId} is already open`);
+        const controller = new AbortController();
+        open.set(requestId, controller);
+        try {
+            const url = await catchLoopbackRedirect((args as { redirectUri?: unknown }).redirectUri, {
+                signal: controller.signal,
+                page: () => loopbackRedirectPage(nativeTheme.shouldUseDarkColors),
+            });
+            return { status: "caught", url };
+        } catch (err) {
+            if (err instanceof LoopbackRedirectFailure) return { status: "failed", code: err.code, message: err.message };
+            logger.error("[loopback] catching a redirect failed:", err);
+            return { status: "failed", code: "failed", message: (err as Error)?.message ?? String(err) };
+        } finally {
+            if (open.get(requestId) === controller) open.delete(requestId);
+        }
+    });
+    ipcMain.handle("panel-loopback-redirect-cancel", (event, args) => {
+        assertShellFrame(event, "panel-loopback-redirect-cancel");
+        loopbackRequests.get(event.sender.id)?.get(loopbackRequestId(args))?.abort();
     });
 
     // adds a Google Drive backup location to a computer, or with a
