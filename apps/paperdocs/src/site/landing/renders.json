@@ -1,7 +1,7 @@
 {
     "hero": {
-        "width": 2076,
-        "height": 1541
+        "width": 1601,
+        "height": 1612
     },
     "laptop": {
         "width": 1521,
@@ -12,8 +12,8 @@
         "height": 862
     },
     "dev-board": {
-        "width": 1594,
-        "height": 647
+        "width": 1608,
+        "height": 1010
     },
     "desktop": {
         "width": 1635,

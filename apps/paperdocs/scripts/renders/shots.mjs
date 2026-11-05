@@ -7,9 +7,9 @@ export const SHOTS = [
     {
         name: "hero",
         minWidth: 1600,
-        width: 2600,
-        height: 2200,
-        yaw: -20,
+        width: 2800,
+        height: 2300,
+        yaw: 26,
         pitch: 12,
         items: [{ model: "all-in-one", screen: "/public/screens/gameserver.png" }],
     },
@@ -36,8 +36,8 @@ export const SHOTS = [
         minWidth: 960,
         width: 2000,
         height: 1700,
-        yaw: 22,
-        pitch: 22,
+        yaw: 28,
+        pitch: 42,
         items: [{ model: "dev-board" }],
     },
     {
