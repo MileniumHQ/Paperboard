@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -16,8 +16,10 @@ import {
 } from "@mileniumhq/paperui";
 import {
     backupApi,
+    backupProgressText,
     ROUTINE_BACKUP_HOURS,
     ROUTINE_BACKUP_LABEL,
+    type BackupProgress,
     type BackupRecord,
     type BackupSchedule,
     type BackupStatus,
@@ -58,12 +60,18 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
     const [error, setError] = createSignal<Outcome | null>(null);
     const [notice, setNotice] = createSignal<Outcome | null>(null);
     const [busy, setBusy] = createSignal<"create" | "schedule" | null>(null);
+    // the server's running backup or restore, made here or routinely
+    const [progress, setProgress] = createSignal<BackupProgress | null>(null);
+    let stopProgress: (() => void) | null = null;
+    onCleanup(() => stopProgress?.());
 
     const load = async () => {
         setLoadError("");
         try {
+            stopProgress ??= backupsApi.onProgress((change) => setProgress(change.progress));
             const now = await backupsApi.status();
             setStatus(now);
+            setProgress(now.progress);
             setBackups(now.location ? await backupsApi.list() : []);
         } catch (err) {
             setLoadError(`Backups could not be loaded: ${errorMessage(err)}`);
@@ -167,9 +175,9 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
     return (
         <>
             <PaperPageHeader icon="backup" title="Backups">
-                <PaperButton disabled={busy() !== null || status() === null} onClick={() => void backUpNow()}>
-                    <PaperIcon>{busy() === "create" ? "progress_activity" : "backup"}</PaperIcon>
-                    {busy() === "create" ? "Backing up..." : "Back Up Now"}
+                <PaperButton disabled={busy() !== null || progress() !== null || status() === null} onClick={() => void backUpNow()}>
+                    <PaperIcon>{busy() === "create" || progress() ? "progress_activity" : "backup"}</PaperIcon>
+                    {progress() ? backupProgressText(progress()!) : busy() === "create" ? "Backing up..." : "Back Up Now"}
                 </PaperButton>
             </PaperPageHeader>
 
