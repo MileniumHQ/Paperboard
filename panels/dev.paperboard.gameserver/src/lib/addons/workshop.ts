@@ -88,6 +88,8 @@ export const workshopSource: AddonSource = {
             body: escapeMarkdown(item.description),
             // an author's own hosts; nothing reviews them
             allowImages: false,
+            // the description is BBCode, escaped into plain text
+            allowHtml: false,
             info: [
                 { label: "Subscribers", value: item.subscriptions === null ? "Unknown" : formatCount(item.subscriptions) },
                 { label: "Favorites", value: item.favorites === null ? "Unknown" : formatCount(item.favorites) },

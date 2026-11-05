@@ -151,7 +151,7 @@ export function AddonDetail<Meta>(props: {
                                         >
                                             {/* Third-party markdown goes through PaperMarkdown, which renders PaperUI
                                                 elements instead of HTML; the source says whether its images may load. */}
-                                            <PaperMarkdown text={project()!.body} allowImages={project()!.allowImages} />
+                                            <PaperMarkdown text={project()!.body} allowImages={project()!.allowImages} allowHtml={project()!.allowHtml} />
                                         </Show>
                                     </Show>
                                 </PaperFlex>

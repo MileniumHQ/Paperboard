@@ -40,6 +40,8 @@ export interface AddonProject {
     body: string;
     /** images in the body load; only for catalogs that review what they host */
     allowImages: boolean;
+    /** the body's HTML is drawn as formatting rather than shown as source */
+    allowHtml: boolean;
     /** the Information table */
     info: { label: string; value: string }[];
 }

@@ -29,6 +29,8 @@ export function modrinthSource(path: string, browseUrl: string): AddonSource {
                 body: project.body,
                 // Modrinth bodies are reviewed, host-scoped by the panel manifest and CSP-enforced
                 allowImages: true,
+                // Modrinth pages are Markdown with HTML in it, which modrinth.com draws
+                allowHtml: true,
                 info: [
                     { label: "Downloads", value: formatCount(project.downloads) },
                     { label: "Follows", value: formatCount(project.follows) },
