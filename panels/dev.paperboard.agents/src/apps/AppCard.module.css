@@ -11,3 +11,15 @@
     background: var(--paper-surface-inset);
     color: var(--paper-text);
 }
+
+/* the title and description take the room left beside the picture, but
+   never less than a readable line: below that, Open wraps to its own row */
+.text {
+    flex: 1 1 calc(var(--paper-uigap) * 10);
+    min-width: 0;
+}
+
+/* Open stays at the card's right edge, also when it wraps */
+.open {
+    margin-inline-start: auto;
+}

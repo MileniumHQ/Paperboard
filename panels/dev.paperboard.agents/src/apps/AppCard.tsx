@@ -26,11 +26,13 @@ export default function AppCard(props: { entry: AppEntry; apps: Launcher }) {
 
     return (
         <section class={styles.card} aria-label={e().title} data-message={e().id}>
-            <PaperFlex direction="row" align="center" gap="full">
+            {/* in the narrow column beside an open app, Open wraps under the
+                text instead of squeezing it to a word per line */}
+            <PaperFlex direction="row" align="center" gap="full" wrap>
                 <Show when={there()} fallback={<PaperIcon>delete</PaperIcon>}>
                     <Picture apps={props.apps} name={e().app} title={e().title} taken />
                 </Show>
-                <PaperFlex flex minWidth={0} gap="onefourth">
+                <PaperFlex class={styles.text} gap="onefourth">
                     <PaperText preset="label">
                         {e().title}
                     </PaperText>
@@ -39,7 +41,7 @@ export default function AppCard(props: { entry: AppEntry; apps: Launcher }) {
                     </PaperText>
                 </PaperFlex>
                 <Show when={there()}>
-                    <PaperButton variant="text" disabled={busy()} onClick={open}>
+                    <PaperButton class={styles.open} variant="text" disabled={busy()} onClick={open}>
                         Open <PaperIcon>open_in_new</PaperIcon>
                     </PaperButton>
                 </Show>
