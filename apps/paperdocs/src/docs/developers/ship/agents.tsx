@@ -11,7 +11,7 @@ const PROMPT = `Build a Paperboard panel in this folder: <what the panel does, a
 
 Read these before you write code:
 - https://paperboard.dev/llms.txt lists every page of the Paperboard docs. Each page is Markdown at its URL with .md in place of the trailing slash.
-- https://paperboard.dev/docs/guides/first-panel.md, then the guide for each part the panel needs.
+- https://paperboard.dev/docs/developers/first-panel.md, then the guide for each part the panel needs.
 - The PaperAPI and PaperUI reference page of every API and component you use.
 
 Rules:
@@ -27,7 +27,7 @@ When you finish, all of these pass, and you show me their output:
 - bun test
 - bunx paperapi doctor, ending with "Ready: Paperboard can run this panel."
 - bunx paperapi call on each public action, with good input and with bad input
-- the panel checklist at https://paperboard.dev/docs/guides/checklist.md, item by item`;
+- the panel checklist at https://paperboard.dev/docs/developers/checklist.md, item by item`;
 
 const TEST_PAPERBOARD = `# once, in the background
 npx @mileniumhq/paperboard serve --headless --data-dir /tmp/pb-agent --port 47815 --host 127.0.0.1
@@ -76,7 +76,7 @@ export default function AgentsGuideDoc() {
                 <tbody>
                     <tr><td><PaperCode>https://paperboard.dev/llms.txt</PaperCode></td><td>Every page of the docs, by section, with its first sentence and a link to its Markdown.</td></tr>
                     <tr><td><PaperCode>https://paperboard.dev/llms-full.txt</PaperCode></td><td>Every page in full, in one file, each marked with its source URL.</td></tr>
-                    <tr><td>Any page with <PaperCode>.md</PaperCode> in place of the trailing slash</td><td>That page alone, such as <PaperCode>https://paperboard.dev/docs/guides/first-panel.md</PaperCode>.</td></tr>
+                    <tr><td>Any page with <PaperCode>.md</PaperCode> in place of the trailing slash</td><td>That page alone, such as <PaperCode>https://paperboard.dev/docs/developers/first-panel.md</PaperCode>.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
@@ -96,11 +96,11 @@ export default function AgentsGuideDoc() {
 
             <PaperText preset="subheader" as="h2" id="test-paperboard">Give it a test Paperboard</PaperText>
             <PaperText preset="body" as="p">
-                An agent tries things that fail, restarts services and changes data. Keep it off your own Paperboard with a second one in a folder of its own, as in <PaperLink href="/docs/guides/dev-loop/#test-paperboard">Work on a second Paperboard</PaperLink>:
+                An agent tries things that fail, restarts services and changes data. Keep it off your own Paperboard with a second one in a folder of its own, as in <PaperLink href="/docs/developers/dev-loop/#test-paperboard">Work on a second Paperboard</PaperLink>:
             </PaperText>
             <PaperCode block language="sh">{TEST_PAPERBOARD}</PaperCode>
             <PaperText preset="body" as="p">
-                Every <PaperCode>paperapi</PaperCode> command then works on the test Paperboard. The scaffold's tests already use a throwaway folder of their own; see <PaperLink href="/docs/guides/testing/#real-data">Tests never reach your Paperboard</PaperLink>.
+                Every <PaperCode>paperapi</PaperCode> command then works on the test Paperboard. The scaffold's tests already use a throwaway folder of their own; see <PaperLink href="/docs/developers/testing/#real-data">Tests never reach your Paperboard</PaperLink>.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="verify">How the agent checks its work</PaperText>
@@ -120,7 +120,7 @@ export default function AgentsGuideDoc() {
                     <tr><td><PaperCode>bunx paperapi doctor</PaperCode></td><td>The manifest is valid, the build is complete, the panel is linked, and its service answers. Each failed line says what to run next.</td></tr>
                     <tr><td><PaperCode>bunx paperapi call &lt;panel-id&gt;</PaperCode></td><td>Lists the panel's actions. With an action id and JSON input, runs it and prints the result or the error.</td></tr>
                     <tr><td><PaperCode>bunx paperapi monitor --panel &lt;panel-id&gt; --json</PaperCode></td><td>Every call, event and service change of the panel, one JSON object per line.</td></tr>
-                    <tr><td>The end-to-end tests</td><td>The actions work through a running Paperboard. See <PaperLink href="/docs/guides/testing/#end-to-end">End-to-end tests</PaperLink>.</td></tr>
+                    <tr><td>The end-to-end tests</td><td>The actions work through a running Paperboard. See <PaperLink href="/docs/developers/testing/#end-to-end">End-to-end tests</PaperLink>.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperCode block language="sh">{CHECK}</PaperCode>
@@ -134,7 +134,7 @@ export default function AgentsGuideDoc() {
             <PaperText preset="subheader" as="h2" id="review">What you check yourself</PaperText>
             <PaperText preset="body" as="p">
                 Commands don't show how the panel looks or whether it makes sense to a person.
-                Open every page and widget in Paperboard, in the light and the dark theme and in a narrow window, make every failure happen once, and go through the <PaperLink href="/docs/guides/checklist/">panel checklist</PaperLink>.
+                Open every page and widget in Paperboard, in the light and the dark theme and in a narrow window, make every failure happen once, and go through the <PaperLink href="/docs/developers/checklist/">panel checklist</PaperLink>.
                 Read the code before you install it anywhere but the test Paperboard: a panel runs with the full reach of your account.
             </PaperText>
         </PaperFlex>

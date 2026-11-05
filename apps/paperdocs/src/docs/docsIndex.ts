@@ -1,6 +1,6 @@
 import sections from "./sections.json";
 import paperboard from "./paperboard/pages.json";
-import guides from "./guides/pages.json";
+import developers from "./developers/pages.json";
 import paperapi from "./paperapi/pages.json";
 import paperui from "./paperui/pages.json";
 
@@ -12,7 +12,7 @@ import paperui from "./paperui/pages.json";
 export const docsIndex: Record<string, any> = {
     meta: { sections },
     paperboard,
-    guides,
+    developers,
     paperapi,
     paperui,
 };

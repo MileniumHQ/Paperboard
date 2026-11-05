@@ -10,11 +10,11 @@ Each section answers one kind of question. A page belongs to exactly one.
 | Section | Path | Reader | Question it answers |
 | --- | --- | --- | --- |
 | Paperboard | `src/docs/paperboard/` | Someone running Paperboard | How do I install, connect, and look after it? |
-| Guides | `src/docs/guides/` | A developer making a panel | How do I build a good panel, start to finish? |
+| Developers | `src/docs/developers/` | A developer making a panel | How do I build a good panel, start to finish? |
 | PaperAPI | `src/docs/paperapi/` | A developer mid-build | What exactly does this API take and return? |
 | PaperUI | `src/docs/paperui/` | A developer mid-build | What exactly does this component or token do? |
 
-Guides teach and explain. PaperAPI and PaperUI are reference: complete,
+Developers pages teach and explain. PaperAPI and PaperUI are reference: complete,
 exact, and dull on purpose. A guide links to reference instead of repeating
 it; a reference page never stops to teach. When a page starts doing both,
 split it.
@@ -147,7 +147,7 @@ Guide page:
    they should see.
 4. Next: the page that naturally follows.
 
-A tutorial (`guides/first-panel`) is run start to finish by someone with
+A tutorial (`developers/first-panel`) is run start to finish by someone with
 nothing but the prerequisites. Every step is tested by following it.
 
 ## Code samples
@@ -163,7 +163,7 @@ nothing but the prerequisites. Every step is tested by following it.
   prose is read, so it carries the rules.
 - PaperUI demo text is generic: a button says `Button`, a setting says
   `Enabled`. When variants need telling apart, use the variant name.
-  Guides may use a realistic example panel, and keep the same one across
+  Developers pages may use a realistic example panel, and keep the same one across
   the guide.
 - A live demo sits inside a card (`<PaperCard data-docs-demo>`) that sets it
   off from the prose. A demo straight on the page background is a defect.

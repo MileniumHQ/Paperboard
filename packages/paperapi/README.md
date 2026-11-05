@@ -1,5 +1,5 @@
 APIs for Paperboard panels. Learn more at https://paperboard.dev/docs/paperapi/, and
-start building with the guides at https://paperboard.dev/docs/guides/.
+start building with the guides at https://paperboard.dev/docs/developers/.
 
 # PaperAPI
 

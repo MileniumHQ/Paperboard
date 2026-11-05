@@ -302,7 +302,7 @@ function usage(cli: CliOptions): string[] {
         "  -h, --help             show this",
         "",
         "Exits 0 when the panel is made, 1 when it cannot be, 2 for a command line it cannot read.",
-        "Guides: https://paperboard.dev/docs/guides/",
+        "Docs: https://paperboard.dev/docs/developers/",
     ];
 }
 
@@ -467,6 +467,6 @@ export async function runCli(cli: CliOptions): Promise<number> {
     log(`  bunx paperapi link   # Paperboard runs the panel from this folder`);
     log("");
     log("Its README.md has what comes after: tests, paperapi doctor, monitor and restart, and publishing.");
-    log("Guides: https://paperboard.dev/docs/guides/");
+    log("Docs: https://paperboard.dev/docs/developers/");
     return 0;
 }

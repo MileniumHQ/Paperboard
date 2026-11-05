@@ -166,7 +166,7 @@ export default function ServicesDoc() {
 
             <PaperText preset="subheader" as="h2" id="before-you-start">Before you start</PaperText>
             <PaperText preset="body" as="p">
-                A panel made with <PaperCode>npm create @mileniumhq/panel</PaperCode>, as in <PaperLink href="/docs/guides/first-panel/">Your first panel</PaperLink>.
+                A panel made with <PaperCode>npm create @mileniumhq/panel</PaperCode>, as in <PaperLink href="/docs/developers/first-panel/">Your first panel</PaperLink>.
                 Its <PaperCode>src/service.ts</PaperCode> builds to <PaperCode>dist/service.js</PaperCode>, which the manifest names in <PaperCode>service</PaperCode>.
                 Every function used here is in the <PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink> and <PaperLink href="/docs/paperapi/bridge/">createPanelBridge</PaperLink> references.
             </PaperText>
@@ -197,7 +197,7 @@ export default function ServicesDoc() {
             <PaperTextList>
                 <li>Put in the state everything a window shows: the settings, the results, and the reason each thing failed. A page that needs something not in the state has to ask for it, and a widget has to ask again.</li>
                 <li>Keep the state plain JSON. It travels to every window as JSON.</li>
-                <li>Never put a key, a token or a password in the state. Every page and widget of the panel receives it. Weather keeps only <PaperCode>hasKey</PaperCode>. See <PaperLink href="/docs/guides/settings-and-secrets/">Settings and secrets</PaperLink>.</li>
+                <li>Never put a key, a token or a password in the state. Every page and widget of the panel receives it. Weather keeps only <PaperCode>hasKey</PaperCode>. See <PaperLink href="/docs/developers/settings-and-secrets/">Settings and secrets</PaperLink>.</li>
                 <li>This file runs in the browser and in Node, so it imports neither.</li>
             </PaperTextList>
 
@@ -237,7 +237,7 @@ export default function ServicesDoc() {
             <PaperText preset="body" as="p">
                 <PaperCode>refreshCity</PaperCode> runs on a timer, so no person is waiting for its answer.
                 It catches every failure, logs it, and puts the reason in <PaperCode>failures</PaperCode>, where the page shows it next to the city.
-                A failure that only reaches the log is a failure nobody sees. See <PaperLink href="/docs/guides/errors/">Show every failure</PaperLink>.
+                A failure that only reaches the log is a failure nobody sees. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.
                 Give every <PaperCode>fetch</PaperCode> a timeout with <PaperCode>AbortSignal.timeout</PaperCode>, so a site that never answers can't hold the work up forever.
             </PaperText>
 
@@ -254,7 +254,7 @@ export default function ServicesDoc() {
             <PaperTextList>
                 <li>Make the bridge at module level, not inside a component. Paperboard waits for the bridges a page makes as it loads before it shows the panel, and shows the failure in place of the panel when one can't reach the service.</li>
                 <li>The page changes state only by calling an action, with <PaperCode>{"bridge.call(\"follow-city\", { city })"}</PaperCode>. The service's <PaperCode>setState</PaperCode> then reaches every window, including the one that called.</li>
-                <li><PaperCode>bridge.call</PaperCode> rejects with the message the action threw. Show it. See <PaperLink href="/docs/guides/errors/">Show every failure</PaperLink>.</li>
+                <li><PaperCode>bridge.call</PaperCode> rejects with the message the action threw. Show it. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="programs">Run other programs</PaperText>
@@ -287,7 +287,7 @@ bunx paperapi call dev.example.weather __getState`}
             </PaperText>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/guides/ui/">design the interface</PaperLink>.
+                Next: <PaperLink href="/docs/developers/ui/">design the interface</PaperLink>.
             </PaperText>
         </PaperFlex>
     );

@@ -91,7 +91,7 @@ export function Topbar(props: TopbarProps) {
                   : "/paperdocs.png",
         );
     const brandName = () =>
-        sectionMeta()?.name || (isSite() ? BRAND.name : "PaperDocs");
+        sectionMeta()?.brand ?? sectionMeta()?.name ?? (isSite() ? BRAND.name : "PaperDocs");
     // The site brand is the "Paperboard" wordmark, textured like the
     // marketing headers. Docs and section brands stay plain PaperUI text.
     const isWordmark = () => isSite() && !sectionMeta();

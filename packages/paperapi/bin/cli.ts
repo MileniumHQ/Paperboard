@@ -60,7 +60,7 @@ function interrupted(): Promise<void> {
 const program = new Command();
 program
     .name("paperapi")
-    .description("Build, run and watch Paperboard panels. Docs: https://paperboard.dev/docs/guides/")
+    .description("Build, run and watch Paperboard panels. Docs: https://paperboard.dev/docs/developers/")
     .version(packageJson.version)
     .showHelpAfterError()
     .exitOverride((err: CommanderError) => {

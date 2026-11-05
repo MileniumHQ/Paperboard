@@ -15,6 +15,8 @@ export interface Subsection {
 
 export interface SectionMeta {
     name: string;
+    /** The top bar's "<brand> docs" when the name reads wrong there ("Developer" for "Developers"). */
+    brand?: string;
     icon?: string;
     /** The section's logo: its card on the docs home and its top bar brand. */
     image: string;

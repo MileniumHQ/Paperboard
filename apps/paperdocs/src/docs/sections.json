@@ -5,10 +5,11 @@
         "image": "/paperboard.png",
         "description": "Install Paperboard, connect computers, and run the server daemon."
     },
-    "guides": {
-        "name": "Guides",
-        "icon": "school",
-        "image": "/paperdocs.png",
+    "developers": {
+        "name": "Developers",
+        "brand": "Developer",
+        "icon": "code",
+        "image": "/developers.png",
         "description": "Build a panel from an empty folder to the Panel Library."
     },
     "paperapi": {

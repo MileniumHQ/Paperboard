@@ -223,7 +223,7 @@ export default function DesignLanguageDoc() {
             </PaperText>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/guides/ui/">Building a good panel UI</PaperLink> applies this language to a whole panel.
+                Next: <PaperLink href="/docs/developers/ui/">Building a good panel UI</PaperLink> applies this language to a whole panel.
             </PaperText>
         </PaperFlex>
     );

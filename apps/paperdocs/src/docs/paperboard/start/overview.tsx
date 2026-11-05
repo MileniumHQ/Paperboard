@@ -92,7 +92,7 @@ export default function PaperboardOverviewDoc() {
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                To make a panel of your own, start with the <PaperLink href="/docs/guides/overview/">Guides</PaperLink>.
+                To make a panel of your own, start with the <PaperLink href="/docs/developers/overview/">Developers</PaperLink> section.
             </PaperText>
 
             <PaperText preset="body" as="p">

@@ -29,7 +29,7 @@ export default function PaperWidgetDoc() {
             <PaperText preset="body" as="p">
                 Render PaperWidget as the root of the widget, inside a <PaperLink href="/docs/paperui/paperprovider/">PaperProvider</PaperLink>.
                 It is absolutely positioned and fills the nearest positioned ancestor, which in a widget page is the tile.
-                The registration side of a widget is in <PaperLink href="/docs/paperapi/widgets/">PaperAPI widgets</PaperLink> and the walkthrough is in <PaperLink href="/docs/guides/widgets/">Widgets</PaperLink>.
+                The registration side of a widget is in <PaperLink href="/docs/paperapi/widgets/">PaperAPI widgets</PaperLink> and the walkthrough is in <PaperLink href="/docs/developers/widgets/">Widgets</PaperLink>.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="back">
                 <PaperFlex width="panel-small" height="panel-height-small">

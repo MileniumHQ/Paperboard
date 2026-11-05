@@ -176,7 +176,7 @@ export default function SettingsAndSecretsDoc() {
 
             <PaperText preset="subheader" as="h2" id="before-you-start">Before you start</PaperText>
             <PaperText preset="body" as="p">
-                A panel with a service, as in <PaperLink href="/docs/guides/services/">Services and state</PaperLink>.
+                A panel with a service, as in <PaperLink href="/docs/developers/services/">Services and state</PaperLink>.
                 The exact calls are in the <PaperLink href="/docs/paperapi/config/">configApi</PaperLink> and <PaperLink href="/docs/paperapi/secrets/">secretsApi</PaperLink> references.
             </PaperText>
 
@@ -213,7 +213,7 @@ export default function SettingsAndSecretsDoc() {
             </PaperText>
             <PaperCode block language="tsx">{SET_UNITS}</PaperCode>
             <PaperTextList>
-                <li><PaperCode>internal: true</PaperCode> keeps the action out of the Actions panel's library and the Agents panel, and refuses it to other panels. The panel's own pages still call it. See <PaperLink href="/docs/guides/actions/#internal">Expose actions</PaperLink>.</li>
+                <li><PaperCode>internal: true</PaperCode> keeps the action out of the Actions panel's library and the Agents panel, and refuses it to other panels. The panel's own pages still call it. See <PaperLink href="/docs/developers/actions/#internal">Expose actions</PaperLink>.</li>
                 <li><PaperCode>configApi.get</PaperCode> resolves with <PaperCode>null</PaperCode> before the first save. Weather starts from <PaperCode>{"{ ...DEFAULT_SETTINGS, ...saved }"}</PaperCode> in <PaperCode>onInit</PaperCode>, so a setting added in a later version gets its default.</li>
                 <li>Settings are in the state, so every window shows the current value without asking.</li>
             </PaperTextList>
@@ -239,7 +239,7 @@ export default function SettingsAndSecretsDoc() {
             <PaperTextList>
                 <li>The key field is <PaperCode>type="password"</PaperCode> with <PaperCode>autocomplete="off"</PaperCode>, and it is cleared once the key is saved. The page never shows a saved key again. It says the key is saved and offers to replace or remove it.</li>
                 <li>Each failure names what didn't happen, such as <PaperCode>API key not saved</PaperCode>, with the reason below.</li>
-                <li>The confirm modal is explained in <PaperLink href="/docs/guides/ui/#confirm">Design the interface</PaperLink>.</li>
+                <li>The confirm modal is explained in <PaperLink href="/docs/developers/ui/#confirm">Design the interface</PaperLink>.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="removal">When the panel is removed</PaperText>
@@ -259,7 +259,7 @@ bunx paperapi call dev.example.weather __getState`}
             </PaperText>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/guides/actions/">expose actions</PaperLink>.
+                Next: <PaperLink href="/docs/developers/actions/">expose actions</PaperLink>.
             </PaperText>
         </PaperFlex>
     );

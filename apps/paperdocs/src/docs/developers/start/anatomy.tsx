@@ -14,12 +14,12 @@ export default function AnatomyDoc() {
             <PaperText preset="body" as="p">
                 A panel folder holds a manifest, the source of up to three programs, and the build Paperboard runs.
                 Here is what each file of a new panel does, what Paperboard reads, and where the panel's data lives instead.
-                Keep it open beside the folder from <PaperLink href="/docs/guides/first-panel/">Your first panel</PaperLink>.
+                Keep it open beside the folder from <PaperLink href="/docs/developers/first-panel/">Your first panel</PaperLink>.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="before-you-start">Before you start</PaperText>
             <PaperText preset="body" as="p">
-                Make a panel with <PaperCode>npm create @mileniumhq/panel</PaperCode> and keep every choice, as in <PaperLink href="/docs/guides/first-panel/">Your first panel</PaperLink>.
+                Make a panel with <PaperCode>npm create @mileniumhq/panel</PaperCode> and keep every choice, as in <PaperLink href="/docs/developers/first-panel/">Your first panel</PaperLink>.
                 A choice you leave out removes its files and its manifest entries.
             </PaperText>
 
@@ -71,7 +71,7 @@ export default function AnatomyDoc() {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td><PaperCode>manifest.json</PaperCode></td><td>The panel's id, name, version, and where its page, service and widgets are. See <PaperLink href="/docs/guides/anatomy/#manifest">The manifest</PaperLink>.</td></tr>
+                    <tr><td><PaperCode>manifest.json</PaperCode></td><td>The panel's id, name, version, and where its page, service and widgets are. See <PaperLink href="/docs/developers/anatomy/#manifest">The manifest</PaperLink>.</td></tr>
                     <tr><td><PaperCode>package.json</PaperCode></td><td>Dependencies and the scripts below.</td></tr>
                     <tr><td><PaperCode>vite.config.ts</PaperCode></td><td>Builds the two pages side by side: <PaperCode>{"input: { index: \"index.html\", widget: \"widget.html\" }"}</PaperCode>.</td></tr>
                     <tr><td><PaperCode>tsconfig.json</PaperCode></td><td>Strict TypeScript with Solid's JSX. <PaperCode>bun run build</PaperCode> runs <PaperCode>tsc</PaperCode> first, so a type error stops the build.</td></tr>
@@ -86,7 +86,7 @@ export default function AnatomyDoc() {
                     <tr><td><PaperCode>src/widget.tsx</PaperCode></td><td>The widget page's mount functions, through <PaperLink href="/docs/paperapi/widgets/">defineWidgets</PaperLink>.</td></tr>
                     <tr><td><PaperCode>src/widget.css</PaperCode></td><td>Gives the widget page a full-height, painted body.</td></tr>
                     <tr><td><PaperCode>src/lib/</PaperCode></td><td>Logic with no PaperAPI and no interface in it, such as <PaperCode>greet.ts</PaperCode>. Code here is what the unit tests reach. <PaperCode>failure.ts</PaperCode> turns a caught error into the words a person is shown.</td></tr>
-                    <tr><td><PaperCode>test/</PaperCode></td><td>Unit tests, the UI standards test, and <PaperCode>hermetic.ts</PaperCode>, which keeps tests away from your real Paperboard. See <PaperLink href="/docs/guides/testing/">Test a panel</PaperLink>.</td></tr>
+                    <tr><td><PaperCode>test/</PaperCode></td><td>Unit tests, the UI standards test, and <PaperCode>hermetic.ts</PaperCode>, which keeps tests away from your real Paperboard. See <PaperLink href="/docs/developers/testing/">Test a panel</PaperLink>.</td></tr>
                     <tr><td><PaperCode>store/about.md</PaperCode></td><td>The long description on the panel's page in the Panel Library. See <PaperLink href="/docs/paperapi/store-listing/">Store listing</PaperLink>.</td></tr>
                     <tr><td><PaperCode>.gitignore</PaperCode></td><td>Keeps <PaperCode>node_modules/</PaperCode>, <PaperCode>dist/</PaperCode> and the release folder <PaperCode>out/</PaperCode> out of version control.</td></tr>
                 </tbody>
@@ -103,7 +103,7 @@ export default function AnatomyDoc() {
                 <tbody>
                     <tr><td><PaperCode>bun run build</PaperCode></td><td><PaperCode>tsc</PaperCode>, then <PaperCode>vite build</PaperCode> for the pages, then <PaperCode>bun build ./src/service.ts --outfile ./dist/service.js --target=node</PaperCode> for the service. A panel without a service runs only the first two.</td></tr>
                     <tr><td><PaperCode>bun test</PaperCode></td><td>Every <PaperCode>*.test.ts</PaperCode> file, after <PaperCode>test/hermetic.ts</PaperCode>.</td></tr>
-                    <tr><td><PaperCode>bun run pack</PaperCode></td><td><PaperCode>bunx paperapi pack</PaperCode>, which writes the release archive. See <PaperLink href="/docs/guides/packaging/">Package a panel</PaperLink>.</td></tr>
+                    <tr><td><PaperCode>bun run pack</PaperCode></td><td><PaperCode>bunx paperapi pack</PaperCode>, which writes the release archive. See <PaperLink href="/docs/developers/packaging/">Package a panel</PaperLink>.</td></tr>
                     <tr><td><PaperCode>bun run dev</PaperCode>, <PaperCode>bun run preview</PaperCode></td><td>Vite's own web server. Paperboard does not use it: Paperboard runs what <PaperCode>build</PaperCode> writes.</td></tr>
                 </tbody>
             </PaperTable>
@@ -184,7 +184,7 @@ export const DEFAULT_STATE: PanelState = { greetingCount: 0 };`}
             </PaperText>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/guides/dev-loop/">the development loop</PaperLink>.
+                Next: <PaperLink href="/docs/developers/dev-loop/">the development loop</PaperLink>.
             </PaperText>
         </PaperFlex>
     );

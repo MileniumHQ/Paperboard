@@ -1,7 +1,7 @@
 # create-panel
 
 Scaffolds a Paperboard panel. The guides for building one are at
-https://paperboard.dev/docs/guides/.
+https://paperboard.dev/docs/developers/.
 
 ```sh
 npm create @mileniumhq/panel

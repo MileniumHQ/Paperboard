@@ -55,7 +55,7 @@ export default function SecurityDoc() {
             </PaperText>
             <PaperText preset="body" as="p">
                 This is why every panel in the Panel Library is reviewed by the Paperboard team before it is published.
-                Installing a panel means trusting it as much as any program you install. See <PaperLink href="/docs/guides/panel-library/">Get into the Panel Library</PaperLink> for what the review checks.
+                Installing a panel means trusting it as much as any program you install. See <PaperLink href="/docs/developers/panel-library/">Get into the Panel Library</PaperLink> for what the review checks.
             </PaperText>
             <PaperText preset="body" as="p">
                 The daemon runs as your account, never as root unless you install a system service with <PaperCode>--run-as root</PaperCode>. That would give every panel root.

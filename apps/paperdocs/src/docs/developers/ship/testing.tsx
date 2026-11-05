@@ -155,7 +155,7 @@ export default function TestingGuideDoc() {
             <PaperText preset="subheader" as="h2" id="before-you-start">Before you start</PaperText>
             <PaperText preset="body" as="p">
                 A panel made with <PaperCode>npm create @mileniumhq/panel</PaperCode>. Run every command from its folder.
-                The end-to-end part needs a second Paperboard server daemon, as in <PaperLink href="/docs/guides/dev-loop/#test-paperboard">Work on a second Paperboard</PaperLink>.
+                The end-to-end part needs a second Paperboard server daemon, as in <PaperLink href="/docs/developers/dev-loop/#test-paperboard">Work on a second Paperboard</PaperLink>.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="what-you-get">What the scaffold gives you</PaperText>
@@ -255,11 +255,11 @@ Ran 2 tests across 1 file.`}
             <PaperText preset="subheader" as="h2" id="by-hand">Check it by hand</PaperText>
             <PaperText preset="body" as="p">
                 Tests don't show how the panel looks. Before you ship, open every page and widget in Paperboard, in the light and the dark theme and in a narrow window, and make every failure happen once.
-                The <PaperLink href="/docs/guides/checklist/">panel checklist</PaperLink> lists what to look at.
+                The <PaperLink href="/docs/developers/checklist/">panel checklist</PaperLink> lists what to look at.
             </PaperText>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/guides/checklist/">the panel checklist</PaperLink>.
+                Next: <PaperLink href="/docs/developers/checklist/">the panel checklist</PaperLink>.
             </PaperText>
         </PaperFlex>
     );

@@ -98,7 +98,7 @@ export default function PaperUiOverviewDoc() {
             </PaperTextList>
             <PaperText preset="body" as="p">
                 The panel template ships a test that fails when a page writes an inline style.
-                How to design a good panel on top of these rules is taught in <PaperLink href="/docs/guides/ui/">Building a good panel UI</PaperLink>.
+                How to design a good panel on top of these rules is taught in <PaperLink href="/docs/developers/ui/">Building a good panel UI</PaperLink>.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="choose">Choosing a component</PaperText>
@@ -138,7 +138,7 @@ export default function PaperUiOverviewDoc() {
             <PaperTextList>
                 <li><PaperLink href="/docs/paperui/quickstart/">Quick start</PaperLink> builds a minimal panel from the provider down.</li>
                 <li><PaperLink href="/docs/paperui/design-language/">Design language</PaperLink> explains the surfaces, borders, color roles and shadow that give Paperboard its look.</li>
-                <li><PaperLink href="/docs/guides/ui/">Building a good panel UI</PaperLink> is the guide to layout, states and feedback.</li>
+                <li><PaperLink href="/docs/developers/ui/">Building a good panel UI</PaperLink> is the guide to layout, states and feedback.</li>
                 <li><PaperLink href="/docs/paperapi/overview/">PaperAPI</PaperLink> is the other half of a panel: files, secrets, processes and a background service.</li>
             </PaperTextList>
         </PaperFlex>

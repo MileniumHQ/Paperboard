@@ -28,7 +28,7 @@ restart the panel from its menu in Paperboard) to run the new build.
 <!-- @endif -->
 - `bun test` runs the unit tests and the UI standards guard.
 
-The guides for building panels are at <https://paperboard.dev/docs/guides/>.
+The guides for building panels are at <https://paperboard.dev/docs/developers/>.
 
 ## What is here
 

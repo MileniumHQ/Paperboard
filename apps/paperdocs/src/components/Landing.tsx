@@ -82,14 +82,14 @@ export function Landing() {
                             <PaperEffect variant="primary">
                                 <PaperButton
                                     variant="primary"
-                                    href={docsPath("guides", "first-panel")}
+                                    href={docsPath("developers", "first-panel")}
                                 >
                                     Start the tutorial
                                 </PaperButton>
                             </PaperEffect>
                             <PaperButton
                                 variant="text"
-                                href={docsPath("guides", "checklist")}
+                                href={docsPath("developers", "checklist")}
                             >
                                 Panel checklist
                             </PaperButton>
@@ -114,7 +114,7 @@ export function Landing() {
                             <PaperButton href="/llms.txt">Open llms.txt</PaperButton>
                             <PaperButton
                                 variant="text"
-                                href={docsPath("guides", "agents")}
+                                href={docsPath("developers", "agents")}
                             >
                                 Build with an agent
                             </PaperButton>
@@ -129,7 +129,7 @@ export function Landing() {
                             Panels run with full trust on your computers, so
                             the Panel Library only lists panels reviewed with
                             the Paperboard team.{" "}
-                            <PaperLink href={docsPath("guides", "panel-library")}>
+                            <PaperLink href={docsPath("developers", "panel-library")}>
                                 How to get a panel listed
                             </PaperLink>
                         </PaperText>

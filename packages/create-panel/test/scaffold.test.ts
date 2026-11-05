@@ -270,7 +270,7 @@ describe("the README a panel starts with", () => {
         const text = readme({});
         const block = text.slice(text.indexOf("```sh") + 5, text.indexOf("```", text.indexOf("```sh") + 5));
         expect(block.trim().split("\n").map((line) => line.replace(/\s+#.*$/, ""))).toEqual(["bun install", "bun run build", "bunx paperapi link"]);
-        expect(text).toContain("https://paperboard.dev/docs/guides/");
+        expect(text).toContain("https://paperboard.dev/docs/developers/");
         expect(text).not.toContain("paperboard.dev/paperapi");
     });
 
@@ -379,7 +379,7 @@ describe("runCli", () => {
         const text = lines.join("\n");
         const commands = lines.map((line) => line.trim().replace(/\s+#.*$/, "")).filter((line) => /^(cd|bun|bunx) /.test(line));
         expect(commands).toEqual([`cd ${relative(process.cwd(), join(parentDir, "dev.paperboard.next"))}`, "bun install", "bun run build", "bunx paperapi link"]);
-        expect(text).toContain("https://paperboard.dev/docs/guides/");
+        expect(text).toContain("https://paperboard.dev/docs/developers/");
         expect(text).not.toContain("npx");
     });
 });

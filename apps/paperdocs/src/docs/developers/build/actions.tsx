@@ -98,7 +98,7 @@ export default function ActionsGuideDoc() {
 
             <PaperText preset="subheader" as="h2" id="before-you-start">Before you start</PaperText>
             <PaperText preset="body" as="p">
-                A panel with a service, as in <PaperLink href="/docs/guides/services/">Services and state</PaperLink>.
+                A panel with a service, as in <PaperLink href="/docs/developers/services/">Services and state</PaperLink>.
                 Every field is in the <PaperLink href="/docs/paperapi/actions/">actionsApi</PaperLink> reference.
             </PaperText>
 
@@ -135,7 +135,7 @@ export default function ActionsGuideDoc() {
                     <tr><td><PaperCode>name</PaperCode></td><td>A verb and its object, in sentence case: <PaperCode>Get forecast</PaperCode>, <PaperCode>Follow city</PaperCode>.</td></tr>
                     <tr><td><PaperCode>description</PaperCode></td><td>What it does and what it returns, in one sentence. An agent decides from this whether to call it.</td></tr>
                     <tr><td><PaperCode>template</PaperCode></td><td>The sentence the block shows, with each input in braces: <PaperCode>{"Get the forecast for {city}"}</PaperCode>.</td></tr>
-                    <tr><td><PaperCode>category</PaperCode>, <PaperCode>icon</PaperCode></td><td>The library section the block sits in, named after the panel, and a Material Symbols name for the action. The block itself shows the panel's icon, so give the panel one; see <PaperLink href="/docs/guides/packaging/#icon">Package a panel</PaperLink>.</td></tr>
+                    <tr><td><PaperCode>category</PaperCode>, <PaperCode>icon</PaperCode></td><td>The library section the block sits in, named after the panel, and a Material Symbols name for the action. The block itself shows the panel's icon, so give the panel one; see <PaperLink href="/docs/developers/packaging/#icon">Package a panel</PaperLink>.</td></tr>
                     <tr><td><PaperCode>output</PaperCode>, <PaperCode>outputFields</PaperCode></td><td>What <PaperCode>run</PaperCode> returns. Each field of an object output becomes a variable the next blocks of a flow can use.</td></tr>
                 </tbody>
             </PaperTable>
@@ -146,7 +146,7 @@ export default function ActionsGuideDoc() {
                 <li><PaperCode>placeholder</PaperCode> names the kind of value, never an example: <PaperCode>City</PaperCode>, <PaperCode>Text</PaperCode>, <PaperCode>Channel ID</PaperCode>. Not <PaperCode>Oslo</PaperCode> or <PaperCode>1234567890</PaperCode>.</li>
                 <li>Set a limit on every input: <PaperCode>maxLength</PaperCode> on text, <PaperCode>min</PaperCode>, <PaperCode>max</PaperCode> and <PaperCode>integer</PaperCode> on numbers, <PaperCode>maxItems</PaperCode> on lists. The flow editor marks a broken limit before the flow runs, and the SDK refuses the call before <PaperCode>run</PaperCode> starts.</li>
                 <li><PaperCode>required</PaperCode> is for the flow editor only. The call still reaches <PaperCode>run</PaperCode> with the input empty, so check it there, as <PaperCode>cityName</PaperCode> does.</li>
-                <li>Never take a key, token or password as an input. Read it from <PaperLink href="/docs/guides/settings-and-secrets/">secretsApi</PaperLink> in the service.</li>
+                <li>Never take a key, token or password as an input. Read it from <PaperLink href="/docs/developers/settings-and-secrets/">secretsApi</PaperLink> in the service.</li>
             </PaperTextList>
             <PaperCode block language="sh">
 {`$ bunx paperapi call dev.example.weather follow-city '{"city":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}'
@@ -173,7 +173,7 @@ export default function ActionsGuideDoc() {
 
             <PaperText preset="subheader" as="h2" id="internal">Internal actions</PaperText>
             <PaperText preset="body" as="p">
-                The page asks the service to do things through internal actions, such as <PaperCode>set-units</PaperCode> in <PaperLink href="/docs/guides/settings-and-secrets/#settings">Settings and secrets</PaperLink>.
+                The page asks the service to do things through internal actions, such as <PaperCode>set-units</PaperCode> in <PaperLink href="/docs/developers/settings-and-secrets/#settings">Settings and secrets</PaperLink>.
                 They need no <PaperCode>template</PaperCode>, <PaperCode>category</PaperCode> or <PaperCode>icon</PaperCode>, since no library shows them. Check their inputs all the same: <PaperCode>paperapi call</PaperCode> reaches them, and a bug in the page can send anything.
             </PaperText>
 
@@ -214,7 +214,7 @@ unfollow-city    Unfollow city  (city: string)`}
             </PaperText>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/guides/widgets/">add a Home widget</PaperLink>.
+                Next: <PaperLink href="/docs/developers/widgets/">add a Home widget</PaperLink>.
             </PaperText>
         </PaperFlex>
     );

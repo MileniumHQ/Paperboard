@@ -278,7 +278,7 @@ for (const alias of DOCS_ALIASES) {
 const llms = [
     "# Paperboard",
     "",
-    "> Paperboard is a desktop app and server daemon for running self-hosted programs, extended by panels. These docs cover using Paperboard, building panels (guides), the PaperAPI runtime, and the PaperUI component library. Every page is also available as Markdown at its URL with `.md` in place of the trailing slash.",
+    "> Paperboard is a desktop app and server daemon for running self-hosted programs, extended by panels. These docs cover using Paperboard, building panels (developers), the PaperAPI runtime, and the PaperUI component library. Every page is also available as Markdown at its URL with `.md` in place of the trailing slash.",
     "",
 ];
 const llmsFull = [];

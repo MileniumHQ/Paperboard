@@ -19,7 +19,7 @@ export default function DevLoopDoc() {
 
             <PaperText preset="subheader" as="h2" id="before-you-start">Before you start</PaperText>
             <PaperText preset="body" as="p">
-                A panel folder linked into a running Paperboard, as in <PaperLink href="/docs/guides/first-panel/">Your first panel</PaperLink>.
+                A panel folder linked into a running Paperboard, as in <PaperLink href="/docs/developers/first-panel/">Your first panel</PaperLink>.
                 Run every command below from the panel folder. The full reference is <PaperLink href="/docs/paperapi/cli/">paperapi</PaperLink>.
             </PaperText>
 
@@ -135,7 +135,7 @@ $ bunx paperapi call dev.example.weather follow-city '{"city":"Oslo"}'
             </PaperCode>
             <PaperText preset="body" as="p">
                 Start every log line with the panel's short name, as <PaperCode>[weather]</PaperCode> does, so it can be found among the others.
-                The log is for you. A person using the panel never reads it, so every failure that matters to them also goes to the page. See <PaperLink href="/docs/guides/errors/">Show every failure</PaperLink>.
+                The log is for you. A person using the panel never reads it, so every failure that matters to them also goes to the page. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="test-paperboard">Work on a second Paperboard</PaperText>
@@ -174,7 +174,7 @@ bunx paperapi doctor`}
             </PaperTable>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/guides/services/">keep state in a service</PaperLink>.
+                Next: <PaperLink href="/docs/developers/services/">keep state in a service</PaperLink>.
             </PaperText>
         </PaperFlex>
     );

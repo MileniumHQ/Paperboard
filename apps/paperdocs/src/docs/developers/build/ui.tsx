@@ -172,7 +172,7 @@ export default function UiGuideDoc() {
 
             <PaperText preset="subheader" as="h2" id="before-you-start">Before you start</PaperText>
             <PaperText preset="body" as="p">
-                A panel with a service, as in <PaperLink href="/docs/guides/services/">Services and state</PaperLink>.
+                A panel with a service, as in <PaperLink href="/docs/developers/services/">Services and state</PaperLink>.
                 The page reads the service's state through <PaperCode>weather()</PaperCode> from <PaperCode>src/weather.ts</PaperCode>, shown there.
                 Every component used here has its own page in the <PaperLink href="/docs/paperui/overview/">PaperUI</PaperLink> reference.
             </PaperText>
@@ -220,7 +220,7 @@ export default function UiGuideDoc() {
                     <tr><td>A row of fields and a button</td><td><PaperLink href="/docs/paperui/paperflex/">PaperFlex</PaperLink> with <PaperCode>direction="row"</PaperCode></td><td><PaperCode>align="center"</PaperCode> lines the button up with the field.</td></tr>
                     <tr><td>Text input</td><td><PaperLink href="/docs/paperui/paperinput/">PaperInput</PaperLink></td><td>The <PaperCode>label</PaperCode> names the field. The sample also follows the city on Enter.</td></tr>
                     <tr><td>One number per thing</td><td><PaperLink href="/docs/paperui/paperstattile/">PaperStatTile</PaperLink> in a <PaperLink href="/docs/paperui/papergrid/">PaperGrid</PaperLink></td><td>The grid fits as many tiles in a row as the width allows.</td></tr>
-                    <tr><td>A failure</td><td><PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> with <PaperCode>variant="danger"</PaperCode></td><td>Shows where the person was looking, with the reason. See <PaperLink href="/docs/guides/errors/">Show every failure</PaperLink>.</td></tr>
+                    <tr><td>A failure</td><td><PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> with <PaperCode>variant="danger"</PaperCode></td><td>Shows where the person was looking, with the reason. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
@@ -230,7 +230,7 @@ export default function UiGuideDoc() {
             <PaperText preset="subheader" as="h2" id="settings">A settings page</PaperText>
             <PaperText preset="body" as="p">
                 Put settings in a <PaperLink href="/docs/paperui/papersettinglist/">PaperSettingList</PaperLink>, one <PaperCode>PaperSettingItem</PaperCode> each, with a title, a short description and its control on the right.
-                Weather's settings page is on <PaperLink href="/docs/guides/settings-and-secrets/#the-page">Settings and secrets</PaperLink>.
+                Weather's settings page is on <PaperLink href="/docs/developers/settings-and-secrets/#the-page">Settings and secrets</PaperLink>.
                 Weather applies the units as soon as they are picked, with no Save button for the page.
             </PaperText>
 
@@ -254,7 +254,7 @@ export default function UiGuideDoc() {
             </PaperTextList>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/guides/errors/">show every failure</PaperLink>.
+                Next: <PaperLink href="/docs/developers/errors/">show every failure</PaperLink>.
             </PaperText>
         </PaperFlex>
     );

@@ -23,8 +23,8 @@ export default function PanelLibraryGuideDoc() {
 
             <PaperText preset="subheader" as="h2" id="before-you-write">Before you write</PaperText>
             <PaperTextList>
-                <li>The panel passes the <PaperLink href="/docs/guides/checklist/">panel checklist</PaperLink>: its build, tests and <PaperCode>bunx paperapi doctor</PaperCode> pass.</li>
-                <li><PaperCode>bunx paperapi pack</PaperCode> makes its archive. See <PaperLink href="/docs/guides/packaging/">Package a panel</PaperLink>.</li>
+                <li>The panel passes the <PaperLink href="/docs/developers/checklist/">panel checklist</PaperLink>: its build, tests and <PaperCode>bunx paperapi doctor</PaperCode> pass.</li>
+                <li><PaperCode>bunx paperapi pack</PaperCode> makes its archive. See <PaperLink href="/docs/developers/packaging/">Package a panel</PaperLink>.</li>
                 <li>Its manifest has a <PaperCode>store</PaperCode> block for its page in the Panel Library: the about text, screenshots in the light and the dark theme, and the services it uses. See <PaperLink href="/docs/paperapi/store-listing/">Store listing</PaperLink>.</li>
                 <li>Its source is somewhere the team can read it, such as a Git repository.</li>
             </PaperTextList>
@@ -55,8 +55,8 @@ export default function PanelLibraryGuideDoc() {
                 A panel needs no review to run on computers you own.
             </PaperText>
             <PaperTextList>
-                <li>On the computer you develop on, <PaperCode>bunx paperapi link</PaperCode> runs it from its folder. See <PaperLink href="/docs/guides/dev-loop/">The development loop</PaperLink>.</li>
-                <li>On your other computers, unpack its archive into Paperboard's data folder. See <PaperLink href="/docs/guides/packaging/#install-by-hand">Install it on your computers</PaperLink>.</li>
+                <li>On the computer you develop on, <PaperCode>bunx paperapi link</PaperCode> runs it from its folder. See <PaperLink href="/docs/developers/dev-loop/">The development loop</PaperLink>.</li>
+                <li>On your other computers, unpack its archive into Paperboard's data folder. See <PaperLink href="/docs/developers/packaging/#install-by-hand">Install it on your computers</PaperLink>.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
                 A panel run this way gets no updates from the Panel Library. Install it again for each new version.

@@ -26,7 +26,7 @@ export default function PaperUiQuickstartDoc() {
             <PaperText preset="body" as="p">
                 Run the generator and answer its prompts.
                 It writes a folder with the Vite config, the manifest, tests and a working three-page panel.
-                The full walkthrough is in <PaperLink href="/docs/guides/first-panel/">Your first panel</PaperLink>.
+                The full walkthrough is in <PaperLink href="/docs/developers/first-panel/">Your first panel</PaperLink>.
             </PaperText>
             <PaperCode block language="sh">
 {`npm create @mileniumhq/panel`}
@@ -278,7 +278,7 @@ bunx paperapi link`}
 
             <PaperText preset="subheader" as="h2" id="next">Next</PaperText>
             <PaperTextList>
-                <li><PaperLink href="/docs/guides/ui/">Building a good panel UI</PaperLink> teaches layout, states, and feedback.</li>
+                <li><PaperLink href="/docs/developers/ui/">Building a good panel UI</PaperLink> teaches layout, states, and feedback.</li>
                 <li><PaperLink href="/docs/paperui/design-language/">Design language</PaperLink> explains the surfaces, borders, color roles and shadow the panel is drawn with.</li>
                 <li><PaperLink href="/docs/paperapi/overview/">PaperAPI</PaperLink> gives the panel files, secrets, processes and a background service.</li>
             </PaperTextList>

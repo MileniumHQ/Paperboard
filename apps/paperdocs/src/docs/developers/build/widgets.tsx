@@ -172,7 +172,7 @@ export default function WidgetsGuideDoc() {
 
             <PaperText preset="subheader" as="h2" id="before-you-start">Before you start</PaperText>
             <PaperText preset="body" as="p">
-                A panel with a service, as in <PaperLink href="/docs/guides/services/">Services and state</PaperLink>. A widget reads the service's state, so a panel without a service has nothing live to show.
+                A panel with a service, as in <PaperLink href="/docs/developers/services/">Services and state</PaperLink>. A widget reads the service's state, so a panel without a service has nothing live to show.
                 Panels made with <PaperCode>npm create @mileniumhq/panel</PaperCode> already have a widget page, <PaperCode>widget.html</PaperCode> and <PaperCode>src/widget.tsx</PaperCode>; this guide replaces its widget with Weather's.
                 The rules for every field are in the <PaperLink href="/docs/paperapi/widgets/">widgets reference</PaperLink>, and the tile's components in <PaperLink href="/docs/paperui/paperwidget/">PaperWidget</PaperLink>.
             </PaperText>
@@ -286,7 +286,7 @@ export default function WidgetsGuideDoc() {
             </PaperText>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/guides/testing/">test the panel</PaperLink>.
+                Next: <PaperLink href="/docs/developers/testing/">test the panel</PaperLink>.
             </PaperText>
         </PaperFlex>
     );

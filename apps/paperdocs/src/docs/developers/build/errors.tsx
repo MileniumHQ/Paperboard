@@ -142,7 +142,7 @@ export default function ErrorsGuideDoc() {
 
             <PaperText preset="subheader" as="h2" id="before-you-start">Before you start</PaperText>
             <PaperText preset="body" as="p">
-                A panel with a service and a page, as in <PaperLink href="/docs/guides/services/">Services and state</PaperLink> and <PaperLink href="/docs/guides/ui/">Design the interface</PaperLink>.
+                A panel with a service and a page, as in <PaperLink href="/docs/developers/services/">Services and state</PaperLink> and <PaperLink href="/docs/developers/ui/">Design the interface</PaperLink>.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="the-rules">The rules</PaperText>
@@ -226,7 +226,7 @@ export default function ErrorsGuideDoc() {
                     <tr><td>A button or form</td><td><PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> with <PaperCode>variant="danger"</PaperCode> next to it.</td></tr>
                     <tr><td>Something the panel needs and doesn't have yet, such as an API key</td><td><PaperLink href="/docs/paperui/paperemptystate/">PaperEmptyState</PaperLink> with the button that fixes it.</td></tr>
                     <tr><td>One item in a list or grid</td><td>The item's own error state, such as <PaperCode>tone="danger"</PaperCode> on a <PaperLink href="/docs/paperui/paperstattile/">PaperStatTile</PaperLink>, and the reason below.</td></tr>
-                    <tr><td>A Home widget</td><td><PaperCode>PaperWidgetMessage</PaperCode> with <PaperCode>tone="danger"</PaperCode> and the reason as its hint. See <PaperLink href="/docs/guides/widgets/#failures">Add a Home widget</PaperLink>.</td></tr>
+                    <tr><td>A Home widget</td><td><PaperCode>PaperWidgetMessage</PaperCode> with <PaperCode>tone="danger"</PaperCode> and the reason as its hint. See <PaperLink href="/docs/developers/widgets/#failures">Add a Home widget</PaperLink>.</td></tr>
                     <tr><td>Inside a modal</td><td>A PaperQuote in the modal. Keep it open, so the person can fix the input.</td></tr>
                 </tbody>
             </PaperTable>
@@ -234,7 +234,7 @@ export default function ErrorsGuideDoc() {
             <PaperText preset="subheader" as="h2" id="logs">Log it too</PaperText>
             <PaperText preset="body" as="p">
                 Log what the person doesn't see in full, with <PaperCode>console.error</PaperCode> and the panel's short name first, as <PaperCode>[weather]</PaperCode>.
-                The service's output goes to the Paperboard log; see <PaperLink href="/docs/guides/dev-loop/#logs">Read the service's output</PaperLink>.
+                The service's output goes to the Paperboard log; see <PaperLink href="/docs/developers/dev-loop/#logs">Read the service's output</PaperLink>.
                 The log is for you, as well as the page, never instead of it.
             </PaperText>
 
@@ -246,7 +246,7 @@ export default function ErrorsGuideDoc() {
             </PaperTextList>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/guides/settings-and-secrets/">settings and secrets</PaperLink>.
+                Next: <PaperLink href="/docs/developers/settings-and-secrets/">settings and secrets</PaperLink>.
             </PaperText>
         </PaperFlex>
     );

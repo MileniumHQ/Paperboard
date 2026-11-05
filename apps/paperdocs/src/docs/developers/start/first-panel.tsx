@@ -320,7 +320,7 @@ true`}
             </PaperText>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/guides/anatomy/">what each file in the folder does</PaperLink>.
+                Next: <PaperLink href="/docs/developers/anatomy/">what each file in the folder does</PaperLink>.
             </PaperText>
         </PaperFlex>
     );

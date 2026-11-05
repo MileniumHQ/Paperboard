@@ -49,7 +49,7 @@ export default function PackagingGuideDoc() {
 
             <PaperText preset="subheader" as="h2" id="before-you-start">Before you start</PaperText>
             <PaperText preset="body" as="p">
-                A panel that passes its tests and the <PaperLink href="/docs/guides/checklist/">panel checklist</PaperLink>.
+                A panel that passes its tests and the <PaperLink href="/docs/developers/checklist/">panel checklist</PaperLink>.
                 The packer's rules are in the <PaperLink href="/docs/paperapi/cli/#pack">paperapi pack</PaperLink> reference.
             </PaperText>
 
@@ -121,7 +121,7 @@ tar -xzf dev.example.weather-0.2.0.tar.gz -C ~/.paperboard/panels/dev.example.we
             </PaperText>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/guides/panel-library/">get into the Panel Library</PaperLink>.
+                Next: <PaperLink href="/docs/developers/panel-library/">get into the Panel Library</PaperLink>.
             </PaperText>
         </PaperFlex>
     );
