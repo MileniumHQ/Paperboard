@@ -171,6 +171,17 @@
     align-items: center;
     gap: var(--paper-uigap);
     transition: opacity var(--paper-mid-transition) ease;
+    /* a loader eases in where it appears, so one shown after a delay never
+       pops into an empty page; with no "to" it ends on its own opacity,
+       which keeps a waiting loader's dim */
+    animation: loaderEnter var(--paper-mid-transition) var(--paper-ease-standard) backwards;
+}
+
+@keyframes loaderEnter {
+    from {
+        opacity: 0;
+        transform: scale(0.92);
+    }
 }
 
 .PaperLoaderGroup {
@@ -184,6 +195,7 @@
    selector is banned (it escapes .paperui-root); tokens carry zeroing for
    durations, but the infinite ripple must be scoped here */
 @media (prefers-reduced-motion: reduce) {
+    .elWrapper,
     .statusFinisher,
     .statusFinisher.full,
     .statusFinisher.full.error,

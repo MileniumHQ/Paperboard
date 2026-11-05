@@ -150,6 +150,8 @@ type PaperLoaderSize = "small" | "medium" | "large";`}
                 <li>With <PaperCode>delay</PaperCode> the component renders nothing until the timer fires, so the loader and its label are absent from the page, not hidden.</li>
                 <li>The timer is cleared when the loader is removed. A later change to <PaperCode>delay</PaperCode> does not restart it.</li>
                 <li>Pick a delay of a few hundred milliseconds for a request that is usually fast. The gameserver panel uses 400 for its server list.</li>
+                <li>The loader fades in when it appears, with or without a delay, so it never pops onto an empty page. Under reduced motion it appears at once.</li>
+                <li>The loader is not centred on its own. To centre it in a panel, wrap it in <PaperCode>{`<PaperFlex fullWidth fullHeight align="center" justify="center">`}</PaperCode>.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="accessibility">Accessibility</PaperText>
@@ -206,7 +208,7 @@ type PaperLoaderSize = "small" | "medium" | "large";`}
             </PaperText>
             <PaperCode block language="tsx">
 {`import { createResource, Show } from "solid-js";
-import { PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperFlex, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
 
 async function readServers(): Promise<string[]> {
     const response = await fetch("/servers.json");
@@ -224,7 +226,11 @@ export function Servers() {
         >
             <Show
                 when={servers()}
-                fallback={<PaperLoader loaderStatus="indeterminate" delay={400} label="Loading servers" />}
+                fallback={
+                    <PaperFlex fullWidth fullHeight align="center" justify="center">
+                        <PaperLoader loaderStatus="indeterminate" delay={400} label="Loading servers" />
+                    </PaperFlex>
+                }
             >
                 {(list) => <PaperText preset="body" as="p">{list().length} servers</PaperText>}
             </Show>
