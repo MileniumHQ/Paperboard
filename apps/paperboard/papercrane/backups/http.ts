@@ -32,6 +32,8 @@ export interface HttpRequestInit {
     timeoutMs?: number;
     /** total request lifetime, including connection and response streaming */
     totalTimeoutMs?: number;
+    /** hears the bodyFile bytes sent, or the toFile bytes received, so far */
+    onProgress?: (done: number) => void;
 }
 
 export class HttpStatusError extends Error {
@@ -95,7 +97,10 @@ export async function httpRequest(rawUrl: string, init: HttpRequestInit = {}): P
                         transform(chunk: Buffer, _enc, done) {
                             bytes += chunk.length;
                             if (bytes > cap) done(new Error(`The download is larger than ${cap} bytes`));
-                            else done(null, chunk);
+                            else {
+                                init.onProgress?.(bytes);
+                                done(null, chunk);
+                            }
                         },
                     });
                     // Open before pipeline so cleanup knows whether this request
@@ -123,7 +128,15 @@ export async function httpRequest(rawUrl: string, init: HttpRequestInit = {}): P
             req.on("error", reject);
             if (init.bodyFile) {
                 upload = fs.createReadStream(init.bodyFile.path);
-                pipeline(upload, req, { signal: controller.signal }).catch(reject);
+                let sent = 0;
+                const counter = new Transform({
+                    transform(chunk: Buffer, _enc, done) {
+                        sent += chunk.length;
+                        init.onProgress?.(sent);
+                        done(null, chunk);
+                    },
+                });
+                pipeline(upload, counter, req, { signal: controller.signal }).catch(reject);
             } else req.end(init.body);
         });
     } catch (caught) {

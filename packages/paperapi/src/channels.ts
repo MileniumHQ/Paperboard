@@ -1,6 +1,8 @@
 // shared protocol names
 export const STATE_SYNC_EVENT = "__stateChanged";
 export const STATE_GET_ACTION = "__getState";
+/** A panel's running backup or restore moved on a step, or ended. */
+export const BACKUP_PROGRESS_EVENT = "backup:progress";
 /** Home asks a panel's service what a widget option's dropdown offers. */
 export const WIDGET_CHOICES_ACTION = "__widgetChoices";
 

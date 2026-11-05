@@ -187,6 +187,7 @@ export const RPC_ROUTES: Record<string, WsRoute> = {
     },
     "backup-source-define": { action: "backup:source-define" },
     "backup-status": { action: "backup:status" },
+    "backup-progress": { action: "backup:progress", unwrap: (r) => r.progress ?? [] },
     // a backup copies and uploads the panel's data, a restore downloads and
     // swaps it in: both take as long as the bytes do
     "backup-create": { action: "backup:create", timeoutMs: null },

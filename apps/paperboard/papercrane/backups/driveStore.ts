@@ -6,7 +6,7 @@
 import * as crypto from "crypto";
 import { logger } from "../logger";
 import { assertSecureUrl, expectOk, httpRequest } from "./http";
-import { BackupListingError, backupArchiveDownloadCap, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
+import { BackupListingError, backupArchiveDownloadCap, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage, type BytesProgress } from "./types";
 
 export interface DriveEndpoints {
     tokenUrl: string;
@@ -164,7 +164,7 @@ export class DriveBackupStore implements BackupStore {
         return newestFirst(records);
     }
 
-    async put(record: BackupRecord, archivePath: string): Promise<void> {
+    async put(record: BackupRecord, archivePath: string, onProgress?: BytesProgress): Promise<void> {
         const metadata = {
             name: `${record.id}.pbbackup`,
             parents: [this.settings.folderId],
@@ -197,16 +197,17 @@ export class DriveBackupStore implements BackupStore {
                 headers: { "Content-Type": "application/gzip" },
                 bodyFile: { path: archivePath, size: record.size },
                 timeoutMs: 120_000,
+                onProgress,
             }),
             "Uploading the backup to Google Drive",
         );
     }
 
-    async get(record: BackupRecord, destPath: string): Promise<void> {
+    async get(record: BackupRecord, destPath: string, onProgress?: BytesProgress): Promise<void> {
         const maxFileBytes = backupArchiveDownloadCap(record.size);
         const id = await this.fileId(record);
         expectOk(
-            await this.api(`/files/${encodeURIComponent(id)}?alt=media`, { toFile: destPath, maxFileBytes, timeoutMs: 120_000 }),
+            await this.api(`/files/${encodeURIComponent(id)}?alt=media`, { toFile: destPath, maxFileBytes, timeoutMs: 120_000, onProgress }),
             "Downloading the backup from Google Drive",
         );
     }

@@ -3,7 +3,8 @@
 // for the panel: this computer, an S3-compatible bucket, or Google Drive.
 // The user chooses the location in a window Paperboard shows; a panel can
 // open it with chooseLocation, never set it itself.
-import { invokeIn } from "./ipc";
+import { getTransport, invokeIn } from "./ipc";
+import { BACKUP_PROGRESS_EVENT } from "./channels";
 import { requirePanelId } from "./panelIdentity";
 import { requestShell } from "./shellRequest";
 import { currentFrameSession } from "./frameSession";
@@ -62,11 +63,87 @@ export interface BackupSchedule {
     last: BackupScheduleResult | null;
 }
 
+/**
+ * What a running backup or restore is doing:
+ * - `preparing`: the panel's service gets ready (a game server saves its world)
+ * - `copying`: the files are copied aside
+ * - `packing`: the copy is compressed into one archive
+ * - `saving`: the archive goes to the backup location
+ * - `downloading`, `checking`, `unpacking`: a restore fetches, verifies and opens the archive
+ * - `restoring`: the panel's data is swapped for the backup's
+ */
+export type BackupStep = "preparing" | "copying" | "packing" | "saving" | "downloading" | "checking" | "unpacking" | "restoring";
+
+export interface BackupProgress {
+    /** the panel whose data is backed up */
+    panelId: string;
+    /** the named source being backed up; null for the panel's own backups */
+    sourceId: string | null;
+    kind: "create" | "restore";
+    step: BackupStep;
+    /** bytes done and expected in this step; null when the step cannot be measured */
+    done: number | null;
+    total: number | null;
+    /** true while the step holds the panel's service stopped */
+    servicePaused: boolean;
+}
+
+/** a change in a panel's running backup; progress is null once it ends */
+export interface BackupProgressChange {
+    panelId: string;
+    sourceId: string | null;
+    progress: BackupProgress | null;
+}
+
+/** the share of the step done, from 0 to 1; null when it cannot be measured */
+export function backupProgressFraction(progress: Pick<BackupProgress, "done" | "total">): number | null {
+    if (progress.done === null || progress.total === null) return null;
+    if (progress.total <= 0) return 1;
+    return Math.min(1, Math.max(0, progress.done / progress.total));
+}
+
+const STEP_LABELS: Record<BackupStep, string> = {
+    preparing: "Getting ready",
+    copying: "Copying files",
+    packing: "Compressing",
+    saving: "Saving",
+    downloading: "Downloading",
+    checking: "Checking",
+    unpacking: "Unpacking",
+    restoring: "Restoring files",
+};
+
+/** what a step is called, for people: "Compressing" */
+export function backupStepLabel(step: BackupStep): string {
+    return STEP_LABELS[step];
+}
+
+/** the step and how far along it is, for people: "Compressing 42%" */
+export function backupProgressText(progress: Pick<BackupProgress, "step" | "done" | "total">): string {
+    const fraction = backupProgressFraction(progress);
+    return fraction === null ? `${STEP_LABELS[progress.step]}…` : `${STEP_LABELS[progress.step]} ${Math.floor(fraction * 100)}%`;
+}
+
+// one listener per panel (and source) on the computer's backup event
+function listenProgress(scope: string | undefined, panelId: string, sourceId: string | null | undefined, listener: (change: BackupProgressChange) => void): () => void {
+    const transport = getTransport(scope);
+    const off = transport.subscribeSource(BACKUP_PROGRESS_EVENT, (payload: any) => {
+        if (payload?.panelId !== panelId) return;
+        if (sourceId !== undefined && (payload.sourceId ?? null) !== sourceId) return;
+        listener({ panelId: payload.panelId, sourceId: payload.sourceId ?? null, progress: payload.progress ?? null });
+    });
+    // the event flows only to a connected socket that declared it
+    transport.ensureConnected().catch((err) => console.error("[paperapi] backup progress could not connect:", err));
+    return off;
+}
+
 export interface BackupStatus {
     /** null until the user chooses where this panel's backups go */
     location: BackupLocation | null;
     /** a backup being made or restored for this panel right now */
     running: "create" | "restore" | null;
+    /** how far along that backup is; null when none is running */
+    progress: BackupProgress | null;
     /** null when the panel has no routine backups */
     schedule: BackupSchedule | null;
 }
@@ -101,7 +178,7 @@ function named(location: BackupLocation | null): BackupLocation | null {
     return location && { ...location, label: backupLocationLabel(location, currentFrameSession()?.computerName) };
 }
 
-const status = (r: any): BackupStatus => ({ location: named(r?.destination ?? null), running: r?.running ?? null, schedule: r?.schedule ?? null });
+const status = (r: any): BackupStatus => ({ location: named(r?.destination ?? null), running: r?.running ?? null, progress: r?.progress ?? null, schedule: r?.schedule ?? null });
 
 /** A named subset of a panel's files and config, with its own backup history. */
 export interface BackupSource {
@@ -135,11 +212,24 @@ export const backupApi = {
             delete: (backupId: string): Promise<void> => invokeIn(scope, "backup-delete", { ...identity, backupId }),
             setSchedule: async (schedule: { everyHours: BackupSchedule["everyHours"]; keep: number } | null): Promise<BackupStatus> => status(await invokeIn(scope, "backup-schedule-set", { ...identity, schedule })),
             chooseLocation: (): Promise<ChooseBackupLocationResult> => backupApi.chooseLocation(appId, sourceId),
+            /** hears this source's running backup or restore move on, and end */
+            onProgress: (listener: (change: BackupProgressChange) => void): (() => void) =>
+                listenProgress(scope, identity.panelId, identity.sourceId, listener),
         };
     },
     /** where this panel's backups go, and whether one is running */
     status: async (appId: string, scope?: string): Promise<BackupStatus> =>
         status(await invokeIn(scope, "backup-status", { panelId: requirePanelId(appId) })),
+
+    /** every backup or restore running now for the panel's data, its
+     * named sources included */
+    progress: (appId: string, scope?: string): Promise<BackupProgress[]> =>
+        invokeIn<BackupProgress[]>(scope, "backup-progress", { panelId: requirePanelId(appId) }),
+
+    /** hears the panel's running backups and restores (its named sources
+     * included) move on a step, and end; returns the unsubscribe */
+    onProgress: (appId: string, listener: (change: BackupProgressChange) => void, scope?: string): (() => void) =>
+        listenProgress(scope, requirePanelId(appId), undefined, listener),
 
     /** backs up the panel's files and config now. The panel's service is
      * stopped while its data is copied, then started again. */

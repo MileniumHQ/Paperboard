@@ -17,7 +17,7 @@ import { handlePanels } from "./rpc/panels";
 import { handleActions } from "./rpc/actions";
 import { handleSystem } from "./rpc/system";
 import { handleSecrets } from "./rpc/secrets";
-import { handleBackups } from "./rpc/backups";
+import { backupServiceFor, handleBackups } from "./rpc/backups";
 import { handlePorts } from "./rpc/ports";
 import { PROTOCOL_VERSION, ErrorCode } from "./protocol";
 import { rpcErrorCode, assertPanelId, assertStr } from "./rpc/params";
@@ -26,6 +26,7 @@ import { isLoopbackHost } from "./discovery";
 import { TrafficMonitor } from "./monitor";
 import { secretsMatch } from "./secretCompare";
 import { MONITOR_PROTOCOL, MONITOR_SUBSCRIBE, MONITOR_UNSUBSCRIBE } from "../../../packages/paperapi/src/monitorProtocol";
+import { BACKUP_PROGRESS_EVENT } from "../../../packages/paperapi/src/channels";
 
 // strict origin allowlist, exact hostname match
 export function isAllowedOrigin(origin: string): boolean {
@@ -164,6 +165,21 @@ export function setupWebSocketServer(
     let inFlightTotal = 0;
     // the traffic tap behind `paperapi monitor`; inert until a host subscribes
     const monitor = new TrafficMonitor((listener) => engine.onLifecycle(listener), sendBounded);
+    // sends an event to the sockets that declared it; fromPanel is who raised it
+    const deliverEvent = (event: string, payload: any, fromPanel: string | null) => {
+        const recipients = new Set<WebSocket>();
+        for (const client of eventSubscribers.get(event) ?? []) recipients.add(client);
+        for (const client of eventSubscribers.get("*") ?? []) recipients.add(client);
+        if (recipients.size === 0 && !monitor.active) return;
+        const msg = JSON.stringify({ type: "event", event, payload });
+        monitor.event(fromPanel, event, msg, recipients.size);
+        for (const client of recipients) {
+            if (client.readyState !== WebSocket.OPEN) continue;
+            if (!sendBounded(client, msg)) client.close(4429, "Slow event consumer");
+        }
+    };
+    // a running backup stops its panel's service: the shell says why, and how far along it is
+    const offBackupProgress = backupServiceFor(engine).onProgress((change) => deliverEvent(BACKUP_PROGRESS_EVENT, change, null));
     wss.options.maxPayload = Math.min(wss.options.maxPayload ?? MAX_WS_PAYLOAD, MAX_WS_PAYLOAD);
     const revokeSockets = (sockets?: Set<WebSocket>) => {
         for (const socket of sockets ?? []) {
@@ -179,6 +195,7 @@ export function setupWebSocketServer(
     wss.once("close", () => {
         auth.off("revoked", onRevoked);
         auth.off("panel-revoked", onPanelRevoked);
+        offBackupProgress();
         byToken.clear();
         byPanel.clear();
         socketSubscriptions.clear();
@@ -303,18 +320,7 @@ export function setupWebSocketServer(
             }
         };
 
-        const broadcastEvent = (event: string, payload: any) => {
-            const recipients = new Set<WebSocket>();
-            for (const client of eventSubscribers.get(event) ?? []) recipients.add(client);
-            for (const client of eventSubscribers.get("*") ?? []) recipients.add(client);
-            if (recipients.size === 0 && !monitor.active) return;
-            const msg = JSON.stringify({ type: "event", event, payload });
-            monitor.event(authedPanelId, event, msg, recipients.size);
-            for (const client of recipients) {
-                if (client.readyState !== WebSocket.OPEN) continue;
-                if (!sendBounded(client, msg)) client.close(4429, "Slow event consumer");
-            }
-        };
+        const broadcastEvent = (event: string, payload: any) => deliverEvent(event, payload, authedPanelId);
 
         ws.on("close", () => {
             clearTimeout(handshakeTimer);

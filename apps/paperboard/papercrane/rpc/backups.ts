@@ -101,6 +101,12 @@ export async function handleBackups(action: string, id: unknown, params: any, ct
             case "backup:status":
                 reply(id, backups.status(panelFor(params, action, ctx)));
                 return true;
+            case "backup:progress": {
+                // every running backup of the panel's data, its sources included
+                const owner = resourcePanelId(ctx.callerPanelId(), assertPanelId(params?.panelId), action)!;
+                reply(id, { progress: backups.progressFor(owner) });
+                return true;
+            }
             case "backup:create": {
                 const panelId = panelFor(params, action, ctx);
                 const label = assertOptStr(params?.label, "label", BACKUP_LABEL_MAX) ?? null;

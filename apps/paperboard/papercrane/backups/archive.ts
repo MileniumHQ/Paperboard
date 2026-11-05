@@ -6,6 +6,7 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import * as tar from "tar";
+import * as zlib from "zlib";
 import { logger } from "../logger";
 import { LimitError, makeSafeTarFilter, scanTarMembers, TAR_BUDGET } from "../storage";
 
@@ -16,21 +17,33 @@ export interface PanelDataEntries {
     config: string;
 }
 
-function measure(dir: string): { bytes: number; entries: number } {
+const TAR_BLOCK = 512;
+/** a member's size in the tar stream: its header and its padded data */
+const tarSize = (bytes: number) => TAR_BLOCK + Math.ceil(bytes / TAR_BLOCK) * TAR_BLOCK;
+
+/** the folder's bytes and entries, and roughly how long its tar stream is */
+function measure(dir: string): { bytes: number; entries: number; tarBytes: number } {
     let bytes = 0;
     let entries = 0;
+    let tarBytes = TAR_BLOCK;
     const stack = [dir];
     while (stack.length) {
         const current = stack.pop()!;
         for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
             if (++entries > TAR_BUDGET.maxEntries) throw new LimitError(`The panel's storage has more than ${TAR_BUDGET.maxEntries} entries`);
             const full = path.join(current, entry.name);
-            if (entry.isDirectory()) stack.push(full);
-            else if (entry.isFile()) bytes += fs.statSync(full).size;
+            if (entry.isDirectory()) {
+                stack.push(full);
+                tarBytes += TAR_BLOCK;
+            } else if (entry.isFile()) {
+                const size = fs.statSync(full).size;
+                bytes += size;
+                tarBytes += tarSize(size);
+            }
             if (bytes > TAR_BUDGET.maxBytes) throw new LimitError(`The panel's storage is larger than ${TAR_BUDGET.maxBytes} bytes`);
         }
     }
-    return { bytes, entries };
+    return { bytes, entries, tarBytes };
 }
 
 export async function sha256File(file: string): Promise<string> {
@@ -40,52 +53,68 @@ export async function sha256File(file: string): Promise<string> {
 }
 
 /**
- * Streams a tar pack into outFile and closes every handle on failure. Not tar's
+ * Gzips a tar pack into outFile and closes every handle on failure. Not tar's
  * own `file` option and not stream.pipeline: the first leaves the output open,
  * the second destroys the pack mid-member, and an open handle makes every later
  * rename of that path fail with EPERM on Windows. On failure the walk stops, and a
- * member still being read is drained so its file closes by itself.
+ * member still being read is drained so its file closes by itself. onData
+ * hears each chunk of the tar stream before it is compressed.
  */
-async function writePack(pack: tar.Pack, outFile: string, stop: () => void): Promise<void> {
+async function writePack(pack: tar.Pack, outFile: string, stop: () => void, onData: (chunk: Buffer) => void): Promise<void> {
+    const gzip = zlib.createGzip();
     const out = fs.createWriteStream(outFile);
     const closed = new Promise<void>((resolve) => out.once("close", () => resolve()));
     const failed = new Promise<never>((_, reject) => {
         pack.on("error", reject);
+        gzip.on("error", reject);
         out.on("error", reject);
     });
     // a rejection nobody awaits yet (the write finished first) is not unhandled
     failed.catch((err) => logger.debug("[backups] archive stream ended with an error after settling:", err));
-    pack.pipe(out);
+    pack.pipe(gzip);
+    gzip.pipe(out);
+    // after the pipe: a data listener on its own would start the pack flowing
+    pack.on("data", onData);
     try {
         await Promise.race([closed, failed]);
     } catch (err) {
         stop();
-        pack.unpipe(out);
+        pack.unpipe(gzip);
         pack.resume();
+        gzip.destroy();
         out.destroy();
         await closed;
         throw err;
     }
 }
 
-/** writes the archive to outFile; resolves with its size and sha256 */
+/** writes the archive to outFile; resolves with its size and sha256.
+ * onProgress hears the tar bytes packed so far and about how many there are */
 export async function createPanelArchive(
     dataDir: string,
     entries: PanelDataEntries,
     outFile: string,
+    onProgress?: (done: number, total: number) => void,
 ): Promise<{ size: number; sha256: string }> {
     const include: string[] = [];
     const filesDir = path.join(dataDir, entries.files);
+    let total = 0;
     if (fs.existsSync(filesDir)) {
-        measure(filesDir);
+        total += measure(filesDir).tarBytes;
         include.push(entries.files);
     }
-    if (fs.existsSync(path.join(dataDir, entries.config))) include.push(entries.config);
+    const configFile = path.join(dataDir, entries.config);
+    if (fs.existsSync(configFile)) {
+        total += tarSize(fs.statSync(configFile).size);
+        include.push(entries.config);
+    }
     if (include.length === 0) throw new Error("The panel has no files or settings to back up");
     let stopped = false;
+    let packed = 0;
     const pack = tar.c(
         {
-            gzip: true,
+            // compressed in writePack, so the tar bytes can be counted
+            gzip: false,
             cwd: dataDir,
             portable: true,
             // one member at a time: tar parks the other members it already
@@ -96,7 +125,11 @@ export async function createPanelArchive(
         },
         include,
     );
-    await writePack(pack, outFile, () => { stopped = true; });
+    await writePack(pack, outFile, () => { stopped = true; }, (chunk) => {
+        packed += chunk.length;
+        // a long path adds a header the estimate leaves out: never past the end
+        onProgress?.(Math.min(packed, total), total);
+    });
     return { size: fs.statSync(outFile).size, sha256: await sha256File(outFile) };
 }
 

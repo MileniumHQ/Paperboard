@@ -48,6 +48,15 @@ backupApi.setSchedule(
     scope?: string,
 ): Promise<BackupStatus>;
 
+/** every backup or restore running for the panel's data, its sources included */
+backupApi.progress(appId: string, scope?: string): Promise<BackupProgress[]>;
+/** returns the unsubscribe */
+backupApi.onProgress(appId: string, listener: (change: BackupProgressChange) => void, scope?: string): () => void;
+/** 0 to 1; null when the step can't be measured */
+backupProgressFraction(progress: BackupProgress): number | null;
+/** "Compressing 42%", or "Getting ready…" */
+backupProgressText(progress: BackupProgress): string;
+
 backupApi.defineSource(appId: string, source: BackupSource, scope?: string): Promise<void>;
 backupApi.forSource(appId: string, sourceId: string, scope?: string): BackupSourceHandle;`}
             </PaperCode>
@@ -57,6 +66,8 @@ backupApi.forSource(appId: string, sourceId: string, scope?: string): BackupSour
     location: BackupLocation | null;
     /** a backup being made or restored for the panel right now */
     running: "create" | "restore" | null;
+    /** how far along it is; null when none is running */
+    progress: BackupProgress | null;
     /** null without routine backups */
     schedule: BackupSchedule | null;
 }
@@ -92,6 +103,26 @@ interface BackupRecord {
     label: string | null;
 }
 
+interface BackupProgress {
+    panelId: string;
+    /** null for the panel's own backups */
+    sourceId: string | null;
+    kind: "create" | "restore";
+    step: "preparing" | "copying" | "packing" | "saving" | "downloading" | "checking" | "unpacking" | "restoring";
+    /** bytes done and expected in this step; null when it can't be measured */
+    done: number | null;
+    total: number | null;
+    /** true while the step holds the panel's service stopped */
+    servicePaused: boolean;
+}
+
+/** progress is null once the backup or restore ends */
+interface BackupProgressChange {
+    panelId: string;
+    sourceId: string | null;
+    progress: BackupProgress | null;
+}
+
 interface BackupSchedule {
     everyHours: 1 | 3 | 6 | 12 | 24 | 48 | 168;
     /** how many routine backups stay; older routine backups are deleted */
@@ -117,7 +148,27 @@ interface BackupSchedule {
                 <li>A backup made by a newer version of the panel than the one installed is refused, so old code never reads new data.</li>
                 <li>One backup or restore runs for each panel at a time, and two on the computer.</li>
                 <li><PaperCode>label</PaperCode> is at most 100 characters. <PaperCode>Routine backup</PaperCode> is kept for routine backups.</li>
-                <li>The calls have no timeout. Show <PaperCode>status().running</PaperCode> to say a backup is in progress.</li>
+                <li>The calls have no timeout. Show <PaperCode>onProgress</PaperCode> to say how far along a backup is, as the sample below does.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="progress">Progress</PaperText>
+            <PaperText preset="body" as="p">
+                A backup goes through <PaperCode>preparing</PaperCode>, <PaperCode>copying</PaperCode> (sources only), <PaperCode>packing</PaperCode> and <PaperCode>saving</PaperCode>.
+                A restore goes through <PaperCode>downloading</PaperCode>, <PaperCode>checking</PaperCode>, <PaperCode>unpacking</PaperCode>, <PaperCode>preparing</PaperCode> and <PaperCode>restoring</PaperCode>.
+                Copying, packing, saving and downloading count bytes. The others have <PaperCode>done</PaperCode> and <PaperCode>total</PaperCode> set to <PaperCode>null</PaperCode>.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`const [progress, setProgress] = createSignal<BackupProgress | null>(null);
+onCleanup(backupApi.onProgress(PANEL_ID, (change) => setProgress(change.progress)));
+
+<PaperButton disabled={progress() !== null}>
+    {progress() ? backupProgressText(progress()!) : "Back Up Now"}
+</PaperButton>`}
+            </PaperCode>
+            <PaperTextList>
+                <li>A new step arrives at once. Byte counts arrive at most every 250 ms.</li>
+                <li>While <PaperCode>servicePaused</PaperCode> is true, the panel's service is stopped. Paperboard covers the panel page with the step and a progress bar, and reloads the page afterward if it lost its service.</li>
+                <li>A routine backup reports progress too, so a page opened in the middle of one can read <PaperCode>status().progress</PaperCode> and listen for the rest.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="routine-backups">Routine backups</PaperText>
@@ -159,6 +210,8 @@ interface BackupSourceHandle {
     delete(backupId: string): Promise<void>;
     setSchedule(schedule: { everyHours: 1 | 3 | 6 | 12 | 24 | 48 | 168; keep: number } | null): Promise<BackupStatus>;
     chooseLocation(): Promise<ChooseBackupLocationResult>;
+    /** hears this source's backups and restores only */
+    onProgress(listener: (change: BackupProgressChange) => void): () => void;
 }`}
             </PaperCode>
             <PaperCode block language="tsx">

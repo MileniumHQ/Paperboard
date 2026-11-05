@@ -26,15 +26,22 @@ export interface BackupUsage {
     available: number | null;
 }
 
+/** called with the bytes handled so far */
+export type BytesProgress = (done: number) => void;
+
+// the progress shapes are PaperAPI's: the daemon sends them as they are
+export type { BackupProgress, BackupProgressChange, BackupStep } from "../../../../packages/paperapi/src/backups";
+
 export interface BackupStore {
     /** proves the location is reachable with its credentials */
     check(): Promise<void>;
     usage(): Promise<BackupUsage>;
     /** newest first, at most MAX_LISTED_BACKUPS */
     list(panelId: string): Promise<BackupRecord[]>;
-    put(record: BackupRecord, archivePath: string): Promise<void>;
-    /** writes the archive to destPath */
-    get(record: BackupRecord, destPath: string): Promise<void>;
+    /** onProgress hears the archive bytes sent so far */
+    put(record: BackupRecord, archivePath: string, onProgress?: BytesProgress): Promise<void>;
+    /** writes the archive to destPath; onProgress hears the bytes received so far */
+    get(record: BackupRecord, destPath: string, onProgress?: BytesProgress): Promise<void>;
     remove(record: BackupRecord): Promise<void>;
 }
 

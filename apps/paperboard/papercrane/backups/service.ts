@@ -34,7 +34,7 @@ import {
 import { DriveBackupStore, forgetDriveToken, GOOGLE_ENDPOINTS, type DriveEndpoints } from "./driveStore";
 import { LocalBackupStore } from "./localStore";
 import { normalizeS3Prefix, S3BackupStore } from "./s3Store";
-import { BACKUP_ID_RE, BACKUP_LABEL_MAX, newBackupId, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
+import { BACKUP_ID_RE, BACKUP_LABEL_MAX, newBackupId, type BackupProgress, type BackupProgressChange, type BackupRecord, type BackupStep, type BackupStore, type BackupUsage } from "./types";
 import {
     BUSY_RETRY_MS,
     MAX_SCHEDULES,
@@ -54,6 +54,12 @@ import {
 
 /** create and restore run at most this many at once, one per panel */
 export const MAX_RUNNING_BACKUP_JOBS = 2;
+
+/** byte counts reach listeners at most this often; a new step at once */
+export const PROGRESS_INTERVAL_MS = 250;
+
+// the steps that run with the panel's service stopped
+const PAUSED_STEPS: ReadonlySet<BackupStep> = new Set(["copying", "packing", "restoring"]);
 
 export interface DestinationSummary {
     id: string;
@@ -117,6 +123,9 @@ export class BackupService {
     private readonly configFile: string;
     private readonly workDir: string;
     private readonly running = new Map<string, "create" | "restore">();
+    /** by backup key (a panel, or a panel's named source) */
+    private readonly progress = new Map<string, BackupProgress & { sentAt: number }>();
+    private readonly progressListeners = new Set<(change: BackupProgressChange) => void>();
     private configWrites: Promise<unknown> = Promise.resolve();
     private readonly schedulesFile: string;
     private scheduleWrites: Promise<unknown> = Promise.resolve();
@@ -351,12 +360,14 @@ export class BackupService {
 
     // ─── A panel's backups ──────────────────────────────────────────────
 
-    status(panelId: string): { destination: DestinationSummary | null; running: "create" | "restore" | null; schedule: BackupSchedule | null } {
+    status(panelId: string): { destination: DestinationSummary | null; running: "create" | "restore" | null; progress: BackupProgress | null; schedule: BackupSchedule | null } {
         const config = this.config();
         const destId = config.panels[panelId];
+        const progress = this.progress.get(panelId);
         return {
             destination: destId ? this.summary(this.destination(destId, config)) : null,
             running: this.running.get(panelId) ?? null,
+            progress: progress ? (({ sentAt: _sentAt, ...rest }) => rest)(progress) : null,
             schedule: readSchedules(this.schedulesFile).panels[panelId] ?? null,
         };
     }
@@ -378,7 +389,53 @@ export class BackupService {
             return await fn();
         } finally {
             this.running.delete(panelId);
+            if (this.progress.delete(panelId)) this.emitProgress(panelId, null);
         }
+    }
+
+    /** hears every running backup's step and bytes, and its end */
+    onProgress(listener: (change: BackupProgressChange) => void): () => void {
+        this.progressListeners.add(listener);
+        return () => this.progressListeners.delete(listener);
+    }
+
+    /** the backups running now for a panel's data, its named sources included */
+    progressFor(owner: string): BackupProgress[] {
+        return [...this.progress.values()].filter((p) => p.panelId === owner).map(({ sentAt: _sentAt, ...progress }) => progress);
+    }
+
+    private emitProgress(key: string, progress: BackupProgress | null): void {
+        const change: BackupProgressChange = {
+            panelId: this.sources.owner(key),
+            sourceId: this.sources.get(key)?.id ?? null,
+            progress,
+        };
+        for (const listener of this.progressListeners) {
+            try {
+                listener(change);
+            } catch (err) { logger.error("[backups] a progress listener failed:", err); }
+        }
+    }
+
+    /** records the job's step; byte counts are sent at most every
+     * PROGRESS_INTERVAL_MS, a new step or a finished one at once */
+    private report(key: string, step: BackupStep, done: number | null = null, total: number | null = null): void {
+        const kind = this.running.get(key);
+        if (!kind) return;
+        const previous = this.progress.get(key);
+        const now = Date.now();
+        const next: BackupProgress = {
+            panelId: this.sources.owner(key),
+            sourceId: this.sources.get(key)?.id ?? null,
+            kind,
+            step,
+            done,
+            total,
+            servicePaused: PAUSED_STEPS.has(step),
+        };
+        const due = !previous || previous.step !== step || done === total || now - previous.sentAt >= PROGRESS_INTERVAL_MS;
+        this.progress.set(key, { ...next, sentAt: due ? now : previous!.sentAt });
+        if (due) this.emitProgress(key, next);
     }
 
     async create(panelId: string, label: string | null): Promise<BackupRecord> {
@@ -398,6 +455,7 @@ export class BackupService {
             const id = newBackupId();
             const archive = path.join(this.workDir, `${id}.pbbackup`);
             try {
+                this.report(panelId, "preparing");
                 const { size, sha256, panelVersion } = await this.engine.withPanelOperation(this.sources.owner(panelId), async () => {
                     // a service that takes part gets ready first (a game
                     // server stops writing its world). When that fails the
@@ -409,19 +467,24 @@ export class BackupService {
                     } catch (err) {
                         notReady = err;
                     }
+                    // said before the service stops, so nobody sees it gone unexplained
+                    const firstStep = this.sources.get(panelId) ? "copying" : "packing";
+                    this.report(panelId, firstStep);
                     return this.engine.withServicePaused(this.sources.owner(panelId), async () => {
                         if (notReady !== null) {
                             throw conflict(`The panel could not get ready for a backup: ${notReady instanceof Error ? notReady.message : String(notReady)}`);
                         }
                         const panelVersion = this.engine.installedPanelVersion(this.sources.owner(panelId));
+                        const packing = (done: number, total: number) => this.report(panelId, "packing", done, total);
                         let made: { size: number; sha256: string };
                         if (this.sources.get(panelId)) {
                             const snapshot = await fs.promises.mkdtemp(path.join(this.workDir, "source-"));
                             try {
-                                const entries = await this.sources.snapshot(panelId, snapshot);
-                                made = await createPanelArchive(snapshot, entries, archive);
+                                const entries = await this.sources.snapshot(panelId, snapshot, (done, total) => this.report(panelId, "copying", done, total));
+                                this.report(panelId, "packing");
+                                made = await createPanelArchive(snapshot, entries, archive, packing);
                             } finally { await fs.promises.rm(snapshot, { recursive: true, force: true }); }
-                        } else made = await createPanelArchive(this.engine.getAppDataDir(), this.engine.panelDataEntries(panelId), archive);
+                        } else made = await createPanelArchive(this.engine.getAppDataDir(), this.engine.panelDataEntries(panelId), archive, packing);
                         return { ...made, panelVersion };
                     });
                 });
@@ -436,7 +499,8 @@ export class BackupService {
                     label: label?.trim() || null,
                     ...(this.sources.get(panelId) ? { sourceId: this.sources.get(panelId)!.id } : {}),
                 };
-                await store.put(record, archive);
+                this.report(panelId, "saving", 0, size);
+                await store.put(record, archive, (done) => this.report(panelId, "saving", done, size));
                 return record;
             } finally {
                 await fs.promises.rm(archive, { force: true });
@@ -466,7 +530,9 @@ export class BackupService {
             const archive = path.join(this.workDir, `${record.id}-restore.pbbackup`);
             const staging = await fs.promises.mkdtemp(path.join(this.workDir, "restore-"));
             try {
-                await store.get(record, archive);
+                this.report(panelId, "downloading", 0, record.size);
+                await store.get(record, archive, (done) => this.report(panelId, "downloading", Math.min(done, record.size), record.size));
+                this.report(panelId, "checking");
                 const size = fs.statSync(archive).size;
                 if (size !== record.size || (await sha256File(archive)) !== record.sha256) {
                     throw new Error("The downloaded backup does not match its record; it was not restored");
@@ -475,9 +541,12 @@ export class BackupService {
                 if (source && !source.legacy && !record.sourceId) throw new Error("This backup is not a named source backup");
                 if (record.sourceId && record.sourceId !== source?.id) throw new Error("This backup belongs to another source");
                 const entries = record.sourceId ? { files: "files", config: "config.json" } : this.engine.panelDataEntries(this.sources.owner(panelId));
+                this.report(panelId, "unpacking");
                 const staged = await extractPanelArchive(archive, entries, staging);
                 await this.engine.withPanelOperation(this.sources.owner(panelId), async () => {
+                    this.report(panelId, "preparing");
                     await this.engine.prepareServiceForRestore(this.sources.owner(panelId), source?.id);
+                    this.report(panelId, "restoring");
                     return source ? this.sources.restore(panelId, staged) : this.engine.replacePanelData(panelId, staged);
                 });
                 return record;

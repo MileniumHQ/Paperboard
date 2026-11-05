@@ -80,6 +80,50 @@ function location(root: unknown, selector: ConfigSelector): { parent: any; key: 
 function sourceKey(owner: string, source: BackupSource): string {
     return source.legacy ? owner : `backup.${createHash("sha256").update(`${owner}/${source.id}`).digest("hex").slice(0, 32)}`;
 }
+/** what copySource takes from a folder: no links, no skipped names, no
+ * excluded top folders; anything but files and folders is refused */
+interface Entry { relative: string; stat: fs.Stats }
+async function sourceEntries(source: Source, from: string): Promise<{ dirs: Entry[]; files: Entry[]; bytes: number }> {
+    const dirs: Entry[] = [];
+    const files: Entry[] = [];
+    let bytes = 0;
+    const stack = [""];
+    while (stack.length) {
+        const dir = stack.pop()!;
+        for (const name of await fs.promises.readdir(path.join(from, dir))) {
+            const relative = dir ? `${dir}/${name}` : name;
+            if ((source.skip ?? []).includes(name)) continue;
+            if ((source.exclude ?? []).some((excluded) => relative === excluded || relative.startsWith(`${excluded}/`))) continue;
+            const stat = await fs.promises.lstat(path.join(from, relative));
+            if (stat.isSymbolicLink()) continue;
+            if (stat.isDirectory()) {
+                dirs.push({ relative, stat });
+                stack.push(relative);
+            } else if (stat.isFile()) {
+                files.push({ relative, stat });
+                bytes += stat.size;
+            } else throw new Error(`The backup cannot copy ${relative}: it is not a file or a folder`);
+        }
+    }
+    return { dirs, files, bytes };
+}
+
+/** copies the source's folder into to, reporting the file bytes copied */
+async function copySource(source: Source, from: string, to: string, onProgress?: (done: number, total: number) => void): Promise<void> {
+    const { dirs, files, bytes } = await sourceEntries(source, from);
+    // parents come before their children in the walk
+    for (const dir of dirs) await fs.promises.mkdir(path.join(to, dir.relative), { recursive: true });
+    let copied = 0;
+    onProgress?.(0, bytes);
+    for (const file of files) {
+        await fs.promises.copyFile(path.join(from, file.relative), path.join(to, file.relative));
+        copied += file.stat.size;
+        // a file still growing (a log) can pass what was measured
+        onProgress?.(Math.min(copied, bytes), bytes);
+    }
+    for (const dir of dirs) await fs.promises.chmod(path.join(to, dir.relative), dir.stat.mode & 0o7777);
+}
+
 export class BackupSources {
     private readonly file: string;
     constructor(private readonly engine: PaperCraneEngine) {
@@ -138,7 +182,9 @@ export class BackupSources {
     owner(key: string): string {
         return this.get(key)?.owner ?? key;
     }
-    async snapshot(key: string, staging: string): Promise<{ files: string; config: string }> {
+    /** copies the source's files and config into staging. onProgress hears
+     * the file bytes copied so far and how many there are. */
+    async snapshot(key: string, staging: string, onProgress?: (done: number, total: number) => void): Promise<{ files: string; config: string }> {
         const source = this.get(key);
         if (!source) throw new Error("Backup source not found");
         const entries = this.engine.panelDataEntries(source.owner);
@@ -147,20 +193,7 @@ export class BackupSources {
         const selected = location(config, source.config);
         const to = path.join(staging, "files");
         fs.mkdirSync(to, { recursive: true });
-        if (fs.existsSync(from))
-            await fs.promises.cp(from, to, {
-                recursive: true,
-                filter: (file) => {
-                    const relative = path.relative(from, file).split(path.sep).join("/");
-                    return (
-                        !fs.lstatSync(file).isSymbolicLink() &&
-                        !(source.skip ?? []).includes(path.basename(file)) &&
-                        !(source.exclude ?? []).some(
-                            (dir) => relative === dir || relative.startsWith(`${dir}/`),
-                        )
-                    );
-                },
-            });
+        if (fs.existsSync(from)) await copySource(source, from, to, onProgress);
         fs.writeFileSync(
             path.join(staging, "config.json"),
             JSON.stringify(selected.parent[selected.key]),

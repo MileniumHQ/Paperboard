@@ -6,7 +6,7 @@ import * as crypto from "crypto";
 import { panelFilesDirName } from "../storage";
 import { logger } from "../logger";
 import { assertSecureUrl, expectOk, httpRequest, type HttpRequestInit } from "./http";
-import { backupArchiveDownloadCap, BACKUP_ARCHIVE_MAX_BYTES, BackupListingError, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
+import { backupArchiveDownloadCap, BACKUP_ARCHIVE_MAX_BYTES, BackupListingError, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage, type BytesProgress } from "./types";
 
 export interface S3Settings {
     /** https://s3.<region>.amazonaws.com, https://<account>.r2.cloudflarestorage.com */
@@ -205,7 +205,7 @@ export class S3BackupStore implements BackupStore {
         return newestFirst(records);
     }
 
-    async put(record: BackupRecord, archivePath: string): Promise<void> {
+    async put(record: BackupRecord, archivePath: string, onProgress?: BytesProgress): Promise<void> {
         if (record.size > BACKUP_ARCHIVE_MAX_BYTES) throw new Error("S3 accepts at most 5 GiB in one upload");
         const keys = this.keys(record);
         expectOk(
@@ -214,6 +214,7 @@ export class S3BackupStore implements BackupStore {
                 headers: { "content-type": "application/gzip" },
                 bodyFile: { path: archivePath, size: record.size },
                 timeoutMs: 120_000,
+                onProgress,
             }),
             "Uploading the backup",
         );
@@ -228,10 +229,10 @@ export class S3BackupStore implements BackupStore {
         );
     }
 
-    async get(record: BackupRecord, destPath: string): Promise<void> {
+    async get(record: BackupRecord, destPath: string, onProgress?: BytesProgress): Promise<void> {
         const maxFileBytes = backupArchiveDownloadCap(record.size);
         expectOk(
-            await this.send("GET", this.objectUrl(this.keys(record).archive), { toFile: destPath, maxFileBytes, timeoutMs: 120_000 }),
+            await this.send("GET", this.objectUrl(this.keys(record).archive), { toFile: destPath, maxFileBytes, timeoutMs: 120_000, onProgress }),
             "Downloading the backup",
         );
     }

@@ -3,9 +3,25 @@
 // and the record is written last, so a listed backup always has its bytes.
 import * as fs from "fs";
 import * as path from "path";
+import { Transform } from "stream";
+import { pipeline } from "stream/promises";
 import { panelFilesDirName, writeFileAtomic } from "../storage";
 import { logger } from "../logger";
-import { BACKUP_ID_RE, BackupListingError, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
+import { BACKUP_ID_RE, BackupListingError, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage, type BytesProgress } from "./types";
+
+/** a file copy that reports the bytes copied so far */
+async function copyCounting(from: string, to: string, onProgress?: BytesProgress): Promise<void> {
+    if (!onProgress) return fs.promises.copyFile(from, to);
+    let copied = 0;
+    const counter = new Transform({
+        transform(chunk: Buffer, _enc, done) {
+            copied += chunk.length;
+            onProgress(copied);
+            done(null, chunk);
+        },
+    });
+    await pipeline(fs.createReadStream(from), counter, fs.createWriteStream(to));
+}
 
 export class LocalBackupStore implements BackupStore {
     constructor(private readonly root: string) {}
@@ -64,12 +80,12 @@ export class LocalBackupStore implements BackupStore {
         return newestFirst(records);
     }
 
-    async put(record: BackupRecord, archivePath: string): Promise<void> {
+    async put(record: BackupRecord, archivePath: string, onProgress?: BytesProgress): Promise<void> {
         const target = this.files(record);
         fs.mkdirSync(path.dirname(target.archive), { recursive: true });
         const part = `${target.archive}.part`;
         try {
-            await fs.promises.copyFile(archivePath, part);
+            await copyCounting(archivePath, part, onProgress);
             await fs.promises.rename(part, target.archive);
             await writeFileAtomic(target.record, JSON.stringify(record, null, 2));
         } catch (err) {
@@ -79,8 +95,8 @@ export class LocalBackupStore implements BackupStore {
         }
     }
 
-    async get(record: BackupRecord, destPath: string): Promise<void> {
-        await fs.promises.copyFile(this.files(record).archive, destPath);
+    async get(record: BackupRecord, destPath: string, onProgress?: BytesProgress): Promise<void> {
+        await copyCounting(this.files(record).archive, destPath, onProgress);
     }
 
     async remove(record: BackupRecord): Promise<void> {
