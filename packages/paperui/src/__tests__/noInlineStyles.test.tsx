@@ -136,6 +136,12 @@ describe("PaperIcon images", () => {
         expect(stencil.style.getPropertyValue("--paper-icon-mask")).toBe('url("/logo.svg")');
     });
 
+    test("tint takes a color for a logo that must not follow its control's icon color", () => {
+        const { container } = render(() => <PaperIcon src="/logo.svg" tint="text" />);
+        const stencil = container.querySelector('[class*="tint"]') as HTMLElement;
+        expect(stencil.style.backgroundColor).toBe("var(--paper-text)");
+    });
+
     test("pixelated keeps pixel art crisp", () => {
         const { container } = render(() => <PaperIcon src="/head.png" pixelated />);
         expect(container.querySelector("img")!.className).toContain("pixelated");

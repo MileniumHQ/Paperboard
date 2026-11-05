@@ -91,9 +91,9 @@ export function Example() {
                     </tr>
                     <tr>
                         <td><PaperCode>tint</PaperCode></td>
-                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>boolean | PaperColor</PaperCode></td>
                         <td>No default (off)</td>
-                        <td>Draws the image as a stencil in the current text color, for one-color logos. Only the image's transparency matters.</td>
+                        <td>Draws the image as a stencil, for one-color logos. Only the image's transparency matters. <PaperCode>true</PaperCode> uses the current text color; a color name such as <PaperCode>"text"</PaperCode> uses that color, for a logo inside a control that colors its icons, like PaperSelectorItem.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>pixelated</PaperCode></td>
@@ -165,11 +165,13 @@ export function OnlineMark(props: { online: boolean }) {
             <PaperText preset="body" as="p">
                 The actions panel draws a category's image icon with <PaperCode>src</PaperCode>.
                 Use <PaperCode>tint</PaperCode> for a single-color logo that should follow the text color, and <PaperCode>pixelated</PaperCode> for pixel art.
+                A PaperSelectorItem draws its icon in the primary color. A maker's logo there names <PaperCode>tint="text"</PaperCode> so it stays one neutral color.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { PaperIcon } from "@mileniumhq/paperui";
 
 <PaperIcon src="/logo.svg" tint />
+<PaperIcon src="/maker.svg" tint="text" />
 <PaperIcon src="/pixel-icon.png" pixelated />`}
             </PaperCode>
 

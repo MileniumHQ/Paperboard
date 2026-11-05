@@ -1,13 +1,20 @@
 import styles from "./index.module.css";
 import { splitProps, Show, type JSX } from "solid-js";
+import type { PaperColor } from "../../types";
+import { resolveColor } from "../../utils/theme";
 
 export interface PaperIconProps extends JSX.HTMLAttributes<HTMLSpanElement> {
     zeroHeight?: boolean;
     monogram?: boolean;
     src?: string;
     alt?: string;
-    /** draw `src` as a stencil in the text color, for one-color logos */
-    tint?: boolean;
+    /**
+     * draw `src` as a stencil, for one-color logos: in the current text
+     * color, or in the color named. A logo inside a control that colors its
+     * icons (a PaperSelectorItem's are the primary color) names "text" to
+     * stay the brand's single color.
+     */
+    tint?: boolean | PaperColor;
     /** keep pixel art crisp when `src` is scaled up */
     pixelated?: boolean;
     /**
@@ -69,7 +76,10 @@ export function PaperIcon(props: PaperIconProps) {
                         {/* the image's alpha cut out of the text color */}
                         <span
                             class={[styles.iconImage, styles.tint].join(" ")}
-                            style={{ "--paper-icon-mask": `url(${JSON.stringify(src())})` }}
+                            style={{
+                                "--paper-icon-mask": `url(${JSON.stringify(src())})`,
+                                "background-color": typeof local.tint === "string" ? resolveColor(local.tint) : undefined,
+                            }}
                         />
                     </Show>
                 )}
