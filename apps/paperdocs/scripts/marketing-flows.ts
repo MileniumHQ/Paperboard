@@ -4,18 +4,23 @@ import { BUILTIN_DEFS } from "../../../panels/dev.paperboard.actions/src/lib/bui
 import { isCanvasBlock, type CanvasBlock } from "../../../panels/dev.paperboard.actions/src/lib/tree";
 import { isTypedOnlyInput } from "../../../panels/dev.paperboard.actions/src/lib/inputTypes";
 
-const GAME = "dev.paperboard.gameserver", BOT = "dev.paperboard.botcreator", AI = "dev.paperboard.agents";
-export const demoChannel = "124800000000000010";
-export const demoUser = "124800000000000020";
-export const demoInteraction = "124800000000000030";
-export const demoMessage = "124800000000000040";
+export const GAME = "dev.paperboard.gameserver";
+export const AGENTS = "dev.paperboard.agents";
 
-/** Screenshot documents use the same owners and schemas as library drags. */
+/**
+ * The learn pages' cross-panel flows, built from the schemas the install
+ * actually registered, as a Library drag would. Game Server's blocks belong
+ * to a server (its project), so the install needs exactly one Minecraft
+ * server; Agents' blocks are the panel's own.
+ */
 export function buildMarketingFlows(registry: ActionInfo[], icons: Record<string, string>) {
+    const servers = new Set(registry.filter(item => item.panelId === GAME && item.project).map(item => item.project));
+    assert.equal(servers.size, 1, "Add exactly one Minecraft server to the temporary install");
+    const [server] = servers;
     const block = (id: string, owner: string, action: string, values: Record<string, unknown> = {}, children?: CanvasBlock[]): CanvasBlock => {
         const record = owner === "builtin.logic"
             ? BUILTIN_DEFS.find(def => def.id === action)?.item
-            : registry.find(item => item.panelId === owner && item.action === action);
+            : registry.find(item => item.panelId === owner && item.action === (owner === GAME ? `${server}/${action}` : action));
         assert.ok(record?.schema, `Missing registered action ${owner}:${action}`);
         assert.equal(record.panelId, owner);
         const result: CanvasBlock = { id, panelId: record.panelId, action: record.schema,
@@ -30,104 +35,21 @@ export function buildMarketingFlows(registry: ActionInfo[], icons: Record<string
         assert.ok(output, `${source.id} has no output`);
         return `{{${source.id}:${typeof output === "string" ? output : output.label || "Result"}:${source.action.icon || "bolt"}}}`;
     };
-    const ask = (id: string, prompt: string, model = "") => block(id, AI, "ask", { prompt, model, personality: "no-nonsense" });
+    const ask = (id: string, question: string) => block(id, AGENTS, "get-answer", { question });
     const truncate = (id: string, source: CanvasBlock, length: number) => block(id, "builtin.logic", "text-truncate", { text: ref(source), length, ellipsis: "..." });
-    const channel = (id: string) => block(id, BOT, "get-channel", { channelId: demoChannel });
-    const send = (id: string, target: CanvasBlock, content: string, extra = {}) => block(id, BOT, "send-message", { channel: ref(target), content, ...extra });
-
-    const count = block("startup-count", GAME, "player-count");
-    const startup = block("startup", GAME, "server-started", {}, [count,
-        block("startup-announcement", "builtin.logic", "text", { value: `Minecraft is ready at play.example.com. ${ref(count)} players online.` }),
-    ]);
-    const startupChannel = channel("startup-channel");
-    startup.children!.push(startupChannel, send("startup-discord", startupChannel, ref(startup.children![1])));
 
     const greeting = ask("join-greeting", "Welcome {{player:Username:person}} to our Minecraft world. Mention the town at spawn. One short sentence.");
     const shortGreeting = truncate("join-short", greeting, 160);
-    const joinChannel = channel("join-channel");
     const joined = block("player-welcome", GAME, "player-joined", { player: "" }, [greeting, shortGreeting,
         block("join-chat", GAME, "say-chat", { message: ref(shortGreeting) }),
-        joinChannel, send("join-discord", joinChannel, "{{player:Username:person}} joined Minecraft. Meet them at spawn!"),
     ]);
 
-    const buttonCount = block("button-count", GAME, "player-count");
-    const players = block("button-players", GAME, "list-players");
-    const button = block("server-button", BOT, "interaction-triggered", { customId: "minecraft-status" }, [
-        buttonCount, players,
-        block("button-reply", BOT, "respond-to-interaction", {
-            interactionId: "{{interactionId:Interaction:reply}}", ephemeral: true,
-            content: `${ref(buttonCount)} players online. ${ref(players)} Join play.example.com.`,
-        }),
+    const challenge = ask("build-challenge", "Give our Minecraft server one fun build challenge for today. One sentence.");
+    const shortChallenge = truncate("challenge-short", challenge, 160);
+    const startup = block("daily-challenge", GAME, "server-started", {}, [challenge, shortChallenge,
+        block("challenge-chat", GAME, "say-chat", { message: ref(shortChallenge) }),
     ]);
-
-    const welcome = ask("member-welcome", "Write a friendly two-sentence welcome for {{username:Username:person}}. Our Minecraft address is play.example.com. Mention the rules channel.");
-    const shortWelcome = truncate("member-short", welcome, 600);
-    const newUser = block("member-user", BOT, "get-user", { userId: "{{userId:User:person}}" });
-    const welcomeChannel = channel("member-welcome-channel");
-    const member = block("member-joined", BOT, "on-member-join", {}, [newUser, welcome, shortWelcome,
-        block("member-dm", BOT, "send-dm", { user: ref(newUser), content: ref(shortWelcome) }),
-        welcomeChannel, send("member-channel", welcomeChannel, "Welcome <@{{userId:User:person}}>! {{username:Username:person}} just joined our community."),
-    ]);
-
-    const chatAnswer = block("chat-answer", AI, "ask", {
-        prompt: "{{author:Username:person}} says: {{content:Message:chat}}", model: "", personality: "no-nonsense",
-        instructions: "You are Lantern Town's helper on a Minecraft server at play.example.com. Keep answers under three sentences.",
-        memory: "{{channelId:Channel:tag}}",
-    });
-    const chatShort = truncate("chat-short", chatAnswer, 1600);
-    const chat = block("chat-message", BOT, "on-message", {}, [
-        block("chat-filter", "builtin.logic", "if", { left: "{{content:Message:chat}}", operator: "starts-with", right: "!ask " }, [
-            chatAnswer, chatShort,
-            block("chat-reply", BOT, "send-message", { channel: "{{channelId:Channel:tag}}", reply: "{{messageId:Message:chat}}", content: ref(chatShort) }),
-        ]),
-    ]);
-
-    const tipAnswer = ask("question-answer", "Answer this Minecraft question briefly: {{content:Message:chat}}");
-    const shortAnswer = truncate("question-short", tipAnswer, 1600);
-    const question = block("tip-request", BOT, "on-message", {}, [
-        block("tip-filter", "builtin.logic", "if", { left: "{{content:Message:chat}}", operator: "starts-with", right: "!tip " }, [
-            tipAnswer, shortAnswer,
-            block("tip-reply", BOT, "send-message", { channel: "{{channelId:Channel:tag}}", reply: "{{messageId:Message:chat}}", content: ref(shortAnswer) }),
-        ]),
-    ]);
-
-    const remaining = block("leave-count", GAME, "player-count");
-    const emptyChannel = channel("empty-channel");
-    const leaving = block("player-left", GAME, "player-left", { player: "" }, [remaining,
-        block("last-player", "builtin.logic", "if", { left: ref(remaining), operator: "==", right: "0" }, [
-            emptyChannel, send("empty-notice", emptyChannel, "{{player:Username:person}} logged off. The Minecraft server is empty; tomorrow's builds are saved."),
-        ]),
-    ]);
-    const statusButton = block("status-button", BOT, "create-button", { label: "Minecraft status", customId: "minecraft-status", style: "primary", disabled: false });
-    const botChannel = channel("bot-channel");
-    const botReady = block("bot-ready", BOT, "on-bot-ready", {}, [
-        botChannel, statusButton,
-        send("ready-notice", botChannel, "Check who's playing, or use !tip for a local AI answer.", { components: ref(statusButton) }),
-    ]);
-    const nightChannel = channel("night-channel");
-    const nightCount = block("night-count", GAME, "player-count");
-    const nightAnswer = ask("night-copy", `Invite friends to our Minecraft game night at spawn. ${ref(nightCount)} players are online. Mention play.example.com. Two sentences.`);
-    const nightShort = truncate("night-short", nightAnswer, 500);
-    const nightEmbed = block("night-card", BOT, "create-embed", { title: "Lantern Town game night", description: ref(nightShort), color: "Blue" });
-    const nightButton = block("night-button", BOT, "create-button", { label: "Who's playing?", customId: "minecraft-status", style: "primary", disabled: false });
-    const nightPost = send("night-post", nightChannel, "Tonight's Minecraft plans", { embeds: ref(nightEmbed), components: ref(nightButton) });
-    const gameNight = block("game-night", "builtin.logic", "on-play", {}, [
-        nightChannel, nightCount, nightAnswer, nightShort, nightEmbed, nightButton, nightPost,
-        block("night-pin", BOT, "pin-message", { channel: ref(nightChannel), message: ref(nightPost) }),
-    ]);
-
-    const helpUser = block("guide-user", BOT, "get-user", { userId: "{{authorId:User:person}}" });
-    const guideAnswer = ask("guide-answer", "Explain this Minecraft question in three clear steps: {{content:Message:chat}}");
-    const guideShort = truncate("guide-short", guideAnswer, 600);
-    const helpDesk = block("guide-request", BOT, "on-message", {}, [
-        block("guide-filter", "builtin.logic", "if", { left: "{{content:Message:chat}}", operator: "starts-with", right: "!guide " }, [
-            helpUser, guideAnswer, guideShort,
-            block("guide-dm", BOT, "send-dm", { user: ref(helpUser), content: ref(guideShort) }),
-            block("guide-acknowledge", BOT, "send-message", { channel: "{{channelId:Channel:tag}}", reply: "{{messageId:Message:chat}}", content: "Your step-by-step guide is in your DMs." }),
-            block("guide-reaction", BOT, "add-reaction", { channel: "{{channelId:Channel:tag}}", message: "{{messageId:Message:chat}}", emoji: "✅" }),
-        ]),
-    ]);
-    return { startup, joined, button, member, chat, question, leaving, botReady, gameNight, helpDesk };
+    return { joined, startup };
 }
 
 /** Editorial fixture validation, not a substitute for a service boundary. */

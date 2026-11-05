@@ -11,138 +11,123 @@ import {
     initPaperApi,
     closeTransport,
 } from "../../../packages/paperapi/src/index";
+import type { CanvasBlock } from "../../../panels/dev.paperboard.actions/src/lib/tree";
+import type { CanvasSaveResult, CanvasSnapshot } from "../../../panels/dev.paperboard.actions/src/lib/canvasDoc";
 
+// The learn pages' cross-panel Actions workflows. Each screenshot's flows are
+// saved as a real Actions project in the temporary install, opened in the
+// real editor, captured, and deleted again. The install needs one Minecraft
+// server, added in Game Server, for that server's blocks. It is never set up
+// or started, and Agents has no brain, so the flows' events never come: they
+// run only in verifyMarketingFlows, against simulated answers.
 if (!process.env.PAPERBOARD_DIR) throw new Error("Use a temporary PAPERBOARD_DIR.");
 const fixtureDir = realpathSync(process.env.PAPERBOARD_DIR);
-assert.ok(fixtureDir.startsWith(realpathSync(tmpdir()) + sep));
+assert.ok(fixtureDir.startsWith(realpathSync(tmpdir()) + sep), "PAPERBOARD_DIR must be a temporary install");
 const expectedPort = JSON.parse(readFileSync(join(fixtureDir, "local/crane.json"), "utf8")).port;
 const panelId = "dev.paperboard.actions";
 const capture = await captureBrowser(1.25);
-const context = capture.context;
 let closeupCapture: Awaited<ReturnType<typeof captureBrowser>> | undefined;
-let tallCapture: Awaited<ReturnType<typeof captureBrowser>> | undefined;
+const made: string[] = [];
+const call = <T>(action: string, inputs: Record<string, unknown> = {}) => actions.call<T>(panelId, action, inputs);
 try {
-    const page = await context.newPage();
+    const page = await capture.context.newPage();
     await page.goto(process.env.PAPERBOARD_BROWSER_ORIGIN || "http://paperboard.localhost:4319");
-    await page.getByText("Actions", { exact: true }).click();
+    // The Panels widget re-renders with live stats, so click the row in the page
+    // instead of waiting for it to hold still.
+    await page.getByRole("button", { name: /^Actions(, running)?\. Open$/ }).evaluate((button: HTMLElement) => button.click());
     const frame = await (await page
         .locator(`iframe[title="${panelId}"]`)
         .elementHandle())!.contentFrame();
     assert.ok(frame);
+    // The host shows a panel's tutorial the first time it opens; once closed,
+    // the install remembers it.
+    const tutorial = page.getByRole("dialog").filter({ hasText: "Snap blocks together" });
+    if (await tutorial.waitFor({ timeout: 5000 }).then(() => true, () => false)) {
+        await tutorial.getByRole("button", { name: /close/i }).first().click();
+        await tutorial.waitFor({ state: "hidden" });
+    }
     await frame.waitForFunction(() => Boolean((window as any).__PAPERBOARD_CRANE));
     const grant = await frame.evaluate(() => (window as any).__PAPERBOARD_CRANE);
     assert.equal(grant.port, expectedPort);
+    // Projects are the Actions panel's own: its grant may make and delete them.
     await initPaperApi({ ...grant, computerId: "local" });
     const registry = await actions.list();
-    // Read the actual library's resolved sibling icons in this browser host.
+
+    closeupCapture = await captureBrowser(2);
+    const closeup = await closeupCapture.context.newPage();
+    const openProject = async (name: string) => {
+        await closeup.goto(frame.url());
+        await closeup.getByText(name, { exact: true }).click();
+        await closeup.locator(".canvas-world").waitFor();
+    };
+    const makeProject = async (name: string, flows: CanvasBlock[]) => {
+        const project = await call<{ id: string }>("create-project", { name });
+        made.push(project.id);
+        const { revision } = await call<CanvasSnapshot>(`${project.id}/get-canvas`);
+        const saved = await call<CanvasSaveResult>(`${project.id}/save-canvas`, {
+            canvas: { flows, notes: [], functions: [] },
+            baseRevision: revision,
+            clientId: "marketing-capture",
+        });
+        assert.ok(!saved.applyError, `${name}: ${saved.applyError}`);
+        return project.id;
+    };
+
+    // The flows carry each panel's icon as the Library resolves it in this
+    // browser host, so read them from a new project's Library. A new project
+    // left without a flow is a draft, which Actions discards on its own.
+    await frame.getByRole("button", { name: "New project" }).first().click();
     await frame.waitForFunction(() => document.querySelectorAll("img").length >= 3);
-    const sources = await frame.locator("img").evaluateAll(images => images.map(image => image.src));
+    const sources = await frame.locator("img").evaluateAll(images => images.map(image => (image as HTMLImageElement).src));
     const icons = Object.fromEntries([...new Set(registry.map(item => item.panelId))]
         .filter(id => id !== panelId)
         .map(id => [id, sources.find(src => new URL(src).hostname.startsWith(`local.${id}.`))]));
     const flows = buildMarketingFlows(registry, icons as Record<string, string>);
     await verifyMarketingFlows(flows);
-    let fixture = { flows: [flows.startup], notes: [], functions: [] };
-    // Confine preview persistence and flow subscriptions to this Chrome context.
-    // Never register these event flows or send their messages on the daemon.
-    const installFixtureRoutes = async (activeContext: typeof context) => activeContext.routeWebSocket(
-        (url) => Number(url.port) === expectedPort,
-        (socket) => {
-            const server = socket.connectToServer();
-            socket.onMessage((message) => {
-                let request;
-                try {
-                    request = JSON.parse(message.toString());
-                } catch {
-                    server.send(message);
-                    return;
-                }
-                const params = request.params || {};
-                let replacement;
-                if (
-                    request.action === "config:get" &&
-                    params.id === panelId &&
-                    params.path === "canvas.json"
-                )
-                    replacement = { data: fixture };
-                if (request.action === "config:set" && params.id === panelId) replacement = {};
-                if (
-                    request.action === "actions:call" &&
-                    params.panelId === panelId &&
-                    params.action === "sync-flows"
-                )
-                    replacement = { result: {} };
-                if (replacement !== undefined)
-                    socket.send(
-                        JSON.stringify({ type: "response", id: request.id, result: replacement }),
-                    );
-                else server.send(message);
-            });
-            server.onMessage((message) => socket.send(message));
-        },
-    );
-    await installFixtureRoutes(context);
-    closeupCapture = await captureBrowser(2);
-    await installFixtureRoutes(closeupCapture.context);
-    const closeup = await closeupCapture.context.newPage();
-    tallCapture = await captureBrowser(1.75);
-    await installFixtureRoutes(tallCapture.context);
-    const tallCloseup = await tallCapture.context.newPage();
+
     const captures = [
-        { name: "actions-overview.png", flows: [flows.gameNight, flows.helpDesk], shell: false, overview: true },
-        { name: "actions.png", flows: [flows.chat, flows.botReady], shell: true },
-        { name: "gameserver-actions.png", flows: [flows.joined], shell: false },
-        { name: "botcreator-actions.png", flows: [flows.button], shell: false },
-        { name: "ai-actions.png", flows: [flows.question], shell: false },
-        { name: "actions-game-flow.png", flows: [flows.startup], shell: false },
-        { name: "actions-discord-flow.png", flows: [flows.member], shell: false },
-        { name: "actions-ai-flow.png", flows: [flows.chat], shell: false },
+        { name: "gameserver-flow.png", project: "Welcome players", flows: [flows.joined] },
+        { name: "agents-flow.png", project: "Daily build challenge", flows: [flows.startup] },
     ];
-    const detail = await context.newPage();
     for (const shot of captures) {
         if (process.env.CAPTURE_SHOTS && !process.env.CAPTURE_SHOTS.split(",").includes(shot.name)) continue;
-        // The schema stays real; each screenshot has its own purpose and data.
-        fixture = { flows: structuredClone(shot.flows), notes: [], functions: [] };
-        fixture.flows.forEach((flow, index) => {
-            flow.pos = { x: shot.shell ? 20 + index * 510 : shot.overview ? 60 + index * 560 : 160, y: shot.shell || shot.overview ? 70 : 30 };
+        const shotFlows = structuredClone(shot.flows);
+        shotFlows.forEach((flow) => {
+            flow.pos = { x: 160, y: 30 };
             validateMarketingFlow(flow);
         });
-        const target = shot.shell ? frame : shot.overview ? detail : shot.name === 'actions-discord-flow.png' ? tallCloseup : closeup;
-        await target.goto(frame.url());
-        await target.locator(".canvas-world > .triggerAction").first().waitFor();
-        await target.getByTitle("Collapse Library").click();
-        if (shot.overview) {
-            // Make the rich message's typed connections visible in the real UI.
-            await target.locator('.action:not(.triggerAction)').filter({ hasText: "Tonight's Minecraft plans" }).getByTitle('Show extra options').click();
-        }
-        const bounds = await target.locator(".canvas-world > .triggerAction").evaluateAll(elements =>
+        await makeProject(shot.project, shotFlows);
+        await openProject(shot.project);
+        await closeup.locator(".canvas-world > .triggerAction").first().waitFor();
+        await closeup.getByTitle("Collapse Library").click();
+        const bounds = await closeup.locator(".canvas-world > .triggerAction").evaluateAll(elements =>
             elements.map(element => element.getBoundingClientRect().toJSON()));
-        const size = await target.evaluate(() => ({ width: innerWidth, height: innerHeight }));
-        console.log(shot.name, bounds.map(rect => ({left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom})), size);
-        assert.equal(bounds.length, fixture.flows.length);
+        const size = await closeup.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+        assert.equal(bounds.length, shotFlows.length);
         assert.ok(bounds.every(rect => rect.left >= 0 && rect.top >= 0 && rect.right <= size.width && rect.bottom <= size.height), `${shot.name} must not clip`);
-        if (bounds.length > 1) assert.ok(bounds[0].right + 20 < bounds[1].left, "Flows must not overlap");
-        await target.locator(".canvas-world img").evaluateAll(images => Promise.all(images.map(image => image.decode())));
-        assert.ok(await target.locator(".canvas-world img").evaluateAll(images => images.length > 0 && images.every(image => image.naturalWidth > 0)), "Real panel icons must load");
-        await target.evaluate(() => document.fonts.ready);
-        assert.ok(await target.locator('.actionVariableOnly[data-has-value="true"]').evaluateAll(fields =>
-            fields.length > 0 && fields.every(field => {
-                const copy = field.cloneNode(true);
+        await closeup.locator(".canvas-world img").evaluateAll(images => Promise.all(images.map(image => (image as HTMLImageElement).decode())));
+        assert.ok(await closeup.locator(".canvas-world img").evaluateAll(images => images.length > 0 && images.every(image => (image as HTMLImageElement).naturalWidth > 0)), "Real panel icons must load");
+        await closeup.evaluate(() => document.fonts.ready);
+        assert.ok(await closeup.locator('.actionVariableOnly[data-has-value="true"]').evaluateAll(fields =>
+            fields.every(field => {
+                const copy = field.cloneNode(true) as HTMLElement;
                 const chips = copy.querySelectorAll('.actionVariableChip');
                 if (!chips.length) return false;
                 chips.forEach(chip => chip.remove());
-                return !copy.textContent.replace(/[\u200B\uFEFF\s]/g, '');
+                return !copy.textContent!.replace(/[​﻿\s]/g, '');
             }),
         ), "Every populated variable-only field must contain real typed chips, never raw IDs");
-        await (shot.shell ? page : target).screenshot({
+        await closeup.screenshot({
             path: fileURLToPath(new URL(`../public/screens/${shot.name}`, import.meta.url)),
         });
-        console.log(`Captured ${shot.name}: runtime-checked panel flows, loaded icons and valid references; external responses simulated.`);
+        console.log(`Captured ${shot.name}: a project in the real editor, with checked flows and loaded icons.`);
     }
-
 } finally {
+    // A project this made is the install's, not the reader's: remove each one.
+    const failures: unknown[] = [];
+    for (const project of made) await call("delete-project", { project }).catch((error) => failures.push(error));
     closeTransport("local");
-    await tallCapture?.close();
     await closeupCapture?.close();
     await capture.close();
+    if (failures.length) throw new AggregateError(failures, "Could not delete the capture's projects");
 }
