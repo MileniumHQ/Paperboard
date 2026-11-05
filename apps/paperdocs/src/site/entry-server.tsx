@@ -27,7 +27,7 @@ export interface RenderedPage {
 const LANDING: RenderedPage = {
     title: "Paperboard | Self-hosted apps and automation",
     description:
-        "Paperboard is an all-in-one toolkit for self-hosting. Run, manage, and automate tools locally on Windows, macOS, and Linux.",
+        "Host a Minecraft server, run a Discord bot, and chat with local AI from one app on your own computer. No terminal required. For Windows, macOS, and Linux.",
     html: "",
 };
 

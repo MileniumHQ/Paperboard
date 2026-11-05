@@ -1,7 +1,7 @@
 {
     "name": "Paperboard",
     "short_name": "Paperboard",
-    "description": "An all-in-one toolkit for self-hosting.",
+    "description": "Game servers, Discord bots, and local AI on your own computer.",
     "start_url": "/",
     "scope": "/",
     "display": "standalone",
