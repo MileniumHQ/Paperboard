@@ -77,7 +77,7 @@ await assertImages("the landing", await read("index.html"));
 // so it renders the same on every browser, screen and GPU.
 {
     const raw = await read("index.html");
-    for (const gone of ["three", "aio-stage", "flight.js", "card-scroll.js", "dots-bar.js", "<canvas", "importmap"]) {
+    for (const gone of ["three", "aio-stage", "flight.js", "card-scroll.js", "dots-bar.js", "cta.js", "data-reveal", "<canvas", "importmap"]) {
         assert.ok(!raw.includes(gone), `the landing must not ship ${gone}`);
     }
     for (const name of ["hero", "laptop", "mini-pc", "dev-board", "desktop"]) {

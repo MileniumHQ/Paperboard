@@ -260,29 +260,33 @@ try {
         "The landing wordmark must use the same blue as every panel page",
     );
     assert.equal(await page.locator('.chart-section, script[src="/js/bar-chart.js"]').count(), 0);
+    // The developer section shows the first-panel tutorial's real commands.
+    // The prompt is drawn by CSS, so copying a line copies only the command.
+    assert.deepEqual(
+        await page.locator(".devs-command").allInnerTexts(),
+        ["npm create @mileniumhq/panel", "cd dev.example.hello", "bun install", "bun run build"],
+    );
     assert.equal(
-        await page
-            .locator(".cta-image")
-            .evaluate((element) => getComputedStyle(element).borderRadius),
-        "4px",
+        await page.locator(".devs-command").first().evaluate(element => getComputedStyle(element, "::before").userSelect),
+        "none",
     );
     // The landing is static: real screenshots and pre-rendered device art,
     // no WebGL, so every browser and screen gets the same page.
     assert.equal(await page.locator("h1").count(), 1);
     assert.equal(await page.locator("canvas").count(), 0, "The landing must not draw with WebGL");
     assert.deepEqual(
-        await page.locator(".panel-feature-link").evaluateAll(links => links.map(link => link.getAttribute("href"))),
+        await page.locator(".panel-row-link").evaluateAll(links => links.map(link => link.getAttribute("href"))),
         ["/game-server/", "/bot-creator/", "/ai/", "/actions/"],
         "The landing walks through three panels, then the one that connects them, each linking to its page",
     );
     assert.deepEqual(
-        await page.locator(".panel-feature h3 .marketing-heading-label").allInnerTexts(),
+        await page.locator(".panel-row h3").allInnerTexts(),
         ["Minecraft, managed", "Give your bot something to do", "AI on your computer", "Connect your panels"],
         "Panel rows reuse their learn page headlines",
     );
     assert.deepEqual(
         await page.locator(".device-label").allInnerTexts(),
-        ["An old laptop", "A mini PC", "A Raspberry Pi", "Your desktop"],
+        ["Your desktop", "An old laptop", "A mini PC", "A Raspberry Pi"],
     );
     assert.ok(!(await page.locator("main").innerText()).toLowerCase().includes("all-in-one"), "The landing must not call Paperboard an all-in-one toolkit");
     // Scroll the whole page so every lazy image loads, then prove each one
@@ -309,8 +313,10 @@ try {
     console.log("verified the static landing: panels, device row, loaded art, no 3D engine, and native scrolling");
 
     // Every screen shape: nothing runs off the side, the hero heading keeps
-    // one type size, panel screenshots never sit on their copy, the device row
-    // fits without devices overlapping, and the outro icons clear the copy.
+    // one type size and shares the copy's left edge, the computer stands above
+    // the fold beside the copy, panel screenshots never sit on their copy and
+    // stay one screen tall, the device row fits without devices overlapping,
+    // and the outro icons clear the copy.
     const overlaps = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
     for (const [width, height] of [[2560, 1080], [1440, 900], [1280, 720], [1024, 768], [820, 1180], [844, 390], [390, 844], [360, 640], [320, 568]]) {
         const shapePage = await browser.newPage({ viewport: { width, height } });
@@ -322,11 +328,21 @@ try {
             assert.equal(new Set(lineSizes).size, 1, `Hero heading lines share one size at ${width} × ${height}: ${lineSizes}`);
             const hero = await shapePage.locator(".hero-render img").boundingBox();
             assert.ok(hero.x >= 0 && hero.x + hero.width <= width && hero.height <= height * 1.05, `The hero art fits the screen at ${width} × ${height}`);
-            const rows = await shapePage.locator(".panel-feature").evaluateAll(features => features.map(feature => ({
-                shot: feature.querySelector(".panel-feature-shot").getBoundingClientRect().toJSON(),
-                copy: feature.querySelector(".panel-feature-copy").getBoundingClientRect().toJSON(),
+            const heroLefts = await shapePage.locator(".hero-copy .marketing-heading-lines, .hero-sub, .hero-copy paper-button").evaluateAll(elements => elements.map(element => Math.round(element.getBoundingClientRect().left)));
+            assert.ok(Math.max(...heroLefts) - Math.min(...heroLefts) <= 2, `The hero heading, copy and download share one left edge at ${width} × ${height}: ${heroLefts}`);
+            if (width > 900) {
+                const copy = await shapePage.locator(".hero-copy").boundingBox();
+                assert.ok(hero.y >= 0 && hero.y + hero.height <= height, `The computer stands above the fold at ${width} × ${height}`);
+                assert.ok(hero.x >= copy.x + copy.width, `The computer sits beside the hero copy at ${width} × ${height}`);
+            }
+            const rows = await shapePage.locator(".panel-row").evaluateAll(features => features.map(feature => ({
+                shot: feature.querySelector(".panel-row-shot").getBoundingClientRect().toJSON(),
+                copy: feature.querySelector(".panel-row-copy").getBoundingClientRect().toJSON(),
             })));
-            assert.ok(rows.every(row => !overlaps(row.shot, row.copy) && row.shot.left >= 0 && row.shot.right <= width), `Panel screenshots stay beside their copy at ${width} × ${height}`);
+            assert.equal(rows.length, 4);
+            // Screenshots may run off the right edge, never the left, and a
+            // row's screenshot is never taller than the screen.
+            assert.ok(rows.every(row => !overlaps(row.shot, row.copy) && row.shot.left >= 0 && row.shot.left < width && row.shot.height <= height), `Panel screenshots stay beside their copy at ${width} × ${height}`);
             const devices = await shapePage.locator(".device .marketing-render").evaluateAll(images => images.map(image => image.getBoundingClientRect().toJSON()));
             assert.equal(devices.length, 4);
             assert.ok(devices.every(box => box.left >= 0 && box.right <= width && box.height > 20), `The device row fits at ${width} × ${height}`);

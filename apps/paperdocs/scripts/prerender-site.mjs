@@ -78,8 +78,7 @@ function landingDocument(page, path) {
 ${stripSsrArtifacts(page.html)}
         <script src="/js/topbar.js"></script>
         <script src="/js/download-button.js"></script>
-        ${page.learn ? '<script src="/js/learn-lightbox.js"></script>' : `<script src="/js/cta.js"></script>
-        <script type="module" src="/js/icon-play.js"></script>`}
+        ${page.learn ? '<script src="/js/learn-lightbox.js"></script>' : '<script type="module" src="/js/icon-play.js"></script>'}
         <script src="/js/footer.js"></script>
     </body>
 </html>

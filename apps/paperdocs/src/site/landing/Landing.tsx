@@ -23,27 +23,33 @@ import {
 // host wrappers (.bg-overlay-host, .styled-text-host, .paper-button-host) that
 // carry the element-level placement the old element selectors held.
 
-// The four panels the landing walks through, in the order it tells them: three
-// jobs, then the panel that connects them. Their copy and screenshots come from
-// the learn pages, so a claim is written (and corrected) in one place.
-const FEATURED_PANELS = ["game-server", "bot-creator", "ai", "actions"].map((slug) => {
+// The panels the landing walks through: three that each do a job, then the
+// one that connects them. Their copy and screenshots come from the learn
+// pages, so a claim is written (and corrected) in one place.
+function learnPanel(slug: string) {
     const panel = LEARN_PANELS.find((candidate) => candidate.slug === slug);
     if (!panel) throw new Error(`paperdocs: the landing features ${slug}, which has no learn page`);
     return panel;
-});
+}
+const JOB_PANELS = ["game-server", "bot-creator", "ai"].map(learnPanel);
+const CONNECTOR_PANEL = learnPanel("actions");
 
-// Screenshots share a two-column row on wide screens (see .panel-feature in
-// style.css) and take the full padded column at 760px and below.
-const PANEL_SHOT_SIZES = "(max-width: 760px) calc(100vw - 48px), 600px";
+// A job panel's screenshot fills the column right of its copy and runs past
+// the page edge (see .panel-row in style.css); on phones it is wider than
+// the screen.
+const PANEL_SHOT_SIZES = "(max-width: 760px) 125vw, 860px";
+const CONNECTOR_SHOT_SIZES = "(max-width: 760px) 125vw, 1100px";
 
-// The machines Paperboard can live on, then the desktop that reaches them.
-// scale is each device's height against the laptop, so the row keeps their
-// real proportions however each render was framed.
+// The machines Paperboard can live on. Each sits in an equal slot, so a
+// flat board reads as clearly as a laptop.
 const HOSTS = [
-    { name: "laptop", label: "An old laptop", scale: 1 },
-    { name: "mini-pc", label: "A mini PC", scale: 0.55 },
-    { name: "dev-board", label: "A Raspberry Pi", scale: 0.42 },
+    { name: "laptop", label: "An old laptop" },
+    { name: "mini-pc", label: "A mini PC" },
+    { name: "dev-board", label: "A Raspberry Pi" },
 ] as const;
+
+// The first-panel tutorial's opening commands (docs/developers/start/first-panel).
+const PANEL_COMMANDS = ["npm create @mileniumhq/panel", "cd dev.example.hello", "bun install", "bun run build"];
 
 const PLAY_ICONS = [
     "/pictures/ai.png",
@@ -93,7 +99,7 @@ function downloadButton(size?: "large"): string {
 }
 
 const bgOverlayHtml = `<bg-overlay opacity="0.4"></bg-overlay>`;
-const docsButtonHtml = `<paper-button variant="brand" href="/docs/"><span>View Docs</span><span class="icon icon-north-east" aria-hidden="true"></span></paper-button>`;
+const docsButtonHtml = `<paper-button variant="brand" href="/docs/"><span>View Docs</span></paper-button>`;
 const githubButtonHtml = `<paper-button variant="black" href="https://github.com/MileniumHQ/Paperboard" target="_blank" rel="noopener noreferrer"><span class="icon icon-github" aria-hidden="true"></span><span>GitHub</span></paper-button>`;
 
 export function DownloadCta() {
@@ -256,40 +262,58 @@ export function MarketingChrome(props: ParentProps) {
     );
 }
 
+function PanelCopy(props: { panel: (typeof JOB_PANELS)[number] }) {
+    return (
+        <div class="panel-row-copy">
+            <p class="panel-row-name">
+                <Icon src={props.panel.icon} size={32} lazy />
+                {props.panel.name}
+            </p>
+            <h3>{props.panel.headline}</h3>
+            <p>{props.panel.description}</p>
+            <a class="panel-row-link" href={`/${props.panel.slug}/`}>
+                Learn about {props.panel.name}
+            </a>
+        </div>
+    );
+}
+
 export function Landing() {
     return (
         <MarketingChrome>
-            <main class="page-layout">
+            <main class="page-layout landing">
                 <section class="hero-section">
-                    <MarketingHeading
-                        level={1}
-                        text="Do more with your computer."
-                        lines={["Do more with", "your computer."]}
-                        size={90}
-                    />
-                    <p class="hero-sub">
-                        Host a Minecraft server, run a Discord bot, and chat with local AI, all from
-                        one app on your own computer. No terminal required.
-                    </p>
-                    <DownloadCta />
+                    <div class="hero-copy">
+                        <MarketingHeading
+                            level={1}
+                            text="Do more with your computer."
+                            lines={["Do more with", "your computer."]}
+                            size={88}
+                        />
+                        <p class="hero-sub">
+                            Host a Minecraft server, run a Discord bot, and chat with local AI, all from
+                            one app on your own computer. No terminal required.
+                        </p>
+                        <DownloadCta />
+                    </div>
                     <figure class="hero-render">
                         <Render
                             name="hero"
                             alt="A computer running the Paperboard Game Server panel"
-                            sizes="(max-width: 1000px) 92vw, 920px"
+                            sizes="(max-width: 900px) 88vw, 46vw"
                             priority
                         />
                     </figure>
                 </section>
 
-                <section class="panels-section" aria-labelledby="panels-heading">
-                    <div class="section-intro" data-reveal>
+                <section class="landing-section panels-section" aria-labelledby="panels-heading">
+                    <div class="section-intro">
                         <MarketingHeading
                             id="panels-heading"
                             level={2}
                             text="A panel for every job."
                             lines={["A panel for", "every job."]}
-                            size={54}
+                            size={60}
                         />
                         <p>
                             Paperboard's apps, called panels, turn things that usually take a server
@@ -298,41 +322,36 @@ export function Landing() {
                             than you can read this paragraph.
                         </p>
                     </div>
-                    <For each={FEATURED_PANELS}>
-                        {(panel, index) => (
-                            <article
-                                class={`panel-feature${index() % 2 ? " panel-feature--reverse" : ""}`}
-                                style={{ "--paper-site-accent": panel.accent }}
-                                data-reveal
-                            >
-                                <figure class="panel-feature-shot screenshot-card">
+                    <For each={JOB_PANELS}>
+                        {(panel) => (
+                            <article class="panel-row">
+                                <PanelCopy panel={panel} />
+                                <figure class="panel-row-shot">
                                     <Screenshot src={panel.image} alt={panel.alt} sizes={PANEL_SHOT_SIZES} />
                                 </figure>
-                                <div class="panel-feature-copy">
-                                    <div class="panel-feature-identity">
-                                        <Icon src={panel.icon} size={36} lazy />
-                                        <span>{panel.name}</span>
-                                    </div>
-                                    <MarketingHeading level={3} text={panel.headline} size={40} />
-                                    <p>{panel.description}</p>
-                                    <a class="panel-feature-link" href={`/${panel.slug}/`}>
-                                        Learn about {panel.name}
-                                        <span class="icon icon-north-east" aria-hidden="true" />
-                                    </a>
-                                </div>
                             </article>
                         )}
                     </For>
+                    <article class="panel-row panel-row--connector">
+                        <PanelCopy panel={CONNECTOR_PANEL} />
+                        <figure class="panel-row-shot">
+                            <Screenshot
+                                src={CONNECTOR_PANEL.image}
+                                alt={CONNECTOR_PANEL.alt}
+                                sizes={CONNECTOR_SHOT_SIZES}
+                            />
+                        </figure>
+                    </article>
                 </section>
 
-                <section class="anywhere-section" aria-labelledby="anywhere-heading" data-reveal>
+                <section class="landing-section anywhere-section" aria-labelledby="anywhere-heading">
                     <div class="section-intro">
                         <MarketingHeading
                             id="anywhere-heading"
                             level={2}
                             text="Paperboard runs anywhere."
                             lines={["Paperboard", "runs anywhere."]}
-                            size={54}
+                            size={60}
                         />
                         <p>
                             Paperboard is 100% compatible with macOS, Windows, and Linux on x86, and
@@ -341,53 +360,51 @@ export function Landing() {
                             desktop.
                         </p>
                     </div>
-                    <div class="device-row">
+                    <div class="device-map">
+                        <figure class="device device--desktop">
+                            <Render name="desktop" alt="" sizes="(max-width: 760px) 80vw, 420px" device />
+                            <figcaption class="device-label">Your desktop</figcaption>
+                        </figure>
+                        <div class="device-link" aria-hidden="true" />
                         <ul class="device-hosts">
                             <For each={HOSTS}>
                                 {(host) => (
-                                    <li class="device" style={{ "--device-scale": host.scale }}>
-                                        <Render name={host.name} alt="" sizes="(max-width: 760px) 30vw, 260px" device />
+                                    <li class="device">
+                                        <span class="device-slot">
+                                            <Render name={host.name} alt="" sizes="(max-width: 760px) 30vw, 220px" device />
+                                        </span>
                                         <span class="device-label">{host.label}</span>
                                     </li>
                                 )}
                             </For>
                         </ul>
-                        <div class="device-link" aria-hidden="true" />
-                        <div class="device device--desktop" style={{ "--device-scale": 1.15 }}>
-                            <Render name="desktop" alt="" sizes="(max-width: 760px) 60vw, 340px" device />
-                            <span class="device-label">Your desktop</span>
-                        </div>
                     </div>
                 </section>
 
-                <section class="cta-section">
-                    <div class="cta-shell">
-                        <div class="cta-copy">
-                            <MarketingHeading
-                                level={2}
-                                text="Devs: We're Open!"
-                                lines={["Devs:", "We're Open!"]}
-                                size={54}
-                            />
-                            <p>
-                                Paperboard's APIs are completely documented and MIT licensed, so
-                                developers can create their own panels with ease. Just run a command
-                                and get started with a panel template in seconds.
-                            </p>
-                            <div class="cta-actions">
-                                <div class="paper-button-host" innerHTML={docsButtonHtml} />
-                                <div class="paper-button-host" innerHTML={githubButtonHtml} />
-                            </div>
-                        </div>
-                        <div class="cta-card screenshot-card">
-                            <Screenshot
-                                class="cta-image"
-                                src="/screens/paperconsole-docs.png"
-                                alt="The PaperConsole documentation page in PaperDocs"
-                                sizes="(max-width: 900px) 92vw, 60vw"
-                            />
+                <section class="landing-section devs-section" aria-labelledby="devs-heading">
+                    <div class="devs-copy">
+                        <MarketingHeading
+                            id="devs-heading"
+                            level={2}
+                            text="Devs: We're Open!"
+                            lines={["Devs:", "We're Open!"]}
+                            size={60}
+                        />
+                        <p>
+                            Paperboard's APIs are completely documented and MIT licensed, so
+                            developers can create their own panels with ease. Just run a command
+                            and get started with a panel template in seconds.
+                        </p>
+                        <div class="devs-actions">
+                            <div class="paper-button-host" innerHTML={docsButtonHtml} />
+                            <div class="paper-button-host" innerHTML={githubButtonHtml} />
                         </div>
                     </div>
+                    <pre class="devs-sheet" aria-label="Commands that make, install and build a new panel">
+                        <code>
+                            <For each={PANEL_COMMANDS}>{(command) => <span class="devs-command">{command}</span>}</For>
+                        </code>
+                    </pre>
                 </section>
 
                 <section class="outro-section" data-play-field>
