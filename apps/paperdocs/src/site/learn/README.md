@@ -10,17 +10,13 @@ Use a `--paper-panel-*` identity token from PaperUI's `styles/colors.css` for
 `accent`. The page derives its background, buttons, and highlights from the
 single `--paper-site-accent` token, also used by the main landing page.
 
-Capture screenshots in Chrome browser mode with `--force-color-profile=srgb`,
-native 1600 × 1200 output. `capture-browser.mjs` sets Chrome's native page zoom
-to 125% through Chrome Settings, with device scale factor 1. Individual Actions
-flows use 200% page zoom; learn-page hero captures use 150%. This reflows the actual UI without resizing images. Use a temporary
-`PAPERBOARD_DIR` and isolated `XDG_CONFIG_HOME`; never capture private user data.
-Use realistic demo data for connected-state marketing captures; confine fixtures
-to the capture browser and never change production readiness or authentication.
-Flow close-ups may use Chrome's page zoom before capture; never upscale an
-existing image. Validate action inputs against the actual schemas, run each
-flow through the authenticated SDK, and check rendered flow bounds for overlap
-and clipping. Put PNGs in `public/screens/` and give every feature a useful alt.
+Screenshots are the panels' own store screenshots. `bun run screens` copies
+each featured panel's dark store screenshots, in store order, from
+`panels/<id>/store` to `public/screens/<name>-<n>.png` (1360 × 1020) and removes
+copies the store no longer has; run it after a panel's store screenshots
+change. The hero and device renders take theirs from `scripts/renders/shots.mjs`
+(`bun run renders`). Give every feature a useful alt; the store's alt text is
+the place to start.
 
 `LearnPage`, `MarketingChrome`, `DownloadCta`, and `Screenshot` are shared Solid
 components. The SSR build produces static pages; sections reveal with a
@@ -35,28 +31,23 @@ Playwright Chromium with `bunx playwright install chromium`. The browser check
 serves built static artifacts on an ephemeral loopback port and tears everything down.
 `bun run dev -- --port 4320` in `apps/paperdocs` starts the local Worker preview.
 
-To refresh the connected-state demo pictures after launching a temporary
-browser-mode install on port 4319:
+Every learn page gives one feature to an Actions workflow. Where no store
+screenshot shows one, `scripts/capture-integrations.ts` captures it from the
+real Actions editor (`*-flow.png`, 1600 × 1200 at 200% page zoom). It needs a
+temporary browser-mode install on port 4319 with Actions, Game Server and
+Agents linked (`bun run link:panels` from the repo root, with that
+`PAPERBOARD_DIR`) and one
+Minecraft server added in Game Server. The server is never set up or started.
+Use a temporary `PAPERBOARD_DIR` and `XDG_CONFIG_HOME`; never capture private
+user data.
 
 ```sh
-PAPERBOARD_DIR=/tmp/paperboard-marketing-... bun run screenshots:demo
-PAPERBOARD_DIR=/tmp/paperboard-marketing-... bun run screenshots:actions
-PAPERBOARD_DIR=/tmp/paperboard-marketing-... bun scripts/capture-integrations.ts
-CAPTURE_LEARN_HERO=1 PAPERBOARD_DIR=/tmp/paperboard-marketing-... bun run screenshots:demo
+TMPDIR=/tmp PAPERBOARD_DIR=/tmp/paperboard-marketing-... bun run screenshots:actions
 ```
 
-The script checks the temporary install's daemon socket, passes authentication
-through, and substitutes only screenshot data inside its own Chrome context.
-Set `PAPERBOARD_BROWSER_ORIGIN` and `CHROME_PATH` when needed. It never changes
-production services, saves credentials, or connects to Discord.
-
-Game Server captures require `real-server-state.json` inside the temporary install,
-recorded from an actual online server through the authenticated SDK. The producer
-uses real Modrinth search results and Mojang profiles/skins. Public usernames appear
-in an illustrative roster; they do not indicate real sessions or endorsements.
-The integration examples use actual registry schemas but remain inside Chrome: no
-event subscriptions are registered and no Discord messages are sent.
-The integration capture owns the published Actions examples; the older generic
-flow capture is a separate SDK execution check. Run integrations last if refreshing
-both. Every published picture has its own filename and contents, including the
-main carousel; the content test rejects reused files and identical image bytes.
+The script builds each flow from the schemas the install registered, checks its
+inputs, runs it through the real Actions runtime against simulated answers,
+saves it as a project, captures it in the editor after checking bounds, icons
+and typed chips, and deletes the project. Set `PAPERBOARD_BROWSER_ORIGIN` and
+`CHROME_PATH` when needed. Every published picture has its own filename and
+contents; the content test rejects reused files and identical image bytes.

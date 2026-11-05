@@ -91,7 +91,16 @@ await assertImages("the landing", await read("index.html"));
     }
 }
 
-for (const slug of ["actions", "game-server", "bot-creator", "ai"]) {
+// A learn page that moved leaves a redirect behind, out of the sitemap, so
+// old links still land on the panel.
+{
+    const moved = await read("ai/index.html");
+    assert.ok(moved.includes('content="0; url=/agents/"'), "/ai/ redirects to /agents/");
+    assert.ok(!moved.includes('class="learn-page"'), "/ai/ is no longer a page of its own");
+    assert.ok(!sitemap.includes("https://paperboard.dev/ai/"), "/ai/ is not in the sitemap");
+}
+
+for (const slug of ["actions", "game-server", "bot-creator", "agents"]) {
     const raw = await read(`${slug}/index.html`);
     assertElementsInHead(slug, raw);
     await assertImages(slug, raw);

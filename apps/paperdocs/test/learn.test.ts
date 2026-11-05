@@ -16,11 +16,12 @@ describe("learn page content and original screenshot assets", () => {
     });
     test("every learn page dedicates a feature to an Actions workflow", () => {
         for (const panel of LEARN_PANELS) {
-            expect(panel.features.some(feature => feature.image.includes("actions") && /Actions|workflow|Discord/i.test(feature.description))).toBe(true);
+            // a captured *-flow.png, or a store screenshot of Actions blocks
+            expect(panel.features.some(feature => (/-flow\.png$/.test(feature.image) || /actions/i.test(feature.image + feature.alt)) && /Actions|workflow|Discord/i.test(feature.description))).toBe(true);
         }
         const bot = LEARN_PANELS.find(panel => panel.slug === "bot-creator")!;
         expect(bot.description).toContain("Actions");
-        expect(bot.features[0].image).toBe("/screens/botcreator-actions.png");
+        expect(bot.features[0].image).toBe("/screens/botcreator-6.png");
     });
     test("every advertised Learn panel has exactly one content definition", () => {
         expect(new Set(LEARN_PANELS.map((panel) => panel.slug)).size).toBe(LEARN_PANELS.length);
@@ -29,7 +30,7 @@ describe("learn page content and original screenshot assets", () => {
         );
     });
     for (const panel of LEARN_PANELS) {
-        test(`${panel.name} has complete features and native 1600 × 1200 screenshots`, () => {
+        test(`${panel.name} has complete features and native 4:3 screenshots`, () => {
             expect(panel.features.length).toBeGreaterThanOrEqual(3);
             for (const feature of panel.features) {
                 expect(feature.title.length).toBeGreaterThan(8);
@@ -43,8 +44,10 @@ describe("learn page content and original screenshot assets", () => {
             for (const src of images) {
                 const png = readFileSync(join(import.meta.dir, "../public", src));
                 expect(png.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
-                expect(png.readUInt32BE(16)).toBe(1600);
-                expect(png.readUInt32BE(20)).toBe(1200);
+                // store screenshots are 1360 × 1020; Actions flow captures 1600 × 1200
+                const width = png.readUInt32BE(16);
+                expect(width).toBeGreaterThanOrEqual(1360);
+                expect(png.readUInt32BE(20) * 4).toBe(width * 3);
             }
         });
     }

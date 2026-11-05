@@ -7,6 +7,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
     DOCS_ALIASES,
+    MOVED_LEARN_PAGES,
     docsRoutes,
     metaSections,
     paths,
@@ -254,6 +255,15 @@ for (const alias of DOCS_ALIASES) {
     const file = join(dist, `${alias.path}.html`);
     await writeFile(file, aliasDocument(alias.target));
     console.log(`alias ${alias.path} -> ${alias.target}`);
+}
+// A learn page that moved keeps its old address as a redirect, so links to it
+// still land. A page still in the site under that address is a mistake.
+for (const moved of MOVED_LEARN_PAGES) {
+    const dir = join(dist, moved.path);
+    if (existsSync(join(dir, "index.html"))) throw new Error(`prerender: ${moved.path} is still a page; it cannot also redirect`);
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "index.html"), aliasDocument(moved.target));
+    console.log(`moved ${moved.path} -> ${moved.target}`);
 }
 
 // The agent-facing index (https://llmstxt.org): every docs page, grouped by

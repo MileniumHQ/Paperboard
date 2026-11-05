@@ -3,7 +3,8 @@ import { DEVICE_WIDTHS, ICON_WIDTHS, RENDER_WIDTHS, SCREEN_WIDTHS, webpSrcset } 
 import RENDERS from "./renders.json";
 
 /**
- * A marketing screenshot. Screenshots are 4:3 (captured at 1600 × 1200), so
+ * A marketing screenshot. Screenshots are the panels' 4:3 store screenshots
+ * (1360 × 1020, copied by scripts/store-screens.mjs), so
  * the box is reserved before the file arrives. Browsers pick a WebP copy sized
  * for the slot from `sizes`; the PNG is the fallback. Offscreen shots load
  * lazily; the one above the fold passes `priority`.
@@ -22,8 +23,8 @@ export function Screenshot(props: {
                 src={withBase(props.src)}
                 alt={props.alt}
                 class={["marketing-screenshot", props.class].filter(Boolean).join(" ")}
-                width={1600}
-                height={1200}
+                width={1360}
+                height={1020}
                 loading={props.priority ? "eager" : "lazy"}
                 fetchpriority={props.priority ? "high" : undefined}
                 decoding="async"

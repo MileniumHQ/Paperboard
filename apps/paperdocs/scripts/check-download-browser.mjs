@@ -100,7 +100,7 @@ export async function checkDownloads(browser, origin) {
         await page.keyboard.press('Escape');
         await page.locator('.download-warning').waitFor({ state: 'detached' });
 
-        for (const path of ['/', '/actions/', '/bot-creator/', '/ai/', '/game-server/']) {
+        for (const path of ['/', '/actions/', '/bot-creator/', '/agents/', '/game-server/']) {
             await page.goto(`${origin}${path}`);
             const trigger = page.locator('.site-topbar__download paper-button').getByRole('link', { name: 'Download', exact: true });
             await trigger.waitFor();

@@ -31,7 +31,7 @@ function learnPanel(slug: string) {
     if (!panel) throw new Error(`paperdocs: the landing features ${slug}, which has no learn page`);
     return panel;
 }
-const JOB_PANELS = ["game-server", "bot-creator", "ai"].map(learnPanel);
+const JOB_PANELS = ["game-server", "bot-creator", "agents"].map(learnPanel);
 const CONNECTOR_PANEL = learnPanel("actions");
 
 // A job panel's screenshot fills the column right of its copy and runs past
@@ -52,11 +52,11 @@ const HOSTS = [
 const PANEL_COMMANDS = ["npm create @mileniumhq/panel", "cd dev.example.hello", "bun install", "bun run build"];
 
 const PLAY_ICONS = [
-    "/pictures/ai.png",
     "/pictures/blocks.png",
     "/pictures/crane.png",
     "/pictures/discord-bot.png",
     "/pictures/game-server.png",
+    "/pictures/agents.png",
     "/pictures/panel-library.png",
     "/pictures/paperapi.png",
 ];
@@ -291,8 +291,8 @@ export function Landing() {
                             size={88}
                         />
                         <p class="hero-sub">
-                            Host a Minecraft server, run a Discord bot, and chat with local AI, all from
-                            one app on your own computer. No terminal required.
+                            Host a Minecraft server, run a Discord bot, and text your own AI agent, all
+                            from one app on your own computer. No terminal required.
                         </p>
                         <DownloadCta />
                     </div>
