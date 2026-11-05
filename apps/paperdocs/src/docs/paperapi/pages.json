@@ -64,6 +64,9 @@
                 "file": {
                     "name": "File API"
                 },
+                "loopback": {
+                    "name": "Loopback redirects"
+                },
                 "package": {
                     "name": "Package API"
                 },
