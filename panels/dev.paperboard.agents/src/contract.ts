@@ -26,6 +26,7 @@ export const UI_ACTION_IDS = {
     installBrain: "ui-install-brain",
     signInBrain: "ui-sign-in-brain",
     brainCode: "ui-brain-code",
+    brainAddress: "ui-brain-address",
     cancelBrainSignIn: "ui-cancel-brain-sign-in",
     signOutBrain: "ui-sign-out-brain",
     // OpenCode's providers: list them, connect one by key or by a sign-in page, take it back
@@ -270,6 +271,14 @@ export interface LoginPrompt {
     code: string | null;
     /** the page ends in a code to paste back here */
     expectsCode: boolean;
+    /**
+     * the loopback address the harness waits on for the browser to come back
+     * to (Codex's "http://127.0.0.1:1455/auth/callback"), null when the page
+     * ends somewhere else. It's on the brain's computer: a browser on another
+     * computer lands on its own loopback, so that address is caught there, or
+     * pasted, and finished with brainAddress.
+     */
+    callback: string | null;
 }
 
 export interface BrainState {

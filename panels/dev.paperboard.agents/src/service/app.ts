@@ -361,6 +361,11 @@ export class AiApp {
         return { sent: true };
     }
 
+    async brainAddress(input: unknown) {
+        await this.brains.finishAt(this.harnessOf(input), (input as { address?: unknown }).address);
+        return { sent: true };
+    }
+
     async cancelBrainSignIn(input: unknown) {
         await this.brains.cancelSignIn(this.harnessOf(input));
         return { cancelled: true };

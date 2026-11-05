@@ -98,6 +98,7 @@ export function createAgent() {
         installBrain: (harness: Harness) => call(UI_ACTION_IDS.installBrain, { harness }),
         signInBrain: (harness: Harness, method?: "browser" | "code") => call(UI_ACTION_IDS.signInBrain, { harness, method }),
         brainCode: (harness: Harness, code: string) => call(UI_ACTION_IDS.brainCode, { harness, code }),
+        brainAddress: (harness: Harness, address: string) => call(UI_ACTION_IDS.brainAddress, { harness, address }),
         cancelBrainSignIn: (harness: Harness) => call(UI_ACTION_IDS.cancelBrainSignIn, { harness }),
         signOutBrain: (harness: Harness) => call(UI_ACTION_IDS.signOutBrain, { harness }),
         providers: () => call<{ providers: ProviderInfo[] }>(UI_ACTION_IDS.providers).then((r) => r.providers),

@@ -53,6 +53,49 @@ const URL_RE = /https:\/\/[^\s"'<>)]+/;
 // Codex's one-time code: groups of letters and digits around a dash ("RJEL-90J2I")
 const CODE_RE = /\b([A-Z0-9]{4}-[A-Z0-9]{4,6})\b/;
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/** A loopback http address with its own port, or null. */
+function loopback(text: string): URL | null {
+    let url: URL;
+    try {
+        url = new URL(text);
+    } catch {
+        return null;
+    }
+    return url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname) && url.port !== "" ? url : null;
+}
+
+/** Where a sign-in page sends the browser back to, when that's a loopback address the harness listens on. */
+export function loopbackCallback(page: string): string | null {
+    let redirect: string | null;
+    try {
+        redirect = new URL(page).searchParams.get("redirect_uri");
+    } catch {
+        return null;
+    }
+    const url = redirect ? loopback(redirect) : null;
+    return url ? `${url.origin}${url.pathname}` : null;
+}
+
+/**
+ * The address a browser ended on, checked against the callback the harness
+ * waits on: the same loopback port and path, carrying the page's answer. The
+ * harness checks the answer itself (its state, its code); this only makes sure
+ * the address goes nowhere else.
+ */
+export function callbackAddress(callback: string, address: unknown): URL {
+    if (typeof address !== "string" || address.length > 8_000) throw new Error("That isn't the address your browser ended on.");
+    const want = loopback(callback);
+    if (!want) throw new Error("This sign-in doesn't come back to an address.");
+    const got = loopback(address.trim());
+    if (!got || got.port !== want.port || got.pathname !== want.pathname) {
+        throw new Error(`That isn't the address your browser ended on. It starts with ${want.origin}${want.pathname}.`);
+    }
+    if (!got.search) throw new Error("That address has no sign-in answer in it. Copy the whole address from your browser.");
+    return got;
+}
+
 /**
  * What the output so far asks of the user. Codex prints the page (and, with a device code, the code after
  * it); Claude Code prints the page it falls back to when a browser doesn't open, whose last step is a code
@@ -62,13 +105,14 @@ export function readLoginOutput(harness: Exclude<Harness, "opencode">, method: L
     const text = stripAnsi(output);
     const url = URL_RE.exec(text)?.[0]?.replace(/[.,;]+$/, "") ?? null;
     if (!url) return null;
-    if (harness === "claude-code") return { url, code: null, expectsCode: true };
+    const callback = loopbackCallback(url);
+    if (harness === "claude-code") return { url, code: null, expectsCode: true, callback };
     if (method === "code") {
         // the code comes after the page; showing the page alone would send the user there with nothing to type
         const code = CODE_RE.exec(text.slice(text.indexOf(url) + url.length))?.[1] ?? null;
-        return code ? { url, code, expectsCode: false } : null;
+        return code ? { url, code, expectsCode: false, callback } : null;
     }
-    return { url, code: null, expectsCode: false };
+    return { url, code: null, expectsCode: false, callback };
 }
 
 /** What the status commands say: signed in or not, and as whom. A reply that's neither is an error, never "signed out". */

@@ -15,7 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { SIGN_IN_REQUIRED, type BrainState, type Harness, type LoginPrompt } from "../contract";
 import { errorText } from "../lib/failure";
-import { LOGOUT_COMMAND, STATUS_COMMAND, loginCommand, outputTail, readLoginOutput, readStatus, type LoginMethod } from "./brainLogin";
+import { LOGOUT_COMMAND, STATUS_COMMAND, callbackAddress, loginCommand, outputTail, readLoginOutput, readStatus, type LoginMethod } from "./brainLogin";
 import type { PackageHost, StartOptions } from "./browser";
 
 export const BRAIN_PACKAGES: Record<Harness, string> = { codex: "codex", "claude-code": "claude-code", opencode: "opencode" };
@@ -199,6 +199,38 @@ export class Brains {
         await this.deps.host.write(loginProcessId(harness), `${code.trim()}\n`);
     }
 
+    /**
+     * The address the browser ended on, for a sign-in that comes back to a
+     * loopback address (state.login.callback). The browser was on another
+     * computer, so the address goes to the harness here, as the browser would
+     * have sent it. Only that callback is ever opened; how the sign-in ends
+     * shows in the state, as it does for a browser on this computer.
+     */
+    async finishAt(harness: Harness, address: unknown): Promise<void> {
+        const callback = this.state[harness].login?.callback;
+        if (!this.logins.has(harness) || !callback) throw new Error(`${NAMES[harness]} isn't waiting for your browser.`);
+        const url = callbackAddress(callback, address);
+        // "localhost" is the harness's own spelling for either loopback; it listens on one of them
+        const hosts = url.hostname === "localhost" ? ["127.0.0.1", "[::1]"] : [url.hostname];
+        let reply: Response | null = null;
+        let unreachable: unknown = null;
+        for (const host of hosts) {
+            try {
+                reply = await fetch(`http://${host}:${url.port}${url.pathname}${url.search}`, { redirect: "manual", signal: AbortSignal.timeout(this.deps.statusMs ?? STATUS_MS) });
+                break;
+            } catch (e) {
+                unreachable = e;
+            }
+        }
+        if (!reply) throw new Error(`${NAMES[harness]} isn't listening for the sign-in anymore: ${errorText(unreachable)}`);
+        // a redirect is the harness's "done" page; anything 400 or above is it refusing the answer
+        if (reply.status >= 400) {
+            const said = outputTail((await reply.text().catch(() => "")).replace(/<[^>]+>/g, " "), 2);
+            throw new Error(`${NAMES[harness]} didn't accept that address (${reply.status})${said ? `: ${said}` : "."}`);
+        }
+        await reply.body?.cancel();
+    }
+
     /** Stop a sign-in the user gave up on: back to where it started, with no error. */
     cancelSignIn(harness: Harness): Promise<void> {
         return this.exclusive(harness, async () => {
@@ -334,4 +366,4 @@ const tail = (output: string) => {
     return t ? `: ${t}` : ".";
 };
 
-const samePrompt = (a: LoginPrompt, b: LoginPrompt | null) => b !== null && a.url === b.url && a.code === b.code && a.expectsCode === b.expectsCode;
+const samePrompt = (a: LoginPrompt, b: LoginPrompt | null) => b !== null && a.url === b.url && a.code === b.code && a.expectsCode === b.expectsCode && a.callback === b.callback;

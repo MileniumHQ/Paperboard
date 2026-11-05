@@ -86,6 +86,7 @@ export const aiService = definePanelService({
         ui(UI_ACTION_IDS.installBrain, "Install a brain", (i) => app.installBrain(i)),
         ui(UI_ACTION_IDS.signInBrain, "Start signing in to a brain", (i) => app.signInBrain(i)),
         ui(UI_ACTION_IDS.brainCode, "Give a brain the code its sign-in page showed", (i) => app.brainCode(i)),
+        ui(UI_ACTION_IDS.brainAddress, "Finish a brain's sign-in at the address the browser ended on", (i) => app.brainAddress(i)),
         ui(UI_ACTION_IDS.cancelBrainSignIn, "Stop signing in to a brain", (i) => app.cancelBrainSignIn(i)),
         ui(UI_ACTION_IDS.signOutBrain, "Sign out of a brain", (i) => app.signOutBrain(i)),
         ui(UI_ACTION_IDS.providers, "List OpenCode's providers", () => app.providerList()),

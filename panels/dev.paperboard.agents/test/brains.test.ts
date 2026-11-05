@@ -260,6 +260,47 @@ describe("signing in", () => {
         expect(s.brains.snapshot().codex.phase).toBe("signing-in");
     });
 
+    test("Codex on another computer: the address the browser ended on reaches its listener here, and nowhere else", async () => {
+        // the login's own listener, as Codex runs it: answers its callback and says when the answer was wrong
+        const heard: string[] = [];
+        const listener = Bun.serve({
+            hostname: "127.0.0.1",
+            port: 0,
+            fetch: (req) => {
+                const url = new URL(req.url);
+                heard.push(`${url.pathname}${url.search}`);
+                if (url.searchParams.get("state") !== "good") return new Response("<html><body>State mismatch</body></html>", { status: 400 });
+                return new Response(null, { status: 302, headers: { location: "/success" } });
+            },
+        });
+        try {
+            const s = setup({ installed: ["codex"] });
+            await s.brains.init();
+            await expect(s.brains.finishAt("codex", "http://127.0.0.1:1/auth/callback?code=c")).rejects.toThrow("isn't waiting for your browser");
+            await s.brains.signIn("codex");
+            const id = loginProcessId("codex");
+            const callback = `http://127.0.0.1:${listener.port}/auth/callback`;
+            s.procs.stdout(id, `navigate to this URL:\n\nhttps://auth.openai.com/oauth/authorize?redirect_uri=${encodeURIComponent(callback)}&state=good\n`);
+            await until(() => s.brains.snapshot().codex.login?.callback === callback);
+
+            // only the callback is ever opened
+            await expect(s.brains.finishAt("codex", `http://127.0.0.1:${listener.port}/elsewhere?code=c&state=good`)).rejects.toThrow("isn't the address");
+            expect(heard).toEqual([]);
+            // the harness's refusal is shown, in its words
+            await expect(s.brains.finishAt("codex", `${callback}?code=c&state=bad`)).rejects.toThrow("Codex didn't accept that address (400): State mismatch");
+            // "localhost" reaches the listener on either loopback
+            await s.brains.finishAt("codex", `http://localhost:${listener.port}/auth/callback?code=c&state=good`);
+            expect(heard).toEqual(["/auth/callback?code=c&state=bad", "/auth/callback?code=c&state=good"]);
+
+            s.signedIn.add("codex");
+            s.procs.exit(id, 0);
+            await until(() => s.brains.snapshot().codex.phase === "ready");
+            expect(s.brains.snapshot().codex).toMatchObject({ signedIn: true, error: null });
+        } finally {
+            listener.stop(true);
+        }
+    });
+
     test("signing in to what isn't installed, or to OpenCode, is refused", async () => {
         const s = setup({ installed: ["opencode"] });
         await s.brains.init();
