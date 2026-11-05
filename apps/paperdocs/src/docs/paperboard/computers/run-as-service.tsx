@@ -157,6 +157,11 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.paperboard.papercran
                 Game servers and other programs that panels started keep running, and the next daemon takes them over when it starts.
                 The service is set up this way so an update or a crash does not take a game server down.
             </PaperText>
+            <PaperText preset="body" as="p">
+                On Linux, a game server the system ends because the computer ran out of memory does not stop the daemon either.
+                The daemon stays up to say so in the server's console, and restarts the server if it is set to restart after a crash.
+                A service file written by an older daemon lacks this: add <PaperCode>OOMPolicy=continue</PaperCode> under <PaperCode>[Service]</PaperCode>, then run <PaperCode>systemctl daemon-reload</PaperCode>.
+            </PaperText>
 
             <PaperText preset="subheader" as="h2" id="updates">Updates</PaperText>
             <PaperText preset="body" as="p">

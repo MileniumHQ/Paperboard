@@ -42,6 +42,7 @@ describe.if(supported)("install-service --dry-run", () => {
             // systemd's own quoting for a path with a space
             expect(out).toContain(`ExecStart=${bin} --headless --port 45999 --data-dir "${dataDir}"`);
             expect(out).toContain("KillMode=process");
+            expect(out).toContain("OOMPolicy=continue");
             expect(out).toContain("WantedBy=default.target");
             expect(out).toContain("systemctl --user enable papercrane-dry.service");
             expect(fs.existsSync(unit)).toBe(false);
