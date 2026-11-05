@@ -10,7 +10,6 @@
     "test": "bun test",
     "deploy": "bun run build && wrangler deploy",
     "test:browser": "node scripts/check-learn-browser.mjs",
-    "screenshots:demo": "node scripts/capture-demo.mjs",
     "screenshots:actions": "bun scripts/capture-integrations.ts",
     "renders": "node scripts/render-models.mjs",
     "screens": "node scripts/store-screens.mjs"
