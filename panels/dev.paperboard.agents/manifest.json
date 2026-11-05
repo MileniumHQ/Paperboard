@@ -42,7 +42,7 @@
         ],
         "services": [
             {
-                "name": "Codex, Claude Code or OpenCode",
+                "name": "Codex, Claude or OpenCode",
                 "detail": "The brain you pick, downloaded from its maker and signed in with your own account. Your conversations go to it"
             },
             {
@@ -68,8 +68,8 @@
                 "detail": "OpenAI's coding agent, Apache-2.0"
             },
             {
-                "name": "Claude Code",
-                "detail": "Anthropic's coding agent, run as published by Anthropic"
+                "name": "Claude",
+                "detail": "Anthropic's coding agent, Claude Code, run as published by Anthropic"
             },
             {
                 "name": "OpenCode",
