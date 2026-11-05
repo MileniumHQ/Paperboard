@@ -14,6 +14,7 @@ import {
 import { MOD_DESCRIPTORS, modIdFrom, PLUGIN_DESCRIPTORS, pluginNameFrom } from "./addonConfig";
 import { readJarEntries } from "./jarEntries";
 import { readSchemaSettings, writeSchemaSetting, type LoaderDeps, type LoaderGroupView } from "./loaderSettings";
+import { serializedFileTask, writeFileAtomic } from "./fileWrites";
 import { listServerFiles, ServerFileMissingError } from "./serverFiles";
 
 // The Crossplay tab's owner: which of Geyser and Floodgate are installed
@@ -134,9 +135,35 @@ export async function writeCrossplaySetting(
     return writeSchemaSetting(platform.schema, setting, raw, deps);
 }
 
-/** After the jars are in: Bedrock players log in through Floodgate. */
+/**
+ * Bedrock players have no Mojang profile key to sign chat with, so a server
+ * that enforces secure profiles drops every line they type. The rest of
+ * server.properties is kept as it is, comments and all.
+ */
+export async function allowUnsignedChat(deps: LoaderDeps): Promise<void> {
+    const fs = deps.fs ?? (nodeFs as unknown as NonNullable<LoaderDeps["fs"]>);
+    const file = nodePath.join(await deps.serverDir(), "server.properties");
+    await serializedFileTask(file, async () => {
+        let text = "";
+        try {
+            text = await fs.readFile(file, "utf8");
+        } catch (err) {
+            // the server writes its defaults around this line on first start
+            if ((err as { code?: string }).code !== "ENOENT") throw err;
+        }
+        if (parseProperties(text)["enforce-secure-profile"]?.trim() === "false") return;
+        const line = /^([ \t]*enforce-secure-profile[ \t]*[=:]).*$/m;
+        const next = line.test(text)
+            ? text.replace(line, "$1false")
+            : `${text}${text === "" || text.endsWith("\n") ? "" : "\n"}enforce-secure-profile=false\n`;
+        await writeFileAtomic(fs, file, next);
+    });
+}
+
+/** After the jars are in: Bedrock players log in through Floodgate, and can chat. */
 export async function prepareCrossplay(software: ServerSoftwareType, deps: LoaderDeps): Promise<CrossplayView> {
     const platform = platformOf(software);
     await writeSchemaSetting(platform.schema, AUTH_TYPE_SETTING, "floodgate", deps);
+    await allowUnsignedChat(deps);
     return readCrossplay(software, deps);
 }

@@ -71,6 +71,27 @@ describe("schema matches the real files", () => {
     });
 });
 
+describe("Bedrock chat", () => {
+    test("turning crossplay on stops the server enforcing secure profiles, and keeps the rest of server.properties", async () => {
+        const root = server("paper");
+        const props = "#Minecraft server properties\nenforce-secure-profile=true\nmotd=A \\u00A7aserver\nserver-port=25565\n";
+        fs.writeFileSync(path.join(root, "server.properties"), props);
+        await prepareCrossplay("paper", deps(root));
+        expect(read(root, "server.properties")).toBe(props.replace("enforce-secure-profile=true", "enforce-secure-profile=false"));
+    });
+
+    test("a server.properties without the key, or with none yet, gets it", async () => {
+        const root = server("paper");
+        fs.writeFileSync(path.join(root, "server.properties"), "server-port=25570");
+        await prepareCrossplay("paper", deps(root));
+        expect(read(root, "server.properties")).toBe("server-port=25570\nenforce-secure-profile=false\n");
+
+        const fresh = server("paper");
+        await prepareCrossplay("paper", deps(fresh));
+        expect(read(fresh, "server.properties")).toBe("enforce-secure-profile=false\n");
+    });
+});
+
 describe("before the server has started with them", () => {
     test("settings show their defaults and an edit writes a partial file", async () => {
         const root = server(null);
