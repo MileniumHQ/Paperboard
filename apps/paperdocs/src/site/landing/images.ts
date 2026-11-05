@@ -8,12 +8,16 @@ import { withBase } from "../../utils/base";
 
 /** Screenshots fill anything from a phone column to a 1100px card. */
 export const SCREEN_WIDTHS = [480, 960, 1600] as const;
+/** The hero render fills up to a 920px column. */
+export const RENDER_WIDTHS = [480, 960, 1600] as const;
+/** Device renders sit in a row, at most 340 CSS pixels wide. */
+export const DEVICE_WIDTHS = [320, 640, 960] as const;
 /** Icons render at 28–84 CSS pixels. */
 export const ICON_WIDTHS = [96, 192] as const;
 
 /** `/screens/gameserver.png` at 960 -> `/img/screens/gameserver-960.webp`. */
 export function variantPath(src: string, width: number): string {
-    const match = /^\/((?:screens|pictures)\/[\w-]+|[\w-]+)\.png$/.exec(src);
+    const match = /^\/((?:screens|pictures|renders)\/[\w-]+|[\w-]+)\.png$/.exec(src);
     if (!match) throw new Error(`paperdocs: no responsive variants for ${src}`);
     return `/img/${match[1]}-${width}.webp`;
 }

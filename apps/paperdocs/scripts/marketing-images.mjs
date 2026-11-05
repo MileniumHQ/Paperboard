@@ -10,7 +10,7 @@ import sharp from "sharp";
 // refreshes its copies on the next build. Encodes are cached by source bytes
 // and width outside the repo, in node_modules/.cache.
 
-const VARIANT = /\/img\/((?:screens|pictures)\/[\w-]+|[\w-]+)-(\d+)\.webp/g;
+const VARIANT = /\/img\/((?:screens|pictures|renders)\/[\w-]+|[\w-]+)-(\d+)\.webp/g;
 const SCREEN_ASPECT = 4 / 3;
 
 export function referencedVariants(html) {

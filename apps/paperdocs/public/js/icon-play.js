@@ -22,6 +22,12 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
     const reduceMotion =
         typeof window.matchMedia === "function" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Matches the style.css rule that sets the icons in a still row: phones
+    // have no room around the copy, and reduced motion asks for no toy.
+    const STILL_QUERY = "(max-width: 600px), (prefers-reduced-motion: reduce)";
+    const still = window.matchMedia(STILL_QUERY);
+    // How far icons keep from the heading and download button.
+    const COPY_MARGIN = 12;
 
     const shapes = await Promise.all(
         icons.map(async (icon) => {
@@ -46,10 +52,44 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
 
     const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+    // The copy, in field coordinates: a solid block icons bounce off and
+    // cannot be dragged onto, so nothing ever covers the heading or button.
+    let obstacle = null;
     function measure() {
         const rect = field.getBoundingClientRect();
         W = rect.width;
         H = rect.height;
+        const copy = copyBox();
+        obstacle = copy && {
+            x: copy.left - rect.left - COPY_MARGIN,
+            y: copy.top - rect.top - COPY_MARGIN,
+            w: copy.width + COPY_MARGIN * 2,
+            h: copy.height + COPY_MARGIN * 2,
+        };
+    }
+
+    function keepOffCopy(item) {
+        if (!obstacle) return;
+        const left = item.x + item.size - obstacle.x;
+        const right = obstacle.x + obstacle.w - item.x;
+        const top = item.y + item.size - obstacle.y;
+        const bottom = obstacle.y + obstacle.h - item.y;
+        if (left <= 0 || right <= 0 || top <= 0 || bottom <= 0) return;
+        // Leave by the shortest way out, bouncing off that face.
+        const push = Math.min(left, right, top, bottom);
+        if (push === left) {
+            item.x -= left;
+            item.vx = -Math.abs(item.vx) * RESTITUTION;
+        } else if (push === right) {
+            item.x += right;
+            item.vx = Math.abs(item.vx) * RESTITUTION;
+        } else if (push === top) {
+            item.y -= top;
+            item.vy = -Math.abs(item.vy) * RESTITUTION;
+        } else {
+            item.y += bottom;
+            item.vy = Math.abs(item.vy) * RESTITUTION;
+        }
     }
 
     // Resting lean follows horizontal position: right of centre leans right,
@@ -185,10 +225,11 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
     function clampAll() {
         measure();
         for (const item of items) {
-            item.x = clamp(item.x, 0, Math.max(0, W - item.size));
-            item.y = clamp(item.y, 0, Math.max(0, H - item.size));
+            keepOffCopy(item);
+            clampItem(item);
             setTransform(item);
         }
+        start();
     }
 
     function integrate(item, dt) {
@@ -302,6 +343,7 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
         }
         collide();
         for (const item of items) {
+            keepOffCopy(item);
             clampItem(item);
             if (!atRest(item)) moving = true;
             setTransform(item);
@@ -376,6 +418,8 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
         item.vy = clamp((nextY - item.y) / dt, -MAX_SPEED, MAX_SPEED);
         item.x = nextX;
         item.y = nextY;
+        keepOffCopy(item);
+        clampItem(item);
         item.lastT = event.timeStamp;
         setTransform(item);
     }
@@ -430,35 +474,50 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
     // (async custom element) has finished laying out and the CTA's real bounds
     // are known — otherwise the first scatter plants icons over the heading.
     let scattered = false;
+    let visible = false;
     const place = () => {
-        if (scattered) return;
+        if (scattered || still.matches) return;
         scattered = true;
         scatter();
         start();
     };
-
-    let observer;
-    if ("IntersectionObserver" in window) {
-        observer = new IntersectionObserver(
-            (entries) => {
-                if (entries.some((entry) => entry.isIntersecting)) {
-                    place();
-                    if (items.some((item) => !atRest(item))) start();
-                } else {
-                    stop();
-                }
-            },
-            { threshold: 0 },
-        );
-        observer.observe(field);
-    } else {
-        place();
+    // Crossing into the still layout hands the icons back to CSS; crossing
+    // out of it scatters them again.
+    function applyMode() {
+        if (still.matches) {
+            stop();
+            items.length = 0;
+            scattered = false;
+            for (const icon of icons) {
+                icon.style.removeProperty("transform");
+                icon.style.removeProperty("width");
+                icon.style.removeProperty("height");
+            }
+        } else if (visible) {
+            place();
+        }
     }
+    still.addEventListener("change", applyMode);
+
+    const observer = new IntersectionObserver(
+        (entries) => {
+            visible = entries.some((entry) => entry.isIntersecting);
+            if (visible) {
+                place();
+                if (items.some((item) => !atRest(item))) start();
+            } else {
+                stop();
+            }
+        },
+        { threshold: 0 },
+    );
+    observer.observe(field);
     window.addEventListener(
         "pagehide",
         () => {
             stop();
-            observer?.disconnect();
+            observer.disconnect();
+            still.removeEventListener("change", applyMode);
             for (const icon of icons) icon.removeEventListener("pointerdown", onPointerDown);
             window.removeEventListener("pointermove", onPointerMove);
             window.removeEventListener("pointerup", onPointerUp);

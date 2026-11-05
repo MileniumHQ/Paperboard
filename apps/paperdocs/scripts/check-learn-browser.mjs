@@ -17,17 +17,6 @@ function luminance(color) {
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-// The stage choreography runs on scroll progress with the showcase hold
-// removed (public/js/flight.js), so stage progress s sits at s + hold
-// viewports of scroll. Scrolling by raw viewports stopped short of the stage
-// once the hold was added.
-const scrollToStage = (target, s) => target.evaluate((s) => {
-    const hold = document.querySelector(".showcase-hold");
-    const showcase = document.querySelector(".showcase-section");
-    const held = hold && showcase ? Math.max(0, hold.offsetHeight - showcase.offsetHeight) / innerHeight : 0;
-    scrollTo(0, innerHeight * (s + held));
-}, s);
-
 // Check the distributed static documents, not a Vite SPA fallback. The Worker
 // routing has its own tests; this loopback server owns and tears down its sockets.
 const dist = resolve(fileURLToPath(new URL("../dist/", import.meta.url)));
@@ -218,8 +207,10 @@ try {
             () => getComputedStyle(document.querySelector(".learn-feature")).opacity === "1",
         );
         await page.locator(".learn-outro").scrollIntoViewIfNeeded();
+        // Wait for every image the next check reads, including the outro's
+        // lazy related-panel icons, which can still be in flight here.
         await page
-            .locator(".learn-feature img")
+            .locator("main img")
             .evaluateAll((images) => Promise.all(images.map((image) => image.decode())));
         assert.deepEqual(
             await page
@@ -275,254 +266,94 @@ try {
             .evaluate((element) => getComputedStyle(element).borderRadius),
         "4px",
     );
-    assert.equal(await page.locator(".card-slide").count(), 6);
-    assert.equal(await page.locator(".preview-card").evaluate(element => getComputedStyle(element, "::before").transform), "matrix(1, 0, 0, 1, 14, 16)");
-    assert.equal(await page.locator(".dots-bar .dot").count(), 6);
-    assert.ok(
-        luminance(await page.locator(".dots-bar").evaluate(element => getComputedStyle(element).backgroundColor)) < 40,
-        "The carousel dots sit on the topbar's smoked glass, not a white pill",
+    // The landing is static: real screenshots and pre-rendered device art,
+    // no WebGL, so every browser and screen gets the same page.
+    assert.equal(await page.locator("h1").count(), 1);
+    assert.equal(await page.locator("canvas").count(), 0, "The landing must not draw with WebGL");
+    assert.deepEqual(
+        await page.locator(".panel-feature-link").evaluateAll(links => links.map(link => link.getAttribute("href"))),
+        ["/game-server/", "/bot-creator/", "/ai/", "/actions/"],
+        "The landing walks through three panels, then the one that connects them, each linking to its page",
     );
-    await page.locator(".showcase-section").scrollIntoViewIfNeeded();
-    await page.waitForTimeout(500);
-    const captionBefore = await page.locator('.card-caption').boundingBox();
-    await page.locator(".dots-bar .dot").nth(3).click();
-    await page.waitForTimeout(75);
-    const captionDuring = await page.locator('.card-caption').evaluate(element => ({
-        box: element.getBoundingClientRect().toJSON(),
-        transform: getComputedStyle(element).transform,
-        textTransform: getComputedStyle(element.querySelector('.caption-title')).transform,
-    }));
-    assert.equal(captionDuring.transform, 'none', 'The caption background must not move when the slide changes');
-    assert.ok(captionDuring.textTransform !== 'none', 'Only the caption text should animate');
-    assert.ok(Math.abs(captionBefore.y - captionDuring.box.y) < 0.5, 'The caption surface must stay fixed during a real slide change');
-    await page.waitForFunction(
-        () => document.querySelector(".caption-title").textContent === "Local AI",
+    assert.deepEqual(
+        await page.locator(".panel-feature h3 .marketing-heading-label").allInnerTexts(),
+        ["Minecraft, managed", "Give your bot something to do", "AI on your computer", "Connect your panels"],
+        "Panel rows reuse their learn page headlines",
     );
-    assert.ok(
-        await page
-            .locator(".card-slides-track")
-            .evaluate((element) => getComputedStyle(element).transform !== "none"),
+    assert.deepEqual(
+        await page.locator(".device-label").allInnerTexts(),
+        ["An old laptop", "A mini PC", "A Raspberry Pi", "Your desktop"],
     );
-    console.log("verified main landing carousel: six slides, text-only caption animation, AI caption, and working selection");
-    for (const [width, height] of [
-        [2560, 720],
-        [1920, 1080],
-        [1440, 900],
-        [1280, 720],
-        [1024, 768],
-        [768, 1024],
-        [844, 390],
-        [390, 844],
-        [320, 568],
-    ]) {
-        await page.setViewportSize({ width, height });
-        await page.goto(`${origin}/`);
-        await page.evaluate(() => window.scrollTo(0, innerHeight));
-        await page.waitForFunction(() => window.__aioStage?.companions.length === 4);
-        await page.waitForTimeout(550);
-        const progress = await page.locator('.dots-bar').evaluate(element => ({
-            height: element.getBoundingClientRect().height,
-            dots: [...element.querySelectorAll('.dot')].map(dot => ({
-                active: dot.classList.contains('active'),
-                width: dot.getBoundingClientRect().width,
-                height: dot.getBoundingClientRect().height,
-            })),
-        }));
-        assert.equal(progress.height, 48, `Carousel indicator must keep its height at ${width} × ${height}`);
-        assert.ok(progress.dots.every(dot => dot.height === 12 && Math.abs(dot.width - (dot.active ? 58 : 12)) < 0.5), `Carousel dots must not shrink at ${width} × ${height}`);
-        await scrollToStage(page, 2);
-        await page.waitForFunction(() =>
-            window.__aioStage.companions.every((entry) => entry.obj.visible),
-        );
-        const connector = await page.locator('.stage-dash').evaluate(element => ({
-            transform: getComputedStyle(element).transform,
-            width: element.getBoundingClientRect().width,
-            left: element.getBoundingClientRect().left,
-            right: element.getBoundingClientRect().right,
-            y: element.getBoundingClientRect().top,
-            visible: getComputedStyle(element).visibility,
-        }));
-        assert.equal(connector.transform, 'none', `The data line must be horizontal at ${width} × ${height}`);
-        assert.equal(connector.visible, 'visible');
-        assert.ok(connector.width >= 24, `The data line needs a legible run at ${width} × ${height}: ${connector.width}`);
-        const devices = await page.evaluate(() => {
-            const stage = window.__aioStage;
-            return [{ id: 'imac', object: stage.group }, ...stage.companions.map((entry) => ({ id: entry.id, object: entry.obj }))].map(({ id, object }) => {
-                const box = new stage.THREE.Box3().setFromObject(object);
-                const corners = [];
-                for (const x of [box.min.x, box.max.x])
-                    for (const y of [box.min.y, box.max.y])
-                        for (const z of [box.min.z, box.max.z])
-                            corners.push(new stage.THREE.Vector3(x, y, z).project(stage.camera));
-                return {
-                    id,
-                    visible: object.visible,
-                    min: box.min, max: box.max,
-                    corners: corners.map((point) => ({ x: point.x, y: point.y })),
-                };
-            });
-        });
-        assert.equal(devices.length, 5);
-        const station = devices.find(device => device.id === 'battlestation');
-        const stationLeft = Math.min(...station.corners.map(point => point.x));
-        assert.ok(devices.filter(device => device !== station).every(device =>
-            Math.max(...device.corners.map(point => point.x)) < stationLeft,
-        ), `Every other device must stay left of the battlestation at ${width} × ${height}`);
-        assert.ok(devices.every(device => {
-            const xs = device.corners.map(point => (point.x + 1) * width / 2);
-            const ys = device.corners.map(point => (1 - point.y) * height / 2);
-            return connector.right <= Math.min(...xs) || connector.left >= Math.max(...xs)
-                || connector.y <= Math.min(...ys) || connector.y >= Math.max(...ys);
-        }), `The horizontal line must stay clear of devices at ${width} × ${height}`);
-        for (const [index, a] of devices.entries()) for (const b of devices.slice(index + 1)) {
-            assert.ok(a.max.x < b.min.x || b.max.x < a.min.x || a.max.y < b.min.y || b.max.y < a.min.y || a.max.z < b.min.z || b.max.z < a.min.z, `Models must not intersect at ${width} × ${height}`);
-        }
-        assert.ok(
-            devices.every(
-                (device) =>
-                    device.visible &&
-                    device.corners.every(
-                        (point) => Math.abs(point.x) < 0.98 && Math.abs(point.y) < 0.98,
-                    ),
-            ),
-            `All five devices must fit at ${width} × ${height}`,
-        );
-        const safeArea = await page.evaluate(() => ({
-            top: document.querySelector('.site-topbar__bar').getBoundingClientRect().bottom + 8,
-            bottom: document.querySelector('.stage-copy').getBoundingClientRect().top - 8,
-        }));
-        assert.ok(devices.every(device => device.corners.every(point => {
-            const y = (1 - point.y) * height / 2;
-            return y > safeArea.top && y < safeArea.bottom;
-        })), `Models need space between navigation and copy at ${width} × ${height}`);
-        for (const fraction of [1.55, 1.7, 1.85, 1.92, 2]) {
-            await scrollToStage(page, fraction);
-            await page.waitForTimeout(80);
-            assert.ok(await page.evaluate(() => {
-                const stage = window.__aioStage;
-                const boxes = [stage.group, ...stage.companions.filter(entry => entry.obj.visible).map(entry => entry.obj)]
-                    .map(obj => new stage.THREE.Box3().setFromObject(obj));
-                return boxes.every((box, index) => boxes.slice(index + 1).every(other => !box.intersectsBox(other)));
-            }), `Moving models must not intersect at stage ${fraction}`);
-        }
+    assert.ok(!(await page.locator("main").innerText()).toLowerCase().includes("all-in-one"), "The landing must not call Paperboard an all-in-one toolkit");
+    // Scroll the whole page so every lazy image loads, then prove each one
+    // decoded, and that nothing fetched a model or the 3D engine.
+    for (let y = 0; y < await page.evaluate(() => document.documentElement.scrollHeight); y += 600) {
+        await page.evaluate(top => scrollTo(0, top), y);
+        await page.waitForTimeout(60);
     }
-    // Change orientation while the stage is visible, without navigating away.
-    for (const [width, height] of [[844, 390], [390, 844], [768, 1024], [1024, 768]]) {
-        await page.setViewportSize({ width, height });
-        await scrollToStage(page, 2);
-        await page.waitForFunction(() => window.__aioStage.companions.every(entry => entry.obj.visible));
-        const points = await page.evaluate(() => {
-            const stage = window.__aioStage;
-            return [stage.group, ...stage.companions.map(entry => entry.obj)].map(obj => {
-                const centre = new stage.THREE.Box3().setFromObject(obj).getCenter(new stage.THREE.Vector3()).project(stage.camera);
-                return { x: (centre.x + 1) * innerWidth / 2, y: (1 - centre.y) * innerHeight / 2 };
-            });
-        });
-        for (const point of points) {
-            await page.mouse.move(point.x, point.y);
-            await page.waitForTimeout(120);
-            assert.ok(await page.evaluate(() => {
-                const stage = window.__aioStage;
-                const boxes = [stage.group, ...stage.companions.map(entry => entry.obj)].map(obj => new stage.THREE.Box3().setFromObject(obj));
-                return boxes.every((box, index) => boxes.slice(index + 1).every(other => !box.intersectsBox(other)));
-            }), `No hover or orientation-change intersections at ${width} × ${height}`);
-        }
-    }
-    console.log("verified compact left device group and right battlestation across nine viewport sizes, live orientation changes, transition and hover");
-    // Past its section the lineup scrolls away with the page. Pinned, it sat
-    // over the "runs anywhere" copy on phones as the copy scrolled up into it.
-    await page.setViewportSize({ width: 390, height: 844 });
-    for (const s of [2.15, 2.3, 2.45]) {
-        await scrollToStage(page, s);
-        await page.waitForTimeout(150);
-        const { modelsBottom, copyTop } = await page.evaluate(() => {
-            const stage = window.__aioStage;
-            const rect = document.querySelector("#aio-stage").getBoundingClientRect();
-            let bottom = -Infinity;
-            for (const obj of [stage.group, ...stage.companions.filter(entry => entry.obj.visible).map(entry => entry.obj)]) {
-                const box = new stage.THREE.Box3().setFromObject(obj);
-                for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
-                    const point = new stage.THREE.Vector3(x, y, z).project(stage.camera);
-                    bottom = Math.max(bottom, rect.top + (1 - point.y) * rect.height / 2);
-                }
-            }
-            return { modelsBottom: bottom, copyTop: document.querySelector(".stage-copy").getBoundingClientRect().top };
-        });
-        assert.ok(modelsBottom < copyTop, `The lineup must stay above its copy at stage ${s} (${Math.round(modelsBottom)} >= ${Math.round(copyTop)})`);
-    }
-    console.log("verified the device lineup leaves with its section instead of covering the copy");
-    // Exercise real hover input and prove the renderer sleeps both when hidden
-    // and when the visible scene has settled, then wakes for a hover turn.
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`${origin}/`);
-    await page.waitForTimeout(600);
-    assert.equal(await page.evaluate(() => Boolean(window.__aioStage)), false, 'Opening screen must defer the 3D stage');
-    assert.deepEqual(await page.evaluate(() => performance.getEntriesByType('resource').filter(entry => /\/js\/vendor\/|\/models\//.test(entry.name)).map(entry => entry.name)), [], 'No Three.js or model downloads before approaching the showcase');
-    const openingTicks = await page.evaluate(() => window.__flight.ticks);
-    await page.waitForTimeout(300);
-    assert.equal(await page.evaluate(() => window.__flight.ticks), openingTicks);
-    // The user owns the scroll: a wheel tick moves the page by its own delta,
-    // never snaps it to the next section.
+    await page.locator("main img").evaluateAll(images => Promise.all(images.map(image => image.decode())));
+    assert.deepEqual(
+        await page.locator("main img").evaluateAll(images => images.filter(image => !image.complete || !image.naturalWidth).map(image => image.src)),
+        [],
+    );
+    assert.deepEqual(
+        await page.evaluate(() => performance.getEntriesByType("resource").map(entry => entry.name).filter(name => /\/models\/|\/js\/vendor\/|three|\.glb/.test(name))),
+        [],
+        "The landing must not download models or Three.js",
+    );
+    // The user owns the scroll: a wheel tick moves the page by its own delta.
+    await page.evaluate(() => scrollTo(0, 0));
     await page.mouse.move(720, 450);
     await page.mouse.wheel(0, 100);
-    await page.waitForTimeout(900);
-    assert.equal(await page.evaluate(() => scrollY), 100, 'A wheel tick must scroll natively, not snap');
-    // The showcase holds still past its arrival so its copy stays readable
-    // before the stage transition starts.
-    for (const fraction of [1, 1.2, 1.4]) {
-        await page.evaluate((f) => scrollTo(0, innerHeight * f), fraction);
-        await page.waitForTimeout(150);
-        const copy = await page.evaluate(() => {
-            const el = document.querySelector('.showcase-content');
-            const rect = el.getBoundingClientRect();
-            return { opacity: getComputedStyle(el).opacity, top: rect.top, bottom: rect.bottom, progress: window.__flight.progress() };
-        });
-        assert.equal(copy.progress, 1, `Choreography must wait out the hold at ${fraction}vh`);
-        assert.equal(copy.opacity, '1', `Showcase copy must stay visible at ${fraction}vh`);
-        assert.ok(copy.top >= 0 && copy.bottom <= 900, `Showcase copy must stay on screen at ${fraction}vh`);
+    await page.waitForFunction(() => scrollY === 100);
+    console.log("verified the static landing: panels, device row, loaded art, no 3D engine, and native scrolling");
+
+    // Every screen shape: nothing runs off the side, the hero heading keeps
+    // one type size, panel screenshots never sit on their copy, the device row
+    // fits without devices overlapping, and the outro icons clear the copy.
+    const overlaps = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
+    for (const [width, height] of [[2560, 1080], [1440, 900], [1280, 720], [1024, 768], [820, 1180], [844, 390], [390, 844], [360, 640], [320, 568]]) {
+        const shapePage = await browser.newPage({ viewport: { width, height } });
+        try {
+            await shapePage.goto(`${origin}/`);
+            await shapePage.evaluate(() => document.fonts.ready);
+            assert.equal(await shapePage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `No horizontal scroll at ${width} × ${height}`);
+            const lineSizes = await shapePage.locator(".hero-section styled-text").evaluateAll(elements => elements.map(element => Math.round(element.shadowRoot.querySelector("svg").getBoundingClientRect().height)));
+            assert.equal(new Set(lineSizes).size, 1, `Hero heading lines share one size at ${width} × ${height}: ${lineSizes}`);
+            const hero = await shapePage.locator(".hero-render img").boundingBox();
+            assert.ok(hero.x >= 0 && hero.x + hero.width <= width && hero.height <= height * 1.05, `The hero art fits the screen at ${width} × ${height}`);
+            const rows = await shapePage.locator(".panel-feature").evaluateAll(features => features.map(feature => ({
+                shot: feature.querySelector(".panel-feature-shot").getBoundingClientRect().toJSON(),
+                copy: feature.querySelector(".panel-feature-copy").getBoundingClientRect().toJSON(),
+            })));
+            assert.ok(rows.every(row => !overlaps(row.shot, row.copy) && row.shot.left >= 0 && row.shot.right <= width), `Panel screenshots stay beside their copy at ${width} × ${height}`);
+            const devices = await shapePage.locator(".device .marketing-render").evaluateAll(images => images.map(image => image.getBoundingClientRect().toJSON()));
+            assert.equal(devices.length, 4);
+            assert.ok(devices.every(box => box.left >= 0 && box.right <= width && box.height > 20), `The device row fits at ${width} × ${height}`);
+            for (const [index, a] of devices.entries()) for (const b of devices.slice(index + 1)) {
+                assert.ok(!overlaps(a, b), `Devices must not overlap at ${width} × ${height}`);
+            }
+            const link = await shapePage.locator(".device-link").boundingBox();
+            assert.ok(link && Math.max(link.width, link.height) >= 24, `The dash between hosts and desktop needs a legible run at ${width} × ${height}`);
+            await shapePage.locator("[data-play-field]").scrollIntoViewIfNeeded();
+            const still = width <= 600;
+            if (!still) {
+                await shapePage.waitForFunction(() => [...document.querySelectorAll(".play-icon")].every(icon => icon.style.transform.includes("translate3d")));
+            }
+            const outro = await shapePage.evaluate(() => ({
+                copy: [...document.querySelectorAll(".outro-copy .styled-text-host, .outro-copy .download-cta")].map(element => element.getBoundingClientRect().toJSON()),
+                icons: [...document.querySelectorAll(".play-icon")].map(element => ({ box: element.getBoundingClientRect().toJSON(), transform: element.style.transform })),
+                field: document.querySelector("[data-play-field]").getBoundingClientRect().toJSON(),
+            }));
+            if (still) assert.ok(outro.icons.every(icon => icon.transform === ""), `Phones show the icons as a still row at ${width} × ${height}`);
+            assert.ok(outro.icons.every(icon => outro.copy.every(copy => !overlaps(icon.box, copy))), `Outro icons must clear the heading and download at ${width} × ${height}`);
+            assert.ok(outro.icons.every(icon => icon.box.top >= outro.field.top - 1 && icon.box.bottom <= outro.field.bottom + 1), `Outro icons stay inside their section at ${width} × ${height}`);
+        } finally { await shapePage.close(); }
     }
-    await scrollToStage(page, 2);
-    await page.waitForFunction(() => window.__aioStage?.companions.length === 4);
-    await page.waitForTimeout(800);
-    const settledRenders = await page.evaluate(() => window.__aioStage.renders);
-    assert.ok(settledRenders > 0);
-    const settledFrames = await page.evaluate(() => window.__aioStage.frames);
-    await page.waitForTimeout(300);
-    assert.equal(await page.evaluate(() => window.__aioStage.renders), settledRenders);
-    assert.equal(await page.evaluate(() => window.__aioStage.frames), settledFrames, 'Settled scene must stop animation callbacks as well as GPU rendering');
-    const hoverPosition = await page.evaluate(() => {
-        const stage = window.__aioStage;
-        const point = new stage.THREE.Box3().setFromObject(stage.group).getCenter(new stage.THREE.Vector3()).project(stage.camera);
-        return { x: (point.x + 1) * innerWidth / 2, y: (1 - point.y) * innerHeight / 2 };
-    });
-    await page.mouse.move(hoverPosition.x, hoverPosition.y);
-    await page.waitForFunction(() => window.__aioStage.renders > 0 && window.__aioStage.groupHover > 0.05);
-    await page.waitForTimeout(800);
-    assert.ok(await page.evaluate(previous => window.__aioStage.renders > previous, settledRenders));
-    assert.ok(await page.evaluate(() => {
-        const s = window.__aioStage;
-        const boxes = [s.group, ...s.companions.map(entry => entry.obj)].map(obj => new s.THREE.Box3().setFromObject(obj));
-        return boxes.every((box, index) => boxes.slice(index + 1).every(other => !box.intersectsBox(other)));
-    }), 'Hover turns must not collide with neighbours');
-    console.log('verified sleeping GPU rendering and live hover without model intersections');
+    console.log("verified the landing hero, panel rows, device row and outro icons across nine screen shapes");
 
-    const unavailableStage = await browser.newPage();
-    try {
-        await unavailableStage.route('**/js/vendor/three.module.js', route => route.abort());
-        await unavailableStage.goto(`${origin}/`);
-        await unavailableStage.evaluate(() => scrollTo(0, innerHeight * 2));
-        await unavailableStage.getByRole('button', { name: 'Retry preview' }).waitFor();
-        assert.equal(await unavailableStage.locator('#aio-stage').getAttribute('data-stage-state'), 'unavailable');
-        await unavailableStage.unroute('**/js/vendor/three.module.js');
-        const reloaded = unavailableStage.waitForEvent('load');
-        await unavailableStage.getByRole('button', { name: 'Retry preview' }).click();
-        await reloaded;
-        await unavailableStage.evaluate(() => scrollTo(0, innerHeight * 2));
-        await unavailableStage.waitForFunction(() => window.__aioStage?.companions.length === 4);
-        assert.equal(await unavailableStage.locator('.stage-unavailable').count(), 0);
-    } finally { await unavailableStage.close(); }
-    console.log('verified failed 3D loading stays visibly unavailable and Retry loads a fresh working scene');
-
+    // The icons are solid against the copy: one thrown or dragged onto the
+    // heading ends up beside it, and pushing one into another moves it.
     await page.setViewportSize({ width: 1440, height: 1080 });
     await page.goto(`${origin}/`);
     await page.locator("[data-play-field]").scrollIntoViewIfNeeded();
@@ -537,40 +368,27 @@ try {
     await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 });
     await page.waitForFunction(previous => document.querySelectorAll(".play-icon")[1].getAttribute("style") !== previous, before);
     await page.mouse.up();
-    console.log("verified actual artwork loads and dragging an icon pushes its neighbour");
-    // Every screen shape: the held showcase keeps card and copy apart and on
-    // screen (pinning the card used to collapse its column under the copy),
-    // a wrapped heading keeps one type size, and the outro's scattered icons
-    // clear the heading and download button.
-    const overlaps = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
-    for (const [width, height] of [[2560, 1080], [1440, 900], [1280, 720], [820, 1180], [844, 390], [390, 844], [360, 640]]) {
-        const shapePage = await browser.newPage({ viewport: { width, height } });
-        try {
-            await shapePage.goto(`${origin}/`);
-            await shapePage.evaluate(() => document.fonts.ready);
-            for (const fraction of [1, 1.3]) {
-                await shapePage.evaluate((f) => scrollTo(0, innerHeight * f), fraction);
-                await shapePage.waitForTimeout(250);
-                const held = await shapePage.evaluate(() => {
-                    const box = (sel) => document.querySelector(sel).getBoundingClientRect().toJSON();
-                    return { card: box(".preview-card"), copy: box(".showcase-content"), heading: box(".showcase-content .marketing-heading-lines"), pinned: document.querySelector(".preview-card").classList.contains("pinned") };
-                });
-                assert.ok(held.pinned, `The card is held at ${width} × ${height}`);
-                assert.ok(!overlaps(held.card, held.copy), `Showcase card and copy must not overlap at ${width} × ${height} (${fraction}vh)`);
-                assert.ok(held.card.top >= 0 && held.heading.top >= held.card.top, `The showcase must start on screen at ${width} × ${height}`);
-            }
-            const lineSizes = await shapePage.locator(".hero-section styled-text").evaluateAll(elements => elements.map(element => Math.round(element.shadowRoot.querySelector("svg").getBoundingClientRect().height)));
-            assert.equal(new Set(lineSizes).size, 1, `Hero heading lines share one size at ${width} × ${height}: ${lineSizes}`);
-            await shapePage.locator("[data-play-field]").scrollIntoViewIfNeeded();
-            await shapePage.waitForFunction(() => [...document.querySelectorAll(".play-icon")].every(icon => icon.style.transform.includes("translate3d")));
-            const outro = await shapePage.evaluate(() => ({
-                copy: [...document.querySelectorAll(".outro-copy .styled-text-host, .outro-copy .download-cta")].map(element => element.getBoundingClientRect().toJSON()),
-                icons: [...document.querySelectorAll(".play-icon")].map(element => element.getBoundingClientRect().toJSON()),
-            }));
-            assert.ok(outro.icons.every(icon => outro.copy.every(copy => !overlaps(icon, copy))), `Outro icons must clear the heading and download at ${width} × ${height}`);
-        } finally { await shapePage.close(); }
-    }
-    console.log("verified the showcase, heading lines and outro icons across seven screen shapes");
+    const heading = await page.locator(".outro-copy .marketing-heading-lines").boundingBox();
+    const thrown = await icons.nth(2).boundingBox();
+    await page.mouse.move(thrown.x + thrown.width / 2, thrown.y + thrown.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(heading.x + heading.width / 2, heading.y + heading.height / 2, { steps: 16 });
+    await page.mouse.up();
+    await page.waitForTimeout(1500);
+    const outroCopy = await page.evaluate(() => [...document.querySelectorAll(".outro-copy .styled-text-host, .outro-copy .download-cta")].map(element => element.getBoundingClientRect().toJSON()));
+    const landed = await icons.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().toJSON()));
+    assert.ok(landed.every(icon => outroCopy.every(copy => !overlaps(icon, copy))), "An icon dragged onto the heading must end up beside it, not over it");
+    console.log("verified dragging pushes icons apart and never leaves one over the copy");
+
+    // Reduced motion: no toy, the icons sit in their still row.
+    const calm = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    try {
+        await calm.goto(`${origin}/`);
+        await calm.locator("[data-play-field]").scrollIntoViewIfNeeded();
+        await calm.waitForTimeout(400);
+        assert.ok(await calm.locator(".play-icon").evaluateAll(elements => elements.every(element => element.style.transform === "" && getComputedStyle(element).position === "static")), "Reduced motion leaves the icons still");
+    } finally { await calm.close(); }
+    console.log("verified reduced motion keeps the outro icons still");
     await page.setViewportSize({ width: 390, height: 844 });
     for (const slug of ["actions", "game-server", "bot-creator", "ai"]) {
         await page.goto(`${origin}/${slug}/`);

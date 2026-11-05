@@ -1,7 +1,8 @@
 import { For, type ParentProps } from "solid-js";
 import { MarketingHeading } from "./MarketingHeading";
 import { styledText } from "./TextEffect";
-import { Icon, Screenshot } from "./Screenshot";
+import { Icon, Render, Screenshot } from "./Screenshot";
+import { LEARN_PANELS } from "../learn/panels";
 import {
     docsDropdownHtml,
     footerDocsHtml,
@@ -11,61 +12,38 @@ import {
     mobileMenuHtml,
 } from "./chromeHtml";
 
-// The site landing (/). This is the Solid port of the old hand-written
-// public/index.html: same markup, same class names, same effects. It ships as
-// its own static document (scripts/prerender-site.mjs gives it landing.css and
-// the public/js/*.js effects), not through SitePage.
+// The site landing (/). It ships as its own static document
+// (scripts/prerender-site.mjs gives it /css/style.css and the public/js/*.js
+// chrome scripts), not through SitePage. Every image is a static file: the
+// device art is rendered ahead of time from the models (scripts/renders/), so
+// the page needs no WebGL and looks the same on every browser and screen.
 //
 // BgOverlay, StyledText, and PaperButton remain custom elements upgraded by
 // those scripts, so their static markup is handed to Solid as innerHTML inside
 // host wrappers (.bg-overlay-host, .styled-text-host, .paper-button-host) that
 // carry the element-level placement the old element selectors held.
 
-const CARD_NOISE_FILTER = `<svg width="100%" height="100%"><defs><filter id="card-noise" x="0%" y="0%" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="1.3" numOctaves="3" stitchTiles="stitch" /><feColorMatrix type="saturate" values="0" /></filter></defs><rect width="100%" height="100%" filter="url(#card-noise)" /></svg>`;
+// The four panels the landing walks through, in the order it tells them: three
+// jobs, then the panel that connects them. Their copy and screenshots come from
+// the learn pages, so a claim is written (and corrected) in one place.
+const FEATURED_PANELS = ["game-server", "bot-creator", "ai", "actions"].map((slug) => {
+    const panel = LEARN_PANELS.find((candidate) => candidate.slug === slug);
+    if (!panel) throw new Error(`paperdocs: the landing features ${slug}, which has no learn page`);
+    return panel;
+});
 
-const SLIDES = [
-    {
-        src: "/screens/gameserver.png",
-        alt: "Game Server panel",
-        title: "Game Server",
-        description: "Host and manage your Minecraft server.",
-    },
-    {
-        src: "/screens/botcreator.png",
-        alt: "Bot Creator panel",
-        title: "Bot Creator",
-        description: "Build Discord interactions without writing code.",
-    },
-    {
-        src: "/screens/actions.png",
-        alt: "Actions panel",
-        title: "Actions",
-        description: "Build flows that bring your panels together.",
-    },
-    {
-        src: "/screens/ai.png",
-        alt: "AI panel",
-        title: "Local AI",
-        description: "Chat with models on your own computer.",
-    },
-    {
-        src: "/screens/panel-library.png",
-        alt: "Panel Library",
-        title: "Panel Library",
-        description: "Find more things your computer can do.",
-    },
-    {
-        src: "/screens/terminal.png",
-        alt: "Terminal panel",
-        title: "Terminal",
-        description: "Your computer’s terminal, inside Paperboard.",
-    },
-];
+// Screenshots share a two-column row on wide screens (see .panel-feature in
+// style.css) and take the full padded column at 760px and below.
+const PANEL_SHOT_SIZES = "(max-width: 760px) calc(100vw - 48px), 600px";
 
-// The preview card is at most 1100px and 94vw wide, or 58vw beside its copy
-// (see .showcase-section in style.css); short screens make it smaller still.
-const SLIDE_SIZES =
-    "(min-aspect-ratio: 5/4) and (min-width: 760px) 58vw, (max-width: 1170px) 94vw, 1100px";
+// The machines Paperboard can live on, then the desktop that reaches them.
+// scale is each device's height against the laptop, so the row keeps their
+// real proportions however each render was framed.
+const HOSTS = [
+    { name: "laptop", label: "An old laptop", scale: 1 },
+    { name: "mini-pc", label: "A mini PC", scale: 0.55 },
+    { name: "dev-board", label: "A Raspberry Pi", scale: 0.42 },
+] as const;
 
 const PLAY_ICONS = [
     "/pictures/ai.png",
@@ -281,11 +259,6 @@ export function MarketingChrome(props: ParentProps) {
 export function Landing() {
     return (
         <MarketingChrome>
-            <div class="stage-fixed" aria-hidden="true">
-                <canvas id="aio-stage" />
-                <div class="stage-dash" aria-hidden="true" />
-            </div>
-
             <main class="page-layout">
                 <section class="hero-section">
                     <MarketingHeading
@@ -295,88 +268,67 @@ export function Landing() {
                         size={90}
                     />
                     <p class="hero-sub">
-                        Paperboard is an <span class="nowrap">all-in-one</span> toolkit for{" "}
-                        <span class="nowrap">self-hosting.</span>
+                        Host a Minecraft server, run a Discord bot, and chat with local AI, all from
+                        one app on your own computer. No terminal required.
                     </p>
                     <DownloadCta />
+                    <figure class="hero-render">
+                        <Render
+                            name="hero"
+                            alt="A computer running the Paperboard Game Server panel"
+                            sizes="(max-width: 1000px) 92vw, 920px"
+                            priority
+                        />
+                    </figure>
                 </section>
 
-                {/* The showcase holds still for a short scroll so its copy can be
-                    read before the stage transition takes over. */}
-                <div class="showcase-hold">
-                    <section class="showcase-section">
-                        {/* Card and dots stay one column so the dots follow the
-                            card in every layout; on wide, short screens the
-                            copy sits beside them instead of below. */}
-                        <div class="showcase-media">
-                            <div class="preview-card screenshot-card">
-                                <div class="card-image-frame">
-                                    <div class="card-slides-track">
-                                        <For each={SLIDES}>
-                                            {(slide, index) => (
-                                                <div
-                                                    class="card-slide"
-                                                    data-slide-title={slide.title}
-                                                    data-slide-description={slide.description}
-                                                >
-                                                    {/* The first slide is the page's
-                                                        largest paint; the rest are
-                                                        clipped by the frame and load
-                                                        once the page has (dots-bar.js). */}
-                                                    <Screenshot
-                                                        src={slide.src}
-                                                        alt={slide.alt}
-                                                        class="card-slide-image"
-                                                        sizes={SLIDE_SIZES}
-                                                        priority={index() === 0}
-                                                    />
-                                                </div>
-                                            )}
-                                        </For>
-                                    </div>
-                                </div>
-                                <div class="card-caption">
-                                    <span class="caption-title">Game Server</span>
-                                    <span class="caption-separator" aria-hidden="true">
-                                        ·
-                                    </span>
-                                    <span class="caption-desc">Host and manage your Minecraft server.</span>
-                                </div>
-                            </div>
-
-                            <div class="dots-bar">
-                                <div class="card-texture-layer" innerHTML={CARD_NOISE_FILTER} />
-                                <For each={SLIDES}>
-                                    {(_, index) => (
-                                        <button class="dot" aria-label={`Slide ${index() + 1}`}>
-                                            <div class="dot-progress" />
-                                        </button>
-                                    )}
-                                </For>
-                            </div>
-                        </div>
-
-                        <div class="showcase-content">
-                            <MarketingHeading
-                                level={2}
-                                text="Your local-first tool for everything."
-                                lines={["Your local-first", "tool for everything."]}
-                                size={54}
-                            />
-                            <p>
-                                Paperboard has various apps (called panels) that simplify a variety of
-                                local tasks into simple, clean interfaces that run entirely on your
-                                computer. You don't need any terminal knowledge or programming
-                                experience; Paperboard works instantaneously and can be set up faster
-                                than you can read this paragraph.
-                            </p>
-                        </div>
-                    </section>
-                </div>
-
-                <section class="stage-section">
-                    <div class="stage-copy">
+                <section class="panels-section" aria-labelledby="panels-heading">
+                    <div class="section-intro" data-reveal>
                         <MarketingHeading
+                            id="panels-heading"
+                            level={2}
+                            text="A panel for every job."
+                            lines={["A panel for", "every job."]}
+                            size={54}
+                        />
+                        <p>
+                            Paperboard's apps, called panels, turn things that usually take a server
+                            and a terminal into simple, clean interfaces that run entirely on your
+                            computer. No programming experience needed, and each one is set up faster
+                            than you can read this paragraph.
+                        </p>
+                    </div>
+                    <For each={FEATURED_PANELS}>
+                        {(panel, index) => (
+                            <article
+                                class={`panel-feature${index() % 2 ? " panel-feature--reverse" : ""}`}
+                                style={{ "--paper-site-accent": panel.accent }}
+                                data-reveal
+                            >
+                                <figure class="panel-feature-shot screenshot-card">
+                                    <Screenshot src={panel.image} alt={panel.alt} sizes={PANEL_SHOT_SIZES} />
+                                </figure>
+                                <div class="panel-feature-copy">
+                                    <div class="panel-feature-identity">
+                                        <Icon src={panel.icon} size={36} lazy />
+                                        <span>{panel.name}</span>
+                                    </div>
+                                    <MarketingHeading level={3} text={panel.headline} size={40} />
+                                    <p>{panel.description}</p>
+                                    <a class="panel-feature-link" href={`/${panel.slug}/`}>
+                                        Learn about {panel.name}
+                                        <span class="icon icon-north-east" aria-hidden="true" />
+                                    </a>
+                                </div>
+                            </article>
+                        )}
+                    </For>
+                </section>
+
+                <section class="anywhere-section" aria-labelledby="anywhere-heading" data-reveal>
+                    <div class="section-intro">
+                        <MarketingHeading
+                            id="anywhere-heading"
                             level={2}
                             text="Paperboard runs anywhere."
                             lines={["Paperboard", "runs anywhere."]}
@@ -384,13 +336,29 @@ export function Landing() {
                         />
                         <p>
                             Paperboard is 100% compatible with macOS, Windows, and Linux on x86, and
-                            macOS and Linux on ARM. You can run Paperboard on a VPS, an old laptop, or a Raspberry
-                            Pi and control it as if it were running locally on your primary desktop.
+                            macOS and Linux on ARM. You can run Paperboard on a VPS, an old laptop, or a
+                            Raspberry Pi and control it as if it were running locally on your primary
+                            desktop.
                         </p>
                     </div>
+                    <div class="device-row">
+                        <ul class="device-hosts">
+                            <For each={HOSTS}>
+                                {(host) => (
+                                    <li class="device" style={{ "--device-scale": host.scale }}>
+                                        <Render name={host.name} alt="" sizes="(max-width: 760px) 30vw, 260px" device />
+                                        <span class="device-label">{host.label}</span>
+                                    </li>
+                                )}
+                            </For>
+                        </ul>
+                        <div class="device-link" aria-hidden="true" />
+                        <div class="device device--desktop" style={{ "--device-scale": 1.15 }}>
+                            <Render name="desktop" alt="" sizes="(max-width: 760px) 60vw, 340px" device />
+                            <span class="device-label">Your desktop</span>
+                        </div>
+                    </div>
                 </section>
-
-                {/* Comparisons stay off the page until we have measured results. */}
 
                 <section class="cta-section">
                     <div class="cta-shell">
@@ -432,9 +400,11 @@ export function Landing() {
                         />
                         <DownloadCta />
                     </div>
-                    <For each={PLAY_ICONS}>
-                        {(src) => <Icon class="play-icon" src={src} size={84} draggable={false} />}
-                    </For>
+                    <div class="play-icons">
+                        <For each={PLAY_ICONS}>
+                            {(src) => <Icon class="play-icon" src={src} size={84} draggable={false} />}
+                        </For>
+                    </div>
                 </section>
             </main>
         </MarketingChrome>

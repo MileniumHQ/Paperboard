@@ -13,8 +13,9 @@ const NUNITO_ADVANCE = 0.56;
  * fits and stack on narrow screens, all at one type size.
  */
 export function MarketingHeading(props: {
-    level: 1 | 2;
+    level: 1 | 2 | 3;
     text: string;
+    id?: string;
     lines?: string[];
     size: number;
 }) {
@@ -24,7 +25,7 @@ export function MarketingHeading(props: {
         return (96 / (longest * NUNITO_ADVANCE)).toFixed(2);
     };
     return (
-        <Dynamic component={`h${props.level}`} class="marketing-heading">
+        <Dynamic component={`h${props.level}`} id={props.id} class="marketing-heading">
             <span class="marketing-heading-label">{props.text}</span>
             <span
                 class="marketing-heading-lines"

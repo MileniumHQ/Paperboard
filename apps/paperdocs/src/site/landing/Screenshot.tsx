@@ -1,5 +1,6 @@
 import { withBase } from "../../utils/base";
-import { ICON_WIDTHS, SCREEN_WIDTHS, webpSrcset } from "./images";
+import { DEVICE_WIDTHS, ICON_WIDTHS, RENDER_WIDTHS, SCREEN_WIDTHS, webpSrcset } from "./images";
+import RENDERS from "./renders.json";
 
 /**
  * A marketing screenshot. Screenshots are 4:3 (captured at 1600 × 1200), so
@@ -45,6 +46,40 @@ export function Icon(props: { src: string; size: number; class?: string; lazy?: 
                 loading={props.lazy ? "lazy" : "eager"}
                 decoding="async"
                 draggable={props.draggable === false ? "false" : undefined}
+            />
+        </picture>
+    );
+}
+
+/**
+ * A device from public/renders, drawn ahead of time from the landing's
+ * low-poly models by scripts/render-models.mjs. Its box comes from the size
+ * that script recorded, so it is reserved before the file arrives.
+ */
+export function Render(props: { name: string; alt: string; sizes: string; priority?: boolean; device?: boolean }) {
+    const size = () => {
+        const known = (RENDERS as Record<string, { width: number; height: number }>)[props.name];
+        if (!known) throw new Error(`paperdocs: no render named ${props.name}; run bun run renders`);
+        return known;
+    };
+    const src = () => `/renders/${props.name}.png`;
+    return (
+        <picture class="marketing-picture">
+            <source
+                type="image/webp"
+                srcset={webpSrcset(src(), props.device ? DEVICE_WIDTHS : RENDER_WIDTHS)}
+                sizes={props.sizes}
+            />
+            <img
+                src={withBase(src())}
+                alt={props.alt}
+                class="marketing-render"
+                width={size().width}
+                height={size().height}
+                loading={props.priority ? "eager" : "lazy"}
+                fetchpriority={props.priority ? "high" : undefined}
+                decoding="async"
+                draggable={false}
             />
         </picture>
     );

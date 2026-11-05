@@ -18,8 +18,8 @@
     --paper-button-face: var(--paper-site-accent);
     --paper-button-ink: var(--paper-on-color);
     --paper-button-deep: color-mix(in srgb, var(--paper-site-accent) 70%, var(--paper-marketing-ink));
-    /* Smoked ink glass: the one surface for the topbar, its menus, and the
-       carousel dots, so every floating control reads as the same material. */
+    /* Smoked ink glass: the one surface for the topbar and its menus, so
+       every floating control reads as the same material. */
     --site-glass: color-mix(in srgb, var(--paper-marketing-ink) 72%, transparent);
     /* Menus are a touch more see-through with a heavier blur, so the page
        behind them frosts instead of showing through. */
@@ -75,7 +75,7 @@ html {
 }
 
 /* clip, not hidden: a hidden body is a scroll container that never scrolls,
-   which would stop the sticky showcase from sticking. */
+   which would stop anything sticky inside it from sticking. */
 body {
     overflow-x: clip;
 }
@@ -156,18 +156,6 @@ body {
     font-weight: 800;
     letter-spacing: -0.02em;
     color: var(--paper-marketing-ink);
-}
-
-.stage-unavailable {
-    position: fixed;
-    top: 45%;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 16px;
-    border-radius: var(--paper-border-radius);
-    background: var(--paper-surface-raised);
-    color: var(--paper-text);
-    z-index: 30;
 }
 
 .site-topbar__nav {
@@ -462,105 +450,32 @@ body {
     }
 }
 
-/* Centred in the space between the topbar and the card peeking up from below
-   (card-scroll.js peeks min(120px, 14vh)). */
+/* The opening screen: the promise, the download, and the computer it runs
+   on, rising from below the fold to invite the scroll. */
 .hero-section {
     position: relative;
-    width: 100vw;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: clamp(16px, 3.2vh, 28px);
-    padding: var(--site-topbar-room) 20px min(120px, 14vh);
     z-index: 10;
-}
-
-/* Extra scroll the showcase stays pinned for. flight.js reads the hold back
-   from layout, so this is the one place it is set. */
-.showcase-hold {
     width: 100%;
-    height: calc(100vh + 45vh);
-}
-
-/* Stacked on portrait screens; on wide, short screens the copy sits beside
-   the card, which is sized from the height left after the topbar, caption and
-   dots, so the whole showcase fits one screen in every shape. */
-.showcase-section {
-    --showcase-gap: clamp(10px, 2vh, 20px);
-    /* Height of everything stacked with the card that is not the image. */
-    --showcase-reserve: calc(var(--site-topbar-room) + 300px);
-    position: sticky;
-    top: 0;
-    width: 100vw;
-    height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: var(--showcase-gap);
-    padding: var(--site-topbar-room) 24px clamp(12px, 2.5vh, 24px);
-    z-index: 20;
+    gap: clamp(16px, 3vh, 28px);
+    padding: calc(var(--site-topbar-room) + clamp(40px, 10vh, 120px)) 20px 0;
 }
 
-.showcase-media {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--showcase-gap);
+.hero-render {
+    /* Short landscape screens keep the computer to about one screen tall. */
+    width: min(920px, 100%, 125svh);
+    margin-top: clamp(16px, 4vh, 48px);
 }
 
-/* Short portrait phones: a smaller card and copy, so the whole showcase
-   still reads on one screen. */
-@media (max-height: 700px) and (max-aspect-ratio: 5/4) {
-    .showcase-section {
-        --site-topbar-room: 72px;
-        --showcase-reserve: calc(var(--site-topbar-room) + 410px);
-        --showcase-gap: 6px;
-        justify-content: safe center;
-        --site-copy-size: 15px;
-    }
-
-    .showcase-content p {
-        line-height: 1.5;
-    }
-
-    /* Below about 640px tall the copy cannot fit beside a legible card; keep
-       the card legible and let the last lines run past the fold. */
-    .showcase-section .preview-card {
-        width: max(200px, min(94vw, (100svh - var(--showcase-reserve)) * 4 / 3));
-    }
-}
-
-@media (min-aspect-ratio: 5/4) and (min-width: 760px) {
-    .showcase-section {
-        --showcase-reserve: calc(var(--site-topbar-room) + 150px);
-        flex-direction: row;
-        gap: clamp(28px, 4.5vw, 80px);
-        padding-inline: clamp(24px, 5vw, 96px);
-    }
-
-    .showcase-section .preview-card {
-        width: min(1100px, 58vw, (100svh - var(--showcase-reserve)) * 4 / 3);
-    }
-
-    /* The card keeps its computed width; only the copy gives way. */
-    .showcase-section .showcase-media {
-        flex: none;
-    }
-
-    .showcase-section .showcase-content {
-        flex: 0 1 34rem;
-        min-width: 0;
-        align-items: flex-start;
-        text-align: left;
-        padding: 0;
-    }
-
-    .showcase-content .marketing-heading-lines {
-        justify-content: flex-start;
-    }
+/* Device art from public/renders: transparent PNGs of the landing's models. */
+.marketing-render {
+    display: block;
+    width: 100%;
+    height: auto;
+    user-select: none;
+    -webkit-user-drag: none;
 }
 
 /* One surface and solid offset layer for every marketing screenshot card. */
@@ -595,216 +510,22 @@ body {
     height: auto;
     border-radius: inherit;
 }
-.preview-card {
-    width: min(1100px, 94vw, (100svh - var(--showcase-reserve, 380px)) * 4 / 3);
-    max-width: 100%;
-    padding: 0;
-    transform-origin: center;
-    cursor: pointer;
-    overflow: visible;
-    will-change: transform;
-}
 
-.card-image-frame {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 4 / 3;
-    border-radius: 12px 12px 0 0;
-    overflow: hidden;
-    background: var(--paper-marketing-ink);
-}
-
-.card-slides-track {
-    display: flex;
-    width: 100%;
-    height: 100%;
-    transition: transform 0.55s cubic-bezier(0.25, 1, 0.5, 1);
-    will-change: transform;
-}
-
-.card-slide { flex: 0 0 100%; min-width: 0; height: 100%; }
-
-.card-slide-image {
-    flex: 0 0 100%;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-    border-radius: 0;
-}
-
-.card-caption {
-    width: 100%;
-    position: relative;
-    padding: 12px 16px 16px;
-    border-radius: 0 0 12px 12px;
-    background: var(--paper-card-face);
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 2px 10px;
-    text-align: center;
-    font-size: 14px;
-    font-weight: 600;
-    color: color-mix(in srgb, var(--paper-on-color) 85%, transparent);
-    letter-spacing: -0.01em;
-    user-select: none;
-}
-
-.card-caption > span {
-    transition:
-        opacity 0.22s ease,
-        transform 0.22s ease;
-}
-
-.card-caption.fade > span {
-    opacity: 0;
-    transform: translateY(4px);
-}
-
-.caption-title {
-    font-weight: 800;
-    color: var(--paper-on-color);
-    white-space: nowrap;
-}
-
-/* On a narrow card the title sits over its description instead of wrapping
-   beside it. */
-@media (max-width: 520px) {
-    .card-caption {
-        flex-direction: column;
-        padding: 10px 12px 12px;
-        font-size: 13px;
-    }
-
-    /* The section already pads the screen edge. */
-    .showcase-section .showcase-content {
-        padding-inline: 0;
-    }
-
-    .caption-separator {
-        display: none;
-    }
-}
-
-.caption-separator {
-    opacity: 0.4;
-}
-
-.caption-desc {
-    color: color-mix(in srgb, var(--paper-on-color) 85%, transparent);
-    font-weight: 600;
-}
-
-.dots-bar {
-    position: relative;
-    height: 48px;
-    flex-shrink: 0;
-    min-height: 48px;
-    padding: 0 20px;
-    border-radius: 999px;
-    background: var(--site-glass);
-    border: 1px solid var(--site-glass-border);
-    -webkit-backdrop-filter: var(--site-glass-filter);
-    backdrop-filter: var(--site-glass-filter);
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    box-shadow:
-        0 16px 36px -10px rgba(2, 8, 20, 0.5),
-        0 6px 16px -6px color-mix(in srgb, var(--paper-site-accent) 30%, transparent),
-        var(--site-glass-highlight);
-    overflow: hidden;
-    user-select: none;
-    z-index: 20;
-}
-
-.dot {
-    position: relative;
-    flex-shrink: 0;
-    height: 12px;
-    width: 12px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--paper-on-color) 28%, transparent);
-    border: none;
-    outline: none;
-    padding: 0;
-    cursor: pointer;
-    overflow: hidden;
-    transition:
-        width 0.45s cubic-bezier(0.25, 1, 0.5, 1),
-        transform 0.2s ease,
-        background-color 0.2s ease;
-    z-index: 4;
-}
-
-.dot:hover {
-    transform: scale(1.22);
-    background: color-mix(in srgb, var(--paper-on-color) 45%, transparent);
-}
-
-.dot:focus-visible {
-    outline: 2px solid var(--paper-on-color);
-    outline-offset: 3px;
-}
-
-.dot.active {
-    width: 58px;
-    background: color-mix(in srgb, var(--paper-on-color) 28%, transparent);
-}
-
-.dot.active:hover {
-    transform: scale(1.08);
-    background: color-mix(in srgb, var(--paper-on-color) 45%, transparent);
-}
-
-.dot-progress {
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 0%;
-    background: var(--paper-site-accent);
-    border-radius: inherit;
-    pointer-events: none;
-    transition: opacity 0.25s ease;
-}
-
-.card-texture-layer {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: inherit;
-    pointer-events: none;
-    mix-blend-mode: overlay;
-    opacity: 0.35;
-    z-index: 3;
-}
-
-.card-texture-layer svg {
-    width: 100%;
-    height: 100%;
-    display: block;
-}
-
-.showcase-content {
-    width: 100%;
-    max-width: 720px;
+/* A section's heading and lead paragraph, centred above its content. */
+.section-intro {
     display: flex;
     flex-direction: column;
     align-items: center;
+    gap: 16px;
+    width: 100%;
+    max-width: 760px;
+    margin-inline: auto;
     text-align: center;
-    color: #ffffff;
-    padding: 0 20px;
-    gap: clamp(10px, 1.6vh, 16px);
-    position: relative;
-    z-index: 10;
+    color: var(--paper-on-color);
 }
 
-.showcase-content p,
-.stage-copy p,
+.section-intro p,
+.panel-feature-copy p,
 .cta-copy p {
     max-width: 62ch;
     font-size: var(--site-copy-size);
@@ -814,75 +535,253 @@ body {
     text-wrap: pretty;
 }
 
-.stage-section {
+.panels-section,
+.anywhere-section {
     position: relative;
-    width: 100vw;
-    height: 100vh;
-    z-index: 20;
-    overflow: hidden;
+    z-index: 10;
+    width: min(1160px, 100%);
+    padding: clamp(96px, 14vh, 160px) 36px 0;
+}
+
+/* One row per panel: its real screenshot turned toward its copy, alternating
+   sides. Hovering or focusing the screenshot turns it to face the reader. */
+.panel-feature {
+    display: grid;
+    /* minmax(0, …): a track may not grow to the screenshot's own width. */
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: clamp(32px, 5vw, 64px);
+    align-items: center;
+    padding-block: clamp(48px, 8vh, 80px);
+}
+
+.panel-feature--reverse {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+}
+
+.panel-feature--reverse .panel-feature-shot {
+    order: 2;
+}
+
+.panel-feature-shot {
+    margin: 0;
+    transform: perspective(1400px) rotateY(10deg);
+    transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.panel-feature--reverse .panel-feature-shot {
+    transform: perspective(1400px) rotateY(-10deg);
+}
+
+.panel-feature .panel-feature-shot:hover {
+    transform: perspective(1400px) rotateY(0deg) translateZ(40px);
+}
+
+.panel-feature-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    text-align: left;
+    color: var(--paper-on-color);
+}
+
+.panel-feature-copy .marketing-heading {
+    text-align: left;
+}
+
+.panel-feature-copy .marketing-heading-lines {
+    justify-content: flex-start;
+}
+
+.panel-feature-identity {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.panel-feature-identity img {
+    object-fit: contain;
+}
+
+.panel-feature-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0;
+    color: var(--paper-on-color);
+    font-size: var(--site-copy-size);
+    font-weight: 800;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+}
+
+.panel-feature-link:focus-visible {
+    outline: 2px solid var(--paper-on-color);
+    outline-offset: 4px;
+    border-radius: 4px;
+}
+
+.panel-feature-link .icon {
+    width: 18px;
+    height: 18px;
+}
+
+/* The machines Paperboard runs on, joined by a marching dash to the desktop
+   that controls them. Each device is sized as a share of one unit, so the
+   row keeps their real proportions at every width. */
+.anywhere-section {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(48px, 8vh, 80px);
+}
+
+.device-row {
+    --device-unit: clamp(84px, 11vw, 160px);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: clamp(16px, 2.5vw, 36px);
+}
+
+.device-hosts {
+    display: flex;
+    align-items: flex-end;
+    gap: clamp(12px, 2.5vw, 36px);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.device {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-end;
-    padding-bottom: 6vh;
+    gap: 14px;
 }
 
-.stage-fixed {
-    position: fixed;
-    inset: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 15;
-    pointer-events: none;
+.device .marketing-render {
+    width: auto;
+    height: calc(var(--device-unit) * var(--device-scale));
 }
 
-#aio-stage {
-    width: 100%;
-    height: 100%;
-    display: block;
-    opacity: 0;
+.device-label {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--site-copy-ink);
+    white-space: nowrap;
 }
 
-.stage-copy {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 12px;
-    padding: 0 20px;
-    pointer-events: auto;
-    opacity: 0;
-    color: #ffffff;
-}
-
-.stage-copy {
-    width: 100%;
-    max-width: 760px;
-}
-
-.stage-dash {
-    position: absolute;
-    left: 0;
-    top: 0;
+.device-link {
+    flex: 0 1 120px;
+    min-width: 40px;
     height: 2px;
-    transform-origin: left center;
-    /* One fixed 18px tile, repeated. The old repeating-gradient stretched its
-       first tile to the element's width, so the leading dash rendered wider
-       than the rest. */
-    background-image: linear-gradient(90deg, #9dbdea 0 10px, transparent 10px 18px);
+    /* Centred on the devices, above their labels. */
+    margin-bottom: calc(var(--device-unit) * 0.5 + 34px);
+    /* One fixed 18px tile, repeated, so every dash is the same length. */
+    background-image: linear-gradient(90deg, var(--site-glass-ink) 0 10px, transparent 10px 18px);
     background-size: 18px 100%;
     background-repeat: repeat-x;
-    animation: dashmarch 0.6s linear infinite;
+    animation: device-link-march 0.6s linear infinite;
 }
 
-@keyframes dashmarch {
-    from {
-        background-position-x: 0;
-    }
+@keyframes device-link-march {
     to {
         background-position-x: 18px;
+    }
+}
+
+/* Narrow screens stack the desktop under the hosts, joined by a vertical
+   dash, and set the hero's art and every panel row in one column. */
+@media (max-width: 760px) {
+    .panels-section,
+    .anywhere-section {
+        padding-inline: 24px;
+    }
+
+    .panel-feature,
+    .panel-feature--reverse {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 36px;
+    }
+
+    .panel-feature--reverse .panel-feature-shot {
+        order: 0;
+    }
+
+    /* The copy leads its screenshot, so each panel reads as one group. */
+    .panel-feature-copy {
+        order: -1;
+        align-items: center;
+        text-align: center;
+        max-width: 560px;
+        margin-inline: auto;
+    }
+
+    .panel-feature-copy .marketing-heading {
+        text-align: center;
+    }
+
+    .panel-feature-copy .marketing-heading-lines {
+        justify-content: center;
+    }
+
+    .device-row {
+        --device-unit: min(22vw, 120px);
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+    }
+
+    .device-link {
+        flex: none;
+        width: 2px;
+        height: 56px;
+        min-width: 0;
+        margin: 0;
+        background-image: linear-gradient(180deg, var(--site-glass-ink) 0 10px, transparent 10px 18px);
+        background-size: 100% 18px;
+        background-repeat: repeat-y;
+        animation-name: device-link-march-down;
+    }
+}
+
+@keyframes device-link-march-down {
+    to {
+        background-position-y: 18px;
+    }
+}
+
+/* Sections rise in as they scroll into view. The reveal is tied to scroll
+   position, not to a script noticing the section: content is never hidden
+   waiting on JavaScript, and browsers without scroll-driven animations
+   simply show everything. */
+@media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) {
+        .page-layout [data-reveal] {
+            animation: section-reveal linear both;
+            animation-timeline: view();
+            animation-range: entry 0% entry 35%;
+        }
+    }
+}
+
+@keyframes section-reveal {
+    from {
+        opacity: 0;
+        translate: 0 26px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .panel-feature .panel-feature-shot,
+    .panel-feature .panel-feature-shot:hover {
+        transform: none;
+    }
+
+    .device-link {
+        animation: none;
     }
 }
 
@@ -1297,11 +1196,6 @@ body {
 
 .cta-card { padding: 0; overflow: visible; }
 
-.cta-card .card-texture-layer {
-    opacity: 0.2;
-    z-index: 1;
-}
-
 .cta-image {
     position: relative;
     z-index: 2;
@@ -1321,7 +1215,11 @@ body {
         justify-items: center;
     }
 
+    /* Full width, not shrink-to-fit: the heading is a size container that
+       adds no width of its own, so while the page was still parsing the
+       copy below it the column was 0px wide and the heading drew at 0px. */
     .cta-copy {
+        width: 100%;
         max-width: 640px;
         align-items: center;
         text-align: center;
@@ -1357,15 +1255,12 @@ body {
     gap: 28px;
 }
 
-/* Seven icons share the bands above and below the copy on narrow screens;
-   give those bands room for the icons to settle without nudging into it. */
-@media (max-width: 520px) {
-    .outro-section {
-        padding-block: 220px;
-    }
+/* The icons are a toy: scattered around the copy, never over it, and drag
+   one to toss it (public/js/icon-play.js). */
+.play-icons {
+    display: contents;
 }
 
-/* Same size, scattered static around the CTA; hidden toy: drag one to toss it. */
 .play-icon {
     position: absolute;
     top: 0;
@@ -1374,12 +1269,42 @@ body {
     height: 84px;
     z-index: 3;
     object-fit: contain;
-    cursor: default;
+    cursor: grab;
     touch-action: none;
     user-select: none;
     -webkit-user-drag: none;
     filter: drop-shadow(0 16px 24px rgba(2, 26, 62, 0.35));
     will-change: transform;
+}
+
+/* Phones have no room around the copy for a toy, and reduced motion asks
+   for none: the icons sit in a still row under the download button instead.
+   icon-play.js reads the same query (STILL_QUERY) and leaves them alone. */
+@media (max-width: 600px), (prefers-reduced-motion: reduce) {
+    .outro-section {
+        min-height: 0;
+        padding-block: clamp(96px, 14vh, 140px);
+        gap: 48px;
+    }
+
+    .play-icons {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 18px;
+        max-width: 420px;
+    }
+
+    .play-icon {
+        position: static;
+        width: 56px;
+        height: 56px;
+        cursor: default;
+        touch-action: auto;
+        will-change: auto;
+    }
 }
 
 .play-icon.is-dragging {

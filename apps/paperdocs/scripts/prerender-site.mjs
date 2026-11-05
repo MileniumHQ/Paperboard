@@ -50,9 +50,9 @@ function isDocsPath(path) {
 }
 
 // Marketing pages share the landing document shell. Learn pages load only
-// the shared chrome scripts and the screenshot lightbox (their scroll reveals
-// are CSS); the main landing additionally
-// gets carousel, stage and drag effects.
+// the shared chrome scripts and the screenshot lightbox; the main landing
+// adds its developer-card reveal and the draggable outro icons. Scroll
+// reveals on both are CSS, and every image is a static file.
 function landingDocument(page, path) {
     return `<!doctype html>
 <html lang="en"${page.accent ? ` style="--paper-site-accent: ${page.accent}"` : ""}>
@@ -78,24 +78,8 @@ function landingDocument(page, path) {
 ${stripSsrArtifacts(page.html)}
         <script src="/js/topbar.js"></script>
         <script src="/js/download-button.js"></script>
-        ${page.learn ? '<script src="/js/learn-lightbox.js"></script>' : `<script src="/js/card-scroll.js"></script>
-        <script src="/js/dots-bar.js"></script>
-        <script src="/js/all-in-one.js"></script>
-        <script src="/js/flight.js"></script>
-        <script src="/js/cta.js"></script>
-        <!-- The import map must precede every module script: Firefox ignores one
-             registered after module loading starts, which drops the bare "three"
-             specifiers and killed the stage there. -->
-        <script type="importmap">
-            {
-                "imports": {
-                    "three": "./js/vendor/three.module.js",
-                    "three/addons/": "./js/vendor/addons/"
-                }
-            }
-        </script>
-        <script type="module" src="/js/icon-play.js"></script>
-        <script type="module" src="/js/aio-stage.js"></script>`}
+        ${page.learn ? '<script src="/js/learn-lightbox.js"></script>' : `<script src="/js/cta.js"></script>
+        <script type="module" src="/js/icon-play.js"></script>`}
         <script src="/js/footer.js"></script>
     </body>
 </html>

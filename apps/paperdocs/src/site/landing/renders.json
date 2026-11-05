@@ -1,0 +1,22 @@
+{
+    "hero": {
+        "width": 2076,
+        "height": 1541
+    },
+    "laptop": {
+        "width": 1521,
+        "height": 1259
+    },
+    "mini-pc": {
+        "width": 1589,
+        "height": 862
+    },
+    "dev-board": {
+        "width": 1594,
+        "height": 647
+    },
+    "desktop": {
+        "width": 1635,
+        "height": 1173
+    }
+}

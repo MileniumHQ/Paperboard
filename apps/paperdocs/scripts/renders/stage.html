@@ -1,0 +1,150 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>html, body { margin: 0; background: transparent; } canvas { display: block; }</style>
+<script type="importmap">{ "imports": { "three": "/scripts/renders/vendor/three.module.js", "three/addons/": "/scripts/renders/vendor/addons/" } }</script>
+<script src="/scripts/renders/all-in-one.js"></script>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<script type="module">
+// Offline studio for the marketing renders (scripts/render-models.mjs). It
+// builds one shot from a spec, frames it, and hands back a transparent PNG.
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+const SCREEN = /screen|display|monitor/;
+const loader = new GLTFLoader();
+const textures = new THREE.TextureLoader();
+
+function loadTexture(src, flipped) {
+    return new Promise((resolve, reject) => textures.load(src, (texture) => {
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.anisotropy = 16;
+        if (flipped) {
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.y = -1;
+            texture.offset.y = 1;
+        }
+        resolve(texture);
+    }, undefined, () => reject(new Error(`render: screen ${src} failed to load`))));
+}
+
+async function loadModel(spec) {
+    if (spec.model === "all-in-one") return { root: window.createAllInOne(THREE), flipped: false };
+    const gltf = await new Promise((resolve, reject) =>
+        loader.load(`/scripts/renders/models/${spec.model}.glb`, resolve, undefined,
+            () => reject(new Error(`render: model ${spec.model} failed to load`))));
+    // GLB screens are UV'd upside down relative to the all-in-one.
+    return { root: gltf.scene, flipped: true };
+}
+
+async function dress(root, flipped, screen) {
+    const targets = [];
+    root.traverse((o) => {
+        if (!o.isMesh) return;
+        o.castShadow = true;
+        o.receiveShadow = true;
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+            if (SCREEN.test((o.name || "").toLowerCase()) || SCREEN.test((m.name || "").toLowerCase())) targets.push(m);
+        }
+    });
+    if (!screen) return;
+    if (!targets.length) throw new Error("render: model has no screen to show " + screen);
+    const texture = await loadTexture(screen, flipped);
+    for (const m of targets) {
+        if ("map" in m) m.map = texture;
+        if ("emissiveMap" in m) { m.emissiveMap = texture; m.emissive?.set(0xffffff); m.emissiveIntensity = 1; }
+        m.color?.set(0xffffff);
+        m.needsUpdate = true;
+    }
+}
+
+window.renderShot = async (shot) => {
+    const canvas = document.getElementById("stage");
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(1);
+    renderer.setSize(shot.width, shot.height, false);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.setClearColor(0x000000, 0);
+
+    const scene = new THREE.Scene();
+    // The site's lighting: a blue-sky hemisphere and one high key light.
+    scene.add(new THREE.HemisphereLight(0xdcecff, 0x0a2a55, 1.1));
+    const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(4096, 4096);
+    sun.shadow.radius = 6;
+    sun.shadow.bias = -0.0004;
+    scene.add(sun);
+
+    const group = new THREE.Group();
+    for (const item of shot.items) {
+        const { root, flipped } = await loadModel(item);
+        await dress(root, flipped, item.screen);
+        const holder = new THREE.Group();
+        holder.add(root);
+        holder.scale.setScalar(item.scale ?? 1);
+        holder.rotation.y = item.rotY ?? 0;
+        holder.position.set(item.x ?? 0, 0, item.z ?? 0);
+        group.add(holder);
+    }
+    scene.add(group);
+
+    // Sit everything on the floor and centre it, then frame the camera on its
+    // bounds so every shot is tight however the models are proportioned.
+    const box = new THREE.Box3().setFromObject(group);
+    group.position.x -= (box.min.x + box.max.x) / 2;
+    group.position.z -= (box.min.z + box.max.z) / 2;
+    group.position.y -= box.min.y;
+    box.setFromObject(group);
+    const size = box.getSize(new THREE.Vector3());
+    const centre = box.getCenter(new THREE.Vector3());
+
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.ShadowMaterial({ opacity: shot.shadow ?? 0.16 }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const reach = Math.max(size.x, size.y, size.z);
+    // High and in front, so shadows fall behind and beside the model rather
+    // than stretching across the page.
+    sun.position.set(centre.x + reach * 0.7, reach * 2.2, centre.z + reach * 1.6);
+    sun.target.position.copy(centre);
+    scene.add(sun.target);
+    const half = reach * 1.2;
+    Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half, near: 0.1, far: reach * 6 });
+    sun.shadow.camera.updateProjectionMatrix();
+
+    const camera = new THREE.PerspectiveCamera(shot.fov ?? 30, shot.width / shot.height, 0.01, 1000);
+    const yaw = THREE.MathUtils.degToRad(shot.yaw ?? 0);
+    const pitch = THREE.MathUtils.degToRad(shot.pitch ?? 14);
+    const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+    // Fit: step back until every corner of the bounds lands inside the frame
+    // with the requested margin.
+    const corners = [];
+    for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) corners.push(new THREE.Vector3(x, y, z));
+    const target = centre.clone();
+    target.y = box.min.y + size.y * (shot.lookY ?? 0.5);
+    const margin = 1 - (shot.margin ?? 0.06) * 2;
+    let lo = 0.1, hi = reach * 40;
+    for (let i = 0; i < 40; i++) {
+        const d = (lo + hi) / 2;
+        camera.position.copy(target).addScaledVector(dir, d);
+        camera.lookAt(target);
+        camera.updateMatrixWorld();
+        const fits = corners.every((c) => { const p = c.clone().project(camera); return Math.abs(p.x) <= margin && Math.abs(p.y) <= margin && p.z < 1; });
+        if (fits) hi = d; else lo = d;
+    }
+    camera.position.copy(target).addScaledVector(dir, hi);
+    camera.lookAt(target);
+    renderer.render(scene, camera);
+    return canvas.toDataURL("image/png");
+};
+window.studioReady = true;
+</script>
+</body>
+</html>

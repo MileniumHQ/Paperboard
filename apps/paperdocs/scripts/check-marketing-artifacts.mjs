@@ -56,10 +56,12 @@ async function assertImages(name, raw) {
     const priority = images.filter((img) => img.includes('fetchpriority="high"'));
     assert.equal(priority.length, 1, `${name} prioritizes exactly one image`);
     assert.ok(!priority[0].includes('loading="lazy"'), `${name}'s priority image is not lazy`);
-    const screenshots = images.filter((img) => img.includes("marketing-screenshot"));
+    // Screenshots and device renders are the large images: only the one
+    // above the fold may load before the reader scrolls to the rest.
+    const large = images.filter((img) => /marketing-(screenshot|render)/.test(img));
     assert.ok(
-        screenshots.filter((img) => !img.includes('loading="lazy"')).length === 1,
-        `${name} loads only its first screenshot eagerly`,
+        large.filter((img) => !img.includes('loading="lazy"')).length === 1,
+        `${name} loads only its first screenshot or render eagerly`,
     );
     for (const match of raw.matchAll(/\ssrcset="([^"]+)"/g)) {
         for (const candidate of match[1].split(",")) {
@@ -70,6 +72,24 @@ async function assertImages(name, raw) {
     }
 }
 await assertImages("the landing", await read("index.html"));
+
+// The landing is static: no WebGL stage, models or scroll choreography ship,
+// so it renders the same on every browser, screen and GPU.
+{
+    const raw = await read("index.html");
+    for (const gone of ["three", "aio-stage", "flight.js", "card-scroll.js", "dots-bar.js", "<canvas", "importmap"]) {
+        assert.ok(!raw.includes(gone), `the landing must not ship ${gone}`);
+    }
+    for (const name of ["hero", "laptop", "mini-pc", "dev-board", "desktop"]) {
+        assert.ok(raw.includes(`/renders/${name}.png`), `the landing shows the ${name} render`);
+    }
+    for (const dir of ["models", "js/vendor"]) {
+        await readdir(new URL(`${dir}/`, dist)).then(
+            () => assert.fail(`dist/${dir} must not ship: the models render offline (scripts/renders/)`),
+            (error) => assert.equal(error.code, "ENOENT"),
+        );
+    }
+}
 
 for (const slug of ["actions", "game-server", "bot-creator", "ai"]) {
     const raw = await read(`${slug}/index.html`);

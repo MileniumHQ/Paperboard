@@ -1,5 +1,6 @@
 (() => {
-  // matches models/all-in-one.glb dims and palette
+  // matches models/all-in-one.glb dims and palette (built in code so the
+  // studio can set its screen like the GLB devices)
   const C = {
     shell: 0x173763,
     fascia: 0x2a6fd6,
