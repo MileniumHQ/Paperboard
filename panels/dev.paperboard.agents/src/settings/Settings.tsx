@@ -23,7 +23,7 @@ import { COMPACTIONS, HARNESSES, LIMITS, type Compaction, type Harness, type Set
 import type { Agent } from "../lib/agent";
 import { SEARCH_MODELS_FROM, createModels, harnessName, loadedModels } from "../lib/brains";
 import { errorText, failure, type Failure } from "../lib/failure";
-import { BrainButtons, BrainStatus, brainLine, createBrainActions } from "./Brain";
+import { BrainButtons, BrainStatus, SignInModal, brainLine, createBrainActions } from "./Brain";
 import Providers from "./Providers";
 
 const DEFAULT_MODEL = "default";
@@ -187,7 +187,9 @@ function AgentSettings(props: { agent: Agent }) {
 function BrainsSettings(props: { agent: Agent }) {
     const actions = createBrainActions(props.agent);
     const [providers, setProviders] = createSignal(false);
-    const busy = (h: Harness) => ["installing", "signing-in", "failed", "unsupported"].includes(props.agent.state.brains[h].phase);
+    // a sign-in happens in its modal; the list shows only the brains' other work and trouble
+    const [signingIn, setSigningIn] = createSignal<Harness | null>(null);
+    const busy = (h: Harness) => ["installing", "failed", "unsupported"].includes(props.agent.state.brains[h].phase) && h !== signingIn();
     return (
         <PaperFlex gap="full" role="region" aria-label="Brains">
             <PaperSectionHeader icon="psychology" title="Brains" role="heading" aria-level={2} />
@@ -195,7 +197,7 @@ function BrainsSettings(props: { agent: Agent }) {
                 <For each={HARNESSES}>
                     {(h) => (
                         <PaperSettingItem title={harnessName(h)} description={brainLine(h, props.agent.state.brains[h])}>
-                            <BrainButtons agent={props.agent} harness={h} actions={actions} onProviders={() => setProviders(true)} />
+                            <BrainButtons agent={props.agent} harness={h} actions={actions} onProviders={() => setProviders(true)} onSignIn={setSigningIn} />
                         </PaperSettingItem>
                     )}
                 </For>
@@ -208,7 +210,7 @@ function BrainsSettings(props: { agent: Agent }) {
                     </PaperFlex>
                 )}
             </For>
-            <Show when={!HARNESSES.some(busy) && actions.error()}>
+            <Show when={!HARNESSES.some(busy) && !signingIn() && actions.error()}>
                 {(shown) => (
                     <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
                         {shown().message}
@@ -216,6 +218,7 @@ function BrainsSettings(props: { agent: Agent }) {
                 )}
             </Show>
             <Providers agent={props.agent} open={providers()} onClose={() => setProviders(false)} />
+            <SignInModal agent={props.agent} harness={signingIn()} actions={actions} onClose={() => setSigningIn(null)} />
         </PaperFlex>
     );
 }

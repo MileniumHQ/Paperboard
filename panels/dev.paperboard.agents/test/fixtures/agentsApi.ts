@@ -1,5 +1,6 @@
-// Browser-only stand-in for the Agents service, behind the two paperapi
-// calls the UI makes (actionsApi and createPanelBridge). The service's own
+// Browser-only stand-in for the Agents service, behind the paperapi calls
+// the UI makes (actionsApi, createPanelBridge, and the shell's
+// catchLoopbackRedirect). The service's own
 // answers are covered by its suites; this lets a fixture drive the real UI
 // into the service's refusals and read what the person is shown.
 import { DEFAULT_STATE, UI_ACTION_IDS, type AiState, type AppInfo, type ChatEntry, type Routine } from "../../src/contract";
@@ -67,4 +68,28 @@ export function createPanelBridge() {
         refreshState: async () => structuredClone(service.state),
         dispose: () => undefined,
     };
+}
+
+export class LoopbackRedirectError extends Error {
+    constructor(
+        readonly code: "invalid-request" | "unavailable" | "in-use" | "busy" | "canceled" | "timeout" | "failed",
+        message: string,
+    ) {
+        super(message);
+        this.name = "LoopbackRedirectError";
+    }
+}
+
+/** what the shell does when a page asks it to catch a loopback redirect: set by a fixture */
+export const loopback = {
+    asked: [] as string[],
+    answer: (_redirectUri: string): Promise<{ status: "caught"; url: string } | { status: "local" }> => Promise.resolve({ status: "local" }),
+};
+
+export function catchLoopbackRedirect(redirectUri: string, options?: { signal?: AbortSignal }) {
+    loopback.asked.push(redirectUri);
+    return new Promise<{ status: "caught"; url: string } | { status: "local" }>((resolve, reject) => {
+        options?.signal?.addEventListener("abort", () => reject(new LoopbackRedirectError("canceled", "canceled")));
+        loopback.answer(redirectUri).then(resolve, reject);
+    });
 }
