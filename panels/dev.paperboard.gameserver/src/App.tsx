@@ -110,7 +110,15 @@ export default function App() {
 
     return (
         <Show when={!failure()} fallback={<PaperQuote variant="danger" title="Servers could not be loaded" role="alert">{failure()}<PaperButton onClick={() => openServer(null)}>Servers</PaperButton></PaperQuote>}>
-        <Show when={servers()} fallback={<PaperLoader loaderStatus="indeterminate" delay={400} label="Loading servers" />}>
+        <Show
+            when={servers()}
+            fallback={
+                // centred, and only after a moment: opening a server reloads the page
+                <PaperFlex fullWidth fullHeight align="center" justify="center">
+                    <PaperLoader loaderStatus="indeterminate" delay={400} label="Loading servers" />
+                </PaperFlex>
+            }
+        >
         <Show when={selectedServerId} fallback={<ServersHome state={servers()!} />}>
             <Show
                 when={configured()}
