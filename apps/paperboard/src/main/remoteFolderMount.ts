@@ -30,26 +30,38 @@ function appleQuoted(s: string): string {
     return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-// passwordless argv: the credential travels in the child's env only
+// passwordless argv: the credential travels in the child's env only.
+// New-PSDrive failures are non-terminating by default: without Stop the
+// script still printed the free letter and exited 0, and Explorer, handed
+// a drive that was never mapped, opened Documents instead.
 export function buildWindowsMountCommand(
     url: string,
     user: string,
     pass: string,
 ): WindowsMountPlan {
     const script = [
+        "$ErrorActionPreference = 'Stop'",
         "$u = $env:PB_DAV_USER",
         "$p = ConvertTo-SecureString $env:PB_DAV_PASS -AsPlainText -Force",
         "$c = New-Object System.Management.Automation.PSCredential($u, $p)",
         `$root = ${singleQuoted(url)}`,
         "$letter = ([char[]](68..90) | Where-Object { -not (Test-Path ($_ + ':')) } | Select-Object -First 1)",
         "if (-not $letter) { Write-Error 'no-drive-letter'; exit 1 }",
-        "New-PSDrive -Name $letter -PSProvider FileSystem -Root $root -Credential $c -Persist -Scope Global | Out-Null",
+        "New-PSDrive -Name $letter -PSProvider FileSystem -Root $root -Credential $c -Persist -Scope Global -ErrorAction Stop | Out-Null",
         "Write-Output ($letter + ':')",
     ].join("; ");
     return {
         args: ["-NoProfile", "-NonInteractive", "-Command", script],
         env: { PB_DAV_USER: user, PB_DAV_PASS: pass },
     };
+}
+
+// the first line of a PowerShell error, without colour codes or the
+// "Cmdlet :" prefix, so a failed mount can say what Windows said
+export function powershellErrorLine(stderr: string): string {
+    const plain = stderr.replace(/\x1b\[[0-9;]*m/g, "");
+    const line = plain.split(/\r?\n/).map((l) => l.trim()).find(Boolean) ?? "";
+    return line.replace(/^[A-Za-z-]+\s*:\s*/, "");
 }
 
 // AppleScript mount body: written to a 0600 temp file by the caller and

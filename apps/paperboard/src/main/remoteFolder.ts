@@ -7,6 +7,7 @@ import {
     buildWindowsMountCommand,
     buildMacMountScript,
     macMountScriptPath,
+    powershellErrorLine,
     remoteFolderSupported,
 } from "./remoteFolderMount";
 import { startDavRelay, relayFolderUrl, type DavRelay } from "./davRelay";
@@ -53,7 +54,8 @@ function execAsync(
             args,
             { timeout: timeoutMs, ...(env ? { env: { ...process.env, ...env } } : {}) },
             (err, stdout, stderr) => {
-                if (err) reject(err);
+                // the caller reads what the program said, not just its exit
+                if (err) reject(Object.assign(err, { stderr: String(stderr) }));
                 else resolve({ stdout: String(stdout), stderr: String(stderr) });
             },
         );
@@ -267,7 +269,13 @@ export async function openRemoteFolder(
             // args are world-readable via WMI/Task Manager
             const url = `http://127.0.0.1:${rec.relay.port}/dav`;
             const plan = buildWindowsMountCommand(url, session.user, session.pass);
-            const out = await execAsync("powershell.exe", plan.args, 60_000, undefined, plan.env);
+            let out: { stdout: string; stderr: string };
+            try {
+                out = await execAsync("powershell.exe", plan.args, 60_000, undefined, plan.env);
+            } catch (err: any) {
+                const said = powershellErrorLine(err?.stderr ?? "") || (err?.message ?? String(err));
+                return await fail(`Windows couldn't map the folder as a drive: ${said}`);
+            }
             const drive = /([A-Z]:)/i.exec(out.stdout)?.[1]?.toUpperCase();
             if (!drive) {
                 logger.warn("[RemoteFolder] mount output:", out.stdout);
@@ -278,6 +286,11 @@ export async function openRemoteFolder(
             const target = subDir
                 ? `${drive}\\${subDir.split("/").join("\\")}\\`
                 : `${drive}\\`;
+            // Explorer opens Documents for a path it can't find, so a
+            // folder that isn't there is an error here, not a wrong window
+            if (!fs.existsSync(target)) {
+                return await fail(`Windows mapped ${drive}, but ${target} isn't in it.`);
+            }
             spawn("explorer", [target], { detached: true, stdio: "ignore" }).unref();
             startWatcher(rec, () => windowsHasWindow(drive));
             return { ok: true };

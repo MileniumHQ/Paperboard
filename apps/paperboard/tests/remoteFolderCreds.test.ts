@@ -7,8 +7,12 @@ import {
     buildWindowsMountCommand,
     buildMacMountScript,
     macMountScriptPath,
+    powershellErrorLine,
     remoteFolderSupported,
 } from "../src/main/remoteFolderMount";
+
+// the real shell the Windows plan runs in (pwsh stands in off Windows)
+const POWERSHELL = process.platform === "win32" ? Bun.which("powershell.exe") : Bun.which("pwsh");
 
 const USER = "dav-user-9";
 const PASS = "s3cr3t-p4ss-quake";
@@ -45,5 +49,25 @@ describe("remote folder mount credential hygiene", () => {
         expect(remoteFolderSupported("darwin")).toBe(true);
         expect(remoteFolderSupported("linux")).toBe(true);
         expect(remoteFolderSupported("freebsd")).toBe(false);
+    });
+
+    // a drive that never mapped must fail the plan: a printed letter sent
+    // Explorer to a drive that wasn't there, and it opened Documents
+    it.skipIf(!POWERSHELL)("windows plan fails, with no drive letter, when the mount fails", () => {
+        const plan = buildWindowsMountCommand("http://127.0.0.1:1/dav", USER, PASS);
+        const run = Bun.spawnSync([POWERSHELL!, ...plan.args], {
+            env: { ...process.env, ...plan.env },
+            timeout: 60_000,
+        });
+        expect(run.exitCode).not.toBe(0);
+        expect(run.stdout.toString()).not.toMatch(/[A-Z]:/);
+        expect(powershellErrorLine(run.stderr.toString())).not.toBe("");
+    });
+
+    it("reads the first line of a PowerShell error without colour or cmdlet", () => {
+        const raw = "\x1b[31;1mNew-PSDrive: \x1b[31;1mThe network path was not found.\x1b[0m\nAt line:1 char:5";
+        expect(powershellErrorLine(raw)).toBe("The network path was not found.");
+        expect(powershellErrorLine("New-PSDrive : Access is denied\r\n+ CategoryInfo")).toBe("Access is denied");
+        expect(powershellErrorLine("")).toBe("");
     });
 });
