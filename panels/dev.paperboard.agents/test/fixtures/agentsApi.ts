@@ -15,6 +15,8 @@ export const service = {
     /** action id → the message it's refused with */
     refuse: {} as Record<string, string>,
     calls: [] as string[],
+    /** action id → how long it takes to answer, in ms */
+    slow: {} as Record<string, number>,
     routines: [] as Routine[],
     history: [] as ChatEntry[],
     apps: [] as AppInfo[],
@@ -50,9 +52,14 @@ export const actionsApi = {
     on: () => () => undefined,
     call: async (_panel: string, id: string, input?: { name?: string }) => {
         service.calls.push(id);
-        await Promise.resolve();
+        await (service.slow[id] ? new Promise((resolve) => setTimeout(resolve, service.slow[id])) : Promise.resolve());
         if (service.refuse[id]) throw new Error(service.refuse[id]);
         if (id === UI_ACTION_IDS.openApp) return { url: service.appUrl(input!.name!), title: service.apps.find((a) => a.name === input!.name)!.title };
+        if (id === UI_ACTION_IDS.setup) {
+            // the agent is made: every window hears the new state
+            service.state = { ...service.state, settings: structuredClone(input) as unknown as AiState["settings"] };
+            for (const heard of listeners) heard({}, structuredClone(service.state));
+        }
         if (id === UI_ACTION_IDS.deleteApp) service.apps = service.apps.filter((a) => a.name !== input!.name);
         if (id === TOOLS_ACTION_IDS.remove) service.tools.config.servers = service.tools.config.servers.filter((s) => s.name !== input!.name);
         return structuredClone(answers[id]?.() ?? {});
@@ -62,9 +69,14 @@ export const actionsApi = {
 /** the panel is on the computer it's shown on */
 export const grantedComputerId = () => "local";
 
+const listeners = new Set<(patch: unknown, full: AiState) => void>();
+
 export function createPanelBridge() {
     return {
-        onStateChange: () => () => undefined,
+        onStateChange: (heard: (patch: unknown, full: AiState) => void) => {
+            listeners.add(heard);
+            return () => listeners.delete(heard);
+        },
         refreshState: async () => structuredClone(service.state),
         dispose: () => undefined,
     };

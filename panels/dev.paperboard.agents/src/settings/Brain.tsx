@@ -2,7 +2,7 @@
 // waiting for them to sign in, or in trouble. The service owns all of it
 // (state.brains); this only shows it and sends the person's answers back.
 
-import { Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
+import { Match, Show, Switch, createEffect, createSignal, on, onCleanup, type JSX } from "solid-js";
 import { catchLoopbackRedirect, LoopbackRedirectError } from "@mileniumhq/paperapi";
 import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperModal, PaperProgress, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { SIGN_IN_REQUIRED, type BrainState, type Harness } from "../contract";
@@ -79,12 +79,16 @@ export function BrainStatus(props: { agent: Agent; harness: Harness; actions: Br
                     <PaperProgress value={b().percent ?? undefined} aria-label={`Installing ${name()}`} />
                 </Match>
                 <Match when={b().phase === "signing-in"}>
-                    <SignInSteps agent={props.agent} harness={props.harness} actions={props.actions} />
-                    <PaperFlex direction="row" gap="half">
-                        <PaperButton variant="text" onClick={() => void props.actions.cancel(props.harness)}>
-                            Cancel
-                        </PaperButton>
-                    </PaperFlex>
+                    <SignInSteps
+                        agent={props.agent}
+                        harness={props.harness}
+                        actions={props.actions}
+                        cancel={
+                            <PaperButton variant="text" onClick={() => void props.actions.cancel(props.harness)}>
+                                Cancel
+                            </PaperButton>
+                        }
+                    />
                 </Match>
                 <Match when={b().phase === "failed" || b().phase === "unsupported"}>
                     <PaperQuote variant="danger" icon="error" title={`${name()} not ready`} role="alert">
@@ -111,7 +115,7 @@ export function BrainStatus(props: { agent: Agent; harness: Harness; actions: Br
  * sign-in finishes there; where it can't be caught (Paperboard in a web
  * browser), the person pastes it.
  */
-export function SignInSteps(props: { agent: Agent; harness: Harness; actions: BrainActions }) {
+export function SignInSteps(props: { agent: Agent; harness: Harness; actions: BrainActions; cancel?: JSX.Element }) {
     const b = () => props.agent.state.brains[props.harness];
     const name = () => harnessName(props.harness);
     // the page was opened: waiting is the one thing left to show
@@ -168,7 +172,15 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
     };
 
     return (
-        <Show when={b().login} fallback={<PaperLoader loaderStatus="indeterminate" label={`Getting ${name()}'s sign-in page`} />}>
+        <Show
+            when={b().login}
+            fallback={
+                <PaperFlex gap="full" align="start">
+                    <PaperLoader loaderStatus="indeterminate" label={`Getting ${name()}'s sign-in page`} />
+                    {props.cancel}
+                </PaperFlex>
+            }
+        >
             {(login) => (
                 <Show
                     when={opened() || !login().url}
@@ -191,6 +203,7 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
                                     Continue in your browser <PaperIcon>open_in_new</PaperIcon>
                                 </PaperButton>
                                 <PaperCopyButton text={login().url!} label="Copy link" variant="text" />
+                                {props.cancel}
                             </PaperFlex>
                         </PaperFlex>
                     }
@@ -240,15 +253,21 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
                                 </PaperFlex>
                             </PaperFlex>
                         </Show>
-                        <Show when={login().url}>
-                            {(url) => (
-                                <PaperFlex direction="row" gap="half" align="center">
-                                    <PaperButton variant="text" href={url()} target="_blank">
-                                        Open the page again
-                                    </PaperButton>
-                                    <PaperCopyButton text={url()} label="Copy link" variant="text" />
-                                </PaperFlex>
-                            )}
+                        {/* the way back to the page, and out: a row that starts where the text above it does */}
+                        <Show when={login().url || props.cancel}>
+                            <PaperFlex direction="row" gap="half" align="center">
+                                <Show when={login().url}>
+                                    {(url) => (
+                                        <>
+                                            <PaperButton href={url()} target="_blank">
+                                                Open the page again
+                                            </PaperButton>
+                                            <PaperCopyButton text={url()} label="Copy link" variant="text" />
+                                        </>
+                                    )}
+                                </Show>
+                                {props.cancel}
+                            </PaperFlex>
                         </Show>
                     </PaperFlex>
                 </Show>

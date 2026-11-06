@@ -1,5 +1,5 @@
 import { Match, Switch, createEffect, createSignal, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperLoader } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperLoader, PaperPresence } from "@mileniumhq/paperui";
 import Workspace from "./Workspace";
 import Onboarding from "./onboarding/Onboarding";
 import { createAgent } from "./lib/agent";
@@ -23,6 +23,8 @@ export default function Main() {
         if (agent.hydration() === "ready" && !agent.state.settings && !onboarding()) setOnboarding(true);
     });
     const meeting = () => onboarding() && (!agent.state.settings || mine());
+    // the chat fades in after the onboarding has faded out; opening a panel that already has an agent shows it at once
+    const [metHere, setMetHere] = createSignal(false);
 
     return (
         <Switch>
@@ -43,13 +45,18 @@ export default function Main() {
                     agent={agent}
                     onSaving={() => setMine(true)}
                     onDone={() => {
+                        setMetHere(true);
                         setOnboarding(false);
                         setMine(false);
                     }}
                 />
             </Match>
             <Match when={agent.state.settings}>
-                <Workspace agent={agent} />
+                <PaperPresence when appear={metHere()} motion="fade">
+                    <PaperFlex fullHeight>
+                        <Workspace agent={agent} />
+                    </PaperFlex>
+                </PaperPresence>
             </Match>
         </Switch>
     );

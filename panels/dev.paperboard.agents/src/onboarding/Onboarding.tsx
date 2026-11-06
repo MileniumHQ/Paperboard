@@ -3,7 +3,8 @@ import {
     PaperButton,
     PaperFlex,
     PaperInput,
-    PaperLoader,
+    PaperCard,
+    PaperPresence,
     PaperQuote,
     PaperSectionHeader,
     PaperSelector,
@@ -35,8 +36,6 @@ import styles from "./Onboarding.module.css";
 // Choosing a brain and pressing Next is all it takes: the next step installs
 // it and opens its sign-in.
 
-const NAMES = ["Pip", "Juniper", "Biscuit", "Nova", "Pebble", "Moss", "Echo", "Clover", "Ziggy", "Wren", "Tofu", "Atlas", "Maple", "Orbit", "Fern", "Scout"];
-
 const DEFAULT_MODEL = "default";
 
 // the last step is the answer to the computer: setting it up, or not yet
@@ -48,11 +47,29 @@ const STEP = { name: 0, brain: 1, signIn: 2, model: 3, computer: 4, last: 5 } as
  * onboarding open to show the computer's setup; onDone: it's finished.
  */
 export default function Onboarding(props: { agent: Agent; onSaving: () => void; onDone: () => void }) {
+    // finishing fades the whole meeting out, and only then hands over to the chat
+    const [leaving, setLeaving] = createSignal(false);
+    let page: HTMLDivElement | undefined;
+    const done = async () => {
+        if (leaving()) return;
+        setLeaving(true);
+        await played(page);
+        props.onDone();
+    };
     return (
-        <div class={styles.page}>
-            <Flow {...props} />
-        </div>
+        <PaperPresence when={!leaving()}>
+            <div ref={page} class={styles.page}>
+                <Flow {...props} onDone={() => void done()} />
+            </div>
+        </PaperPresence>
     );
+}
+
+/** Resolves once the animations `el` is playing now (an exit PaperPresence just started) have ended. */
+async function played(el: Element | undefined) {
+    // PaperPresence starts the exit as the element is let go, in the same update
+    await Promise.resolve();
+    if (el) await Promise.allSettled(el.getAnimations().map((a) => a.finished));
 }
 
 function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void }) {
@@ -65,7 +82,6 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
     const [harness, setHarness] = createSignal<Harness>();
     const [model, setModel] = createSignal<string>();
     const [computer, setComputer] = createSignal<"setup" | "later">();
-    const placeholder = NAMES[Math.floor(Math.random() * NAMES.length)]!;
 
     // saving belongs to the service: an error here is its answer, shown with a way to try again
     const [saving, setSaving] = createSignal(false);
@@ -106,7 +122,6 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
                 speaker={speaker}
                 name={name}
                 setName={setName}
-                placeholder={placeholder}
                 harness={harness}
                 setHarness={setHarness}
                 model={model}
@@ -131,7 +146,6 @@ function Scenes(props: {
     speaker: Speaker;
     name: Getter<string>;
     setName: Setter<string>;
-    placeholder: string;
     harness: Getter<Harness | undefined>;
     setHarness: Setter<Harness>;
     model: Getter<string | undefined>;
@@ -313,12 +327,12 @@ function Scenes(props: {
                     <PaperInput
                         ref={(el) => queueMicrotask(() => el.focus())}
                         label="Name"
-                        placeholder={props.placeholder}
+                        placeholder="Name"
                         value={props.name()}
                         onInput={(e) => props.setName(e.currentTarget.value)}
                         maxLength={LIMITS.name}
                     />
-                    {/* the suggestion is only a suggestion: say why Next waits */}
+                    {/* say why Next waits */}
                     <Show when={props.name().length === 0}>
                         <PaperText preset="hint">Type a name to continue.</PaperText>
                     </Show>
@@ -348,13 +362,19 @@ function Scenes(props: {
                         {(h) => (
                             <>
                                 <PaperSectionHeader title={harnessName(h())} role="heading" aria-level={2} />
-                                <Show when={brainReady() || brain()?.phase === "installed"}>
-                                    <PaperText preset="hint" inset>
-                                        {brainLine(h(), brain()!)}
-                                    </PaperText>
-                                </Show>
-                                <BrainStatus agent={agent} harness={h()} actions={actions} />
-                                <BrainButtons agent={agent} harness={h()} actions={actions} onProviders={() => setProviders(true)} />
+                                {/* one card: the header's inset is the card's, so the line, the sign-in and the buttons all start where its title does */}
+                                <PaperCard padding="sixfourths" gap="full">
+                                    <Show when={brainReady() || brain()?.phase === "installed"}>
+                                        <PaperText preset="hint">{brainLine(h(), brain()!)}</PaperText>
+                                    </Show>
+                                    {/* only while there's something to show: an empty one would still take a gap */}
+                                    <Show when={brain()?.phase !== "ready" && brain()?.phase !== "installed" || actions.error()}>
+                                        <BrainStatus agent={agent} harness={h()} actions={actions} />
+                                    </Show>
+                                    <Show when={!["installing", "signing-in", "unsupported"].includes(brain()?.phase ?? "")}>
+                                        <BrainButtons agent={agent} harness={h()} actions={actions} onProviders={() => setProviders(true)} />
+                                    </Show>
+                                </PaperCard>
                             </>
                         )}
                     </Show>
