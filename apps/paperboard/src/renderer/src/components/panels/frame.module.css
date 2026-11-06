@@ -9,6 +9,8 @@
     width: 100%;
     height: 100%;
     border: none;
+    /* a panel fades in once painted, and out behind a loader or a backup */
+    transition: opacity var(--paper-short-transition) var(--paper-ease-standard);
 }
 
 /* the library stays mounted while another layer shows */
@@ -28,10 +30,13 @@
     border-left: var(--paper-border-width) solid var(--paper-border);
 }
 
-/* every opened panel stays mounted; only the current one shows */
+/* every opened panel stays mounted; only the current one shows. It sits on
+   the panels' own background, so a frame not yet painted (or held by a
+   backup) shows the colour the panel will paint, not the shell's */
 .panelLayer {
     position: absolute;
     inset: 0;
+    background: var(--paper-surface-app);
 }
 
 .panelLayer.away {
