@@ -34,6 +34,8 @@ const local = serverLocal(() => ({
     password: "",
     prompts: 0,
     partialPrompt: false,
+    // addresses Paperboard's own listener checks connected from
+    probes: [] as string[],
     queries: 0,
     listed: [] as { name: string; address: string }[],
     store: null as PlayerStore | null,
@@ -318,7 +320,11 @@ export const terrariaService: GameService = {
         if (!local().ready) return false;
         return new Promise((resolve, reject) => {
             const socket = net.connect({ host: "127.0.0.1", port: Number(ctx.state.serverPort) });
-            socket.setTimeout(1000); socket.once("connect", () => { socket.destroy(); resolve(true); });
+            socket.setTimeout(1000); socket.once("connect", () => {
+                // Terraria prints the check as "127.0.0.1:<port> is connecting..."; that line is ours, not a player's
+                local().probes = [...local().probes, `127.0.0.1:${socket.localPort}`].slice(-16);
+                socket.destroy(); resolve(true);
+            });
             socket.once("error", err => { socket.destroy(); if ((err as NodeJS.ErrnoException).code === "ECONNREFUSED") resolve(false); else reject(new Error(`Terraria listener probe failed: ${err.message}`)); });
             socket.once("timeout", () => { socket.destroy(); reject(new Error("Terraria listener probe timed out")); });
         });
@@ -341,6 +347,8 @@ export const terrariaService: GameService = {
         if (event && observePlayers(ctx, event)) return;
         // the console's ": " prompt rides on the next line it prints; blank lines say nothing
         const shown = stripPrompt(line).trimEnd();
+        const probe = /^(\S+) is connecting\.\.\.$/.exec(shown)?.[1];
+        if (probe && local().probes.includes(probe)) { local().probes = local().probes.filter((p) => p !== probe); return; }
         if (shown) local().console.push(ctx, shown);
     },
     async assertFileAccess(ctx, file, write) {

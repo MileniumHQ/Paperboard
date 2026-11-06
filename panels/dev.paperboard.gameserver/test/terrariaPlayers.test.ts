@@ -142,6 +142,28 @@ test("a join is tracked, its address learned from a quiet `playing`, and kick, b
     await terrariaService.dispose();
 }));
 
+test("Paperboard's own check that the server listens stays out of the console", () => inServer(scope, async () => {
+    const net = await import("node:net");
+    const accepted: string[] = [];
+    const listener = net.createServer((socket) => { accepted.push(`127.0.0.1:${socket.remotePort}`); socket.destroy(); });
+    await new Promise<void>((resolve) => listener.listen(0, "127.0.0.1", resolve));
+    try {
+        const ctx = makeCtx();
+        ctx.setState({ serverPort: String((listener.address() as import("node:net").AddressInfo).port) });
+        terrariaService.observeLine(ctx, "Listening on port 7777");
+        expect(await terrariaService.readiness!.probe!(ctx)).toBe(true);
+        await settle();
+        expect(accepted).toHaveLength(1);
+        // what Terraria prints for that check, then for a real player
+        terrariaService.observeLine(ctx, `${accepted[0]} is connecting...`);
+        terrariaService.observeLine(ctx, ": 127.0.0.1:1 is connecting...");
+        await settle();
+        expect(ctx.state.serverEntries.map((e: any) => e.content)).toEqual(["Listening on port 7777", "127.0.0.1:1 is connecting..."]);
+    } finally {
+        listener.close();
+    }
+}));
+
 test("the console shows Terraria's lines without its prompt, blank lines or a false error", () => inServer(scope, async () => {
     const ctx = makeCtx();
     for (const line of ["Error Logging Enabled.", "Terraria Server v1.4.5.8", "", ": Server started", "Listening on port 7777", ": ", "Exception thrown: System.IO.IOException"]) terrariaService.observeLine(ctx, line);
