@@ -7,6 +7,7 @@
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { allowTestEndpoint } from "./hermetic";
 
 const panelDir = resolve(import.meta.dir, "..");
 
@@ -60,14 +61,89 @@ async function buildFixture(page: string, alias: Record<string, string>, outDir:
     });
 }
 
+// Real time, for what only happens on a rendered frame (ResizeObserver,
+// Web Animations): under --virtual-time-budget frames don't run. Chrome is
+// driven over its DevTools socket and #results is read once it's written.
+async function readInRealTime(chrome: string, url: string, profile: string): Promise<string> {
+    const proc = Bun.spawn(
+        [
+            chrome,
+            "--headless=new",
+            `--user-data-dir=${profile}`,
+            "--remote-debugging-port=0",
+            "--disable-gpu",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-background-networking",
+            "--no-first-run",
+            "--hide-scrollbars",
+            "--window-size=1280,800",
+            url,
+        ],
+        { stdout: "ignore", stderr: "pipe" },
+    );
+    try {
+        let stderr = "";
+        const reader = proc.stderr.getReader();
+        const decoder = new TextDecoder();
+        let port = "";
+        while (!port) {
+            const { value, done } = await reader.read();
+            if (done) throw new Error(`headless Chrome exited before its DevTools socket opened: ${stderr.slice(0, 400)}`);
+            stderr += decoder.decode(value);
+            port = /DevTools listening on ws:\/\/[^:]+:(\d+)\//.exec(stderr)?.[1] ?? "";
+        }
+        const deadline = Date.now() + 60_000;
+        let target: { webSocketDebuggerUrl: string } | undefined;
+        while (!target && Date.now() < deadline) {
+            const list = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()) as { type: string; url: string; webSocketDebuggerUrl: string }[];
+            target = list.find((t) => t.type === "page" && t.url.startsWith(url));
+            if (!target) await Bun.sleep(100);
+        }
+        if (!target) throw new Error("headless Chrome never opened the fixture page");
+        // the Chrome this test started, on loopback: the one socket it may open
+        const disallow = allowTestEndpoint(target.webSocketDebuggerUrl);
+        const socket = new WebSocket(target.webSocketDebuggerUrl);
+        disallow();
+        await new Promise((resolve, reject) => {
+            socket.onopen = resolve;
+            socket.onerror = () => reject(new Error("the fixture page's DevTools socket failed"));
+        });
+        let id = 0;
+        const read = () =>
+            new Promise<string>((resolve) => {
+                const ask = ++id;
+                socket.onmessage = (event) => {
+                    const reply = JSON.parse(String(event.data));
+                    if (reply.id === ask) resolve(String(reply.result?.result?.value ?? ""));
+                };
+                socket.send(JSON.stringify({ id: ask, method: "Runtime.evaluate", params: { expression: `document.getElementById("results")?.textContent ?? ""` } }));
+            });
+        while (Date.now() < deadline) {
+            const text = await read();
+            if (text.startsWith("RESULT:")) {
+                socket.close();
+                return text;
+            }
+            await Bun.sleep(100);
+        }
+        throw new Error("the fixture didn't write its results within a minute");
+    } finally {
+        proc.kill();
+        await proc.exited;
+    }
+}
+
 /**
  * `page` is the fixture's HTML, relative to the panel; `alias` swaps a
- * package for a panel file, e.g. PaperUI for a DOM stub.
+ * package for a panel file, e.g. PaperUI for a DOM stub. `realTime` runs
+ * it with rendered frames instead of under a virtual time budget.
  */
 export async function runBrowserFixture(
     chrome: string,
     page: string,
     alias: Record<string, string>,
+    options: { realTime?: boolean } = {},
 ): Promise<FixtureResults> {
     const dir = mkdtempSync(join(tmpdir(), "paperboard-agents-fixture-"));
     const dist = join(dir, "dist");
@@ -90,6 +166,10 @@ export async function runBrowserFixture(
                 return new Response(blob);
             },
         });
+        if (options.realTime) {
+            const text = await readInRealTime(chrome, `http://127.0.0.1:${server.port}/${page}`, join(dir, "profile"));
+            return JSON.parse(Buffer.from(text.slice("RESULT:".length), "base64").toString("utf8")) as FixtureResults;
+        }
         // serve while Chrome runs: spawn must not block this event loop
         const proc = Bun.spawn(
             [

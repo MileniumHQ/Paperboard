@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup, type JSX } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -26,6 +26,7 @@ import type { Agent } from "../lib/agent";
 import { errorText } from "../lib/failure";
 import { BrainButtons, BrainStatus, brainLine, createBrainActions } from "../settings/Brain";
 import Providers from "../settings/Providers";
+import { glideWhenRecentered } from "./glide";
 import styles from "./Onboarding.module.css";
 
 // The first meeting: name, brain, and (if the user wants it now) the agent's
@@ -276,11 +277,18 @@ function Scenes(props: {
         }),
     );
 
+    // the speaker glides when a step's content re-centers the column, instead of jumping
+    let above: HTMLDivElement | undefined;
+    let speakerEl: HTMLDivElement | undefined;
+    onMount(() => {
+        if (above) onCleanup(glideWhenRecentered(above, () => speakerEl));
+    });
+
     return (
         <div class={styles.flow}>
-            <div class={styles.above} />
+            <div ref={above} class={styles.above} />
             <Show when={speakerShown()}>
-                <div class={styles.speaker} classList={{ [styles.leaving!]: leaving() }}>
+                <div ref={speakerEl} class={styles.speaker} classList={{ [styles.leaving!]: leaving() }}>
                     <span class={styles.faceChip}>
                         <Face face={face} size={64} frame="sphere" skin={skinFor(name())} />
                     </span>
