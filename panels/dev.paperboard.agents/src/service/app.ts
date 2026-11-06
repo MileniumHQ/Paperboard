@@ -27,14 +27,14 @@ import { Providers } from "./providers";
 import type { LoginMethod } from "./brainLogin";
 import { startComputerMcp, type ComputerMcp } from "./computerMcp";
 import { Conversation, type TurnHost } from "./conversation";
-import { HARNESS_NAMES, customSection } from "./harness";
+import { CLAUDE_MEMORY_OFF, HARNESS_NAMES, customSection } from "./harness";
 import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from "./computerTools";
 import { filesToolset } from "./attachmentTools";
 import { actionsToolset, type ActionsHost } from "./actionsToolset";
 import { McpServers, type Vault } from "./mcpServers";
 import { mcpToolset } from "./mcpToolset";
 import { TOOLS_EVENT, type ToolsConfig, type ToolsView } from "../toolsContract";
-import { listModels } from "./models";
+import { askClaudeModels, listModels } from "./models";
 import { Memory } from "./memory";
 import { messagesToolset } from "./messages";
 import { Routines } from "./routines";
@@ -96,6 +96,8 @@ export class AiApp {
     private tools: Toolbox | null = null;
     servers!: McpServers;
     asker!: Asker;
+    /** the empty folder Claude runs in when it's asked for its models */
+    private modelsDir = "";
     /** the conversation dropdown as flows last got it, and the registration in flight */
     private published = "";
     private publishing: Promise<void> = Promise.resolve();
@@ -125,6 +127,7 @@ export class AiApp {
     private async prepare(ctx: AppContext) {
         this.ctx = ctx;
         const root = await this.host.storageDir();
+        this.modelsDir = path.join(root, "models");
         this.ctx.setState({ settings: await this.loadSettings() });
         this.memory = new Memory({ dir: path.join(root, "memory"), onChange: (memory) => this.ctx.setState({ memory }) });
         const t = this.host.tools;
@@ -319,6 +322,10 @@ export class AiApp {
                 const resolved = this.brains.resolve(h);
                 if (!resolved) throw new Error(`${HARNESS_NAMES[h]} isn't installed`);
                 return this.host.exec(resolved, args, { timeoutMs: o.timeoutMs, env: this.brains.env(h) });
+            }, () => {
+                const command = this.brains.resolve("claude-code");
+                if (!command) throw new Error("Claude isn't installed");
+                return askClaudeModels({ ...this.host, write: this.host.tools.write }, { command, env: { ...this.brains.env("claude-code"), ...CLAUDE_MEMORY_OFF }, cwd: this.modelsDir });
             }),
         };
     }
