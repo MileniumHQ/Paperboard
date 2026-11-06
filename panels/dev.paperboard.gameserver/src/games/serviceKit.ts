@@ -150,32 +150,47 @@ export function progressStep(line: string): string | null {
     return trimmed.replace(PERCENT, "%");
 }
 
+// how far back a progress line looks for its step's earlier count
+const PROGRESS_LOOKBACK = 32;
+
+/**
+ * Adds a line to a console's lines. A progress line replaces its step's
+ * earlier count when only progress lines stand between them, so a start
+ * shows "Loading world data: 100%" once, not a hundred times, even while
+ * Terraria reprints "Finalizing world" between each of its other counts.
+ * Any other line in between keeps the earlier count.
+ */
+function addConsoleLine<T>(lines: T[], line: T, text: (line: T) => string): T[] {
+    const step = progressStep(text(line));
+    if (step !== null) {
+        for (let i = lines.length - 1; i >= Math.max(0, lines.length - PROGRESS_LOOKBACK); i--) {
+            const earlier = progressStep(text(lines[i]!));
+            if (earlier === null) break;
+            if (earlier === step) return [...lines.slice(0, i), ...lines.slice(i + 1), line];
+        }
+    }
+    return [...lines, line];
+}
+
 /**
  * Console lines gathered for a tenth of a second and published together, so a
  * chatty server costs one state update per batch rather than one per line.
- * A progress line replaces the one before it of the same step: a start shows
- * "Loading world data: 100%" once, not a hundred times.
  */
 export class ConsoleBuffer {
     private pending: string[] = [];
     private timer: ReturnType<typeof setTimeout> | null = null;
     constructor(private readonly isError: (line: string) => boolean) {}
     push(ctx: Context, line: string) {
-        const step = progressStep(line);
-        const previous = this.pending.at(-1);
-        if (step !== null && previous !== undefined && progressStep(previous) === step) this.pending = this.pending.slice(0, -1);
-        this.pending = [...this.pending, line].slice(-CONSOLE_LINES);
+        this.pending = addConsoleLine(this.pending, line, String).slice(-CONSOLE_LINES);
         if (this.timer) return;
         this.timer = setTimeout(() => {
             this.timer = null;
             const lines = this.pending;
             this.pending = [];
-            // checked as it publishes: a line written in between keeps the old progress line
-            const step = progressStep(lines[0]!);
-            const last = ctx.state.serverEntries.at(-1);
-            const published = step !== null && last && progressStep(String(last.content)) === step ? ctx.state.serverEntries.slice(0, -1) : ctx.state.serverEntries;
-            const entries: PaperConsoleEntry[] = lines.map((content) => ({ type: this.isError(content) ? "error" : "info", content }));
-            ctx.setState({ serverEntries: [...published, ...entries].slice(-CONSOLE_LINES) });
+            // added to what is published now: a line written in between keeps the old progress line
+            let entries: PaperConsoleEntry[] = ctx.state.serverEntries;
+            for (const content of lines) entries = addConsoleLine(entries, { type: this.isError(content) ? "error" : "info", content }, (entry) => String(entry.content));
+            ctx.setState({ serverEntries: entries.slice(-CONSOLE_LINES) });
         }, 100);
     }
     dispose() {

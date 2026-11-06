@@ -147,12 +147,24 @@ describe("the console", () => {
         await wait();
         buffer.push(ctx, "99.9% - Final clean up - 92.9%");
         buffer.push(ctx, "100.0% - Final clean up - 100.0%");
+        // then it reprints its last step between each count of saving and loading the world
+        for (const count of ["Saving world data: 15%", "Saving world data: 89%", "Validating world save: 63%", "Resetting game objects 100%", "Loading world data: 30%"]) {
+            buffer.push(ctx, "100.0% - Finalizing world - 0.0%");
+            await wait();
+            buffer.push(ctx, count);
+        }
+        buffer.push(ctx, "100.0% - Finalizing world - 0.0%");
         buffer.push(ctx, "Listening on port 7777");
         await wait();
         expect(state.serverEntries.map((e) => e.content)).toEqual([
             "0.4% - Resetting - 80.9%",
             "95.9% - Clean up - 99.9%",
             "100.0% - Final clean up - 100.0%",
+            "Saving world data: 89%",
+            "Validating world save: 63%",
+            "Resetting game objects 100%",
+            "Loading world data: 30%",
+            "100.0% - Finalizing world - 0.0%",
             "Listening on port 7777",
         ]);
     });
