@@ -179,3 +179,20 @@ describe("listMapRegions failures", () => {
         await expect(listMapRegions(ctx)).rejects.toThrow(/Could not list/);
     });
 });
+
+describe("listMapRegions terrain", () => {
+    it("bounds a dimension by its generated chunks, not by its whole regions", async () => {
+        regionFile = buildRegion(chunkNbt(nbt.list({ type: "string", value: ["minecraft:stone"] }), 137), 2);
+        // the one chunk sits at chunk (3, 5) of region 0,0: its location entry moves there
+        const region = fs.readFileSync(regionFile);
+        region.copy(region, (3 + 5 * 32) * 4, 0, 4);
+        region.writeUInt32BE(0, 0);
+        fs.writeFileSync(regionFile, region);
+        const listing = await listMapRegions(ctx);
+        expect(listing.dimensions[0]).toMatchObject({
+            dimension: "overworld",
+            regions: [{ x: 0, z: 0 }],
+            terrain: { minX: 48, minZ: 80, maxX: 64, maxZ: 96 },
+        });
+    });
+});

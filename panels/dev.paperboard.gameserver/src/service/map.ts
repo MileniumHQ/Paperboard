@@ -50,9 +50,19 @@ const MAX_CHUNK_BYTES = 16 * 1024 * 1024;
 // availability list and an unbounded request fan-out
 const MAX_REGIONS_PER_DIMENSION = 8192;
 
+/** Where a dimension has generated chunks, in blocks: max is the first block past the last chunk. */
+export interface TerrainBounds {
+    minX: number;
+    minZ: number;
+    maxX: number;
+    maxZ: number;
+}
+
 export interface MapDimensionRegions {
     dimension: MapDimension;
     regions: RegionCoord[];
+    /** the generated chunks' extent, so the map opens on the terrain, not on empty region space */
+    terrain: TerrainBounds;
 }
 
 export interface MapRegionsResult {
@@ -157,9 +167,51 @@ export async function listMapRegions(
         }
         if (regions.length === 0) continue;
         regions.sort((a, b) => a.x - b.x || a.z - b.z);
-        dimensions.push({ dimension, regions });
+        dimensions.push({ dimension, regions, terrain: await terrainBounds(dir, regions) });
     }
     return { levelName, dimensions };
+}
+
+/**
+ * The extent of a dimension's generated chunks. A region file's first 4 KiB
+ * locate its 1024 chunks, a zero entry being one never generated. Only the
+ * regions on the edge of the listing can hold the outermost chunks, so only
+ * their headers are read. A region file with no chunks counts as a whole region.
+ */
+async function terrainBounds(dir: string, regions: RegionCoord[]): Promise<TerrainBounds> {
+    const minRX = Math.min(...regions.map((r) => r.x));
+    const maxRX = Math.max(...regions.map((r) => r.x));
+    const minRZ = Math.min(...regions.map((r) => r.z));
+    const maxRZ = Math.max(...regions.map((r) => r.z));
+    const bounds = { minX: Infinity, minZ: Infinity, maxX: -Infinity, maxZ: -Infinity };
+    const take = (x: number, z: number, size: number) => {
+        bounds.minX = Math.min(bounds.minX, x);
+        bounds.minZ = Math.min(bounds.minZ, z);
+        bounds.maxX = Math.max(bounds.maxX, x + size);
+        bounds.maxZ = Math.max(bounds.maxZ, z + size);
+    };
+    for (const region of regions) {
+        if (region.x !== minRX && region.x !== maxRX && region.z !== minRZ && region.z !== maxRZ) continue;
+        const absolute = await fileApi.getPath(`${dir}/${regionFileName(region)}`, PANEL_ID);
+        const header = Buffer.alloc(4096);
+        const file = await fs.promises.open(absolute, "r");
+        let read: number;
+        try {
+            read = (await file.read(header, 0, 4096, 0)).bytesRead;
+        } finally {
+            await file.close();
+        }
+        let found = false;
+        for (let i = 0; i < 1024 && (i + 1) * 4 <= read; i++) {
+            if (header.readUInt32BE(i * 4) === 0) continue;
+            found = true;
+            take((region.x * REGION_CHUNKS + (i % REGION_CHUNKS)) * CHUNK_SIZE, (region.z * REGION_CHUNKS + Math.floor(i / REGION_CHUNKS)) * CHUNK_SIZE, CHUNK_SIZE);
+        }
+        if (!found) take(region.x * REGION_BLOCKS, region.z * REGION_BLOCKS, REGION_BLOCKS);
+    }
+    // inner regions are inside the edge ones; with every edge region empty, the regions themselves bound it
+    if (!Number.isFinite(bounds.minX)) for (const region of regions) take(region.x * REGION_BLOCKS, region.z * REGION_BLOCKS, REGION_BLOCKS);
+    return bounds;
 }
 
 function blockNameAt(sections: Map<number, Section>, x: number, y: number, z: number): string {

@@ -20,6 +20,7 @@ import {
 import {
     listMapRegions,
     renderMapTile,
+    type MapDimensionRegions,
     type MapRegionsResult,
 } from "../lib/map";
 import {
@@ -41,6 +42,8 @@ import { errorMessage, type Outcome } from "../lib/failure";
 const MIN_SCALE = 0.05;
 const MAX_SCALE = 3;
 const ZOOM_STEP = 1.2;
+// how much of the map the terrain fills when it opens
+const TERRAIN_FILL = 0.8;
 const POSITION_POLL_MS = 2000;
 const TILE_REFRESH_MS = 5000;
 // new regions appear while the server generates; re-list on a slower clock
@@ -267,19 +270,21 @@ export default function MapView() {
         centerOnWorld(x, z);
     };
 
-    const centerOnRegion = (rx: number, rz: number) =>
-        centerOnWorld((rx + 0.5) * REGION_BLOCKS, (rz + 0.5) * REGION_BLOCKS);
+    // the whole generated terrain in view, with a margin: a new world's few
+    // chunks fill the map instead of sitting small in a corner of their region
+    const fitTerrain = (terrain: MapDimensionRegions["terrain"]) => {
+        const { width, height } = sizeOf();
+        const fit = Math.min(width / (terrain.maxX - terrain.minX), height / (terrain.maxZ - terrain.minZ)) * TERRAIN_FILL;
+        setScale(Math.max(MIN_SCALE, Math.min(MAX_SCALE, fit)));
+        centerOnWorld((terrain.minX + terrain.maxX) / 2, (terrain.minZ + terrain.maxZ) / 2);
+    };
 
-    // switching dimension recentres on that dimension's nearest region, so
-    // the Nether/End never open on empty space the overworld was centred on
+    // switching dimension fits that dimension's terrain, so the Nether/End
+    // never open on empty space the overworld was centred on
     const switchDimension = (dim: MapDimension) => {
         setDimension(dim);
-        const regions = regionsFor(dim);
-        if (regions.length === 0) return;
-        const closest = regions.reduce((best, r) =>
-            Math.hypot(r.x, r.z) < Math.hypot(best.x, best.z) ? r : best,
-        );
-        centerOnRegion(closest.x, closest.z);
+        const terrain = info()?.dimensions?.find((d) => d.dimension === dim)?.terrain;
+        if (terrain) fitTerrain(terrain);
     };
 
     const goToPlayer = (name: string) => {
@@ -309,10 +314,7 @@ export default function MapView() {
                 dims[0];
             if (!centeredView || !current) {
                 setDimension(target.dimension);
-                const closest = target.regions.reduce((best, r) =>
-                    Math.hypot(r.x, r.z) < Math.hypot(best.x, best.z) ? r : best,
-                );
-                centerOnRegion(closest.x, closest.z);
+                fitTerrain(target.terrain);
             }
             centeredView = true;
         } catch (err) {

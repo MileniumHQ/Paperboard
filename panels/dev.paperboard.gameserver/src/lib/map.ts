@@ -5,6 +5,8 @@ import type { MapDimension, RegionCoord } from "../core/map";
 export interface MapDimensionRegions {
     dimension: MapDimension;
     regions: RegionCoord[];
+    /** the generated chunks' extent in blocks; max is the first block past the last chunk */
+    terrain: { minX: number; minZ: number; maxX: number; maxZ: number };
 }
 
 export interface MapRegionsResult {
