@@ -181,6 +181,9 @@ export class ConsoleBuffer {
     private timer: ReturnType<typeof setTimeout> | null = null;
     constructor(private readonly isError: (line: string) => boolean) {}
     push(ctx: Context, line: string) {
+        // a game's first line can start with byte order marks (Terraria writes one each start): they are no text
+        line = line.replace(/^\uFEFF+/, "");
+        if (!line) return;
         this.pending = addConsoleLine(this.pending, line, String).slice(-CONSOLE_LINES);
         if (this.timer) return;
         this.timer = setTimeout(() => {
