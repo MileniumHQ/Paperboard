@@ -3,7 +3,7 @@ import { type Component, createMemo, createSignal, onCleanup, Show } from "solid
 import type { BuiltinWidgetProps } from "./types";
 import { widgetTitle } from "./systemFigures";
 import { USAGE_HISTORY_SAMPLES, useUsage } from "./usageStore";
-import { formatBytes, formatPercent, type Segment, usageChart, usedFraction, type UsageMetric } from "./usageSegments";
+import { formatBytes, formatPercent, legendRows, type Segment, usageChart, usedFraction, type UsageMetric } from "./usageSegments";
 import styles from "./Builtins.module.css";
 
 // the legend has room for one figure per row; the ring's tooltip adds CPU
@@ -26,7 +26,8 @@ const UsageDonut: Component<BuiltinWidgetProps & { metric: UsageMetric }> = (pro
     });
     const slices = () => (chart()?.segments ?? []).map((segment) => toChart(segment));
     // the legend names as many of the largest users as its box has rows
-    // for, then "Free"; the rest are in the ring and the chart's name
+    // for, then "Free"; the rest are in the ring and the chart's name. CPU
+    // and Memory pick them alike, so the two cards name the same owners
     const [rows, setRows] = createSignal(3);
     const fitLegend = (box: HTMLDivElement) => {
         const observer = new ResizeObserver(() => {
@@ -38,7 +39,7 @@ const UsageDonut: Component<BuiltinWidgetProps & { metric: UsageMetric }> = (pro
     };
     const legend = () => {
         const c = chart();
-        return c ? [...c.segments.slice(0, rows() - 1), c.free].map((segment) => toChart(segment, false)) : [];
+        return c ? legendRows(c, rows()).map((segment) => toChart(segment, false)) : [];
     };
     // how the share in use has moved while the widget was watched
     const trend = () =>

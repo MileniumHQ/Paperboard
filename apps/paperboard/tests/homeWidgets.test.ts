@@ -7,7 +7,7 @@ import { defaultHomeItems } from "../src/renderer/src/components/home/builtins/d
 import { figureOf, formatRate, formatUptime, panelRunState } from "../src/renderer/src/components/home/builtins/systemFigures";
 import { nextShownUsage, type ShownUsage } from "../src/renderer/src/components/home/builtins/usageStore";
 import { FLAGS, stripeColor } from "../src/renderer/src/components/home/builtins/flags";
-import { formatBytes, MAX_PANEL_SEGMENTS, usageChart, usedFraction } from "../src/renderer/src/components/home/builtins/usageSegments";
+import { formatBytes, legendRows, MAX_PANEL_SEGMENTS, usageChart, usedFraction } from "../src/renderer/src/components/home/builtins/usageSegments";
 
 const GiB = 1024 ** 3;
 const name = (id: string) => `Panel ${id}`;
@@ -90,6 +90,27 @@ describe("usage chart", () => {
         expect(drawn).toBeCloseTo(0.25);
         // the reading is still the one reported
         expect(chart?.segments.find((s) => s.key === "a")?.detail).toBe("6 GB");
+    });
+
+    it("names the same owners in the same order on the CPU and Memory cards", () => {
+        // a terminal busy on the CPU but small in memory, beside Paperboard the other way round
+        const both = report([["terminal", 0.25, 15], ["idle", 0.5, 0]], {
+            memory: { totalBytes: 16 * GiB, availableBytes: 8 * GiB, otherBytes: 6 * GiB },
+            cpu: { cores: 8, idlePercent: 50, otherPercent: 30 },
+        });
+        const cpu = usageChart(both, "cpu", name);
+        const memory = usageChart(both, "memory", name);
+        // a legend with room for two owners and Free, as on a Home card
+        const rows = (chart: typeof cpu) => (chart ? legendRows(chart, 3).map((s) => [s.key, s.detail]) : []);
+        expect(rows(cpu)).toEqual([["other", "30%"], ["terminal", "15%"], ["free", "50%"]]);
+        expect(rows(memory)).toEqual([["other", "6 GB"], ["terminal", "256 MB"], ["free", "8 GB"]]);
+        // each card lists the owners it names largest first by its own reading
+        const busy = report([["terminal", 0.25, 40]], { cpu: { cores: 8, idlePercent: 25, otherPercent: 30 } });
+        const named = (metric: "cpu" | "memory") => rows(usageChart(busy, metric, name)).map(([key]) => key);
+        expect(named("cpu")).toEqual(["terminal", "other", "free"]);
+        expect(named("memory")).toEqual(["other", "terminal", "free"]);
+        // the ring still draws largest first
+        expect(cpu?.segments.map((s) => s.key)).toEqual(["other", "terminal", "paperboard"]);
     });
 
     it("writes sizes the way people read them", () => {

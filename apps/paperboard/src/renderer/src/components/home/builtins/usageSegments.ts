@@ -21,7 +21,22 @@ export interface UsageChart {
     used: number;
     /** largest first; free is not among them */
     segments: Segment[];
+    /**
+     * The same segments in the order the legend picks them: by each owner's
+     * share of CPU and memory together, so the CPU and Memory cards name the
+     * same owners. legendRows() takes them from here.
+     */
+    legend: Segment[];
     free: Segment;
+}
+
+/**
+ * What a legend with room for `rows` names: the owners both cards pick, each
+ * card listing them largest first by its own reading, then what's free.
+ */
+export function legendRows(chart: UsageChart, rows: number): Segment[] {
+    const named = chart.legend.slice(0, Math.max(0, rows - 1));
+    return [...named.sort((a, b) => b.fraction - a.fraction), chart.free];
 }
 
 /** Panels beyond this many share one "Other panels" segment. */
@@ -70,6 +85,18 @@ export function usedFraction(report: UsageReport, metric: UsageMetric): number |
 
 /** null while CPU hasn't been measured yet */
 export function usageChart(report: UsageReport, metric: UsageMetric, panelName: (id: string) => string): UsageChart | null {
+    const chart = segmentsOf(report, metric, panelName);
+    if (!chart) return null;
+    // an owner's share of the other figure too; CPU before it was measured adds nothing
+    const other = segmentsOf(report, metric === "cpu" ? "memory" : "cpu", panelName);
+    const otherShare = new Map((other?.segments ?? []).map((s) => [s.key, s.fraction]));
+    const weight = (s: Segment) => s.fraction + (otherShare.get(s.key) ?? 0);
+    // ties keep this figure's order, so the legend never reshuffles on equal shares
+    const legend = chart.segments.map((s, rank) => ({ s, rank })).sort((a, b) => weight(b.s) - weight(a.s) || a.rank - b.rank).map(({ s }) => s);
+    return { ...chart, legend };
+}
+
+function segmentsOf(report: UsageReport, metric: UsageMetric, panelName: (id: string) => string): Omit<UsageChart, "legend"> | null {
     const cpu = report.cpu;
     if (metric === "cpu" && !cpu) return null;
     const total = metric === "memory" ? report.memory.totalBytes : 100;
