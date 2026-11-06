@@ -30,6 +30,7 @@ export default function PaperWizardDoc() {
                 Number each <PaperCode>PaperWizardStep</PaperCode> from 0 with <PaperCode>index</PaperCode> and name its fields.
                 On every Next the wizard reads the named fields of the form into one record, and the last Next passes the record to <PaperCode>onComplete</PaperCode>.
                 A wizard fills its parent, so give the parent a height: a modal, a pane, or a sized container.
+                Moving between steps crossfades: the step leaving stays, inert, and fades where it stands while the next one slides in over it, so the wizard never shows an empty frame.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="back">
                 <PaperFlex height="panel-height-small" fullWidth>

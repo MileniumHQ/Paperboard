@@ -73,7 +73,29 @@
     width: 100%;
     height: 100%;
     overflow-y: auto;
+}
+
+.stepEnter {
     animation: stepFadeIn var(--paper-short-transition) var(--paper-ease-emphasized) both;
+}
+
+/* fades where it stands while the next step arrives over it */
+.stepExit {
+    animation: stepFadeOut var(--paper-tiny-transition) var(--paper-ease-standard) both;
+    pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .stepEnter,
+    .stepExit {
+        animation-duration: 0.01ms;
+    }
+}
+
+@keyframes stepFadeOut {
+    to {
+        opacity: 0;
+    }
 }
 
 @keyframes stepFadeIn {

@@ -1,6 +1,7 @@
 import { PaperButton } from "../../components/PaperButton";
 import { PaperIcon } from "../../components/PaperIcon";
 import { PaperEffect } from "../../components/PaperEffect";
+import { PaperPresence } from "../../components/PaperPresence";
 import type { PaperButtonVariant, PaperRole } from "../../types";
 import { PaperText } from "../../components/PaperText";
 import styles from "./index.module.css";
@@ -295,11 +296,13 @@ export function PaperWizardStep(props: ParentProps<PaperWizardStepProps>) {
     const className = () =>
         [styles.PaperWizardStep, local.class].filter(Boolean).join(" ");
 
+    // the step leaving stays over the one arriving until it has faded, so a
+    // step change crossfades instead of passing through an empty frame
     return (
-        <Show when={isActive()}>
-            <div {...rest} class={className()} classList={local.classList}>
+        <PaperPresence when={isActive()} appear enterClass={styles.stepEnter} exitClass={styles.stepExit}>
+            <div {...rest} class={className()} classList={local.classList} inert={!isActive()}>
                 {local.children}
             </div>
-        </Show>
+        </PaperPresence>
     );
 }
