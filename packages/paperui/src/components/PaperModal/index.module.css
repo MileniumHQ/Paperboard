@@ -31,6 +31,28 @@
     pointer-events: none;
 }
 
+/* a modal opened over another: the page is already dimmed */
+.over {
+    background: transparent;
+    backdrop-filter: none;
+}
+
+/* a modal with another over it steps back out of sight and takes no input;
+   it comes forward again when that one closes */
+.covered {
+    pointer-events: none;
+}
+
+.covered .modalBox {
+    opacity: 0;
+    transform: scale(0.96);
+    transition: opacity var(--paper-short-transition) ease-in, transform var(--paper-short-transition) ease-in;
+}
+
+.backdrop:not(.covered) .modalBox {
+    transition: opacity var(--paper-short-transition) ease-out, transform var(--paper-short-transition) var(--paper-ease-emphasized);
+}
+
 /* a closed modal lingers for a frame and its fade: a press made then
    belongs to the page underneath, not the backdrop on its way out */
 .closing {

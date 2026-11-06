@@ -190,6 +190,11 @@ export function Example() {
                 Only the newest open modal answers Escape, the Tab loop, and the system Back action.
                 Closing it hands those back to the one beneath.
             </PaperText>
+            <PaperText preset="body" as="p">
+                The page is dimmed once however many are open. A modal opened over another brings no scrim of its own,
+                and the one beneath steps back out of sight and takes no presses until it is on top again. Use this for
+                a second step that Back returns from, such as naming what was just picked.
+            </PaperText>
 
             <PaperText preset="subheader" as="h3" id="accessibility">Accessibility</PaperText>
             <PaperTextList>

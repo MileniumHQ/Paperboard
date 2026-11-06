@@ -7,6 +7,7 @@ import {
     createUniqueId,
     onCleanup,
     Show,
+    untrack,
     type JSX,
     type ParentProps,
 } from "solid-js";
@@ -38,8 +39,10 @@ export interface PaperModalProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>
 }
 
 // open modals, newest last: only the top one answers the keyboard, so
-// Escape on a modal opened over another closes just that one
-const openModals: object[] = [];
+// Escape on a modal opened over another closes just that one. A modal
+// under another steps back out of sight, and the one over it brings no
+// scrim of its own, so the page is dimmed once however many are stacked.
+const [openModals, setOpenModals] = createSignal<object[]>([]);
 
 export function PaperModal(props: ParentProps<PaperModalProps>) {
     let modalRef: HTMLDivElement | undefined;
@@ -87,6 +90,14 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
     // sees the claim dropped on a later frame. Without an exit animation,
     // under reduced motion, nothing else would wait that long.
     const [shown, setShown] = createSignal(!!local.open);
+    // this modal's place in the stack while open, and whether it opened over another
+    const [layer, setLayer] = createSignal<object | null>(null);
+    const [over, setOver] = createSignal(false);
+    const covered = () => {
+        const own = layer();
+        const stack = openModals();
+        return own !== null && stack.indexOf(own) < stack.length - 1;
+    };
     createEffect(() => {
         if (local.open) {
             setShown(true);
@@ -101,7 +112,9 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
 
         const previousActiveElement = document.activeElement as HTMLElement | null;
         const layer = {};
-        openModals.push(layer);
+        setOver(untrack(openModals).length > 0);
+        setOpenModals((stack) => [...stack, layer]);
+        setLayer(layer);
 
         // the modal stays mounted, so a field's own autofocus fires once at
         // mount: the modal hands focus to it on every open instead
@@ -111,7 +124,7 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
         });
 
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (local.concealed || openModals.at(-1) !== layer) return;
+            if (local.concealed || openModals().at(-1) !== layer) return;
             if ((local.closeOnEsc ?? true) && e.key === "Escape") {
                 local.onClose?.();
                 return;
@@ -147,7 +160,8 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
         window.addEventListener("keydown", handleKeyDown);
         onCleanup(() => {
             window.removeEventListener("keydown", handleKeyDown);
-            openModals.splice(openModals.indexOf(layer), 1);
+            setOpenModals((stack) => stack.filter((open) => open !== layer));
+            setLayer(null);
             cancelAnimationFrame(focusFrame);
             previousActiveElement?.focus?.();
         });
@@ -174,6 +188,8 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
                         [styles.bottom]: local.placement === "bottom",
                         [styles.concealed]: !!local.concealed,
                         [styles.closing]: !local.open,
+                        [styles.over]: over(),
+                        [styles.covered]: covered(),
                     }}
                     aria-hidden={local.concealed ? "true" : undefined}
                     onClick={handleBackdropClick}
