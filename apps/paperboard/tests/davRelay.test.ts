@@ -164,6 +164,44 @@ describe("basic mode (macOS/Windows mounts)", () => {
     });
 });
 
+describe("path mode (Windows mounts)", () => {
+    // Windows' WebDAV client won't send a password over plain http, so it
+    // mounts with none: only requests under the relay's secret segment are
+    // served, and the daemon's hrefs come back under it too
+    it("hides everything outside the secret path", async () => {
+        const relay = await relayWith({ clientAuth: "path", verifyPeer: async () => false });
+        expect(relay.prefix).toMatch(/^\/[0-9a-f]{48}$/);
+        for (const url of ["/dav/", `/${"0".repeat(48)}/dav/`, `${relay.prefix.slice(0, -1)}/dav/`, relay.prefix + "x/dav/"]) {
+            const res = await fetch(`http://127.0.0.1:${relay.port}${url}`, { method: "PROPFIND", headers: { Depth: "0" } });
+            expect(res.status).toBe(404);
+        }
+    });
+
+    it("serves the folder under the secret path, hrefs included", async () => {
+        const relay = await relayWith({ clientAuth: "path" });
+        const res = await fetch(`http://127.0.0.1:${relay.port}${relay.prefix}/dav/files/`, { method: "PROPFIND", headers: { Depth: "1" } });
+        expect(res.status).toBe(207);
+        const body = await res.text();
+        expect(body).toContain("note.txt");
+        const hrefs = [...body.matchAll(/<D:href>([^<]*)<\/D:href>/g)].map((m) => m[1]);
+        expect(hrefs.length).toBeGreaterThan(1);
+        for (const href of hrefs) expect(href.startsWith(`${relay.prefix}/dav/files/`)).toBe(true);
+        expect(Number(res.headers.get("content-length"))).toBe(Buffer.byteLength(body));
+    });
+
+    it("moves files within the secret path, and not out of it", async () => {
+        const relay = await relayWith({ clientAuth: "path" });
+        const base = `http://127.0.0.1:${relay.port}${relay.prefix}/dav/files`;
+        expect((await fetch(`${base}/w.txt`, { method: "PUT", body: "windows bytes" })).status).toBeLessThan(300);
+        const outside = await fetch(`${base}/w.txt`, { method: "MOVE", headers: { Destination: `http://127.0.0.1:${relay.port}/dav/files/x.txt` } });
+        expect(outside.status).toBe(400);
+        const moved = await fetch(`${base}/w.txt`, { method: "MOVE", headers: { Destination: `${base}/v.txt` } });
+        expect(moved.status).toBeLessThan(300);
+        expect(fs.readFileSync(path.join(tmp, "files", "v.txt"), "utf8")).toBe("windows bytes");
+        expect(await (await fetch(`${base}/v.txt`)).text()).toBe("windows bytes");
+    });
+});
+
 describe("who may connect", () => {
     // skipped off Linux: the owner check reads /proc/net/tcp, which only exists there
     it.skipIf(!IS_LINUX)("accepts this user through the real socket owner check", async () => {

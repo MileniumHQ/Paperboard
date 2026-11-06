@@ -2,9 +2,9 @@
 // effects): DAV session passwords must never appear in spawn argv, where
 // any process on the box can read them (WMI/Task Manager/ps).
 //
-// Windows maps with PowerShell New-PSDrive -Persist and a PSCredential
-// built from child-only env vars — argv carries a static script plus a
-// non-secret URL. macOS mounts through a 0600 temp osascript file that is
+// Windows maps with `net use` and no credential: the relay serves only a
+// secret path, passed to PowerShell in a child-only env var, so argv
+// carries a static script. macOS mounts through a 0600 temp osascript file that is
 // unlinked right after use. Linux opens a credential-free loopback URL
 // served by the DAV relay (davRelay.ts), which adds the auth itself.
 import * as os from "os";
@@ -20,39 +20,49 @@ export interface WindowsMountPlan {
     env: Record<string, string>;
 }
 
-function singleQuoted(s: string): string {
-    if (/[\r\n]/.test(s)) throw new Error("mount value contains a line break");
-    return `'${s.replace(/'/g, "''")}'`;
-}
-
 function appleQuoted(s: string): string {
     if (/[\r\n]/.test(s)) throw new Error("mount value contains a line break");
     return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-// passwordless argv: the credential travels in the child's env only.
-// New-PSDrive failures are non-terminating by default: without Stop the
-// script still printed the free letter and exited 0, and Explorer, handed
-// a drive that was never mapped, opened Documents instead.
-export function buildWindowsMountCommand(
-    url: string,
-    user: string,
-    pass: string,
-): WindowsMountPlan {
+// The drive Windows maps for a relay in path mode: its WebDAV client's UNC
+// form, \\host@port\path. The prefix is the relay's secret segment.
+export function windowsDavRoot(port: number, prefix: string): string {
+    if (!/^\/[0-9a-f]+$/.test(prefix)) throw new Error("a Windows mount needs the relay's secret path");
+    return `\\\\127.0.0.1@${port}\\${prefix.slice(1)}\\dav`;
+}
+
+// The root, which holds the relay's secret, travels in the child's env only:
+// argv is readable by every local account (WMI, Task Manager).
+//
+// Windows' WebDAV client (the WebClient service) starts on demand by an ETW
+// trigger that ordinary users may fire, not by Start-Service, which needs an
+// administrator; it's fired the way Windows itself does before mapping.
+// `net use` maps WebDAV where New-PSDrive -Persist refuses an http root and
+// fails with a credential, and /persistent:no drops the drive at sign-out,
+// since the relay's port is gone by then. Any failure stops the script, so
+// no drive letter is printed for a drive that never mapped (Explorer, sent
+// to one, opened Documents).
+export function buildWindowsMountCommand(root: string): WindowsMountPlan {
     const script = [
         "$ErrorActionPreference = 'Stop'",
-        "$u = $env:PB_DAV_USER",
-        "$p = ConvertTo-SecureString $env:PB_DAV_PASS -AsPlainText -Force",
-        "$c = New-Object System.Management.Automation.PSCredential($u, $p)",
-        `$root = ${singleQuoted(url)}`,
+        "$root = $env:PB_DAV_ROOT",
+        "if ((Get-Service WebClient).Status -ne 'Running') {",
+        "$trigger = New-Object System.Diagnostics.Eventing.EventProvider([guid]'22b6d684-fa63-4578-87c9-effcbe6643c7')",
+        "[void]$trigger.WriteMessageEvent('')",
+        "$trigger.Dispose()",
+        "$deadline = (Get-Date).AddSeconds(15)",
+        "while ((Get-Service WebClient).Status -ne 'Running') { if ((Get-Date) -gt $deadline) { Write-Error 'The WebClient service, which Windows opens WebDAV folders with, did not start. Check that it is not disabled in Services.'; exit 1 }; Start-Sleep -Milliseconds 200 }",
+        "}",
         "$letter = ([char[]](68..90) | Where-Object { -not (Test-Path ($_ + ':')) } | Select-Object -First 1)",
-        "if (-not $letter) { Write-Error 'no-drive-letter'; exit 1 }",
-        "New-PSDrive -Name $letter -PSProvider FileSystem -Root $root -Credential $c -Persist -Scope Global -ErrorAction Stop | Out-Null",
+        "if (-not $letter) { Write-Error 'Every drive letter is in use.'; exit 1 }",
+        "$said = & net.exe use ($letter + ':') $root /persistent:no 2>&1",
+        "if ($LASTEXITCODE -ne 0) { Write-Error (($said | Where-Object { ([string]$_).Trim() }) -join ' '); exit 1 }",
         "Write-Output ($letter + ':')",
-    ].join("; ");
+    ].join("; ").replace(/\{; /g, "{ ").replace(/; \}/g, " }");
     return {
         args: ["-NoProfile", "-NonInteractive", "-Command", script],
-        env: { PB_DAV_USER: user, PB_DAV_PASS: pass },
+        env: { PB_DAV_ROOT: root },
     };
 }
 

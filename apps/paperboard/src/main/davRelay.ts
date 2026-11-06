@@ -14,13 +14,20 @@
 //   The user's browser is also this user, so peer mode serves only
 //   requests addressed to Host 127.0.0.1:<port> with no Origin (DNS
 //   rebinding).
-// - "basic" (macOS, Windows): the OS mounts with the session credential and
-//   the relay refuses any request that does not carry it.
+// - "basic" (macOS): the OS mounts with the session credential and the
+//   relay refuses any request that does not carry it.
+// - "path" (Windows): Windows' WebDAV client won't send a password over
+//   plain http (BasicAuthLevel 1, the default) and its drive mapping fails
+//   with one anyway, so it mounts with no credential. The relay serves only
+//   paths under a random per-relay secret segment (`prefix`), which travels
+//   to the mount in the child's env, never argv. Hrefs in the daemon's XML
+//   answers gain the prefix, so the client sees one consistent namespace.
 // No Electron imports: tests drive the real relay.
 import * as fs from "fs";
 import * as http from "http";
 import * as https from "https";
 import * as net from "net";
+import { randomBytes } from "crypto";
 import { logger } from "../../papercrane/logger";
 import { pinnedTlsOptions } from "../../papercrane/pinnedTls";
 import { secretsMatch } from "../../papercrane/secretCompare";
@@ -100,7 +107,7 @@ export interface DavRelayOptions {
     user: string;
     pass: string;
     /** how local callers are checked; see the header comment */
-    clientAuth: "peer" | "basic";
+    clientAuth: "peer" | "basic" | "path";
     /** quiet time after which the relay closes itself and calls onIdle */
     idleMs: number;
     onIdle: () => void;
@@ -110,6 +117,8 @@ export interface DavRelayOptions {
 
 export interface DavRelay {
     readonly port: number;
+    /** the secret path segment ("/<hex>") every request starts with in path mode; "" otherwise */
+    readonly prefix: string;
     close(): Promise<void>;
 }
 
@@ -120,7 +129,8 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
     const agent = new https.Agent({ ...pinnedTlsOptions(opts.cert), keepAlive: true, maxSockets: MAX_RELAY_CONNECTIONS });
     const authorization = `Basic ${Buffer.from(`${opts.user}:${opts.pass}`).toString("base64")}`;
     const verifyPeer =
-        opts.clientAuth === "basic" ? async () => true : (opts.verifyPeer ?? peerIsCurrentUser);
+        opts.clientAuth === "peer" ? (opts.verifyPeer ?? peerIsCurrentUser) : async () => true;
+    const prefix = opts.clientAuth === "path" ? `/${randomBytes(24).toString("hex")}` : "";
     const sockets = new Set<net.Socket>();
     let idleTimer: NodeJS.Timeout | null = null;
     let closed = false;
@@ -153,6 +163,18 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
             req.resume();
             return;
         }
+        let target = req.url ?? "/";
+        if (opts.clientAuth === "path") {
+            const end = target.indexOf("/", 1);
+            const head = end === -1 ? target.split("?")[0]! : target.slice(0, end);
+            if (!secretsMatch(head, prefix)) {
+                res.writeHead(404, { "Content-Type": "text/plain" });
+                res.end("Not Found");
+                req.resume();
+                return;
+            }
+            target = target.slice(prefix.length) || "/";
+        }
         const headers: http.OutgoingHttpHeaders = {};
         for (const [key, value] of Object.entries(req.headers)) {
             if (value === undefined || DROP_REQUEST_HEADERS.has(key)) continue;
@@ -164,7 +186,8 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
         if (typeof headers.destination === "string") {
             try {
                 const dest = new URL(headers.destination);
-                headers.destination = `${upstream.origin}${dest.pathname}${dest.search}`;
+                if (prefix && !dest.pathname.startsWith(`${prefix}/`)) throw new Error("Destination outside the relay's folder");
+                headers.destination = `${upstream.origin}${dest.pathname.slice(prefix.length)}${dest.search}`;
             } catch {
                 res.writeHead(400, { "Content-Type": "text/plain" });
                 res.end("Bad Destination");
@@ -177,7 +200,7 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
                 hostname: upstream.hostname,
                 port: upstream.port,
                 method: req.method,
-                path: req.url,
+                path: target,
                 headers,
                 timeout: UPSTREAM_TIMEOUT_MS,
             },
@@ -186,6 +209,32 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
                 for (const [key, value] of Object.entries(up.headers)) {
                     if (value === undefined || DROP_RESPONSE_HEADERS.has(key)) continue;
                     back[key] = value;
+                }
+                if (prefix && typeof back.location === "string" && back.location.startsWith("/")) back.location = prefix + back.location;
+                // path mode: the daemon's hrefs name /dav/..., the client asked under the prefix
+                if (prefix && /xml/i.test(String(up.headers["content-type"] ?? ""))) {
+                    const encoding = String(up.headers["content-encoding"] ?? "identity").toLowerCase();
+                    if (encoding !== "identity") {
+                        logger.warn(`[DavRelay] can't rewrite a ${encoding} XML answer`);
+                        up.resume();
+                        res.writeHead(502, { "Content-Type": "text/plain" });
+                        res.end(`The remote computer answered in ${encoding}, which the relay can't read`);
+                        return;
+                    }
+                    const chunks: Buffer[] = [];
+                    up.on("data", (c: Buffer) => chunks.push(c));
+                    up.on("end", () => {
+                        const body = Buffer.from(
+                            Buffer.concat(chunks).toString("utf8").replace(/<([A-Za-z][\w.-]*:)?href>\//g, `<$1href>${prefix}/`),
+                            "utf8",
+                        );
+                        delete back["transfer-encoding"];
+                        back["content-length"] = String(body.length);
+                        res.writeHead(up.statusCode ?? 502, back);
+                        res.end(body);
+                    });
+                    up.on("error", () => res.destroy());
+                    return;
                 }
                 res.writeHead(up.statusCode ?? 502, back);
                 up.pipe(res);
@@ -238,6 +287,7 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
         get port() {
             return port;
         },
+        prefix,
         close() {
             if (closed) return Promise.resolve();
             closed = true;
