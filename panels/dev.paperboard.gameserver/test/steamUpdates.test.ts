@@ -149,7 +149,8 @@ echo "Success! App '$app' fully installed."
 });
 
 test("a download is published as getting ready until Steam measures it, then by how much of how much", async () => {
-    // what SteamCMD printed downloading app 90 (2026-11-02): it makes room first, with its own percent, then downloads
+    // what SteamCMD printed downloading app 90 (2026-11-02) and app 232250 (2026-11-06):
+    // it checks the files already there and makes room, each with its own percent, then downloads
     const workspace = path.join(root, ".steam", PANEL_ID);
     const script = path.join(workspace, "steamcmd", "steamcmd.sh");
     fs.writeFileSync(script, `#!/bin/sh
@@ -157,6 +158,7 @@ dir="$2"; app="$6"
 mkdir -p "$dir/steamapps" "$dir/tf/maps" "$dir/tf/cfg"
 printf '"AppState"\\n{\\n\\t"buildid"\\t\\t"26334371"\\n}\\n' > "$dir/steamapps/appmanifest_$app.acf"
 printf '\\033[0m Update state (0x3) reconfiguring, progress: 0.00 (0 / 0)\\n'
+printf '\\033[0m Update state (0x5) verifying install, progress: 37.26 (5680978207 / 15245763276)\\n'
 printf '\\033[0m Update state (0x11) preallocating, progress: 80.31 (778988852 / 970035750)\\n'
 printf '\\033[0m Update state (0x61) downloading, progress: 8.21 (79648257 / 970035750)\\n'
 printf '\\033[0m Update state (0x81) verifying update, progress: 14.79 (143436135 / 970035750)\\n'
@@ -180,9 +182,10 @@ echo "Success! App '$app' fully installed."
     await inServer(scope, () => tf2Service.initialize!(ctx, false));
     await inServer(scope, async () => (await tf2Service.actions()).find((a) => a.id === `${tf2.id}-install`)!.run(ctx, {}));
 
-    expect(published.slice(0, 5)).toEqual([
+    expect(published.slice(0, 6)).toEqual([
         { stage: "preparing", percent: 0 },
         { stage: "preparing", percent: 0, bytes: { done: 0, total: 0 } },
+        { stage: "preparing", percent: 37, bytes: { done: 5680978207, total: 15245763276 } },
         { stage: "preparing", percent: 80, bytes: { done: 778988852, total: 970035750 } },
         { stage: "downloading", percent: 8, bytes: { done: 79648257, total: 970035750 } },
         { stage: "verifying", percent: 14, bytes: { done: 143436135, total: 970035750 } },

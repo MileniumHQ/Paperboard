@@ -145,7 +145,7 @@ export function downloadWorkshopItems(appId: number, ids: readonly string[], opt
 
 /** What an app download is doing, by SteamCMD's progress lines. */
 export interface AppProgress {
-    /** "preparing" is making room for the files (reconfiguring, preallocating), whose percent is not the download's */
+    /** "preparing" is getting ready to download: checking the files already there, then making room for the new ones; its percent is not the download's */
     stage: "preparing" | "downloading" | "verifying";
     percent: number;
     bytes: { done: number; total: number };
@@ -156,7 +156,9 @@ export function parseAppProgress(line: string): AppProgress | null {
     const match = /Update state \(0x[0-9a-f]+\) (downloading|verifying install|verifying update|preallocating|reconfiguring|committing)[^,]*, progress: ([\d.]+) \((\d+) \/ (\d+)\)/i.exec(line.replace(ANSI, ""));
     if (!match) return null;
     const state = match[1]!.toLowerCase();
-    const stage = state.startsWith("verifying") ? "verifying" : state === "preallocating" || state === "reconfiguring" ? "preparing" : "downloading";
+    // "verifying install" checks the files already there, before anything downloads;
+    // "verifying update" checks what was just downloaded
+    const stage = state === "verifying update" ? "verifying" : state === "verifying install" || state === "preallocating" || state === "reconfiguring" ? "preparing" : "downloading";
     return { stage, percent: Math.max(0, Math.min(100, Number(match[2]))), bytes: { done: Number(match[3]), total: Number(match[4]) } };
 }
 

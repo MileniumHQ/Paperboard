@@ -64,6 +64,8 @@ describe("SteamCMD app installs", () => {
     test("progress and the final verdict are read from SteamCMD's own lines", () => {
         expect(parseAppProgress("\x1b[0m Update state (0x61) downloading, progress: 45.12 (2225000000 / 4932070576)")).toEqual({ stage: "downloading", percent: 45.12, bytes: { done: 2225000000, total: 4932070576 } });
         expect(parseAppProgress(" Update state (0x81) verifying update, progress: 32.59 (1607344511 / 4932070576)")).toEqual({ stage: "verifying", percent: 32.59, bytes: { done: 1607344511, total: 4932070576 } });
+        // the files already there are checked before anything downloads
+        expect(parseAppProgress(" Update state (0x5) verifying install, progress: 3.16 (482203726 / 15245763276)")).toEqual({ stage: "preparing", percent: 3.16, bytes: { done: 482203726, total: 15245763276 } });
         expect(parseAppProgress(" Update state (0x0) unknown, progress: 0.00 (0 / 0)")).toBeNull();
         expect(parseAppResult(["\x1b[0mSuccess! App '2394010' fully installed."], 2394010)).toEqual({ ok: true });
         expect(parseAppResult(["ERROR! Failed to install app '2394010' (Missing configuration)"], 2394010)).toEqual({ ok: false, reason: "Missing configuration" });
