@@ -67,6 +67,8 @@ export const loginProcessId = (harness: Harness) => `brain-login-${harness}`;
 const none = (): BrainState => ({ phase: "none", installed: false, version: null, signedIn: false, account: null, percent: null, login: null, error: null, updateWaiting: false });
 
 interface Login {
+    /** where the brain stood when the sign-in started: a stopped sign-in goes back there */
+    before: Pick<BrainState, "phase" | "signedIn" | "account">;
     cancelled: boolean;
     failure: string | null;
     exited: Promise<number | undefined>;
@@ -163,7 +165,10 @@ export class Brains {
             const { args, needsInput } = loginCommand(harness, method);
             const id = loginProcessId(harness);
             let out = "";
-            const login: Login = { cancelled: false, failure: null, exited: undefined as never };
+            const was = this.state[harness];
+            // a sign-in started after a failure goes back to installed: the failure is what it was retrying
+            const before = { phase: was.phase === "failed" ? ("installed" as const) : was.phase, signedIn: was.signedIn, account: was.account };
+            const login: Login = { before, cancelled: false, failure: null, exited: undefined as never };
             const shown = (text: string) => {
                 out = (out + text).slice(-OUTPUT_CAP);
                 const prompt = readLoginOutput(harness, method, out);
@@ -231,11 +236,22 @@ export class Brains {
         await reply.body?.cancel();
     }
 
-    /** Stop a sign-in the user gave up on: back to where it started, with no error. */
+    /**
+     * Stop a sign-in the user gave up on: back to where it started, with no error. That shows at once; the
+     * harness's own status, which takes it a second to start up and say, follows and corrects it if need be.
+     */
     cancelSignIn(harness: Harness): Promise<void> {
         return this.exclusive(harness, async () => {
-            await this.cancel(harness);
-            await this.look(harness);
+            const login = this.logins.get(harness);
+            if (login) {
+                login.cancelled = true;
+                this.set(harness, { ...login.before, login: null, error: null, percent: null });
+            }
+            try {
+                await this.cancel(harness);
+            } finally {
+                await this.look(harness);
+            }
         });
     }
 

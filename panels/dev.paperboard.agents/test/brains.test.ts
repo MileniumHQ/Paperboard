@@ -260,6 +260,27 @@ describe("signing in", () => {
         expect(s.brains.snapshot().codex.phase).toBe("signing-in");
     });
 
+    test("a stopped sign-in shows as stopped at once, before the brain's own status (a slow start-up) answers", async () => {
+        const s = setup({ installed: ["claude-code"] });
+        await s.brains.init();
+        await s.brains.signIn("claude-code");
+        // the status command takes its time, as Claude's start-up does
+        const host = (s.brains as unknown as { deps: { host: BrainsHost } }).deps.host;
+        const exec = host.exec;
+        let answer!: () => void;
+        const held = new Promise<void>((ok) => (answer = ok));
+        host.exec = async (command, args, o) => {
+            await held;
+            return exec(command, args, o);
+        };
+        const cancelled = s.brains.cancelSignIn("claude-code");
+        await until(() => s.brains.snapshot()["claude-code"].phase !== "signing-in");
+        expect(s.brains.snapshot()["claude-code"]).toMatchObject({ phase: "installed", error: null, login: null });
+        answer();
+        await cancelled;
+        expect(s.brains.snapshot()["claude-code"]).toMatchObject({ phase: "installed", error: null, login: null });
+    });
+
     test("Codex on another computer: the address the browser ended on reaches its listener here, and nowhere else", async () => {
         // the login's own listener, as Codex runs it: answers its callback and says when the answer was wrong
         const heard: string[] = [];
