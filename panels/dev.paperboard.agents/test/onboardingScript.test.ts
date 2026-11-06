@@ -20,6 +20,13 @@ describe("the setup script", () => {
         expect(scriptFor("Pip").named("Pip")[0]).toContain("**Pip**");
     });
 
+    it("says the sign-in waits for the person's click: nothing opens by itself", () => {
+        for (const name of ["Pip", "Verity"]) {
+            const said = scriptFor(name).signIn.join(" ");
+            expect(said).not.toMatch(/window opens|I'll open|opens? (the|a) (page|browser)/i);
+        }
+    });
+
     it("has only lines the speaker can say", () => {
         for (const name of ["Pip", "Verity"]) for (const line of lines(scriptFor(name), name)) expect(() => parse(line)).not.toThrow();
     });

@@ -23,7 +23,7 @@ const DEFAULT: Script = {
         `[satisfied][bounce]**${name}** it is! [happy]I like that name.`,
         "[sad]I also don't have a brain yet. All this is prewritten. [happy]Fortunately, you can give me that too!\nI can think with Codex, Claude or OpenCode. Pick one and I'll download it.",
     ],
-    signIn: ["[happy]Good choice! [pause 300]I'll get it ready. If it needs you to sign in, a browser window opens."],
+    signIn: ["[happy]Good choice! [pause 300]I'll get it ready. If it needs you to sign in, you'll do that in your browser."],
     computer: [
         "[satisfied]Great, I can think now!",
         "[happy]I can do so much more if I have my own computer. [surprised]Hear me out: what if we share this one!\nI can set up my own environment so I can't see or touch any of your stuff.",
@@ -39,7 +39,7 @@ const CHARACTER_SCRIPTS: Record<Character, Script> = {
             "[happy]I'm your **personal helper friend**, and I know everything! [pause 500][unsure]Well. Almost everything.",
             "[sad]I don't have a brain yet, you see. [happy]But you can give me one! Codex, Claude or OpenCode will do.\nI'll take good care of it. I take good care of everything!",
         ],
-        signIn: ["[wish]Ooh, good choice, friend! [happy]I'll get it all ready. If it wants you to sign in, I'll open the page. [wink]Easy!"],
+        signIn: ["[wish]Ooh, good choice, friend! [happy]I'll get it all ready. If it wants you to sign in, I'll show you where. [wink]Easy!"],
         computer: [
             "[satisfied][bounce]I can think! Ask me anything! I know everything!",
             "[happy]Now, a helper friend should always be close by. [wish]What if I lived on your computer too?\n[wink]My own little corner, of course. I won't see or touch any of your stuff. Promise!",
