@@ -2,7 +2,7 @@ import GameOptions from "./components/GameOptions";
 import { createEffect, createMemo, createSignal, onMount, onCleanup, untrack, For, Index, Show } from "solid-js";
 import { tabIds } from "./lib/tabIds";
 import {
-    PaperPanel, PaperButton, PaperIcon, PaperQuote, PaperLoader, PaperFlex, PaperText,
+    PaperPanel, PaperPresence, PaperButton, PaperIcon, PaperQuote, PaperLoader, PaperFlex, PaperText,
     PaperMenu,
     PaperMenuItem,
     PaperMenuLabel,
@@ -30,6 +30,8 @@ const HOME_ENTRY = "home";
 export default function App() {
     const [configured, setConfigured] = createSignal<boolean | null>(null);
     const [activeTab, setActiveTab] = createSignal("overview");
+    // Finish Setup fades the server's page in; opening a set-up server shows it at once
+    const [setUpHere, setSetUpHere] = createSignal(false);
     // set when a plugin's Configure button asks the Files tab to open its settings
     const [filesReveal, setFilesReveal] = createSignal<PaperFileReveal | null>(null);
 
@@ -135,12 +137,13 @@ export default function App() {
                             {gameUI()!.setup({
                                 get initialSoftware() { return selectedServer(servers()!).state.serverSoftware; },
                                 get initialVersion() { return selectedServer(servers()!).state.serverVersion; },
-                                onComplete: () => setConfigured(true),
+                                onComplete: () => { setSetUpHere(true); setConfigured(true); },
                             })}
                         </PaperFlex>
                     </PaperFlex>
                 }
             >
+                <PaperPresence when appear={setUpHere()} motion="fade">
                 <PaperPanel>
                     <PaperMenu
                         name="serverMenu"
@@ -178,6 +181,7 @@ export default function App() {
                         </For>
                     </PaperInterfaceGroup>
                 </PaperPanel>
+                </PaperPresence>
             </Show>
         </Show>
         </Show>
