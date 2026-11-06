@@ -1,7 +1,7 @@
 import { createEffect, createSignal } from "solid-js";
 import type { LoaderStatus } from "@mileniumhq/paperui";
 import type { InstallLoaderItem } from "../../components/InstallLoaders";
-import { installProgress, serverBridge } from "../../lib/server";
+import { installProgress, serverBridge, setInstallProgress } from "../../lib/server";
 import { createInstallFlow } from "../installFlow";
 import { formatSize } from "../../lib/addons/presentation";
 import type { SteamUpdateStatus } from "./installAction";
@@ -14,6 +14,8 @@ export interface SteamInstallInfo {
     build: string | null;
     /** the game's own version, once a start has printed it */
     version: string | null;
+    /** whether this server's download finished, so setup opened again does not download it again */
+    downloaded: boolean;
 }
 
 /**
@@ -27,6 +29,8 @@ export function createSteamInstall(action: string) {
 
     const run = (): Promise<boolean> =>
         flow.run(async () => {
+            // a previous run's last stage is not this run's: an install already running reports its own
+            setInstallProgress(null);
             setReached(-1);
             await serverBridge.call(action, undefined, { timeoutMs: null });
         });
@@ -66,5 +70,5 @@ export function createSteamInstall(action: string) {
         { label: "Setting up server...", percent: percent(2), status: status(2) },
     ];
 
-    return { error, installed, running, run, rows, reset: flow.reset };
+    return { error, installed, running, run, rows, reset: flow.reset, finished: flow.finished };
 }

@@ -29,5 +29,8 @@ export function createInstallFlow() {
         }
     };
 
-    return { error, installed, running, run, reset: () => setError("") };
+    /** an install that finished before this screen opened */
+    const finished = () => { setError(""); setInstalled(true); };
+
+    return { error, installed, running, run, finished, reset: () => setError("") };
 }

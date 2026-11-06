@@ -63,15 +63,25 @@ export async function steamUpdateStatus(spec: Pick<SteamInstallSpec, "appId" | "
     return { installed, latest, updateAvailable: installed !== null && installed !== latest };
 }
 
+/** Each server's install while it runs, so setup opened again follows it instead of being refused. */
+const running = new WeakMap<BusyFlag, Promise<void>>();
+
 /** Installs the newest build, or the first one; the Updates tab's install and an automatic update both run it. */
 export function steamInstall(spec: SteamInstallSpec): (ctx: Context) => Promise<void> {
     const name = spec.game.name;
-    return (ctx) => exclusive(ctx, spec.flag(), name, async () => {
-        assertHost(spec.game);
-        const build = await installWithProgress(ctx, spec.appId, await spec.installDir(), spec.afterInstall);
-        await updateSettings(spec.setupAfterInstall ? { build } : { configured: true, build });
-        await spec.loadOptions(ctx);
-    });
+    return (ctx) => {
+        const flag = spec.flag();
+        const current = running.get(flag);
+        if (current) return current;
+        const install = exclusive(ctx, flag, name, async () => {
+            assertHost(spec.game);
+            const build = await installWithProgress(ctx, spec.appId, await spec.installDir(), spec.afterInstall);
+            await updateSettings(spec.setupAfterInstall ? { build } : { configured: true, build });
+            await spec.loadOptions(ctx);
+        }).finally(() => running.delete(flag));
+        running.set(flag, install);
+        return install;
+    };
 }
 
 /** The Updates tab's three Actions for a game downloaded from Steam. */
@@ -81,7 +91,13 @@ export function steamInstallActions(spec: SteamInstallSpec) {
     return [
         gameAction(spec.ids.info, `${name} install`, async () => {
             const saved = await readSettings();
-            return { host: hostSupportHere(spec.game), build: await installedBuild(spec.appId, await spec.installDir()), version: typeof saved.version === "string" ? saved.version : null };
+            return {
+                host: hostSupportHere(spec.game),
+                build: await installedBuild(spec.appId, await spec.installDir()),
+                version: typeof saved.version === "string" ? saved.version : null,
+                // a finished install saves its build; one cut short does not
+                downloaded: typeof saved.build === "string",
+            };
         }),
         gameAction(spec.ids.latest, `${name} newest build`, () => steamUpdateStatus(spec)),
         gameAction(spec.ids.install, `Install or update ${name}`, async (ctx) => { await install(ctx); return true; }),

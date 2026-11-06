@@ -56,6 +56,8 @@ describe("source setup behavior", () => {
             expect(c.modesStillChoosable).toBe(true);
             expect(c.mapsReason).toBe(true);
             expect(c.noChoiceWithoutMaps).toBe(true);
+            expect(c.staleUnticked, "a new download's rows are not ticked by the last one's end").toBe(0);
+            expect(c.reopensAtMode, "setup left after the download opens at the game mode, without downloading again").toBe(true);
         },
         120_000,
     );

@@ -189,3 +189,36 @@ echo "Success! App '$app' fully installed."
     ]);
     expect(published.at(-1)).toEqual({ stage: "completed", percent: 100 });
 });
+
+test("setup opened again during a download follows it, and after it is told the download is done", async () => {
+    // a SteamCMD that takes a moment, and counts its runs
+    const workspace = path.join(root, ".steam", PANEL_ID);
+    const script = path.join(workspace, "steamcmd", "steamcmd.sh");
+    const runs = path.join(root, "steamcmd-runs");
+    fs.rmSync(runs, { force: true });
+    fs.writeFileSync(script, `#!/bin/sh
+dir="$2"; app="$6"
+echo run >> "${runs}"
+sleep 0.3
+mkdir -p "$dir/steamapps" "$dir/tf/maps" "$dir/tf/cfg"
+printf '"AppState"\n{\n\t"buildid"\t\t"26334371"\n}\n' > "$dir/steamapps/appmanifest_$app.acf"
+echo "Success! App '$app' fully installed."
+`, { mode: 0o755 });
+    fs.rmSync(path.join(root, "server"), { recursive: true, force: true });
+    settings = {};
+    const { inServer } = await import("../src/service/scope");
+    const state: Record<string, unknown> = { serverStatus: "offline" };
+    const ctx = { state, setState: (patch: any) => Object.assign(state, typeof patch === "function" ? patch(state) : patch), emitTrigger: () => {} } as any;
+    const scope = { server: { id: "s-steam-again", game: tf2.id, directory: "" }, locals: new Map() } as any;
+    const run = (id: string) => inServer(scope, async () => (await tf2Service.actions()).find((a) => a.id === id)!.run(ctx, {}));
+
+    await inServer(scope, () => tf2Service.initialize!(ctx, false));
+    expect(await run(`${tf2.id}-info`)).toMatchObject({ downloaded: false });
+    const first = run(`${tf2.id}-install`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    // setup left and opened again: its install is the one already running, not a refusal
+    expect(await run(`${tf2.id}-install`)).toBe(true);
+    expect(await first).toBe(true);
+    expect(fs.readFileSync(runs, "utf8").trim().split("\n")).toHaveLength(1);
+    expect(await run(`${tf2.id}-info`)).toMatchObject({ downloaded: true, build: "26334371" });
+});

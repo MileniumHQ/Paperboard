@@ -29,7 +29,13 @@ function InstallStep(props: { name: string; infoAction: string; installAction: s
         }
         if (disposed()) return;
         if (!info.host.supported) setBlocked({ host: info.host });
-        else void run();
+        else if (info.downloaded) {
+            // setup left after the download opens at its next question, not at a second download
+            install.finished();
+            wizard?.setCanProceed(true);
+            wizard?.setOptionsShown(true);
+            if (wizard && !wizard.isLastStep()) wizard.nextStep();
+        } else void run();
     });
 
     return (

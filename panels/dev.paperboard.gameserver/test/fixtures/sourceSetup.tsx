@@ -27,6 +27,9 @@ let installed = ["ctf_2fort", "ctf_turbine", "pl_badwater", "cp_dustbowl", "zz_u
 let pictures: () => unknown = () => ({ source: { name: "Test Wiki", url: "https://wiki.example/maps" }, pictures: { ctf_2fort: "https://wiki.example/ctf_2fort.png", cp_dustbowl: "https://wiki.example/cp_dustbowl.png" }, titles: { ctf_2fort: "2Fort", cp_dustbowl: "Dustbowl (Control Point)" } });
 let play: (input: any) => unknown = () => ({});
 let mapsFails = "";
+// a download that finished before setup opened, as the service reports it
+let downloaded = false;
+let installCalls = 0;
 // the download ends when the test says so
 let finishDownload = () => {};
 const played: any[] = [];
@@ -38,8 +41,8 @@ const state = {
 actionsApi.on = (() => () => {}) as typeof actionsApi.on;
 actionsApi.call = (async (_panel: string, action: string, input: any) => {
     if (action === "__getState") return state;
-    if (action === "s1/team-fortress-2-info") return { host: { supported: true }, build: null, version: null };
-    if (action === "s1/team-fortress-2-install") { await new Promise<void>((resolve) => (finishDownload = resolve)); return true; }
+    if (action === "s1/team-fortress-2-info") return { host: { supported: true }, build: downloaded ? "26334371" : null, version: null, downloaded };
+    if (action === "s1/team-fortress-2-install") { installCalls++; await new Promise<void>((resolve) => (finishDownload = resolve)); return true; }
     if (action === "s1/team-fortress-2-maps") { if (mapsFails) throw new Error(mapsFails); return installed; }
     if (action === "s1/team-fortress-2-map-pictures") return pictures();
     if (action === "s1/team-fortress-2-play") { played.push(input); return play(input); }
@@ -186,6 +189,27 @@ try {
     checks.mapsReason = text().includes("install the game in Updates first");
     checks.noChoiceWithoutMaps = !card("Mixed") && button("Next")!.disabled;
     run.stop();
+    mapsFails = "";
+
+    // the last install's final stage is still in state: a new download's rows start unticked
+    const { setInstallProgress } = await import("../../src/lib/server");
+    const ticks = () => [...document.querySelectorAll("*")].filter((e) => e.children.length === 0 && e.textContent === "check").length;
+    setInstallProgress({ stage: "completed", percent: 100 });
+    let stop = render(() => <PaperProvider>{sourceUI(TF2, tf2).create({} as any).setup({ onComplete: () => {} } as any)}</PaperProvider>, root);
+    await wait("the download to start", () => text().includes("Downloading Team Fortress 2") && installCalls > 0);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    checks.staleUnticked = ticks();
+    finishDownload();
+    await wait("the download to finish", () => Boolean(button("Next") && !button("Next")!.disabled));
+    stop();
+
+    // setup left after the download opens at the game mode, without downloading again
+    downloaded = true;
+    installCalls = 0;
+    stop = render(() => <PaperProvider>{sourceUI(TF2, tf2).create({} as any).setup({ onComplete: () => {} } as any)}</PaperProvider>, root);
+    await wait("the game modes", () => Boolean(heading("Game Mode")) && Boolean(card("Capture the Flag")));
+    checks.reopensAtMode = installCalls === 0 && !button("Back") && button("Next")!.disabled;
+    stop();
 } catch (err) {
     error = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
 }
