@@ -18,7 +18,7 @@ const tutorial: OpenTutorial = {
     name: "Fixture",
     steps: [
         { title: "First step", body: "Where it starts." },
-        { title: "Second step", body: "Where it ends." },
+        { title: "Second step", body: "Where it ends.", image: { light: "/second-step-picture.png", alt: "Second step picture" } },
     ],
     imageSrc: (path) => path,
 };
@@ -67,9 +67,16 @@ async function run() {
     if (!tutorialBox) throw new Error("the tutorial dialog did not open");
     const next = [...tutorialBox.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim().startsWith("Next"));
     if (!next) throw new Error(`the tutorial has no Next button: ${tutorialBox.textContent}`);
+    // every step's picture is asked for as the tutorial opens, not when its step arrives
+    c.tutorialPicturesLoadAhead = performance.getEntriesByType("resource").some((entry) => entry.name.endsWith("/second-step-picture.png"));
+    // a step change crossfades: the step leaving stays, fading, over the one
+    // arriving, so the frame between them is never empty
     next.click();
-    await sleep(50);
-    c.tutorialOnSecondStep = Boolean(tutorialBox.textContent?.includes("Second step"));
+    await sleep(30);
+    const leaving = [...tutorialBox.querySelectorAll<HTMLElement>("form > div:first-child > *")].find((step) => step.textContent?.includes("First step"));
+    c.tutorialStepsCrossfade = Boolean(leaving && tutorialBox.textContent?.includes("Second step") && Number(getComputedStyle(leaving).opacity) > 0);
+    await sleep(400);
+    c.tutorialOnSecondStep = Boolean(tutorialBox.textContent?.includes("Second step")) && !tutorialBox.textContent?.includes("First step");
     setOpenTutorial(null);
     await sleep(20);
     c.tutorialFadesWithItsStep = Boolean(tutorialBox.textContent?.includes("Second step"));

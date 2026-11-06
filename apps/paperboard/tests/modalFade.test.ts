@@ -13,6 +13,8 @@ describe.skipIf(!chrome)("stay-mounted modals", () => {
         const { checks, error } = await runBrowserFixture(chrome!, "tests/fixtures/modalFade/index.html");
         expect(error).toBe("");
         expect(checks).toEqual({
+            tutorialPicturesLoadAhead: true,
+            tutorialStepsCrossfade: true,
             tutorialOnSecondStep: true,
             tutorialFadesWithItsStep: true,
             tutorialKeepsItsName: true,

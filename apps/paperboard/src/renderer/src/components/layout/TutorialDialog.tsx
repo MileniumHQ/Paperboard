@@ -1,4 +1,4 @@
-import { type Component, createSignal, For, Show } from "solid-js";
+import { type Component, createEffect, createSignal, For, Show } from "solid-js";
 import {
     PaperFlex,
     PaperIcon,
@@ -59,6 +59,17 @@ const StepImage: Component<{ src: string; image: TutorialImage; compact?: boolea
 // declares, clicked through in the same wizard dialog that connects a computer.
 const TutorialDialog: Component<TutorialDialogProps> = (props) => {
     const shown = createShownWhileClosing(() => props.tutorial);
+    const pictureOf = (tutorial: OpenTutorial, image: TutorialImage) =>
+        tutorial.imageSrc((isDark(props.theme) && image.dark) || image.light);
+    // every step's picture loads as the tutorial opens, so a step crossfades
+    // in whole instead of its picture arriving after its text
+    createEffect(() => {
+        const tutorial = props.tutorial;
+        if (!tutorial) return;
+        for (const step of tutorial.steps) {
+            if (step.image) new Image().src = pictureOf(tutorial, step.image);
+        }
+    });
     return (
         <PaperModal
             open={props.tutorial !== null}
@@ -85,7 +96,7 @@ const TutorialDialog: Component<TutorialDialogProps> = (props) => {
                                                 <StepImage
                                                     image={image()}
                                                     compact={props.compact}
-                                                    src={tutorial.imageSrc((isDark(props.theme) && image().dark) || image().light)}
+                                                    src={pictureOf(tutorial, image())}
                                                 />
                                             )}
                                         </Show>
