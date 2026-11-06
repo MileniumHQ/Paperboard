@@ -3,7 +3,7 @@
 // beside the page. An app opened from a card or the Apps page slides in from
 // the right, and the chat steps aside to a column, or all the way off to the left.
 
-import { For, Match, Show, Switch, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import { PAPER_PANEL_COMPACT_WIDTH, PaperFlex, PaperMenu, PaperMenuItem, PaperModal } from "@mileniumhq/paperui";
 import Apps from "./apps/Apps";
 import AppView from "./apps/AppView";
@@ -16,6 +16,7 @@ import Routines from "./routines/Routines";
 import Settings from "./settings/Settings";
 import Tools from "./tools/Tools";
 import type { Agent } from "./lib/agent";
+import { PageHold } from "./lib/pageHold";
 import styles from "./Workspace.module.css";
 
 export type Page = "computer" | "apps" | "memories" | "routines" | "tools" | "settings";
@@ -29,15 +30,21 @@ const PAGES: { id: Page; title: string; icon: string }[] = [
     { id: "settings", title: "Settings", icon: "settings" },
 ];
 
+// how long a chosen page may wait for its first read before it shows with its loader
+const HOLD_MS = 300;
+
 export default function Workspace(props: { agent: Agent }) {
     const { agent } = props;
     const [open, setOpen] = createSignal(false);
-    // the last page stays chosen while the panel is open; only the open page is mounted
+    // the last page stays chosen while the panel is open; only the open page is mounted,
+    // and a newly chosen one beside it, out of sight, until its first read is in
     const [page, setPage] = createSignal<Page>("computer");
+    const [shown, setShown] = createSignal<Page>("computer");
+    const mounted = () => (page() === shown() ? [shown()] : [shown(), page()]);
     const face = createFace({ expression: "happy" });
     onCleanup(face.dispose);
 
-    const title = () => PAGES.find((p) => p.id === page())!.title;
+    const title = () => PAGES.find((p) => p.id === shown())!.title;
 
     // phones: the menu becomes a strip above the page, at the width panels take their phone layout
     const narrow = matchMedia(`(max-width: ${PAPER_PANEL_COMPACT_WIDTH - 1}px)`);
@@ -59,6 +66,23 @@ export default function Workspace(props: { agent: Agent }) {
         // the slide away, if there is one (none when motion is reduced); a slide cut short ends it too
         void Promise.allSettled(appPane.getAnimations().map((a) => a.finished)).then(() => !apps.shown() && setDrawn(null));
     });
+
+    const view = (p: Page) => {
+        switch (p) {
+            case "computer":
+                return <ComputerView agent={agent} />;
+            case "apps":
+                return <Apps apps={apps} name={agent.state.settings?.name ?? "your agent"} onOpened={() => setOpen(false)} />;
+            case "memories":
+                return <Memories agent={agent} />;
+            case "routines":
+                return <Routines agent={agent} />;
+            case "tools":
+                return <Tools agent={agent} />;
+            case "settings":
+                return <Settings agent={agent} />;
+        }
+    };
 
     return (
         <>
@@ -86,27 +110,26 @@ export default function Workspace(props: { agent: Agent }) {
                             )}
                         </For>
                     </PaperMenu>
-                    <PaperFlex flex minWidth={0} minHeight={0} scrollable="y" padding={page() === "computer" || page() === "apps" ? undefined : "double"}>
-                        <Switch>
-                            <Match when={page() === "computer"}>
-                                <ComputerView agent={agent} />
-                            </Match>
-                            <Match when={page() === "apps"}>
-                                <Apps apps={apps} name={agent.state.settings?.name ?? "your agent"} onOpened={() => setOpen(false)} />
-                            </Match>
-                            <Match when={page() === "memories"}>
-                                <Memories agent={agent} />
-                            </Match>
-                            <Match when={page() === "routines"}>
-                                <Routines agent={agent} />
-                            </Match>
-                            <Match when={page() === "tools"}>
-                                <Tools agent={agent} />
-                            </Match>
-                            <Match when={page() === "settings"}>
-                                <Settings agent={agent} />
-                            </Match>
-                        </Switch>
+                    <PaperFlex flex minWidth={0} minHeight={0} scrollable="y" padding={shown() === "computer" || shown() === "apps" ? undefined : "double"}>
+                        <For each={mounted()}>
+                            {(p) => {
+                                // a chosen page asks for its first reads as it mounts; one that reads nothing shows in this same frame
+                                const held: Promise<unknown>[] = [];
+                                if (p !== untrack(shown)) {
+                                    queueMicrotask(() => {
+                                        const waited = held.length ? Promise.race([Promise.allSettled(held), new Promise((r) => setTimeout(r, HOLD_MS))]) : Promise.resolve();
+                                        void waited.then(() => page() === p && setShown(p));
+                                    });
+                                }
+                                return (
+                                    <PageHold.Provider value={(read) => held.push(read)}>
+                                        <PaperFlex flex minWidth={0} hidden={p !== shown()}>
+                                            {view(p)}
+                                        </PaperFlex>
+                                    </PageHold.Provider>
+                                );
+                            }}
+                        </For>
                     </PaperFlex>
                 </PaperFlex>
             </PaperModal>

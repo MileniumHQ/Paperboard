@@ -20,6 +20,7 @@ import {
 } from "@mileniumhq/paperui";
 import type { MemoryList } from "../contract";
 import type { Agent } from "../lib/agent";
+import { holdPage } from "../lib/pageHold";
 import { errorText } from "../lib/failure";
 
 export default function Memories(props: { agent: Agent }) {
@@ -45,7 +46,9 @@ export default function Memories(props: { agent: Agent }) {
             if (!gone && mine === reads) setError(errorText(e));
         }
     };
-    createEffect(on(() => agent.state.memory.revision, () => void load()));
+    // the page before this one stays up until the first read is in
+    holdPage(load());
+    createEffect(on(() => agent.state.memory.revision, () => void load(), { defer: true }));
 
     const empty = () => list() !== null && list()!.facts.length === 0 && list()!.notes.length === 0;
 

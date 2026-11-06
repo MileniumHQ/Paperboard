@@ -5,7 +5,6 @@
     /* fills the modal's page edge to edge */
     height: 100%;
     min-height: 0;
-    background: var(--paper-surface-app);
 }
 
 .content {

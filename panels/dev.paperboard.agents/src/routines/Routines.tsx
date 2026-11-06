@@ -7,6 +7,7 @@ import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperIcon, PaperLoa
 import type { Routine } from "../contract";
 import { describeSchedule, localStamp } from "../routineText";
 import type { Agent } from "../lib/agent";
+import { holdPage } from "../lib/pageHold";
 import { errorText } from "../lib/failure";
 
 export default function Routines(props: { agent: Agent }) {
@@ -32,7 +33,9 @@ export default function Routines(props: { agent: Agent }) {
             if (!gone && mine === reads) setError(errorText(e));
         }
     };
-    createEffect(on(() => agent.state.routines.revision, () => void load()));
+    // the page before this one stays up until the first read is in
+    holdPage(load());
+    createEffect(on(() => agent.state.routines.revision, () => void load(), { defer: true }));
 
     const stop = async (r: Routine) => {
         setFailed(null);

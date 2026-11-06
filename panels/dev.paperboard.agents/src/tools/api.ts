@@ -36,9 +36,11 @@ export function createTools() {
             setLoad("failed");
         }
     };
-    void refresh();
+    // the first read, settled either way (a failure is in load and loadError)
+    const first = refresh();
 
     return {
+        first,
         view,
         load,
         loadError,

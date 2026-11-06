@@ -26,6 +26,7 @@ import {
     PaperToggle,
 } from "@mileniumhq/paperui";
 import type { Agent } from "../lib/agent";
+import { holdPage } from "../lib/pageHold";
 import { errorText, failure, type Failure } from "../lib/failure";
 import { TOOL_LIMITS, type ServerSpec, type ServerStatus } from "../toolsContract";
 import { createTools, type Tools as ToolsClient } from "./api";
@@ -33,6 +34,8 @@ import { blankForm, formFromSpec, newRow, secretNameOf, specFromForm, typedSecre
 
 export default function Tools(props: { agent: Agent }) {
     const tools = createTools();
+    // the page before this one stays up until the first read is in
+    holdPage(tools.first);
     const name = () => props.agent.state.settings?.name ?? "The agent";
 
     return (
