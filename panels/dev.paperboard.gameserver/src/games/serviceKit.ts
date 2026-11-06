@@ -137,10 +137,17 @@ export function redact(line: string, secrets: readonly string[]): string {
 }
 
 const CONSOLE_LINES = 1000;
-/** A progress line's step, as "Loading world data" for "Loading world data: 27%"; null for any other line. */
+const PERCENT = /\d{1,3}(?:\.\d+)?%/g;
+
+/**
+ * A progress line's step: the line with its counts masked, so "Loading world
+ * data: 27%" and a new world's "95.4% - Clean up - 63.9%" (overall and step
+ * count) each match their next count. Null for a line that doesn't end in one.
+ */
 export function progressStep(line: string): string | null {
-    const match = /^(.*\D)\s*:?\s*\d{1,3}(?:\.\d+)?%$/.exec(line.trim());
-    return match ? match[1]!.replace(/[\s:]+$/, "") : null;
+    const trimmed = line.trim();
+    if (!/\d{1,3}(?:\.\d+)?%$/.test(trimmed)) return null;
+    return trimmed.replace(PERCENT, "%");
 }
 
 /**

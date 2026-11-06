@@ -133,6 +133,29 @@ describe("the console", () => {
             "Players: 10% off at the shop",
         ]);
     });
+
+    test("a new world's generation counts up on one line per step, overall and step percent both moving", async () => {
+        let state = { serverEntries: [] as { type: string; content: string }[] };
+        const ctx = { get state() { return state; }, setState(patch: any) { state = { ...state, ...patch }; } } as any;
+        const buffer = new ConsoleBuffer(() => false);
+        const wait = () => new Promise((r) => setTimeout(r, 150));
+        // as Terraria prints the first start of a new world
+        buffer.push(ctx, "0.0% - Resetting - 0.0%");
+        buffer.push(ctx, "0.4% - Resetting - 80.9%");
+        await wait();
+        for (let n = 0; n <= 99; n++) buffer.push(ctx, `95.${Math.floor(n / 10)}% - Clean up - ${n}.9%`);
+        await wait();
+        buffer.push(ctx, "99.9% - Final clean up - 92.9%");
+        buffer.push(ctx, "100.0% - Final clean up - 100.0%");
+        buffer.push(ctx, "Listening on port 7777");
+        await wait();
+        expect(state.serverEntries.map((e) => e.content)).toEqual([
+            "0.4% - Resetting - 80.9%",
+            "95.9% - Clean up - 99.9%",
+            "100.0% - Final clean up - 100.0%",
+            "Listening on port 7777",
+        ]);
+    });
 });
 
 describe("computers each game runs on", () => {
