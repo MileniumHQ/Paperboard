@@ -8,6 +8,7 @@
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
     "store": {
+        "about": "./store/about.md",
         "screenshots": [
             {
                 "light": "./store/1-light.png",
