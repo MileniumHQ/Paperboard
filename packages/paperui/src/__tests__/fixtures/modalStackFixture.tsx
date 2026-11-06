@@ -4,6 +4,10 @@
 // twice, with the first dialog still showing under it. The page is dimmed once:
 // the modal underneath steps back out of sight and comes forward again when the
 // one over it closes. jsdom computes no styles from the stylesheet, so it cannot see this.
+//
+// The page's blur fades in with its dim: Chromium drops a backdrop-filter while
+// its element's opacity animates, so a backdrop that faded its opacity showed a
+// sharp page and then snapped the blur on once the fade ended.
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { PaperModal } from "../../index";
@@ -46,6 +50,17 @@ function Fixture() {
 
 async function run(): Promise<void> {
     setFirst(true);
+    // halfway through the fade in: the blur is part way there, and nothing hides it
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const fading = document.getAnimations().find((a) => (a.effect as KeyframeEffect | null)?.target === backdrop("Choose one"));
+    if (!fading) throw new Error("the backdrop has no fade in");
+    fading.pause();
+    fading.currentTime = Number(fading.effect!.getComputedTiming().duration) / 2;
+    const midway = getComputedStyle(backdrop("Choose one"));
+    const radius = Number(/blur\(([\d.]+)px\)/.exec(midway.backdropFilter)?.[1] ?? NaN);
+    out.checks.blurFadesIn = midway.opacity === "1" && radius > 0 && radius < 5;
+    out.checks.midwayBlur = midway.backdropFilter;
+    out.checks.midwayOpacity = midway.opacity;
     await wait(400);
     const scrim = getComputedStyle(backdrop("Choose one")).backgroundColor;
     out.checks.firstDims = scrim !== "rgba(0, 0, 0, 0)";

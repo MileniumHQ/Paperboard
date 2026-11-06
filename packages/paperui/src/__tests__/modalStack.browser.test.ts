@@ -20,6 +20,7 @@ describe("PaperModal over another in a real browser", () => {
             if (!chrome) return;
             const { error, checks } = await runFixture(chrome, "src/__tests__/fixtures/modalStackFixture.html");
             expect(error, "the fixture threw").toBe("");
+            expect(checks.blurFadesIn, `the blur didn't fade in with the dim (halfway: ${checks.midwayBlur}, opacity ${checks.midwayOpacity})`).toBe(true);
             expect(checks.firstDims, "a lone modal dims the page").toBe(true);
             expect(checks.secondAddsNoScrim, "the modal on top dimmed the page a second time").toBe(true);
             expect(checks.firstStillDims, "the page's one scrim went away").toBe(true);

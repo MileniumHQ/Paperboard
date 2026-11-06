@@ -229,21 +229,20 @@
     }
 }
 
+/* the scrim and its blur fade themselves rather than the backdrop's opacity:
+   Chromium drops a backdrop-filter while its element's opacity animates, so the
+   blur snapped in once the fade had ended. The modal box fades on its own. */
 @keyframes backdropFadeIn {
     from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
+        background-color: transparent;
+        backdrop-filter: blur(0);
     }
 }
 
 @keyframes backdropFadeOut {
-    from {
-        opacity: 1;
-    }
     to {
-        opacity: 0;
+        background-color: transparent;
+        backdrop-filter: blur(0);
     }
 }
 
