@@ -128,3 +128,12 @@ test("Windows sends console commands as UTF-16, the encoding Terraria reads ther
     expect(consoleInput("win32")).toBe("utf16le");
     expect(consoleInput("linux")).toBe("utf8");
 });
+
+test("each Terraria software shows its logo, a file the panel ships", async () => {
+    const { SOFTWARE, SOFTWARE_ICON } = await import("../src/games/terraria/catalog");
+    for (const id of SOFTWARE) {
+        const icon = SOFTWARE_ICON[id];
+        expect(icon, `${id} has no logo`).toStartWith("/assets/");
+        expect((await fs.stat(path.join(import.meta.dir, "..", "public", icon))).size).toBeGreaterThan(0);
+    }
+});

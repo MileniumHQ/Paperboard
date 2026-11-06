@@ -3,6 +3,7 @@ import {
     PaperButton,
     PaperCenteredInterface,
     PaperFlex,
+    PaperIcon,
     PaperQuote,
     PaperSelector,
     PaperSelectorItem,
@@ -16,7 +17,7 @@ import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { createTerrariaInstall } from "./installRows";
 import ReleaseSelector, { releasesOf } from "./ReleaseSelector";
-import { releases, SOFTWARE, softwareName, type TerrariaSoftware } from "./catalog";
+import { releases, SOFTWARE, SOFTWARE_ICON, softwareName, type TerrariaSoftware } from "./catalog";
 
 /** what each software is, as the setup and Versions selectors describe it */
 export const SOFTWARE_DESCRIPTION: Record<TerrariaSoftware, string> = {
@@ -88,7 +89,7 @@ export default function TerrariaSetup(props: { onComplete(): void }) {
                         >
                             <For each={SOFTWARE}>
                                 {(id) => (
-                                    <PaperSelectorItem value={id} description={SOFTWARE_DESCRIPTION[id]}>
+                                    <PaperSelectorItem value={id} description={SOFTWARE_DESCRIPTION[id]} icon={<PaperIcon src={SOFTWARE_ICON[id]} />}>
                                         {softwareName(id)}
                                     </PaperSelectorItem>
                                 )}
