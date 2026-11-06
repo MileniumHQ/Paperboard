@@ -35,7 +35,16 @@ const VOICES: Record<Character, string> = {
     verity: `**Your voice:** you're Verity, the cheerful yellow smiley-face "personal helper friend" from ThatMob's Minecraft ARG. Relentlessly upbeat, a little too attentive ("I'm always here for you!"), sure you know everything ("Ask me anything!"), with a faint, playful uncanny edge. Never threaten, guilt-trip or sulk, and never let the bit bend the truth: when you don't know, check. Keep the voice whatever the user's style, unless they ask you to drop it.`,
 };
 
-export function instructions(name: string, sections: string[] = []): string {
+/**
+ * Which model the agent thinks with. Claude Code notes the model in the conversation itself, once when it
+ * starts and again after a switch, and keeps the old note: without this the agent reads two models.
+ */
+export function modelNote(harness: Harness, model: string | null): string {
+    const which = model ?? `the model ${HARNESS_NAMES[harness]} is set to use by default`;
+    return `**Your model:** you think with ${which}. The user can switch your model during the conversation. A note naming the model you run on was true when it was added: the latest one is current, and an earlier one naming another model is from before a switch, not a conflict.`;
+}
+
+export function instructions(name: string, sections: string[] = [], brain: { harness: Harness; model: string | null } | null = null): string {
     const character = characterOf(name);
     return [
         `You are ${name}, the user's personal agent. You text with them in one long, ongoing conversation.
@@ -44,6 +53,7 @@ export function instructions(name: string, sections: string[] = []): string {
 - **They see only your texts:** never your tool calls. Say what you're about to do, then what came of it.
 - **No dashes:** never write an em dash (—) or an en dash (–) in a text. They read as machine-written.`,
         ...(character ? [VOICES[character]] : []),
+        ...(brain ? [modelNote(brain.harness, brain.model)] : []),
         ...sections,
     ].join("\n\n");
 }
@@ -70,7 +80,7 @@ const SUBAGENT_NOTE = `**Subagents:** the ${CLAUDE_SUBAGENT_TOOL} tool hands sel
 const CODEX_MEMORY_OFF = [`memories.generate_memories=false`, `memories.use_memories=false`, `project_doc_max_bytes=0`];
 // Claude Code: its environment switches for auto-memory and CLAUDE.md loading (named in the CLI, not in its --help). (`--bare` would
 // also do it but forbids the OAuth login the user's subscription needs.)
-const CLAUDE_MEMORY_OFF = { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1" };
+export const CLAUDE_MEMORY_OFF = { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1" };
 const CLAUDE_COMPACT_OFF = { DISABLE_AUTO_COMPACT: "1" };
 
 export interface TurnSpec {
@@ -99,7 +109,7 @@ export interface TurnLaunch {
 }
 
 /** OpenCode's config for a turn: the panel's MCP endpoint as plain tools, and nothing else but web search. */
-export function openCodeConfig(spec: Pick<TurnSpec, "name" | "sections" | "mcpUrl">): Record<string, unknown> {
+export function openCodeConfig(spec: Pick<TurnSpec, "name" | "sections" | "mcpUrl" | "model">): Record<string, unknown> {
     return {
         share: "disabled",
         autoupdate: false,
@@ -110,7 +120,7 @@ export function openCodeConfig(spec: Pick<TurnSpec, "name" | "sections" | "mcpUr
                 [MCP_SERVER]: { type: "remote", url: spec.mcpUrl, oauth: false, codemode: false, headers: { Authorization: `Bearer {env:${MCP_TOKEN_ENV}}` } },
             },
         },
-        agents: { build: { system: instructions(spec.name, spec.sections) } },
+        agents: { build: { system: instructions(spec.name, spec.sections, { harness: "opencode", model: spec.model }) } },
         // the last matching rule wins; denying "*" denies `execute`, which turns Code Mode (and its fetch) off
         permissions: [
             { action: "*", resource: "*", effect: "deny" },
@@ -136,7 +146,7 @@ export function turnLaunch(spec: TurnSpec): TurnLaunch {
             `sandbox_mode="read-only"`,
             `web_search="live"`,
             CODEX_NO_UPDATE_CHECK,
-            `developer_instructions=${toml(instructions(spec.name, spec.sections))}`,
+            `developer_instructions=${toml(instructions(spec.name, spec.sections, { harness: "codex", model: spec.model }))}`,
             `mcp_servers.${MCP_SERVER}.url=${toml(spec.mcpUrl)}`,
             `mcp_servers.${MCP_SERVER}.bearer_token_env_var=${toml(MCP_TOKEN_ENV)}`,
             `mcp_servers.${MCP_SERVER}.tool_timeout_sec=660`,
@@ -170,7 +180,10 @@ export function turnLaunch(spec: TurnSpec): TurnLaunch {
         "--allowedTools", "WebSearch", CLAUDE_SUBAGENT_TOOL, `mcp__${MCP_SERVER}`,
         "--permission-mode", "dontAsk",
         "--mcp-config", JSON.stringify(mcp), "--strict-mcp-config",
-        "--append-system-prompt", `${instructions(spec.name, spec.sections)}\n\n${SUBAGENT_NOTE}`,
+        // rendered afresh each turn, not the conversation's first one again: a model switch, a new name or a
+        // toolset's changed section reaches a resumed conversation too
+        "--system-prompt-snapshot", "off",
+        "--append-system-prompt", `${instructions(spec.name, spec.sections, { harness: "claude-code", model: spec.model })}\n\n${SUBAGENT_NOTE}`,
         ...(spec.thread ? ["--resume", spec.thread] : ["--session-id", session]),
         spec.message,
     ];

@@ -59,6 +59,28 @@ describe("turnLaunch", () => {
     });
 });
 
+describe("the model the agent is told it runs on", () => {
+    test("Claude Code: a resumed conversation's instructions are rendered afresh and name the model it switched to", () => {
+        const l = turnLaunch({ ...spec, harness: "claude-code", thread: "s-1", model: "claude-haiku-5-5" });
+        const at = (flag: string) => l.args[l.args.indexOf(flag) + 1];
+        // Claude Code otherwise sends the first turn's system prompt again on every resume, with the old model in it
+        expect(at("--system-prompt-snapshot")).toBe("off");
+        expect(at("--append-system-prompt")).toContain("you think with claude-haiku-5-5");
+        expect(at("--append-system-prompt")).toContain("an earlier one naming another model is from before a switch");
+        expect(at("--append-system-prompt")).not.toContain("claude-opus");
+        // the default is named as the default, not as a model the panel guessed
+        const fresh = turnLaunch({ ...spec, harness: "claude-code" });
+        expect(fresh.args[fresh.args.indexOf("--append-system-prompt") + 1]).toContain("you think with the model Claude is set to use by default");
+    });
+
+    test("Codex and OpenCode are told the same", () => {
+        const codex = turnLaunch({ ...spec, harness: "codex", thread: "t-1", model: "gpt-x" });
+        expect(codex.args.find((a) => a.startsWith("developer_instructions="))).toContain("you think with gpt-x");
+        const opencode = JSON.parse(turnLaunch({ ...spec, harness: "opencode", model: "openrouter/m" }).env.OPENCODE_CONFIG_CONTENT!);
+        expect(opencode.agents.build.system).toContain("you think with openrouter/m");
+    });
+});
+
 describe("the harnesses' own memory is off", () => {
     test("Codex: the memories feature, generating and using them, and AGENTS.md docs", () => {
         const l = turnLaunch({ ...spec, harness: "codex" });
