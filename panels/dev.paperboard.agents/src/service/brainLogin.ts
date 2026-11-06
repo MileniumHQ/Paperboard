@@ -57,23 +57,14 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /** A loopback http address with its own port, or null. */
 function loopback(text: string): URL | null {
-    let url: URL;
-    try {
-        url = new URL(text);
-    } catch {
-        return null;
-    }
+    const url = URL.parse(text);
+    if (!url) return null;
     return url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname) && url.port !== "" ? url : null;
 }
 
 /** Where a sign-in page sends the browser back to, when that's a loopback address the harness listens on. */
 export function loopbackCallback(page: string): string | null {
-    let redirect: string | null;
-    try {
-        redirect = new URL(page).searchParams.get("redirect_uri");
-    } catch {
-        return null;
-    }
+    const redirect = URL.parse(page)?.searchParams.get("redirect_uri");
     const url = redirect ? loopback(redirect) : null;
     return url ? `${url.origin}${url.pathname}` : null;
 }
