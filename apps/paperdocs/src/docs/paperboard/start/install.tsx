@@ -42,12 +42,28 @@ export default function InstallDoc() {
                         <td><PaperLink href="https://i.paperboard.dev/pb/latest/paperboard-macos-x64.zip">paperboard-macos-x64.zip</PaperLink></td>
                     </tr>
                     <tr>
-                        <td>Linux, x64</td>
+                        <td>Linux, x64 (AppImage)</td>
                         <td><PaperLink href="https://i.paperboard.dev/pb/latest/paperboard-linux-x64.AppImage">paperboard-linux-x64.AppImage</PaperLink></td>
                     </tr>
                     <tr>
-                        <td>Linux, ARM64</td>
+                        <td>Linux, ARM64 (AppImage)</td>
                         <td><PaperLink href="https://i.paperboard.dev/pb/latest/paperboard-linux-arm64.AppImage">paperboard-linux-arm64.AppImage</PaperLink></td>
+                    </tr>
+                    <tr>
+                        <td>Debian and Ubuntu, x64</td>
+                        <td><PaperLink href="https://i.paperboard.dev/pb/latest/paperboard-linux-x64.deb">paperboard-linux-x64.deb</PaperLink></td>
+                    </tr>
+                    <tr>
+                        <td>Debian and Ubuntu, ARM64</td>
+                        <td><PaperLink href="https://i.paperboard.dev/pb/latest/paperboard-linux-arm64.deb">paperboard-linux-arm64.deb</PaperLink></td>
+                    </tr>
+                    <tr>
+                        <td>Fedora and openSUSE, x64</td>
+                        <td><PaperLink href="https://i.paperboard.dev/pb/latest/paperboard-linux-x64.rpm">paperboard-linux-x64.rpm</PaperLink></td>
+                    </tr>
+                    <tr>
+                        <td>Fedora and openSUSE, ARM64</td>
+                        <td><PaperLink href="https://i.paperboard.dev/pb/latest/paperboard-linux-arm64.rpm">paperboard-linux-arm64.rpm</PaperLink></td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -80,6 +96,10 @@ export default function InstallDoc() {
 
             <PaperText preset="subheader" as="h2" id="linux">Linux</PaperText>
             <PaperText preset="body" as="p">
+                Linux has three downloads. The AppImage runs on any distribution, and the deb and rpm install through your package manager.
+            </PaperText>
+            <PaperText preset="subheader" as="h3" id="linux-appimage">AppImage</PaperText>
+            <PaperText preset="body" as="p">
                 The AppImage is the whole app in one file. It needs FUSE 2, which you install from your distribution's packages if it is missing.
                 Make the file executable, then open it. From a terminal in the folder you downloaded it to:
             </PaperText>
@@ -90,6 +110,28 @@ export default function InstallDoc() {
             <PaperText preset="body" as="p">
                 The first line marks the file as a program. The second opens Paperboard.
                 Keep the AppImage where it is: Paperboard updates the file in place.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h3" id="linux-deb">Debian and Ubuntu</PaperText>
+            <PaperText preset="body" as="p">
+                Install the deb with apt, from the folder you downloaded it to. Use the ARM64 file on an ARM computer.
+            </PaperText>
+            <PaperCode block language="sh">
+{`sudo apt install ./paperboard-linux-x64.deb`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="linux-rpm">Fedora and openSUSE</PaperText>
+            <PaperText preset="body" as="p">
+                Install the rpm with your package manager, from the folder you downloaded it to. Use the ARM64 file on an ARM computer.
+            </PaperText>
+            <PaperCode block language="sh">
+{`sudo dnf install ./paperboard-linux-x64.rpm`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                On openSUSE, use <PaperCode>sudo zypper install ./paperboard-linux-x64.rpm</PaperCode>.
+            </PaperText>
+            <PaperText preset="body" as="p">
+                Both packages add Paperboard to your applications menu and start it with the <PaperCode>paperboard</PaperCode> command.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="first-start">The first start</PaperText>
@@ -133,8 +175,8 @@ export default function InstallDoc() {
                 <li>A package update that a running panel is using waits. The top bar shows <b>1 update waiting</b>. Stop that panel's processes and the update installs.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
-                Paperboard installed on Linux from anything other than the AppImage does not update itself.
-                It tells you when a new version is out. Update it with the package manager you used to install it.
+                Paperboard installed on Linux from the deb or rpm does not update itself.
+                It tells you when a new version is out. Install the newer deb or rpm over the old one the same way you installed it.
             </PaperText>
 
             <PaperText preset="body" as="p">
