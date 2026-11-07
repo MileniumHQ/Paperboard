@@ -59,7 +59,7 @@ bun run build:linux       # Linux AppImage, deb and rpm (x64)
 bun run build:linux-arm64 # Linux AppImage, deb and rpm (ARM64)
 bun run build:unpack      # No installer, just an unpacked directory
 ```
-The Linux builds make an rpm, which needs `rpmbuild` (the `rpm` package on Debian and Ubuntu, `rpm-build` on Fedora).
+The Linux builds make an rpm, which needs `rpmbuild` (the `rpm` package on Debian and Ubuntu, `rpm-tools` on Arch, `rpm-build` on Fedora).
 
 Paperboard server (standalone PaperCrane)
 ```zsh
