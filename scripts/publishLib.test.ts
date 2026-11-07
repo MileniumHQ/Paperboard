@@ -9,6 +9,8 @@ import {
     archOf,
     assetFileName,
     paperboardArtifacts,
+    paperboardPackages,
+    isUpdatePayload,
     buildCraneIndex,
     buildLatestYml,
     bunPinMismatch,
@@ -348,6 +350,49 @@ it("Linux x64 build input matches electron-builder while release name stays cano
     expect(paperboardArtifacts("linux-x64", "0.1.0")).toEqual({ buildFile: "paperboard-0.1.0-linux-x86_64.AppImage", releaseFile: "paperboard-linux-x64.AppImage" });
 });
 
+describe("Linux distro packages", () => {
+    it("builds a deb and an rpm per Linux arch under electron-builder's own arch names", () => {
+        expect(paperboardPackages("linux-x64", "0.1.0")).toEqual([
+            { buildFile: "paperboard-0.1.0-linux-amd64.deb", releaseFile: "paperboard-linux-x64.deb" },
+            { buildFile: "paperboard-0.1.0-linux-x86_64.rpm", releaseFile: "paperboard-linux-x64.rpm" },
+        ]);
+        expect(paperboardPackages("linux-arm64", "0.1.0")).toEqual([
+            { buildFile: "paperboard-0.1.0-linux-arm64.deb", releaseFile: "paperboard-linux-arm64.deb" },
+            { buildFile: "paperboard-0.1.0-linux-aarch64.rpm", releaseFile: "paperboard-linux-arm64.rpm" },
+        ]);
+    });
+
+    it("ships no package for other systems", () => {
+        for (const target of ["macos-x64", "macos-arm64", "windows-x64"] as const) {
+            expect(paperboardPackages(target, "0.1.0")).toEqual([]);
+        }
+    });
+
+    it("keeps packages out of the update feed", () => {
+        const files = ALL_TARGETS.flatMap((t) => [
+            paperboardArtifacts(t, "0.1.0").releaseFile,
+            ...paperboardPackages(t, "0.1.0").map((p) => p.releaseFile),
+        ]);
+        expect(files.filter(isUpdatePayload)).toEqual(ALL_TARGETS.map((t) => assetFileName("pb", t)));
+        for (const file of files) expect(isValidFileSegment(file)).toBe(true);
+    });
+
+    it("is what electron-builder is told to build for Linux, one arch per script", () => {
+        const { readFileSync } = require("fs") as typeof import("fs");
+        const dir = `${import.meta.dir}/../apps/paperboard`;
+        const config = Bun.YAML.parse(readFileSync(`${dir}/electron-builder.yml`, "utf8")) as {
+            linux: { target: unknown };
+            deb: { artifactName: string };
+            rpm: { artifactName: string };
+        };
+        expect(config.linux.target).toEqual(["AppImage", "deb", "rpm"]);
+        const scripts = JSON.parse(readFileSync(`${dir}/package.json`, "utf8")).scripts;
+        expect(scripts["build:linux"]).toContain("electron-builder --linux --x64");
+        expect(scripts["build:linux-arm64"]).toContain("electron-builder --linux --arm64");
+        expect(config.deb.artifactName).toContain("${version}-linux-${arch}.${ext}");
+        expect(config.rpm.artifactName).toContain("${version}-linux-${arch}.${ext}");
+    });
+});
 
 describe("bunPinMismatch", () => {
     it("accepts only the exact pinned Bun", () => {

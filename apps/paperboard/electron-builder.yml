@@ -63,10 +63,9 @@ mac:
 linux:
     icon: resources/icon.png
     target:
-        - target: AppImage
-          arch:
-              - x64
-              - arm64
+        - AppImage
+        - deb
+        - rpm
     publish:
         - provider: generic
           url: https://i.paperboard.dev/pb
@@ -76,5 +75,9 @@ linux:
     synopsis: Run and manage tools locally.
     description: Run and manage tools locally.
 appImage:
+    artifactName: ${name}-${version}-linux-${arch}.${ext}
+deb:
+    artifactName: ${name}-${version}-linux-${arch}.${ext}
+rpm:
     artifactName: ${name}-${version}-linux-${arch}.${ext}
 npmRebuild: false

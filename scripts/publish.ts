@@ -33,7 +33,7 @@ import {
     statSync,
     chmodSync,
 } from "fs";
-import { join, basename } from "path";
+import { join, basename, extname } from "path";
 import { tmpdir } from "os";
 import * as tar from "tar";
 import { writeNodePtySidecar } from "./craneSidecar";
@@ -49,6 +49,8 @@ import {
     PAPERDL_R2_BUCKET,
     assetFileName,
     paperboardArtifacts,
+    paperboardPackages,
+    isUpdatePayload,
     buildCraneIndex,
     buildLatestYml,
     dlFileUrl,
@@ -407,19 +409,36 @@ interface BuiltBinary {
     target: Target;
     filePath: string;
     filename: string;
+    // the canonical name on the release; set for Paperboard builds
+    releaseFile?: string;
     sha256: string;
     sha512: string;
     size: number;
 }
 
-async function buildPbTarget(target: Target): Promise<BuiltBinary> {
+// One electron-builder pass per target: the update payload first, then any
+// distro packages the same pass produced (Linux).
+async function buildPbTarget(target: Target): Promise<BuiltBinary[]> {
     if (osOf(target) === "macos") ensureMacSpawnHelpers();
     await sh([process.execPath, "run", PB_BUILD_SCRIPT[target]], { quiet: false });
-    const artifact = paperboardArtifacts(target, version);
-    const filePath = join(distDir, artifact.buildFile);
-    if (!existsSync(filePath)) throw new Error(`Missing ${target} artifact: ${filePath}`);
-    const { sha256, sha512, size } = await hashFile(filePath);
-    return { app: "pb", target, filePath, filename: artifact.buildFile, sha256, sha512, size };
+    const artifacts = [paperboardArtifacts(target, version), ...paperboardPackages(target, version)];
+    const built: BuiltBinary[] = [];
+    for (const artifact of artifacts) {
+        const filePath = join(distDir, artifact.buildFile);
+        if (!existsSync(filePath)) throw new Error(`Missing ${target} artifact: ${filePath}`);
+        const { sha256, sha512, size } = await hashFile(filePath);
+        built.push({
+            app: "pb",
+            target,
+            filePath,
+            filename: artifact.buildFile,
+            releaseFile: artifact.releaseFile,
+            sha256,
+            sha512,
+            size,
+        });
+    }
+    return built;
 }
 
 async function buildCraneTarget(target: Target): Promise<BuiltBinary> {
@@ -456,9 +475,10 @@ async function stageReleaseAssets(built: BuiltBinary[]): Promise<BuiltBinary[]> 
     mkdirSync(stagedDir, { recursive: true });
     const staged: BuiltBinary[] = [];
     for (const b of built) {
-        const file = b.app === "pb"
-            ? paperboardArtifacts(b.target, version).releaseFile
-            : assetFileName(b.app, b.target);
+        if (b.app === "pb" && !b.releaseFile) {
+            throw new Error(`${b.filename} has no release name`);
+        }
+        const file = b.app === "pb" ? b.releaseFile! : assetFileName(b.app, b.target);
         const outPath = join(stagedDir, file);
         if (b.app === "pb") {
             cpSync(b.filePath, outPath);
@@ -496,7 +516,7 @@ async function buildSelected(jobs: { app: DlApp; target: Target }[]): Promise<Bu
     const built: BuiltBinary[] = [];
     for (const j of jobs) {
         const b =
-            j.app === "pb" ? [await buildPbTarget(j.target)] : [await buildCraneTarget(j.target)];
+            j.app === "pb" ? await buildPbTarget(j.target) : [await buildCraneTarget(j.target)];
         built.push(...b);
         progress.increment(1, { task: `${j.app} ${j.target}` });
     }
@@ -540,7 +560,8 @@ async function flowBuildBinaries(): Promise<void> {
         if (!mine.length) continue;
         const record: Record<string, unknown> = {};
         for (const b of mine) {
-            record[b.target] = {
+            const key = isUpdatePayload(b.filename) ? b.target : `${b.target}-${extname(b.filename).slice(1)}`;
+            record[key] = {
                 file: b.filename,
                 path: b.filePath,
                 sha256: b.sha256,
@@ -691,7 +712,7 @@ async function publishIndex(signingKey: KeyObject, v: string, staged: BuiltBinar
     const releaseDate = new Date().toISOString();
     const byFeed = new Map<Feed, YmlEntry[]>();
     for (const b of staged) {
-        if (b.app !== "pb") continue;
+        if (b.app !== "pb" || !isUpdatePayload(b.filename)) continue;
         const feed = feedOf(b.target);
         if (!byFeed.has(feed)) byFeed.set(feed, []);
         byFeed.get(feed)!.push({ target: b.target, file: b.filename, sha512: b.sha512, size: b.size });
@@ -745,7 +766,10 @@ async function flowRepublishIndex(yes: boolean): Promise<void> {
     }
 
     const jobs: { app: DlApp; target: Target; file: string }[] = [
-        ...ALL_TARGETS.map((target) => ({ app: "pb" as DlApp, target, file: assetFileName("pb", target) })),
+        ...ALL_TARGETS.flatMap((target) => [
+            { app: "pb" as DlApp, target, file: assetFileName("pb", target) },
+            ...paperboardPackages(target, version).map((pkg) => ({ app: "pb" as DlApp, target, file: pkg.releaseFile })),
+        ]),
         ...ALL_TARGETS.map((target) => ({ app: "crane" as DlApp, target, file: assetFileName("crane", target) })),
     ];
     const missing = jobs.filter((j) => !releaseAssets.has(j.file)).map((j) => j.file);
@@ -1105,7 +1129,7 @@ async function flowPublishPackages(): Promise<void> {
 // Builds Paperboard installers + crane binaries + all panels into ../usb/:
 //
 //   usb/
-//     installers/    win setup exe, mac ZIP, linux AppImage (per selected arch)
+//     installers/    win setup exe, mac ZIP, linux AppImage/deb/rpm (per selected arch)
 //     crane/         papercrane-<target> binaries
 //     panels/        <board-id>/ (manifest.json + dist/ + branding/)
 //     link-panels.sh symlinks panels/ into ~/.paperboard/panels/ for testing
@@ -1181,6 +1205,8 @@ async function chooseUsbArches(requested: Arch[] | null): Promise<Arch[]> {
     return picked;
 }
 
+const isLinuxInstaller = (f: string) => /\.(AppImage|deb|rpm)$/.test(f);
+
 async function buildUsbFolder(oses: Os[], arches: Arch[]) {
     const USB = join(HERE, "..", "usb");
     const usbDistDir = join(HERE, "dist");
@@ -1227,8 +1253,8 @@ async function buildUsbFolder(oses: Os[], arches: Arch[]) {
         match: (f: string) => boolean;
     }[] = [
         { os: "windows", arch: "x64", script: "build:win", match: (f) => f.endsWith("-setup.exe") },
-        { os: "linux", arch: "x64", script: "build:linux", match: (f) => f.endsWith(".AppImage") },
-        { os: "linux", arch: "arm64", script: "build:linux-arm64", match: (f) => f.endsWith(".AppImage") },
+        { os: "linux", arch: "x64", script: "build:linux", match: isLinuxInstaller },
+        { os: "linux", arch: "arm64", script: "build:linux-arm64", match: isLinuxInstaller },
     ];
     const installerFiles: string[] = [];
     for (const { os, arch, script, match } of osBuilds) {
@@ -1349,7 +1375,7 @@ INSTALLERS (installers/)
 ${installerFiles.map((f) => `  ${f}`).join("\n")}
 
   Install: Windows -> run the setup exe; macOS -> unzip and drag
-  Paperboard.app to Applications; Linux -> chmod +x the .AppImage, then run it.
+  Paperboard.app to Applications; Linux -> chmod +x the .AppImage and run it, or install the .deb / .rpm.
 
   PAPERBOARD SERVER BINARIES (crane/)
   Standalone Paperboard server daemon per target. Mostly useful for headless boxes:
