@@ -4,14 +4,14 @@ import { AppUpdateSession } from "../src/main/appUpdateSession";
 import { buildLatestYml } from "../../../scripts/publishLib";
 
 describe("package manager app update availability", () => {
-    async function check(body: string, currentVersion: string, status = 200) {
+    async function check(body: string, currentVersion: string, status = 200, installMode: "package-manager" | "package-download" = "package-manager") {
         const requests: string[] = [];
         const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
             requests.push(new URL(request.url).pathname);
             return new Response(body, { status });
         } });
         const updater = new ManualAppUpdater(currentVersion, `http://127.0.0.1:${server.port}/latest-linux.yml`);
-        const session = new AppUpdateSession(updater, () => undefined, 1000, "package-manager");
+        const session = new AppUpdateSession(updater, () => undefined, 1000, installMode);
         try { return { state: await session.check(), requests }; }
         finally { session.dispose(); await server.stop(true); }
     }
@@ -21,6 +21,12 @@ describe("package manager app update availability", () => {
     it("reads the actual publisher feed and offers a manual update without downloading app bytes", async () => {
         const result = await check(feed, "0.1.0");
         expect(result.state).toMatchObject({ status: "manual", version: "0.2.0", installMode: "package-manager" });
+        expect(result.requests).toEqual(["/latest-linux.yml"]);
+    });
+
+    it("a deb or rpm from Paperboard is offered for download, never downloaded", async () => {
+        const result = await check(feed, "0.1.0", 200, "package-download");
+        expect(result.state).toMatchObject({ status: "manual", version: "0.2.0", installMode: "package-download" });
         expect(result.requests).toEqual(["/latest-linux.yml"]);
     });
 
