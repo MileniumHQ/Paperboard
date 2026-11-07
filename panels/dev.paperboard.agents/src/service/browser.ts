@@ -784,7 +784,7 @@ export class BrowserComputer {
     async callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
         if (this.state.phase !== "ready" || !this.cdp?.open) {
             const why: Partial<Record<ComputerPhase, string>> = {
-                none: "You don't have a computer yet; the user can set one up from the Agents panel.",
+                none: "You don't have a computer yet; the user can set one up from the Agent panel.",
                 unsupported: `This machine can't run your computer: ${this.state.error ?? "unsupported"}`,
                 installing: "Your computer is still being set up.",
                 starting: "Your computer is still starting up; try again in a moment.",

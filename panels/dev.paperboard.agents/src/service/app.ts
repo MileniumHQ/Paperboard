@@ -107,7 +107,7 @@ export class AiApp {
     /** Wait for init. Actions fail with init's error rather than hang on a service that never got ready. */
     async ready(): Promise<void> {
         const failure = await this.settled;
-        if (failure) throw new Error(`the Agents service didn't start: ${failure.message}`);
+        if (failure) throw new Error(`the Agent service didn't start: ${failure.message}`);
     }
 
     constructor(private host: AppHost) {}

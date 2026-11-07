@@ -81,7 +81,7 @@ try {
         assert.equal(await page.locator("h1.marketing-heading, .learn-feature h2.marketing-heading, .learn-outro h2.marketing-heading").count(), FEATURES[slug] + 2, "a headline, one per feature, and the outro");
         assert.ok(!(await page.locator("main").innerText()).includes("—"));
         assert.ok(await page.locator(".learn-outro h2").evaluate(element => element.classList.contains("marketing-heading")));
-        assert.equal(await page.locator(".learn-outro h2 .marketing-heading-label").innerText(), `Get ${slug === "agents" ? "Agents" : slug === "game-server" ? "Game Server" : slug === "bot-creator" ? "Bot Creator" : "Actions"}`);
+        assert.equal(await page.locator(".learn-outro h2 .marketing-heading-label").innerText(), `Get ${slug === "agents" ? "Agent" : slug === "game-server" ? "Game Server" : slug === "bot-creator" ? "Bot Creator" : "Actions"}`);
         assert.ok(await page.locator(".learn-feature-copy").evaluateAll(elements => elements.every(element => getComputedStyle(element).textAlign === "center")));
         assert.ok(await page.locator(".site-topbar__trigger, .site-topbar__link").evaluateAll(elements => elements.every(element => {
             const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;

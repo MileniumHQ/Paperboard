@@ -41,12 +41,12 @@ export class Asker {
 
     /** `instructions`: the flow's own, in place of the ones in settings */
     async ask(question: unknown, instructions?: string): Promise<string> {
-        if (this.closed) throw new Error("the Agents service is shutting down");
+        if (this.closed) throw new Error("the Agent service is shutting down");
         const text = typeof question === "string" ? question.trim() : "";
         if (!text) throw new Error("ask something first");
         if (text.length > LIMITS.message) throw new Error(`questions are limited to ${LIMITS.message} characters`);
         const settings = this.deps.settings();
-        if (!settings) throw new Error("set up the agent in the Agents panel first");
+        if (!settings) throw new Error("set up the agent in the Agent panel first");
         const own = instructions?.trim();
         if (own && own.length > LIMITS.instructions) throw new Error(`instructions are limited to ${LIMITS.instructions} characters`);
         const custom = own || settings.automationInstructions || null;

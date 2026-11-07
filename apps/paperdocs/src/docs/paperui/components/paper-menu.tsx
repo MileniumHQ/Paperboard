@@ -395,7 +395,7 @@ export function App(props: { onHome: () => void }) {
             <PaperText preset="subheader" as="h3" id="tab-strip">Tab strip</PaperText>
             <PaperText preset="body" as="p">
                 A horizontal menu is a row of entries with a divider under it.
-                The Agents panel switches to one on phones with <PaperCode>horizontal={"{phone()}"}</PaperCode>.
+                The Agent panel switches to one on phones with <PaperCode>horizontal={"{phone()}"}</PaperCode>.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">
                 <PaperMenu name="docs-tabs" horizontal embedded defaultValue="a">

@@ -1,5 +1,5 @@
 // Switching between the pages of the workspace menu (real browser, real
-// frames): the real Main on real PaperUI over a fake Agents service that
+// frames): the real Main on real PaperUI over a fake Agent service that
 // takes a moment to answer. No frame between two pages may be empty or a
 // loader, a slow read shows its loader after a moment, and the Computer page
 // is on the same surface as the rest.

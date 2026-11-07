@@ -1,4 +1,4 @@
-// Refreshes the `helium` record (the Helium browser the Agents panel drives)
+// Refreshes the `helium` record (the Helium browser the Agent panel drives)
 // to the latest stable release of imputnet's three platform repos.
 //
 //   bun run update:helium              latest stable (no drafts/prereleases)

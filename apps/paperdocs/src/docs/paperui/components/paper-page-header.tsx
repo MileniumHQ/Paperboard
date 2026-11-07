@@ -138,7 +138,7 @@ export function Projects(props: { count: number; onNew: () => void }) {
             <PaperText preset="subheader" as="h3" id="custom-icon">Custom leading element</PaperText>
             <PaperText preset="body" as="p">
                 Pass an element as <PaperCode>icon</PaperCode> for art that is not a glyph, such as an avatar.
-                The Agents panel's chat header shows its agent's face this way, with <PaperCode>centerWhenStacked</PaperCode> on.
+                The Agent panel's chat header shows its agent's face this way, with <PaperCode>centerWhenStacked</PaperCode> on.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { PaperAvatar, PaperButton, PaperPageHeader } from "@mileniumhq/paperui";

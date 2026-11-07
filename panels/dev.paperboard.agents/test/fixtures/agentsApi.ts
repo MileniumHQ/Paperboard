@@ -1,4 +1,4 @@
-// Browser-only stand-in for the Agents service, behind the paperapi calls
+// Browser-only stand-in for the Agent service, behind the paperapi calls
 // the UI makes (actionsApi, createPanelBridge, and the shell's
 // catchLoopbackRedirect). The service's own
 // answers are covered by its suites; this lets a fixture drive the real UI

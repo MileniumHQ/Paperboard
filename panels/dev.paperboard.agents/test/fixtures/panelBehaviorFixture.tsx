@@ -1,4 +1,4 @@
-// The real Agents panel (Main) on real PaperUI, over the fake service in
+// The real Agent panel (Main) on real PaperUI, over the fake service in
 // agentsApi.ts, driven through what a person does in its menu: settings
 // while the brains can't be looked for, erasing the computer and removing a
 // tool server when the service refuses, and reading the routines.

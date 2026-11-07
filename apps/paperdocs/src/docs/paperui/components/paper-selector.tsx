@@ -256,7 +256,7 @@ export function Features() {
             <PaperText preset="subheader" as="h3" id="refuse">Refusing a change while busy</PaperText>
             <PaperText preset="body" as="p">
                 A controlled selector only moves when you move it.
-                The Agents panel's project picker ignores a choice while a save is running.
+                The Agent panel's project picker ignores a choice while a save is running.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { PaperSelector, PaperSelectorItem } from "@mileniumhq/paperui";

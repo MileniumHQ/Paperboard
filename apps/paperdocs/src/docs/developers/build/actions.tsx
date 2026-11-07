@@ -112,7 +112,7 @@ export default function ActionsGuideDoc() {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td>Public</td><td>The Actions panel's library as a block, the Agents panel as a tool, and any panel that calls it</td><td><PaperCode>forecast</PaperCode>, <PaperCode>follow-city</PaperCode>, <PaperCode>unfollow-city</PaperCode></td></tr>
+                    <tr><td>Public</td><td>The Actions panel's library as a block, the Agent panel as a tool, and any panel that calls it</td><td><PaperCode>forecast</PaperCode>, <PaperCode>follow-city</PaperCode>, <PaperCode>unfollow-city</PaperCode></td></tr>
                     <tr><td>Event</td><td>The Actions panel, as a block that starts a flow</td><td><PaperCode>freezing</PaperCode></td></tr>
                     <tr><td>Internal (<PaperCode>internal: true</PaperCode>)</td><td>Only the panel's own pages and service. Other panels are refused</td><td><PaperCode>set-units</PaperCode>, <PaperCode>key-changed</PaperCode></td></tr>
                 </tbody>

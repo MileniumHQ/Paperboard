@@ -1,6 +1,6 @@
 // Flows as a program writes and reads them: a trigger and its steps named
 // by panel and action, with input values, instead of canvas blocks with
-// positions and embedded schemas. The Agents panel builds flows this way.
+// positions and embedded schemas. The Agent panel builds flows this way.
 // Building checks every step against the live registry and refuses with a
 // reason the writer can fix; nothing half-built reaches a canvas.
 import type { ActionSchema } from "@mileniumhq/paperapi";

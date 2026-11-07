@@ -1,4 +1,4 @@
-// Refreshes the `opencode` record (the OpenCode CLI the Agents panel drives)
+// Refreshes the `opencode` record (the OpenCode CLI the Agent panel drives)
 // to the newest stable 2.x release of anomalyco/opencode.
 //
 //   bun run update:opencode              newest stable 2.x release

@@ -1891,7 +1891,7 @@ export const staticTriggers = [
 // Added after flows named actions by bare id, so no deprecated forwarder
 // carries them: they only ever lived in a bot's project. The ones that
 // return lists or records are hidden from the Actions library, for programs
-// and the Agents panel.
+// and the Agent panel.
 const MAX_LISTED_MEMBERS = 100;
 
 export const laterActions = [
@@ -2665,7 +2665,7 @@ async function deleteCommand(entry: BotEntry, rawId: unknown): Promise<CommandMu
 // ---------------------------------------------------------------------------
 
 // Hidden from the Actions library (they return lists, not block-shaped
-// values) but in the bot's project for programs and the Agents panel: the
+// values) but in the bot's project for programs and the Agent panel: the
 // ids every other action takes, looked up by name, and the bot's commands.
 // A command made here is an event in the same project, ready for a flow.
 export function managementActions(entry: BotEntry): ActionDefinition[] {

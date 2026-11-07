@@ -1,4 +1,4 @@
-// Refreshes the `codex` record (the Codex CLI the Agents panel drives) to the
+// Refreshes the `codex` record (the Codex CLI the Agent panel drives) to the
 // latest stable release of openai/codex.
 //
 //   bun run update:codex              latest stable (no drafts/prereleases)

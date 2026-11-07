@@ -149,7 +149,7 @@ export const LEARN_PANELS: LearnPanel[] = [
     {
         slug: "agents",
         summary: "An agent you text, with a computer of its own",
-        name: "Agents",
+        name: "Agent",
         seoTitle: "Your own AI agent | Paperboard",
         icon: "/pictures/agents.png",
         accent: "var(--paper-panel-agents)",

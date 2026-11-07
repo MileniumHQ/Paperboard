@@ -4,7 +4,7 @@
 // stdout and stderr, so a panel service that started a process and then
 // attached to it (the Game Server panel does both, and attaches again when
 // it restarts) got every line twice: its console and chat showed each line
-// twice, and a stdout reader (the Agents panel's MCP servers) read each
+// twice, and a stdout reader (the Agent panel's MCP servers) read each
 // message twice.
 import { test, expect } from "bun:test";
 import fs from "node:fs";

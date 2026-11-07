@@ -1,4 +1,4 @@
-// The real Agents panel (Main) on real PaperUI, over the fake service in
+// The real Agent panel (Main) on real PaperUI, over the fake service in
 // agentsApi.ts, switching between the pages of its menu as a person does,
 // with the service taking a moment to answer each page's first read. Every
 // rendered frame is read: a switch must never paint an empty page or a

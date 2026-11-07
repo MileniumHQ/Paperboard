@@ -35,7 +35,7 @@ export default function Main() {
             </Match>
             <Match when={agent.hydration() === "failed"}>
                 <PaperFlex center fullHeight padding="double">
-                    <PaperEmptyState icon="cloud_off" title="Couldn't reach the Agents service" description={agent.error() ?? undefined}>
+                    <PaperEmptyState icon="cloud_off" title="Couldn't reach the Agent service" description={agent.error() ?? undefined}>
                         <PaperButton onClick={() => void agent.hydrate()}>Try again</PaperButton>
                     </PaperEmptyState>
                 </PaperFlex>

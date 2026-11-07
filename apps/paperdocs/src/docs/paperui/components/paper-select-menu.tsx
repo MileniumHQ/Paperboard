@@ -246,7 +246,7 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
             <PaperText preset="subheader" as="h3" id="searchable">Searchable list with descriptions</PaperText>
             <PaperText preset="body" as="p">
-                The Agents panel's provider picker is a searchable menu.
+                The Agent panel's provider picker is a searchable menu.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">
                 <PaperSelectMenu

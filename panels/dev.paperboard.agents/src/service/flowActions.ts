@@ -47,7 +47,7 @@ export interface MessageReceived {
 const instructionsInput = {
     type: "string",
     label: "Instructions",
-    description: "Added to what the agent is told for this. Replaces the instructions for automations in the Agents panel's settings; leave it empty to use those.",
+    description: "Added to what the agent is told for this. Replaces the instructions for automations in the Agent panel's settings; leave it empty to use those.",
     placeholder: "Instructions from settings",
     maxLength: LIMITS.instructions,
     multiline: true,

@@ -100,7 +100,7 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
                 <li>The header is a flat row with no border or background. It spans its container and indents by the same inset as text outside a card, so it lines up with card contents.</li>
-                <li>The title is a <PaperCode>span</PaperCode>, not a heading element. To put it in the heading outline, pass <PaperCode>role="heading"</PaperCode> and <PaperCode>aria-level</PaperCode> on the header, as the Agents panel's onboarding does.</li>
+                <li>The title is a <PaperCode>span</PaperCode>, not a heading element. To put it in the heading outline, pass <PaperCode>role="heading"</PaperCode> and <PaperCode>aria-level</PaperCode> on the header, as the Agent panel's onboarding does.</li>
                 <li>The count shows as a monochrome <PaperLink href="/docs/paperui/paperbadge/">PaperBadge</PaperLink>.</li>
             </PaperTextList>
 

@@ -1,4 +1,4 @@
-Text an agent the way you'd text a friend. The Agents panel gives it a computer of its own, so instead of telling you how to do something, it goes and does it.
+Text an agent the way you'd text a friend. The Agent panel gives it a computer of its own, so instead of telling you how to do something, it goes and does it.
 
 - **Your choice of brain** - Run it on Codex, Claude or OpenCode, signed in with your own account, and pick the model it thinks with. OpenCode has free models too.
 - **A computer of its own** - It browses the web in a browser of its own, and you can watch it work or take over at any time. It never sees your files or your network.

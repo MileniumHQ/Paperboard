@@ -1,4 +1,4 @@
-// Refreshes the `claude-code` record (the Claude Code CLI the Agents panel
+// Refreshes the `claude-code` record (the Claude Code CLI the Agent panel
 // drives) to Anthropic's current release.
 //
 //   bun run update:claude-code                       the `stable` channel

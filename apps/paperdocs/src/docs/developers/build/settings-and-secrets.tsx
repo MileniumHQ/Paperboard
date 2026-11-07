@@ -213,7 +213,7 @@ export default function SettingsAndSecretsDoc() {
             </PaperText>
             <PaperCode block language="tsx">{SET_UNITS}</PaperCode>
             <PaperTextList>
-                <li><PaperCode>internal: true</PaperCode> keeps the action out of the Actions panel's library and the Agents panel, and refuses it to other panels. The panel's own pages still call it. See <PaperLink href="/docs/developers/actions/#internal">Expose actions</PaperLink>.</li>
+                <li><PaperCode>internal: true</PaperCode> keeps the action out of the Actions panel's library and the Agent panel, and refuses it to other panels. The panel's own pages still call it. See <PaperLink href="/docs/developers/actions/#internal">Expose actions</PaperLink>.</li>
                 <li><PaperCode>configApi.get</PaperCode> resolves with <PaperCode>null</PaperCode> before the first save. Weather starts from <PaperCode>{"{ ...DEFAULT_SETTINGS, ...saved }"}</PaperCode> in <PaperCode>onInit</PaperCode>, so a setting added in a later version gets its default.</li>
                 <li>Settings are in the state, so every window shows the current value without asking.</li>
             </PaperTextList>

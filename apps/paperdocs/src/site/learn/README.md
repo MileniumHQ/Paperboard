@@ -35,7 +35,7 @@ Every learn page gives one feature to an Actions workflow. Where no store
 screenshot shows one, `scripts/capture-integrations.ts` captures it from the
 real Actions editor (`*-flow.png`, 1600 × 1200 at 200% page zoom). It needs a
 temporary browser-mode install on port 4319 with Actions, Game Server and
-Agents linked (`bun run link:panels` from the repo root, with that
+Agent linked (`bun run link:panels` from the repo root, with that
 `PAPERBOARD_DIR`) and one
 Minecraft server added in Game Server. The server is never set up or started.
 Use a temporary `PAPERBOARD_DIR` and `XDG_CONFIG_HOME`; never capture private

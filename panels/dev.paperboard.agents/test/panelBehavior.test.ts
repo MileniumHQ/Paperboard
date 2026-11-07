@@ -1,5 +1,5 @@
 // The panel as a person meets it (real browser): the real Main on real
-// PaperUI over a fake Agents service. It proves settings stand and say why
+// PaperUI over a fake Agent service. It proves settings stand and say why
 // when a brain is in trouble, that a failed turn names what didn't
 // happen, that a refused erase or tool server
 // removal is explained inside the confirmation that's still open, and that

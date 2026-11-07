@@ -242,7 +242,7 @@ export function Example() {
             <PaperText preset="subheader" as="h3" id="streamed-reply">Streamed reply</PaperText>
             <PaperText preset="body" as="p">
                 Pass a signal's value as <PaperCode>text</PaperCode> and append to the signal as chunks arrive.
-                The Agents panel renders every message this way.
+                The Agent panel renders every message this way.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { createSignal, Show } from "solid-js";

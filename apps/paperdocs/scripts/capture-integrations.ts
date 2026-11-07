@@ -18,7 +18,7 @@ import type { CanvasSaveResult, CanvasSnapshot } from "../../../panels/dev.paper
 // saved as a real Actions project in the temporary install, opened in the
 // real editor, captured, and deleted again. The install needs one Minecraft
 // server, added in Game Server, for that server's blocks. It is never set up
-// or started, and Agents has no brain, so the flows' events never come: they
+// or started, and Agent has no brain, so the flows' events never come: they
 // run only in verifyMarketingFlows, against simulated answers.
 if (!process.env.PAPERBOARD_DIR) throw new Error("Use a temporary PAPERBOARD_DIR.");
 const fixtureDir = realpathSync(process.env.PAPERBOARD_DIR);

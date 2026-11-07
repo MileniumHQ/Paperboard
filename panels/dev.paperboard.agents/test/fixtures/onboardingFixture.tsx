@@ -1,4 +1,4 @@
-// The real Agents panel (Main) on real PaperUI, over the fake service in
+// The real Agent panel (Main) on real PaperUI, over the fake service in
 // agentsApi.ts, met for the first time: named, given Codex (installed and
 // signed in), its default model and no computer yet, and then handed over
 // to the chat. It reads the Name field's placeholder, where the sign-in

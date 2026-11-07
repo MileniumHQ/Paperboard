@@ -13,7 +13,7 @@ export default function ActionsApiDoc() {
             <PaperText preset="header" as="h1">actionsApi</PaperText>
             <PaperText preset="body" as="p">
                 actionsApi registers a panel's actions, calls other panels' actions, and sends events and triggers between panels.
-                An action with a schema becomes a block in the Actions panel's flow builder and a tool the Agents panel can call.
+                An action with a schema becomes a block in the Actions panel's flow builder and a tool the Agent panel can call.
                 It works in every context, and most panels register their actions from the service through <PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink>.
             </PaperText>
 
@@ -126,8 +126,8 @@ interface RegisterOptions {
                     <tr><td><PaperCode>inputs</PaperCode></td><td><PaperCode>Record&lt;string, ActionParamDefinition&gt;</PaperCode></td><td>The values the block asks for, keyed by the name <PaperCode>run</PaperCode> reads. See <PaperLink href="/docs/paperapi/actions/#inputs">Inputs</PaperLink>.</td></tr>
                     <tr><td><PaperCode>output</PaperCode></td><td><PaperCode>DataType | {"{ type, label?, description? }"}</PaperCode></td><td>The type of what <PaperCode>run</PaperCode> returns, or of what an event action fires.</td></tr>
                     <tr><td><PaperCode>outputFields</PaperCode></td><td><PaperCode>Record&lt;string, DataType | ActionOutputFieldDefinition&gt;</PaperCode></td><td>Named fields of an object output. The flow builder offers each one as a typed variable.</td></tr>
-                    <tr><td><PaperCode>internal</PaperCode></td><td><PaperCode>boolean</PaperCode></td><td>Out of the library and the Agents panel, and refused to other panels. For calls between a panel's own pages and service.</td></tr>
-                    <tr><td><PaperCode>hidden</PaperCode></td><td><PaperCode>boolean</PaperCode></td><td>Out of the library, but callable by any panel and offered to the Agents panel. For actions too involved to be a block.</td></tr>
+                    <tr><td><PaperCode>internal</PaperCode></td><td><PaperCode>boolean</PaperCode></td><td>Out of the library and the Agent panel, and refused to other panels. For calls between a panel's own pages and service.</td></tr>
+                    <tr><td><PaperCode>hidden</PaperCode></td><td><PaperCode>boolean</PaperCode></td><td>Out of the library, but callable by any panel and offered to the Agent panel. For actions too involved to be a block.</td></tr>
                     <tr><td><PaperCode>deprecated</PaperCode></td><td><PaperCode>string</PaperCode></td><td>Still runs, but the library stops offering it and every placed block shows this text. Say what to use instead.</td></tr>
                     <tr><td><PaperCode>match</PaperCode></td><td><PaperCode>ActionMatchDefinition | ActionMatchDefinition[]</PaperCode></td><td>Event actions only. See <PaperLink href="/docs/paperapi/actions/#matching">Matching</PaperLink>.</td></tr>
                     <tr><td><PaperCode>quick</PaperCode></td><td><PaperCode>boolean</PaperCode></td><td>Kept in the registry. No part of Paperboard reads it.</td></tr>

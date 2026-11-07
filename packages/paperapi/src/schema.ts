@@ -129,7 +129,7 @@ export interface ActionSchema {
     internal?: boolean;
     /**
      * Left out of the Actions library, but listed, callable by any panel and
-     * offered to the Agents panel: actions too involved to be blocks (editing
+     * offered to the Agent panel: actions too involved to be blocks (editing
      * a flow), meant for programs and agents.
      */
     hidden?: boolean;

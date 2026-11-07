@@ -11,7 +11,7 @@ export const AGENTS = "dev.paperboard.agents";
  * The learn pages' cross-panel flows, built from the schemas the install
  * actually registered, as a Library drag would. Game Server's blocks belong
  * to a server (its project), so the install needs exactly one Minecraft
- * server; Agents' blocks are the panel's own.
+ * server; Agent's blocks are the panel's own.
  */
 export function buildMarketingFlows(registry: ActionInfo[], icons: Record<string, string>) {
     const servers = new Set(registry.filter(item => item.panelId === GAME && item.project).map(item => item.project));

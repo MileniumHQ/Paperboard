@@ -1,5 +1,5 @@
 // Meeting the agent for the first time (real browser, real frames): the real
-// Main on real PaperUI over a fake Agents service. The Name field's
+// Main on real PaperUI over a fake Agent service. The Name field's
 // placeholder names what goes in it, the sign-in card's line and buttons
 // start at one edge, and finishing fades the meeting out and the chat in.
 //
