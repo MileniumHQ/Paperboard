@@ -1,7 +1,8 @@
 export interface AppUpdateState {
     revision: number;
     status: "idle" | "checking" | "current" | "downloading" | "ready" | "failed" | "manual";
-    installMode: "automatic" | "package-manager";
+    // package-download: a deb or rpm from Paperboard; the user installs the new one
+    installMode: "automatic" | "package-manager" | "package-download";
     version: string | null;
     percent: number | null;
     error: string | null;

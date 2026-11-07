@@ -221,6 +221,61 @@ export function paperboardArtifacts(target: Target, version: string): {
     return { buildFile, releaseFile };
 }
 
+// Linux distro packages built beside the AppImage in the same electron-builder
+// pass. They are downloads only: a package manager owns the installed bytes,
+// so they never appear in an updater feed (see isUpdatePayload).
+export type LinuxPackage = "deb" | "rpm";
+export const LINUX_PACKAGES: LinuxPackage[] = ["deb", "rpm"];
+
+// electron-builder names a package's arch the way its format does: Debian
+// says amd64 where RPM says x86_64.
+const PACKAGE_BUILD_ARCH: Record<LinuxPackage, Record<Arch, string>> = {
+    deb: { x64: "amd64", arm64: "arm64" },
+    rpm: { x64: "x86_64", arm64: "aarch64" },
+};
+
+export function paperboardPackages(target: Target, version: string): {
+    buildFile: string;
+    releaseFile: string;
+}[] {
+    if (osOf(target) !== "linux") return [];
+    const arch = archOf(target);
+    return LINUX_PACKAGES.map((format) => ({
+        buildFile: `paperboard-${version}-linux-${PACKAGE_BUILD_ARCH[format][arch]}.${format}`,
+        releaseFile: `paperboard-${target}.${format}`,
+    }));
+}
+
+// Whether a published Paperboard file is what the app updates itself with.
+export function isUpdatePayload(file: string): boolean {
+    return !LINUX_PACKAGES.some((format) => file.endsWith(`.${format}`));
+}
+
+// The files the download index records from a release. Distro packages are
+// expected only on a release that ships them, so a release made before deb and
+// rpm still re-indexes; a release with some of them is missing the rest.
+export function expectedReleaseAssets(
+    onRelease: ReadonlySet<string>,
+    version: string,
+): { app: DlApp; target: Target; file: string }[] {
+    const packages = ALL_TARGETS.flatMap((target) =>
+        paperboardPackages(target, version).map((pkg) => ({ app: "pb" as DlApp, target, file: pkg.releaseFile })),
+    );
+    const shipsPackages = packages.some((pkg) => onRelease.has(pkg.file));
+    return [
+        ...ALL_TARGETS.map((target) => ({ app: "pb" as DlApp, target, file: assetFileName("pb", target) })),
+        ...(shipsPackages ? packages : []),
+        ...ALL_TARGETS.map((target) => ({ app: "crane" as DlApp, target, file: assetFileName("crane", target) })),
+    ];
+}
+
+// What building the Linux packages needs beyond electron-builder itself.
+export function missingLinuxPackageTools(which: (cmd: string) => string | null): string | null {
+    return which("rpmbuild")
+        ? null
+        : "Building the Linux rpm needs rpmbuild: install rpm (Debian, Ubuntu), rpm-tools (Arch) or rpm-build (Fedora).";
+}
+
 // Direct GitHub release-asset URL. publish.ts uploads here; Origami only
 // ever 302-redirects here, it never proxies bytes.
 export function releaseAssetUrl(

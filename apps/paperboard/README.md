@@ -55,10 +55,11 @@ bun run build             # Typecheck and build
 bun run build:win         # Windows installer
 bun run build:mac-x64     # macOS .zip (Intel)
 bun run build:mac-arm64   # macOS .zip (Apple Silicon)
-bun run build:linux       # Linux AppImage (x64)
-bun run build:linux-arm64 # Linux AppImage (ARM64)
+bun run build:linux       # Linux AppImage, deb and rpm (x64)
+bun run build:linux-arm64 # Linux AppImage, deb and rpm (ARM64)
 bun run build:unpack      # No installer, just an unpacked directory
 ```
+The Linux builds make an rpm, which needs `rpmbuild` (the `rpm` package on Debian and Ubuntu, `rpm-tools` on Arch, `rpm-build` on Fedora).
 
 Paperboard server (standalone PaperCrane)
 ```zsh
