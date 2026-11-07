@@ -7,6 +7,7 @@ Paperboard is a dashboard for self-hostable programs. Panels are like the apps. 
 - **Optimize for a thousand panels:** Never hard code a function for a single panel or create a global API that has an extremely narrow use case. Paperboard should work the same for any panel, as it's an SDK at heart. There are a few exceptions in the codebase for this, but don't write them in yourself.
 - **Panel trust:** Paperboard trusts panels a LOT. They're not sandboxed for a variety of reasons. That's okay, they're reviewed and only first-party. Don't try to sandbox a panel if it can easily do the same thing in a different way.
 - **Secrets:** Obviously don't commit secrets. But also, if Paperboard is storing secrets, they should be stored securely - there's an API for that.
+- **App keys live in `.env.local`:** Third-party app keys (like the Google Drive OAuth client) go in gitignored `apps/paperboard/.env.local`. Release builds need that file. The privacy page (`apps/paperdocs/src/site/pages/privacy.md`) must list every backup provider and every outbound service.
 - **Fail loudly:** Never let Paperboard swallow a failure. The worst thing that could happen is a button not working and there's no way to know why. Always show errors when they occur.
 - **Don't run remote code:** Panels can run any code they want, but that doesn't mean they should run network code. Don't make it possible for a panel to run code or commands from outside the panel unless directed.
 - **No weird fallbacks:** Don't create a placeholder if something isn't available, throw an error and handle it.
@@ -14,6 +15,8 @@ Paperboard is a dashboard for self-hostable programs. Panels are like the apps. 
 - **Nothing ships that is unfinished:** Don't write experimental code, write production-ready code.
 - **Don't touch .paperboard:** The user's .paperboard is theirs, ensure tests don't reach it. Use `PAPERBOARD_DIR`.
 - **Suicide prevention:** Don't `pkill -f`, because that could also kill your own shell.
+- **Leave the real app alone:** Never kill the installed Paperboard app or its workloads (game servers, supervisors). People play on those servers. If the real app crashed, check whether a session killed it before debugging Paperboard.
+- **Launching from an agent shell:** Your shell may set `ELECTRON_RUN_AS_NODE=1`, which makes Electron crash. Launch with `env -u ELECTRON_RUN_AS_NODE`, a throwaway `PAPERBOARD_DIR` and `--user-data-dir`.
 - **Always test.** Unless you're certain it'll work fine, always do a manual check to ensure the feature works and looks great.
 - When making Actions, placeholders are the type (etc "Text" or "Channel ID") and not a description (etc "Example Text" "1234567890")
 
@@ -28,6 +31,8 @@ Some rules about Git:
 - **Keep the workspace clean:** Only code, assets and markdown in this repo, no logs, builds, etc should end up here.
 - Conventional commits (`feat:`, `fix:`, `chore:`). Never `stuff` or `checkpoint`.
 - Split into multiple commits when necessary.
+- **Shared checkout:** Other sessions may switch this checkout's branch mid-task. Run `git branch --show-current` before every commit or merge, commit with `git commit -- <paths>` (never `git add -A` or a bare `git commit`), and never touch another session's uncommitted files.
+- **Branches:** `company` is only for accounts work (sign-in, Paperboard Cloud, web hosting). Everything else goes to `main`, even if you're sitting on `company`. Merge `main` into `company`, never the other way, and never push `company`.
 
 Gates:
 
