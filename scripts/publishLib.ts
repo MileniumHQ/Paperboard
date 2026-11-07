@@ -251,6 +251,31 @@ export function isUpdatePayload(file: string): boolean {
     return !LINUX_PACKAGES.some((format) => file.endsWith(`.${format}`));
 }
 
+// The files the download index records from a release. Distro packages are
+// expected only on a release that ships them, so a release made before deb and
+// rpm still re-indexes; a release with some of them is missing the rest.
+export function expectedReleaseAssets(
+    onRelease: ReadonlySet<string>,
+    version: string,
+): { app: DlApp; target: Target; file: string }[] {
+    const packages = ALL_TARGETS.flatMap((target) =>
+        paperboardPackages(target, version).map((pkg) => ({ app: "pb" as DlApp, target, file: pkg.releaseFile })),
+    );
+    const shipsPackages = packages.some((pkg) => onRelease.has(pkg.file));
+    return [
+        ...ALL_TARGETS.map((target) => ({ app: "pb" as DlApp, target, file: assetFileName("pb", target) })),
+        ...(shipsPackages ? packages : []),
+        ...ALL_TARGETS.map((target) => ({ app: "crane" as DlApp, target, file: assetFileName("crane", target) })),
+    ];
+}
+
+// What building the Linux packages needs beyond electron-builder itself.
+export function missingLinuxPackageTools(which: (cmd: string) => string | null): string | null {
+    return which("rpmbuild")
+        ? null
+        : "Building the Linux rpm needs rpmbuild: install rpm (Debian, Ubuntu), rpm-tools (Arch) or rpm-build (Fedora).";
+}
+
 // Direct GitHub release-asset URL. publish.ts uploads here; Origami only
 // ever 302-redirects here, it never proxies bytes.
 export function releaseAssetUrl(

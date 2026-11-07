@@ -11,6 +11,8 @@ import {
     paperboardArtifacts,
     paperboardPackages,
     isUpdatePayload,
+    expectedReleaseAssets,
+    missingLinuxPackageTools,
     buildCraneIndex,
     buildLatestYml,
     bunPinMismatch,
@@ -375,6 +377,26 @@ describe("Linux distro packages", () => {
         ]);
         expect(files.filter(isUpdatePayload)).toEqual(ALL_TARGETS.map((t) => assetFileName("pb", t)));
         for (const file of files) expect(isValidFileSegment(file)).toBe(true);
+    });
+
+    it("expects packages on a release only when it ships them", () => {
+        const base = new Set(ALL_TARGETS.flatMap((t) => [assetFileName("pb", t), assetFileName("crane", t)]));
+        expect(expectedReleaseAssets(base, "0.1.0").map((j) => j.file).sort()).toEqual([...base].sort());
+
+        const partial = new Set([...base, "paperboard-linux-x64.deb"]);
+        const files = expectedReleaseAssets(partial, "0.1.0").map((j) => j.file);
+        expect(files.filter((f) => !partial.has(f)).sort()).toEqual([
+            "paperboard-linux-arm64.deb",
+            "paperboard-linux-arm64.rpm",
+            "paperboard-linux-x64.rpm",
+        ]);
+        expect(expectedReleaseAssets(partial, "0.1.0").find((j) => j.file === "paperboard-linux-arm64.rpm"))
+            .toEqual({ app: "pb", target: "linux-arm64", file: "paperboard-linux-arm64.rpm" });
+    });
+
+    it("names the missing tool before a Linux build starts", () => {
+        expect(missingLinuxPackageTools(() => "/usr/bin/rpmbuild")).toBeNull();
+        expect(missingLinuxPackageTools(() => null)).toContain("needs rpmbuild");
     });
 
     it("is what electron-builder is told to build for Linux, one arch per script", () => {
