@@ -2,6 +2,7 @@ import * as path from "path";
 import { app, BrowserWindow } from "electron";
 import { AppUpdateSession, getAppUpdateState, retainAppUpdateState } from "./appUpdateSession";
 import { ManualAppUpdater } from "./manualAppUpdater";
+import { linuxPackageInstall } from "./linuxPackageInstall";
 import { isShellUrl } from "./communication/shellGuard";
 import type { AppUpdater } from "electron-updater";
 import { createPlatformUpdater } from "./platformUpdater";
@@ -202,13 +203,21 @@ export function quitAndInstallAppUpdate(): void {
 }
 
 let appUpdateSession: AppUpdateSession | null = null;
+let packageDownload: string | null = null;
+
+/** Where the user gets the latest Paperboard: their deb or rpm, else the downloads page. */
+export function appUpdateDownloadUrl(): string {
+    appUpdater();
+    return packageDownload ?? "https://paperboard.dev/downloads/";
+}
 
 function appUpdater(): AppUpdateSession {
     if (appUpdateSession) return appUpdateSession;
-    const packageManaged = process.platform === "linux" && !process.env.APPIMAGE;
-    const updater = packageManaged
-        ? new ManualAppUpdater(app.getVersion(), "https://i.paperboard.dev/pb/latest-linux.yml")
-        : platformUpdater();
+    const install = process.platform === "linux" && !process.env.APPIMAGE
+        ? linuxPackageInstall(process.resourcesPath, process.arch)
+        : null;
+    packageDownload = install?.download ?? null;
+    const updater = install ? new ManualAppUpdater(app.getVersion(), install.feedUrl) : platformUpdater();
     appUpdateSession = new AppUpdateSession(updater, (state) => {
         retainAppUpdateState(state);
         for (const window of BrowserWindow.getAllWindows()) {
@@ -216,7 +225,7 @@ function appUpdater(): AppUpdateSession {
                 window.webContents.send("app-update-state", state);
             }
         }
-    }, TASK_TIMEOUT_MS, packageManaged ? "package-manager" : "automatic");
+    }, TASK_TIMEOUT_MS, !install ? "automatic" : packageDownload ? "package-download" : "package-manager");
     return appUpdateSession;
 }
 

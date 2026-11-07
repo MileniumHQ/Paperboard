@@ -176,7 +176,7 @@ export default function InstallDoc() {
             </PaperTextList>
             <PaperText preset="body" as="p">
                 Paperboard installed on Linux from the deb or rpm does not update itself.
-                It tells you when a new version is out. Install the newer deb or rpm over the old one the same way you installed it.
+                It tells you when a new version is out, and <b>Download update</b> gets the new package. Install it over the old one the same way you installed it.
             </PaperText>
 
             <PaperText preset="body" as="p">

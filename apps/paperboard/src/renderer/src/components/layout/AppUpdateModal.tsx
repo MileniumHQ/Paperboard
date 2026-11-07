@@ -7,7 +7,15 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
     const [downloadError, setDownloadError] = createSignal<string | null>(null);
     const failed = () => props.state.status === "failed";
     const ready = () => props.state.status === "ready";
-    const packageManaged = () => props.state.installMode === "package-manager";
+    const packageManaged = () => props.state.installMode !== "automatic";
+    const packageDownload = () => props.state.installMode === "package-download";
+    const packageMessage = () => {
+        const lead = props.state.status === "manual" ? `Paperboard ${props.state.version} is available.` : "Paperboard could not check for updates.";
+        const how = packageDownload()
+            ? "Download the new package and install it over this one, the same way you installed Paperboard."
+            : "Update Paperboard with the package manager you used to install it.";
+        return `${lead} ${how} You can keep using this version in the meantime.`;
+    };
     const openDownload = async () => {
         setDownloadError(null);
         try { await shellIpc().invoke("open-update-download"); }
@@ -20,8 +28,11 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
         size="medium"
         footer={<>
             <PaperButton variant="text" onClick={props.onClose}>Later</PaperButton>
+            <Show when={props.state.status === "manual" && packageDownload()}>
+                <PaperButton onClick={openDownload}>Download update</PaperButton>
+            </Show>
             <Show when={failed()}>
-                <Show when={!packageManaged()}><PaperButton variant="text" onClick={openDownload}>Download manually</PaperButton></Show>
+                <Show when={!packageManaged() || packageDownload()}><PaperButton variant="text" onClick={openDownload}>Download manually</PaperButton></Show>
                 <PaperButton onClick={() => shellIpc().send("relaunch-for-update")}>{packageManaged() ? "Retry check" : "Retry update"}</PaperButton>
             </Show>
             <Show when={ready()}>
@@ -31,7 +42,7 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
     >
         <PaperFlex direction="column" gap="full">
             <PaperText preset="text">
-                {packageManaged() ? `${props.state.status === "manual" ? `Paperboard ${props.state.version} is available.` : "Paperboard could not check for updates."} Update Paperboard with the package manager you used to install it. You can keep using this version in the meantime.`
+                {packageManaged() ? packageMessage()
                     : failed() ? `${props.state.version ? `Version ${props.state.version} is available, but the update could not finish.` : "Paperboard could not check for or install an update."} You can keep using Paperboard and retry, or download the latest installer.`
                     : ready() ? `Version ${props.state.version} is downloaded. Restart Paperboard to apply it.`
                     : `Downloading Paperboard ${props.state.version ?? ""}${props.state.percent === null ? "…" : `: ${props.state.percent}%`}`}

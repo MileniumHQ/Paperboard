@@ -32,7 +32,7 @@ export class AppUpdateSession {
     ) {
         this.state.installMode = installMode;
         this.listeners = [
-            ["update-available", (info) => this.set({ status: installMode === "package-manager" ? "manual" : "downloading", version: info.version, percent: null, error: null })],
+            ["update-available", (info) => this.set({ status: installMode === "automatic" ? "downloading" : "manual", version: info.version, percent: null, error: null })],
             ["update-not-available", () => this.set({ status: "current", version: null, percent: null, error: null })],
             ["download-progress", (progress) => this.set({ percent: Math.round(progress.percent) })],
             ["update-downloaded", (info) => this.set({ status: "ready", version: info.version, percent: 100, error: null })],

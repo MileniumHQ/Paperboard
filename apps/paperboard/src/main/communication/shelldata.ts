@@ -9,7 +9,7 @@ import { getLocalDir } from "../../../papercrane/paths";
 import { sanitizeId } from "../../../papercrane/storage";
 import { logger } from "../../../papercrane/logger";
 import { getAppUpdateState } from "../appUpdateSession";
-import { quitAndInstallAppUpdate } from "../updater";
+import { appUpdateDownloadUrl, quitAndInstallAppUpdate } from "../updater";
 import { collectPackageUpdates } from "../packageUpdates";
 import { assertShellFrame, isRefusedFrame } from "./shellGuard";
 import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./shellHandlers";
@@ -232,7 +232,7 @@ export default function registerShellIpc(ipcMain: IpcMain) {
     });
     ipcMain.handle("open-update-download", async (event) => {
         assertShellFrame(event, "open-update-download");
-        await shell.openExternal("https://paperboard.dev/downloads/");
+        await shell.openExternal(appUpdateDownloadUrl());
     });
 
     // restart into staged update; no-op without a download
