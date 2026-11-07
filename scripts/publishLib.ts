@@ -221,6 +221,36 @@ export function paperboardArtifacts(target: Target, version: string): {
     return { buildFile, releaseFile };
 }
 
+// Linux distro packages built beside the AppImage in the same electron-builder
+// pass. They are downloads only: a package manager owns the installed bytes,
+// so they never appear in an updater feed (see isUpdatePayload).
+export type LinuxPackage = "deb" | "rpm";
+export const LINUX_PACKAGES: LinuxPackage[] = ["deb", "rpm"];
+
+// electron-builder names a package's arch the way its format does: Debian
+// says amd64 where RPM says x86_64.
+const PACKAGE_BUILD_ARCH: Record<LinuxPackage, Record<Arch, string>> = {
+    deb: { x64: "amd64", arm64: "arm64" },
+    rpm: { x64: "x86_64", arm64: "aarch64" },
+};
+
+export function paperboardPackages(target: Target, version: string): {
+    buildFile: string;
+    releaseFile: string;
+}[] {
+    if (osOf(target) !== "linux") return [];
+    const arch = archOf(target);
+    return LINUX_PACKAGES.map((format) => ({
+        buildFile: `paperboard-${version}-linux-${PACKAGE_BUILD_ARCH[format][arch]}.${format}`,
+        releaseFile: `paperboard-${target}.${format}`,
+    }));
+}
+
+// Whether a published Paperboard file is what the app updates itself with.
+export function isUpdatePayload(file: string): boolean {
+    return !LINUX_PACKAGES.some((format) => file.endsWith(`.${format}`));
+}
+
 // Direct GitHub release-asset URL. publish.ts uploads here; Origami only
 // ever 302-redirects here, it never proxies bytes.
 export function releaseAssetUrl(
