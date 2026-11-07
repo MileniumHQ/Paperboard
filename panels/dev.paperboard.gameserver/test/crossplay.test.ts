@@ -69,6 +69,42 @@ describe("schema matches the real files", () => {
         // the rest of the generated file is untouched
         expect(read(root, "plugins/Geyser-Spigot/config.yml")).toContain("# Geyser Configuration File");
     });
+
+    test("turning crossplay on lets RakNet clients in too, with NetherNet on a UDP port of its own", async () => {
+        // Geyser's own default is NetherNet alone, on the Bedrock port
+        const root = server("paper");
+        const before = read(root, "plugins/Geyser-Spigot/config.yml");
+        await prepareCrossplay("paper", deps(root));
+        const after = read(root, "plugins/Geyser-Spigot/config.yml");
+        const changed = before.split("\n").map((line, i) => [line, after.split("\n")[i]]).filter(([a, b]) => a !== b);
+        expect(changed).toEqual([
+            ["  webrtc-port: 0", "  webrtc-port: 19133"],
+            ["  transport: nethernet", "  transport: both"],
+            ["  auth-type: online", "  auth-type: floodgate"],
+        ]);
+        expect(values(await readCrossplay("paper", deps(root)))["geyser.webrtc-port"]).toBe("19133");
+    });
+
+    test("a transport set to RakNet, or NetherNet on a port someone picked, is kept", async () => {
+        const root = server("paper");
+        const file = path.join(root, "plugins/Geyser-Spigot/config.yml");
+        const original = fs.readFileSync(file, "utf8");
+        fs.writeFileSync(file, original.replace("transport: nethernet", "transport: raknet"));
+        await prepareCrossplay("paper", deps(root));
+        expect(parseYaml(read(root, "plugins/Geyser-Spigot/config.yml")).bedrock).toMatchObject({ transport: "raknet", "webrtc-port": 0 });
+
+        fs.writeFileSync(file, original.replace("webrtc-port: 0", "webrtc-port: 19200"));
+        await prepareCrossplay("paper", deps(root));
+        expect(parseYaml(read(root, "plugins/Geyser-Spigot/config.yml")).bedrock).toMatchObject({ transport: "nethernet", "webrtc-port": 19200 });
+    });
+
+    test("both transports on one port get NetherNet a port of its own", async () => {
+        const root = server("paper");
+        const file = path.join(root, "plugins/Geyser-Spigot/config.yml");
+        fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("transport: nethernet", "transport: both"));
+        await prepareCrossplay("paper", deps(root));
+        expect(parseYaml(read(root, "plugins/Geyser-Spigot/config.yml")).bedrock).toMatchObject({ transport: "both", "webrtc-port": 19133 });
+    });
 });
 
 describe("Bedrock chat", () => {
@@ -108,7 +144,7 @@ describe("before the server has started with them", () => {
         // the same shape a real Geyser and Floodgate start filled in (see README)
         expect(parseYaml(read(root, "config/Geyser-Fabric/config.yml"))).toEqual({
             java: { "auth-type": "floodgate" },
-            bedrock: { port: 19140 },
+            bedrock: { transport: "both", "webrtc-port": 19133, port: 19140 },
         });
         expect(parseYaml(read(root, "config/floodgate/config.yml"))).toEqual({ "player-link": { "require-link": true } });
         expect(values(await readCrossplay("fabric", deps(root)))["geyser.port"]).toBe("19140");
@@ -120,6 +156,14 @@ describe("refusals", () => {
         const root = server("paper");
         fs.writeFileSync(path.join(root, "server.properties"), "server-port=25570\n");
         await expect(writeCrossplaySetting("paper", "geyser.port", "25570", deps(root))).rejects.toThrow("Java server's port");
+    });
+
+    test("the NetherNet port cannot be the Bedrock port, nor the other way round", async () => {
+        const root = server("paper");
+        await prepareCrossplay("paper", deps(root));
+        await expect(writeCrossplaySetting("paper", "geyser.webrtc-port", "19132", deps(root))).rejects.toThrow("UDP port of their own");
+        await expect(writeCrossplaySetting("paper", "geyser.port", "19133", deps(root))).rejects.toThrow("UDP port of their own");
+        await expect(writeCrossplaySetting("paper", "geyser.transport", "raknet", deps(root))).rejects.toThrow("Unknown crossplay setting");
     });
 
     test("text is one line, and only listed settings are written", async () => {

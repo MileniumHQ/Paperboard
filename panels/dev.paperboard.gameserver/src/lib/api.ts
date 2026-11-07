@@ -12,6 +12,7 @@ import {
     serverPortName,
     JAVA_PORT_NAME,
     BEDROCK_PORT_NAME,
+    NETHERNET_PORT_NAME,
 } from "../core/portNames";
 import { scopedFiles } from "../scopedFiles";
 import { PANEL_ID, serverStateOf } from "../servers";
@@ -58,7 +59,7 @@ export const portApi: typeof rawPorts = {
     prepare: (panel, name, scope) => rawPorts.prepare(panel, portName(name), scope),
     release: (panel, name, scope) => rawPorts.release(panel, portName(name), scope),
     list: async (panel, scope) => {
-        const names = [portName(JAVA_PORT_NAME), portName(BEDROCK_PORT_NAME)];
+        const names = [portName(JAVA_PORT_NAME), portName(BEDROCK_PORT_NAME), portName(NETHERNET_PORT_NAME)];
         return (await rawPorts.list(panel, scope)).filter((claim) => names.includes(claim.name));
     },
 };

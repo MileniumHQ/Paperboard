@@ -48,6 +48,18 @@ const SETTINGS: LoaderSetting[] = [
         defaultValue: String(DEFAULT_BEDROCK_PORT),
     },
     {
+        id: "geyser.webrtc-port",
+        file: "geyser",
+        path: ["bedrock", "webrtc-port"],
+        title: "NetherNet port",
+        description: "Where newer Bedrock versions connect. To play from outside your network, forward it over UDP.",
+        control: "number",
+        min: 1,
+        max: 65535,
+        // Geyser's own: 0 shares the Bedrock port, which "both" cannot
+        defaultValue: "0",
+    },
+    {
         id: "geyser.server-name",
         file: "geyser",
         path: ["gameplay", "server-name"],
@@ -170,7 +182,29 @@ export const AUTH_TYPE_SETTING: LoaderSetting = {
     defaultValue: "online",
 };
 
+/**
+ * How Bedrock players connect. Geyser's default is "nethernet" alone, which
+ * turns away every client still connecting over RakNet, so crossplay sets
+ * "both", each on its own UDP port. Not shown: "raknet" is only for someone
+ * editing the file, and stays as they set it.
+ */
+export const TRANSPORT_SETTING: LoaderSetting = {
+    id: "geyser.transport",
+    file: "geyser",
+    path: ["bedrock", "transport"],
+    title: "Bedrock transport",
+    description: "",
+    control: "select",
+    options: [
+        { value: "both", label: "NetherNet and RakNet" },
+        { value: "nethernet", label: "NetherNet" },
+        { value: "raknet", label: "RakNet" },
+    ],
+    defaultValue: "nethernet",
+};
+
 export const BEDROCK_PORT_SETTING_ID = "geyser.port";
+export const NETHERNET_PORT_SETTING_ID = "geyser.webrtc-port";
 
 // Forge has no Geyser build; Vanilla has no add-ons at all
 export const CROSSPLAY: Readonly<Partial<Record<ServerSoftwareType, CrossplayPlatform>>> = {

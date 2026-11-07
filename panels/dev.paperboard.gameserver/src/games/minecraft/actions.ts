@@ -54,8 +54,8 @@ import { settleInterruptedWork } from "../../service/recovery";
 import { readLoaderSettings, writeLoaderSetting } from "../../service/loaderSettings";
 import { listServerFiles, readServerFile, writeServerFile } from "../../service/serverFiles";
 import { locateAddonConfig } from "../../service/addonConfig";
-import { prepareCrossplay, readBedrockNaming, readCrossplay, writeCrossplaySetting } from "../../service/crossplay";
-import { claimBedrockPort } from "../../service/ports";
+import { findCrossplayJars, prepareCrossplay, readBedrockNaming, readCrossplay, settleBedrockTransport, writeCrossplaySetting } from "../../service/crossplay";
+import { claimBedrockPorts } from "../../service/ports";
 import { livePortDeps } from "../../service/portDeps";
 import { readServerIcon, removeServerIcon, setServerIcon } from "../../service/serverIcon";
 import { liveInstallDeps } from "../../service/softwareInstallDeps";
@@ -904,7 +904,15 @@ export const panelActions: ActionDefinition[] = [
         output: { type: "object", label: "Crossplay" },
         quick: false,
         icon: "devices",
-        run: async (ctx: ServiceContext<GameServerState>) => readCrossplay(minecraftSoftware(ctx.state.serverSoftware), loaderDeps),
+        run: async (ctx: ServiceContext<GameServerState>) => {
+            const software = minecraftSoftware(ctx.state.serverSoftware);
+            // a Geyser set up before Paperboard let RakNet clients in shows,
+            // and gets on its next start, the setup it would get today
+            if (!isInstallRunning() && (await findCrossplayJars(software, loaderDeps)).geyser) {
+                await settleBedrockTransport(software, loaderDeps);
+            }
+            return readCrossplay(software, loaderDeps);
+        },
     }),
 
     defineAction({
@@ -945,7 +953,7 @@ export const panelActions: ActionDefinition[] = [
                 throw new Error("A server install is running; turn crossplay on once it finishes.");
             }
             await prepareCrossplay(minecraftSoftware(ctx.state.serverSoftware), loaderDeps);
-            await claimBedrockPort(minecraftSoftware(ctx.state.serverSoftware), false, livePortDeps());
+            await claimBedrockPorts(minecraftSoftware(ctx.state.serverSoftware), false, livePortDeps());
             return readCrossplay(minecraftSoftware(ctx.state.serverSoftware), loaderDeps);
         },
     }),

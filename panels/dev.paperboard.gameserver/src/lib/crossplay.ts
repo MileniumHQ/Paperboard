@@ -4,7 +4,7 @@ import { SOFTWARE } from "../software/catalog";
 import { CROSSPLAY, GEYSER_MODRINTH_ID, type CrossplayPlatform } from "../software/crossplay";
 import { ACTION_IDS } from "../service/contract";
 import type { CrossplayView } from "../service/crossplay";
-import { BEDROCK_PORT_NAME } from "../core/portNames";
+import { BEDROCK_PORT_NAME, NETHERNET_PORT_NAME } from "../core/portNames";
 import { PANEL_ID } from "../service/types";
 import { serverBridge, serverSoftware, serverVersion } from "./server";
 import { getProject, installGeyserMCProject, installProjectVersion, modrinthFetch, uninstallPlugin } from "./plugins";
@@ -65,11 +65,12 @@ export async function enableCrossplay(current: CrossplayView): Promise<Crossplay
     return serverBridge.call<CrossplayView>(ACTION_IDS.prepareCrossplay);
 }
 
-/** removes both jars and gives the Bedrock port back; their settings folders
+/** removes both jars and gives the Bedrock ports back; their settings folders
  * stay, so turning it back on keeps them */
 export async function disableCrossplay(current: CrossplayView): Promise<CrossplayView> {
     if (current.geyser) await uninstallPlugin(current.geyser);
     if (current.floodgate) await uninstallPlugin(current.floodgate);
     await portApi.release(PANEL_ID, BEDROCK_PORT_NAME);
+    await portApi.release(PANEL_ID, NETHERNET_PORT_NAME);
     return readCrossplay();
 }

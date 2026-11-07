@@ -9,6 +9,8 @@ import {
     BEDROCK_PORT_SETTING_ID,
     CROSSPLAY,
     crossplaySetting,
+    NETHERNET_PORT_SETTING_ID,
+    TRANSPORT_SETTING,
     type CrossplayPlatform,
 } from "../software/crossplay";
 import { MOD_DESCRIPTORS, modIdFrom, PLUGIN_DESCRIPTORS, pluginNameFrom } from "./addonConfig";
@@ -132,7 +134,70 @@ export async function writeCrossplaySetting(
             throw new Error(`Port ${java} is the Java server's port. Bedrock players need a port of their own.`);
         }
     }
+    if (setting.id === BEDROCK_PORT_SETTING_ID || setting.id === NETHERNET_PORT_SETTING_ID) {
+        const { bedrockPort, nethernetPort } = await readBedrockTransport(software, deps);
+        const other = setting.id === BEDROCK_PORT_SETTING_ID ? nethernetPort : bedrockPort;
+        if (other !== 0 && Number(String(raw).trim()) === other) {
+            throw new Error(`Port ${other} is already Geyser's other Bedrock port. NetherNet and RakNet each need a UDP port of their own.`);
+        }
+    }
     return writeSchemaSetting(platform.schema, setting, raw, deps);
+}
+
+export interface BedrockTransport {
+    transport: string;
+    bedrockPort: number;
+    /** 0 when Geyser shares the Bedrock port */
+    nethernetPort: number;
+}
+
+/** how Geyser's config says Bedrock players connect, with Geyser's defaults for what it leaves out */
+export async function readBedrockTransport(software: ServerSoftwareType, deps: LoaderDeps): Promise<BedrockTransport> {
+    const platform = platformOf(software);
+    const settings = [TRANSPORT_SETTING, crossplaySetting(BEDROCK_PORT_SETTING_ID)!, crossplaySetting(NETHERNET_PORT_SETTING_ID)!];
+    const { groups } = await readSchemaSettings({ files: platform.schema.files, settings }, deps);
+    const group = groups.find((g) => g.settings.some((s) => s.id === TRANSPORT_SETTING.id));
+    if (!group) throw new Error("Geyser's settings are missing from the crossplay schema");
+    if (group.error) throw new Error(`Could not read how Bedrock players connect from ${group.path}: ${group.error}`);
+    const value = (id: string) => {
+        const setting = group.settings.find((s) => s.id === id);
+        if (!setting) throw new Error(`Geyser's ${group.path} has no ${id} setting`);
+        return setting.value;
+    };
+    const port = (id: string) => {
+        const number = Number(value(id));
+        if (!Number.isInteger(number) || number < 0 || number > 65535) {
+            throw new Error(`Geyser's ${group.path} has ${JSON.stringify(value(id))} for ${id}, which is not a port`);
+        }
+        return number;
+    };
+    return {
+        transport: value(TRANSPORT_SETTING.id),
+        bedrockPort: port(BEDROCK_PORT_SETTING_ID),
+        nethernetPort: port(NETHERNET_PORT_SETTING_ID),
+    };
+}
+
+/**
+ * Lets every Bedrock client in. Geyser's default, NetherNet alone on the
+ * Bedrock port, refuses clients that connect over RakNet, so that default
+ * becomes "both" with NetherNet on a UDP port of its own. "raknet", or
+ * NetherNet on a port someone picked, was set on purpose and is kept.
+ */
+export async function settleBedrockTransport(software: ServerSoftwareType, deps: LoaderDeps): Promise<BedrockTransport> {
+    const platform = platformOf(software);
+    const current = await readBedrockTransport(software, deps);
+    let { transport, nethernetPort } = current;
+    if (transport === "nethernet" && nethernetPort === 0) {
+        await writeSchemaSetting(platform.schema, TRANSPORT_SETTING, "both", deps);
+        transport = "both";
+    }
+    if (transport === "both" && (nethernetPort === 0 || nethernetPort === current.bedrockPort)) {
+        // the port registry moves it again if something else has this one
+        nethernetPort = current.bedrockPort < 65535 ? current.bedrockPort + 1 : current.bedrockPort - 1;
+        await writeSchemaSetting(platform.schema, crossplaySetting(NETHERNET_PORT_SETTING_ID)!, String(nethernetPort), deps);
+    }
+    return { ...current, transport, nethernetPort };
 }
 
 /**
@@ -165,5 +230,6 @@ export async function prepareCrossplay(software: ServerSoftwareType, deps: Loade
     const platform = platformOf(software);
     await writeSchemaSetting(platform.schema, AUTH_TYPE_SETTING, "floodgate", deps);
     await allowUnsignedChat(deps);
+    await settleBedrockTransport(software, deps);
     return readCrossplay(software, deps);
 }

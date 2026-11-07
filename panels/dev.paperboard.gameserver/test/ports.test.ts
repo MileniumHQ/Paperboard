@@ -1,15 +1,16 @@
 // The server's ports through Paperboard's real port registry, on real files
 // and real sockets: a port another program holds is moved in the file the
 // server reads, or refused when the user's setting says so, and the Bedrock
-// port is claimed only while Geyser is installed.
+// ports are claimed only while Geyser is installed, NetherNet on one of its own.
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import { strToU8, zipSync } from "fflate";
+import { parse as parseYaml } from "yaml";
 import { parseProperties } from "../src/core/properties";
-import { claimBedrockPort, prepareServerPorts, type PortDeps } from "../src/service/ports";
+import { claimBedrockPorts, prepareServerPorts, type PortDeps } from "../src/service/ports";
 import { readCrossplay } from "../src/service/crossplay";
 import { writeSchemaSetting } from "../src/service/loaderSettings";
 import { CROSSPLAY, crossplaySetting, BEDROCK_PORT_SETTING_ID } from "../src/software/crossplay";
@@ -109,13 +110,48 @@ describe("starting the server", () => {
         expect(shown).toBe(String(bedrock.port));
     });
 
-    test("without Geyser the Bedrock port is given back", async () => {
+    test("Geyser's default NetherNet-only setup gets RakNet back, and NetherNet its own UDP port", async () => {
         const { root, registry, deps, ready } = setup("next-free", { geyser: true });
         await ready;
-        await claimBedrockPort("paper", false, deps);
-        expect(registry.list(PANEL_ID).map((claim) => claim.name)).toEqual(["bedrock"]);
+        await prepareServerPorts("paper", deps);
+        const claims = Object.fromEntries(registry.list(PANEL_ID).map((claim) => [claim.name, claim]));
+        expect(claims.nethernet).toMatchObject({ protocol: "udp", label: "Game Server (Bedrock NetherNet)" });
+        expect(claims.nethernet!.port).not.toBe(claims.bedrock!.port);
+        const geyser = parseYaml(fs.readFileSync(path.join(root, "plugins", "Geyser-Spigot", "config.yml"), "utf8")).bedrock;
+        expect(geyser).toMatchObject({ transport: "both", port: claims.bedrock!.port, "webrtc-port": claims.nethernet!.port });
+    });
+
+    test("a NetherNet port the Bedrock port moved onto moves too", async () => {
+        const busy = await occupy();
+        const { root, registry, deps, ready } = setup("next-free", { geyser: true });
+        await ready;
+        await writeSchemaSetting(CROSSPLAY.paper!.schema, crossplaySetting(BEDROCK_PORT_SETTING_ID)!, String(busy), { serverDir: async () => root });
+        await prepareServerPorts("paper", deps);
+        const claims = Object.fromEntries(registry.list(PANEL_ID).map((claim) => [claim.name, claim.port]));
+        expect(claims.bedrock).toBeGreaterThan(busy);
+        expect(claims.nethernet).toBeGreaterThan(busy);
+        expect(claims.nethernet).not.toBe(claims.bedrock);
+        const geyser = parseYaml(fs.readFileSync(path.join(root, "plugins", "Geyser-Spigot", "config.yml"), "utf8")).bedrock;
+        expect(geyser).toMatchObject({ port: claims.bedrock, "webrtc-port": claims.nethernet });
+    });
+
+    test("a Geyser set to RakNet alone claims no NetherNet port", async () => {
+        const { root, registry, deps, ready } = setup("next-free", { geyser: true });
+        await ready;
+        const file = path.join(root, "plugins", "Geyser-Spigot", "config.yml");
+        fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("transport: nethernet", "transport: raknet"));
+        await prepareServerPorts("paper", deps);
+        expect(registry.list(PANEL_ID).map((claim) => claim.name).sort()).toEqual(["bedrock", "java"]);
+        expect(parseYaml(fs.readFileSync(file, "utf8")).bedrock.transport).toBe("raknet");
+    });
+
+    test("without Geyser the Bedrock ports are given back", async () => {
+        const { root, registry, deps, ready } = setup("next-free", { geyser: true });
+        await ready;
+        await claimBedrockPorts("paper", false, deps);
+        expect(registry.list(PANEL_ID).map((claim) => claim.name)).toEqual(["bedrock", "nethernet"]);
         fs.rmSync(path.join(root, "plugins", "Geyser-Spigot.jar"));
-        await claimBedrockPort("paper", false, deps);
+        await claimBedrockPorts("paper", false, deps);
         expect(registry.list(PANEL_ID)).toEqual([]);
     });
 });

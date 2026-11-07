@@ -41,4 +41,4 @@ export async function prepareGamePorts(specs: AsyncIterable<PortSpec> | Iterable
     return moves;
 }
 // Existing Minecraft adapters and tests retain their import path.
-export { DEFAULT_JAVA_PORT, readJavaPort, prepareServerPorts, claimBedrockPort } from "../games/minecraft/ports";
+export { DEFAULT_JAVA_PORT, readJavaPort, prepareServerPorts, claimBedrockPorts } from "../games/minecraft/ports";
