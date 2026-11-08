@@ -116,6 +116,20 @@ describe("PaperModal - Accessibility & Focus Trapping Tests", () => {
         expect(screen.getByRole("dialog", { name: "Leaving" }).getAttribute("aria-modal")).toBe("true");
     });
 
+    test("a closed dialog leaves even when the page draws no frames", async () => {
+        // a hidden tab, or a headless browser on fast-forwarded time
+        const frames = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 0);
+        try {
+            const [open, setOpen] = createSignal(true);
+            render(() => <PaperModal open={open()} title="Unseen"><p>Content</p></PaperModal>);
+            const dialog = screen.getByRole("dialog", { name: "Unseen" });
+            setOpen(false);
+            await vi.waitFor(() => expect(dialog.isConnected).toBe(false), { timeout: 1000 });
+        } finally {
+            frames.mockRestore();
+        }
+    });
+
     test("reopening before the next frame keeps the dialog modal", async () => {
         const [open, setOpen] = createSignal(true);
         render(() => <PaperModal open={open()} title="Reopening"><p>Content</p></PaperModal>);

@@ -44,6 +44,9 @@ export interface PaperModalProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>
 // scrim of its own, so the page is dimmed once however many are stacked.
 const [openModals, setOpenModals] = createSignal<object[]>([]);
 
+// how long a closed dialog waits for a frame before it leaves without one
+const LEAVE_WITHOUT_FRAME_MS = 100;
+
 export function PaperModal(props: ParentProps<PaperModalProps>) {
     let modalRef: HTMLDivElement | undefined;
     const titleId = `paper-modal-title-${createUniqueId()}`;
@@ -103,8 +106,16 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
             setShown(true);
             return;
         }
-        const frame = requestAnimationFrame(() => setShown(false));
-        onCleanup(() => cancelAnimationFrame(frame));
+        // A page that draws no frames (a hidden tab, a headless browser on
+        // fast-forwarded time) still lets the dialog go: the timer comes long
+        // after a frame wherever frames are drawn.
+        const hide = () => setShown(false);
+        const frame = requestAnimationFrame(hide);
+        const timer = setTimeout(hide, LEAVE_WITHOUT_FRAME_MS);
+        onCleanup(() => {
+            cancelAnimationFrame(frame);
+            clearTimeout(timer);
+        });
     });
 
     createEffect(() => {
