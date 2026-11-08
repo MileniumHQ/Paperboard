@@ -357,7 +357,9 @@ export class ModStore {
     async upload(stageDir: string): Promise<string[]> {
         try {
             let names: string[];
-            try { names = await fs.readdir(stageDir); } catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") throw new Error("Nothing was uploaded. Choose the files again."); throw err; }
+            // sorted: the disk's own order differs between filesystems, and
+            // the error below should read the same everywhere
+            try { names = (await fs.readdir(stageDir)).sort((a, b) => a.localeCompare(b)); } catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") throw new Error("Nothing was uploaded. Choose the files again."); throw err; }
             if (names.length === 0) throw new Error("Nothing was uploaded. Choose the files again.");
             const incoming = [];
             const problems: string[] = [];

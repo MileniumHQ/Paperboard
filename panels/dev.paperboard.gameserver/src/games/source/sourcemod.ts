@@ -148,7 +148,8 @@ export class SourceMod {
      */
     async upload(stage: string): Promise<string[]> {
         let names: string[];
-        try { names = await fs.readdir(stage); }
+        // sorted, so the first file refused is the same on every filesystem
+        try { names = (await fs.readdir(stage)).sort((a, b) => a.localeCompare(b)); }
         catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") throw new Error("Nothing was uploaded. Choose the files again."); throw err; }
         if (names.length === 0) throw new Error("Nothing was uploaded. Choose the files again.");
         for (const name of names) {
