@@ -283,7 +283,7 @@ try {
     );
     assert.deepEqual(
         await page.locator(".panel-row h3 .marketing-heading-label").allTextContents(),
-        ["An agent you text", "Game night, hosted", "Your own Discord bot", "Connect your panels"],
+        ["An agent you text", "A server in minutes", "Your own Discord bot", "Connect your panels"],
         "Panel rows reuse their learn page headlines",
     );
     assert.deepEqual(

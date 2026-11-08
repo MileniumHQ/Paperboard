@@ -77,10 +77,10 @@ export const LEARN_PANELS: LearnPanel[] = [
         seoTitle: "Game server manager for Minecraft, Terraria and more | Paperboard",
         icon: "/pictures/game-server.png",
         accent: "var(--paper-panel-gameserver)",
-        headline: "Game night, hosted",
-        headlineLines: ["Game night,", "hosted"],
+        headline: "A server in minutes",
+        headlineLines: ["A server", "in minutes"],
         description:
-            "Run servers for Minecraft, Terraria, Palworld and Team Fortress 2 on your own computer. Pick a game, and your friends can join in minutes.",
+            "Run servers for Minecraft, Terraria, Palworld and Team Fortress 2 on your own computer. Pick a game, and Paperboard sets up the rest. No terminal needed.",
         image: "/screens/gameserver-1.png",
         alt: "Servers for Minecraft, Terraria, Palworld and Team Fortress 2",
         features: [
