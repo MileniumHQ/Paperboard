@@ -277,13 +277,13 @@ try {
     assert.equal(await page.locator("h1").count(), 1);
     assert.equal(await page.locator("canvas").count(), 0, "The landing must not draw with WebGL");
     assert.deepEqual(
-        await page.locator(".panel-row-link").evaluateAll(links => links.map(link => link.getAttribute("href"))),
-        ["/game-server/", "/bot-creator/", "/agents/", "/actions/"],
+        await page.locator(".panel-row-button paper-button").evaluateAll(links => links.map(link => link.getAttribute("href"))),
+        ["/agents/", "/game-server/", "/bot-creator/", "/actions/"],
         "The landing walks through three panels, then the one that connects them, each linking to its page",
     );
     assert.deepEqual(
-        await page.locator(".panel-row h3").allInnerTexts(),
-        ["Minecraft, managed", "Give your bot something to do", "An agent you text", "Connect your panels"],
+        await page.locator(".panel-row h3 .marketing-heading-label").allTextContents(),
+        ["An agent you text", "Game night, hosted", "Your own Discord bot", "Connect your panels"],
         "Panel rows reuse their learn page headlines",
     );
     assert.deepEqual(
@@ -316,9 +316,10 @@ try {
 
     // Every screen shape: nothing runs off the side, the hero heading keeps
     // one type size and shares the copy's left edge, the computer stands above
-    // the fold beside the copy, panel screenshots never sit on their copy and
-    // stay one screen tall, the device row fits without devices overlapping,
-    // and the outro icons clear the copy.
+    // the fold beside the copy, each panel's copy card covers only a corner of
+    // its window and the cards trade sides, every panel headline is one size,
+    // the device row fits without devices overlapping, and the outro icons
+    // clear the copy.
     const overlaps = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
     for (const [width, height] of [[2560, 1080], [1440, 900], [1280, 720], [1024, 768], [820, 1180], [844, 390], [390, 844], [360, 640], [320, 568]]) {
         const shapePage = await browser.newPage({ viewport: { width, height } });
@@ -342,9 +343,18 @@ try {
                 copy: feature.querySelector(".panel-row-copy").getBoundingClientRect().toJSON(),
             })));
             assert.equal(rows.length, 4);
-            // Screenshots may run off the right edge, never the left, and a
-            // row's screenshot is never taller than the screen.
-            assert.ok(rows.every(row => !overlaps(row.shot, row.copy) && row.shot.left >= 0 && row.shot.left < width && row.shot.height <= height), `Panel screenshots stay beside their copy at ${width} × ${height}`);
+            const area = box => Math.max(0, box.right - box.left) * Math.max(0, box.bottom - box.top);
+            const shared = (a, b) => area({ left: Math.max(a.left, b.left), right: Math.min(a.right, b.right), top: Math.max(a.top, b.top), bottom: Math.min(a.bottom, b.bottom) });
+            // A window stays on screen and mostly visible: its copy card covers
+            // a corner, never the window.
+            assert.ok(rows.every(row => row.shot.left >= 0 && row.shot.right <= width && row.copy.left >= 0 && row.copy.right <= width), `Panel windows and their copy stay on screen at ${width} × ${height}`);
+            assert.ok(rows.every(row => shared(row.shot, row.copy) <= area(row.shot) * 0.3), `A panel's copy covers at most a corner of its window at ${width} × ${height}`);
+            if (width > 900) {
+                const sides = rows.map(row => (row.copy.left + row.copy.right) / 2 > (row.shot.left + row.shot.right) / 2 ? "right" : "left");
+                assert.deepEqual(sides, ["right", "left", "right", "left"], `Panel copy trades sides at ${width} × ${height}`);
+            }
+            const headlineSizes = await shapePage.locator(".panel-row styled-text").evaluateAll(elements => elements.map(element => Math.round(element.shadowRoot.querySelector("svg").getBoundingClientRect().height)));
+            assert.equal(new Set(headlineSizes).size, 1, `Panel headlines share one size at ${width} × ${height}: ${headlineSizes}`);
             const devices = await shapePage.locator(".device .marketing-render").evaluateAll(images => images.map(image => image.getBoundingClientRect().toJSON()));
             assert.equal(devices.length, 4);
             assert.ok(devices.every(box => box.left >= 0 && box.right <= width && box.height > 20), `The device row fits at ${width} × ${height}`);

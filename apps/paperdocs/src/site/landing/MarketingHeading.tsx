@@ -10,7 +10,9 @@ const NUNITO_ADVANCE = 0.56;
 /**
  * Real heading text stays available before the decorative element upgrades.
  * `lines` are the places the heading may wrap: they sit on one row when it
- * fits and stack on narrow screens, all at one type size.
+ * fits and stack on narrow screens, all at one type size. Headings that sit
+ * side by side as a set (one per panel) pass the set's longest line as
+ * `fitLength`, so they shrink together and always share one size.
  */
 export function MarketingHeading(props: {
     level: 1 | 2 | 3;
@@ -18,10 +20,11 @@ export function MarketingHeading(props: {
     id?: string;
     lines?: string[];
     size: number;
+    fitLength?: number;
 }) {
     const lines = () => props.lines ?? [props.text];
     const fit = () => {
-        const longest = Math.max(...lines().map((line) => line.length));
+        const longest = props.fitLength ?? Math.max(...lines().map((line) => line.length));
         return (96 / (longest * NUNITO_ADVANCE)).toFixed(2);
     };
     return (

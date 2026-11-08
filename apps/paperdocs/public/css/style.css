@@ -451,10 +451,11 @@ body {
 }
 
 /* The landing (Landing.tsx). One loud thing, the computer in the hero; every
-   section after it is quiet, flat, and hangs off one left edge. */
+   section after it sits in one centred column: its intro centred, its panels
+   trading sides down the page. */
 .landing {
-    /* The left edge every section hangs from: a 1200px column, centred, with
-       a phone-sized gutter as the floor. */
+    /* The one column every section sits in: 1200px, centred, with a
+       phone-sized gutter as the floor. */
     --landing-gutter: max(var(--paper-uigap-double), (100% - 1200px) / 2);
     --landing-gap: clamp(var(--paper-uigap-double), 4.5vw, calc(var(--paper-uigap) * 6));
     --landing-shadow: color-mix(in srgb, var(--paper-primary-deep) 55%, var(--paper-marketing-ink));
@@ -469,7 +470,7 @@ body {
 }
 
 /* The opening screen: the promise and the download on the left, the computer
-   it runs on filling the right, all of it above the fold. */
+   it runs on beside it, so the two read as one group, all above the fold. */
 .hero-section {
     position: relative;
     z-index: 10;
@@ -479,8 +480,10 @@ body {
     grid-template-columns: minmax(0, 7fr) minmax(0, 6fr);
     align-items: center;
     gap: var(--landing-gap);
-    padding: calc(var(--site-topbar-room) + var(--paper-uigap-double)) var(--paper-uigap-double)
-        var(--paper-uigap-quadruple) var(--landing-gutter);
+    /* Half the gutter on the right: the computer comes in toward the copy,
+       while the copy keeps the room its heading needs. */
+    padding: calc(var(--site-topbar-room) + var(--paper-uigap-double))
+        max(var(--paper-uigap-double), var(--landing-gutter) / 2) var(--paper-uigap-quadruple) var(--landing-gutter);
 }
 
 .hero-copy {
@@ -512,7 +515,7 @@ body {
 }
 
 .hero-render {
-    justify-self: end;
+    justify-self: center;
     width: 100%;
     max-width: 920px;
 }
@@ -522,7 +525,7 @@ body {
 .hero-render .marketing-render {
     max-height: calc(100svh - var(--site-topbar-room) - var(--paper-uigap-quadruple) * 1.5);
     object-fit: contain;
-    object-position: right center;
+    object-position: center;
 }
 
 /* The page's one unprompted motion: the computer settles onto the desk as
@@ -580,25 +583,40 @@ body {
     display: block;
     width: 100%;
     height: auto;
-    border-radius: inherit;
+}
+
+/* The image sits in a <picture> that takes no box, so it can't inherit the
+   card's corners: it is given them, inside the card's 1px border. */
+.screenshot-card .marketing-screenshot {
+    border-radius: 11px;
 }
 
 .landing-section {
     position: relative;
     z-index: 10;
     width: 100%;
-    padding: clamp(96px, 16vh, 180px) var(--landing-gutter) 0;
+    padding: clamp(72px, 12vh, 140px) var(--landing-gutter) 0;
 }
 
 /* A section's heading and lead paragraph, on the page's left edge. */
 .section-intro {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     gap: var(--paper-uigap-sixfourths);
     width: 100%;
     max-width: 760px;
+    margin-inline: auto;
+    text-align: center;
     color: var(--paper-on-color);
+}
+
+.landing .section-intro > .marketing-heading {
+    text-align: center;
+}
+
+.landing .section-intro > .marketing-heading .marketing-heading-lines {
+    justify-content: center;
 }
 
 .section-intro p,
@@ -612,29 +630,68 @@ body {
     text-wrap: pretty;
 }
 
-/* A panel per row: its copy on the left edge, its real screenshot to the
-   right running off the page like a window you could open. */
+/* A panel's chapter (PanelRow in Landing.tsx): its window, large, on a paper
+   card whose offset sheet is the panel's colour; its copy on an ink card (the
+   topbar's material) floating over the window's lower corner. Chapters trade
+   sides. */
 .panel-row {
+    /* A white sheet of a button with the panel's colour under it. */
+    --paper-button-face: var(--paper-on-color);
+    --paper-button-ink: var(--paper-marketing-ink);
+    --paper-button-deep: color-mix(in srgb, var(--panel-accent) 80%, var(--paper-marketing-ink));
     display: grid;
-    grid-template-columns: minmax(0, 400px) minmax(0, 1fr);
-    align-items: center;
-    gap: var(--landing-gap);
-    padding-top: clamp(64px, 11vh, 112px);
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    padding-top: clamp(96px, 16vh, 176px);
+}
+
+.panel-row-shot {
+    --paper-site-accent: var(--panel-accent);
+    grid-column: 1 / span 9;
+    grid-row: 1;
+    /* room for the card's offset sheet */
+    margin: 0 14px 16px 0;
 }
 
 .panel-row-copy {
+    grid-column: 8 / span 5;
+    grid-row: 1;
+    align-self: end;
+    z-index: 1;
+    /* hangs below the window's lower edge, so it reads as a layer above it */
+    margin-bottom: calc(var(--paper-uigap-quadruple) * -1.5);
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: var(--paper-uigap);
+    padding: var(--paper-uigap-triple);
     color: var(--paper-on-color);
+    /* the topbar's ink, nearly opaque: over a window, a clear glass would
+       smear the window's edge into the copy */
+    background: color-mix(in srgb, var(--paper-marketing-ink) 92%, transparent);
+    backdrop-filter: var(--site-glass-menu-filter);
+    border: 1px solid var(--site-glass-border);
+    border-radius: 20px;
+    box-shadow: 0 40px 80px -30px var(--landing-shadow);
+}
+
+.panel-row--flip .panel-row-shot {
+    grid-column: 4 / span 9;
+}
+
+.panel-row--flip .panel-row-copy {
+    grid-column: 1 / span 5;
+}
+
+.panel-row-copy p:not(.panel-row-name) {
+    margin: 0;
 }
 
 .panel-row-name {
     display: flex;
     align-items: center;
     gap: var(--paper-uigap-threefourths);
-    font-size: var(--paper-text-size-4);
+    margin: 0;
+    font-size: var(--paper-text-size-6);
     font-weight: var(--paper-weight-black);
 }
 
@@ -642,69 +699,13 @@ body {
     object-fit: contain;
 }
 
-.panel-row-copy h3 {
-    margin: 0 0 var(--paper-uigap-onefourth);
-    font-size: clamp(var(--paper-text-size-9), 2.6vw, 44px);
-    font-weight: var(--paper-weight-black);
-    line-height: var(--paper-leading-tight);
-    letter-spacing: -0.02em;
-    text-wrap: balance;
-    text-shadow: 0 3px 0 var(--landing-shadow);
+.panel-row-button {
+    margin-top: var(--paper-uigap-half);
 }
 
-.panel-row-link {
-    margin-top: var(--paper-uigap-onefourth);
-    padding-block: var(--paper-uigap-third);
-    color: var(--paper-on-color);
-    font-size: var(--site-copy-size);
-    font-weight: var(--paper-weight-black);
-    text-decoration: underline;
-    text-decoration-thickness: 2px;
-    text-underline-offset: 5px;
-}
-
-.panel-row-link:hover {
-    text-decoration-thickness: 3px;
-}
-
-.panel-row-link:focus-visible {
-    outline: 2px solid var(--paper-on-color);
-    outline-offset: 4px;
-    border-radius: 4px;
-}
-
-.panel-row-shot {
-    /* Past the gutter and off the page, but never wider than a big monitor's
-       worth: on very wide screens the whole window shows. */
-    width: min(calc(100% + var(--landing-gutter) + 6vw), 1100px);
-    /* A window's worth of the app: the top of the screenshot, where each
-       panel keeps what it is about, cropped so a row stays one screen tall. */
-    aspect-ratio: 16 / 10;
-    max-height: 90svh;
-    overflow: hidden;
-    border-radius: 14px;
-    background: var(--paper-marketing-ink);
-    box-shadow: 0 48px 90px -36px var(--landing-shadow);
-}
-
-.panel-row-shot .marketing-screenshot {
-    height: 100%;
-    object-fit: cover;
-    object-position: left top;
-}
-
-/* The panel that connects the others gets the full width under its copy. */
-.panel-row--connector {
-    grid-template-columns: minmax(0, 1fr);
-}
-
-.panel-row--connector .panel-row-copy {
-    max-width: 560px;
-}
-
-.panel-row--connector .panel-row-shot {
-    width: min(calc(100% + var(--landing-gutter) + 6vw), 1400px);
-    aspect-ratio: 21 / 10;
+/* The last chapter's copy hangs into the next section's top padding. */
+.panels-section {
+    padding-bottom: var(--paper-uigap-quadruple);
 }
 
 /* The desktop you sit at, joined by a dash to the machines it reaches. The
@@ -752,7 +753,7 @@ body {
 
 .device-label {
     font-size: var(--paper-text-size-3);
-    font-weight: var(--paper-weight-black);
+    font-weight: var(--paper-weight-medium);
     color: var(--site-copy-ink);
     white-space: nowrap;
 }
@@ -768,7 +769,7 @@ body {
 }
 
 /* For developers: the copy, and the real commands that start a panel on a
-   sheet of paper. */
+   dark sheet, the colour of a terminal. */
 .devs-section {
     /* Room before the outro, so its icons never crowd the buttons. */
     padding-bottom: clamp(48px, 8vh, 96px);
@@ -804,8 +805,8 @@ body {
     margin: 0;
     padding: var(--paper-uigap-triple) var(--paper-uigap-quadruple);
     overflow-x: auto;
-    background: var(--paper-on-color);
-    color: var(--paper-marketing-ink);
+    background: var(--paper-marketing-ink);
+    color: var(--paper-on-color);
     font-family: var(--paper-font-family-code);
     font-size: clamp(var(--paper-text-size-2), 1.1vw + 3px, var(--paper-text-size-5));
     line-height: 2.1;
@@ -822,7 +823,7 @@ body {
     right: 0;
     width: var(--devs-fold);
     height: var(--devs-fold);
-    background: linear-gradient(225deg, transparent 50%, color-mix(in srgb, var(--paper-primary) 22%, var(--paper-on-color)) 50%);
+    background: linear-gradient(225deg, transparent 50%, color-mix(in srgb, var(--paper-primary) 30%, var(--paper-marketing-ink)) 50%);
     border-bottom-left-radius: 4px;
 }
 
@@ -838,7 +839,7 @@ body {
 /* The prompt is drawn, not written, so copying a line copies the command. */
 .devs-command::before {
     content: "$ ";
-    color: var(--paper-primary);
+    color: color-mix(in srgb, var(--paper-primary) 70%, var(--paper-on-color));
     user-select: none;
 }
 
@@ -853,10 +854,23 @@ body {
     }
 }
 
-/* Narrow screens set everything in one column on the left edge. Screenshots
-   still run off the right side of the screen; the desktop comes before the
-   machines it reaches. */
+/* Narrow screens set everything in one column on the left edge; a panel's
+   copy sits under its window, overlapping its edge; the desktop comes before
+   the machines it reaches. */
 @media (max-width: 900px) {
+    .panel-row-shot,
+    .panel-row--flip .panel-row-shot,
+    .panel-row-copy,
+    .panel-row--flip .panel-row-copy {
+        grid-column: 1 / -1;
+    }
+
+    .panel-row-copy {
+        grid-row: 2;
+        margin: calc(var(--paper-uigap-double) * -1) var(--paper-uigap) 0;
+        padding: var(--paper-uigap-double);
+    }
+
     .hero-section {
         min-height: 0;
         grid-template-columns: minmax(0, 1fr);
@@ -871,18 +885,6 @@ body {
 }
 
 @media (max-width: 760px) {
-    .panel-row {
-        grid-template-columns: minmax(0, 1fr);
-        gap: var(--paper-uigap-triple);
-    }
-
-    .panel-row-shot,
-    .panel-row--connector .panel-row-shot {
-        width: 125%;
-        aspect-ratio: 4 / 3;
-        border-radius: 10px;
-    }
-
     .device-map {
         grid-template-columns: minmax(0, 1fr);
         justify-items: center;

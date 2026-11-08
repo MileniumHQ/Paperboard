@@ -64,7 +64,7 @@ describe("landing chrome contents", () => {
         expect(learnDropdownHtml).toContain("Game Server");
         expect(learnDropdownHtml).not.toContain("&amp;amp;");
         expect(learnDropdownHtml).toContain(
-            "Dedicated Minecraft &amp; game server manager",
+            "Servers for Minecraft, Terraria, Palworld &amp; TF2",
         );
     });
 

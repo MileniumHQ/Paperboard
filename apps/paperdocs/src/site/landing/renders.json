@@ -8,15 +8,15 @@
         "height": 1259
     },
     "mini-pc": {
-        "width": 1589,
-        "height": 862
+        "width": 1743,
+        "height": 869
     },
     "dev-board": {
-        "width": 1608,
-        "height": 1010
+        "width": 1653,
+        "height": 655
     },
     "desktop": {
-        "width": 1635,
-        "height": 1173
+        "width": 1620,
+        "height": 1042
     }
 }

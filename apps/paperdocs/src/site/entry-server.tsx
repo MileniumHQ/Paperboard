@@ -27,7 +27,7 @@ export interface RenderedPage {
 const LANDING: RenderedPage = {
     title: "Paperboard | Self-hosted apps and automation",
     description:
-        "Host a Minecraft server, run a Discord bot, and text your own AI agent from one app on your own computer. No terminal required. For Windows, macOS, and Linux.",
+        "Text your own AI agent, host a game server, and run a Discord bot from one app on your own computer. No terminal required. For Windows, macOS, and Linux.",
     html: "",
 };
 
