@@ -9,6 +9,11 @@ export async function showUnsignedDownload(download: import('../../public/js/uns
     warning.showUnsignedDownload(download, trigger);
 }
 
+export async function showLinuxDownload(downloads: import('../../public/js/linux-downloads.mjs').LinuxDownloads, trigger: HTMLElement) {
+    const warning = await import('./DownloadWarning');
+    warning.showLinuxDownload(downloads, trigger);
+}
+
 // Islands are server-rendered for the static response, then re-rendered here
 // in the browser. A client render (not hydrate) is deliberate: partial
 // hydration is not supported by Solid's page-scoped hydration keys, and the

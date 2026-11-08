@@ -28,7 +28,7 @@ export async function checkDownloads(browser, origin) {
         assert.equal(await page.locator('main').getByText('Downloads', { exact: true }).count(), 1);
         assert.equal(await page.getByRole('heading', { name: 'Paperboard server daemon', exact: true }).count(), 1);
         assert.equal(await page.locator('main ul').count(), 2, 'Each product has a plain text list');
-        assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').count(), 10, 'Both products retain every architecture');
+        assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').count(), 14, 'Both products retain every architecture and Linux format');
         assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').filter({ hasText: /^Download$/ }).count(), 0, 'Links identify the architecture rather than repeating Download');
 
         for (const [app, file, os] of [
@@ -92,7 +92,7 @@ export async function checkDownloads(browser, origin) {
         const linuxDownload = page.waitForEvent('download');
         await page.locator('a[href$="paperboard-linux-x64.AppImage"]').click();
         await (await linuxDownload).cancel();
-        assert.equal(await page.getByRole('dialog').count(), 0, 'Linux downloads proceed directly');
+        assert.equal(await page.getByRole('dialog').count(), 0, 'A Linux format the downloads page names proceeds directly');
         await page.goto(`${origin}/contact/`);
         await page.goBack();
         await windows.click();
@@ -134,5 +134,98 @@ export async function checkDownloads(browser, origin) {
         assert.equal(await page.getByRole('dialog').count(), 0, 'Reduced motion dismissal stays immediate');
         assert.deepEqual(errors, []);
         console.log('verified unsigned download warnings for both apps, all six Windows/macOS releases, five marketing pages, keyboard/focus/backdrop, exact downloads, Linux and mobile/reduced motion');
+    } finally { await context.close(); }
+}
+
+// A Linux visitor's detected download button asks which format to get, and
+// downloads exactly that one.
+export async function checkLinuxDownload(browser, origin) {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    try {
+        await context.addInitScript(() => {
+            Object.defineProperty(navigator, 'userAgentData', { value: {
+                platform: 'Linux',
+                getHighEntropyValues: async () => ({ architecture: 'x86', bitness: '64' }),
+            } });
+        });
+        await context.route('https://i.paperboard.dev/**', route => route.fulfill({
+            body: 'Download browser fixture',
+            headers: { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="fixture.bin"' },
+        }));
+        const page = await context.newPage();
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        let downloads = 0;
+        page.on('download', () => downloads++);
+        const base = 'https://i.paperboard.dev/pb/latest/paperboard-linux-x64';
+        for (const path of ['/', '/game-server/']) {
+            await page.goto(`${origin}${path}`);
+            const trigger = page.locator('.download-cta paper-button').first().getByRole('link', { name: 'Download for Linux (x64)' });
+            await trigger.waitFor();
+            await trigger.click();
+            const modal = page.getByRole('dialog', { name: 'Download for Linux' });
+            await modal.waitFor();
+            assert.equal(downloads, 0, 'Choosing a format starts no download');
+            assert.equal(await modal.getByRole('radio').count(), 3, 'AppImage, deb and rpm are offered');
+            const download = modal.locator('.download-warning__download');
+            assert.equal(await download.getAttribute('href'), `${base}.AppImage`, 'The AppImage, which runs anywhere, is chosen first');
+            await modal.getByText('rpm', { exact: true }).click();
+            assert.equal(await download.getAttribute('href'), `${base}.rpm`);
+            assert.equal(await modal.locator('.download-warning__filename').innerText(), 'paperboard-linux-x64.rpm');
+            await modal.getByText('deb', { exact: true }).click();
+            assert.equal(await download.getAttribute('href'), `${base}.deb`);
+            const requested = page.waitForEvent('download');
+            await download.click();
+            const release = await requested;
+            assert.equal(release.url(), `${base}.deb`, 'The chosen format is the one downloaded');
+            await release.cancel();
+            await page.locator('.download-warning').waitFor({ state: 'detached' });
+            assert.equal(await trigger.evaluate(node => node.getRootNode().activeElement === node), true, 'Focus returns to the download button');
+            downloads = 0;
+        }
+        // The topbar's short button asks too, and each opening starts from the AppImage.
+        const topbar = page.locator('.site-topbar__download paper-button').getByRole('link', { name: 'Download', exact: true });
+        await topbar.click();
+        const modal = page.getByRole('dialog', { name: 'Download for Linux' });
+        await modal.waitFor();
+        assert.equal(await modal.locator('.download-warning__download').getAttribute('href'), `${base}.AppImage`);
+        await page.keyboard.press('Escape');
+        await page.locator('.download-warning').waitFor({ state: 'detached' });
+        assert.equal(downloads, 0, 'Dismissing downloads nothing');
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto(`${origin}/`);
+        await page.locator('.download-cta paper-button').first().getByRole('link', { name: 'Download for Linux (x64)' }).click();
+        await modal.waitFor();
+        assert.ok(await modal.evaluate(node => node.getBoundingClientRect().width <= innerWidth && node.clientWidth >= node.scrollWidth), 'The format choice fits a phone without clipping');
+        if (process.env.LINUX_DOWNLOAD_SHOT) await page.screenshot({ path: process.env.LINUX_DOWNLOAD_SHOT });
+        await page.keyboard.press('Escape');
+        await page.locator('.download-warning').waitFor({ state: 'detached' });
+        // The window follows the system theme: in each, its text and every
+        // format's name and description stand out from the surface behind them.
+        for (const colorScheme of ['light', 'dark']) {
+            await page.emulateMedia({ colorScheme });
+            await page.locator('.download-cta paper-button').first().getByRole('link', { name: 'Download for Linux (x64)' }).click();
+            await modal.waitFor();
+            const contrast = await modal.evaluate(dialog => {
+                const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number);
+                const luminance = value => {
+                    const [r, g, b] = rgb(value).map(channel => {
+                        const c = channel / 255;
+                        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+                    });
+                    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                };
+                const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+                const surface = luminance(getComputedStyle(dialog).backgroundColor);
+                const texts = [...dialog.querySelectorAll('p, label')].filter(node => node.textContent.trim());
+                return { surface, worst: Math.min(...texts.map(node => ratio(surface, luminance(getComputedStyle(node).color)))) };
+            });
+            assert.ok(colorScheme === 'dark' ? contrast.surface < 0.1 : contrast.surface > 0.6, `The window is ${colorScheme} in ${colorScheme} mode`);
+            assert.ok(contrast.worst >= 4.5, `Every line of the window is readable in ${colorScheme} mode (worst ${contrast.worst.toFixed(2)}:1)`);
+            await page.keyboard.press('Escape');
+            await page.locator('.download-warning').waitFor({ state: 'detached' });
+        }
+        assert.deepEqual(errors, []);
+        console.log('verified the Linux format choice: three formats, the chosen one downloads, topbar and hero buttons, focus, dismissal, phone width, and light and dark mode');
     } finally { await context.close(); }
 }

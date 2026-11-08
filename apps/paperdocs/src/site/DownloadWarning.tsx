@@ -1,13 +1,26 @@
-import { PaperButton, PaperEffect, PaperModal, PaperText } from '@mileniumhq/paperui';
-import { createSignal, For, onCleanup, Show } from 'solid-js';
+import { PaperButton, PaperEffect, PaperModal, PaperSelector, PaperSelectorItem, PaperText } from '@mileniumhq/paperui';
+import { createSignal, For, Match, onCleanup, Show, Switch } from 'solid-js';
 import { render } from 'solid-js/web';
 import { installationGuidance, unsignedExplanation, type UnsignedDownload } from '../../public/js/unsigned-downloads.mjs';
+import type { LinuxDownloads } from '../../public/js/linux-downloads.mjs';
 
-let show: ((download: UnsignedDownload, trigger: HTMLElement) => void) | undefined;
+// What a download link asks before it downloads: how to open an unsigned
+// Windows or Mac build, or which Linux format to get.
+type DownloadRequest = { kind: 'unsigned'; download: UnsignedDownload } | { kind: 'linux'; downloads: LinuxDownloads };
+
+let show: ((request: DownloadRequest, trigger: HTMLElement) => void) | undefined;
 
 // One lazy island uses the actual shared controls and modal, including their
 // entry/exit transitions, accessible title, focus traversal and reduced motion.
 export function showUnsignedDownload(download: UnsignedDownload, trigger: HTMLElement) {
+    showRequest({ kind: 'unsigned', download }, trigger);
+}
+
+export function showLinuxDownload(downloads: LinuxDownloads, trigger: HTMLElement) {
+    showRequest({ kind: 'linux', downloads }, trigger);
+}
+
+function showRequest(request: DownloadRequest, trigger: HTMLElement) {
     if (!show) {
         const root = document.createElement('div');
         root.id = 'download-warning-root';
@@ -22,11 +35,12 @@ export function showUnsignedDownload(download: UnsignedDownload, trigger: HTMLEl
         }
         window.addEventListener('pagehide', onPageHide);
     }
-    show!(download, trigger);
+    show!(request, trigger);
 }
 
 function DownloadWarning() {
-    const [download, setDownload] = createSignal<UnsignedDownload>();
+    const [request, setRequest] = createSignal<DownloadRequest>();
+    const [format, setFormat] = createSignal<string | number>('appimage');
     const [open, setOpen] = createSignal(false);
     let trigger: HTMLElement | undefined;
     let overflow = '';
@@ -69,7 +83,8 @@ function DownloadWarning() {
         // PaperModal records the focused trigger; focus it explicitly for
         // browsers whose pointer clicks do not focus anchors.
         source.focus({ preventScroll: true });
-        setDownload(selected);
+        setRequest(selected);
+        setFormat('appimage');
         overflow = document.documentElement.style.overflow;
         document.documentElement.style.overflow = 'hidden';
         setOpen(true);
@@ -87,32 +102,63 @@ function DownloadWarning() {
         if (open() || closing) restoreBackground();
         show = undefined;
     });
-    const guidance = () => installationGuidance[download()!.platform];
+    const unsigned = () => {
+        const current = request();
+        return current?.kind === 'unsigned' ? current.download : undefined;
+    };
+    const linux = () => {
+        const current = request();
+        return current?.kind === 'linux' ? current.downloads : undefined;
+    };
+    const guidance = () => installationGuidance[unsigned()!.platform];
+    const chosen = () => {
+        const choice = linux()!.choices.find(item => item.id === format());
+        if (!choice) throw new Error(`No Linux download for ${String(format())}`);
+        return choice;
+    };
+    // The file the Download button gets, whichever question was asked.
+    const target = () => (unsigned() ?? chosen()) as { href: string; file: string };
 
     return (
-        <Show when={download()}>
+        <Show when={request()}>
             <PaperModal
                 open={open()}
                 onClose={close}
-                title={`Installing on ${guidance().label}`}
+                title={unsigned() ? `Installing on ${guidance().label}` : 'Download for Linux'}
                 class="paperui-root download-warning"
                 size="medium"
                 aria-describedby="download-warning-summary"
                 footer={<>
                     <PaperButton variant="text" onClick={close}>Cancel</PaperButton>
                     <PaperEffect variant="brand">
-                        <PaperButton variant="brand" href={download()!.href} onClick={close} class="download-warning__download">
+                        <PaperButton variant="brand" href={target().href} onClick={close} class="download-warning__download">
                             Download
                         </PaperButton>
                     </PaperEffect>
                 </>}
             >
-                <div id="download-warning-summary"><PaperText as="p" preset="body">{guidance().summary}</PaperText></div>
-                <PaperText as="p" preset="body" color="text-subtle">{unsignedExplanation}</PaperText>
-                <ol class="download-warning__steps"><For each={guidance().steps}>{step => <li>{step}</li>}</For></ol>
-                <PaperText as="p" preset="caption" color="text-subtle">{guidance().note}</PaperText>
-                <a class="download-warning__source" href={guidance().source} target="_blank" rel="noopener noreferrer">{guidance().sourceLabel}</a>
-                <PaperText as="p" preset="caption" family="code" breakWord color="text-subtle" class="download-warning__filename">{download()!.file}</PaperText>
+                <Switch>
+                    <Match when={unsigned()}>
+                        <div id="download-warning-summary"><PaperText as="p" preset="body">{guidance().summary}</PaperText></div>
+                        <PaperText as="p" preset="body" color="text-subtle">{unsignedExplanation}</PaperText>
+                        <ol class="download-warning__steps"><For each={guidance().steps}>{step => <li>{step}</li>}</For></ol>
+                        <PaperText as="p" preset="caption" color="text-subtle">{guidance().note}</PaperText>
+                        <a class="download-warning__source" href={guidance().source} target="_blank" rel="noopener noreferrer">{guidance().sourceLabel}</a>
+                    </Match>
+                    <Match when={linux()}>
+                        {(downloads) => <>
+                            <div id="download-warning-summary">
+                                <PaperText as="p" preset="body">Paperboard for Linux ({downloads().architecture}) comes in three formats. Pick the one for your distribution.</PaperText>
+                            </div>
+                            <PaperSelector name="linux-format" value={format()} onValueChange={setFormat} aria-label="Format">
+                                <For each={downloads().choices}>
+                                    {choice => <PaperSelectorItem value={choice.id} description={choice.description}>{choice.label}</PaperSelectorItem>}
+                                </For>
+                            </PaperSelector>
+                        </>}
+                    </Match>
+                </Switch>
+                <PaperText as="p" preset="caption" family="code" breakWord color="text-subtle" class="download-warning__filename">{target().file}</PaperText>
             </PaperModal>
         </Show>
     );
