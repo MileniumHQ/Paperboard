@@ -16,8 +16,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      # the silent-catch and TODO-expiry gates scan with ripgrep, which the
-      # runner image does not ship
-      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      # the silent-catch and TODO-expiry gates scan with ripgrep, and Game
+      # Server's art test crops through the real ffmpeg; the runner image
+      # ships neither
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep ffmpeg
       - run: bun install --frozen-lockfile
       - run: bun run gate
