@@ -23,7 +23,8 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ripgrep ffmpeg xvfb
       - run: bun install --frozen-lockfile
       # Electron fetches its binary only when its install script runs
-      - run: node "$(node -p "require.resolve('electron/install.js', { paths: ['apps/paperboard'] })")"
+      - run: |
+          node "$(node -p "require.resolve('electron/install.js', { paths: ['apps/paperboard'] })")"
       # Ubuntu 24.04 keeps Electron's sandbox from making user namespaces
       - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: xvfb-run -a bun run gate
