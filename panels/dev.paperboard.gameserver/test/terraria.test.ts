@@ -60,7 +60,7 @@ test("Terraria release replacement and interrupted swap recovery leave worlds un
         await recoverRelease(target);
         expect(await fs.readFile(path.join(target, "server"), "utf8")).toBe("repaired executable");
         await fs.mkdir(`${target}.previous`); await recoverRelease(target);
-        expect(await fs.readdir(root)).toEqual(["World.wld", "install"]);
+        expect((await fs.readdir(root)).sort()).toEqual(["World.wld", "install"]);
         await expect(activateRelease(path.join(root, "missing-stage"), target)).rejects.toThrow();
         expect(await fs.readFile(path.join(target, "server"), "utf8")).toBe("repaired executable");
         expect(await fs.readFile(path.join(root, "World.wld"), "utf8")).toBe("persistent world");
