@@ -68,7 +68,8 @@ describe("remote folder mount credential hygiene", () => {
         expect(run.exitCode).not.toBe(0);
         expect(run.stdout.toString()).not.toMatch(/[A-Z]:/);
         expect(powershellErrorLine(run.stderr.toString())).not.toBe("");
-    });
+    // PowerShell takes several seconds to start on a CI runner
+    }, 60_000);
 
     it("reads the first line of a PowerShell error without colour or cmdlet", () => {
         const raw = "\x1b[31;1mNew-PSDrive: \x1b[31;1mThe network path was not found.\x1b[0m\nAt line:1 char:5";
