@@ -5,6 +5,9 @@
 import readline from "node:readline";
 
 const requireAuth = process.argv.includes("--auth");
+// `--one-write` sends session/new's answer and the session updates after it in
+// one write, as a real agent's often arrive in one read
+const oneWrite = process.argv.includes("--one-write");
 // `--models config` offers models the current way (configOptions), `--models legacy` the older draft's way
 const modelStyle = process.argv.includes("--models") ? process.argv[process.argv.indexOf("--models") + 1] : undefined;
 const MODEL_OPTIONS = [
@@ -139,8 +142,14 @@ function handle(message) {
             if (!authed) return fail(id, -32000, "Authentication required");
             const sessionId = `s${nextSession++}`;
             sessions.add(sessionId);
-            reply(id, { sessionId, modes: MODES, ...modelFields(sessionId) });
-            return update(sessionId, { sessionUpdate: "available_commands_update", availableCommands: [{ name: "review", description: "Review changes" }] });
+            const answer = { id, result: { sessionId, modes: MODES, ...modelFields(sessionId) } };
+            const commands = { method: "session/update", params: { sessionId, update: { sessionUpdate: "available_commands_update", availableCommands: [{ name: "review", description: "Review changes" }] } } };
+            if (oneWrite) {
+                const switched = { method: "session/update", params: { sessionId, update: { sessionUpdate: "current_mode_update", currentModeId: "code" } } };
+                return process.stdout.write([answer, commands, switched].map((m) => `${JSON.stringify({ jsonrpc: "2.0", ...m })}\n`).join(""));
+            }
+            send(answer);
+            return send(commands);
         }
         case "session/load":
             // a fresh process remembers sessions the way a real agent keeps them on disk: by id

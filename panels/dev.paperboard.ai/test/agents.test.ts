@@ -94,6 +94,12 @@ describe("agent hub", () => {
         expect(infos.c1).toEqual({ modes: [{ id: "ask", name: "Ask" }, { id: "code", name: "Code", description: "Edits files" }, NO_SANDBOX_MODE], mode: "ask", commands: [{ name: "review", description: "Review changes" }] });
     });
 
+    it("keeps the commands and mode an agent sends in the same read as its session/new answer", async () => {
+        await hub.openSession({ conversationId: "c1", connection: connection(["--one-write"]), cwd: "/w" });
+        // sent after the answer, the mode switch is newer than the answer's "ask"
+        expect(infos.c1).toMatchObject({ mode: "code", commands: [{ name: "review", description: "Review changes" }] });
+    });
+
     it("sends a message larger than one process write, whole", async () => {
         const c = connection();
         await hub.openSession({ conversationId: "c1", connection: c, cwd: "/w" });

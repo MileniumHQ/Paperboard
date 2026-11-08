@@ -29,6 +29,8 @@ import { killObserved, StderrTail, watchExit, type ExitWatch } from "./processWa
 /** ACP's "authentication required" error code */
 export const AUTH_REQUIRED = -32000;
 export const MAX_SESSIONS_PER_AGENT = 32;
+/** session updates that describe the session itself, kept if they beat its session/new answer */
+const EARLY_UPDATES = new Set(["available_commands_update", "current_mode_update", "config_option_update"]);
 const IDLE_MS = 10 * 60_000;
 const INIT_TIMEOUT_MS = 60_000;
 const STOP_TIMEOUT_MS = 10_000;
@@ -148,6 +150,13 @@ class AgentProcess implements AgentRunner {
     private infos = new Map<string, AgentSessionInfo>();
     /** conversation id → how its session picks a model */
     private sessionModels = new Map<string, SessionModels>();
+    /**
+     * session id → the commands, mode and model updates an agent sent for a
+     * session before its session/new answer was handled. Agents send these
+     * right after answering, often in the same read, so they would otherwise
+     * reach a session that isn't tracked yet and be lost.
+     */
+    private early = new Map<string, Record<string, unknown>[]>();
     private modelList: AgentModel[] | null = null;
     private listing: Promise<AgentModel[]> | null = null;
     private state: AgentState = { status: "stopped" };
@@ -338,6 +347,10 @@ class AgentProcess implements AgentRunner {
         if (method !== "session/update" || !isObject(params) || typeof params.sessionId !== "string" || !isObject(params.update)) return;
         const update = params.update;
         const conversationId = this.conversationOf(params.sessionId);
+        if (!conversationId && EARLY_UPDATES.has(String(update.sessionUpdate))) {
+            this.holdEarly(params.sessionId, update);
+            return;
+        }
         if (update.sessionUpdate === "available_commands_update") {
             if (conversationId) this.patchInfo(conversationId, { commands: commandsFrom(update.availableCommands) });
             return;
@@ -404,19 +417,35 @@ class AgentProcess implements AgentRunner {
         }
         if (this.state.status === "auth-required") this.publish({ status: "ready" });
         const offered = modesFrom(isObject(result) ? result.modes : undefined);
-        const { current } = offered;
         const modes = withNoSandbox(offered.modes);
-        this.patchInfo(request.conversationId, { modes, ...(current ? { mode: current } : {}) });
-        if (request.mode && request.mode !== current && modes.some((m) => m.id === request.mode)) {
-            await this.setMode(request.conversationId, request.mode);
-        }
+        this.patchInfo(request.conversationId, { modes, ...(offered.current ? { mode: offered.current } : {}) });
         const models = sessionModelsFrom(result);
         if (models) {
             this.sessionModels.set(request.conversationId, models);
             this.learnModels(models.models);
         }
+        // sent after the answer, so they are newer than what it said
+        this.replayEarly(sessionId);
+        const current = this.infos.get(request.conversationId)?.mode;
+        if (request.mode && request.mode !== current && modes.some((m) => m.id === request.mode)) {
+            await this.setMode(request.conversationId, request.mode);
+        }
         await this.applyModel(request.conversationId, request.model);
         return { sessionId, resumed, capabilities: init.capabilities };
+    }
+
+    private holdEarly(sessionId: string, update: Record<string, unknown>): void {
+        const held = this.early.get(sessionId) ?? [];
+        this.early.delete(sessionId);
+        this.early.set(sessionId, [...held, update]);
+        // an agent naming sessions it never opened must not grow this forever
+        while (this.early.size > MAX_SESSIONS_PER_AGENT) this.early.delete(this.early.keys().next().value!);
+    }
+
+    private replayEarly(sessionId: string): void {
+        const held = this.early.get(sessionId);
+        this.early.delete(sessionId);
+        for (const update of held ?? []) this.onNotification("session/update", { sessionId, update });
     }
 
     private track(conversationId: string, sessionId: string): void {
