@@ -16,9 +16,14 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      # the silent-catch and TODO-expiry gates scan with ripgrep, and Game
-      # Server's art test crops through the real ffmpeg; the runner image
-      # ships neither
-      - run: sudo apt-get update && sudo apt-get install -y ripgrep ffmpeg
+      # the silent-catch and TODO-expiry gates scan with ripgrep, Game
+      # Server's art test crops through the real ffmpeg, and the app's
+      # updater and supervisor tests open a real Electron, which needs a
+      # display; the runner image ships none of them
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep ffmpeg xvfb
       - run: bun install --frozen-lockfile
-      - run: bun run gate
+      # Electron fetches its binary only when its install script runs
+      - run: node "$(node -p "require.resolve('electron/install.js', { paths: ['apps/paperboard'] })")"
+      # Ubuntu 24.04 keeps Electron's sandbox from making user namespaces
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: xvfb-run -a bun run gate
