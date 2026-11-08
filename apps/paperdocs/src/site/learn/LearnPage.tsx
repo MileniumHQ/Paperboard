@@ -4,6 +4,7 @@ import { MarketingHeading } from "../landing/MarketingHeading";
 import { Icon, Screenshot } from "../landing/Screenshot";
 import { withBase } from "../../utils/base";
 import { LEARN_PANELS, type LearnPanel } from "./panels";
+import { learnPageText } from "../trademarks";
 
 // Slot widths for the screenshot variants (learn.css): the hero is
 // min(1040px, 100%) of the padded column; features share a two-column row on
@@ -30,7 +31,7 @@ function ZoomableScreenshot(props: { src: string; alt: string; sizes: string; pr
 export function LearnPage(props: { panel: LearnPanel }) {
     return (
         <div class="learn-page">
-            <MarketingChrome>
+            <MarketingChrome text={learnPageText(props.panel)}>
                 <main class="learn-main">
                     <section class="learn-hero">
                         <div class="learn-identity">

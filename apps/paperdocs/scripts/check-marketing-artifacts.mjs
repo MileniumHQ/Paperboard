@@ -7,28 +7,39 @@ const read = (name) => readFile(new URL(name, dist), "utf8");
 const flatten = (html) => html.replace(/\s+/g, " ");
 const sitemap = await read("sitemap.xml");
 
-const MINECRAFT_DISCLAIMER =
-    "It is not affiliated with, endorsed by, or sponsored by Mojang Studios, Microsoft, or Minecraft.";
-const DISCORD_DISCLAIMER =
-    "Paperboard is not affiliated with, endorsed by, or sponsored by Discord Inc.";
+// Each marketing page's footer disclaims the trademarks its own copy names
+// (src/site/trademarks.ts), so the notice differs from page to page.
+const INDEPENDENT = "Paperboard is an independent project. It is not affiliated with, endorsed by, or sponsored by";
+const notice = (html) => {
+    const start = html.indexOf('<div class="site-footer__legal">');
+    return start < 0 ? "" : html.slice(start, html.indexOf("</div>", start));
+};
+function assertNotice(name, html, { owners, absent = [] }) {
+    const legal = notice(html);
+    assert.ok(!legal.includes(".."), `${name}'s notice must not double a full stop`);
+    assert.ok(legal.includes(INDEPENDENT), `${name} must say Paperboard is independent`);
+    for (const owner of owners) assert.ok(legal.includes(owner), `${name} must disclaim ${owner}`);
+    for (const owner of absent) assert.ok(!legal.includes(owner), `${name} names no ${owner} product, so it must not disclaim one`);
+}
+const NOTICES = {
+    landing: { owners: ["Mojang Studios, Microsoft, Re-Logic, Pocketpair, Valve, or Discord Inc."], absent: ["Anthropic", "Rinth, Inc."] },
+    "game-server": { owners: ["Mojang Studios", "Re-Logic", "Pocketpair", "Valve", "Rinth, Inc."], absent: ["Discord Inc.", "Anthropic"] },
+    "bot-creator": { owners: ["Discord Inc."], absent: ["Mojang Studios", "Valve"] },
+    agents: { owners: ["OpenAI", "Anthropic", "Anomaly"], absent: ["Valve", "Discord Inc."] },
+    actions: { owners: ["Discord Inc."], absent: ["Mojang Studios", "Valve"] },
+};
 
 const landing = flatten(await read("index.html"));
+assertNotice("the landing page", landing, NOTICES.landing);
 assert.ok(
-    landing.includes(MINECRAFT_DISCLAIMER),
-    "the landing page must disclaim Minecraft affiliation",
-);
-assert.ok(
-    landing.includes(DISCORD_DISCLAIMER),
-    "the landing page must disclaim Discord affiliation",
+    landing.includes("Minecraft, Terraria, Palworld, Team Fortress 2, and Discord are trademarks of their respective owners."),
+    "the landing page must name the trademarks it disclaims",
 );
 
-// The docs use their own footer (src/components/Footer.tsx); the disclaimers
-// belong to the marketing footer only.
+// The docs use their own footer (src/components/Footer.tsx); the notice
+// belongs to the marketing footer only.
 const docs = flatten(await read("docs/index.html"));
-assert.ok(
-    !docs.includes(MINECRAFT_DISCLAIMER) && !docs.includes(DISCORD_DISCLAIMER),
-    "the docs pages must not carry the marketing disclaimers",
-);
+assert.ok(!docs.includes(INDEPENDENT), "the docs pages must not carry the marketing notice");
 
 // The decorative heading, button, and overlay elements must be defined in
 // the head, so they render as the parser creates them instead of painting
@@ -115,14 +126,7 @@ for (const slug of ["actions", "game-server", "bot-creator", "agents"]) {
     assert.ok(!html.includes("learn-reveal.js"), `${slug} must not hide content behind a reveal script`);
     assert.ok(html.includes('src="/js/learn-lightbox.js"'), `${slug} needs full-screen screenshots`);
     assert.ok(!html.includes('src="/js/card-scroll.js"'), `${slug} must not capture scrolling`);
-    assert.ok(
-        html.includes(MINECRAFT_DISCLAIMER),
-        `${slug} must disclaim Minecraft affiliation`,
-    );
-    assert.ok(
-        html.includes(DISCORD_DISCLAIMER),
-        `${slug} must disclaim Discord affiliation`,
-    );
+    assertNotice(slug, html, NOTICES[slug]);
     assert.ok(
         html.includes(`href="https://paperboard.dev/${slug}/"`),
         `${slug} needs its own canonical URL`,

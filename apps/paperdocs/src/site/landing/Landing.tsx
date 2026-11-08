@@ -1,8 +1,9 @@
-import { For, type ParentProps } from "solid-js";
+import { For, Show, type ParentProps } from "solid-js";
 import { MarketingHeading } from "./MarketingHeading";
 import { styledText } from "./TextEffect";
 import { Icon, Render, Screenshot } from "./Screenshot";
-import { LEARN_PANELS } from "../learn/panels";
+import { HEADLINE_FIT_LENGTH, LEARN_PANELS, type LearnPanel } from "../learn/panels";
+import { landingRowText, listOf, sentence, trademarkNotice, type TrademarkNotice } from "../trademarks";
 import {
     docsDropdownHtml,
     footerDocsHtml,
@@ -23,22 +24,21 @@ import {
 // host wrappers (.bg-overlay-host, .styled-text-host, .paper-button-host) that
 // carry the element-level placement the old element selectors held.
 
-// The panels the landing walks through: three that each do a job, then the
-// one that connects them. Their copy and screenshots come from the learn
-// pages, so a claim is written (and corrected) in one place.
+// The panels the landing walks through, one row each, their copy alternating
+// sides, in the site's panel order: three that each do a job, then the one
+// that connects them. Their
+// copy and screenshots come from the learn pages, so a claim is written (and
+// corrected) in one place.
 function learnPanel(slug: string) {
     const panel = LEARN_PANELS.find((candidate) => candidate.slug === slug);
     if (!panel) throw new Error(`paperdocs: the landing features ${slug}, which has no learn page`);
     return panel;
 }
-const JOB_PANELS = ["game-server", "bot-creator", "agents"].map(learnPanel);
-const CONNECTOR_PANEL = learnPanel("actions");
+const LANDING_PANELS = ["agents", "game-server", "bot-creator", "actions"].map(learnPanel);
 
-// A job panel's screenshot fills the column right of its copy and runs past
-// the page edge (see .panel-row in style.css); on phones it is wider than
-// the screen.
-const PANEL_SHOT_SIZES = "(max-width: 760px) 125vw, 860px";
-const CONNECTOR_SHOT_SIZES = "(max-width: 760px) 125vw, 1100px";
+// A panel's window spans three quarters of the column (see .panel-row in
+// style.css); on phones it takes the full width, its copy under it.
+const PANEL_SHOT_SIZES = "(max-width: 900px) 92vw, 900px";
 
 // The machines Paperboard can live on. Each sits in an equal slot, so a
 // flat board reads as clearly as a laptop.
@@ -52,11 +52,11 @@ const HOSTS = [
 const PANEL_COMMANDS = ["npm create @mileniumhq/panel", "cd dev.example.hello", "bun install", "bun run build"];
 
 const PLAY_ICONS = [
+    "/pictures/agents.png",
+    "/pictures/game-server.png",
+    "/pictures/discord-bot.png",
     "/pictures/blocks.png",
     "/pictures/crane.png",
-    "/pictures/discord-bot.png",
-    "/pictures/game-server.png",
-    "/pictures/agents.png",
     "/pictures/panel-library.png",
     "/pictures/paperapi.png",
 ];
@@ -177,7 +177,8 @@ export function Topbar() {
     );
 }
 
-export function Footer() {
+// The legal lines name only the trademarks the page's own copy mentions.
+export function Footer(props: { notice?: TrademarkNotice }) {
     return (
         <footer class="site-footer">
             <div class="site-footer__inner">
@@ -236,51 +237,86 @@ export function Footer() {
                     </a>
                 </div>
             </div>
-            <div class="site-footer__legal">
-                <p>
-                    Paperboard is an independent project. It is not affiliated with,
-                    endorsed by, or sponsored by Mojang Studios, Microsoft, or
-                    Minecraft.
-                </p>
-                <p>
-                    Paperboard is not affiliated with, endorsed by, or sponsored by
-                    Discord Inc.
-                </p>
-            </div>
+            <Show when={props.notice}>
+                {(notice) => (
+                    <div class="site-footer__legal">
+                        <p>
+                            Paperboard is an independent project. It is not affiliated with,
+                            endorsed by, or sponsored by {sentence(listOf(notice().owners, "or"))}
+                        </p>
+                        <p>
+                            {listOf(notice().names, "and")}{" "}
+                            {notice().names.length > 1
+                                ? "are trademarks of their respective owners."
+                                : "is a trademark of its owner."}
+                        </p>
+                    </div>
+                )}
+            </Show>
         </footer>
     );
 }
 
-export function MarketingChrome(props: ParentProps) {
+/** `text`: every piece of copy the page shows, for its footer's trademark notice. */
+export function MarketingChrome(props: ParentProps<{ text: string[] }>) {
     return (
         <>
             <Topbar />
             <div class="bg-overlay-host" innerHTML={bgOverlayHtml} />
             {props.children}
-            <Footer />
+            <Footer notice={trademarkNotice(props.text)} />
         </>
     );
 }
 
-function PanelCopy(props: { panel: (typeof JOB_PANELS)[number] }) {
+// "Learn more", with the panel named for screen readers.
+function learnButtonHtml(panel: LearnPanel): string {
     return (
-        <div class="panel-row-copy">
-            <p class="panel-row-name">
-                <Icon src={props.panel.icon} size={32} lazy />
-                {props.panel.name}
-            </p>
-            <h3>{props.panel.headline}</h3>
-            <p>{props.panel.description}</p>
-            <a class="panel-row-link" href={`/${props.panel.slug}/`}>
-                Learn about {props.panel.name}
-            </a>
-        </div>
+        `<paper-button variant="brand" href="/${panel.slug}/">` +
+        `<span>Learn more</span><span class="sr-only"> about ${panel.name}</span>` +
+        `</paper-button>`
     );
 }
 
+// A panel's chapter: its real window, large, on a paper card whose offset
+// sheet is the panel's colour, with its copy on an ink card (the topbar's
+// material) floating over the window's lower corner. Chapters trade
+// sides down the page.
+function PanelRow(props: { panel: LearnPanel; flip: boolean }) {
+    return (
+        <article
+            class={props.flip ? "panel-row panel-row--flip" : "panel-row"}
+            style={{ "--panel-accent": props.panel.accent }}
+        >
+            <figure class="panel-row-shot screenshot-card">
+                <Screenshot src={props.panel.image} alt={props.panel.alt} sizes={PANEL_SHOT_SIZES} />
+            </figure>
+            <div class="panel-row-copy">
+                <p class="panel-row-name">
+                    <Icon src={props.panel.icon} size={40} lazy />
+                    {props.panel.name}
+                </p>
+                <MarketingHeading
+                    level={3}
+                    text={props.panel.headline}
+                    lines={props.panel.headlineLines}
+                    fitLength={HEADLINE_FIT_LENGTH}
+                    size={48}
+                />
+                <p>{props.panel.description}</p>
+                <div class="paper-button-host panel-row-button" innerHTML={learnButtonHtml(props.panel)} />
+            </div>
+        </article>
+    );
+}
+
+const HERO_SUB =
+    "Text your own AI agent, host a game server, and run a Discord bot, all from one app on your own computer. No terminal required.";
+const HERO_ALT = "A computer showing Paperboard's Home, with a game server's status and console beside the system widgets";
+
 export function Landing() {
     return (
-        <MarketingChrome>
+        <MarketingChrome text={[HERO_SUB, HERO_ALT, ...LANDING_PANELS.flatMap(landingRowText)]}>
             <main class="page-layout landing">
                 <section class="hero-section">
                     <div class="hero-copy">
@@ -290,16 +326,13 @@ export function Landing() {
                             lines={["Do more with", "your computer."]}
                             size={88}
                         />
-                        <p class="hero-sub">
-                            Host a Minecraft server, run a Discord bot, and text your own AI agent, all
-                            from one app on your own computer. No terminal required.
-                        </p>
+                        <p class="hero-sub">{HERO_SUB}</p>
                         <DownloadCta />
                     </div>
                     <figure class="hero-render">
                         <Render
                             name="hero"
-                            alt="A computer running the Paperboard Game Server panel"
+                            alt={HERO_ALT}
                             sizes="(max-width: 900px) 88vw, 46vw"
                             priority
                         />
@@ -322,26 +355,9 @@ export function Landing() {
                             than you can read this paragraph.
                         </p>
                     </div>
-                    <For each={JOB_PANELS}>
-                        {(panel) => (
-                            <article class="panel-row">
-                                <PanelCopy panel={panel} />
-                                <figure class="panel-row-shot">
-                                    <Screenshot src={panel.image} alt={panel.alt} sizes={PANEL_SHOT_SIZES} />
-                                </figure>
-                            </article>
-                        )}
+                    <For each={LANDING_PANELS}>
+                        {(panel, index) => <PanelRow panel={panel} flip={index() % 2 === 1} />}
                     </For>
-                    <article class="panel-row panel-row--connector">
-                        <PanelCopy panel={CONNECTOR_PANEL} />
-                        <figure class="panel-row-shot">
-                            <Screenshot
-                                src={CONNECTOR_PANEL.image}
-                                alt={CONNECTOR_PANEL.alt}
-                                sizes={CONNECTOR_SHOT_SIZES}
-                            />
-                        </figure>
-                    </article>
                 </section>
 
                 <section class="landing-section anywhere-section" aria-labelledby="anywhere-heading">
