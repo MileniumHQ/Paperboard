@@ -7,6 +7,7 @@
 //
 // A suite that needs its own data dir may override PAPERBOARD_DIR, but must
 // restore the previous value (see tests/machineid.test.ts for the pattern).
+import { afterAll } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -25,13 +26,23 @@ for (const dir of [
 }
 process.env.PAPERBOARD_DIR = root;
 
-process.once("exit", () => {
-    try {
-        fs.rmSync(root, { recursive: true, force: true });
-    } catch (err) {
-        console.error(
-            "[test setup] failed to remove throwaway PAPERBOARD_DIR:",
-            err,
-        );
+// bun test fires no process exit handlers, so cleanup runs in a preload
+// afterAll, which bun runs once after every test file. Support modules add
+// their own teardown (temp dirs, spawned children) through
+// registerTestCleanup; it runs first, then the throwaway PAPERBOARD_DIR goes.
+const cleanups: Array<() => void | Promise<void>> = [];
+(globalThis as { __paperboardTestCleanup?: typeof cleanups }).__paperboardTestCleanup = cleanups;
+
+afterAll(async () => {
+    const failures: unknown[] = [];
+    for (const cleanup of cleanups.splice(0)) {
+        try {
+            await cleanup();
+        } catch (err) {
+            console.error("[test setup] a test cleanup failed:", err);
+            failures.push(err);
+        }
     }
+    fs.rmSync(root, { recursive: true, force: true });
+    if (failures.length) throw new AggregateError(failures, "test cleanup failed");
 });
