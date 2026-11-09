@@ -20,11 +20,16 @@ Paperboard is a dashboard for self-hostable programs. Panels are like the apps. 
 - **Always test.** Unless you're certain it'll work fine, always do a manual check to ensure the feature works and looks great.
 - When making Actions, placeholders are the type (etc "Text" or "Channel ID") and not a description (etc "Example Text" "1234567890")
 
-Fixes:
-
-- **Prove it:** a fix comes with a small test that fails without it, across the real boundary, not a mock.
-- **Don't cheat tests:** never skip, loosen, or delete a failing test; fix the test if it expects broken behavior.
 - **Be careful with deletes:** stop a service before touching its files, and keep user data on uninstall.
+
+Tests:
+
+- **Tests are CI:** deterministic, no sleeps or timing races, no network, nothing from the dev's machine. Temp dirs only, via `PAPERBOARD_DIR`.
+- **Real boundaries:** real filesystem, processes, Electron and browser over mocks.
+- **Every release target:** CI runs Linux x64/arm64, macOS x64/arm64 and Windows x64. No POSIX-only shells, paths or signals outside a per-platform branch.
+- **Fewer, stronger tests:** only data loss, security, install/update/release, core contracts and shipped bugs in core flows. `tests-inventory.md` lists what the suite covers; add to it when you add a test.
+- **Prove it:** a fix comes with a small test that fails without it.
+- **Don't cheat tests:** never skip, loosen, `.todo` or delete a failing test. A test that can't run fails with the reason. If a test expects broken behavior, fix the test.
 
 Some rules about Git:
 
