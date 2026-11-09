@@ -1,0 +1,68 @@
+{
+  "version": 2,
+  "items": [
+    {
+      "id": "a08aac8d-c695-4cd1-87f7-f103d311c3cf",
+      "source": "builtin",
+      "computerId": "local",
+      "widgetId": "clock",
+      "size": "4x1",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "a44bc9db-686b-47b4-bfce-e2f1564e741a",
+      "source": "builtin",
+      "computerId": "local",
+      "widgetId": "disk",
+      "size": "2x1",
+      "x": 4,
+      "y": 0
+    },
+    {
+      "id": "731132ac-0146-403f-b725-d10b46a4fd14",
+      "source": "builtin",
+      "computerId": "local",
+      "widgetId": "computers",
+      "size": "2x1",
+      "x": 6,
+      "y": 0
+    },
+    {
+      "id": "6fa8339d-2df3-4ddd-92c6-c124dd939e16",
+      "source": "builtin",
+      "computerId": "local",
+      "widgetId": "cpu",
+      "size": "2x2",
+      "x": 0,
+      "y": 1
+    },
+    {
+      "id": "a234ba3d-977e-4fa5-9961-b946065dcdbd",
+      "source": "builtin",
+      "computerId": "local",
+      "widgetId": "memory",
+      "size": "2x2",
+      "x": 2,
+      "y": 1
+    },
+    {
+      "id": "7d1a7b97-40c5-4530-987a-95826540d705",
+      "source": "builtin",
+      "computerId": "local",
+      "widgetId": "network",
+      "size": "2x2",
+      "x": 4,
+      "y": 1
+    },
+    {
+      "id": "e938000d-d929-41f0-afc5-4970310c41da",
+      "source": "builtin",
+      "computerId": "local",
+      "widgetId": "panels",
+      "size": "2x2",
+      "x": 6,
+      "y": 1
+    }
+  ]
+}

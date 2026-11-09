@@ -1,0 +1,29 @@
+[
+  {
+    "token": "048d753b184f9acbf304bd76ddee120067e8be3fa073f246",
+    "clientName": "host",
+    "pairedAt": "2026-11-09T22:02:36.269Z",
+    "lastSeenAt": "2026-11-09T22:02:36.424Z"
+  },
+  {
+    "token": "pcp_8c443d452f4da9a40329a30d97c8de9d9bdbb027c241e47e",
+    "clientName": "panel-service:dev.paperboard.snapshot",
+    "pairedAt": "2026-11-09T22:02:36.274Z",
+    "lastSeenAt": "2026-11-09T22:02:36.274Z",
+    "panelId": "dev.paperboard.snapshot"
+  },
+  {
+    "token": "pc_9b8c0643fe36d70a00b3dd8f590429552435907efe2964f3",
+    "clientName": "Snapshot Laptop",
+    "pairedAt": "2026-11-09T22:02:36.285Z",
+    "lastSeenAt": "2026-11-09T22:02:36.285Z"
+  },
+  {
+    "token": "pcp_755dacb2b6da7416a04e9a21cc12bd9e0ccc6f6df0ea59aa",
+    "clientName": "panel-service:dev.paperboard.snapshot",
+    "pairedAt": "2026-11-09T22:02:36.285Z",
+    "lastSeenAt": "2026-11-09T22:02:36.285Z",
+    "panelId": "dev.paperboard.snapshot",
+    "issuedBy": "pc_9b8c0643fe36d70a00b3dd8f590429552435907efe2964f3"
+  }
+]

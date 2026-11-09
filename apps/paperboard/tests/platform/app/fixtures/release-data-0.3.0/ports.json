@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "policy": "next-free",
+  "claims": [
+    {
+      "panelId": "dev.paperboard.snapshot",
+      "name": "game",
+      "label": "Game",
+      "protocol": "tcp",
+      "port": 41733
+    }
+  ]
+}

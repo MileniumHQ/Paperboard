@@ -1,0 +1,15 @@
+{
+  "activeId": "local",
+  "computers": [
+    {
+      "id": "snapshot-rack",
+      "name": "Snapshot Rack",
+      "host": "127.0.0.2",
+      "port": 1,
+      "token": "pc_f8f514aa01f426c1de26f31b5b9d46c9797590ab63558d72",
+      "cert": "-----BEGIN CERTIFICATE-----\nMIIBVTCB/KADAgECAhB7MCpqwA2xkwF7a1DWf1rYMAoGCCqGSM49BAMCMBwxGjAY\nBgNVBAMMEVBhcGVyYm9hcmQgU2VydmVyMB4XDTI2MTEwODIyMDIzNloXDTM2MTEw\nNjIyMDIzNlowHDEaMBgGA1UEAwwRUGFwZXJib2FyZCBTZXJ2ZXIwWTATBgcqhkjO\nPQIBBggqhkjOPQMBBwNCAATg4o7n3Axz66exFIZ1hdba+V5NDzF/PLPA/Y0aSZli\nD5juzRtmAse5FzCuvRps26amniW0FdSH8oh3aqleyrXeoyAwHjAcBgNVHREEFTAT\nghFwYXBlcmJvYXJkLXNlcnZlcjAKBggqhkjOPQQDAgNIADBFAiBrVyKKObskU+M0\nrkA0hBzLJRnls4r65SyI67oQmH079gIhAJGMUJmXykYfmb8xCS8hOHPSPzdAxnDo\nbTMJHzIEcrs9\n-----END CERTIFICATE-----\n",
+      "os": "linux",
+      "arch": "x64"
+    }
+  ]
+}
