@@ -83,7 +83,7 @@ jobs:
             libraries) targets="packages paperapi paperui create-panel crane-launcher scripts" ;;
             app) targets="paperboard" ;;
             panels) targets="agents botcreator gameserver terminal" ;;
-            web) targets="paperdocs origami origami-library pbd global" ;;
+            web) targets="paperdocs origami origami-library pbd panelapis global" ;;
             *) echo "unknown gate group ${{ matrix.group }}" >&2; exit 2 ;;
           esac
           if [ "${{ matrix.target.os }}" = linux ]; then
