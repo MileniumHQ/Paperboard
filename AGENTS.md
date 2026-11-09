@@ -26,7 +26,7 @@ Tests:
 
 - **Tests are CI:** deterministic, no sleeps or timing races, no network, nothing from the dev's machine. Temp dirs only, via `PAPERBOARD_DIR`.
 - **Real boundaries:** real filesystem, processes, Electron and browser over mocks.
-- **Every release target:** CI runs Linux x64/arm64, macOS x64/arm64 and Windows x64. No POSIX-only shells, paths or signals outside a per-platform branch.
+- **Platform tests:** CI runs everything once on Linux x64. Only tests whose outcome depends on the OS or CPU go in a `tests/platform` (or `test/platform`) directory, which also runs on Linux arm64, macOS x64/arm64 and Windows x64. Those stay portable: no POSIX-only shells, paths or signals outside a per-platform branch.
 - **Fewer, stronger tests:** only data loss, security, install/update/release, core contracts and shipped bugs in core flows. `tests-inventory.md` lists what the suite covers; add to it when you add a test.
 - **Prove it:** a fix comes with a small test that fails without it.
 - **Don't cheat tests:** never skip, loosen, `.todo` or delete a failing test. A test that can't run fails with the reason. If a test expects broken behavior, fix the test.

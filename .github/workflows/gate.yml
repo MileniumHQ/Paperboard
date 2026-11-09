@@ -11,29 +11,74 @@ concurrency:
   group: gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
+  # The whole gate, once, on Linux x64, split into parallel jobs: each group
+  # is a set of `bun run gate` targets, so a job proves exactly what it names
   gate:
-    name: ${{ matrix.group }} (${{ matrix.target.name }})
+    name: ${{ matrix.group }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [libraries, app, panels, web]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Cache Bun packages and the Electron binary
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            ~/.cache/electron
+          key: deps-linux-x64-${{ hashFiles('bun.lock') }}
+          restore-keys: deps-linux-x64-
+      # the silent-catch and TODO-expiry gates scan with ripgrep, Game
+      # Server's art test crops through the real ffmpeg, and the app's
+      # Electron tests need a display and a session bus
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep ffmpeg xvfb dbus
+          # Ubuntu 24.04 keeps Electron's sandbox from making user namespaces
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: bun install --frozen-lockfile
+      # Electron fetches its binary only when its install script runs
+      - name: Fetch Electron
+        if: matrix.group != 'web'
+        run: |
+          node "$(node -p "require.resolve('electron/install.js', { paths: ['apps/paperboard'] })")"
+      - name: Gate
+        run: |
+          case "${{ matrix.group }}" in
+            libraries) targets="packages paperapi paperui create-panel crane-launcher scripts" ;;
+            app) targets="paperboard" ;;
+            panels) targets="agents botcreator gameserver terminal" ;;
+            web) targets="paperdocs origami origami-library pbd panelapis global" ;;
+            *) echo "unknown gate group ${{ matrix.group }}" >&2; exit 2 ;;
+          esac
+          dbus-run-session -- xvfb-run -a bun run gate $targets
+
+  # The other release targets run only the cross-platform suite: the tests
+  # whose outcome depends on the OS or CPU (booting and updating the built
+  # app and daemon, processes and signals, paths, archives, file modes).
+  # Logic that's the same everywhere is proven once by the Linux gate above.
+  platform:
+    name: platform (${{ matrix.target.name }})
     runs-on: ${{ matrix.target.runner }}
     timeout-minutes: 30
     strategy:
-      # one red target never hides what the others found
       fail-fast: false
       matrix:
-        # every release target in scripts/publishLib.ts ALL_TARGETS
+        # with linux-x64 above, every target in scripts/publishLib.ts ALL_TARGETS
         target:
-          - { name: linux-x64, runner: ubuntu-24.04, os: linux }
           - { name: linux-arm64, runner: ubuntu-24.04-arm, os: linux }
           - { name: macos-x64, runner: macos-15-intel, os: macos }
           - { name: macos-arm64, runner: macos-15, os: macos }
           - { name: windows-x64, runner: windows-2025, os: windows }
-        # the gate split into parallel jobs: each group is a set of
-        # `bun run gate` targets, so a job proves exactly what it names
-        group: [libraries, app, panels]
-        include:
-          # the web services deploy to Cloudflare and the repo-wide checks
-          # read the tree, so neither depends on the runner's platform
-          - target: { name: linux-x64, runner: ubuntu-24.04, os: linux }
-            group: web
     defaults:
       run:
         shell: bash
@@ -55,52 +100,34 @@ jobs:
             ~/AppData/Local/electron/Cache
           key: deps-${{ matrix.target.name }}-${{ hashFiles('bun.lock') }}
           restore-keys: deps-${{ matrix.target.name }}-
-      # the silent-catch and TODO-expiry gates scan with ripgrep, Game
-      # Server's art test crops through the real ffmpeg, and on Linux the
-      # app's Electron tests need a display and a session bus
-      - name: Install system tools (Linux)
+      - name: Display and session bus for Electron (Linux)
         if: matrix.target.os == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ripgrep ffmpeg xvfb dbus
-          # Ubuntu 24.04 keeps Electron's sandbox from making user namespaces
+          sudo apt-get install -y xvfb dbus
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - name: Install system tools (macOS)
-        if: matrix.target.os == 'macos'
-        run: brew install ripgrep ffmpeg
-      - name: Install system tools (Windows)
-        if: matrix.target.os == 'windows'
-        run: choco install -y --no-progress ripgrep ffmpeg
       - run: bun install --frozen-lockfile
-      # Electron fetches its binary only when its install script runs
       - name: Fetch Electron
-        if: matrix.group != 'web'
         run: |
           node "$(node -p "require.resolve('electron/install.js', { paths: ['apps/paperboard'] })")"
-      - name: Gate
+      - name: Cross-platform suite
         run: |
-          case "${{ matrix.group }}" in
-            libraries) targets="packages paperapi paperui create-panel crane-launcher scripts" ;;
-            app) targets="paperboard" ;;
-            panels) targets="agents botcreator gameserver terminal" ;;
-            web) targets="paperdocs origami origami-library pbd panelapis global" ;;
-            *) echo "unknown gate group ${{ matrix.group }}" >&2; exit 2 ;;
-          esac
           if [ "${{ matrix.target.os }}" = linux ]; then
-            dbus-run-session -- xvfb-run -a bun run gate $targets
+            dbus-run-session -- xvfb-run -a bun run gate platform
           else
-            bun run gate $targets
+            bun run gate platform
           fi
+
   # One stable check to require in branch protection, whatever the matrix is
   gate-green:
     name: Gate
     if: always()
-    needs: gate
+    needs: [gate, platform]
     runs-on: ubuntu-24.04
     steps:
       - name: Every gate job passed
         run: |
-          if [ "${{ needs.gate.result }}" != success ]; then
-            echo "gate jobs finished with: ${{ needs.gate.result }}" >&2
+          if [ "${{ needs.gate.result }}" != success ] || [ "${{ needs.platform.result }}" != success ]; then
+            echo "gate: ${{ needs.gate.result }}, platform: ${{ needs.platform.result }}" >&2
             exit 1
           fi
