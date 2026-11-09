@@ -22,10 +22,11 @@
 #     pbd            pbd.lc short-link worker: typecheck, tests, silent-catches
 #     scripts        root dev/publish scripts: tests, silent-catches
 #     actions agents ai botcreator gameserver terminal   first-party panels
+#     global         repo-wide checks (changelog-existence, todo-expiry)
 #   e.g. `bun run gate terminal`, `bun run gate paperapi paperui`
 #
-# Repo-wide checks (changelog-existence, todo-expiry) run only in the full
-# gate; a filtered run is about the named targets.
+# Repo-wide checks (changelog-existence, todo-expiry) run in the full gate or
+# when `global` is named; any other filtered run is about the named targets.
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -57,7 +58,7 @@ run_in() {
 # Every selectable target. The *-build names are prerequisites, not
 # user-facing: they exist so a filtered run can pull in the shared library
 # artifact a consumer needs without running that library's whole suite.
-KNOWN_TARGETS="packages paperapi paperui create-panel crane-launcher paperapi-build paperui-build create-panel-build paperboard paperdocs origami origami-library pbd scripts actions agents ai botcreator gameserver terminal"
+KNOWN_TARGETS="global packages paperapi paperui create-panel crane-launcher paperapi-build paperui-build create-panel-build paperboard paperdocs origami origami-library pbd scripts actions agents ai botcreator gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the

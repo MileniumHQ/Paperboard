@@ -1,13 +1,42 @@
 name: Integration gate
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+# A newer push to the same branch or PR makes the older run moot
+concurrency:
+  group: gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
-  linux:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+  gate:
+    name: ${{ matrix.group }} (${{ matrix.target.name }})
+    runs-on: ${{ matrix.target.runner }}
+    timeout-minutes: 30
+    strategy:
+      # one red target never hides what the others found
+      fail-fast: false
+      matrix:
+        # every release target in scripts/publishLib.ts ALL_TARGETS
+        target:
+          - { name: linux-x64, runner: ubuntu-24.04, os: linux }
+          - { name: linux-arm64, runner: ubuntu-24.04-arm, os: linux }
+          - { name: macos-x64, runner: macos-15-intel, os: macos }
+          - { name: macos-arm64, runner: macos-15, os: macos }
+          - { name: windows-x64, runner: windows-2025, os: windows }
+        # the gate split into parallel jobs: each group is a set of
+        # `bun run gate` targets, so a job proves exactly what it names
+        group: [libraries, app, panels]
+        include:
+          # the web services deploy to Cloudflare and the repo-wide checks
+          # read the tree, so neither depends on the runner's platform
+          - target: { name: linux-x64, runner: ubuntu-24.04, os: linux }
+            group: web
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
@@ -16,15 +45,62 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+      - name: Cache Bun packages and the Electron binary
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            ~/.cache/electron
+            ~/Library/Caches/electron
+            ~/AppData/Local/electron/Cache
+          key: deps-${{ matrix.target.name }}-${{ hashFiles('bun.lock') }}
+          restore-keys: deps-${{ matrix.target.name }}-
       # the silent-catch and TODO-expiry gates scan with ripgrep, Game
-      # Server's art test crops through the real ffmpeg, and the app's
-      # updater and supervisor tests open a real Electron, which needs a
-      # display and a session bus; the runner image ships none of them
-      - run: sudo apt-get update && sudo apt-get install -y ripgrep ffmpeg xvfb dbus
+      # Server's art test crops through the real ffmpeg, and on Linux the
+      # app's Electron tests need a display and a session bus
+      - name: Install system tools (Linux)
+        if: matrix.target.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep ffmpeg xvfb dbus
+          # Ubuntu 24.04 keeps Electron's sandbox from making user namespaces
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Install system tools (macOS)
+        if: matrix.target.os == 'macos'
+        run: brew install ripgrep ffmpeg
+      - name: Install system tools (Windows)
+        if: matrix.target.os == 'windows'
+        run: choco install -y --no-progress ripgrep ffmpeg
       - run: bun install --frozen-lockfile
       # Electron fetches its binary only when its install script runs
-      - run: |
+      - name: Fetch Electron
+        if: matrix.group != 'web'
+        run: |
           node "$(node -p "require.resolve('electron/install.js', { paths: ['apps/paperboard'] })")"
-      # Ubuntu 24.04 keeps Electron's sandbox from making user namespaces
-      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - run: dbus-run-session -- xvfb-run -a bun run gate
+      - name: Gate
+        run: |
+          case "${{ matrix.group }}" in
+            libraries) targets="packages paperapi paperui create-panel crane-launcher scripts" ;;
+            app) targets="paperboard" ;;
+            panels) targets="agents botcreator gameserver terminal" ;;
+            web) targets="paperdocs origami origami-library pbd global" ;;
+            *) echo "unknown gate group ${{ matrix.group }}" >&2; exit 2 ;;
+          esac
+          if [ "${{ matrix.target.os }}" = linux ]; then
+            dbus-run-session -- xvfb-run -a bun run gate $targets
+          else
+            bun run gate $targets
+          fi
+  # One stable check to require in branch protection, whatever the matrix is
+  gate-green:
+    name: Gate
+    if: always()
+    needs: gate
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Every gate job passed
+        run: |
+          if [ "${{ needs.gate.result }}" != success ]; then
+            echo "gate jobs finished with: ${{ needs.gate.result }}" >&2
+            exit 1
+          fi
