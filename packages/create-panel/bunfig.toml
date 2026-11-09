@@ -1,0 +1,5 @@
+# test/setup.ts gives the test process a throwaway PAPERBOARD_DIR, so the
+# scaffolder's suite (which links panels and runs a daemon) never reaches
+# the developer's real Paperboard data.
+[test]
+preload = ["./test/setup.ts"]
