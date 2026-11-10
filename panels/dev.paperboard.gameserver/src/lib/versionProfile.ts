@@ -334,8 +334,12 @@ export function classifyMcVersion(raw: string): ClassifiedMcVersion {
     return { raw: id, kind: "unknown", base: id };
 }
 
-/** the release id whose behaviour this build carries */
-export function behaviorVersionOf(raw: string): string {
+/**
+ * the release id whose behaviour this build carries; null for a weekly
+ * snapshot older than the anchor table, whose cycle shipped a release below
+ * the supported floor (its raw id would otherwise coerce to "17.0.0")
+ */
+export function behaviorVersionOf(raw: string): string | null {
     const classified = classifyMcVersion(raw);
     if (classified.kind !== "snapshot") return classified.base;
     const key = weeklyKey(classified.raw);
@@ -351,7 +355,7 @@ export function behaviorVersionOf(raw: string): string {
             best = { key: anchorKey, release };
         }
     }
-    return best?.release ?? classified.base;
+    return best?.release ?? null;
 }
 
 // pure version comparison over releases, drops and snapshots
