@@ -41,6 +41,28 @@ function once<T>(make: () => Promise<T>): () => Promise<T> {
     return () => (pending ??= make());
 }
 
+// The app's dependencies, reachable from `dir` the way the asar's
+// node_modules are. Each package is linked to its real folder in the
+// install's store, never through the app's own node_modules: on Windows a
+// package link inside a linked node_modules resolved against the link's
+// location instead of its target, so Electron found no dependency at all.
+// A junction needs no privilege on Windows; elsewhere it is a symlink.
+export function linkDependencies(dir: string): void {
+    const from = path.join(APP_DIR, "node_modules");
+    const to = path.join(dir, "node_modules");
+    const link = (name: string) => fs.symlinkSync(fs.realpathSync(path.join(from, name)), path.join(to, name), "junction");
+    fs.mkdirSync(to);
+    for (const name of fs.readdirSync(from)) {
+        if (name.startsWith(".")) continue;
+        if (!name.startsWith("@")) {
+            link(name);
+            continue;
+        }
+        fs.mkdirSync(path.join(to, name));
+        for (const scoped of fs.readdirSync(path.join(from, name))) link(path.join(name, scoped));
+    }
+}
+
 export interface BuiltApp {
     // the directory Electron runs: package.json, out/, node_modules
     dir: string;
@@ -56,8 +78,7 @@ export const buildApp = once(async (): Promise<BuiltApp> => {
     await run([process.execPath, viteBin, "build", "--outDir", path.join(dir, "out"), "--logLevel", "error"], APP_DIR);
     const { name, productName, version, main } = APP_PACKAGE;
     fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name, productName, version, main }));
-    // a junction needs no privilege on Windows; elsewhere it is a symlink
-    fs.symlinkSync(path.join(APP_DIR, "node_modules"), path.join(dir, "node_modules"), "junction");
+    linkDependencies(dir);
     for (const entry of ["out/main/index.js", "out/preload/index.js", "out/renderer/index.html"]) {
         if (!fs.existsSync(path.join(dir, entry))) throw new Error(`electron-vite build produced no ${entry}`);
     }

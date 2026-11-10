@@ -5,7 +5,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { assetFileName, feedOf, ymlKeyFor } from "../../../../../../../scripts/publishLib";
-import { APP_DIR, APP_PACKAGE, hostTarget } from "../build";
+import { APP_PACKAGE, hostTarget, linkDependencies } from "../build";
 import { watch, WAIT_MS } from "../crane";
 import { electronBinary } from "../electron";
 import { ownChild, tempDataDir, tempDir } from "../temp";
@@ -25,7 +25,7 @@ export function buildUpdaterApp(): Promise<string> {
         if (!result.success) throw new Error(`updater entry build failed:\n${result.logs.map(String).join("\n")}`);
         const { name, productName, version } = APP_PACKAGE;
         fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name, productName, version, main: "main.js" }));
-        fs.symlinkSync(path.join(APP_DIR, "node_modules"), path.join(dir, "node_modules"), "junction");
+        linkDependencies(dir);
         return dir;
     })();
     return built;
