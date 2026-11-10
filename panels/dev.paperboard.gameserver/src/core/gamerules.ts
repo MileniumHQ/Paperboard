@@ -12,7 +12,8 @@ import {
 const GAMERULE_NAME_PATTERN = /^[a-z0-9_]{1,64}$/;
 const GAMERULE_VALUE_PATTERN = /^(?:true|false|-?\d{1,10})$/i;
 
-const REGISTRY_NAMES: ReadonlySet<string> = new Set(GAMERULES.map((r) => r.name));
+const REGISTRY: ReadonlyMap<string, GameruleEntry> = new Map(GAMERULES.map((r) => [r.name, r]));
+const REGISTRY_NAMES: ReadonlySet<string> = new Set(REGISTRY.keys());
 
 /**
  * The rules a server of this version accepts: added at or before it, and
@@ -39,12 +40,24 @@ export function assertGameruleName(name: unknown): string {
     return s;
 }
 
+const BOOLEAN_VALUE_PATTERN = /^(?:true|false)$/;
+const NUMBER_VALUE_PATTERN = /^-?\d{1,10}$/;
+
+/** `name` must already be a registry member (assertGameruleName); the value must fit the rule's type */
 export function assertGameruleValue(name: string, value: unknown): string {
-    const s = String(value ?? "").trim();
+    const s = String(value ?? "").trim().toLowerCase();
     if (!GAMERULE_VALUE_PATTERN.test(s)) {
         throw new Error(`Refusing unsafe gamerule value for ${name}: ${JSON.stringify(value)}`);
     }
-    return s.toLowerCase();
+    const rule = REGISTRY.get(name);
+    if (!rule) throw new Error(`Refusing unknown gamerule: ${JSON.stringify(name)}`);
+    if (rule.valueType === "boolean" && !BOOLEAN_VALUE_PATTERN.test(s)) {
+        throw new Error(`Refusing ${JSON.stringify(value)} for ${name}: it takes true or false`);
+    }
+    if (rule.valueType === "number" && !NUMBER_VALUE_PATTERN.test(s)) {
+        throw new Error(`Refusing ${JSON.stringify(value)} for ${name}: it takes a whole number`);
+    }
+    return s;
 }
 
 // null when the line is not a gamerule readout. Both the query response
