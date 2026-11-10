@@ -77,16 +77,22 @@ const REPLACEMENT_PROBE_TIMEOUT_MS = 30_000;
 // system library or one that throws while loading is refused here, while the
 // running daemon still owns the path and nothing needs restoring.
 async function probeReplacement(file: string, version: string): Promise<void> {
+    const refused = (how: string, why: string) => new Error(`Refusing update: the ${version} daemon does not start on this computer (${how}): ${why}`);
     const reported = await new Promise<string>((resolve, reject) => {
-        execFile(file, ["--version"], { timeout: REPLACEMENT_PROBE_TIMEOUT_MS, windowsHide: true, maxBuffer: 64 * 1024 }, (err, stdout, stderr) => {
-            if (err) {
-                const why = String(stderr).trim() || err.message;
-                const how = err.killed ? `did not answer within ${REPLACEMENT_PROBE_TIMEOUT_MS / 1000}s` : `exited with ${err.code ?? err.signal}`;
-                reject(new Error(`Refusing update: the ${version} daemon does not start on this computer (${how}): ${why}`));
-                return;
-            }
-            resolve(String(stdout).trim());
-        });
+        // a file the system can't execute at all fails the spawn itself
+        try {
+            execFile(file, ["--version"], { timeout: REPLACEMENT_PROBE_TIMEOUT_MS, windowsHide: true, maxBuffer: 64 * 1024 }, (err, stdout, stderr) => {
+                if (err) {
+                    const why = String(stderr).trim() || err.message;
+                    const how = err.killed ? `did not answer within ${REPLACEMENT_PROBE_TIMEOUT_MS / 1000}s` : `exited with ${err.code ?? err.signal}`;
+                    reject(refused(how, why));
+                    return;
+                }
+                resolve(String(stdout).trim());
+            });
+        } catch (err) {
+            reject(refused("could not be run", err instanceof Error ? err.message : String(err)));
+        }
     });
     if (reported !== version) {
         throw new Error(`Refusing update: the binary signed as ${version} reports version ${reported || "(nothing)"}`);
