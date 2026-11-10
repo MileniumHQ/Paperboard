@@ -1,0 +1,12 @@
+/* Blockly draws into a real element that needs a size: it takes the room
+   the run bar and the log leave. */
+.canvas {
+    flex: 3 1 0;
+    min-height: 0;
+    position: relative;
+}
+
+.log {
+    flex: 1 1 0;
+    min-height: 0;
+}

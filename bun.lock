@@ -240,6 +240,20 @@
         "vite-plugin-solid": "^2.11.14",
       },
     },
+    "panels/dev.paperboard.blocks": {
+      "name": "dev.paperboard.blocks",
+      "dependencies": {
+        "@mileniumhq/paperapi": "workspace:*",
+        "@mileniumhq/paperui": "workspace:*",
+        "blockly": "13.4.0",
+        "solid-js": "^1.9.17",
+      },
+      "devDependencies": {
+        "typescript": "~6.0.3",
+        "vite": "^8.3.2",
+        "vite-plugin-solid": "^2.11.14",
+      },
+    },
     "panels/dev.paperboard.botcreator": {
       "name": "dev.paperboard.botcreator",
       "dependencies": {
@@ -841,6 +855,8 @@
 
     "blake3-wasm": ["blake3-wasm@2.1.5", "", {}, "sha512-F1+K8EbfOZE49dtoPtmxUQrpXaBIl3ICvasLh+nJta0xkz+9kF/7uet9fLnwKqhDrmj6g+6K3Tw9yQPUg2ka5g=="],
 
+    "blockly": ["blockly@13.4.0", "", { "peerDependencies": { "jsdom": ">=27.4.0 <31.0.0" } }, "sha512-cWZJV5nocL+VWOG9Vfm6j8shdOLGyvKkyoGOS2bk9u6PKb4qqLp50NeL8YoNMTEi7fHmY37eBYT1yC6Y7/yZ7w=="],
+
     "bluebird": ["bluebird@3.7.2", "", {}, "sha512-XpNj6GDQzdfW+r2Wnn7xiSAd7TM3jzkxGXBGTtWKuSXv1xUV+azxAm8jdWZN06QTQk+2N2XB9jRDkvbmQmcRtg=="],
 
     "bonjour-service": ["bonjour-service@1.4.4", "", { "dependencies": { "fast-deep-equal": "^3.1.3", "multicast-dns": "^7.2.5" } }, "sha512-jCZcVv7eoc4QesRscwEZtSROBen+6LpKAmBIsQYQrsAeVHLyMXWX/t6eIV5KiRZYNUBl8eVqImEEMQ8L5+c/Kw=="],
@@ -958,6 +974,8 @@
     "dev.paperboard.agents": ["dev.paperboard.agents@workspace:panels/dev.paperboard.agents"],
 
     "dev.paperboard.ai": ["dev.paperboard.ai@workspace:panels/dev.paperboard.ai"],
+
+    "dev.paperboard.blocks": ["dev.paperboard.blocks@workspace:panels/dev.paperboard.blocks"],
 
     "dev.paperboard.botcreator": ["dev.paperboard.botcreator@workspace:panels/dev.paperboard.botcreator"],
 

@@ -1,0 +1,9 @@
+{
+    "name": "Blocks",
+    "id": "dev.paperboard.blocks",
+    "version": "0.1.0",
+    "description": "Build automations from blocks, with every panel's actions",
+    "publisher": "Paperboard",
+    "base": "./dist/index.html",
+    "service": "./dist/service.js"
+}
