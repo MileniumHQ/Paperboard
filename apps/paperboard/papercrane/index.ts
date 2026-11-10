@@ -13,7 +13,7 @@ import { PaperCraneEngine } from "./engine";
 import { PaperCraneAuth } from "./auth";
 import { handleHttpRequest } from "./http";
 import { createHostAuthorityCheck } from "./hostAuthority";
-import { DavSessionStore } from "./dav";
+import { davMaxUploadBytes, DavSessionStore } from "./dav";
 import { setupWebSocketServer } from "./ws";
 import { PaperCraneTui } from "./tui";
 import { ensureNativeHelpersExecutable } from "./pty";
@@ -422,6 +422,24 @@ function listenPaperCraneServer(
                 ? https.createServer({ key: tlsIdentity.key, cert: tlsIdentity.cert }, onRequest)
                 : http.createServer(onRequest);
             const localServer = tlsIdentity ? http.createServer(onRequest) : null;
+            // An upload that waits for a go-ahead (Expect: 100-continue) and
+            // declares more than the upload cap is refused before its body
+            // is sent. Refused while the body is still arriving, the
+            // closing connection resets on Windows and the client loses the
+            // 413 for "ECONNRESET". Every other request goes on as usual.
+            const onCheckContinue = (req: http.IncomingMessage, res: http.ServerResponse) => {
+                const declared = Number(req.headers["content-length"]);
+                const cap = davMaxUploadBytes();
+                if ((req.method || "").toUpperCase() === "PUT" && Number.isFinite(declared) && declared > cap) {
+                    res.writeHead(413, { "Content-Type": "text/plain", Connection: "close" });
+                    res.end(`The file is larger than this computer accepts (${cap} bytes)`);
+                    return;
+                }
+                res.writeContinue();
+                onRequest(req, res);
+            };
+            server.on("checkContinue", onCheckContinue);
+            localServer?.on("checkContinue", onCheckContinue);
 
             const handshakeFile = craneHandshakePath();
             const startId = crypto.randomUUID();

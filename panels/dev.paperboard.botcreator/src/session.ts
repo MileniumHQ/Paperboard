@@ -4,6 +4,7 @@
 // and tells each session where its triggers go.
 import {
     Client,
+    GatewayCloseCodes,
     GatewayIntentBits,
     ChannelType,
     ApplicationCommandOptionType,
@@ -120,15 +121,30 @@ function serializeCommandOptions(
     }));
 }
 
+// what a close that ends the session means for the person running the bot;
+// these are the codes discord.js gives up on instead of reconnecting
+const GATEWAY_CLOSE_REASONS: Partial<Record<number, string>> = {
+    [GatewayCloseCodes.AuthenticationFailed]: "the bot token was rejected",
+    [GatewayCloseCodes.InvalidShard]: "the shard was invalid",
+    [GatewayCloseCodes.ShardingRequired]: "the bot is in too many servers to run without sharding",
+    [GatewayCloseCodes.InvalidAPIVersion]: "the gateway version is not supported",
+    [GatewayCloseCodes.InvalidIntents]: "the requested intents are invalid",
+    [GatewayCloseCodes.DisallowedIntents]: "the bot asked for a privileged intent that is not enabled in the Discord Developer Portal",
+};
+
 const gatewayErrorMessage = (err: unknown): string => {
     if (err instanceof Error) return err.message;
     if (typeof err === "string") return err;
     if (err && typeof err === "object") {
-        const obj = err as { code?: unknown; reason?: unknown; message?: unknown };
+        const obj = err as { code?: unknown; message?: unknown };
         if (obj.message) return String(obj.message);
-        if (obj.code !== undefined) {
-            return obj.reason ? `close ${obj.code}: ${obj.reason}` : `close code ${obj.code}`;
+        // discord.js 14 fills a close event's reason with a deprecation
+        // notice, never what Discord sent: the code is the only truth
+        if (typeof obj.code === "number") {
+            const why = GATEWAY_CLOSE_REASONS[obj.code];
+            return why ? `Discord closed the gateway (${obj.code}): ${why}` : `Discord closed the gateway (${obj.code})`;
         }
+        if (obj.code !== undefined) return `Discord closed the gateway (${String(obj.code)})`;
         return "gateway closed";
     }
     return err === undefined || err === null ? "gateway closed" : String(err);

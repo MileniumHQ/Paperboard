@@ -563,13 +563,17 @@ export function on(
     // attach RPC, one replay entry), so an unsubscribe only tears down when
     // the LAST subscriber leaves. Per-subscriber attach/untrack pairs
     // previously untracked on the first unsubscribe while a listener
-    // remained, silently losing reconnect replay.
+    // remained, silently losing reconnect replay. Exit counts too: the daemon
+    // sends a resource's exit only to connections attached to it, so an exit
+    // listener on a connection that did not start the resource (a restarted
+    // service taking back a run) would otherwise never hear it.
     const tracked: "terminal" | "process" | null =
-        kind === "terminal-data"
+        kind === "terminal-data" || kind === "terminal-exit"
             ? "terminal"
             : kind === "process-data" ||
                 kind === "process-stdout" ||
-                kind === "process-stderr"
+                kind === "process-stderr" ||
+                kind === "process-exit"
             ? "process"
             : null;
     if (tracked) {

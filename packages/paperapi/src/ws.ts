@@ -562,25 +562,32 @@ export class CraneTransport {
                 });
                 return;
             }
+            // the reply is sent once the handler settles, which can be after
+            // the connection closed (a daemon restart mid-call): an undeliverable
+            // reply is reported here, never thrown out of the handler's chain
+            const reply = (outcome: { result: unknown } | { error: string }) => {
+                try {
+                    this.frame({ type: "action_reply", callId, ...outcome });
+                    return;
+                } catch (err) {
+                    if ("error" in outcome) {
+                        debugErr(`reply to ${panelId}:${action} (call ${callId}) was not delivered`, err);
+                        return;
+                    }
+                    // a result that cannot be sent (unserializable, or the
+                    // connection is gone) is answered as the call's error
+                    reply({ error: `The action's result could not be sent: ${(err as Error)?.message || String(err)}` });
+                }
+            };
             Promise.resolve()
                 .then(() => {
                     const call = () => handler(...(Array.isArray(args) ? args : []));
                     return actionCallScope ? actionCallScope.run(callId, call) : call();
                 })
-                .then((result) => {
-                    this.frame({
-                        type: "action_reply",
-                        callId,
-                        result: result === undefined ? null : result,
-                    });
-                })
-                .catch((err: any) => {
-                    this.frame({
-                        type: "action_reply",
-                        callId,
-                        error: err?.message || String(err),
-                    });
-                });
+                .then(
+                    (result) => reply({ result: result === undefined ? null : result }),
+                    (err: any) => reply({ error: err?.message || String(err) }),
+                );
             return;
         }
 

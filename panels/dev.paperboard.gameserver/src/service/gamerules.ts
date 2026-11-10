@@ -133,7 +133,9 @@ export async function applyPendingGamerules(
     if (undelivered) return;
 
     try {
-        await config.set({ ...(saved ?? {}), pendingGamerules: {} }, PANEL_ID);
+        // re-read: the config may have changed while the commands went out
+        const fresh = await config.get<Record<string, unknown> | null>(PANEL_ID);
+        await config.set({ ...(fresh && typeof fresh === "object" ? fresh : {}), pendingGamerules: {} }, PANEL_ID);
     } catch (err) {
         console.error("[Service:Gamerules] clearing applied edits failed:", err);
     }

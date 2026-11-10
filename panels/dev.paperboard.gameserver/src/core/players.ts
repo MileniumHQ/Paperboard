@@ -91,16 +91,25 @@ export function consoleTimeToSeconds(clean: string): number | undefined {
     return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
 }
 
+// the server's own line: the message starts the line or right after the log
+// prefix's brackets and their colon (26.3 adds "System chat: "), so a chat
+// line ("<Mallory> Steve joined the game") or a /say ("[Mallory] ...") can
+// never pass for one
+const SERVER_MESSAGE = String.raw`^(?:(?:\[[^\]]*\]\s*)+:\s*)?(?:System chat:\s*)?`;
+const JOINED_RE = new RegExp(`${SERVER_MESSAGE}(${NAME_IN_LINE})(?: \\(formerly known as ${NAME_IN_LINE}\\))? joined the game\\s*$`, "i");
+const LEFT_RE = new RegExp(`${SERVER_MESSAGE}(${NAME_IN_LINE}) left the game\\s*$`, "i");
+const LISTED_RE = new RegExp(`${SERVER_MESSAGE}There are [^:]*players online[^:]*:\\s*(.+)`, "i");
+
 export function extractJoinedName(clean: string): string | undefined {
-    return clean.match(new RegExp(`(${NAME_IN_LINE})\\s+joined the game`, "i"))?.[1];
+    return clean.trim().match(JOINED_RE)?.[1];
 }
 
 export function extractLeftName(clean: string): string | undefined {
-    return clean.match(new RegExp(`(${NAME_IN_LINE})\\s+left the game`, "i"))?.[1];
+    return clean.trim().match(LEFT_RE)?.[1];
 }
 
 export function extractListedNames(clean: string): string[] | undefined {
-    const listMatch = clean.match(/players online[^:]*:\s*(.+)/i);
+    const listMatch = clean.trim().match(LISTED_RE);
     if (!listMatch) return undefined;
     return listMatch[1]
         .split(",")

@@ -1,5 +1,4 @@
 import { config, files as fileApi, type ServiceContext } from "./api";
-import properties from "dot-properties";
 import { sanitizeFileName, listDirectory } from "./filesystem";
 import {
     buildWorldInfos,
@@ -10,7 +9,7 @@ import {
     assertShellSafeLevelName,
     type WorldInfo,
 } from "../core/worlds";
-import { parseProperties, extractLevelName } from "../core/properties";
+import { parseProperties, extractLevelName, stringifyServerProperties } from "../core/properties";
 import { type GameServerState, PANEL_ID } from "./types";
 import { makeTrashRemoveDeps } from "./trashDeps";
 import { trashRemovePathsWith } from "./trash";
@@ -167,19 +166,15 @@ export async function setActiveWorld(
         throw new Error("Refusing multi-line seed");
     }
 
-    let content: string | null = null;
-    try {
-        content = await fileApi.read("server.properties", PANEL_ID);
-    } catch (err) {
-        console.debug("[Service:Worlds] server.properties unreadable, writing fresh:", String(err));
-    }
+    // an unreadable file fails the switch: writing "fresh" over it would
+    // drop every other setting the server had
+    const content = await fileApi.read("server.properties", PANEL_ID);
     const props = content ? parseProperties(content) : {};
     props["level-name"] = plan.name;
     if (plan.kind === "create") {
         props["level-seed"] = cleanSeed;
     }
-    const out = properties.stringify(props, { keySep: "=", lineWidth: null, latin1: false });
-    await fileApi.write("server.properties", out, PANEL_ID);
+    await fileApi.write("server.properties", stringifyServerProperties(props), PANEL_ID);
     if (plan.kind === "create") {
         const pending = await readPendingWorlds();
         if (!pending.some((n) => n.toLowerCase() === plan.name.toLowerCase())) {

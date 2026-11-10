@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { execFile } from "node:child_process";
 import { extractArchive, packageArchiveSuffix } from "./engineArchives";
 import { streamToFileWithProgress, writeJsonAtomicSync } from "./storage";
 import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "./releaseSignature";
@@ -67,6 +68,37 @@ export async function restoreCraneUpdate(execPath: string): Promise<void> {
     await fs.promises.rm(directory, { recursive: true, force: true });
 }
 
+// how long the replacement gets to start and print its version
+const REPLACEMENT_PROBE_TIMEOUT_MS = 30_000;
+
+// The replacement must start on this computer before it takes the place of
+// the running executable. `--version` evaluates the whole compiled bundle
+// (the CLI imports the server), so a binary for the wrong CPU, one missing a
+// system library or one that throws while loading is refused here, while the
+// running daemon still owns the path and nothing needs restoring.
+async function probeReplacement(file: string, version: string): Promise<void> {
+    const refused = (how: string, why: string) => new Error(`Refusing update: the ${version} daemon does not start on this computer (${how}): ${why}`);
+    const reported = await new Promise<string>((resolve, reject) => {
+        // a file the system can't execute at all fails the spawn itself
+        try {
+            execFile(file, ["--version"], { timeout: REPLACEMENT_PROBE_TIMEOUT_MS, windowsHide: true, maxBuffer: 64 * 1024 }, (err, stdout, stderr) => {
+                if (err) {
+                    const why = String(stderr).trim() || err.message;
+                    const how = err.killed ? `did not answer within ${REPLACEMENT_PROBE_TIMEOUT_MS / 1000}s` : `exited with ${err.code ?? err.signal}`;
+                    reject(refused(how, why));
+                    return;
+                }
+                resolve(String(stdout).trim());
+            });
+        } catch (err) {
+            reject(refused("could not be run", err instanceof Error ? err.message : String(err)));
+        }
+    });
+    if (reported !== version) {
+        throw new Error(`Refusing update: the binary signed as ${version} reports version ${reported || "(nothing)"}`);
+    }
+}
+
 export async function installCraneRelease(
     release: CraneRelease,
     activate?: () => Promise<void>,
@@ -100,6 +132,7 @@ export async function installCraneRelease(
         await fs.promises.rename(expected, replacement);
         await fs.promises.chmod(replacement, 0o755);
         const binarySha256 = await digestFile(replacement);
+        await probeReplacement(replacement, release.version);
         await fs.promises.rm(contents, { recursive: true });
         await fs.promises.unlink(archive);
         writeJsonAtomicSync(path.join(directory, "state.json"), { version: release.version, binarySha256 }, { mode: 0o600 });

@@ -163,14 +163,21 @@ export async function writePanelFile(
     body: Readable,
     size: number,
 ): Promise<void> {
+    // the daemon answers a file over its cap before any byte is sent: a
+    // refusal that arrives while the body is still going out is lost to a
+    // connection reset on Windows, leaving only "ECONNRESET" for the reason
     const put = daemonRequest(endpoint, "PUT", filePath(req), {
         "Content-Type": "application/octet-stream",
         "Content-Length": String(size),
+        Expect: "100-continue",
     });
     const response = awaitResponse(put);
-    // a refusal (413, 403) can answer before the body is sent; the
+    // a refusal (413, 403) can still answer before the body is sent; the
     // response decides, and the upload stream is torn down either way
-    const sent = pipeline(body, put).catch((err) => err as Error);
+    let sent: Promise<Error | undefined> = Promise.resolve(undefined);
+    put.once("continue", () => {
+        sent = pipeline(body, put).then(() => undefined, (err) => err as Error);
+    });
     const res = await response.catch(async (err) => {
         body.destroy();
         await sent;
@@ -178,7 +185,10 @@ export async function writePanelFile(
     });
     if (res.statusCode !== 201 && res.statusCode !== 204) {
         body.destroy();
-        throw await statusFailure(res, `Writing "${req.path}"`);
+        const failure = await statusFailure(res, `Writing "${req.path}"`);
+        // a refusal before the body leaves the request unfinished
+        put.destroy();
+        throw failure;
     }
     res.resume();
     const sendError = await sent;

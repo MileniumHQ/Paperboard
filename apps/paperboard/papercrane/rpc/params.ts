@@ -80,7 +80,9 @@ export function assertPanelId(value: unknown): string {
 // Panel-relative JSON path for config get/set: workspaces live in the
 // panel's own files dir (config.set(data, id, "tabs.json")). Absolute
 // paths, traversal and non-JSON names are refused here so the refusal is
-// a typed INVALID_PARAMS instead of an engine-level surprise.
+// a typed INVALID_PARAMS instead of an engine-level surprise. A colon is
+// refused too: it is a Windows drive ("C:/...", absolute there) or an NTFS
+// stream, never part of a portable panel-relative name.
 export function assertConfigPath(value: unknown): string | undefined {
     const raw = assertOptStr(value, "path", 256);
     if (raw === undefined) return undefined;
@@ -89,6 +91,7 @@ export function assertConfigPath(value: unknown): string | undefined {
     if (
         !normalized.endsWith(".json") ||
         normalized.startsWith("/") ||
+        normalized.includes(":") ||
         segments.some((segment) => segment === "" || segment === "..")
     ) {
         throw new InvalidParamsError(

@@ -41,6 +41,28 @@ function once<T>(make: () => Promise<T>): () => Promise<T> {
     return () => (pending ??= make());
 }
 
+// The app's dependencies, reachable from `dir` the way the asar's
+// node_modules are. Each package is linked to its real folder in the
+// install's store, never through the app's own node_modules: on Windows a
+// package link inside a linked node_modules resolved against the link's
+// location instead of its target, so Electron found no dependency at all.
+// A junction needs no privilege on Windows; elsewhere it is a symlink.
+export function linkDependencies(dir: string): void {
+    const from = path.join(APP_DIR, "node_modules");
+    const to = path.join(dir, "node_modules");
+    const link = (name: string) => fs.symlinkSync(fs.realpathSync(path.join(from, name)), path.join(to, name), "junction");
+    fs.mkdirSync(to);
+    for (const name of fs.readdirSync(from)) {
+        if (name.startsWith(".")) continue;
+        if (!name.startsWith("@")) {
+            link(name);
+            continue;
+        }
+        fs.mkdirSync(path.join(to, name));
+        for (const scoped of fs.readdirSync(path.join(from, name))) link(path.join(name, scoped));
+    }
+}
+
 export interface BuiltApp {
     // the directory Electron runs: package.json, out/, node_modules
     dir: string;
@@ -56,8 +78,7 @@ export const buildApp = once(async (): Promise<BuiltApp> => {
     await run([process.execPath, viteBin, "build", "--outDir", path.join(dir, "out"), "--logLevel", "error"], APP_DIR);
     const { name, productName, version, main } = APP_PACKAGE;
     fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name, productName, version, main }));
-    // a junction needs no privilege on Windows; elsewhere it is a symlink
-    fs.symlinkSync(path.join(APP_DIR, "node_modules"), path.join(dir, "node_modules"), "junction");
+    linkDependencies(dir);
     for (const entry of ["out/main/index.js", "out/preload/index.js", "out/renderer/index.html"]) {
         if (!fs.existsSync(path.join(dir, entry))) throw new Error(`electron-vite build produced no ${entry}`);
     }
@@ -76,6 +97,12 @@ export interface BuiltCrane {
 // number into the binary (the update entries need a newer release);
 // `bootFailure` compiles a release whose daemon exits before it serves;
 // `protocolVersion` one that speaks another wire protocol version.
+//
+// The stamps need bundler plugins, which only Bun.build takes, so it
+// bundles and the CLI compiles the bundle. Bun.build's own `compile` makes a
+// Windows executable whose entry never sees import.meta.main (the binary
+// starts, runs nothing and exits 0), so the release's CLI compile is the one
+// that makes the executable on every target.
 export async function compileCrane(options: { version?: string; bootFailure?: boolean; protocolVersion?: number } = {}): Promise<BuiltCrane> {
     const target = hostTarget();
     const dir = tempDir("crane");
@@ -86,9 +113,12 @@ export async function compileCrane(options: { version?: string; bootFailure?: bo
         fs.writeFileSync(entry, `console.error("this release cannot start");\nprocess.exit(70);\n`);
     }
     const pkgFilter = /[\\/]apps[\\/]paperboard[\\/]package\.json$/;
+    const bundleDir = tempDir("crane-bundle");
     const result = await Bun.build({
         entrypoints: [entry],
-        compile: { target: BUN_TARGET_MAP[target] as Bun.Build.Target, outfile: file },
+        target: "bun",
+        outdir: bundleDir,
+        naming: "main.js",
         plugins: [{
             name: "release-version",
             setup(build) {
@@ -109,7 +139,8 @@ export async function compileCrane(options: { version?: string; bootFailure?: bo
             },
         }],
     });
-    if (!result.success) throw new Error(`crane compile failed:\n${result.logs.map(String).join("\n")}`);
+    if (!result.success) throw new Error(`crane bundle failed:\n${result.logs.map(String).join("\n")}`);
+    await run([process.execPath, "build", "--compile", `--target=${BUN_TARGET_MAP[target]}`, path.join(bundleDir, "main.js"), "--outfile", file], bundleDir);
     if (!fs.existsSync(file)) throw new Error(`crane compile produced no ${file}`);
     // every Windows crane ships the node-pty sidecar beside it
     if (target.startsWith("windows")) writeNodePtySidecar(dir, path.join(APP_DIR, "node_modules", "node-pty"));

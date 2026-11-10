@@ -293,10 +293,12 @@ export class SavedCommands {
         try {
             await this.transaction(() => this.deps.save(this.docNow()));
         } catch (err) {
+            // abandoned before the kill: the exit it causes arrives while the
+            // kill is awaited and must not be recorded as the run's outcome
+            this.abandon(live, previousRun);
             await this.deps.kill(procId).catch((killErr) =>
                 console.error(`[TerminalService] could not stop unrecorded run of ${command.id}:`, killErr),
             );
-            this.abandon(live, previousRun);
             throw new Error(`"${command.label}" was stopped: its run could not be recorded (${err instanceof Error ? err.message : String(err)})`);
         }
         if (!live.settled) {

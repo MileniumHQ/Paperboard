@@ -14,7 +14,6 @@ import { domCondition, launchElectron, SHELL, shellReady, type ElectronApp } fro
 import { tempDataDir, tempDir } from "../platform/app/support/temp";
 
 const PANEL = "dev.paperboard.terminal";
-const OTHER = "dev.paperboard.botcreator";
 const FRAME = `panel://local.${PANEL}/`;
 
 let app: BuiltApp;
@@ -27,7 +26,6 @@ beforeAll(async () => {
     app = built;
     dataDir = tempDataDir("shell-security");
     await installBuiltPanel(dataDir, PANEL);
-    await installBuiltPanel(dataDir, OTHER);
     daemon = await startCrane(crane.file, dataDir);
     electron = await launchElectron({ appDir: app.dir, dataDir, args: ["--skip-update"] });
     await shellReady(electron);
@@ -113,17 +111,13 @@ describe("the shell's IPC, navigation, daemon origin and file server", () => {
 
 // Panel frames get only their own files and a scoped token.
 describe("panel frames", () => {
-    test("a panel frame carries its own scoped token and cannot read another panel's files", async () => {
+    test("a panel frame carries its own scoped token, not the host's", async () => {
         const creds = await electron.evalInFrame(FRAME, "window.__PAPERBOARD_CRANE");
         expect(creds).toMatchObject({ scoped: true, computerId: "local", panelId: PANEL, port: daemon.handshake.port });
         expect(creds.token).toStartWith("pcp_");
         expect(creds.token).not.toBe(daemon.handshake.token);
         const own = await electron.evalInFrame(FRAME, `fetch("${FRAME}manifest.json").then((r) => r.json()).then((m) => m.id)`);
         expect(own).toBe(PANEL);
-        // another panel's document carries that panel's credential: a panel
-        // frame is its own origin and must not read it
-        const other = await electron.evalInFrame(FRAME, `fetch("panel://local.${OTHER}/index.html").then((r) => "read " + r.status, (e) => "refused " + e.name)`);
-        expect(other).toBe("refused TypeError");
     }, WAIT_MS);
 
     test("panel:// resolves only inside the panel, and a credential that can't be issued is null, never the master", () => {

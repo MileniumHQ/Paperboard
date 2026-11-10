@@ -530,7 +530,11 @@ export async function runSupervisor(procId: string): Promise<void> {
         unrefTimer(giveUp);
     };
 
-    const startWorkload = () => {
+    // resolves once the workload's start outcome is known: a failure has
+    // set startError, a success has a pid. A program that cannot be spawned
+    // (missing, not executable) is only reported asynchronously, after the
+    // spawn call returns.
+    const startWorkload = async (): Promise<void> => {
         // explicit but missing cwd must fail with its path attached
         let finalCwd: string;
         if (config.cwd) {
@@ -588,17 +592,28 @@ export async function runSupervisor(procId: string): Promise<void> {
                 failStart(`Could not start ${command}: ${(err as Error).message}`);
                 return;
             }
-            childPid = childProcess.pid || 0;
+            const spawned = childProcess;
+            const spawnError = await new Promise<Error | null>((resolve) => {
+                spawned.once("spawn", () => resolve(null));
+                spawned.once("error", resolve);
+            });
+            if (spawnError) {
+                // nothing runs: the caller's start fails with the reason
+                childProcess = null;
+                failStart(`Could not start ${command}: ${spawnError.message}`);
+                return;
+            }
+            childPid = spawned.pid || 0;
 
             // decode per stream, not per chunk: a multibyte character split
             // across two pipe reads must not turn into two U+FFFD
-            childProcess.stdout?.setEncoding("utf8");
-            childProcess.stderr?.setEncoding("utf8");
-            childProcess.stdout?.on("data", (chunk: string) => emitOutput("stdout", chunk));
-            childProcess.stderr?.on("data", (chunk: string) => emitOutput("stderr", chunk));
+            spawned.stdout?.setEncoding("utf8");
+            spawned.stderr?.setEncoding("utf8");
+            spawned.stdout?.on("data", (chunk: string) => emitOutput("stdout", chunk));
+            spawned.stderr?.on("data", (chunk: string) => emitOutput("stderr", chunk));
             // the code is read when the child exits, while its handle is still held
             let exactCode: number | null = null;
-            childProcess.on("exit", (code) => {
+            spawned.on("exit", (code) => {
                 if (code === null || !childPid) return;
                 try {
                     exactCode = exactExitCode(childPid, code);
@@ -608,8 +623,8 @@ export async function runSupervisor(procId: string): Promise<void> {
                     emitOutput("stderr", `\n[Paperboard] ${message}\n`);
                 }
             });
-            childProcess.on("close", (code, signal) => workloadExited(workloadExitCode(exactCode ?? code, signal)));
-            childProcess.on("error", (err) => {
+            spawned.on("close", (code, signal) => workloadExited(workloadExitCode(exactCode ?? code, signal)));
+            spawned.on("error", (err) => {
                 emitOutput("stderr", `\n[Process Error] ${err.message}\n`);
                 workloadExited(1);
             });
@@ -636,6 +651,6 @@ export async function runSupervisor(procId: string): Promise<void> {
     // Bun can accept a connection before invoking the listen callback. Set
     // the spawn outcome first so no client can read a speculative success
     // while cwd validation or synchronous PTY startup is still pending.
-    startWorkload();
+    await startWorkload();
     server.listen(socketPath);
 }

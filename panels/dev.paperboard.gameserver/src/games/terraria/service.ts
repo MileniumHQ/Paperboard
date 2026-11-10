@@ -315,6 +315,11 @@ export const terrariaService: GameService = {
             command: { executable, args: ["-config", path.join(directory, "serverconfig.txt"), "-noupnp"], cwd: bin, env: { ...await profile(directory), ...mono }, inputEncoding: consoleInput(process.platform) },
         };
     },
+    // the password is in serverconfig.txt only while the server runs: the
+    // stopped folder (which backups copy) gets the config without it. A stop
+    // takes it out before the exit (the server read it at start); afterStop
+    // covers every other way the process ends.
+    afterStop: () => generate(""),
     isMutating: () => local().busy || local().modsBusy,
     readiness: { timeoutMs: 300_000, async probe(ctx) {
         if (!local().ready) return false;
@@ -330,7 +335,11 @@ export const terrariaService: GameService = {
         });
     } },
     saveWorld: save,
-    stopTimeoutMs: 120_000, stopEntry: "exit", stop: () => processApi.write(PROC, "exit\n"),
+    stopTimeoutMs: 120_000, stopEntry: "exit", async stop(ctx) {
+        // a failed rewrite is shown, never a reason to keep the server running; afterStop tries again
+        await generate("").catch(err => report(ctx, "Could not take the join password out of serverconfig.txt", err));
+        await processApi.write(PROC, "exit\n");
+    },
     commandLine(command) { const line = singleLine(command, "Command").trim(); if (/^(password|exit-nosave)\b/i.test(line)) throw new Error("Use Options for the password and Stop for a saved shutdown"); return `${line}\n`; },
     sendChat: (_ctx, message) => processApi.write(PROC, `say ${singleLine(message, "Message")}\n`),
     observePartialLine(_ctx, line) {
