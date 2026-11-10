@@ -20,7 +20,6 @@ import * as tar from "tar";
 import { WebSocket } from "ws";
 import { verifyDaemonProof, DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE } from "../apps/paperboard/papercrane/handshake";
 import { CraneSocket, randomChallenge, readHandshake, startCrane, watch, WAIT_MS } from "../apps/paperboard/tests/platform/app/support/crane";
-import { domCondition } from "../apps/paperboard/tests/platform/app/support/electron";
 import { cleanupSuite, ownChild, tempDir } from "../apps/paperboard/tests/platform/app/support/temp";
 import { ALL_TARGETS, archOf, assetFileName, osOf, type Target } from "./publishLib";
 
@@ -164,11 +163,9 @@ async function smokeApp(target: Target, dir: string): Promise<void> {
         return devtools !== "";
     });
 
-    const page = await shellPage(Number(devtools), app.output);
     // textContent: a fresh profile opens on the welcome tutorial, which
     // covers the sidebar that lists this computer
-    const listed = await evaluate(page, domCondition(`document.body.textContent.includes("This Computer")`));
-    if (!listed) throw new Error(`the shell never listed This Computer:\n${app.output()}`);
+    await untilShell(Number(devtools), `document.body?.textContent.includes("This Computer") === true`, app.output);
 
     // the daemon the app started answers as this release
     const handshake = readHandshake(dataDir);
@@ -184,35 +181,42 @@ async function smokeApp(target: Target, dir: string): Promise<void> {
     console.log(`✓ app ${assetFileName("pb", target)}: shell up, server v${info.version}`);
 }
 
-// the shell's page target, once Chromium lists it
-async function shellPage(port: number, output: () => string): Promise<string> {
+// Polls the shell page until `expression` is true. The page is looked up
+// afresh each time: while the app starts it can reload, which ends the
+// page's context mid-evaluation.
+async function untilShell(port: number, expression: string, output: () => string): Promise<void> {
     const deadline = Date.now() + WAIT_MS;
-    let seen: { url: string }[] = [];
+    let last = "the shell page never opened";
     while (Date.now() < deadline) {
         const res = await fetch(`http://127.0.0.1:${port}/json/list`);
         if (!res.ok) throw new Error(`DevTools /json/list answered ${res.status}`);
-        seen = (await res.json()) as { type: string; url: string; webSocketDebuggerUrl: string }[];
-        const shell = (seen as { type: string; url: string; webSocketDebuggerUrl: string }[]).find((t) => t.type === "page" && t.url === `${SHELL}index.html`);
-        if (shell) return shell.webSocketDebuggerUrl;
+        const pages = (await res.json()) as { type: string; url: string; webSocketDebuggerUrl: string }[];
+        const shell = pages.find((t) => t.type === "page" && t.url === `${SHELL}index.html`);
+        if (!shell) last = `the shell page never opened; pages: ${JSON.stringify(pages.map((t) => t.url))}`;
+        else {
+            const reply = await evaluate(shell.webSocketDebuggerUrl, expression);
+            if (reply.value === true) return;
+            last = reply.error ?? `the shell never satisfied ${expression}; it shows: ${String((await evaluate(shell.webSocketDebuggerUrl, "document.body?.innerText.slice(0, 2000)")).value)}`;
+        }
         await Bun.sleep(250);
     }
-    throw new Error(`the shell page never opened; pages: ${JSON.stringify(seen.map((t) => t.url))}\n${output()}`);
+    throw new Error(`${last}\n${output()}`);
 }
 
-// evaluates an expression in a page over the DevTools protocol, awaiting a
-// promise it returns
-function evaluate(wsUrl: string, expression: string): Promise<unknown> {
+// One evaluation in a page over the DevTools protocol: its value, or why
+// there is none (a thrown error, or the page navigating away mid-call)
+function evaluate(wsUrl: string, expression: string): Promise<{ value?: unknown; error?: string }> {
     const ws = new WebSocket(wsUrl);
     return new Promise((resolve, reject) => {
         ws.once("error", reject);
-        ws.once("open", () => ws.send(JSON.stringify({ id: 1, method: "Runtime.evaluate", params: { expression, awaitPromise: true, returnByValue: true } })));
+        ws.once("open", () => ws.send(JSON.stringify({ id: 1, method: "Runtime.evaluate", params: { expression, returnByValue: true } })));
         ws.on("message", (raw) => {
             const msg = JSON.parse(raw.toString());
             if (msg.id !== 1) return;
             ws.close();
-            if (msg.error) reject(new Error(`Runtime.evaluate: ${msg.error.message}`));
-            else if (msg.result.exceptionDetails) reject(new Error(`in the shell: ${msg.result.exceptionDetails.exception?.description ?? msg.result.exceptionDetails.text}`));
-            else resolve(msg.result.result.value);
+            if (msg.error) resolve({ error: `Runtime.evaluate: ${msg.error.message}` });
+            else if (msg.result.exceptionDetails) resolve({ error: `in the shell: ${msg.result.exceptionDetails.exception?.description ?? msg.result.exceptionDetails.text}` });
+            else resolve({ value: msg.result.result.value });
         });
     });
 }
