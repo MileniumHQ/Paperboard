@@ -76,6 +76,12 @@ export interface BuiltCrane {
 // number into the binary (the update entries need a newer release);
 // `bootFailure` compiles a release whose daemon exits before it serves;
 // `protocolVersion` one that speaks another wire protocol version.
+//
+// The stamps need bundler plugins, which only Bun.build takes, so it
+// bundles and the CLI compiles the bundle. Bun.build's own `compile` makes a
+// Windows executable whose entry never sees import.meta.main (the binary
+// starts, runs nothing and exits 0), so the release's CLI compile is the one
+// that makes the executable on every target.
 export async function compileCrane(options: { version?: string; bootFailure?: boolean; protocolVersion?: number } = {}): Promise<BuiltCrane> {
     const target = hostTarget();
     const dir = tempDir("crane");
@@ -86,9 +92,12 @@ export async function compileCrane(options: { version?: string; bootFailure?: bo
         fs.writeFileSync(entry, `console.error("this release cannot start");\nprocess.exit(70);\n`);
     }
     const pkgFilter = /[\\/]apps[\\/]paperboard[\\/]package\.json$/;
+    const bundleDir = tempDir("crane-bundle");
     const result = await Bun.build({
         entrypoints: [entry],
-        compile: { target: BUN_TARGET_MAP[target] as Bun.Build.Target, outfile: file },
+        target: "bun",
+        outdir: bundleDir,
+        naming: "main.js",
         plugins: [{
             name: "release-version",
             setup(build) {
@@ -109,7 +118,8 @@ export async function compileCrane(options: { version?: string; bootFailure?: bo
             },
         }],
     });
-    if (!result.success) throw new Error(`crane compile failed:\n${result.logs.map(String).join("\n")}`);
+    if (!result.success) throw new Error(`crane bundle failed:\n${result.logs.map(String).join("\n")}`);
+    await run([process.execPath, "build", "--compile", `--target=${BUN_TARGET_MAP[target]}`, path.join(bundleDir, "main.js"), "--outfile", file], bundleDir);
     if (!fs.existsSync(file)) throw new Error(`crane compile produced no ${file}`);
     // every Windows crane ships the node-pty sidecar beside it
     if (target.startsWith("windows")) writeNodePtySidecar(dir, path.join(APP_DIR, "node_modules", "node-pty"));
