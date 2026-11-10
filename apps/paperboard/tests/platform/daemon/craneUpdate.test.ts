@@ -10,6 +10,7 @@ import { dataDir, tempDir } from "../../daemon/support/fs";
 import { FIXTURE_PUBLIC_KEY, serve, sha256, signCrane } from "../../daemon/support/release";
 import { Rpc } from "../../daemon/support/rpc";
 import { TEST_TIMEOUT_MS } from "../../daemon/support/wait";
+import { compileCrane } from "../app/support/build";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 
@@ -31,6 +32,12 @@ function publish(name: string, archive: Buffer, version = NEWER) {
 	const digest = sha256(archive);
 	return { downloadUrl: `${registry.url}/${name}.tar.gz`, version, sha256: digest, signature: signCrane(version, digest) };
 }
+
+// A replacement must start and report the version it was signed as before it
+// takes the executable's place, so the releases these tests publish are a
+// real crane stamped as NEWER, compiled once.
+let newerCrane: Promise<Buffer> | undefined;
+const newerCraneBytes = () => (newerCrane ??= compileCrane({ version: NEWER }).then((built) => fs.readFileSync(built.file)));
 
 const hitsFor = (name: string) => registry.hits.filter((p) => p === `/${name}.tar.gz`).length;
 
@@ -80,8 +87,9 @@ describe("crane self-update", () => {
 			fs.copyFileSync(await craneBinary(), exe);
 			fs.chmodSync(exe, 0o755);
 			const before = sha256(fs.readFileSync(exe));
-			// the replacement is a real crane build: the same compiled binary
-			const release = publish("runnable", tarGz([{ name: BINARY_NAME, content: fs.readFileSync(await craneBinary()), mode: 0o644 }]));
+			// the replacement is a real crane build, stamped as the newer release
+			const newer = await newerCraneBytes();
+			const release = publish("runnable", tarGz([{ name: BINARY_NAME, content: newer, mode: 0o644 }]));
 			const crane = await startCrane({ dataDir: dataDir(), binary: exe, env: { PAPERBOARD_RELEASE_PUBLIC_KEY: FIXTURE_PUBLIC_KEY } });
 			try {
 				const host = await crane.rpc();
@@ -91,7 +99,7 @@ describe("crane self-update", () => {
 			} finally {
 				await crane.stop();
 			}
-			expect(sha256(fs.readFileSync(exe))).toBe(sha256(fs.readFileSync(await craneBinary())));
+			expect(sha256(fs.readFileSync(exe))).toBe(sha256(newer));
 			expect(before).toBe(sha256(fs.readFileSync(await craneBinary())));
 			expect(fs.statSync(exe).mode & 0o111).not.toBe(0);
 			const ran = spawnSync(exe, ["status", "--json", "--data-dir", dataDir()], { env: childEnv(dataDir()), encoding: "utf8", timeout: 30_000 });
@@ -121,9 +129,10 @@ describe("crane self-update", () => {
 		});
 
 		test("a failed activation restores the old executable; parked bytes go only once the new version is observed", async () => {
+			const newer = await newerCraneBytes();
 			const exe = installedExecutable("old");
 			await expect(
-				installCraneRelease({ ...publish("activation", tarGz([{ name: BINARY_NAME, content: "new" }])), execPath: exe, releaseKey: FIXTURE_PUBLIC_KEY }, async () => {
+				installCraneRelease({ ...publish("activation", tarGz([{ name: BINARY_NAME, content: newer }])), execPath: exe, releaseKey: FIXTURE_PUBLIC_KEY }, async () => {
 					throw new Error("the new daemon never answered");
 				}),
 			).rejects.toThrow("never answered");
@@ -131,8 +140,8 @@ describe("crane self-update", () => {
 			expect(fs.existsSync(`${exe}.update`)).toBe(false);
 
 			const saved = installedExecutable("old");
-			expect((await installCraneRelease({ ...publish("parked", tarGz([{ name: BINARY_NAME, content: "new" }])), execPath: saved, releaseKey: FIXTURE_PUBLIC_KEY })).status).toBe("awaiting-restart");
-			expect(fs.readFileSync(saved, "utf8")).toBe("new");
+			expect((await installCraneRelease({ ...publish("parked", tarGz([{ name: BINARY_NAME, content: newer }])), execPath: saved, releaseKey: FIXTURE_PUBLIC_KEY })).status).toBe("awaiting-restart");
+			expect(fs.readFileSync(saved).equals(newer)).toBe(true);
 			expect(await confirmCraneUpdate(saved, "1.0.0")).toBe(false);
 			expect(fs.readFileSync(path.join(`${saved}.update`, "previous"), "utf8")).toBe("old");
 			expect(await confirmCraneUpdate(saved, NEWER)).toBe(true);
