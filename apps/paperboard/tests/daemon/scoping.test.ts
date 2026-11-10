@@ -8,7 +8,6 @@ import { PaperCraneAuth } from "../../papercrane/auth";
 import { CredentialStore } from "../../papercrane/credentials";
 import { readRemotes } from "../../papercrane/remotes";
 import { parseBackupLocationRequest } from "../../src/renderer/src/lib/backupLocationRequest";
-import { secretsApi } from "../../../../packages/paperapi/src/secrets";
 import { CraneTransport } from "../../../../packages/paperapi/src/ws";
 import { dataDir, listTree } from "./support/fs";
 import { startDaemon, stopDaemon, type InProcessDaemon } from "./support/inproc";
@@ -223,7 +222,8 @@ describe("the secret vault", () => {
 			expect((await host.fail("secrets:set", { panelId: "test.vault", name: "../a", value: "b" })).code).toBe("INVALID_PARAMS");
 
 			const transport = new CraneTransport({ port: daemon.instance.localPort, token: daemon.instance.auth.issuePanelToken("test.vault"), computerId: "local" });
-			expect(await secretsApi.list("test.vault", transport)).toEqual(["alpha", "zeta"]);
+			// the panel's own scoped token lists the same names
+			expect((await transport.call("secrets:list", { panelId: "test.vault" })).keys).toEqual(["alpha", "zeta"]);
 			transport.close();
 
 			await host.ok("panel:uninstall", { panelId: "test.vault" });
