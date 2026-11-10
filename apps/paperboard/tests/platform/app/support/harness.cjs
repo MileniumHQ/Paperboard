@@ -42,19 +42,56 @@ function findContents(match) {
     return found;
 }
 
-function findFrame(match) {
+function frameAt(match) {
     for (const contents of webContents.getAllWebContents()) {
         if (contents.isDestroyed()) continue;
         const frame = contents.mainFrame.framesInSubtree.find((f) => f.url.startsWith(match));
         if (frame) return frame;
     }
-    throw new Error(`no frame at ${match}`);
+    return null;
+}
+
+// An iframe element is in the page before its frame has navigated to its
+// src (on a slower computer, visibly so): wait for a frame to commit a
+// document at `match`, watching navigations rather than polling a clock.
+function findFrame(match, ms) {
+    const ready = frameAt(match);
+    if (ready) return Promise.resolve(ready);
+    return new Promise((resolve, reject) => {
+        const watched = [];
+        const settle = (finish) => {
+            clearTimeout(timer);
+            app.off("web-contents-created", onCreated);
+            for (const contents of watched) {
+                if (contents.isDestroyed()) continue;
+                contents.off("did-frame-navigate", check);
+                contents.off("did-frame-finish-load", check);
+            }
+            finish();
+        };
+        const check = () => {
+            const frame = frameAt(match);
+            if (frame) settle(() => resolve(frame));
+        };
+        const follow = (contents) => {
+            watched.push(contents);
+            contents.on("did-frame-navigate", check);
+            contents.on("did-frame-finish-load", check);
+        };
+        const onCreated = (_event, contents) => follow(contents);
+        const timer = setTimeout(() => {
+            const open = webContents.getAllWebContents().filter((c) => !c.isDestroyed()).flatMap((c) => c.mainFrame.framesInSubtree.map((f) => f.url));
+            settle(() => reject(new Error(`no frame at ${match} within ${ms} ms; frames: ${open.join(", ")}`)));
+        }, ms);
+        app.on("web-contents-created", onCreated);
+        for (const contents of webContents.getAllWebContents()) if (!contents.isDestroyed()) follow(contents);
+    });
 }
 
 const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor;
 const commands = {
     eval: ({ match, code }) => findContents(match).executeJavaScript(code, true),
-    evalFrame: ({ match, code }) => findFrame(match).executeJavaScript(code, true),
+    evalFrame: async ({ match, code, waitMs }) => (await findFrame(match, waitMs)).executeJavaScript(code, true),
     main: ({ code }) => new AsyncFunction("require", "electron", "app", code)(require, electron, app),
     quit: () => {
         app.quit();

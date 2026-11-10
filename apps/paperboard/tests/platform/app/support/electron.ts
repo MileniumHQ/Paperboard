@@ -143,7 +143,9 @@ export async function launchElectron(options: {
             });
         },
         evalIn: (match, code) => command("eval", { match, code }),
-        evalInFrame: (match, code) => command("evalFrame", { match, code }),
+        // the frame wait ends first, so its message (the frames that are
+        // open) arrives instead of a bare timeout
+        evalInFrame: (match, code) => command("evalFrame", { match, code, waitMs: WAIT_MS / 2 }),
         evalMain: (code) => command("main", { code }),
         async quit() {
             if (child.exitCode === null && child.signalCode === null) await command("quit", {});
