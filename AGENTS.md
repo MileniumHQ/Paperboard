@@ -25,7 +25,7 @@ Tests:
 
 - **Tests are CI:** deterministic, no network, temp dirs via `PAPERBOARD_DIR`. Real boundaries over mocks.
 - **Platform tests:** only OS-dependent tests go in `test/platform`; CI runs those on every release target.
-- **Only what matters:** data loss, security, updates/releases, core contracts. Listed in `tests-inventory.md`.
+- **Only what matters:** data loss, security, updates/releases, core contracts.
 - **Never skip or loosen a failing test.** Fix the code, or the test if it expects broken behavior.
 
 Some rules about Git:
