@@ -23,6 +23,7 @@ export const minecraftService: GameService = {
         const { panelActions, panelEventActions } = await import("./actions");
         return [...panelActions, ...panelEventActions];
     },
+    blocks: async (ctx) => (await import("./blocks")).minecraftBlocks(ctx),
     async initialize(ctx, running) {
         if (!running) await settleInterruptedWork(ctx);
         await recoverPausedSaving();

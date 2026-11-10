@@ -2,6 +2,7 @@ import {
     definePanelService,
     backupApi,
     actionsApi,
+    blocksApi,
     config,
     fileApi,
     defineAction,
@@ -21,6 +22,7 @@ import {
 } from "./servers";
 import * as nodeFs from "node:fs/promises";
 import { inServer, type ServerScope } from "./service/scope";
+import { announcePlayerChanges, bindBlocks, mergeBlocks, PLAYER_TYPE, sharedBlocks } from "./service/blocks";
 import { processApi as scopedProcess, LEGACY_DEPRECATION } from "./service/api";
 import { type GameServerState, SERVER_PROC_ID, appendCapped } from "./service/types";
 import { setRecoveryBlock } from "./service/recoveryState";
@@ -168,7 +170,9 @@ function createScope(server: StoredServer): ServerScope {
                 return state;
             },
             setState(patch) {
+                const before = state;
                 state = { ...state, ...(typeof patch === "function" ? patch(state) : patch) };
+                announcePlayerChanges(scope.blocks, before, state, server.name);
                 publish(scope);
                 histories.get(server.id)?.changed(state);
             },
@@ -238,6 +242,11 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
                     PANEL_ID,
                 );
         }
+        scope.blocks = await blocksApi.defineProject(
+            { id: server.id, name: server.name, icon: gameFor(server.game).icon },
+            PANEL_ID,
+        );
+        await scope.blocks.register(bindBlocks(scope, mergeBlocks(sharedBlocks(scope.ctx), await game.blocks?.(scope.ctx))));
         let wasRunning = false;
         try {
             const history = await readHistory(await historyFile(server.id));
@@ -345,6 +354,7 @@ export const gameServerService = definePanelService({
                 const scope = requireServer(server);
                 const renamed = { ...scope.server, name: serverName(name) };
                 await scope.project!.update({ name: renamed.name, icon: gameFor(renamed.game).icon });
+                await scope.blocks!.update({ name: renamed.name, icon: gameFor(renamed.game).icon });
                 await updateSaved((current) => ({
                     ...current,
                     servers: current.servers.map((s) =>
@@ -381,6 +391,7 @@ export const gameServerService = definePanelService({
                     });
                     await backupApi.forSource(PANEL_ID, scope.server.id).setSchedule(null);
                     await scope.project!.remove();
+                    await scope.blocks!.remove();
                     if (scope.legacy)
                         for (const def of await gameServiceFor(scope.server.game).actions())
                             await actionsApi.unregister(def.id, PANEL_ID);
@@ -419,6 +430,7 @@ export const gameServerService = definePanelService({
     async onInit(ctx) {
         rootContext = ctx;
         try {
+            await blocksApi.panel(PANEL_ID).register({ types: [PLAYER_TYPE] });
             const original = await config.get(PANEL_ID);
             saved = readServersConfig(original);
             // No file operations or data moves: installed records and all config

@@ -24,6 +24,8 @@ type Context = ServiceContext<GameServerState>;
 export interface GameService {
     initialState(): GameServerState;
     actions(): Promise<readonly ActionDefinition[]>;
+    /** The game's own blocks for the Blocks panel, beside the ones every game shares. */
+    blocks?(ctx: Context): Promise<import("@mileniumhq/paperapi").BlockSet>;
     initialize(ctx: Context, running: boolean): Promise<void>;
     dispose(): Promise<void>;
     beforeRemove(): Promise<void>;

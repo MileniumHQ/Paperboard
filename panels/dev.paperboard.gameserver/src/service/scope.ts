@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { ActionProjectHandle, ServiceContext } from "@mileniumhq/paperapi";
+import type { ActionProjectHandle, BlocksProjectHandle, ServiceContext } from "@mileniumhq/paperapi";
 import type { StoredServer } from "../servers";
 import type { GameServerState } from "./types";
 export interface ServerScope {
@@ -8,6 +8,8 @@ export interface ServerScope {
     processIds: readonly string[];
     ctx: ServiceContext<GameServerState>;
     project?: ActionProjectHandle;
+    /** the server's Blocks project (Actions API v2) */
+    blocks?: BlocksProjectHandle;
     saveSettings(settings: Record<string, unknown>): Promise<void>;
     bindAction(def: any): any;
     locals: Map<symbol, unknown>;
