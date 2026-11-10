@@ -1,0 +1,181 @@
+name: Release
+# The title is how scripts/publish.ts finds the run it started
+run-name: Release v${{ inputs.version }} from ${{ inputs.commit }}
+# Started by Publish binaries in scripts/publish.ts, which then hashes and
+# signs what this leaves on the draft release, makes it public and moves the
+# download index. The release signing key never comes here.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version (must match apps/paperboard/package.json)
+        required: true
+        type: string
+      commit:
+        description: Commit on main to build
+        required: true
+        type: string
+      draft:
+        description: Leave the build on a draft release
+        type: boolean
+        default: true
+permissions:
+  contents: read
+# one release at a time; a second waits instead of racing the first's draft
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  # Each target built on a runner of its own OS, so macOS builds are signed
+  # by a Mac and Windows binaries carry their version info. linux-arm64 is
+  # built on x64: electron-builder's deb and rpm tooling is x64 only, and
+  # nothing on Linux needs signing.
+  build:
+    name: build (${{ matrix.target.name }})
+    runs-on: ${{ matrix.target.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: true
+      matrix:
+        target:
+          - { name: linux-x64, runner: ubuntu-24.04, os: linux }
+          - { name: linux-arm64, runner: ubuntu-24.04, os: linux }
+          - { name: macos-x64, runner: macos-15-intel, os: macos }
+          - { name: macos-arm64, runner: macos-15, os: macos }
+          - { name: windows-x64, runner: windows-2025, os: windows }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+      - name: The commit is on main and names this version
+        env:
+          COMMIT: ${{ inputs.commit }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          git merge-base --is-ancestor "$COMMIT" origin/main || { echo "$COMMIT is not on main" >&2; exit 1; }
+          actual=$(node -p "require('./apps/paperboard/package.json').version")
+          [ "$actual" = "$VERSION" ] || { echo "package.json is v$actual, not v$VERSION" >&2; exit 1; }
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Cache Bun packages and electron-builder's downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: release-${{ matrix.target.name }}-${{ hashFiles('bun.lock') }}
+          restore-keys: release-${{ matrix.target.name }}-
+      - name: Linux package tools
+        if: matrix.target.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+      - run: bun install --frozen-lockfile
+      - name: Build
+        run: bun scripts/publish.ts ci-build --target ${{ matrix.target.name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target.name }}
+          path: apps/paperboard/dist/release/
+          if-no-files-found: error
+          retention-days: 7
+
+  # What each target ships, run on that target the way a download is
+  # (scripts/releaseSmoke.ts): signatures, the server, and the app's shell
+  smoke:
+    name: smoke (${{ matrix.target.name }})
+    needs: build
+    runs-on: ${{ matrix.target.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { name: linux-x64, runner: ubuntu-24.04, os: linux }
+          - { name: linux-arm64, runner: ubuntu-24.04-arm, os: linux }
+          - { name: macos-x64, runner: macos-15-intel, os: macos }
+          - { name: macos-arm64, runner: macos-15, os: macos }
+          - { name: windows-x64, runner: windows-2025, os: windows }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: smoke-${{ matrix.target.name }}-${{ hashFiles('bun.lock') }}
+          restore-keys: smoke-${{ matrix.target.name }}-
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-${{ matrix.target.name }}
+          path: release
+      - name: Display and session bus for Electron (Linux)
+        if: matrix.target.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb dbus
+          # Ubuntu 24.04 keeps Electron's sandbox from making user namespaces
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Smoke
+        run: |
+          if [ "${{ matrix.target.os }}" = linux ]; then
+            dbus-run-session -- xvfb-run -a bun scripts/releaseSmoke.ts --target ${{ matrix.target.name }} --dir release
+          else
+            bun scripts/releaseSmoke.ts --target ${{ matrix.target.name }} --dir release
+          fi
+
+  # Every target's files on one draft release, tagged at the built commit
+  # when it is made public. A draft left by an earlier run of this version is
+  # replaced; a public release is never touched.
+  draft:
+    name: draft release
+    needs: smoke
+    if: inputs.draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+      - name: Draft v${{ inputs.version }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT: ${{ inputs.commit }}
+          TAG: v${{ inputs.version }}
+        run: |
+          if draft=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$draft" != true ]; then
+              echo "$TAG is already public; a release is never rebuilt over" >&2
+              exit 1
+            fi
+            gh release delete "$TAG" --yes
+          fi
+          gh release create "$TAG" --draft --target "$COMMIT" \
+            --title "Paperboard $TAG" --notes "Paperboard $TAG ($(date -u +%Y-%m-%d))" \
+            release/*
+          gh release view "$TAG" --json assets --jq '.assets[] | "\(.name)\t\(.size)"'

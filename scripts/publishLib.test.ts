@@ -208,15 +208,17 @@ describe("releases compile only with the exact pinned Bun", () => {
         }
     });
 
-    test("the repo pins bun@1.4.4 and every CI gate job installs that same Bun", () => {
+    test("the repo pins bun@1.4.4 and every CI job, the release builds included, installs that same Bun", () => {
         const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
         expect(pkg.packageManager).toBe("bun@1.4.4");
         expect(bunPinMismatch(pkg.packageManager, "1.4.4")).toBeNull();
-        const workflow = Bun.YAML.parse(readFileSync(join(ROOT, ".github", "workflows", "gate.yml"), "utf8")) as {
-            jobs: Record<string, { steps?: { uses?: string; with?: Record<string, unknown> }[] }>;
-        };
-        const setups = Object.values(workflow.jobs).flatMap((job) => (job.steps ?? []).filter((s) => s.uses?.startsWith("oven-sh/setup-bun")));
-        expect(setups.length).toBeGreaterThan(0);
-        for (const step of setups) expect(`bun@${step.with?.["bun-version"]}`).toBe(pkg.packageManager);
+        for (const file of ["gate.yml", "release.yml"]) {
+            const workflow = Bun.YAML.parse(readFileSync(join(ROOT, ".github", "workflows", file), "utf8")) as {
+                jobs: Record<string, { steps?: { uses?: string; with?: Record<string, unknown> }[] }>;
+            };
+            const setups = Object.values(workflow.jobs).flatMap((job) => (job.steps ?? []).filter((s) => s.uses?.startsWith("oven-sh/setup-bun")));
+            expect(setups.length).toBeGreaterThan(0);
+            for (const step of setups) expect(`bun@${step.with?.["bun-version"]}`).toBe(pkg.packageManager);
+        }
     });
 });

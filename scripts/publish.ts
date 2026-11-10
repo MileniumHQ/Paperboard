@@ -343,27 +343,6 @@ async function r2Put(key: string, filePath: string, contentType: string): Promis
     ]);
 }
 
-// ─── GitHub releases ────────────────────────────────────────────────────────
-
-async function ghReleaseEnsure(tag: string, title: string): Promise<void> {
-    if (await cmdOk(["gh", "release", "view", tag, "--repo", GH_REPO])) {
-        p.log.info(`Release ${tag} already exists — uploading assets into it.`);
-        return;
-    }
-    await sh([
-        "gh",
-        "release",
-        "create",
-        tag,
-        "--repo",
-        GH_REPO,
-        "--title",
-        title,
-        "--notes",
-        `${title} (${new Date().toISOString().slice(0, 10)})`,
-    ]);
-}
-
 // ─── Builds ─────────────────────────────────────────────────────────────────
 
 const PB_BUILD_SCRIPT: Record<Target, string> = {
@@ -418,9 +397,29 @@ interface BuiltBinary {
     size: number;
 }
 
+// macOS runs only signed arm64 code and reports an unsigned download as
+// "damaged", and only a Mac can sign it. A macOS build made anywhere else
+// would ship broken, so it is refused; the release workflow builds macOS on
+// Apple's own runners.
+function assertMacHost(target: Target): void {
+    if (osOf(target) === "macos" && process.platform !== "darwin") {
+        throw new Error(
+            `${target} builds only on a Mac: off a Mac it can't be signed, and macOS refuses it. Publish binaries builds it in the release workflow.`,
+        );
+    }
+}
+
+// Ad-hoc signs a compiled macOS server binary in place and checks the
+// signature holds. There is no Developer ID yet, so ad-hoc is the signature.
+async function signMacBinary(filePath: string): Promise<void> {
+    await sh(["codesign", "--force", "--sign", "-", filePath], { quiet: true });
+    await sh(["codesign", "--verify", "--strict", filePath], { quiet: true });
+}
+
 // One electron-builder pass per target: the update payload first, then any
 // distro packages the same pass produced (Linux).
 async function buildPbTarget(target: Target): Promise<BuiltBinary[]> {
+    assertMacHost(target);
     if (osOf(target) === "macos") ensureMacSpawnHelpers();
     await sh([process.execPath, "run", PB_BUILD_SCRIPT[target]], { quiet: false });
     const artifacts = [paperboardArtifacts(target, version), ...paperboardPackages(target, version)];
@@ -444,6 +443,7 @@ async function buildPbTarget(target: Target): Promise<BuiltBinary[]> {
 }
 
 async function buildCraneTarget(target: Target): Promise<BuiltBinary> {
+    assertMacHost(target);
     const bunTarget = BUN_TARGET_MAP[target];
     const outName =
         osOf(target) === "windows" ? `papercrane-${target}.exe` : `papercrane-${target}`;
@@ -464,6 +464,7 @@ async function buildCraneTarget(target: Target): Promise<BuiltBinary> {
     if (!existsSync(filePath))
         throw new Error(`No Paperboard Server binary found at ${filePath}`);
     if (osOf(target) === "windows") applyCraneWindowsIcon(filePath);
+    if (osOf(target) === "macos") await signMacBinary(filePath);
     const { sha256, sha512, size } = await hashFile(filePath);
     return {
         app: "crane",
@@ -517,7 +518,7 @@ async function stageReleaseAssets(built: BuiltBinary[]): Promise<BuiltBinary[]> 
 }
 
 // Build the selected app/target jobs, each hashed as produced. Shared by the
-// interactive build flow and the headless CI builder; the CI builder then
+// interactive build flow and the release workflow's ci-build, which then
 // stages the canonical release assets with stageReleaseAssets.
 async function buildSelected(jobs: { app: DlApp; target: Target }[]): Promise<BuiltBinary[]> {
     if (jobs.some((j) => j.app === "pb" && osOf(j.target) === "linux")) assertLinuxPackageTools();
@@ -592,7 +593,83 @@ async function flowBuildBinaries(): Promise<void> {
     p.outro("Done — artifacts are in dist/.");
 }
 
-// ─── Flow: publish binaries (GitHub Releases + live index) ──────────────────
+// ─── Flow: CI build (one target, in the release workflow) ───────────────────
+
+// What the release workflow runs on each target's own runner: the app and
+// the server for that target, staged under dist/release/ by their release
+// names for the workflow to smoke and put on the draft release.
+async function flowCiBuild(argv: string[]): Promise<void> {
+    const at = argv.indexOf("--target");
+    const target = at >= 0 ? argv[at + 1] : undefined;
+    if (!target || !(ALL_TARGETS as string[]).includes(target)) {
+        throw new Error(`ci-build --target must be one of ${ALL_TARGETS.join(", ")}, got ${JSON.stringify(target ?? null)}`);
+    }
+    if (!isValidVersionSegment(version)) {
+        throw new Error(`Refusing to build version ${JSON.stringify(version)}: it is not a safe URL/tag segment.`);
+    }
+    const built = await buildSelected([
+        { app: "pb", target: target as Target },
+        { app: "crane", target: target as Target },
+    ]);
+    const staged = await stageReleaseAssets(built);
+    console.log(`\nStaged v${version} for ${target} in ${join(distDir, "release")}:`);
+    printTable([
+        ["file", "size", "sha256"],
+        ...staged.map((b) => [b.filename, `${mb(b.size)} MB`, b.sha256]),
+    ]);
+}
+
+// ─── Flow: publish binaries (release workflow + live index) ─────────────────
+
+const RELEASE_WORKFLOW = "release.yml";
+const REPO_ROOT = join(HERE, "..", "..");
+
+// The commit the release workflow will build: HEAD, with no uncommitted
+// changes to tracked files (CI never sees them), already on origin/main, and
+// with a green Gate.
+async function releaseCommit(): Promise<string> {
+    const changed = await sh(["git", "status", "--porcelain", "--untracked-files=no"], { cwd: REPO_ROOT, quiet: true });
+    if (changed) {
+        fail(`The release workflow builds commits, not this working tree. Commit or stash these first:\n${changed}`);
+    }
+    const commit = await sh(["git", "rev-parse", "HEAD"], { cwd: REPO_ROOT, quiet: true });
+    await sh(["git", "fetch", "--quiet", "origin", "main"], { cwd: REPO_ROOT, quiet: true });
+    if (!(await cmdOk(["git", "merge-base", "--is-ancestor", commit, "origin/main"], REPO_ROOT))) {
+        fail(`HEAD (${commit.slice(0, 10)}) is not on origin/main yet. Push it first; releases build only from main.`);
+    }
+    const gate = await sh(
+        ["gh", "api", `repos/${GH_REPO}/commits/${commit}/check-runs?check_name=Gate`, "--jq", "[.check_runs[] | {status, conclusion}]"],
+        { quiet: true },
+    );
+    const runs = JSON.parse(gate) as { status: string; conclusion: string | null }[];
+    if (!runs.length) fail(`${commit.slice(0, 10)} has no Gate run. Releases build only commits the gate passed.`);
+    if (runs.some((r) => r.status !== "completed")) fail(`The Gate on ${commit.slice(0, 10)} is still running. Publish once it passes.`);
+    if (!runs.some((r) => r.conclusion === "success")) {
+        fail(`The Gate on ${commit.slice(0, 10)} did not pass (${runs.map((r) => r.conclusion).join(", ")}). Fix main first.`);
+    }
+    return commit;
+}
+
+// Starts the release workflow and returns its run's id. The run is found by
+// its title, which names the version and commit it was started with.
+async function dispatchRelease(commit: string): Promise<string> {
+    const title = `Release v${version} from ${commit}`;
+    const started = Date.now();
+    await sh(
+        ["gh", "workflow", "run", RELEASE_WORKFLOW, "--repo", GH_REPO, "--ref", "main", "-f", `version=${version}`, "-f", `commit=${commit}`],
+        { quiet: true },
+    );
+    while (Date.now() - started < 60_000) {
+        const listed = JSON.parse(await sh(
+            ["gh", "run", "list", "--repo", GH_REPO, "--workflow", RELEASE_WORKFLOW, "--event", "workflow_dispatch", "--limit", "20", "--json", "databaseId,displayTitle,createdAt"],
+            { quiet: true },
+        )) as { databaseId: number; displayTitle: string; createdAt: string }[];
+        const run = listed.find((r) => r.displayTitle === title && Date.parse(r.createdAt) >= started - 10_000);
+        if (run) return String(run.databaseId);
+        await Bun.sleep(3000);
+    }
+    throw new Error(`GitHub accepted the release workflow but no run titled "${title}" appeared within a minute. Check https://github.com/${GH_REPO}/actions/workflows/${RELEASE_WORKFLOW}`);
+}
 
 async function flowPublishBinaries(): Promise<void> {
     p.intro("Publish binaries");
@@ -601,24 +678,33 @@ async function flowPublishBinaries(): Promise<void> {
             `Refusing to publish version ${JSON.stringify(version)}: it is not a safe URL/tag segment. Fix package.json first.`,
         );
     }
-    p.log.info(`Paperboard v${version} + Paperboard Server v${version}`);
-    p.log.warn("Publishing is a big step: GitHub Releases are created and the live download index moves.");
-    if (!checkCancel(await p.confirm({ message: `Build all 10 binaries for v${version}?`, initialValue: false }))) {
-        cancelled();
-    }
     // daemons refuse unsigned self-updates: no key, nothing is built
     const signingKey = loadReleaseSigningKey();
+    await ensureGithubAuth();
+    const commit = await releaseCommit();
+    const tag = tagFor(version);
+    p.log.info(`Paperboard v${version} + Paperboard Server v${version}, from ${commit.slice(0, 10)}`);
+    p.log.warn("The release workflow builds and smoke-tests every target on its own runner, then leaves them on a draft release. Nothing is public until you confirm again.");
+    if (!checkCancel(await p.confirm({ message: `Build v${version} in the release workflow?`, initialValue: false }))) {
+        cancelled();
+    }
 
-    const jobs: { app: DlApp; target: Target }[] = [
-        ...ALL_TARGETS.map((target) => ({ app: "pb" as DlApp, target })),
-        ...ALL_TARGETS.map((target) => ({ app: "crane" as DlApp, target })),
-    ];
-    const built = await buildSelected(jobs);
+    const runId = await dispatchRelease(commit);
+    const runUrl = `https://github.com/${GH_REPO}/actions/runs/${runId}`;
+    p.log.step(`Release workflow: ${runUrl}`);
+    try {
+        await sh(["gh", "run", "watch", runId, "--repo", GH_REPO, "--exit-status", "--interval", "30"], { quiet: false });
+    } catch (err) {
+        fail(`The release workflow failed, so nothing was published. See ${runUrl}\n${err instanceof Error ? err.message : String(err)}`);
+    }
 
-    p.log.step("Staging canonical release assets in dist/release/…");
-    const staged = await stageReleaseAssets(built);
-
-    p.log.info("Built and hashed as-shipped:");
+    const release = await readRelease(tag);
+    if (!release.isDraft) fail(`${tag} is already public; the workflow only ever leaves a draft. Nothing was changed.`);
+    if (release.targetCommitish !== commit) {
+        fail(`The draft ${tag} was built from ${release.targetCommitish}, not ${commit}. Nothing was changed.`);
+    }
+    const staged = await hashReleaseAssets(tag, release.assets);
+    p.log.info("Built by the release workflow, hashed as hosted on the draft:");
     printTable([
         ["file", "size", "sha256"],
         ...staged.map((b) => [b.filename, `${mb(b.size)} MB`, b.sha256.slice(0, 16)]),
@@ -626,7 +712,7 @@ async function flowPublishBinaries(): Promise<void> {
     if (
         !checkCancel(
             await p.confirm({
-                message: `Upload ${staged.length} files and move the live "latest" pointer to v${version}?`,
+                message: `Make ${tag} public and move the live "latest" pointer to v${version}?`,
                 initialValue: false,
             }),
         )
@@ -634,34 +720,91 @@ async function flowPublishBinaries(): Promise<void> {
         cancelled();
     }
 
-    await ensureGithubAuth();
     await ensureCloudflareAuth();
-
-    // One GitHub release per version (tag v<version>) holding every app and
-    // server binary: the app embeds its daemon, so they ship as one artifact
-    // set under one tag.
-    const tag = tagFor(version);
-    await ghReleaseEnsure(tag, `Paperboard v${version}`);
-    const up = bar(staged.length);
-    for (const b of staged) {
-        await sh(["gh", "release", "upload", tag, b.filePath, "--clobber", "--repo", GH_REPO], {
-            quiet: true,
-        });
-        up.increment(1, { task: b.filename });
-    }
-    up.stop();
-    p.log.success(`${tag}: ${staged.length} asset(s) uploaded.`);
-
+    await sh(["gh", "release", "edit", tag, "--repo", GH_REPO, "--draft=false"], { quiet: true });
+    p.log.success(`${tag} is public.`);
     await publishIndex(signingKey, version, staged);
 
     p.log.success("Published:");
     printTable([
         ["what", "url"],
-        [`release`, `https://github.com/${GH_REPO}/releases/tag/${tagFor(version)}`],
+        [`release`, `https://github.com/${GH_REPO}/releases/tag/${tag}`],
         [`latest pb`, dlFileUrl("pb", "latest", assetFileName("pb", "macos-arm64"))],
         [`latest crane`, dlFileUrl("crane", "latest", assetFileName("crane", "linux-x64"))],
     ]);
     p.outro(`Paperboard v${version} is live.`);
+}
+
+interface ReleaseAsset {
+    size: number;
+    digest: string | null;
+}
+
+interface HostedRelease {
+    isDraft: boolean;
+    targetCommitish: string;
+    assets: Map<string, ReleaseAsset>;
+}
+
+async function readRelease(tag: string): Promise<HostedRelease> {
+    let raw: string;
+    try {
+        raw = await sh(["gh", "release", "view", tag, "--repo", GH_REPO, "--json", "assets,isDraft,targetCommitish"], { quiet: true });
+    } catch (err) {
+        fail(`Release ${tag} not found or unreadable: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    const parsed = JSON.parse(raw) as {
+        isDraft: boolean;
+        targetCommitish: string;
+        assets: { name: string; size: number; digest?: string | null }[];
+    };
+    return {
+        isDraft: parsed.isDraft,
+        targetCommitish: parsed.targetCommitish,
+        assets: new Map(parsed.assets.map((a) => [a.name, { size: a.size, digest: a.digest ?? null }])),
+    };
+}
+
+// Hashes every asset a release must hold, as hosted: the bytes are
+// downloaded and checked against GitHub's own size and sha256, so the index
+// can only ever record files that are really there.
+async function hashReleaseAssets(tag: string, releaseAssets: Map<string, ReleaseAsset>): Promise<BuiltBinary[]> {
+    const jobs = expectedReleaseAssets(new Set(releaseAssets.keys()), version);
+    const missing = jobs.filter((j) => !releaseAssets.has(j.file)).map((j) => j.file);
+    if (missing.length) {
+        fail(`Release ${tag} is missing expected asset(s):\n  ${missing.join("\n  ")}`);
+    }
+    const dir = join(tmpdir(), `paperboard-index-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    const staged: BuiltBinary[] = [];
+    try {
+        const dl = bar(jobs.length);
+        for (const j of jobs) {
+            const release = releaseAssets.get(j.file)!;
+            await sh(
+                ["gh", "release", "download", tag, "--repo", GH_REPO, "--pattern", j.file, "--dir", dir, "--clobber"],
+                { quiet: true },
+            );
+            const filePath = join(dir, j.file);
+            if (!existsSync(filePath)) throw new Error(`gh did not download ${j.file}`);
+            const { sha256, sha512, size } = await hashFile(filePath);
+            if (size !== release.size) {
+                fail(`${j.file}: hashed size ${size} does not match the release's ${release.size}`);
+            }
+            if (release.digest) {
+                const expected = release.digest.replace(/^sha256:/i, "");
+                if (expected && expected !== sha256) {
+                    fail(`${j.file}: sha256 does not match the release digest; refusing to index changed bytes`);
+                }
+            }
+            staged.push({ app: j.app, target: j.target, filePath, filename: j.file, releaseFile: j.file, sha256, sha512, size });
+            dl.increment(1, { task: j.file });
+        }
+        dl.stop();
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+    return staged;
 }
 
 // Move the live index to a finished release: KV version records, the signed
@@ -744,9 +887,9 @@ async function publishIndex(signingKey: KeyObject, v: string, staged: BuiltBinar
 }
 
 // ─── Flow: repair the live index from an existing release ───────────────────
-// The binary flow uploads to GitHub, then writes the index. If the upload
-// succeeded but the index write did not, the release exists but nothing can
-// download. This re-derives the index from the bytes actually hosted on the
+// Publish binaries makes the release public, then writes the index. If the
+// release went public but the index write did not, the release exists but
+// nothing can download. This re-derives the index from the bytes actually hosted on the
 // release — it hashes the released assets and refuses when an expected one
 // is missing, so it can never record a file that is not there.
 async function flowRepublishIndex(yes: boolean): Promise<void> {
@@ -760,25 +903,11 @@ async function flowRepublishIndex(yes: boolean): Promise<void> {
     await ensureGithubAuth();
     await ensureCloudflareAuth();
 
-    let releaseAssets: Map<string, { size: number; digest: string | null }>;
-    try {
-        const raw = await sh(
-            ["gh", "release", "view", tag, "--repo", GH_REPO, "--json", "assets"],
-            { quiet: true },
-        );
-        const assets = (JSON.parse(raw) as {
-            assets: { name: string; size: number; digest?: string | null }[];
-        }).assets;
-        releaseAssets = new Map(assets.map((a) => [a.name, { size: a.size, digest: a.digest ?? null }]));
-    } catch (err) {
-        fail(`Release ${tag} not found or unreadable: ${err instanceof Error ? err.message : String(err)}`);
+    const release = await readRelease(tag);
+    if (release.isDraft) {
+        fail(`${tag} is still a draft: its files can't be downloaded yet. Publish binaries makes it public and moves the index.`);
     }
-
-    const jobs = expectedReleaseAssets(new Set(releaseAssets.keys()), version);
-    const missing = jobs.filter((j) => !releaseAssets.has(j.file)).map((j) => j.file);
-    if (missing.length) {
-        fail(`Release ${tag} is missing expected asset(s):\n  ${missing.join("\n  ")}`);
-    }
+    const expected = expectedReleaseAssets(new Set(release.assets.keys()), version).length;
 
     if (!yes) {
         if (!process.stdin.isTTY) {
@@ -787,7 +916,7 @@ async function flowRepublishIndex(yes: boolean): Promise<void> {
         if (
             !checkCancel(
                 await p.confirm({
-                    message: `Hash the ${jobs.length} assets on ${tag} and move "latest" to v${version}?`,
+                    message: `Hash the ${expected} assets on ${tag} and move "latest" to v${version}?`,
                     initialValue: false,
                 }),
             )
@@ -796,48 +925,7 @@ async function flowRepublishIndex(yes: boolean): Promise<void> {
         }
     }
 
-    // Prefer the staged bytes publish.ts uploaded (same files, no 1.3 GB
-    // re-download) but verify each against the release's sha256 digest, so a
-    // stale or changed local file can never be recorded. Missing/renamed
-    // local files fall back to downloading the hosted asset.
-    const stagedDir = join(HERE, "dist", "release");
-    const dir = join(tmpdir(), `paperboard-index-${Date.now()}`);
-    mkdirSync(dir, { recursive: true });
-    const staged: BuiltBinary[] = [];
-    try {
-        const dl = bar(jobs.length);
-        for (const j of jobs) {
-            const release = releaseAssets.get(j.file)!;
-            const local = join(stagedDir, j.file);
-            let filePath: string;
-            if (existsSync(local) && statSync(local).size === release.size) {
-                filePath = local;
-            } else {
-                await sh(
-                    ["gh", "release", "download", tag, "--repo", GH_REPO, "--pattern", j.file, "--dir", dir, "--clobber"],
-                    { quiet: true },
-                );
-                filePath = join(dir, j.file);
-                if (!existsSync(filePath)) throw new Error(`gh did not download ${j.file}`);
-            }
-            const { sha256, sha512, size } = await hashFile(filePath);
-            if (size !== release.size) {
-                fail(`${j.file}: hashed size ${size} does not match the release's ${release.size}`);
-            }
-            if (release.digest) {
-                const expected = release.digest.replace(/^sha256:/i, "");
-                if (expected && expected !== sha256) {
-                    fail(`${j.file}: sha256 does not match the release digest; refusing to index changed bytes`);
-                }
-            }
-            staged.push({ app: j.app, target: j.target, filePath, filename: j.file, releaseFile: j.file, sha256, sha512, size });
-            dl.increment(1, { task: j.file });
-        }
-        dl.stop();
-    } finally {
-        rmSync(dir, { recursive: true, force: true });
-    }
-
+    const staged = await hashReleaseAssets(tag, release.assets);
     p.log.info("Hashed as hosted on the release:");
     printTable([
         ["file", "size", "sha256"],
@@ -1235,7 +1323,10 @@ async function buildUsbFolder(oses: Os[], arches: Arch[]) {
     // A packaged mac app gets a pty helper that can never execute unless
     // its exec bit is restored first. (Runtime self-heal in pty.ts covers
     // copies; this covers the build.)
-    if (selected.has("macos")) ensureMacSpawnHelpers();
+    if (selected.has("macos")) {
+        for (const target of targetsForOses(["macos"], arches)) assertMacHost(target);
+        ensureMacSpawnHelpers();
+    }
 
     const snapshotDist = () => Date.now();
     const copyNew = (buildStart: number, dest: string, match: (f: string) => boolean) => {
@@ -1302,6 +1393,7 @@ async function buildUsbFolder(oses: Os[], arches: Arch[]) {
         const built = join(usbDistDir, outName);
         if (!existsSync(built)) throw new Error(`No Paperboard Server binary found at ${built}`);
         if (os === "windows") applyCraneWindowsIcon(built);
+        if (os === "macos") await signMacBinary(built);
         cpSync(built, join(craneDir, outName));
         craneFiles.push(`crane/${outName}`);
     }
@@ -1446,6 +1538,10 @@ async function main(): Promise<void> {
         await buildUsbFolder(await chooseUsbOses(oses), await chooseUsbArches(arches));
         return;
     }
+    if (argv[0] === "ci-build") {
+        await flowCiBuild(argv.slice(1));
+        return;
+    }
     if (argv[0] === "republish-index") {
         await flowRepublishIndex(argv.includes("--yes"));
         return;
@@ -1461,7 +1557,7 @@ async function main(): Promise<void> {
             message: "What would you like to do?",
             options: [
                 { value: "build", label: "Build binaries", hint: "local only — pick app/server targets" },
-                { value: "publish-bin", label: "Publish binaries", hint: "build all, confirm twice, upload" },
+                { value: "publish-bin", label: "Publish binaries", hint: "release workflow builds all, confirm twice, go live" },
                 { value: "panels", label: "Publish panels", hint: "pick panels, pack, upload to registry" },
                 { value: "unlist", label: "Unlist panels", hint: "take panels off the store, keep their records" },
                 { value: "packages", label: "Publish packages", hint: "pick npm packages, build, npm publish" },
