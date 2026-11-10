@@ -22,14 +22,13 @@ export default function BlocksApiDoc() {
                     <tr>
                         <th>Kind</th>
                         <th>In Blocks</th>
-                        <th>For</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td>Event</td><td>A block a flow starts from. Each value it fires with is a typed value inside the flow.</td><td>Something happened: a player joined.</td></tr>
-                    <tr><td>Command</td><td>A step that does something, and may give back a typed value.</td><td>Kick a player, send a message.</td></tr>
-                    <tr><td>Value</td><td>A value block for state the panel keeps. It only reads.</td><td>Player count, online players.</td></tr>
-                    <tr><td>Type</td><td>What a value is. Its fields become properties: one "[field] of [value]" block.</td><td>A Player, a Channel and its name.</td></tr>
+                    <tr><td>Event</td><td>A block a flow starts from, such as a player joining. Each value it fires with is a typed value inside the flow.</td></tr>
+                    <tr><td>Command</td><td>A step that does something, such as kicking a player, and may give back a typed value.</td></tr>
+                    <tr><td>Value</td><td>A value block for state the panel keeps, such as the player count. It only reads.</td></tr>
+                    <tr><td>Type</td><td>What a value is, such as a Player. Its fields become properties: one "[field] of [value]" block.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
