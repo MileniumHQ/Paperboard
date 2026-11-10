@@ -101,6 +101,7 @@ function signVerified(key: KeyObject, msg: Buffer, what: string): string {
 }
 
 const HERE = join(import.meta.dir, "..", "apps", "paperboard");
+const REPO_ROOT = join(import.meta.dir, "..");
 const ORIGAMI_DIR = join(HERE, "..", "origami");
 const ORIGAMI_URL = process.env.ORIGAMI_URL || "https://origami.ariapis.com";
 
@@ -517,11 +518,20 @@ async function stageReleaseAssets(built: BuiltBinary[]): Promise<BuiltBinary[]> 
     return staged;
 }
 
+// The app bundles PaperAPI and PaperUI from their built dist/, which is
+// never committed: built fresh, so a release never ships a stale one.
+async function buildWorkspacePackages(): Promise<void> {
+    for (const pkg of ["paperapi", "paperui"]) {
+        await sh([process.execPath, "run", "build"], { cwd: join(REPO_ROOT, "packages", pkg), quiet: false });
+    }
+}
+
 // Build the selected app/target jobs, each hashed as produced. Shared by the
 // interactive build flow and the release workflow's ci-build, which then
 // stages the canonical release assets with stageReleaseAssets.
 async function buildSelected(jobs: { app: DlApp; target: Target }[]): Promise<BuiltBinary[]> {
     if (jobs.some((j) => j.app === "pb" && osOf(j.target) === "linux")) assertLinuxPackageTools();
+    if (jobs.some((j) => j.app === "pb")) await buildWorkspacePackages();
     const progress = bar(jobs.length);
     const built: BuiltBinary[] = [];
     for (const j of jobs) {
@@ -622,7 +632,6 @@ async function flowCiBuild(argv: string[]): Promise<void> {
 // ─── Flow: publish binaries (release workflow + live index) ─────────────────
 
 const RELEASE_WORKFLOW = "release.yml";
-const REPO_ROOT = join(HERE, "..", "..");
 
 // The commit the release workflow will build: HEAD, with no uncommitted
 // changes to tracked files (CI never sees them), already on origin/main, and
@@ -1357,6 +1366,7 @@ async function buildUsbFolder(oses: Os[], arches: Arch[]) {
     ];
     const installerFiles: string[] = [];
     if (selected.has("linux")) assertLinuxPackageTools();
+    await buildWorkspacePackages();
     for (const { os, arch, script, match } of osBuilds) {
         if (!selected.has(os) || !selectedArches.has(arch)) continue;
         console.log(`\n🔨 Building Paperboard for ${os}…\n`);
