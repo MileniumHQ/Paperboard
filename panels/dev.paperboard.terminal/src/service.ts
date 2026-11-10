@@ -10,6 +10,7 @@ import {
 } from "@mileniumhq/paperapi";
 import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scrollback";
 import { errorMessage } from "./lib/failure";
+import { writeTerminal } from "./lib/terminalWrite";
 import { SavedCommands, type CommandRun, type SavedCommand } from "./lib/savedCommands";
 
 // pass PANEL_ID explicitly, ambient scope resolves to last-imported panel
@@ -231,7 +232,7 @@ export async function writeToTerminal(
     } catch (err) {
         throw new Error(`Terminal session "${id}" could not be created; keystrokes were not sent: ${errorMessage(err)}`);
     }
-    await terminalApi.write(id, inputs?.text || "");
+    await writeTerminal(id, inputs?.text || "");
     return true;
 }
 

@@ -6,6 +6,7 @@ import { terminalApi, actions as actionsApi } from "@mileniumhq/paperapi";
 import { terminalKeyAction } from "./keys";
 import { errorMessage, type Outcome } from "./lib/failure";
 import { joinScrollback } from "./lib/scrollback";
+import { writeRefusal, writeTerminal } from "./lib/terminalWrite";
 import styles from "./Terminal.module.css";
 import "@xterm/xterm/css/xterm.css";
 
@@ -37,7 +38,7 @@ export async function pasteClipboard(id: string) {
     const text = await pasteText();
     // null is unavailable, "" is an empty clipboard: neither writes to the shell
     if (text === null) throw new Error("The clipboard couldn't be read here. Paste with the keyboard instead.");
-    if (text) await terminalApi.write(id, text);
+    if (text) await writeTerminal(id, text);
 }
 
 export interface TerminalComponentProps {
@@ -177,7 +178,13 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 connect();
                 return;
             }
-            terminalApi.write(props.id, data).catch((err) => {
+            // an oversized paste is refused whole, and the session is fine
+            const refusal = writeRefusal(data);
+            if (refusal) {
+                props.onFailure({ title: "Nothing pasted", message: refusal });
+                return;
+            }
+            writeTerminal(props.id, data).catch((err) => {
                 console.error("[terminal] write failed:", err);
                 stop(`Lost this terminal: ${errorMessage(err)}`, "Press any key to try again.");
             });
