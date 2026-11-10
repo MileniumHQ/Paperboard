@@ -1,18 +1,12 @@
 // Bot Creator's service: every bot the panel runs, each with its own
-// session and its own Actions project. A bot's Discord actions and events
-// live in its project ("<bot>/send-message"), so two bots share nothing in
-// a flow; the builders that never touch Discord (embeds, buttons, menus)
-// are global. The panel's own controls reach the service through internal
-// actions that name the bot.
+// session, its own Actions project and its own Blocks project. A bot's
+// Discord actions and events live in its project ("<bot>/send-message"), so
+// two bots share nothing in a flow; the builders that never touch Discord
+// (embeds, buttons, menus) are global. The panel's own controls reach the
+// service through internal actions that name the bot.
 import {
-    ActivityType,
-    ChannelType,
-    GuildScheduledEventEntityType,
-    GuildScheduledEventPrivacyLevel,
     PermissionsBitField,
     type Client,
-    type ColorResolvable,
-    type GuildMember,
 } from "discord.js";
 import {
     INPUTS,
@@ -30,10 +24,7 @@ import {
     MAX_RECENT_MESSAGES,
     MAX_POLL_ANSWERS,
     MAX_POLL_HOURS,
-    buildPoll,
-    fileFromUrl,
     findMembers,
-    parseMoment,
     permissionNames,
     resolveGuild,
     resolveMember,
@@ -41,18 +32,65 @@ import {
     type DiscordButtonData,
 } from "./discordOps";
 import {
+    MAX_LISTED_MEMBERS,
+    PRESENCE_STATUSES,
+    addRole,
+    banUser,
+    createChannel,
+    createInvite,
+    createRole,
+    createScheduledEvent,
+    deleteChannel,
+    deleteRole,
+    describeMember,
+    disconnectMember,
+    editChannel,
+    editRole,
+    editThread,
+    fetchMessageIn,
+    kickMember,
+    messageReactions,
+    moveMember,
+    pinnedMessages,
+    pollResults,
+    removeRole,
+    removeTimeout,
+    roleMembers,
+    sendFile,
+    sendPoll,
+    setActivity,
+    setChannelPermissions,
+    setNickname,
+    showTyping,
+    timeoutMember,
+    unbanUser,
+    verifyChannel,
+    verifyUser,
+} from "./botOps";
+import {
     definePanelService,
     defineAction,
     defineType,
     secretsApi,
     actionsApi,
+    blocksApi,
     projectActionId,
     resolveItemCategory,
     config,
     type ActionDefinition,
     type ActionProjectHandle,
+    type BlocksProjectHandle,
     type ServiceContext,
 } from "@mileniumhq/paperapi";
+import {
+    blockEvent,
+    botBlocks,
+    commandEvent,
+    commandEventId,
+    panelBlocks,
+    valueChanges,
+    type BotBlocksHost,
+} from "./blocks";
 import { randomUUID } from "node:crypto";
 import {
     extractApplicationIdFromToken,
@@ -89,6 +127,14 @@ import {
     buildGuildDetail,
     buildMemberSummaries,
 } from "./session";
+
+export {
+    PRESENCE_STATUSES,
+    validatePresenceStatus,
+    channelPermissionChanges,
+    scheduledEventOptions,
+    type PresenceStatus,
+} from "./botOps";
 
 export {
     BotSession,
@@ -238,19 +284,6 @@ function interactionsOf(ctx: unknown): InteractionOps {
     return new InteractionOps((id) => session.takeInteraction(id));
 }
 
-// discord presence statuses — the only legal values for set-status
-export const PRESENCE_STATUSES = ["online", "idle", "dnd", "invisible"] as const;
-export type PresenceStatus = (typeof PRESENCE_STATUSES)[number];
-
-export function validatePresenceStatus(status: unknown): PresenceStatus {
-    if (typeof status === "string" && (PRESENCE_STATUSES as readonly string[]).includes(status)) {
-        return status as PresenceStatus;
-    }
-    throw new Error(
-        `Unknown status "${String(status)}": expected one of ${PRESENCE_STATUSES.join(", ")}`,
-    );
-}
-
 export function buildInviteUrl(appId: string, permissions: string[]): string {
     if (!appId) {
         throw new Error("Cannot build an invite URL: no application ID is known.");
@@ -360,14 +393,7 @@ export const actions = [
             label: "Channel",
         },
         icon: "tag",
-        run: async (ctx, inputs: { channelId: string }) => {
-            const bot = clientOf(ctx);
-            const channel = await bot.channels.fetch(inputs.channelId.trim());
-            if (!channel) {
-                throw new Error(`Channel ${inputs.channelId} not found`);
-            }
-            return inputs.channelId.trim();
-        },
+        run: async (ctx, inputs: { channelId: string }) => verifyChannel(clientOf(ctx), inputs.channelId),
     }),
 
     defineAction({
@@ -389,14 +415,7 @@ export const actions = [
             label: "User",
         },
         icon: "person",
-        run: async (ctx, inputs: { userId: string }) => {
-            const bot = clientOf(ctx);
-            const user = await bot.users.fetch(inputs.userId.trim());
-            if (!user) {
-                throw new Error(`User ${inputs.userId} not found`);
-            }
-            return inputs.userId.trim();
-        },
+        run: async (ctx, inputs: { userId: string }) => verifyUser(clientOf(ctx), inputs.userId),
     }),
 
     defineAction({
@@ -427,20 +446,7 @@ export const actions = [
         run: async (
             ctx,
             inputs: { channel: string; messageId: string },
-        ) => {
-            const bot = clientOf(ctx);
-            const channel = await bot.channels.fetch(inputs.channel.trim());
-            if (channel && "messages" in channel) {
-                const msg = await (channel as any).messages.fetch(
-                    inputs.messageId.trim(),
-                );
-                if (!msg) {
-                    throw new Error(`Message ${inputs.messageId} not found`);
-                }
-                return msg.id;
-            }
-            throw new Error(`Channel ${inputs.channel} not found or not text-based`);
-        },
+        ) => (await fetchMessageIn(clientOf(ctx), inputs.channel, inputs.messageId)).id,
     }),
 
     defineAction({
@@ -606,14 +612,7 @@ export const actions = [
         },
         icon: "tune",
         run: async (ctx, inputs: { activity: string; status?: string }) => {
-            const bot = clientOf(ctx);
-            const status = validatePresenceStatus(inputs.status || "online");
-            bot.user?.setPresence({
-                activities: [
-                    { name: inputs.activity, type: ActivityType.Custom },
-                ],
-                status,
-            });
+            setActivity(clientOf(ctx), inputs.activity, inputs.status);
             return true;
         },
     }),
@@ -1132,9 +1131,7 @@ export const actions = [
             ctx,
             inputs: { user: string; role: string; guildId?: string },
         ) => {
-            const bot = clientOf(ctx);
-            const member = await resolveMember(bot, inputs.user, inputs.guildId);
-            await member.roles.add(inputs.role.trim());
+            await addRole(clientOf(ctx), inputs.user, inputs.role, inputs.guildId);
             return true;
         },
     }),
@@ -1159,9 +1156,7 @@ export const actions = [
             ctx,
             inputs: { user: string; role: string; guildId?: string },
         ) => {
-            const bot = clientOf(ctx);
-            const member = await resolveMember(bot, inputs.user, inputs.guildId);
-            await member.roles.remove(inputs.role.trim());
+            await removeRole(clientOf(ctx), inputs.user, inputs.role, inputs.guildId);
             return true;
         },
     }),
@@ -1185,15 +1180,7 @@ export const actions = [
         run: async (
             ctx,
             inputs: { name: string; color?: string; guildId?: string },
-        ) => {
-            const bot = clientOf(ctx);
-            const guild = await resolveGuild(bot, inputs.guildId);
-            const role = await guild.roles.create({
-                name: inputs.name.trim(),
-                ...(inputs.color ? { color: inputs.color as ColorResolvable } : {}),
-            });
-            return role.id;
-        },
+        ) => (await createRole(clientOf(ctx), inputs)).id,
     }),
 
     defineAction({
@@ -1212,13 +1199,7 @@ export const actions = [
         },
         icon: "remove_moderator",
         run: async (ctx, inputs: { role: string; guildId?: string }) => {
-            const bot = clientOf(ctx);
-            const guild = await resolveGuild(bot, inputs.guildId);
-            const role = await guild.roles.fetch(inputs.role.trim());
-            if (!role) {
-                throw new Error(`Role ${inputs.role} not found`);
-            }
-            await role.delete();
+            await deleteRole(clientOf(ctx), inputs.role, inputs.guildId);
             return true;
         },
     }),
@@ -1244,13 +1225,7 @@ export const actions = [
             ctx,
             inputs: { user: string; deleteDays?: number; reason?: string; guildId?: string },
         ) => {
-            const bot = clientOf(ctx);
-            const guild = await resolveGuild(bot, inputs.guildId);
-            const days = Math.max(0, Math.min(7, Math.floor(Number(inputs.deleteDays ?? 0))));
-            await guild.members.ban(inputs.user.trim(), {
-                deleteMessageSeconds: days * 86_400,
-                ...(inputs.reason ? { reason: inputs.reason } : {}),
-            });
+            await banUser(clientOf(ctx), inputs.user, inputs);
             return true;
         },
     }),
@@ -1271,9 +1246,7 @@ export const actions = [
         },
         icon: "person_remove",
         run: async (ctx, inputs: { user: string; guildId?: string }) => {
-            const bot = clientOf(ctx);
-            const guild = await resolveGuild(bot, inputs.guildId);
-            await guild.members.unban(inputs.user.trim());
+            await unbanUser(clientOf(ctx), inputs.user, inputs.guildId);
             return true;
         },
     }),
@@ -1298,9 +1271,7 @@ export const actions = [
             ctx,
             inputs: { user: string; reason?: string; guildId?: string },
         ) => {
-            const bot = clientOf(ctx);
-            const member = await resolveMember(bot, inputs.user, inputs.guildId);
-            await member.kick(inputs.reason ?? undefined);
+            await kickMember(clientOf(ctx), inputs.user, inputs.reason, inputs.guildId);
             return true;
         },
     }),
@@ -1326,10 +1297,7 @@ export const actions = [
             ctx,
             inputs: { user: string; minutes?: number; reason?: string; guildId?: string },
         ) => {
-            const bot = clientOf(ctx);
-            const member = await resolveMember(bot, inputs.user, inputs.guildId);
-            const minutes = Math.max(1, Math.min(40_320, Math.floor(Number(inputs.minutes ?? 10))));
-            await member.timeout(minutes * 60_000, inputs.reason ?? undefined);
+            await timeoutMember(clientOf(ctx), inputs.user, inputs);
             return true;
         },
     }),
@@ -1354,31 +1322,7 @@ export const actions = [
         run: async (
             ctx,
             inputs: { name: string; kind?: string; topic?: string; guildId?: string },
-        ) => {
-            const bot = clientOf(ctx);
-            const guild = await resolveGuild(bot, inputs.guildId);
-            const kindMap: Record<
-                string,
-                typeof ChannelType.GuildText | typeof ChannelType.GuildVoice | typeof ChannelType.GuildAnnouncement | typeof ChannelType.GuildCategory
-            > = {
-                text: ChannelType.GuildText,
-                voice: ChannelType.GuildVoice,
-                announcement: ChannelType.GuildAnnouncement,
-                category: ChannelType.GuildCategory,
-            };
-            const kind = kindMap[(inputs.kind || "text").toLowerCase()];
-            if (kind === undefined) {
-                throw new Error(`Unknown channel kind "${inputs.kind}"`);
-            }
-            const channel = await guild.channels.create({
-                name: inputs.name.trim(),
-                type: kind,
-                ...(inputs.topic && kind === ChannelType.GuildText
-                    ? { topic: inputs.topic }
-                    : {}),
-            });
-            return channel.id;
-        },
+        ) => (await createChannel(clientOf(ctx), inputs)).id,
     }),
 
     defineAction({
@@ -1396,9 +1340,7 @@ export const actions = [
         },
         icon: "delete_forever",
         run: async (ctx, inputs: { channel: string }) => {
-            const ops = new MessageOps(clientOf(ctx));
-            const channel = await ops.fetchChannel(inputs.channel);
-            await channel.delete();
+            await deleteChannel(clientOf(ctx), inputs.channel);
             return true;
         },
     }),
@@ -1424,22 +1366,7 @@ export const actions = [
             ctx,
             inputs: { channel: string; name?: string; topic?: string; slowmode?: number },
         ) => {
-            const ops = new MessageOps(clientOf(ctx));
-            const channel = await ops.fetchChannel(inputs.channel);
-            if (
-                inputs.name === undefined &&
-                inputs.topic === undefined &&
-                inputs.slowmode === undefined
-            ) {
-                throw new Error("Edit Channel needs a name, topic, or slowmode to change");
-            }
-            await (channel as any).edit({
-                ...(inputs.name !== undefined ? { name: inputs.name } : {}),
-                ...(inputs.topic !== undefined ? { topic: inputs.topic } : {}),
-                ...(inputs.slowmode !== undefined
-                    ? { rateLimitPerUser: Math.max(0, Math.min(21_600, Math.floor(Number(inputs.slowmode)))) }
-                    : {}),
-            });
+            await editChannel(clientOf(ctx), inputs.channel, inputs);
             return true;
         },
     }),
@@ -1489,14 +1416,7 @@ export const actions = [
             ctx,
             inputs: { user: string; channel: string; guildId?: string },
         ) => {
-            const bot = clientOf(ctx);
-            const member = await resolveMember(bot, inputs.user, inputs.guildId);
-            if (!member.voice.channel) {
-                throw new Error(
-                    `User ${inputs.user} is not connected to a voice channel`,
-                );
-            }
-            await member.voice.setChannel(inputs.channel.trim());
+            await moveMember(clientOf(ctx), inputs.user, inputs.channel, inputs.guildId);
             return true;
         },
     }),
@@ -1520,14 +1440,7 @@ export const actions = [
             ctx,
             inputs: { user: string; guildId?: string },
         ) => {
-            const bot = clientOf(ctx);
-            const member = await resolveMember(bot, inputs.user, inputs.guildId);
-            if (!member.voice.channel) {
-                throw new Error(
-                    `User ${inputs.user} is not connected to a voice channel`,
-                );
-            }
-            await member.voice.disconnect();
+            await disconnectMember(clientOf(ctx), inputs.user, inputs.guildId);
             return true;
         },
     }),
@@ -1547,20 +1460,8 @@ export const actions = [
             label: "Invite",
         },
         icon: "link",
-        run: async (ctx, inputs: { channel: string; maxUses?: number }) => {
-            const ops = new MessageOps(clientOf(ctx));
-            const channel = await ops.fetchChannel(inputs.channel);
-            if (!("createInvite" in channel)) {
-                throw new Error(`Channel ${inputs.channel} cannot have invites`);
-            }
-            const maxUses = Math.max(0, Math.min(100, Math.floor(Number(inputs.maxUses ?? 0))));
-            const invite = await (channel as any).createInvite({
-                maxUses,
-                maxAge: 0,
-                unique: true,
-            });
-            return invite.url;
-        },
+        run: async (ctx, inputs: { channel: string; maxUses?: number }) =>
+            createInvite(clientOf(ctx), inputs.channel, inputs.maxUses),
     }),
 ];
 
@@ -1892,7 +1793,6 @@ export const staticTriggers = [
 // carries them: they only ever lived in a bot's project. The ones that
 // return lists or records are hidden from the Actions library, for programs
 // and the Agent panel.
-const MAX_LISTED_MEMBERS = 100;
 
 export const laterActions = [
     defineAction({
@@ -1910,13 +1810,8 @@ export const laterActions = [
         },
         output: { type: "discord-message", label: "Message" },
         icon: "ballot",
-        run: async (ctx, inputs: { channel: string; question: string; answers: unknown; hours?: number; multiple?: boolean }) => {
-            const poll = buildPoll(inputs);
-            const channel = await new MessageOps(clientOf(ctx)).fetchChannel(inputs.channel);
-            if (!("send" in channel)) throw new Error(`Channel ${inputs.channel} can't take messages`);
-            const sent = await channel.send({ poll });
-            return sent.id;
-        },
+        run: async (ctx, inputs: { channel: string; question: string; answers: unknown; hours?: number; multiple?: boolean }) =>
+            (await sendPoll(clientOf(ctx), inputs)).id,
     }),
 
     defineAction({
@@ -1929,16 +1824,8 @@ export const laterActions = [
         inputs: { channel: INPUTS.channel, message: INPUTS.message },
         output: { type: "object", label: "Results" },
         icon: "ballot",
-        run: async (ctx, inputs: { channel: string; message: string }) => {
-            const message = await new MessageOps(clientOf(ctx)).fetchMessage(inputs.channel, inputs.message);
-            if (!message.poll) throw new Error(`Message ${inputs.message} isn't a poll`);
-            const poll = message.poll;
-            return {
-                question: poll.question.text ?? "",
-                closed: Boolean(poll.resultsFinalized) || (poll.expiresTimestamp !== null && poll.expiresTimestamp <= Date.now()),
-                answers: [...poll.answers.values()].map((answer: any) => ({ text: answer.text ?? "", votes: answer.voteCount ?? 0 })),
-            };
-        },
+        run: async (ctx, inputs: { channel: string; message: string }) =>
+            pollResults(clientOf(ctx), inputs.channel, inputs.message),
     }),
 
     defineAction({
@@ -1955,13 +1842,8 @@ export const laterActions = [
         },
         output: { type: "discord-message", label: "Message" },
         icon: "attach_file",
-        run: async (ctx, inputs: { channel: string; url: string; name?: string; content?: string }) => {
-            const file = fileFromUrl(inputs.url, inputs.name);
-            const channel = await new MessageOps(clientOf(ctx)).fetchChannel(inputs.channel);
-            if (!("send" in channel)) throw new Error(`Channel ${inputs.channel} can't take messages`);
-            const sent = await channel.send({ ...(inputs.content ? { content: inputs.content } : {}), files: [file] });
-            return sent.id;
-        },
+        run: async (ctx, inputs: { channel: string; url: string; name?: string; content?: string }) =>
+            (await sendFile(clientOf(ctx), inputs)).id,
     }),
 
     defineAction({
@@ -1974,9 +1856,7 @@ export const laterActions = [
         output: { type: "boolean", label: "Success" },
         icon: "more_horiz",
         run: async (ctx, inputs: { channel: string }) => {
-            const channel = await new MessageOps(clientOf(ctx)).fetchChannel(inputs.channel);
-            if (!("sendTyping" in channel)) throw new Error(`Channel ${inputs.channel} isn't one people type in`);
-            await channel.sendTyping();
+            await showTyping(clientOf(ctx), inputs.channel);
             return true;
         },
     }),
@@ -1991,18 +1871,14 @@ export const laterActions = [
         inputs: { channel: INPUTS.channel },
         output: { type: "list<object>", label: "Messages" },
         icon: "push_pin",
-        run: async (ctx, inputs: { channel: string }) => {
-            const channel = await new MessageOps(clientOf(ctx)).fetchChannel(inputs.channel);
-            if (!("messages" in channel)) throw new Error(`Channel ${inputs.channel} not found or not text-based`);
-            const pins = await channel.messages.fetchPins();
-            return pins.items.map((pin: any) => ({
+        run: async (ctx, inputs: { channel: string }) =>
+            (await pinnedMessages(clientOf(ctx), inputs.channel)).map((pin: any) => ({
                 id: String(pin.message.id),
                 author: String(pin.message.author?.username ?? ""),
                 authorId: String(pin.message.author?.id ?? ""),
                 content: String(pin.message.content ?? ""),
                 pinnedAt: pin.pinnedAt.toISOString(),
-            }));
-        },
+            })),
     }),
 
     defineAction({
@@ -2015,19 +1891,8 @@ export const laterActions = [
         inputs: { channel: INPUTS.channel, message: INPUTS.message },
         output: { type: "list<object>", label: "Reactions" },
         icon: "add_reaction",
-        run: async (ctx, inputs: { channel: string; message: string }) => {
-            const message = await new MessageOps(clientOf(ctx)).fetchMessage(inputs.channel, inputs.message);
-            const out = [];
-            for (const reaction of message.reactions.cache.values()) {
-                const users = await reaction.users.fetch({ limit: 100 });
-                out.push({
-                    emoji: reaction.emoji.id ? `<:${reaction.emoji.name}:${reaction.emoji.id}>` : String(reaction.emoji.name ?? ""),
-                    count: reaction.count,
-                    users: [...users.values()].map((user: any) => ({ userId: String(user.id), username: String(user.username) })),
-                });
-            }
-            return out;
-        },
+        run: async (ctx, inputs: { channel: string; message: string }) =>
+            messageReactions(clientOf(ctx), inputs.channel, inputs.message),
     }),
 
     defineAction({
@@ -2057,16 +1922,11 @@ export const laterActions = [
         output: { type: "object", label: "Members" },
         icon: "groups",
         run: async (ctx, inputs: { role: string; guildId?: string }) => {
-            const guild = await resolveGuild(clientOf(ctx), inputs.guildId);
-            const role = await guild.roles.fetch(inputs.role.trim());
-            if (!role) throw new Error(`Role ${inputs.role} not found`);
-            // the whole member list once, so the role's members aren't only the cached ones
-            await guild.members.fetch();
-            const members = [...role.members.values()];
+            const { role, total, members } = await roleMembers(clientOf(ctx), inputs.role, inputs.guildId);
             return {
                 role: { id: role.id, name: role.name },
-                total: members.length,
-                members: members.slice(0, MAX_LISTED_MEMBERS).map((m) => ({ userId: m.id, username: m.user.username, displayName: m.displayName })),
+                total,
+                members: members.map((m) => ({ userId: m.id, username: m.user.username, displayName: m.displayName })),
             };
         },
     }),
@@ -2086,10 +1946,7 @@ export const laterActions = [
         output: { type: "boolean", label: "Success" },
         icon: "edit",
         run: async (ctx, inputs: { user: string; nickname?: string; reason?: string; guildId?: string }) => {
-            const nickname = (inputs.nickname ?? "").trim();
-            if (nickname.length > 32) throw new Error("A nickname is at most 32 characters");
-            const member = await resolveMember(clientOf(ctx), inputs.user, inputs.guildId);
-            await member.setNickname(nickname || null, inputs.reason || undefined);
+            await setNickname(clientOf(ctx), inputs.user, inputs);
             return true;
         },
     }),
@@ -2104,8 +1961,7 @@ export const laterActions = [
         output: { type: "boolean", label: "Success" },
         icon: "timer_off",
         run: async (ctx, inputs: { user: string; reason?: string; guildId?: string }) => {
-            const member = await resolveMember(clientOf(ctx), inputs.user, inputs.guildId);
-            await member.timeout(null, inputs.reason || undefined);
+            await removeTimeout(clientOf(ctx), inputs.user, inputs.reason, inputs.guildId);
             return true;
         },
     }),
@@ -2127,17 +1983,7 @@ export const laterActions = [
         output: { type: "boolean", label: "Success" },
         icon: "workspace_premium",
         run: async (ctx, inputs: { role: string; name?: string; color?: string; hoist?: boolean; mentionable?: boolean; guildId?: string }) => {
-            const changes = {
-                ...(inputs.name ? { name: inputs.name.trim() } : {}),
-                ...(inputs.color ? { color: inputs.color as ColorResolvable } : {}),
-                ...(typeof inputs.hoist === "boolean" ? { hoist: inputs.hoist } : {}),
-                ...(typeof inputs.mentionable === "boolean" ? { mentionable: inputs.mentionable } : {}),
-            };
-            if (!Object.keys(changes).length) throw new Error("Edit Role needs a name, color, or setting to change");
-            const guild = await resolveGuild(clientOf(ctx), inputs.guildId);
-            const role = await guild.roles.fetch(inputs.role.trim());
-            if (!role) throw new Error(`Role ${inputs.role} not found`);
-            await role.edit(changes);
+            await editRole(clientOf(ctx), inputs.role, inputs);
             return true;
         },
     }),
@@ -2161,13 +2007,7 @@ export const laterActions = [
         output: { type: "boolean", label: "Success" },
         icon: "lock",
         run: async (ctx, inputs: { channel: string; target: string; allow?: unknown; deny?: unknown; reset?: unknown; reason?: string }) => {
-            const changes = channelPermissionChanges(inputs);
-            const channel = await new MessageOps(clientOf(ctx)).fetchChannel(inputs.channel);
-            if (!channel.guild || !channel.permissionOverwrites) throw new Error(`Channel ${inputs.channel} isn't a server channel with permissions`);
-            const raw = inputs.target.trim();
-            const target = raw.toLowerCase() === "everyone" || raw === "@everyone" ? channel.guild.id : raw;
-            if (!SNOWFLAKE_PATTERN.test(target)) throw new Error(`"${raw}" isn't a role id, a user id, or everyone`);
-            await channel.permissionOverwrites.edit(target, changes, { reason: inputs.reason || undefined });
+            await setChannelPermissions(clientOf(ctx), inputs);
             return true;
         },
     }),
@@ -2187,15 +2027,7 @@ export const laterActions = [
         output: { type: "boolean", label: "Success" },
         icon: "forum",
         run: async (ctx, inputs: { thread: string; name?: string; archived?: boolean; locked?: boolean }) => {
-            const changes = {
-                ...(inputs.name ? { name: inputs.name.trim() } : {}),
-                ...(typeof inputs.archived === "boolean" ? { archived: inputs.archived } : {}),
-                ...(typeof inputs.locked === "boolean" ? { locked: inputs.locked } : {}),
-            };
-            if (!Object.keys(changes).length) throw new Error("Edit Thread needs a name, or to archive or lock it");
-            const channel = await new MessageOps(clientOf(ctx)).fetchChannel(inputs.thread);
-            if (!channel.isThread?.()) throw new Error(`Channel ${inputs.thread} isn't a thread`);
-            await channel.edit(changes);
+            await editThread(clientOf(ctx), inputs.thread, inputs);
             return true;
         },
     }),
@@ -2219,80 +2051,11 @@ export const laterActions = [
         },
         output: { type: "url", label: "Event link" },
         icon: "event",
-        run: async (ctx, inputs: { name: string; start: unknown; end?: unknown; channel?: string; location?: string; description?: string; guildId?: string }) => {
-            const bot = clientOf(ctx);
-            const options = await scheduledEventOptions(bot, inputs);
-            const guild = await resolveGuild(bot, inputs.guildId);
-            const event = await guild.scheduledEvents.create(options);
-            return event.url;
-        },
+        run: async (ctx, inputs: { name: string; start: unknown; end?: unknown; channel?: string; location?: string; description?: string; guildId?: string }) =>
+            createScheduledEvent(clientOf(ctx), inputs),
     }),
 ];
 
-
-function describeMember(member: GuildMember) {
-    return {
-        userId: member.id,
-        username: member.user.username,
-        displayName: member.displayName,
-        nickname: member.nickname,
-        bot: member.user.bot,
-        roles: [...member.roles.cache.values()]
-            .filter((role) => role.id !== member.guild.id)
-            .sort((a, b) => b.position - a.position)
-            .map((role) => ({ id: role.id, name: role.name })),
-        joinedAt: member.joinedAt ? member.joinedAt.toISOString() : null,
-        timedOutUntil: member.communicationDisabledUntil && member.communicationDisabledUntil.getTime() > Date.now()
-            ? member.communicationDisabledUntil.toISOString()
-            : null,
-        voiceChannelId: member.voice?.channelId ?? null,
-        guildId: member.guild.id,
-    };
-}
-
-/** Set Channel Permissions' inputs as one overwrite: true allows, false denies, null resets. */
-export function channelPermissionChanges(inputs: { allow?: unknown; deny?: unknown; reset?: unknown }): Record<string, boolean | null> {
-    const changes: Record<string, boolean | null> = {};
-    const lists: [unknown, boolean | null][] = [[inputs.allow, true], [inputs.deny, false], [inputs.reset, null]];
-    for (const [list, value] of lists) {
-        for (const name of permissionNames(list)) {
-            if (name in changes && changes[name] !== value) throw new Error(`${name} is named in more than one list`);
-            changes[name] = value;
-        }
-    }
-    if (!Object.keys(changes).length) throw new Error("Name at least one permission to allow, deny, or reset");
-    return changes;
-}
-
-/** Create Scheduled Event's inputs as Discord's options, refused with what's missing. */
-export async function scheduledEventOptions(
-    bot: Client,
-    inputs: { name: string; start: unknown; end?: unknown; channel?: string; location?: string; description?: string },
-) {
-    const name = (inputs.name ?? "").trim();
-    if (!name || name.length > 100) throw new Error("An event's name is 1 to 100 characters");
-    const start = parseMoment(inputs.start, "Starts");
-    if (start.getTime() <= Date.now()) throw new Error("An event starts in the future");
-    const end = inputs.end === undefined || inputs.end === "" ? undefined : parseMoment(inputs.end, "Ends");
-    if (end && end.getTime() <= start.getTime()) throw new Error("An event ends after it starts");
-    const description = inputs.description?.trim() ? { description: inputs.description.trim() } : {};
-    const base = { name, scheduledStartTime: start, privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly, ...description };
-    if (inputs.channel && inputs.channel.trim()) {
-        const channel = await bot.channels.fetch(inputs.channel.trim());
-        const type = (channel as any)?.type;
-        if (type !== ChannelType.GuildVoice && type !== ChannelType.GuildStageVoice) throw new Error(`Channel ${inputs.channel} isn't a voice or stage channel`);
-        return {
-            ...base,
-            ...(end ? { scheduledEndTime: end } : {}),
-            entityType: type === ChannelType.GuildStageVoice ? GuildScheduledEventEntityType.StageInstance : GuildScheduledEventEntityType.Voice,
-            channel: channel!.id,
-        };
-    }
-    const location = inputs.location?.trim() ?? "";
-    if (!location) throw new Error("An event outside a voice channel needs a location");
-    if (!end) throw new Error("An event outside a voice channel needs an end");
-    return { ...base, scheduledEndTime: end, entityType: GuildScheduledEventEntityType.External, entityMetadata: { location } };
-}
 
 // the actions that only build a payload: they never reach Discord, so every
 // bot shares them as the panel's global blocks
@@ -2338,6 +2101,10 @@ interface BotEntry {
     project: ActionProjectHandle | null;
     /** why the bot's actions are not in Actions, when they aren't */
     actionsError: string | null;
+    /** the bot's Blocks project, once defined; null while it isn't */
+    blocks: BlocksProjectHandle | null;
+    /** tells Blocks which of the bot's values changed, once its project is registered */
+    blocksChanged: (() => void) | null;
 }
 
 const bots = new Map<string, BotEntry>();
@@ -2346,6 +2113,8 @@ let legacyBot: string | undefined;
 let savedExtras: Record<string, unknown> = {};
 // why the saved bots couldn't be read; nothing is written over them meanwhile
 let botsError: string | null = null;
+// why the panel's Blocks types and builders couldn't be registered; no bot's blocks can be then
+let panelBlocksError: string | null = null;
 let serviceCtx: ServiceContext<BotsServiceState> | null = null;
 
 function summary(entry: BotEntry): BotSummary {
@@ -2408,7 +2177,7 @@ function logFailure(what: string) {
     return (err: unknown) => console.error(`[DiscordService] ${what}:`, errorToMessage(err));
 }
 
-function sessionHost(id: string) {
+function sessionHost(id: string, entry: () => BotEntry) {
     return {
         emit(trigger: string, output: unknown) {
             actionsApi.emitTrigger(projectActionId(id, trigger), output, PANEL_ID)
@@ -2417,13 +2186,22 @@ function sessionHost(id: string) {
                 actionsApi.emitTrigger(trigger, output, PANEL_ID)
                     .catch(logFailure(`event ${trigger} failed`));
             }
+            fireBlocksEvent(entry(), trigger, output).catch(logFailure(`Blocks event ${id}/${trigger} failed`));
         },
         changed() {
-            const entry = bots.get(id);
-            if (entry) noteIdentity(entry);
+            const known = bots.get(id);
+            if (known) noteIdentity(known);
             publish();
+            entry().blocksChanged?.();
         },
     };
+}
+
+/** The trigger as the bot's Blocks event, once the bot's blocks are registered. */
+async function fireBlocksEvent(entry: BotEntry, trigger: string, output: unknown): Promise<void> {
+    if (!entry.blocks) return;
+    const { event, payload } = blockEvent(trigger, output, entry.stored.commands);
+    await entry.blocks.fire(event, payload);
 }
 
 // the bot's name and avatar are Discord's: kept as of the last login, so the
@@ -2440,13 +2218,48 @@ function noteIdentity(entry: BotEntry): void {
     if (renamed && entry.project) {
         entry.project.update({ name, icon: "smart_toy" }).catch(logFailure(`renaming ${name}'s project failed`));
     }
+    if (renamed && entry.blocks) {
+        entry.blocks.update({ name, icon: "smart_toy" }).catch(logFailure(`renaming ${name}'s Blocks project failed`));
+    }
 }
 
 function createEntry(stored: StoredBot, hasToken: boolean): BotEntry {
-    const session = new BotSession(stored.id, sessionHost(stored.id));
+    // the session's host reaches the entry it belongs to, made just below
+    let entry: BotEntry | null = null;
+    const session = new BotSession(stored.id, sessionHost(stored.id, () => entry!));
     session.applicationId = stored.applicationId;
     session.commands = stored.commands;
-    return { stored, session, hasToken, project: null, actionsError: null };
+    entry = { stored, session, hasToken, project: null, actionsError: null, blocks: null, blocksChanged: null };
+    return entry;
+}
+
+/** What a bot's blocks run against: its live session. */
+function blocksHost(entry: BotEntry): BotBlocksHost {
+    return {
+        client: () => entry.session.requireClient(),
+        interactions: () => new InteractionOps((id) => entry.session.takeInteraction(id)),
+        connected: () => entry.session.connected(),
+        userId: () => {
+            const id = entry.session.client?.user?.id || entry.stored.applicationId;
+            if (!id) throw new Error("This bot's Discord user isn't known yet. Turn it on in Bot Creator.");
+            return id;
+        },
+    };
+}
+
+/** The bots connected now, whose clients a Blocks type's fields look things up with. */
+function connectedClients(): Client[] {
+    return [...bots.values()].flatMap((entry) => (entry.session.connected() && entry.session.client ? [entry.session.client] : []));
+}
+
+/** Defines the bot's Blocks project and registers its commands, values and events into it. */
+async function registerBlocks(entry: BotEntry): Promise<void> {
+    if (panelBlocksError) throw new Error(`Bot Creator's types aren't in Blocks: ${panelBlocksError}`);
+    const blocks = await blocksApi.defineProject({ id: entry.stored.id, name: entry.stored.name, icon: "smart_toy" }, PANEL_ID);
+    entry.blocks = blocks;
+    await blocks.register(botBlocks(blocksHost(entry)));
+    if (entry.stored.commands.length) await blocks.register({ events: entry.stored.commands.map(commandEvent) });
+    entry.blocksChanged = valueChanges(blocks, blocksHost(entry), entry.stored.name);
 }
 
 /** Defines the bot's project and registers its actions, events and commands into it. */
@@ -2457,6 +2270,7 @@ async function registerBot(entry: BotEntry): Promise<void> {
     for (const def of managementActions(entry)) await project.register(def);
     for (const command of entry.stored.commands) await project.register(commandTriggerDefinition(command));
     if (legacyBot === entry.stored.id) await registerLegacyForwarders(entry);
+    await registerBlocks(entry);
     entry.actionsError = null;
 }
 
@@ -2547,7 +2361,7 @@ async function registerEntry(entry: BotEntry): Promise<void> {
     try {
         await registerBot(entry);
     } catch (err) {
-        entry.actionsError = `Its actions couldn't be added to Actions: ${errorToMessage(err)}`;
+        entry.actionsError = `Its actions couldn't be added to Actions and Blocks: ${errorToMessage(err)}`;
         console.error(`[DiscordService] ${entry.stored.name}:`, entry.actionsError);
     }
 }
@@ -2591,6 +2405,8 @@ async function registerCommandTrigger(entry: BotEntry, command: SlashCommandDefi
         if (legacyBot === entry.stored.id) {
             await actionsApi.register({ ...commandTriggerDefinition(command), deprecated: LEGACY_DEPRECATION }, undefined, PANEL_ID);
         }
+        if (!entry.blocks) throw new Error(entry.actionsError ?? "the bot's project is not in Blocks");
+        await entry.blocks.register({ events: [commandEvent(command)] });
         return null;
     } catch (err) {
         console.error(`[DiscordService] event action registration failed for /${command.name}:`, err);
@@ -2602,6 +2418,7 @@ async function unregisterCommandTrigger(entry: BotEntry, command: SlashCommandDe
     try {
         if (entry.project) await entry.project.unregister(commandTriggerId(command));
         if (legacyBot === entry.stored.id) await actionsApi.unregister(commandTriggerId(command), PANEL_ID);
+        if (entry.blocks) await entry.blocks.unregister("event", commandEventId(command));
         return null;
     } catch (err) {
         console.error(`[DiscordService] event action removal failed for /${command.name}:`, err);
@@ -2930,6 +2747,7 @@ export const internalActions = [
                 bots.delete(id);
                 await entry.session.stop();
                 if (entry.project) await entry.project.remove().catch(logFailure("removing the refused bot's project failed"));
+                if (entry.blocks) await entry.blocks.remove().catch(logFailure("removing the refused bot's Blocks project failed"));
                 await forget();
                 throw err;
             }
@@ -2969,7 +2787,7 @@ export const internalActions = [
     internalAction(
         "delete-bot",
         "Delete Bot",
-        "Panel UI only: stops a bot and removes it, its token, its commands and its Actions project.",
+        "Panel UI only: stops a bot and removes it, its token, its commands, and its Actions and Blocks projects.",
         async (inputs) => {
             requireReadable();
             const entry = requireBot(inputs?.bot);
@@ -2987,6 +2805,12 @@ export const internalActions = [
                 if (legacyBot === id) {
                     await unregisterLegacyForwarders(entry);
                     legacyBot = undefined;
+                }
+                step = "remove its blocks from Blocks";
+                if (entry.blocks) {
+                    await entry.blocks.remove();
+                    entry.blocks = null;
+                    entry.blocksChanged = null;
                 }
                 step = "delete its token";
                 await secretsApi.delete(tokenName(id), PANEL_ID);
@@ -3076,6 +2900,13 @@ export const botService = definePanelService({
         } catch (err) {
             botsError = errorToMessage(err);
             console.error("[DiscordService] reading the saved bots failed:", botsError);
+        }
+        // the types first: every bot's blocks use them
+        try {
+            await blocksApi.panel(PANEL_ID).register(panelBlocks(connectedClients));
+        } catch (err) {
+            panelBlocksError = errorToMessage(err);
+            console.error("[DiscordService] registering the Blocks types failed:", panelBlocksError);
         }
         for (const entry of bots.values()) await registerEntry(entry);
         publish();

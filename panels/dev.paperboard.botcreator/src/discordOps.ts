@@ -801,9 +801,13 @@ export class MessageOps {
     }
 
     async send(channelId: string, payload: MessagePayloadInput): Promise<string> {
+        return (await this.sendMessage(channelId, payload)).id;
+    }
+
+    /** Sends to a channel; the sent message, for a caller that needs more than its id. */
+    async sendMessage(channelId: string, payload: MessagePayloadInput): Promise<any> {
         const channel = await this.textChannel(channelId);
-        const sent = await channel.send(buildMessagePayload(payload));
-        return sent.id;
+        return channel.send(buildMessagePayload(payload));
     }
 
     async reply(
@@ -811,10 +815,17 @@ export class MessageOps {
         replyTo: string,
         payload: MessagePayloadInput,
     ): Promise<string> {
+        return (await this.replyMessage(channelId, replyTo, payload)).id;
+    }
+
+    async replyMessage(
+        channelId: string,
+        replyTo: string,
+        payload: MessagePayloadInput,
+    ): Promise<any> {
         const channel = await this.textChannel(channelId);
         const target = await channel.messages.fetch(replyTo.trim());
-        const sent = await target.reply(buildMessagePayload(payload));
-        return sent.id;
+        return target.reply(buildMessagePayload(payload));
     }
 
     async edit(
@@ -859,9 +870,12 @@ export class MessageOps {
     }
 
     async dm(userId: string, payload: MessagePayloadInput): Promise<string> {
+        return (await this.dmMessage(userId, payload)).id;
+    }
+
+    async dmMessage(userId: string, payload: MessagePayloadInput): Promise<any> {
         const user = await this.bot.users.fetch(userId.trim());
-        const sent = await user.send(buildMessagePayload(payload));
-        return sent.id;
+        return user.send(buildMessagePayload(payload));
     }
 
     async delete(channelId: string, messageId: string): Promise<boolean> {
@@ -1079,6 +1093,16 @@ export class InteractionOps {
             const sent = await this.deliver(interaction, body, Boolean(payload.ephemeral), true);
             return sent.messageId();
         });
+    }
+
+    /** A follow-up, with the channel it was sent in. */
+    async followUpMessage(
+        interactionId: string,
+        payload: { content?: string; embeds?: unknown; components?: unknown; ephemeral?: boolean },
+    ): Promise<{ id: string; channelId: string }> {
+        const channelId = this.take(interactionId.trim()).channelId;
+        if (!channelId) throw new Error(`Interaction ${interactionId} has no channel to follow up in`);
+        return { id: await this.followUp(interactionId, payload), channelId };
     }
 
     /** Opens a modal; only possible as the very first answer. */
