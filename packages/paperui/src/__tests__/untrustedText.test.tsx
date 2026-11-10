@@ -83,6 +83,14 @@ describe("untrusted text renders inert", () => {
         const inline = markdown('Text <svg onload="steal()"><script>window.ran = true</script></svg> more', { allowHtml: true });
         expect(inline.querySelector("svg")).toBeNull();
         expectInert(inline);
+
+        // inline, the tags and the text between them are separate tokens:
+        // the script's text goes with it
+        const script = markdown("Text <script>window.ran = true</script> more", { allowHtml: true });
+        expectInert(script);
+        expect(script.textContent).not.toContain("window.ran");
+        expect(script.textContent).toContain("Text");
+        expect(script.textContent).toContain("more");
     });
 
     test("images stay hidden unless allowImages", () => {

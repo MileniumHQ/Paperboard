@@ -11,7 +11,16 @@ export interface HtmlTag {
     closed: boolean;
 }
 
-export type HtmlToken = HtmlTag | { type: "close"; tag: string } | { type: "text"; text: string };
+export type HtmlToken =
+    | HtmlTag
+    | { type: "close"; tag: string }
+    | { type: "text"; text: string }
+    /**
+     * A skipped element whose end tag is not in this fragment: inline Markdown
+     * HTML is one tag per fragment, so `<script>`, its text and `</script>`
+     * arrive apart. nestHtml drops everything up to the end tag.
+     */
+    | { type: "skip"; tag: string };
 
 export type HtmlNode<Leaf> =
     | { type: "text"; text: string }
@@ -106,11 +115,16 @@ export function tokenizeHtml(source: string): HtmlToken[] {
         const tag = open[1].toLowerCase();
         i = lt + open[0].length;
         if (SKIPPED.has(tag) || EMBEDS.has(tag)) {
+            if (EMBEDS.has(tag)) tokens.push({ type: "open", tag, attrs: readAttrs(open[2]), closed: true });
             if (!open[3]) {
                 const end = source.toLowerCase().indexOf(`</${tag}`, i);
-                i = end === -1 ? source.length : source.indexOf(">", end) + 1 || source.length;
+                if (end === -1) {
+                    tokens.push({ type: "skip", tag });
+                    i = source.length;
+                } else {
+                    i = source.indexOf(">", end) + 1 || source.length;
+                }
             }
-            if (EMBEDS.has(tag)) tokens.push({ type: "open", tag, attrs: readAttrs(open[2]), closed: true });
             continue;
         }
         tokens.push({ type: "open", tag, attrs: readAttrs(open[2]), closed: VOID.has(tag) || open[3] === "/" });
@@ -143,7 +157,20 @@ export function nestHtml<Leaf>(items: (HtmlToken | { type: "leaf"; leaf: Leaf })
     const root: HtmlNode<Leaf>[] = [];
     const stack: Extract<HtmlNode<Leaf>, { type: "element" }>[] = [];
     const children = () => (stack.length ? stack[stack.length - 1].children : root);
+    // the skipped element being dropped, and how deep it nests in itself
+    let skipping: { tag: string; depth: number } | null = null;
     for (const item of items) {
+        if (skipping) {
+            const same = "tag" in item && item.tag === skipping.tag;
+            if (same && item.type === "close") skipping.depth--;
+            else if (same && (item.type === "skip" || (item.type === "open" && !item.closed))) skipping.depth++;
+            if (skipping.depth === 0) skipping = null;
+            continue;
+        }
+        if (item.type === "skip") {
+            skipping = { tag: item.tag, depth: 1 };
+            continue;
+        }
         if (item.type === "text" || item.type === "leaf") {
             children().push(item);
             continue;
