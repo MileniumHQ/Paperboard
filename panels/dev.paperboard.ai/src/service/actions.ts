@@ -52,8 +52,37 @@ const personalityOptions = PROMPT_STYLES.map((style) => ({
     description: PROMPT_STYLE_DESCRIPTIONS[style],
 }));
 
-const MAX_PROMPT_CHARS = 32_000;
-const MAX_INSTRUCTIONS_CHARS = 8_000;
+export const MAX_PROMPT_CHARS = 32_000;
+export const MAX_INSTRUCTIONS_CHARS = 8_000;
+
+export interface AskInputs {
+    prompt?: string;
+    model?: string;
+    personality?: string;
+    instructions?: string;
+    memory?: string;
+}
+
+/** Ask AI, as the action (v1) and the block (v2) both run it. */
+export async function askFromFlow(app: AiApp, inputs: AskInputs | undefined): Promise<string> {
+    await app.ready;
+    if (inputs?.personality !== undefined && inputs.personality !== "" && !isPromptStyle(inputs.personality)) {
+        throw new Error(`Unknown personality ${JSON.stringify(inputs.personality)}.`);
+    }
+    return app.ask(
+        str(inputs?.prompt, "prompt", MAX_PROMPT_CHARS),
+        optStr(inputs?.model, "model"),
+        optStr(inputs?.instructions, "instructions", MAX_INSTRUCTIONS_CHARS),
+        isPromptStyle(inputs?.personality) ? inputs.personality : undefined,
+        optStr(inputs?.memory, "memory", MAX_MEMORY_KEY_CHARS),
+    );
+}
+
+/** Forget Memory, as the action (v1) and the block (v2) both run it. */
+export async function forgetFromFlow(app: AiApp, memory: unknown): Promise<boolean> {
+    await app.ready;
+    return app.forgetMemory(str(memory, "memory", MAX_MEMORY_KEY_CHARS));
+}
 
 export function publicActions(app: AiApp): ActionDefinition[] {
     const models = askModelOptions(app);
@@ -105,19 +134,7 @@ export function publicActions(app: AiApp): ActionDefinition[] {
             },
             output: { type: "string", label: "Answer" },
             icon: "smart_toy",
-            run: async (_ctx, inputs: { prompt?: string; model?: string; personality?: string; instructions?: string; memory?: string }) => {
-                await app.ready;
-                if (inputs?.personality !== undefined && inputs.personality !== "" && !isPromptStyle(inputs.personality)) {
-                    throw new Error(`Unknown personality ${JSON.stringify(inputs.personality)}.`);
-                }
-                return app.ask(
-                    str(inputs?.prompt, "prompt", MAX_PROMPT_CHARS),
-                    optStr(inputs?.model, "model"),
-                    optStr(inputs?.instructions, "instructions", MAX_INSTRUCTIONS_CHARS),
-                    isPromptStyle(inputs?.personality) ? inputs.personality : undefined,
-                    optStr(inputs?.memory, "memory", MAX_MEMORY_KEY_CHARS),
-                );
-            },
+            run: async (_ctx, inputs: AskInputs) => askFromFlow(app, inputs),
         }),
         defineAction({
             id: ACTION_IDS.forgetMemory,
@@ -128,10 +145,7 @@ export function publicActions(app: AiApp): ActionDefinition[] {
             inputs: { memory: { type: "string", label: "Memory key", required: true, maxLength: MAX_MEMORY_KEY_CHARS } },
             output: { type: "boolean", label: "Forgot" },
             icon: "history_toggle_off",
-            run: async (_ctx, inputs: { memory?: string }) => {
-                await app.ready;
-                return app.forgetMemory(str(inputs?.memory, "memory", MAX_MEMORY_KEY_CHARS));
-            },
+            run: async (_ctx, inputs: { memory?: string }) => forgetFromFlow(app, inputs?.memory),
         }),
         defineAction({
             id: ACTION_IDS.listModels,

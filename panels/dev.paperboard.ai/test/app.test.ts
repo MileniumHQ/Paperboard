@@ -15,6 +15,13 @@ import type { ProcessHost } from "../src/service/runtime";
 import { ChildHost } from "./childHost";
 import type { AiState } from "../src/core/types";
 import { QUICK_ASK_DEFAULT_MODEL } from "../src/core/widgets";
+import * as paperapi from "@mileniumhq/paperapi";
+import { TestBlocks } from "./blocksRig";
+
+// the Blocks registry the service registers with: in memory, checking with
+// PaperAPI's own validators, kept from the real module before it is mocked
+const { inputsProblem, qualifyTypeRef, validateBlockDefinitions, valueProblem } = paperapi;
+const blocks = new TestBlocks();
 
 const filesDir = fs.mkdtempSync(path.join(os.tmpdir(), "pb-ai-app-"));
 const secrets = new Map<string, string>();
@@ -53,6 +60,11 @@ mock.module("@mileniumhq/paperapi", () => ({
         register: async () => {},
         registerMultiple: async () => {},
     },
+    blocksApi: { panel: () => blocks },
+    inputsProblem,
+    qualifyTypeRef,
+    validateBlockDefinitions,
+    valueProblem,
     systemApi: { getGpus: async () => ({ gpus: [], errors: [] }) },
     processApi: {},
     defineAction: (definition: unknown) => definition,
@@ -445,6 +457,31 @@ describe("AiApp widget actions", () => {
             await expect(app.quickAsk("one too many")).rejects.toThrow(`Only ${MAX_ACTIVE_REPLIES} chats can reply at once.`);
             expect(ctx.state.conversations.map((c) => c.id)).toEqual(before);
             expect(ctx.state.openRequest).toBe(pending);
+        });
+    });
+
+    it("registers its blocks, which ask the real models, list them with their provider, and fire When AI Replies", async () => {
+        await withApp(custom(), async (app, ctx) => {
+            await modelsListed(ctx);
+            expect(await blocks.read("models")).toEqual(["api-0000000a|local:7b", "api-0000000a|local:9b"]);
+            expect(await blocks.property("model", "provider", "api-0000000a|local:9b")).toBe("Local");
+            expect(await blocks.property("model", "name", "api-0000000a|local:9b")).toBe("local:9b");
+            await expect(blocks.property("model", "name", "api-0000000f|local:9b")).rejects.toThrow("was removed from the AI panel");
+            expect(await blocks.run("ask", { prompt: "hi", model: "api-0000000a|local:9b" })).toBe("Hi.");
+
+            await app.setFavorite({ provider: "api-0000000a", model: "local:9b", favorite: true });
+            expect(blocks.changes).toContain("favorite-models");
+            expect(await blocks.read("favorite-models")).toEqual(["api-0000000a|local:9b"]);
+
+            const { conversationId } = await app.quickAsk("What is a panel?");
+            const start = Date.now();
+            while (!blocks.fired.some((f) => f.event === "reply-finished")) {
+                if (Date.now() - start > 3000) throw new Error("When AI Replies never fired");
+                await new Promise((r) => setTimeout(r, 10));
+            }
+            expect(blocks.fired.find((f) => f.event === "reply-finished")!.payload).toEqual({ text: "Hi.", chat: conversationId, model: "api-0000000a|local:7b" });
+            expect(await blocks.property("chat", "title", conversationId)).toBe(ctx.state.conversations.find((c) => c.id === conversationId)!.title);
+            await expect(blocks.property("chat", "title", "gone")).rejects.toThrow('No chat "gone"');
         });
     });
 

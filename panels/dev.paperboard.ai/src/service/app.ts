@@ -47,6 +47,7 @@ import { quickAskTarget } from "../core/widgets";
 import {
     addFavorite,
     favoriteChoices,
+    favoriteValue,
     isFavoriteModelName,
     MAX_FAVORITE_MODEL_CHARS,
     parseModelChoice,
@@ -70,6 +71,7 @@ import {
 } from "../core/types";
 import manifest from "../../manifest.json";
 import { republishPublicActions } from "./actions";
+import { AiBlocks, aiBlocks } from "./blocks";
 import { runShell } from "./builtins";
 import { askOnce, ChatEngine, type ApprovalDecision } from "./chat";
 import { listLoaded, unloadAndConfirm } from "./loaded";
@@ -174,6 +176,8 @@ export class AiApp {
     private updateWatchClosed = false;
     private readonly updateCheckMs: number;
     readonly ready = new Promise<void>((resolve) => (this.resolveReady = resolve));
+    /** the panel's blocks for the Blocks panel (Actions API v2) */
+    private readonly blocks = new AiBlocks();
 
     constructor(
         private readonly host: ProcessHost & Partial<AgentProcessHost> = processHost,
@@ -195,6 +199,7 @@ export class AiApp {
                 void republishPublicActions(this).catch((err) =>
                     console.error("[ai] republishing action options failed:", String(err)),
                 );
+                this.blocks.list("models", () => this.blockModels());
             },
             onPulls: (pulls) => this.ctx.setState({ pulls }),
         });
@@ -490,6 +495,7 @@ export class AiApp {
             settings: clampSettings(this.stored.settings),
             favorites: this.ctx.state.favorites.filter((f) => f.provider !== id),
         });
+        this.blocks.list("favorite-models", () => this.favoriteModels());
         const keyed = this.keyedIds();
         keyed.delete(id);
         this.publishConnections(this.stored.connections ?? [], keyed);
@@ -586,10 +592,14 @@ export class AiApp {
             onGenerating: (generating) => this.ctx.setState({ generating }),
             onApprovals: (approvals) => this.ctx.setState({ approvals }),
             onSpeed: (model, tps) => void this.recordSpeed(model, tps),
-            onReplyFinished: (payload) => this.ctx.emitTrigger(TRIGGER_IDS.replyFinished, payload),
+            onReplyFinished: (payload) => {
+                this.ctx.emitTrigger(TRIGGER_IDS.replyFinished, payload);
+                this.blocks.fire(TRIGGER_IDS.replyFinished, { text: payload.text, chat: payload.conversationId, model: this.chatModel(payload.conversationId, payload.model) });
+            },
         });
         await this.loadConfig();
         await this.loadConversations();
+        await this.blocks.register(aiBlocks(this), { models: this.blockModels(), "favorite-models": this.favoriteModels() });
         // actions wait for settings and history, not for Ollama to boot —
         // and neither does the daemon's service-ready gate. Awaiting the
         // runtime here coupled readiness to Ollama's 60 s boot, so a slow or
@@ -751,6 +761,7 @@ export class AiApp {
         this.ctx.setState({ favorites });
         // the model dropdowns of Ask AI and the reply trigger are the favorites
         void republishPublicActions(this).catch((err) => console.error("[ai] republishing action options failed:", String(err)));
+        this.blocks.list("favorite-models", () => this.favoriteModels());
         return favorites;
     }
 
@@ -1242,7 +1253,41 @@ export class AiApp {
     /** Every model a flow can ask, across connections; coding agents answer only in chats. */
     async flowModels(): Promise<string[]> {
         const models = await this.models.refresh();
-        return [...new Set(models.filter((m) => !m.capabilities.includes("agent")).map((m) => m.name))];
+        return [...new Set(askable(models).map((m) => m.name))];
+    }
+
+    // ─── blocks (Actions API v2) ───────────────────────────────────────────
+
+    /** The models a flow can ask, as the model list is now, each naming its provider. */
+    blockModels(): string[] {
+        return [...new Set(askable(this.ctx.state.models).map((m) => favoriteValue({ provider: m.provider, model: m.name })))];
+    }
+
+    favoriteModels(): string[] {
+        return this.askModelChoices().map((c) => c.value);
+    }
+
+    /** A model value's name and provider, as the Model type's fields read them. */
+    blockModel(value: string): { name: string; provider: string } {
+        const parsed = parseModelChoice(value);
+        if (!parsed.model) throw new Error("A model needs a name.");
+        const provider = parsed.provider ?? this.models.providerOf(parsed.model);
+        if (!provider) throw new Error(`No provider in the AI panel lists ${parsed.model}.`);
+        if (!this.connections.some((c) => c.id === provider)) throw new Error(`The provider of ${parsed.model} was removed from the AI panel.`);
+        return { name: parsed.model, provider: connectionLabel(this.connections, provider) };
+    }
+
+    /** A chat's title and model, as the Chat type's fields read them. */
+    blockChat(id: string): { title: string; model: string } {
+        const chat = this.ctx.state.conversations.find((c) => c.id === id);
+        if (!chat) throw new Error(`No chat "${id}" in the AI panel; it may have been deleted.`);
+        return { title: chat.title, model: this.chatModel(chat.id, chat.model) };
+    }
+
+    /** A chat's model as a Model value: named by its provider once the chat has one. */
+    private chatModel(id: string, model: string): string {
+        const provider = this.ctx.state.conversations.find((c) => c.id === id)?.provider;
+        return provider ? favoriteValue({ provider, model }) : model;
     }
 
     private chatClientFor(providerId: string) {
@@ -1275,4 +1320,9 @@ export class AiApp {
         this.models.cancelAll();
         await this.agents?.stopAll();
     }
+}
+
+/** The models a flow or a block can ask: coding agents answer only in chats. */
+function askable<T extends { capabilities: readonly string[] }>(models: readonly T[]): T[] {
+    return models.filter((m) => !m.capabilities.includes("agent"));
 }
