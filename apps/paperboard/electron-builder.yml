@@ -41,6 +41,13 @@ nsis:
     installerIcon: build/icon.ico
     uninstallerIcon: build/icon.ico
 mac:
+    # Ad-hoc: no Developer ID yet. arm64 macOS runs only signed code, and an
+    # unsigned download shows as "damaged". Signing needs a Mac, so macOS
+    # builds come from the release workflow's macOS runners. Hardened runtime
+    # is off: it only matters for notarization, and with ad-hoc signing its
+    # library validation refuses Electron's own frameworks.
+    identity: "-"
+    hardenedRuntime: false
     entitlementsInherit: build/entitlements.mac.plist
     extendInfo:
         NSMicrophoneUsageDescription: A panel you allowed wants to hear you.

@@ -42,6 +42,20 @@ function entryType(entry: AdmZip.IZipEntry): number {
     return ((entry.header.attr >>> 16) & UNIX_TYPE) >>> 0;
 }
 
+// macOS refuses unsigned arm64 code and calls an unsigned download
+// "damaged". electron-builder signs nothing unless an identity is named, so
+// with no Developer ID the app must ask for ad-hoc. The release workflow's
+// smoke checks the signature the Mac build actually carries.
+describe("macOS builds are signed", () => {
+    test("electron-builder signs the app ad-hoc, without the hardened runtime that refuses Electron's frameworks", () => {
+        const config = Bun.YAML.parse(readFileSync(join(APP, "electron-builder.yml"), "utf8")) as {
+            mac: { identity?: unknown; hardenedRuntime?: unknown };
+        };
+        expect(config.mac.identity).toBe("-");
+        expect(config.mac.hardenedRuntime).toBe(false);
+    });
+});
+
 // The macOS ZIP keeps framework symlinks when built off-Mac.
 describe("the macOS ZIP keeps framework symlinks when built off-Mac", () => {
     test("electron-builder targets only zip for macOS x64 and arm64", () => {
