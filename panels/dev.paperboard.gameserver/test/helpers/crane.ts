@@ -117,7 +117,9 @@ export async function startTestDaemon(): Promise<TestDaemon> {
             allowed.delete(port);
             if (child.exitCode === null && child.signalCode === null) child.kill();
             await exited;
-            fs.rmSync(binDir, { recursive: true, force: true });
+            // Windows holds an exited program's executable open a moment
+            // longer, so deleting it right away fails with EPERM
+            fs.rmSync(binDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
         },
     };
 }
