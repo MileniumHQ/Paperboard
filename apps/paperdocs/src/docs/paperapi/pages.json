@@ -42,6 +42,9 @@
                 "actions": {
                     "name": "Actions API"
                 },
+                "blocks": {
+                    "name": "Blocks API"
+                },
                 "bridge": {
                     "name": "Bridge API"
                 },
