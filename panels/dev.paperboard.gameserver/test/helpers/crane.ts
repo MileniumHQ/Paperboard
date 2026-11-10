@@ -18,6 +18,7 @@ const REPO = path.resolve(import.meta.dir, "../../../..");
 const CRANE_ENTRY = path.join(REPO, "apps/paperboard/papercrane/main.ts");
 const START_TIMEOUT_MS = 30_000;
 const ALLOWED = Symbol.for("paperboard.gameserver.test.daemonPorts");
+const DAEMON_BUILDS = Symbol.for("paperboard.gameserver.test.daemonBuilds");
 
 // a test on the daemon starts real processes and waits on their output;
 // each wait has its own bound (helpers/scope.ts waitFor), under this one
@@ -56,6 +57,11 @@ export async function startTestDaemon(): Promise<TestDaemon> {
         throw new Error(`PAPERBOARD_DIR must be the throwaway dir test/hermetic.ts made, not ${dataDir}`);
     }
     const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "gameserver-crane-"));
+    // the supervisors it starts re-run this executable and outlive the
+    // daemon by design (a test may restart it and expect them adopted), so
+    // the binary goes once the file's tests are done: test/hermetic.ts
+    const builds: string[] = ((globalThis as any)[DAEMON_BUILDS] ??= []);
+    builds.push(binDir);
     const binary = buildCrane(binDir);
     // the daemon and every process it starts reach no network: a request
     // that is not for loopback goes to a proxy nothing listens on and fails
@@ -117,9 +123,6 @@ export async function startTestDaemon(): Promise<TestDaemon> {
             allowed.delete(port);
             if (child.exitCode === null && child.signalCode === null) child.kill();
             await exited;
-            // Windows holds an exited program's executable open a moment
-            // longer, so deleting it right away fails with EPERM
-            fs.rmSync(binDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
         },
     };
 }

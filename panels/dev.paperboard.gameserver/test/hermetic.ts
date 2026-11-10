@@ -6,9 +6,52 @@ import * as path from "node:path";
 // no-network guard below refuses a connection.
 const testData = fs.mkdtempSync(path.join(os.tmpdir(), "gameserver-unit-"));
 process.env.PAPERBOARD_DIR = testData;
+const SUITE_STARTED = Date.now();
+const DAEMON_BUILDS = Symbol.for("paperboard.gameserver.test.daemonBuilds");
+
+const alive = (pid: number): boolean => {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ESRCH") return false;
+        throw err;
+    }
+};
+
+// The supervisors (and workloads) the test daemons started outlive them by
+// design. They are this process's, so they end here, from the records the
+// daemon keeps in sockets/, before their executables are removed: Windows
+// can't delete a program that is still running.
+async function endSupervisors(): Promise<void> {
+    const sockets = path.join(testData, "sockets");
+    const pids: number[] = [];
+    for (const file of fs.existsSync(sockets) ? fs.readdirSync(sockets).filter((f) => f.endsWith(".json")) : []) {
+        const meta = JSON.parse(fs.readFileSync(path.join(sockets, file), "utf8"));
+        if (!(Date.parse(meta.startedAt) >= SUITE_STARTED)) continue;
+        for (const pid of [meta.pid, meta.childPid]) {
+            if (typeof pid === "number" && pid > 0 && pid !== process.pid && alive(pid)) {
+                process.kill(pid, "SIGKILL");
+                pids.push(pid);
+            }
+        }
+    }
+    const deadline = Date.now() + 10_000;
+    while (pids.some(alive)) {
+        if (Date.now() > deadline) throw new Error(`supervisor processes ${pids.filter(alive).join(", ")} did not end`);
+        await Bun.sleep(50);
+    }
+}
+
 // bun test never fires exit handlers; a preload afterAll runs once the
 // process's test files are done
-afterAll(() => fs.rmSync(testData, { recursive: true, force: true }));
+afterAll(async () => {
+    await endSupervisors();
+    for (const dir of ((globalThis as any)[DAEMON_BUILDS] ?? []).splice(0) as string[]) {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+    fs.rmSync(testData, { recursive: true, force: true });
+});
 
 // Hermetic test guard: unit tests must never open network connections.
 // The panel SDK discovers a running daemon through ~/.paperboard/local/crane.json,
