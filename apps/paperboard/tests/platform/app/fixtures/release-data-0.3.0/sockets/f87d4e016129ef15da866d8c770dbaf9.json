@@ -1,0 +1,19 @@
+{
+  "id": "snapshot-workload",
+  "pid": 1383505,
+  "childPid": 1383513,
+  "isPty": false,
+  "startedAt": "2026-11-09T22:02:36.478Z",
+  "config": {
+    "id": "snapshot-workload",
+    "type": "child_process",
+    "command": "/usr/bin/bun",
+    "args": [
+      "-e",
+      "setInterval(() => {}, 1 << 30)"
+    ],
+    "cwd": "/var/tmp/pb-snapshot-cgo31l",
+    "noStdin": false,
+    "env": {}
+  }
+}

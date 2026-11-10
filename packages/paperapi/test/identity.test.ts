@@ -1,88 +1,87 @@
-// identity resolution: injected > hostname > granted boot context
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { grantedComputerId, resolvePanelId, resolveDefaultPanelId } from "../src/identity";
-import { captureServiceBootContext } from "../src/boot";
+import { afterEach, describe, expect, test } from "bun:test";
+import { captureServiceBootContext, serviceBootContext } from "../src/boot";
+import { grantedComputerId, panelAssetUrl, resolvePanelId } from "../src/identity";
 
-describe("resolvePanelId", () => {
-    const savedWindow = (globalThis as any).window;
-    const savedCrane = (globalThis as any).__PAPERBOARD_CRANE;
-    const savedEnv = process.env.PAPERBOARD_PANEL_ID;
+const BOOT_ENV = ["PAPERBOARD_PANEL_ID", "PAPERCRANE_PANEL_TOKEN", "PAPERCRANE_PORT", "PAPERCRANE_TOKEN"];
+const g = globalThis as any;
 
-    function setWindowHostname(hostname: string): void {
-        (globalThis as any).window = {
-            location: { hostname },
-        };
-    }
+afterEach(() => {
+    for (const name of BOOT_ENV) delete process.env[name];
+    delete g.__PAPERBOARD_SERVICE_BOOT;
+    delete g.__PAPERBOARD_CRANE;
+    delete g.window;
+    delete g.location;
+    // leave no captured context for the next test (or file)
+    captureServiceBootContext();
+});
 
-    beforeEach(() => {
-        delete process.env.PAPERBOARD_PANEL_ID;
-        (globalThis as any).__PAPERBOARD_CRANE = undefined;
-        (globalThis as any).window = undefined;
-        captureServiceBootContext();
+function env(values: Record<string, string>): void {
+    for (const [k, v] of Object.entries(values)) process.env[k] = v;
+}
+
+// Services boot only on their scoped token.
+describe("services boot only on their scoped token", () => {
+    test("the in-process boot global is read once and removed, and later changes do not move it", () => {
+        g.__PAPERBOARD_SERVICE_BOOT = { panelId: "dev.a", token: "pcp_a", port: 4100 };
+        expect(captureServiceBootContext()).toEqual({ panelId: "dev.a", token: "pcp_a", port: 4100 });
+        expect(g.__PAPERBOARD_SERVICE_BOOT).toBeUndefined();
+        env({ PAPERBOARD_PANEL_ID: "dev.b", PAPERCRANE_PANEL_TOKEN: "pcp_b", PAPERCRANE_PORT: "4200" });
+        g.__PAPERBOARD_SERVICE_BOOT = { panelId: "dev.c", token: "pcp_c", port: 4300 };
+        expect(serviceBootContext()).toEqual({ panelId: "dev.a", token: "pcp_a", port: 4100 });
     });
 
-    afterEach(() => {
-        (globalThis as any).window = savedWindow;
-        (globalThis as any).__PAPERBOARD_CRANE = savedCrane;
-        if (savedEnv === undefined) delete process.env.PAPERBOARD_PANEL_ID;
-        else process.env.PAPERBOARD_PANEL_ID = savedEnv;
-        captureServiceBootContext();
+    test("the spawned-service env boots on the scoped token, which wins over a master token", () => {
+        env({ PAPERBOARD_PANEL_ID: "dev.a", PAPERCRANE_PANEL_TOKEN: "pcp_scoped", PAPERCRANE_PORT: "4100", PAPERCRANE_TOKEN: "master" });
+        expect(captureServiceBootContext()).toEqual({ panelId: "dev.a", token: "pcp_scoped", port: 4100 });
     });
 
-    test("explicitly injected panelId wins over hostname and boot context", () => {
-        setWindowHostname("panel.myhost.local");
-        (globalThis as any).__PAPERBOARD_CRANE = { panelId: "panel.injected" };
-        process.env.PAPERBOARD_PANEL_ID = "panel.env";
-        captureServiceBootContext();
-        expect(resolvePanelId()).toBe("panel.injected");
+    test("a master token alone yields no context", () => {
+        env({ PAPERBOARD_PANEL_ID: "dev.a", PAPERCRANE_PORT: "4100", PAPERCRANE_TOKEN: "master" });
+        expect(captureServiceBootContext()).toBeNull();
+        expect(serviceBootContext()).toBeNull();
     });
 
-    test("a hostname never grants panel identity", () => {
-        setWindowHostname("panel.myhost.local");
-        const id = resolvePanelId();
-        expect(id).toBe("");
-        expect(typeof id).toBe("string");
-    });
-
-    test("the granted boot context is used only outside a document context", () => {
-        (globalThis as any).window = undefined;
-        process.env.PAPERBOARD_PANEL_ID = "panel.env";
-        process.env.PAPERCRANE_PORT = "999";
-        process.env.PAPERCRANE_PANEL_TOKEN = "pcp_x";
-        captureServiceBootContext();
-        expect(resolvePanelId()).toBe("panel.env");
-    });
-
-    test("returns empty string when no identity source exists", () => {
-        (globalThis as any).window = undefined;
-        expect(resolvePanelId()).toBe("");
-    });
-
-    test("resolveDefaultPanelId prefers the transport panelId", () => {
-        setWindowHostname("panel.myhost.local");
-        expect(resolveDefaultPanelId("transport.panel")).toBe("transport.panel");
-        expect(resolveDefaultPanelId(undefined)).toBe("");
+    test("a malformed boot context fails closed", () => {
+        for (const bad of [{ panelId: "", token: "t", port: 1 }, { panelId: "dev.a", token: "", port: 1 }, { panelId: "dev.a", token: "t", port: 0 }, { panelId: "dev.a", token: "t", port: "4100" }, null]) {
+            g.__PAPERBOARD_SERVICE_BOOT = bad;
+            expect(captureServiceBootContext()).toBeNull();
+            expect(g.__PAPERBOARD_SERVICE_BOOT).toBeUndefined();
+        }
+        env({ PAPERBOARD_PANEL_ID: "dev.a", PAPERCRANE_PANEL_TOKEN: "pcp", PAPERCRANE_PORT: "not-a-port" });
+        expect(captureServiceBootContext()).toBeNull();
     });
 });
 
-describe("granted computer identity", () => {
-    const savedLocation = (globalThis as any).location;
+// Panel and computer identity are granted, never inferred.
+describe("panel and computer identity are granted, never inferred", () => {
+    test("a page gets its identity from host injection, never from its hostname", () => {
+        g.window = {};
+        g.location = { protocol: "http:", host: "local.dev.spoofed.localhost:5173", hostname: "local.dev.spoofed.localhost" };
+        expect(resolvePanelId()).toBe("");
+        expect(() => grantedComputerId()).toThrow("Paperboard computer identity was not injected");
 
-    afterEach(() => {
-        (globalThis as any).location = savedLocation;
+        g.__PAPERBOARD_CRANE = { computerId: "c-remote", panelId: "dev.real" };
+        expect(resolvePanelId()).toBe("dev.real");
+        expect(grantedComputerId()).toBe("c-remote");
     });
 
-    test("computer scope comes from injection, not the hostname prefix", () => {
-        (globalThis as any).location = { hostname: "alpha.myhost.local" };
-        const previous = (globalThis as any).__PAPERBOARD_CRANE;
-        try {
-            (globalThis as any).__PAPERBOARD_CRANE = { computerId: "granted" };
-            expect(grantedComputerId()).toBe("granted");
-        } finally { (globalThis as any).__PAPERBOARD_CRANE = previous; }
-    });
-
-    test("falls back to local without a document", () => {
-        (globalThis as any).location = undefined;
+    test("a service gets its panel from the granted boot context, and a plain Node process is local with no panel", () => {
+        expect(resolvePanelId()).toBe("");
         expect(grantedComputerId()).toBe("local");
+        env({ PAPERBOARD_PANEL_ID: "dev.svc", PAPERCRANE_PANEL_TOKEN: "pcp", PAPERCRANE_PORT: "4100" });
+        captureServiceBootContext();
+        expect(resolvePanelId()).toBe("dev.svc");
+    });
+
+    test("panelAssetUrl uses the granted, possibly remote, computer and refuses a malformed panel id", () => {
+        expect(panelAssetUrl("dev.icons", "./icon.png")).toBe("panel://local.dev.icons/icon.png");
+        g.window = {};
+        g.__PAPERBOARD_CRANE = { computerId: "c-remote", panelId: "dev.me" };
+        expect(panelAssetUrl("dev.icons", "/icon.png")).toBe("panel://c-remote.dev.icons/icon.png");
+        g.location = { protocol: "http:", host: "c-remote.dev.me.paperboard.localhost:5173" };
+        expect(panelAssetUrl("dev.icons", "icon.png")).toBe("http://c-remote.dev.icons.paperboard.localhost:5173/icon.png");
+        for (const bad of ["../evil", "a.b/c", "", "Upper"]) {
+            expect(() => panelAssetUrl(bad, "icon.png")).toThrow("Invalid panel id");
+        }
     });
 });

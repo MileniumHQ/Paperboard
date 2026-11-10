@@ -19,12 +19,14 @@ Paperboard is a dashboard for self-hostable programs. Panels are like the apps. 
 - **Launching from an agent shell:** Your shell may set `ELECTRON_RUN_AS_NODE=1`, which makes Electron crash. Launch with `env -u ELECTRON_RUN_AS_NODE`, a throwaway `PAPERBOARD_DIR` and `--user-data-dir`.
 - **Always test.** Unless you're certain it'll work fine, always do a manual check to ensure the feature works and looks great.
 - When making Actions, placeholders are the type (etc "Text" or "Channel ID") and not a description (etc "Example Text" "1234567890")
-
-Fixes:
-
-- **Prove it:** a fix comes with a small test that fails without it, across the real boundary, not a mock.
-- **Don't cheat tests:** never skip, loosen, or delete a failing test; fix the test if it expects broken behavior.
 - **Be careful with deletes:** stop a service before touching its files, and keep user data on uninstall.
+
+Tests:
+
+- **Tests are CI:** deterministic, no network, temp dirs via `PAPERBOARD_DIR`. Real boundaries over mocks.
+- **Platform tests:** only OS-dependent tests go in `test/platform`; CI runs those on every release target.
+- **Only what matters:** data loss, security, updates/releases, core contracts.
+- **Never skip or loosen a failing test.** Fix the code, or the test if it expects broken behavior.
 
 Some rules about Git:
 

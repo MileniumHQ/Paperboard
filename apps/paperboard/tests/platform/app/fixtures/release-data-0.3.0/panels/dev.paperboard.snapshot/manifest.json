@@ -1,0 +1,9 @@
+{
+    "name": "Snapshot",
+    "id": "dev.paperboard.snapshot",
+    "version": "1.0.0",
+    "description": "Release-data snapshot fixture",
+    "publisher": "Paperboard",
+    "base": "./dist/index.html",
+    "service": "./dist/service.js"
+}

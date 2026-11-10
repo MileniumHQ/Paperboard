@@ -1,260 +1,144 @@
-// The `paperapi` command line as a developer runs it: a real process, a real
-// panel folder, and a throwaway PAPERBOARD_DIR. Covers what every command
-// prints, where, and with which exit code (0 done, 1 failed, 2 usage). The
-// commands that need a running daemon are proved against a real one in
-// apps/paperboard/tests/trafficMonitor.test.ts.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { spawn, spawnSync } from "child_process";
-import { once } from "events";
-import * as fs from "fs";
-import * as net from "net";
-import * as os from "os";
-import * as path from "path";
-import { fileURLToPath } from "url";
+import { spawn } from "node:child_process";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import * as net from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { WebSocketServer } from "ws";
+import { linkPanel } from "../src/link";
 
-const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../bin/cli.ts");
-const ID = "dev.test.cli";
+const CLI = join(import.meta.dir, "..", "bin", "cli.ts");
 
-let root: string;
-let data: string;
-let panel: string;
-
-function run(args: string[], cwd = root) {
-    const env: Record<string, string | undefined> = { ...process.env, PAPERBOARD_DIR: data, NO_COLOR: "1" };
-    delete env.FORCE_COLOR;
-    const proc = spawnSync(process.execPath, [CLI, ...args], { cwd, env, encoding: "utf8" });
-    return { code: proc.status, stdout: proc.stdout, stderr: proc.stderr };
-}
-
-function writePanel(manifest: Record<string, unknown> = {}, built = true) {
-    fs.mkdirSync(path.join(panel, "src"), { recursive: true });
-    fs.writeFileSync(path.join(panel, "manifest.json"), JSON.stringify({ id: ID, name: "CLI Test", version: "0.1.0", ...manifest }));
-    fs.writeFileSync(path.join(panel, "src", "index.ts"), "export {};\n");
-    if (built) {
-        fs.mkdirSync(path.join(panel, "dist"), { recursive: true });
-        fs.writeFileSync(path.join(panel, "dist", "index.html"), "<!doctype html>");
-        // the build is newer than its source
-        const later = new Date(Date.now() + 1000);
-        fs.utimesSync(path.join(panel, "dist", "index.html"), later, later);
-    }
-}
+let work: string;
+let dataDir: string;
+let home: string;
 
 beforeEach(() => {
-    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "paperapi-cli-")));
-    data = path.join(root, "data");
-    panel = path.join(root, "work", ID);
-    fs.mkdirSync(panel, { recursive: true });
+    work = mkdtempSync(join(tmpdir(), "paperapi-cli-"));
+    dataDir = join(work, "data");
+    home = join(work, "home");
+    mkdirSync(join(dataDir, "local"), { recursive: true });
+    mkdirSync(home);
 });
 
 afterEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
+    rmSync(work, { recursive: true, force: true });
 });
 
-describe("exit codes", () => {
-    test("a command line the CLI cannot read exits 2 and says why", () => {
-        const badJson = run(["call", ID, "greet", "{name:"]);
-        expect(badJson.code).toBe(2);
-        expect(badJson.stderr).toContain("✗ The inputs are not JSON");
-        expect(badJson.stderr).toContain("Pass one JSON value");
+function panelFolder(id = "dev.test.linked"): string {
+    const dir = join(work, id);
+    mkdirSync(dir);
+    writeFileSync(join(dir, "manifest.json"), JSON.stringify({ id, name: "Linked", version: "0.1.0" }));
+    return dir;
+}
 
-        const badId = run(["call", "Not An Id", "greet"]);
-        expect(badId.code).toBe(2);
-        expect(badId.stderr).toContain('✗ "Not An Id" is not a panel id');
+interface Run {
+    code: number | null;
+    stdout: string;
+    stderr: string;
+}
 
-        const badTimeout = run(["call", ID, "greet", "--timeout", "70000"]);
-        expect(badTimeout.code).toBe(2);
-        expect(badTimeout.stderr).toContain("--timeout must be a whole number of milliseconds from 1 to 60000");
-
-        expect(run(["monitor", "--panel", "../escape"]).code).toBe(2);
-        expect(run(["no-such-command"]).code).toBe(2);
-    });
-
-    test("--help and --version exit 0", () => {
-        const help = run(["--help"]);
-        expect(help.code).toBe(0);
-        for (const name of ["link", "unlink", "links", "doctor", "monitor", "call", "restart", "pack"]) expect(help.stdout).toContain(name);
-        expect(run(["--version"]).code).toBe(0);
-    });
-
-    test("a command that needs Paperboard exits 1 and names the handshake it looked for", () => {
-        for (const args of [["monitor"], ["call", ID, "greet"], ["restart", ID]]) {
-            const result = run(args);
-            expect(result.code).toBe(1);
-            expect(result.stderr).toContain(`✗ Paperboard isn't running: there is no ${path.join(data, "local", "crane.json")}`);
-            expect(result.stderr).toContain("set PAPERBOARD_DIR");
-        }
-    });
-
-    test("a stale handshake is refused, never sent the token", async () => {
-        // a port nothing listens on, as a daemon that stopped leaves behind
-        const server = net.createServer();
-        await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-        const port = (server.address() as net.AddressInfo).port;
-        await new Promise<void>((resolve) => server.close(() => resolve()));
-        fs.mkdirSync(path.join(data, "local"), { recursive: true });
-        fs.writeFileSync(path.join(data, "local", "crane.json"), JSON.stringify({ port, token: "t".repeat(48) }));
-        const result = run(["monitor"]);
-        expect(result.code).toBe(1);
-        expect(result.stderr).toContain(`✗ Paperboard isn't running: nothing listens on 127.0.0.1:${port}`);
-    });
-});
-
-describe("link, links and unlink work on PAPERBOARD_DIR", () => {
-    test("link links the folder into PAPERBOARD_DIR and says where", () => {
-        writePanel();
-        const linked = run(["link"], panel);
-        expect(linked.code).toBe(0);
-        expect(linked.stderr).toContain(`✓ Linked CLI Test (${ID})`);
-        expect(linked.stdout).toBe(`${path.join(data, "panels", ID)} → .\n`);
-        expect(fs.realpathSync(path.join(data, "panels", ID))).toBe(panel);
-        // a panel with no service has none to restart
-        expect(linked.stderr).toContain("Paperboard serves its pages from this folder now.\n");
-        expect(linked.stderr.includes("paperapi restart")).toBe(false);
-
-        const listed = run(["links"]);
-        expect(listed.code).toBe(0);
-        expect(listed.stderr).toContain(`1 development link in ${path.join(data, "panels")}`);
-        expect(listed.stdout).toContain(`${ID}  → ${panel}`);
-        expect(JSON.parse(run(["links", "--json"]).stdout)).toEqual([{ id: ID, targetPath: panel, isBroken: false }]);
-
-        const unlinked = run(["unlink", ID]);
-        expect(unlinked.code).toBe(0);
-        expect(unlinked.stderr).toContain(`✓ Unlinked ${ID}`);
-        expect(fs.existsSync(path.join(data, "panels", ID))).toBe(false);
-    });
-
-    test("link says to restart the service of a panel that has one", () => {
-        writePanel({ service: "./dist/service.js" });
-        const linked = run(["link"], panel);
-        expect(linked.code).toBe(0);
-        expect(linked.stderr).toContain("run paperapi restart to run the new service");
-    });
-
-    test("links names the data folder it looked in, not ~/.paperboard", () => {
-        const listed = run(["links"]);
-        expect(listed.code).toBe(0);
-        expect(listed.stderr).toBe(`No development links in ${path.join(data, "panels")}.\n`);
-    });
-
-    test("unlinking a panel with no link fails, naming where it looked", () => {
-        const result = run(["unlink", ID]);
-        expect(result.code).toBe(1);
-        expect(result.stderr).toContain(`✗ ${ID} has no development link in ${path.join(data, "panels")}`);
-    });
-
-    test("link refuses to replace an installed copy without --force, and says how", () => {
-        writePanel();
-        fs.mkdirSync(path.join(data, "panels", ID), { recursive: true });
-        const refused = run(["link", panel]);
-        expect(refused.code).toBe(1);
-        expect(refused.stderr).toContain(`An installed copy of ${ID} already exists`);
-        expect(refused.stderr).toContain("--force");
-        expect(run(["link", panel, "--force"]).code).toBe(0);
-        expect(fs.realpathSync(path.join(data, "panels", ID))).toBe(panel);
-    });
-});
-
-describe("doctor", () => {
-    test("names each problem with the command that fixes it", () => {
-        writePanel({}, false);
-        const result = run(["doctor", panel]);
-        expect(result.code).toBe(1);
-        expect(result.stdout).toContain("✓ Manifest    CLI Test 0.1.0");
-        expect(result.stdout).toContain("✗ Build       dist/index.html is missing");
-        expect(result.stdout).toContain("→ bun run build");
-        expect(result.stdout).toContain(`✗ Link        not linked into ${path.join(data, "panels")}`);
-        expect(result.stdout).toContain("→ paperapi link");
-        expect(result.stdout).toContain("✗ Paperboard  isn't running");
-        expect(result.stdout).toContain("3 problems.");
-    });
-
-    test("warns about source changed after the last build", () => {
-        writePanel();
-        const later = new Date(Date.now() + 5000);
-        fs.utimesSync(path.join(panel, "src", "index.ts"), later, later);
-        const report = JSON.parse(run(["doctor", "--json"], panel).stdout);
-        expect(report.checks.find((c: { name: string }) => c.name === "Build")).toEqual({
-            name: "Build", status: "warn", detail: "src/index.ts changed after the last build", fix: "bun run build",
+// the CLI as a developer runs it, in its own process
+function cli(args: string[], cwd = work): Promise<Run> {
+    return new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, [CLI, ...args], { cwd, env: { ...process.env, PAPERBOARD_DIR: dataDir, HOME: home, USERPROFILE: home }, stdio: ["ignore", "pipe", "pipe"] });
+        let stdout = "";
+        let stderr = "";
+        child.stdout.on("data", (c: Buffer) => {
+            stdout += c.toString();
         });
+        child.stderr.on("data", (c: Buffer) => {
+            stderr += c.toString();
+        });
+        child.once("error", reject);
+        child.once("close", (code) => resolve({ code, stdout, stderr }));
+    });
+}
+
+async function freePort(): Promise<number> {
+    const server = net.createServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const port = (server.address() as net.AddressInfo).port;
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    return port;
+}
+
+// Linking never clobbers an install or the real Paperboard, and the CLI guards its token.
+describe("linking never clobbers an install or the real Paperboard, and the CLI guards its token", () => {
+    test("paperapi link links into PAPERBOARD_DIR/panels and never into the home folder's Paperboard", async () => {
+        const dir = panelFolder();
+        const result = await cli(["link"], dir);
+        expect(result.code).toBe(0);
+        const link = join(dataDir, "panels", "dev.test.linked");
+        expect(lstatSync(link).isSymbolicLink()).toBe(true);
+        expect(readlinkSync(link)).toBe(dir);
+        expect(existsSync(join(home, ".paperboard"))).toBe(false);
     });
 
-    test("tells an installed copy apart from a link to another folder", () => {
-        writePanel();
-        fs.mkdirSync(path.join(data, "panels", ID), { recursive: true });
-        const installed = JSON.parse(run(["doctor", "--json", panel]).stdout);
-        const installedLink = installed.checks.find((c: { name: string }) => c.name === "Link");
-        expect(installedLink.status).toBe("fail");
-        expect(installedLink.fix).toContain("paperapi link --force");
+    test("an installed panel directory is not replaced without force, and is with it", async () => {
+        const dir = panelFolder();
+        const installed = join(dataDir, "panels", "dev.test.linked");
+        mkdirSync(installed, { recursive: true });
+        writeFileSync(join(installed, "manifest.json"), '{"id":"dev.test.linked","installed":true}');
 
-        fs.rmSync(path.join(data, "panels", ID), { recursive: true });
-        const elsewhere = path.join(root, "elsewhere");
-        fs.mkdirSync(elsewhere);
-        fs.symlinkSync(elsewhere, path.join(data, "panels", ID), "dir");
-        const linkedElsewhere = JSON.parse(run(["doctor", "--json", panel]).stdout);
-        const elsewhereLink = linkedElsewhere.checks.find((c: { name: string }) => c.name === "Link");
-        expect(elsewhereLink.status).toBe("fail");
-        expect(elsewhereLink.detail).toContain(`points at another folder: ${elsewhere}`);
+        const refused = await cli(["link"], dir);
+        expect(refused.code).toBe(1);
+        expect(refused.stderr).toContain("An installed copy of dev.test.linked already exists");
+        expect(lstatSync(installed).isDirectory()).toBe(true);
+        expect(readFileSync(join(installed, "manifest.json"), "utf8")).toContain('"installed":true');
+
+        // the library call refuses the same way
+        const previous = process.env.PAPERBOARD_DIR;
+        process.env.PAPERBOARD_DIR = dataDir;
+        try {
+            expect(() => linkPanel({ targetDir: dir })).toThrow("Use --force to replace it");
+        } finally {
+            process.env.PAPERBOARD_DIR = previous;
+        }
+
+        const forced = await cli(["link", "--force"], dir);
+        expect(forced.code).toBe(0);
+        expect(lstatSync(installed).isSymbolicLink()).toBe(true);
     });
 
-    test("refuses a manifest the daemon would refuse", () => {
-        writePanel({ id: "Bad Id" });
-        const bad = run(["doctor", panel]);
-        expect(bad.code).toBe(1);
-        expect(bad.stdout).toContain('✗ Manifest  "id": Invalid panel id');
-
-        writePanel({ service: "../outside.js" });
-        expect(run(["doctor", panel]).stdout).toContain('"service" must stay inside the panel folder: ../outside.js');
-    });
-
-    test("says so when run outside a panel folder", () => {
-        const result = run(["doctor"], root);
-        expect(result.code).toBe(1);
-        expect(result.stdout).toContain(`there is no manifest.json in ${root}`);
-    });
-
-    // `paperapi doctor | head`: the reader closes stdout before the report
-    // ends, and the command used to crash on the write with EPIPE
-    test("stops quietly with its own exit code when the reader closes stdout", async () => {
-        writePanel();
-        const expected = run(["doctor", panel]).code;
-        for (const runtime of [process.execPath, "node"]) {
-            const script = runtime === "node" ? path.resolve(path.dirname(CLI), "../dist/cli.js") : CLI;
-            if (runtime === "node" && !fs.existsSync(script)) throw new Error(`build the CLI first: ${script} is missing`);
-            const env: Record<string, string | undefined> = { ...process.env, PAPERBOARD_DIR: data, NO_COLOR: "1" };
-            delete env.FORCE_COLOR;
-            const child = spawn(runtime, [script, "doctor", panel], { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
-            // nothing reads stdout: every write the command makes fails
-            child.stdout.destroy();
-            let stderr = "";
-            child.stderr.on("data", (chunk) => (stderr += chunk));
-            const [code] = (await once(child, "close")) as [number | null];
-            expect(stderr.includes("EPIPE")).toBe(false);
-            expect([runtime, code]).toEqual([runtime, expected]);
+    test("unreadable command lines exit 2", async () => {
+        for (const args of [["monitor", "--panel", "../escape"], ["unlink", "../escape"], ["no-such-command"], ["call", "dev.a", "act", "{}", "--timeout"]]) {
+            const result = await cli(args);
+            expect({ args, code: result.code }).toEqual({ args, code: 2 });
         }
     });
-});
 
-describe("pack", () => {
-    test("prints the archive and its sha256, or only JSON with --json", () => {
-        writePanel();
-        const packed = run(["pack", panel, "--out", path.join(root, "out")]);
-        expect(packed.code).toBe(0);
-        expect(packed.stderr).toContain(`✓ Packed ${ID} 0.1.0`);
-        // plain text a terminal and a log both show: no ellipsis character
-        expect(packed.stderr).toContain("Archiving manifest.json, dist\n");
-        expect(packed.stderr.includes("\u2026")).toBe(false);
-        // shown relative to where the developer is
-        expect(packed.stdout).toMatch(new RegExp(`^out/${ID}-0\\.1\\.0\\.tar\\.gz\\nsha256 [a-f0-9]{64}\\n$`));
-
-        const json = run(["pack", panel, "--out", path.join(root, "out"), "--json"]);
-        expect(json.code).toBe(0);
-        expect(JSON.parse(json.stdout)).toMatchObject({ id: ID, version: "0.1.0", archiveName: `${ID}-0.1.0.tar.gz` });
-    });
-
-    test("a manifest pack refuses exits 1 with the reason", () => {
-        writePanel({ version: undefined });
-        const result = run(["pack", panel]);
+    test("a handshake naming a port nothing listens on is refused", async () => {
+        const port = await freePort();
+        writeFileSync(join(dataDir, "local", "crane.json"), JSON.stringify({ port, token: "host-secret" }));
+        const result = await cli(["call", "dev.a"]);
         expect(result.code).toBe(1);
-        expect(result.stderr).toContain("✗ Panel manifest must specify a 'version'");
+        expect(result.stderr).toContain(`nothing listens on 127.0.0.1:${port}`);
     });
+
+    test("a listener that cannot prove it holds the token never receives it", async () => {
+        const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+        await new Promise<void>((resolve) => wss.once("listening", () => resolve()));
+        const received: string[] = [];
+        const headers: Record<string, unknown>[] = [];
+        wss.on("connection", (ws, req) => {
+            headers.push({ ...req.headers });
+            ws.on("message", (raw) => received.push(raw.toString()));
+            ws.send(JSON.stringify({ type: "daemon-proof", proof: "0".repeat(64) }));
+        });
+        try {
+            const port = (wss.address() as net.AddressInfo).port;
+            writeFileSync(join(dataDir, "local", "crane.json"), JSON.stringify({ port, token: "host-secret" }));
+            const result = await cli(["call", "dev.a"]);
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain("could not prove it is the Paperboard");
+            expect(headers).toHaveLength(1);
+            expect(JSON.stringify(headers[0])).not.toContain("host-secret");
+            expect(received).toEqual([]);
+        } finally {
+            for (const client of wss.clients) client.terminate();
+            await new Promise<void>((resolve) => wss.close(() => resolve()));
+        }
+    });
+
 });

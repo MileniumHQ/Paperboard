@@ -1,467 +1,171 @@
-// The Modpacks tab's install against a real temp server folder and real
-// .mrpack archives built here. Modrinth answers are recorded shapes; the
-// daemon's download is replaced by a writer that serves known bytes and
-// checks sha1 the way the daemon does. sha512 is the service's own check
-// and runs for real.
-import { afterEach, describe, expect, test } from "bun:test";
-import * as crypto from "node:crypto";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
-import { zipSync, strToU8 } from "fflate";
-import { installModpack, removeModpack, type ModpackDeps } from "../src/service/modpacks";
-import { uploadModpack } from "../src/service/addonUploads";
-import { addonStageDir } from "../src/core/addonUpload";
-import { activatePack, newPackStagingName, packFilesPath, recoverStagedPacks } from "../src/service/packActivation";
-import { isKeptPath, parseModpackRecord, parsePackIndex, safePackPath, MODPACK_RECORD_KEY, MODPACK_STAGING_KEY } from "../src/core/modpack";
-import { INSTALL_RECORDS_KEY } from "../src/core/plugins";
-import type { ServerSoftwareType } from "../src/software/catalog";
+import { startTestDaemon, type TestDaemon } from "./helpers/crane";
+import { minecraftServer, type McServer } from "./helpers/minecraft";
+import { mrpack, packCdn, packDeps, packFile, packIndex, sha1, sha512 } from "./helpers/modpack";
+import { loopbackServer } from "./helpers/http";
+import { readTree, writeTree } from "./helpers/tmp";
+import { installModpack, installUploadedModpack, removeModpack, type ModpackDeps } from "./../src/service/modpacks";
+import { MODRINTH_API } from "../src/core/modrinth";
 
-const dirs: string[] = [];
-afterEach(() => {
-    for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+let daemon: TestDaemon;
+beforeAll(async () => {
+    daemon = await startTestDaemon();
+});
+afterAll(async () => {
+    await daemon?.stop();
 });
 
-const sha = (algo: string, data: Uint8Array) => crypto.createHash(algo).update(data).digest("hex");
+const USER = { "world/level.dat": "level", "server.properties": "motd=mine\n", "libraries/neo.jar": "neoforge" };
 
-interface PackFile {
-    path: string;
-    bytes: Uint8Array;
-    env?: string;
-    url?: string;
-    sha512?: string;
+function neoServer(files: Record<string, string> = {}): McServer {
+    return minecraftServer({ software: "neoforge", files: { ...USER, ...files } });
 }
 
-function index(files: PackFile[], deps: Record<string, string> = { minecraft: "1.21.1", "fabric-loader": "0.16.5" }) {
-    return {
-        formatVersion: 1,
-        game: "minecraft",
-        versionId: "1.0.0",
-        name: "Test Pack",
-        dependencies: deps,
-        files: files.map((f) => ({
-            path: f.path,
-            hashes: { sha1: sha("sha1", f.bytes), sha512: f.sha512 ?? sha("sha512", f.bytes) },
-            downloads: [f.url ?? `https://cdn.modrinth.com/data/x/${encodeURIComponent(f.path)}`],
-            fileSize: f.bytes.byteLength,
-            ...(f.env ? { env: { client: "required", server: f.env } } : {}),
-        })),
-    };
+function upload(mc: McServer, archive: Uint8Array, deps: ModpackDeps) {
+    fs.writeFileSync(path.join(mc.dir, "upload.mrpack"), archive);
+    return installUploadedModpack("upload.mrpack", "neoforge", deps);
 }
 
-function mrpack(idx: unknown, entries: Record<string, string | Uint8Array> = {}): Uint8Array {
-    const zip: Record<string, Uint8Array> = { "modrinth.index.json": strToU8(JSON.stringify(idx)) };
-    for (const [name, data] of Object.entries(entries)) zip[name] = typeof data === "string" ? strToU8(data) : data;
-    return zipSync(zip);
-}
+const live = (mc: McServer) =>
+    Object.fromEntries(Object.entries(readTree(mc.dir)).filter(([f]) => !f.startsWith(".trash-") && !f.endsWith("/") && f !== "upload.mrpack"));
+const trashed = (mc: McServer) =>
+    Object.keys(readTree(mc.dir))
+        .filter((f) => f.startsWith(".trash-") && !f.endsWith("/"))
+        .map((f) => f.replace(/^\.trash-[^/]+\//, ""))
+        .sort();
 
-function harness(opts: { installed?: { version: string; build: string | null }; installFails?: boolean } = {}) {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pb-modpacks-"));
-    dirs.push(root);
-    let config: Record<string, unknown> = {};
-    const served = new Map<string, Uint8Array>();
-    const versions = new Map<string, unknown>();
-    const softwareInstalls: [string, string, string][] = [];
-    const progress: unknown[] = [];
-    let installed = { software: "fabric" as ServerSoftwareType, version: "1.21.1", build: "0.16.5" as string | null, ...opts.installed };
+// Modpack install, update and removal are transactional.
+describe("modpack transactions", () => {
+    test("an uploaded pack places downloads, then overrides over them, trashes the mods it replaces, and records pack and staging together", async () => {
+        const mc = neoServer({ "mods/old.jar": "user's old mod" });
+        const cdn = packCdn();
+        const index = packIndex([packFile(cdn, "mods/sodium.jar", "sodium"), packFile(cdn, "config/shared.toml", "from download")]);
+        const deps = packDeps(mc, cdn);
+        const outcome = await upload(mc, mrpack(index, { overrides: { "config/shared.toml": "from overrides", "config/a.toml": "a" }, serverOverrides: { "config/a.toml": "server a" } }), deps);
+        expect(outcome).toMatchObject({ title: "Test Pack", mcVersion: "1.21.1", loaderVersion: "21.1.256", switchedServer: false });
+        const tree = live(mc);
+        expect(tree["mods/sodium.jar"]).toBe("sodium");
+        expect(tree["config/shared.toml"]).toBe("from overrides");
+        expect(tree["config/a.toml"]).toBe("server a");
+        expect(tree["mods/old.jar"]).toBeUndefined();
+        expect(trashed(mc)).toEqual(["mods/old.jar"]);
+        const settings = mc.scope.server.settings;
+        expect((settings.modpack as { files: string[]; uploaded: boolean }).files).toEqual(["config/a.toml", "config/shared.toml", "mods/sodium.jar"]);
+        expect((settings.modpack as { uploaded: boolean }).uploaded).toBe(true);
+        expect(settings.modpackStaging).toMatch(/^\.modpack-/);
+        expect(fs.readdirSync(mc.dir).filter((e) => e.startsWith(".modpack-"))).toEqual([]);
+    });
 
-    const publishPack = (versionId: string, archive: Uint8Array) => {
-        const url = `https://cdn.modrinth.com/data/pack/versions/${versionId}/pack.mrpack`;
-        served.set(url, archive);
-        versions.set(versionId, {
-            id: versionId,
-            project_id: "packproj",
-            version_number: `v${versionId}`,
-            loaders: ["fabric"],
-            game_versions: ["1.21.1"],
-            files: [
-                {
-                    url,
-                    filename: "pack.mrpack",
-                    primary: true,
-                    size: archive.byteLength,
-                    hashes: { sha1: sha("sha1", archive), sha512: sha("sha512", archive) },
-                },
-            ],
+    test("a Modrinth pack is fetched by its version record and checked against both hashes", async () => {
+        const mc = neoServer();
+        const cdn = packCdn();
+        const pack = Buffer.from(mrpack(packIndex([packFile(cdn, "mods/sodium.jar", "sodium")])));
+        const modrinth = loopbackServer((_req, url) => {
+            if (url.pathname === "/v2/version/VERSION1")
+                return Response.json({
+                    id: "VERSION1",
+                    project_id: "PROJECT1",
+                    version_number: "1.0.0",
+                    name: "1.0.0",
+                    loaders: ["neoforge"],
+                    game_versions: ["1.21.1"],
+                    files: [{ url: "https://cdn.modrinth.com/data/pack.mrpack", filename: "pack.mrpack", primary: true, size: pack.length, hashes: { sha1: sha1(pack), sha512: sha512(pack) } }],
+                });
+            if (url.pathname === "/v2/project/PROJECT1") return Response.json({ id: "PROJECT1", slug: "test-pack", title: "Test Pack", project_type: "modpack" });
+            return new Response("not found", { status: 404 });
         });
-    };
-    const serve = (files: PackFile[]) => {
-        for (const f of files) served.set(f.url ?? `https://cdn.modrinth.com/data/x/${encodeURIComponent(f.path)}`, f.bytes);
-    };
-
-    const deps: ModpackDeps = {
-        serverDir: async () => root,
-        levelName: async () => "world",
-        fetchJson: async <T,>(url: string) => {
-            const version = /\/version\/([^/?]+)$/.exec(url)?.[1];
-            if (version) return versions.get(version) as T;
-            return { id: "packproj", slug: "test-pack", title: "Test Pack", project_type: "modpack" } as T;
-        },
-        download: async ({ url, targetPath, sha1 }) => {
-            const bytes = served.get(url);
-            if (!bytes) throw new Error(`404 ${url}`);
-            if (sha("sha1", bytes) !== sha1) throw new Error("sha1 mismatch");
-            const target = path.join(root, ...targetPath.split("/"));
-            fs.mkdirSync(path.dirname(target), { recursive: true });
-            fs.writeFileSync(target, bytes);
-        },
-        sha512: async (abs) => sha("sha512", fs.readFileSync(abs)),
-        readConfig: async () => config,
-        writeConfig: async (patch) => {
-            config = { ...config, ...patch };
-        },
-        installed: async () => installed,
-        installSoftware: async (software, version, build, configPatch) => {
-            softwareInstalls.push([software, version, build]);
-            if (opts.installFails) throw new Error("installer exploded");
-            await deps.writeConfig(configPatch);
-            installed = { software, version, build };
-            return {};
-        },
-        publish: (p) => progress.push(p),
-    };
-    const write = (rel: string, data = "x") => {
-        fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
-        fs.writeFileSync(path.join(root, rel), data);
-    };
-    const read = (rel: string) => fs.readFileSync(path.join(root, rel), "utf8");
-    const has = (rel: string) => fs.existsSync(path.join(root, rel));
-    const trashed = (rel: string) =>
-        fs.readdirSync(root).some((e) => e.startsWith(".trash-") && fs.existsSync(path.join(root, e, rel)));
-    const leftovers = () => fs.readdirSync(root).filter((e) => e.startsWith(".modpack-"));
-    return { root, deps, publishPack, serve, softwareInstalls, progress, config: () => config, write, read, has, trashed, leftovers };
-}
-
-const install = (h: ReturnType<typeof harness>, versionId: string, software: ServerSoftwareType = "fabric") =>
-    installModpack({ projectId: "packproj", versionId }, software, h.deps);
-
-describe("pack paths", () => {
-    test("only paths every OS writes the same way inside the server folder", () => {
-        for (const ok of ["mods/sodium+0.5.jar", "config/a b/[x].json5", "kubejs/server_scripts/x.js"]) {
-            expect(safePackPath(ok)).toBe(ok);
-        }
-        for (const bad of ["../x", "mods/../../x", "/etc/passwd", "C:/x", "mods\\x.jar", "mods//x", "./x", "con.txt", "mods/aux", "mods.", "x ", "", "a\u0000b"]) {
-            expect(safePackPath(bad)).toBeNull();
-        }
+        // the archive's exact bytes, beside the pack's files
+        const files = loopbackServer((req, url) => (url.pathname === "/data/pack.mrpack" ? new Response(pack) : fetch(`${cdn.url}${url.pathname}`)));
+        const deps = packDeps(mc, files, {
+            fetchJson: async <T>(url: string) => (await (await fetch(url.replace(MODRINTH_API, `${modrinth.url}/v2`))).json()) as T,
+        });
+        await installModpack({ projectId: "PROJECT1", versionId: "VERSION1" }, "neoforge", deps);
+        expect(live(mc)["mods/sodium.jar"]).toBe("sodium");
+        expect(mc.scope.server.settings.modpack).toMatchObject({ projectId: "PROJECT1", versionId: "VERSION1", slug: "test-pack" });
     });
 
-    test("the world, settings and installed software are kept, whatever the world is called", () => {
-        for (const kept of ["server.properties", "world/level.dat", "survival_nether/x", "libraries/a.jar", ".install-1/x", "Ops.json"]) {
-            expect(isKeptPath(kept, "survival") || isKeptPath(kept, "world")).toBe(true);
-        }
-        expect(isKeptPath("survival/region/r.0.0.mca", "survival")).toBe(true);
-        expect(isKeptPath("config/world.toml", "world")).toBe(false);
-        expect(isKeptPath("mods/a.jar", "world")).toBe(false);
-    });
-});
-
-describe("pack index", () => {
-    const jar = { path: "mods/a.jar", bytes: strToU8("a") };
-
-    test("a pack for another loader is refused", () => {
-        expect(() => parsePackIndex(index([jar], { minecraft: "1.21.1", neoforge: "21.1.1" }), "fabric", "world")).toThrow(
-            "built for neoforge",
-        );
-        expect(() => parsePackIndex(index([jar], { minecraft: "1.21.1", "quilt-loader": "0.26" }), "fabric", "world")).toThrow();
-        expect(() => parsePackIndex(index([jar]), "paper", "world")).toThrow("does not run modpacks");
-    });
-
-    test("client-only files are skipped, kept paths reported, and the loader version read", () => {
-        const parsed = parsePackIndex(
-            index([jar, { path: "mods/shaders.jar", bytes: strToU8("s"), env: "unsupported" }, { path: "server.properties", bytes: strToU8("p") }]),
-            "fabric",
-            "world",
-        );
-        expect(parsed.downloads.map((d) => d.path)).toEqual(["mods/a.jar"]);
-        expect(parsed.kept).toEqual(["server.properties"]);
-        expect([parsed.mcVersion, parsed.loaderVersion]).toEqual(["1.21.1", "0.16.5"]);
-    });
-
-    test("unsafe paths, other hosts and repeated paths refuse the whole pack", () => {
-        expect(() => parsePackIndex(index([{ path: "../escape.jar", bytes: strToU8("x") }]), "fabric", "world")).toThrow("unsafe file path");
-        expect(() =>
-            parsePackIndex(index([{ ...jar, url: "https://evil.example/a.jar" }]), "fabric", "world"),
-        ).toThrow("allowed host");
-        expect(() =>
-            parsePackIndex(index([jar, { path: "MODS/A.jar", bytes: strToU8("b") }]), "fabric", "world"),
-        ).toThrow("twice");
-    });
-});
-
-describe("installing", () => {
-    test("places the pack, replaces the old mods, keeps the user's server, and switches the loader build", async () => {
-        const h = harness({ installed: { version: "1.21.1", build: "0.16.0" } });
-        h.write("mods/old.jar", "old");
-        h.write("config/user.cfg", "mine");
-        h.write("server.properties", "motd=mine");
-        h.write("world/level.dat", "world");
-        const files = [{ path: "mods/a.jar", bytes: strToU8("jar-a") }, { path: "config/user.cfg", bytes: strToU8("from-download") }];
-        h.serve(files);
-        h.publishPack(
-            "v1",
-            mrpack(index(files), {
-                "overrides/config/user.cfg": "from-overrides",
-                "overrides/config/new.toml": "base",
-                "server-overrides/config/new.toml": "server",
-                "overrides/server.properties": "motd=pack",
-                "overrides/world/level.dat": "pack-world",
-            }),
-        );
-
-        const outcome = await install(h, "v1");
-
-        expect(h.read("mods/a.jar")).toBe("jar-a");
-        expect(h.read("config/user.cfg")).toBe("from-overrides");
-        expect(h.read("config/new.toml")).toBe("server");
-        expect(h.read("server.properties")).toBe("motd=mine");
-        expect(h.read("world/level.dat")).toBe("world");
-        expect(h.has("mods/old.jar")).toBe(false);
-        expect(h.trashed("mods/old.jar")).toBe(true);
-        expect(h.trashed("config/user.cfg")).toBe(true);
-        expect(h.softwareInstalls).toEqual([["fabric", "1.21.1", "0.16.5"]]);
-        expect(outcome).toMatchObject({ switchedServer: true, kept: ["server.properties", "world/level.dat"] });
-        expect((h.config()[MODPACK_RECORD_KEY] as { files: string[] }).files).toEqual([
-            "config/new.toml",
-            "config/user.cfg",
-            "mods/a.jar",
-        ]);
-        expect(h.leftovers()).toEqual([]);
-    });
-
-    test("bytes that do not match the pack's sha512 are refused and nothing moves", async () => {
-        const h = harness();
-        h.write("mods/old.jar", "old");
-        const file = { path: "mods/a.jar", bytes: strToU8("jar-a"), sha512: "0".repeat(128) };
-        h.serve([file]);
-        h.publishPack("v1", mrpack(index([file])));
-
-        await expect(install(h, "v1")).rejects.toThrow("sha512");
-        expect(h.read("mods/old.jar")).toBe("old");
-        expect(h.has("mods/a.jar")).toBe(false);
-        expect(h.config()[MODPACK_RECORD_KEY]).toBeUndefined();
-        expect(h.leftovers()).toEqual([]);
-    });
-
-    test("a failed loader switch puts every old file back and leaves no new folder", async () => {
-        const h = harness({ installed: { version: "1.20.1", build: "0.15.0" }, installFails: true });
-        h.write("mods/old.jar", "old");
-        h.write("config/user.cfg", "mine");
-        const files = [{ path: "mods/a.jar", bytes: strToU8("jar-a") }];
-        h.serve(files);
-        h.publishPack("v1", mrpack(index(files), { "overrides/config/user.cfg": "pack", "overrides/kubejs/x.js": "js" }));
-
-        await expect(install(h, "v1")).rejects.toThrow("installer exploded");
-        expect(h.read("mods/old.jar")).toBe("old");
-        expect(h.read("config/user.cfg")).toBe("mine");
-        expect(h.has("mods/a.jar")).toBe(false);
-        expect(h.has("kubejs")).toBe(false);
-        expect(h.config()[MODPACK_RECORD_KEY]).toBeUndefined();
-        expect(h.leftovers()).toEqual([]);
-    });
-
-    test("an update removes what the old version placed and the new one does not", async () => {
-        const h = harness();
-        const v1 = [{ path: "mods/a.jar", bytes: strToU8("a") }];
-        const v2 = [{ path: "mods/b.jar", bytes: strToU8("b") }];
-        h.serve([...v1, ...v2]);
-        h.publishPack("v1", mrpack(index(v1), { "overrides/config/only-v1.txt": "1", "overrides/config/both.txt": "1" }));
-        h.publishPack("v2", mrpack(index(v2), { "overrides/config/both.txt": "2" }));
-        await install(h, "v1");
-        h.write("config/mine.txt", "user");
-
-        await install(h, "v2");
-        expect(h.has("mods/a.jar")).toBe(false);
-        expect(h.has("config/only-v1.txt")).toBe(false);
-        expect(h.read("config/both.txt")).toBe("2");
-        expect(h.read("mods/b.jar")).toBe("b");
-        expect(h.read("config/mine.txt")).toBe("user");
-        // the loader build already matched: no server reinstall
-        expect(h.softwareInstalls).toEqual([]);
-    });
-
-    test("mod records for replaced jars are dropped with them", async () => {
-        const h = harness();
-        h.write("mods/old.jar", "old");
-        await h.deps.writeConfig({ [INSTALL_RECORDS_KEY]: { "old.jar": { projectId: "p", slug: "s", version: "1" } } });
-        const files = [{ path: "mods/a.jar", bytes: strToU8("a") }];
-        h.serve(files);
-        h.publishPack("v1", mrpack(index(files)));
-        await install(h, "v1");
-        expect(h.config()[INSTALL_RECORDS_KEY]).toEqual({});
-    });
-
-    test("an override that inflates past its cap is stopped while inflating", async () => {
-        const h = harness();
-        h.publishPack("v1", mrpack(index([]), { "overrides/config/bomb.bin": new Uint8Array(65 * 1024 * 1024) }));
-        await expect(install(h, "v1")).rejects.toThrow("64 MiB");
-        expect(h.has("config")).toBe(false);
-        expect(h.leftovers()).toEqual([]);
-    });
-
-    test("an unsafe override path refuses the pack", async () => {
-        const h = harness();
-        h.publishPack("v1", mrpack(index([]), { "overrides/con/x.txt": "x" }));
-        await expect(install(h, "v1")).rejects.toThrow("unsafe override path");
-        expect(h.leftovers()).toEqual([]);
-    });
-});
-
-describe("removing and recovery", () => {
-    test("remove trashes only what the pack placed and keeps the server software", async () => {
-        const h = harness();
-        const files = [{ path: "mods/a.jar", bytes: strToU8("a") }];
-        h.serve(files);
-        h.publishPack("v1", mrpack(index(files), { "overrides/config/p.txt": "p" }));
-        await install(h, "v1");
-        h.write("config/mine.txt", "user");
-
-        expect(await removeModpack(h.deps)).toEqual({ removed: 2 });
-        expect(h.has("mods/a.jar")).toBe(false);
-        expect(h.trashed("mods/a.jar")).toBe(true);
-        expect(h.read("config/mine.txt")).toBe("user");
-        expect(h.config()[MODPACK_RECORD_KEY]).toBeNull();
-        expect(h.softwareInstalls).toEqual([]);
-        expect(h.leftovers()).toEqual([]);
-    });
-
-    test("an interrupted activation rolls back unless the record names it, then commits", async () => {
-        for (const recorded of [false, true]) {
-            const h = harness();
-            h.write("mods/old.jar", "old");
-            const staging = newPackStagingName();
-            h.write(`${packFilesPath(staging)}/mods/new.jar`, "new");
-            // activated, then the service dies before commit
-            await activatePack({ root: h.root, staging, staged: ["mods/new.jar"], replace: ["mods/old.jar"] });
-
-            const result = await recoverStagedPacks(h.root, recorded ? staging : null);
-            expect(h.leftovers()).toEqual([]);
-            if (recorded) {
-                expect(result.committed).toEqual([staging]);
-                expect(h.read("mods/new.jar")).toBe("new");
-                expect(h.trashed("mods/old.jar")).toBe(true);
+    test("the loader is reinstalled only when the pack's build differs, in the same write as the pack record", async () => {
+        for (const installedBuild of ["21.1.256", "21.1.200"]) {
+            const mc = neoServer();
+            const cdn = packCdn();
+            const switches: unknown[][] = [];
+            const writes: Record<string, unknown>[] = [];
+            const deps = packDeps(mc, cdn, {
+                installed: async () => ({ software: "neoforge", version: "1.21.1", build: installedBuild }),
+                installSoftware: async (...args) => {
+                    switches.push(args);
+                    return {};
+                },
+                writeConfig: async (patch) => {
+                    writes.push(patch);
+                },
+            });
+            const outcome = await upload(mc, mrpack(packIndex([packFile(cdn, "mods/a.jar", "a")])), deps);
+            if (installedBuild === "21.1.256") {
+                expect(outcome.switchedServer).toBe(false);
+                expect(switches).toEqual([]);
+                expect(Object.keys(writes[0]!)).toContain("modpack");
             } else {
-                expect(result.rolledBack).toEqual([staging]);
-                expect(h.read("mods/old.jar")).toBe("old");
-                expect(h.has("mods/new.jar")).toBe(false);
+                expect(outcome.switchedServer).toBe(true);
+                expect(writes).toEqual([]);
+                expect(switches[0]!.slice(0, 3)).toEqual(["neoforge", "1.21.1", "21.1.256"]);
+                expect(Object.keys(switches[0]![3] as object)).toEqual(expect.arrayContaining(["modpack", "modpackStaging"]));
             }
         }
     });
 
-    test("a removal recorded before the crash stays removed", async () => {
-        const h = harness();
-        const files = [{ path: "mods/a.jar", bytes: strToU8("a") }];
-        h.serve(files);
-        h.publishPack("v1", mrpack(index(files)));
-        await install(h, "v1");
-        const staging = newPackStagingName();
-        await activatePack({ root: h.root, staging, staged: [], replace: ["mods/a.jar"] });
-        await h.deps.writeConfig({ [MODPACK_RECORD_KEY]: null, [MODPACK_STAGING_KEY]: staging });
+    test("an update removes what the old version placed and keeps the user's files; removal trashes only the pack's files", async () => {
+        const mc = neoServer();
+        const cdn = packCdn();
+        const deps = packDeps(mc, cdn);
+        await upload(mc, mrpack(packIndex([packFile(cdn, "mods/a.jar", "a1"), packFile(cdn, "mods/b.jar", "b1")]), { overrides: { "config/pack.toml": "v1" } }), deps);
+        writeTree(mc.dir, { "config/user.toml": "mine" });
 
-        await recoverStagedPacks(h.root, h.config()[MODPACK_STAGING_KEY] as string);
-        expect(h.has("mods/a.jar")).toBe(false);
-        expect(h.trashed("mods/a.jar")).toBe(true);
-    });
-});
+        await upload(mc, mrpack(packIndex([packFile(cdn, "mods/a.jar", "a2"), packFile(cdn, "mods/c.jar", "c2")])), deps);
+        let tree = live(mc);
+        expect(tree["mods/a.jar"]).toBe("a2");
+        expect(tree["mods/c.jar"]).toBe("c2");
+        expect(tree["mods/b.jar"]).toBeUndefined();
+        expect(tree["config/pack.toml"]).toBeUndefined();
+        expect(tree["config/user.toml"]).toBe("mine");
+        expect(trashed(mc)).toEqual(expect.arrayContaining(["config/pack.toml", "mods/a.jar", "mods/b.jar"]));
 
-test("pack activation and rollback failure preserve parked originals for recovery", async () => {
-    const h = harness();
-    h.write("mods/old.jar", "old");
-    h.publishPack("v1", mrpack(index([]), { "overrides/mods/new.jar": "new" }));
-    h.deps.fs = { ...fs.promises, rename: async (from: string, to: string) => {
-        if (to === path.join(h.root, "mods/new.jar") || (to === path.join(h.root, "mods/old.jar") && from.includes("previous"))) throw new Error("rename blocked");
-        await fs.promises.rename(from, to);
-    } };
-    await expect(install(h, "v1")).rejects.toThrow();
-    const staging = h.leftovers()[0]!;
-    expect(h.read(`${staging}/previous/mods/old.jar`)).toBe("old");
-    await recoverStagedPacks(h.root, null);
-    expect(h.read("mods/old.jar")).toBe("old");
-    expect(h.leftovers()).toEqual([]);
-});
-
-test("a refused combined record restores both server software and pack files", async () => {
-    const { installServerSoftwareLocked, withInstallLock } = await import("../src/games/minecraft/softwareInstall");
-    const { SOFTWARE_PROVIDERS } = await import("../src/games/minecraft/providers");
-    const h = harness({ installed: { version: "1.20.1", build: "0.15.0" } });
-    h.write("server.jar", "old server");
-    h.write("mods/old.jar", "old mods");
-    h.publishPack("v1", mrpack(index([]), { "overrides/mods/new.jar": "new mods" }));
-    const save = h.deps.writeConfig;
-    h.deps.writeConfig = async (patch) => {
-        if (MODPACK_RECORD_KEY in patch) throw new Error("config refused");
-        await save(patch);
-    };
-    h.deps.installSoftware = (software, version, build, configPatch) => installServerSoftwareLocked(
-        { setState: () => {} } as any, software, version, {
-            serverDir: async () => h.root,
-            readConfig: h.deps.readConfig, writeConfig: h.deps.writeConfig,
-            javaBinary: async () => ({ bin: "/java", home: "/" }),
-            download: async ({ targetPath }) => h.write(targetPath, "new server"),
-            runInstaller: async () => { throw new Error("not an installer"); },
-            provider: () => ({ ...SOFTWARE_PROVIDERS.fabric, resolveBuild: async () => ({ build, artifact: { url: "https://example.invalid/server.jar" } }) }),
-        }, { build, configPatch },
-    );
-    await expect(withInstallLock(() => install(h, "v1"))).rejects.toThrow("config refused");
-    expect(h.read("server.jar")).toBe("old server");
-    expect(h.read("mods/old.jar")).toBe("old mods");
-    expect(h.has("mods/new.jar")).toBe(false);
-    expect(h.config().install).toBeUndefined();
-});
-
-describe("a modpack uploaded from disk", () => {
-    const STAGE = "0a1b2c3d-1111-4222-8333-444455556666";
-    const stage = (h: ReturnType<typeof harness>, archive: Uint8Array | string) => {
-        h.write(`${addonStageDir(STAGE)}/pack.mrpack`, "");
-        fs.writeFileSync(path.join(h.root, addonStageDir(STAGE), "pack.mrpack"), archive);
-    };
-
-    test("installs like a Modrinth pack and records that it was uploaded", async () => {
-        const h = harness();
-        const sodium = { path: "mods/sodium.jar", bytes: strToU8("sodium") };
-        h.serve([sodium]);
-        h.write("mods/old.jar", "old");
-        stage(h, mrpack(index([sodium]), { "overrides/config/a.toml": "a=1" }));
-        const outcome = await uploadModpack(STAGE, "fabric", h.deps);
-        expect(outcome).toMatchObject({ title: "Test Pack", versionNumber: "1.0.0", switchedServer: false });
-        expect(h.read("mods/sodium.jar")).toBe("sodium");
-        expect(h.read("config/a.toml")).toBe("a=1");
-        expect(h.trashed("mods/old.jar")).toBe(true);
-        const record = parseModpackRecord(h.config()[MODPACK_RECORD_KEY])!;
-        expect(record).toMatchObject({ uploaded: true, title: "Test Pack", versionNumber: "1.0.0", mcVersion: "1.21.1" });
-        expect(record.projectId).toBeUndefined();
-        expect(h.has(addonStageDir(STAGE))).toBe(false);
-        expect(h.leftovers()).toEqual([]);
-
-        // removing it works from the same record
-        await removeModpack(h.deps);
-        expect(h.has("mods/sodium.jar")).toBe(false);
+        expect(await removeModpack(deps)).toEqual({ removed: 2 });
+        tree = live(mc);
+        expect(tree["mods/a.jar"]).toBeUndefined();
+        expect(tree["mods/c.jar"]).toBeUndefined();
+        expect(tree["config/user.toml"]).toBe("mine");
+        for (const [file, content] of Object.entries(USER)) expect(tree[file]).toBe(content);
+        expect(mc.scope.server.settings.modpack).toBeNull();
     });
 
-    test("a file that is not a zip is refused and cleaned up", async () => {
-        const h = harness();
-        stage(h, "<html>not a pack</html>");
-        await expect(uploadModpack(STAGE, "fabric", h.deps)).rejects.toThrow("The uploaded modpack is not a zip file");
-        expect(h.has(addonStageDir(STAGE))).toBe(false);
-        expect(h.config()[MODPACK_RECORD_KEY]).toBeUndefined();
-        expect(h.leftovers()).toEqual([]);
-    });
-
-    test("a pack for another loader, or one whose file does not match its hash, changes nothing", async () => {
-        const h = harness();
-        h.write("mods/keep.jar", "keep");
-        stage(h, mrpack(index([], { minecraft: "1.21.1", "neoforge": "21.1.1" })));
-        await expect(uploadModpack(STAGE, "fabric", h.deps)).rejects.toThrow("built for neoforge");
-
-        const bad = { path: "mods/x.jar", bytes: strToU8("real"), sha512: "0".repeat(128) };
-        h.serve([bad]);
-        stage(h, mrpack(index([bad])));
-        await expect(uploadModpack(STAGE, "fabric", h.deps)).rejects.toThrow("does not match its sha512");
-        expect(h.read("mods/keep.jar")).toBe("keep");
-        expect(h.config()[MODPACK_RECORD_KEY]).toBeUndefined();
-    });
-
-    test("a missing upload fails with a message, not a crash", async () => {
-        const h = harness();
-        await expect(uploadModpack(STAGE, "fabric", h.deps)).rejects.toThrow("The uploaded modpack is gone");
+    test("a failed loader switch or a refused config write puts every old file back and records nothing", async () => {
+        const failures: Partial<ModpackDeps>[] = [
+            {
+                installed: async () => ({ software: "neoforge", version: "1.21.1", build: "21.1.200" }),
+                installSoftware: async () => {
+                    throw new Error("The NeoForge installer failed (exit code 1)");
+                },
+            },
+            {
+                writeConfig: async () => {
+                    throw new Error("config store refused the write");
+                },
+            },
+        ];
+        for (const failure of failures) {
+            const mc = neoServer({ "mods/old.jar": "old", "config/pack.toml": "user's edit" });
+            const cdn = packCdn();
+            const before = live(mc);
+            await expect(
+                upload(mc, mrpack(packIndex([packFile(cdn, "mods/new.jar", "new")]), { overrides: { "config/pack.toml": "pack" } }), packDeps(mc, cdn, failure)),
+            ).rejects.toThrow("The previous mods were put back");
+            expect(live(mc)).toEqual(before);
+            expect(trashed(mc)).toEqual([]);
+            expect(mc.scope.server.settings.modpack).toBeUndefined();
+            expect(fs.readdirSync(mc.dir).filter((e) => e.startsWith(".modpack-"))).toEqual([]);
+        }
     });
 });

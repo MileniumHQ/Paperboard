@@ -134,6 +134,27 @@ const gatewayErrorMessage = (err: unknown): string => {
     return err === undefined || err === null ? "gateway closed" : String(err);
 };
 
+/**
+ * The Discord API base a bot's client talks to. Unset, it is discord.com.
+ * BOTCREATOR_DISCORD_API names another Discord-compatible API (an http or
+ * https address ending in /api), which is how the panel's tests run bots
+ * against a Discord on loopback; the gateway address comes from that API.
+ */
+export function discordApiBase(env: Record<string, string | undefined> = process.env): string | undefined {
+    const raw = env.BOTCREATOR_DISCORD_API;
+    if (raw === undefined || raw === "") return undefined;
+    let url: URL;
+    try {
+        url = new URL(raw);
+    } catch (err) {
+        throw new Error(`BOTCREATOR_DISCORD_API is not a web address: "${raw}" (${errorToMessage(err)})`);
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+        throw new Error(`BOTCREATOR_DISCORD_API must be an http or https address, not "${raw}"`);
+    }
+    return url.href.replace(/\/+$/, "");
+}
+
 export class BotSession {
     client: Client | null = null;
     /** the application id known before login: saved, or read from the token */
@@ -418,9 +439,11 @@ export class BotSession {
         this.commandsReceived = 0;
 
         // privileged intents, without them content arrives empty
+        const api = discordApiBase();
         const bot = clientFactory
             ? clientFactory()
             : new Client({
+                ...(api ? { rest: { api } } : {}),
                 intents: [
                     GatewayIntentBits.Guilds,
                     GatewayIntentBits.GuildMessages,

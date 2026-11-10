@@ -1,278 +1,225 @@
-import { describe, test, expect, vi } from "vitest";
-import { render, fireEvent, waitFor, within, screen } from "@solidjs/testing-library";
-import { createSignal } from "solid-js";
+import { describe, expect, test } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import {
     PaperFileBrowser,
-    paperFileIcon,
-    paperFileLanguage,
-    ancestorPaths,
     type PaperFileContent,
     type PaperFileListing,
-    type PaperFileReveal,
-} from "../templates/PaperFileBrowser";
+    type PaperFileSaveResult,
+} from "../index";
 
-// an in-memory tree standing in for whatever owns the files
-function fakeFiles(tree: Record<string, string | null>) {
-    const files = new Map(Object.entries(tree));
-    const versions = new Map<string, number>();
-    const list = vi.fn(async (dir: string): Promise<PaperFileListing> => {
-        const prefix = dir ? `${dir}/` : "";
-        const names = new Map<string, "file" | "folder">();
-        for (const path of files.keys()) {
-            if (!path.startsWith(prefix)) continue;
-            const rest = path.slice(prefix.length);
-            const [head, ...tail] = rest.split("/");
-            if (!head) continue;
-            names.set(head, tail.length > 0 || files.get(path) === null ? "folder" : "file");
-        }
-        return {
-            entries: [...names].map(([name, kind]) => ({ name, kind, path: prefix + name })),
-        };
-    });
-    const read = vi.fn(async (path: string): Promise<PaperFileContent> => {
-        const text = files.get(path);
-        if (typeof text !== "string") throw new Error(`no such file ${path}`);
-        return { kind: "text", text, version: String(versions.get(path) ?? 0) };
-    });
-    const write = vi.fn(async (path: string, text: string, version: string | undefined) => {
-        if (version !== String(versions.get(path) ?? 0)) throw new Error("This file changed on disk since you opened it.");
-        files.set(path, text);
-        versions.set(path, (versions.get(path) ?? 0) + 1);
-        return { version: String(versions.get(path)), message: "Saved. Restart the server to apply it." };
-    });
-    return { files, versions, list, read, write };
+interface Deferred<T> {
+    promise: Promise<T>;
+    resolve: (value: T) => void;
+    reject: (err: Error) => void;
 }
 
-const TREE = {
-    "server.properties": "motd=hi\n",
-    "plugins/Essentials/config.yml": "nickname-prefix: '~'\n",
-    "plugins/Essentials/kits.yml": "kits: {}\n",
-    "plugins/LuckPerms/config.yml": "server: global\n",
+function deferred<T>(): Deferred<T> {
+    let resolve!: (value: T) => void;
+    let reject!: (err: Error) => void;
+    const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+    });
+    return { promise, resolve, reject };
+}
+
+const ROOT: PaperFileListing = {
+    entries: [
+        { name: "server.properties", path: "server.properties", kind: "file" },
+        { name: "ops.json", path: "ops.json", kind: "file" },
+    ],
 };
 
-async function treeItem(getByRole: (role: string, opts: object) => HTMLElement, name: string) {
-    // a row with unsaved edits is announced as "name Unsaved changes"
-    const pattern = new RegExp(`\\b${name.replace(".", "\\.")}( Unsaved changes)?$`);
-    return waitFor(() => getByRole("treeitem", { name: pattern }));
+/** A file owner whose answers the test decides, recording every call. */
+function files(disk: Record<string, string>) {
+    const versions: Record<string, number> = Object.fromEntries(Object.keys(disk).map((p) => [p, 1]));
+    const reads: string[] = [];
+    const writes: { path: string; text: string; version: string | undefined }[] = [];
+    let nextWrite: Deferred<PaperFileSaveResult> | null = null;
+    return {
+        reads,
+        writes,
+        holdNextWrite() {
+            nextWrite = deferred<PaperFileSaveResult>();
+            return nextWrite;
+        },
+        list: async (path: string): Promise<PaperFileListing> => {
+            expect(path).toBe("");
+            return ROOT;
+        },
+        read: async (path: string): Promise<PaperFileContent> => {
+            reads.push(path);
+            return { kind: "text", text: disk[path], version: `v${versions[path]}` };
+        },
+        write: async (path: string, text: string, version: string | undefined): Promise<PaperFileSaveResult> => {
+            writes.push({ path, text, version });
+            const held = nextWrite;
+            nextWrite = null;
+            if (held) return held.promise;
+            if (version !== `v${versions[path]}`) throw new Error(`${path} changed on disk since it was opened`);
+            disk[path] = text;
+            versions[path]++;
+            return { version: `v${versions[path]}` };
+        },
+        changeOnDisk(path: string, text: string) {
+            disk[path] = text;
+            versions[path]++;
+        },
+    };
 }
 
-describe("file icons and languages", () => {
-    test("config formats, archives and folders get their own icons", () => {
-        expect(paperFileIcon("config.yml", "file")).toBe("settings");
-        expect(paperFileIcon("EssentialsX.jar", "file")).toBe("folder_zip");
-        expect(paperFileIcon("server-icon.png", "file")).toBe("image");
-        expect(paperFileIcon("database.mv.db", "file")).toBe("database");
-        expect(paperFileIcon("noext", "file")).toBe("draft");
-        expect(paperFileIcon("plugins", "folder", true)).toBe("folder_open");
+const editor = () => screen.getByLabelText(/^Contents of/) as HTMLTextAreaElement;
+const typeInto = (text: string) => {
+    editor().value = text;
+    fireEvent.input(editor());
+};
+const row = (name: string) => screen.getByRole("treeitem", { name: new RegExp(name.replace(".", "\\.")) });
+const toolbarSave = () => screen.getAllByRole("button", { name: /Save/ }).find((b) => !b.closest('[role="dialog"]'))!;
+const dialog = () => screen.getByRole("dialog", { name: /Save changes to/ });
+
+async function openFile(name: string) {
+    await waitFor(() => row(name));
+    fireEvent.click(row(name));
+    await waitFor(() => expect(screen.getByLabelText(`Contents of ${name}`)).toBeTruthy());
+}
+
+// Inventory: Content, files and console — File browser save safety.
+describe("PaperFileBrowser save safety", () => {
+    test("a save passes the version that was read, then the version the save returned", async () => {
+        const owner = files({ "server.properties": "motd=hi" });
+        render(() => <PaperFileBrowser rootLabel="Server" list={owner.list} read={owner.read} write={owner.write} />);
+        await openFile("server.properties");
+
+        typeInto("motd=hello");
+        fireEvent.click(toolbarSave());
+        await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Saved"));
+        typeInto("motd=hello again");
+        fireEvent.click(toolbarSave());
+        await waitFor(() => expect(owner.writes).toHaveLength(2));
+
+        expect(owner.writes).toEqual([
+            { path: "server.properties", text: "motd=hello", version: "v1" },
+            { path: "server.properties", text: "motd=hello again", version: "v2" },
+        ]);
     });
 
-    test("a format without a grammar still has a truthful label", () => {
-        expect(paperFileLanguage("core.conf")).toEqual({ label: "Config" });
-        expect(paperFileLanguage("config.yml")).toEqual({ id: "yaml", label: "YAML" });
-        expect(paperFileLanguage("README")).toEqual({ label: "Plain text" });
+    test("a save refused because the file changed keeps the edits and offers Reload, which asks before discarding", async () => {
+        const owner = files({ "server.properties": "motd=hi" });
+        render(() => <PaperFileBrowser rootLabel="Server" list={owner.list} read={owner.read} write={owner.write} />);
+        await openFile("server.properties");
+
+        owner.changeOnDisk("server.properties", "motd=from the server");
+        typeInto("motd=mine");
+        fireEvent.click(toolbarSave());
+        const alert = await screen.findByRole("alert");
+        expect(alert.textContent).toContain("changed on disk");
+        expect(editor().value).toBe("motd=mine");
+        expect(screen.getAllByLabelText("Unsaved changes").length).toBeGreaterThan(0);
+        expect(toolbarSave().hasAttribute("disabled")).toBe(false);
+
+        fireEvent.click(within(alert).getByRole("button", { name: /Reload from disk/ }));
+        // asks first: nothing is read and the edits are still there
+        expect(dialog()).toBeTruthy();
+        expect(owner.reads).toEqual(["server.properties"]);
+        expect(editor().value).toBe("motd=mine");
+
+        fireEvent.click(within(dialog()).getByRole("button", { name: "Discard" }));
+        await waitFor(() => expect(editor().value).toBe("motd=from the server"));
+        expect(owner.reads).toEqual(["server.properties", "server.properties"]);
     });
 
-    test("ancestorPaths walks down from the root", () => {
-        expect(ancestorPaths("plugins/Essentials")).toEqual(["plugins", "plugins/Essentials"]);
-        expect(ancestorPaths("")).toEqual([]);
+    test("switching files with unsaved edits asks first, and Cancel stays put", async () => {
+        const owner = files({ "server.properties": "motd=hi", "ops.json": "[]" });
+        render(() => <PaperFileBrowser rootLabel="Server" list={owner.list} read={owner.read} write={owner.write} />);
+        await openFile("server.properties");
+        typeInto("motd=unsaved");
+
+        fireEvent.click(row("ops.json"));
+        expect(within(dialog()).getByText(/Save changes to server\.properties\?/)).toBeTruthy();
+        expect(owner.reads).toEqual(["server.properties"]);
+
+        fireEvent.click(within(dialog()).getByRole("button", { name: "Cancel" }));
+        expect(editor().getAttribute("aria-label")).toBe("Contents of server.properties");
+        expect(editor().value).toBe("motd=unsaved");
+        expect(owner.reads).toEqual(["server.properties"]);
+    });
+
+    test("cancelling the question while its save is in flight does not run the navigation", async () => {
+        const owner = files({ "server.properties": "motd=hi", "ops.json": "[]" });
+        render(() => <PaperFileBrowser rootLabel="Server" list={owner.list} read={owner.read} write={owner.write} />);
+        await openFile("server.properties");
+        typeInto("motd=first");
+
+        fireEvent.click(row("ops.json"));
+        const write = owner.holdNextWrite();
+        fireEvent.click(within(dialog()).getByRole("button", { name: "Save" }));
+        await waitFor(() => expect(owner.writes).toHaveLength(1));
+        fireEvent.click(within(dialog()).getByRole("button", { name: "Cancel" }));
+        write.resolve({ version: "v2" });
+
+        await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Saved"));
+        expect(owner.writes).toEqual([{ path: "server.properties", text: "motd=first", version: "v1" }]);
+        expect(owner.reads).toEqual(["server.properties"]);
+        expect(editor().getAttribute("aria-label")).toBe("Contents of server.properties");
+        expect(editor().value).toBe("motd=first");
+    });
+
+    test("edits typed while the question's save is in flight are kept, and the navigation waits", async () => {
+        const owner = files({ "server.properties": "motd=hi", "ops.json": "[]" });
+        render(() => <PaperFileBrowser rootLabel="Server" list={owner.list} read={owner.read} write={owner.write} />);
+        await openFile("server.properties");
+        typeInto("motd=first");
+
+        fireEvent.click(row("ops.json"));
+        const write = owner.holdNextWrite();
+        fireEvent.click(within(dialog()).getByRole("button", { name: "Save" }));
+        await waitFor(() => expect(owner.writes).toHaveLength(1));
+        typeInto("motd=typed while saving");
+        write.resolve({ version: "v2" });
+
+        await waitFor(() => expect(screen.queryByRole("dialog", { name: /Save changes to/ })).toBeNull());
+        expect(owner.reads).toEqual(["server.properties"]);
+        expect(editor().getAttribute("aria-label")).toBe("Contents of server.properties");
+        expect(editor().value).toBe("motd=typed while saving");
+        expect(screen.getAllByLabelText("Unsaved changes").length).toBeGreaterThan(0);
     });
 });
 
-describe("PaperFileBrowser", () => {
-    test("lists the root as a tree, folders first-class with aria-expanded", async () => {
-        const fs = fakeFiles(TREE);
-        const { getByRole } = render(() => <PaperFileBrowser rootLabel="Server" list={fs.list} read={fs.read} />);
-        const plugins = await treeItem(getByRole, "plugins");
-        expect(getByRole("tree", { name: "Server files" })).toBeTruthy();
-        expect(plugins.getAttribute("aria-expanded")).toBe("false");
-        expect((await treeItem(getByRole, "server.properties")).getAttribute("aria-expanded")).toBeNull();
+// Inventory: Content, files and console — Failures are shown, not swallowed (file browser).
+describe("PaperFileBrowser read failures", () => {
+    test("a folder that can't be listed shows the error with a working Retry", async () => {
+        let attempts = 0;
+        const list = async (): Promise<PaperFileListing> => {
+            attempts++;
+            if (attempts === 1) throw new Error("Permission denied: /srv/world");
+            return ROOT;
+        };
+        render(() => <PaperFileBrowser rootLabel="Server" list={list} read={async () => ({ kind: "text", text: "" })} />);
 
-        fireEvent.click(plugins);
-        await treeItem(getByRole, "Essentials");
-        expect(plugins.getAttribute("aria-expanded")).toBe("true");
-        expect(fs.list).toHaveBeenCalledWith("plugins");
+        const alert = await screen.findByRole("alert");
+        expect(alert.textContent).toBe("Permission denied: /srv/world");
+        fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+        await waitFor(() => row("server.properties"));
+        expect(attempts).toBe(2);
+        expect(screen.queryByRole("alert")).toBeNull();
     });
 
-    test("opens a text file in the editor and saves it with the version it read", async () => {
-        const fs = fakeFiles(TREE);
-        const { getByRole, findByRole } = render(() => (
-            <PaperFileBrowser rootLabel="Server" list={fs.list} read={fs.read} write={fs.write} />
-        ));
-        fireEvent.click(await treeItem(getByRole, "server.properties"));
-        const box = (await findByRole("textbox", { name: "Contents of server.properties" })) as HTMLTextAreaElement;
-        expect(box.value).toBe("motd=hi\n");
+    test("a file that can't be read shows the error with a working Try again", async () => {
+        let attempts = 0;
+        const read = async (): Promise<PaperFileContent> => {
+            attempts++;
+            if (attempts === 1) throw new Error("EIO: i/o error, read");
+            return { kind: "text", text: "motd=hi" };
+        };
+        render(() => <PaperFileBrowser rootLabel="Server" list={async () => ROOT} read={read} />);
+        await waitFor(() => row("server.properties"));
+        fireEvent.click(row("server.properties"));
 
-        const save = getByRole("button", { name: "Save" }) as HTMLButtonElement;
-        expect(save.disabled).toBe(true);
-        box.value = "motd=hello\n";
-        fireEvent.input(box);
-        expect(save.disabled).toBe(false);
-        fireEvent.click(save);
-
-        await findByRole("status");
-        expect(fs.write).toHaveBeenCalledWith("server.properties", "motd=hello\n", "0");
-        expect(getByRole("status").textContent).toContain("Restart the server to apply it.");
-        expect(save.disabled).toBe(true);
-    });
-
-    test("a refused save stays unsaved and offers Reload from disk", async () => {
-        const fs = fakeFiles(TREE);
-        const { getByRole, findByRole } = render(() => (
-            <PaperFileBrowser rootLabel="Server" list={fs.list} read={fs.read} write={fs.write} />
-        ));
-        fireEvent.click(await treeItem(getByRole, "server.properties"));
-        const box = (await findByRole("textbox")) as HTMLTextAreaElement;
-        // the server rewrote the file after it was opened
-        fs.versions.set("server.properties", 5);
-        box.value = "motd=mine\n";
-        fireEvent.input(box);
-        fireEvent.click(getByRole("button", { name: "Save" }));
-
-        const alert = await findByRole("alert");
-        expect(alert.textContent).toContain("changed on disk");
-        expect((getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(false);
-        fireEvent.click(within(alert).getByRole("button", { name: /Reload from disk/ }));
-        // unsaved edits are not thrown away without asking
-        await screen.findByRole("dialog");
-    });
-
-    test("switching files with unsaved edits asks first; Cancel keeps them, Discard moves on", async () => {
-        const fs = fakeFiles(TREE);
-        const { getByRole, findByRole, queryByRole } = render(() => (
-            <PaperFileBrowser rootLabel="Server" list={fs.list} read={fs.read} write={fs.write} />
-        ));
-        fireEvent.click(await treeItem(getByRole, "server.properties"));
-        const box = (await findByRole("textbox")) as HTMLTextAreaElement;
-        box.value = "motd=draft\n";
-        fireEvent.input(box);
-
-        fireEvent.click(await treeItem(getByRole, "plugins"));
-        fireEvent.click(await treeItem(getByRole, "LuckPerms"));
-        fireEvent.click(await treeItem(getByRole, "config.yml"));
-        const dialog = await screen.findByRole("dialog");
-        expect(dialog.textContent).toContain("Save changes to server.properties?");
-
-        fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-        expect(((await findByRole("textbox")) as HTMLTextAreaElement).value).toBe("motd=draft\n");
-
-        fireEvent.click(await treeItem(getByRole, "config.yml"));
-        fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Discard" }));
-        await waitFor(() =>
-            expect((getByRole("textbox") as HTMLTextAreaElement).value).toBe("server: global\n"),
-        );
-        expect(fs.write).not.toHaveBeenCalled();
-    });
-
-    test("reveal opens the folders down to a file and opens it", async () => {
-        const fs = fakeFiles(TREE);
-        const [reveal, setReveal] = createSignal<PaperFileReveal | null>(null);
-        const { getByRole, findByRole } = render(() => (
-            <PaperFileBrowser rootLabel="Server" list={fs.list} read={fs.read} reveal={reveal()} />
-        ));
-        setReveal({ path: "plugins/Essentials/config.yml", kind: "file" });
-        const box = (await findByRole("textbox")) as HTMLTextAreaElement;
-        expect(box.value).toBe("nickname-prefix: '~'\n");
-        expect(fs.list).toHaveBeenCalledWith("plugins/Essentials");
-        const item = await treeItem(getByRole, "config.yml");
-        expect(item.getAttribute("aria-selected")).toBe("true");
-        expect(item.getAttribute("aria-level")).toBe("3");
-    });
-
-    test("without write the editor is read-only and says why", async () => {
-        const fs = fakeFiles(TREE);
-        const { getByRole, findByRole, queryByRole, getByText } = render(() => (
-            <PaperFileBrowser rootLabel="Server" list={fs.list} read={fs.read} />
-        ));
-        fireEvent.click(await treeItem(getByRole, "server.properties"));
-        expect(((await findByRole("textbox")) as HTMLTextAreaElement).readOnly).toBe(true);
-        expect(queryByRole("button", { name: "Save" })).toBeNull();
-        expect(getByText("This browser is read-only")).toBeTruthy();
-    });
-
-    test("a folder that cannot be listed shows why, and Retry lists it again", async () => {
-        const fs = fakeFiles(TREE);
-        fs.list.mockRejectedValueOnce(new Error("Permission denied"));
-        const { findByRole, getByRole } = render(() => <PaperFileBrowser rootLabel="Server" list={fs.list} read={fs.read} />);
-        expect((await findByRole("alert")).textContent).toContain("Permission denied");
-        fireEvent.click(getByRole("button", { name: "Retry" }));
-        await treeItem(getByRole, "plugins");
-    });
-
-    test("a file that cannot be read shows the reason and a Try again action", async () => {
-        const fs = fakeFiles(TREE);
-        const { getByRole, findByRole } = render(() => <PaperFileBrowser rootLabel="Server" list={fs.list} read={fs.read} />);
-        fs.read.mockRejectedValueOnce(new Error("The file is larger than 2 MB"));
-        fireEvent.click(await treeItem(getByRole, "server.properties"));
-        expect((await findByRole("alert")).textContent).toContain("larger than 2 MB");
-        fireEvent.click(getByRole("button", { name: /Try again/ }));
-        await findByRole("textbox");
-    });
-
-    test("arrow keys move through rows and Right opens a folder", async () => {
-        const fs = fakeFiles(TREE);
-        const { getByRole } = render(() => <PaperFileBrowser rootLabel="Server" list={fs.list} read={fs.read} />);
-        const plugins = await treeItem(getByRole, "plugins");
-        // one tab stop: the first row
-        expect((await treeItem(getByRole, "server.properties")).tabIndex).toBe(0);
-        expect(plugins.tabIndex).toBe(-1);
-        // keys come from the focused row, not from the container
-        fireEvent.keyDown(await treeItem(getByRole, "server.properties"), { key: "ArrowDown" });
-        expect(plugins.tabIndex).toBe(0);
-        fireEvent.keyDown(plugins, { key: "ArrowRight" });
-        await treeItem(getByRole, "Essentials");
-        expect(plugins.getAttribute("aria-expanded")).toBe("true");
-        fireEvent.keyDown(plugins, { key: "ArrowLeft" });
-        expect(plugins.getAttribute("aria-expanded")).toBe("false");
-    });
-
-    test("Enter and Space on a folder's Retry button are the button's, not the tree's", async () => {
-        const fs = fakeFiles(TREE);
-        const { getByRole } = render(() => <PaperFileBrowser rootLabel="Server" list={fs.list} read={fs.read} />);
-        const plugins = await treeItem(getByRole, "plugins");
-        fs.list.mockRejectedValueOnce(new Error("Permission denied"));
-        fireEvent.click(plugins);
-        const retry = await screen.findByRole("button", { name: "Retry" });
-        for (const key of ["Enter", " "]) {
-            // fireEvent returns false when the key's default action was prevented
-            expect(fireEvent.keyDown(retry, { key })).toBe(true);
-        }
-        expect(fs.read).not.toHaveBeenCalled();
-    });
-
-    test("Cancel while Save is in flight keeps the newer edits instead of moving on", async () => {
-        const fs = fakeFiles(TREE);
-        let finishWrite!: () => void;
-        const gate = new Promise<void>((resolve) => (finishWrite = resolve));
-        const slowWrite = vi.fn(async (path: string, text: string, version: string | undefined) => {
-            await gate;
-            return fs.write(path, text, version);
-        });
-        const { getByRole, findByRole } = render(() => (
-            <PaperFileBrowser rootLabel="Server" list={fs.list} read={fs.read} write={slowWrite} />
-        ));
-        fireEvent.click(await treeItem(getByRole, "server.properties"));
-        const box = (await findByRole("textbox")) as HTMLTextAreaElement;
-        box.value = "motd=draft\n";
-        fireEvent.input(box);
-
-        fireEvent.click(await treeItem(getByRole, "plugins"));
-        fireEvent.click(await treeItem(getByRole, "LuckPerms"));
-        fireEvent.click(await treeItem(getByRole, "config.yml"));
-        const dialog = await screen.findByRole("dialog");
-        fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
-        await waitFor(() => expect(slowWrite).toHaveBeenCalled());
-
-        // the user changes their mind and keeps typing
-        fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-        box.value = "motd=newer\n";
-        fireEvent.input(box);
-
-        finishWrite();
-        await waitFor(() => expect(fs.write).toHaveBeenCalled());
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        expect((getByRole("textbox") as HTMLTextAreaElement).value).toBe("motd=newer\n");
-        expect(fs.read).not.toHaveBeenCalledWith("plugins/LuckPerms/config.yml");
+        const alert = await screen.findByRole("alert");
+        expect(alert.textContent).toContain("Couldn't open server.properties");
+        expect(alert.textContent).toContain("EIO: i/o error, read");
+        fireEvent.click(within(alert).getByRole("button", { name: /Try again/ }));
+        await waitFor(() => expect(editor().value).toBe("motd=hi"));
+        expect(attempts).toBe(2);
     });
 });

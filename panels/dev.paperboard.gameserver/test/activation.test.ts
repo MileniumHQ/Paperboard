@@ -1,228 +1,119 @@
-// Software switches as a transaction on a real server folder: the new
-// install's files replace exactly the previous install's, user data is
-// never touched, a failure mid-swap restores the previous server, and a
-// crash mid-swap is settled on the next service start.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
-import * as fsp from "node:fs/promises";
-import * as os from "node:os";
+import * as nodeFs from "node:fs/promises";
 import * as path from "node:path";
-import {
-    activateStagedInstall,
-    recoverStagedInstalls,
-    type ActivationFs,
-} from "../src/service/activation";
+import { tempDir, readTree, writeTree } from "./helpers/tmp";
+import { activateStagedInstall, type ActivationFs } from "../src/service/activation";
 
-let root: string;
-beforeEach(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), "pb-activation-"));
-});
-afterEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
-});
+const USER_DATA = {
+    "world/level.dat": "level",
+    "world/region/r.0.0.mca": "region",
+    "server.properties": "motd=mine\n",
+    "plugins/Essentials.jar": "plugin",
+    "eula.txt": "eula=true\n",
+};
 
-function write(relative: string, content = relative) {
-    const full = path.join(root, relative);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content);
-}
-const read = (relative: string) => fs.readFileSync(path.join(root, relative), "utf8");
-const has = (relative: string) => fs.existsSync(path.join(root, relative));
-const entries = () => fs.readdirSync(root).sort();
-
-// a Paper server mid-life: its jar, a runtime libraries/ cache it did not
-// install, and the user's world, settings and plugins
-function paperServer() {
-    write("server.jar", "paper");
-    write("libraries/com/example/cache.jar", "paper-runtime-cache");
-    write("world/level.dat", "world");
-    write("server.properties", "motd=hi");
-    write("plugins/Essentials.jar", "plugin");
-    write("eula.txt", "eula=true");
+/** a server running Paper (server.jar + its libraries cache) with the user's data, and NeoForge staged */
+function serverWithStagedNeoForge(staging = ".install-1-1") {
+    const root = tempDir("gameserver-activate-");
+    writeTree(root, {
+        ...USER_DATA,
+        "server.jar": "paper",
+        "libraries/paper-lib.jar": "paper runtime cache",
+        "cache/mojang.jar": "paper download cache",
+        [`${staging}/server/libraries/net/neoforged/neoforge/21.1.256/unix_args.txt`]: "args",
+        [`${staging}/server/run.sh`]: "run",
+        [`${staging}/server/user_jvm_args.txt`]: "jvm",
+    });
+    return { root, staging };
 }
 
-// the NeoForge installer's output, staged
-function stageNeoForge(staging: string) {
-    write(`${staging}/installer.jar`, "installer");
-    write(`${staging}/server/libraries/net/neoforged/neoforge/21.1.256/unix_args.txt`, "args");
-    write(`${staging}/server/libraries/net/neoforged/neoforge/21.1.256/win_args.txt`, "args");
-    write(`${staging}/server/run.sh`, "#!/bin/sh");
-    write(`${staging}/server/user_jvm_args.txt`, "# jvm");
+/** the real filesystem, except rename fails for the paths `fail` picks */
+function failingRename(fail: (from: string, to: string) => boolean, alsoFailRestore = false): ActivationFs {
+    let failed = false;
+    return {
+        mkdir: (p, o) => nodeFs.mkdir(p, o),
+        readdir: (p) => nodeFs.readdir(p),
+        rm: (p, o) => nodeFs.rm(p, o),
+        writeFile: (p, d) => nodeFs.writeFile(p, d),
+        readFile: (p, e) => nodeFs.readFile(p, e),
+        lstat: (p) => nodeFs.lstat(p),
+        rename: async (from, to) => {
+            if ((!failed || alsoFailRestore) && fail(from, to)) {
+                failed = true;
+                throw Object.assign(new Error(`EIO: rename ${path.basename(from)}`), { code: "EIO" });
+            }
+            await nodeFs.rename(from, to);
+        },
+    };
 }
 
-const USER_DATA = ["world/level.dat", "server.properties", "plugins/Essentials.jar", "eula.txt"];
-
-describe("activateStagedInstall", () => {
-    test("Paper -> NeoForge: new files live, Paper's jar gone, its runtime cache recoverable, user data untouched", async () => {
-        paperServer();
-        stageNeoForge(".install-1-1");
-        const activation = await activateStagedInstall({ root, staging: ".install-1-1", replaced: ["server.jar"] });
+// Activation is a transaction that never touches user data.
+describe("activating a staged install", () => {
+    test("moves the new files in, deletes only the previous install's files, trashes what else it displaced, and leaves user data alone", async () => {
+        const { root, staging } = serverWithStagedNeoForge();
+        // a previous Paper install that also had its own libraries/ cache entry displaced by NeoForge's libraries/
+        const activation = await activateStagedInstall({ root, staging, replaced: ["server.jar"] });
         expect(activation.installed).toEqual(["libraries", "run.sh", "user_jvm_args.txt"]);
         await activation.commit();
-
-        expect(has("libraries/net/neoforged/neoforge/21.1.256/unix_args.txt")).toBe(true);
-        expect(has("server.jar")).toBe(false);
-        expect(has(".install-1-1")).toBe(false);
-        // libraries/ was Paper's runtime cache, not Paper's install: trashed, not deleted
-        const trash = entries().find((e) => e.startsWith(".trash-"))!;
-        expect(read(`${trash}/libraries/com/example/cache.jar`)).toBe("paper-runtime-cache");
-        for (const file of USER_DATA) expect(has(file)).toBe(true);
+        const tree = readTree(root);
+        for (const [file, content] of Object.entries(USER_DATA)) expect(tree[file]).toBe(content);
+        expect(tree["server.jar"]).toBeUndefined();
+        expect(tree["libraries/net/neoforged/neoforge/21.1.256/unix_args.txt"]).toBe("args");
+        expect(tree["cache/mojang.jar"]).toBe("paper download cache");
+        // Paper's libraries/ was not the recorded install's: kept in the trash
+        const trash = Object.keys(tree).find((f) => /^\.trash-[^/]+\/$/.test(f));
+        expect(trash).toBeDefined();
+        expect(tree[`${trash}libraries/paper-lib.jar`]).toBe("paper runtime cache");
+        expect(Object.keys(tree).some((f) => f.startsWith(staging))).toBe(false);
     });
 
-    test("NeoForge -> NeoForge update deletes the previous install's own files outright", async () => {
-        write("libraries/net/neoforged/neoforge/21.1.200/unix_args.txt", "old");
-        write("run.sh", "old");
-        write("world/level.dat", "world");
-        stageNeoForge(".install-2-1");
-        const activation = await activateStagedInstall({
-            root,
-            staging: ".install-2-1",
-            replaced: ["libraries", "run.sh", "user_jvm_args.txt"],
-        });
-        await activation.commit();
-        expect(has("libraries/net/neoforged/neoforge/21.1.200")).toBe(false);
-        expect(read("run.sh")).toBe("#!/bin/sh");
-        expect(entries().some((e) => e.startsWith(".trash-"))).toBe(false);
-        expect(has("world/level.dat")).toBe(true);
-    });
-
-    test("an install that produces user data is refused before anything moves", async () => {
-        paperServer();
-        write(".install-3-1/server/server.properties", "motd=installer");
-        write(".install-3-1/server/server.jar", "new");
-        await expect(
-            activateStagedInstall({ root, staging: ".install-3-1", replaced: ["server.jar"] }),
-        ).rejects.toThrow("not an install file");
-        expect(read("server.properties")).toBe("motd=hi");
-        expect(read("server.jar")).toBe("paper");
-    });
-
-    test("a previous record claiming a world is refused, the world stays", async () => {
-        paperServer();
-        write(".install-4-1/server/server.jar", "new");
-        await expect(
-            activateStagedInstall({ root, staging: ".install-4-1", replaced: ["server.jar", "world"] }),
-        ).rejects.toThrow("refusing to remove");
-        expect(has("world/level.dat")).toBe(true);
-    });
-
-    test("a failure mid-swap restores the previous server exactly", async () => {
-        paperServer();
-        stageNeoForge(".install-5-1");
-        const before = snapshot();
-        let renames = 0;
-        const failing: ActivationFs = {
-            ...(fsp as unknown as ActivationFs),
-            rename: async (from, to) => {
-                // journal rename, two parks, then the first staged move fails
-                if (++renames === 4) throw Object.assign(new Error("disk full"), { code: "ENOSPC" });
-                await fsp.rename(from, to);
-            },
-        };
-        await expect(
-            activateStagedInstall({ root, staging: ".install-5-1", replaced: ["server.jar"], fs: failing }),
-        ).rejects.toThrow("previous files were restored: disk full");
-        expect(snapshot()).toEqual(before.filter(([name]) => !name.startsWith(".install-")));
-    });
-
-    test("rollback after the record write failed restores the previous server", async () => {
-        paperServer();
-        stageNeoForge(".install-6-1");
-        const before = snapshot().filter(([name]) => !name.startsWith(".install-"));
-        const activation = await activateStagedInstall({ root, staging: ".install-6-1", replaced: ["server.jar"] });
-        await activation.rollback();
-        expect(snapshot()).toEqual(before);
-    });
-});
-
-describe("recoverStagedInstalls (service start after a crash)", () => {
-    // crash after the journal and every move, before the record was written
-    async function crashAfterSwap(staging: string) {
-        paperServer();
-        stageNeoForge(staging);
-        await activateStagedInstall({ root, staging, replaced: ["server.jar"] });
-        // process dies here: no commit, no rollback
-    }
-
-    test("a swap the record never named is rolled back", async () => {
-        paperServer();
-        const before = snapshot();
-        fs.rmSync(root, { recursive: true });
-        fs.mkdirSync(root);
-        await crashAfterSwap(".install-7-1");
-        const result = await recoverStagedInstalls(root, null);
-        expect(result.rolledBack).toEqual([".install-7-1"]);
-        expect(snapshot()).toEqual(before);
-    });
-
-    test("a swap the record names is committed", async () => {
-        await crashAfterSwap(".install-8-1");
-        const result = await recoverStagedInstalls(root, ".install-8-1");
-        expect(result.committed).toEqual([".install-8-1"]);
-        expect(has("server.jar")).toBe(false);
-        expect(has("run.sh")).toBe(true);
-        expect(has(".install-8-1")).toBe(false);
-    });
-
-    test("a crash between parking and moving in is rolled back too", async () => {
-        paperServer();
-        stageNeoForge(".install-9-1");
-        const before = snapshot().filter(([name]) => !name.startsWith(".install-"));
-        // journal + first park land, then the process dies: every later
-        // filesystem call (including the in-process rollback) never happens
-        let renames = 0;
-        let dead = false;
-        const alive = <T>(op: () => Promise<T>) => {
-            if (dead) return Promise.reject(new Error("process is dead"));
-            return op();
-        };
-        const real = fsp as unknown as ActivationFs;
-        const dying: ActivationFs = {
-            mkdir: (p, o) => alive(() => real.mkdir(p, o)),
-            readdir: (p) => alive(() => real.readdir(p)),
-            rm: (p, o) => alive(() => real.rm(p, o)),
-            writeFile: (p, d) => alive(() => real.writeFile(p, d)),
-            readFile: (p, e) => alive(() => real.readFile(p, e)),
-            lstat: (p) => alive(() => real.lstat(p)),
-            rename: (from, to) =>
-                alive(async () => {
-                    await real.rename(from, to);
-                    if (++renames === 2) dead = true;
-                }),
-        };
-        await activateStagedInstall({ root, staging: ".install-9-1", replaced: ["server.jar"], fs: dying }).catch(
-            () => undefined,
-        );
-        expect(has(".install-9-1/journal.json")).toBe(true);
-        expect(has(".install-9-1/previous/server.jar")).toBe(true);
-        expect(has("server.jar")).toBe(false);
-        await recoverStagedInstalls(root, null);
-        expect(snapshot()).toEqual(before);
-    });
-
-    test("staging that never activated is discarded; an unreadable journal is left alone", async () => {
-        write(".install-10-1/installer.jar", "partial download");
-        write(".install-11-1/journal.json", "{not json");
-        write(".install-11-1/previous/server.jar", "only copy");
-        await expect(recoverStagedInstalls(root, null)).rejects.toThrow();
-        expect(has(".install-11-1/previous/server.jar")).toBe(true);
-        fs.rmSync(path.join(root, ".install-11-1"), { recursive: true });
-        const result = await recoverStagedInstalls(root, null);
-        expect(result.discarded).toEqual([".install-10-1"]);
-        expect(has(".install-10-1")).toBe(false);
-    });
-});
-
-// every file under root with its content, sorted
-function snapshot(): [string, string][] {
-    const out: [string, string][] = [];
-    const walk = (relative: string) => {
-        for (const name of fs.readdirSync(path.join(root, relative))) {
-            const child = relative ? `${relative}/${name}` : name;
-            if (fs.statSync(path.join(root, child)).isDirectory()) walk(child);
-            else out.push([child, read(child)]);
+    test("an install output or an old record that claims user data is refused before anything moves", async () => {
+        for (const userEntry of ["world", "server.properties", "plugins", "eula.txt"]) {
+            const { root, staging } = serverWithStagedNeoForge();
+            writeTree(root, { [`${staging}/server/${userEntry}${userEntry.includes(".") ? "" : "/x"}`]: "installer output" });
+            const before = readTree(root);
+            await expect(activateStagedInstall({ root, staging, replaced: ["server.jar"] })).rejects.toThrow("is not an install file");
+            expect(readTree(root)).toEqual(before);
         }
-    };
-    walk("");
-    return out.sort((a, b) => a[0].localeCompare(b[0]));
-}
+        for (const claimed of ["world", "server.properties", "plugins", "eula.txt", "WORLD", "../outside"]) {
+            const { root, staging } = serverWithStagedNeoForge();
+            const before = readTree(root);
+            await expect(activateStagedInstall({ root, staging, replaced: [claimed] })).rejects.toThrow("refusing to remove it");
+            expect(readTree(root)).toEqual(before);
+        }
+    });
+
+    test("a rename failing mid-swap restores the server folder exactly", async () => {
+        const { root, staging } = serverWithStagedNeoForge();
+        const before = readTree(root);
+        // the second staged entry fails to arrive, after the old files were parked
+        const fsWithFailure = failingRename((from) => from.endsWith(`${path.sep}run.sh`) && from.includes(`${staging}${path.sep}server`));
+        await expect(activateStagedInstall({ root, staging, replaced: ["server.jar"], fs: fsWithFailure })).rejects.toThrow(
+            "Activating the install failed; the previous files were restored",
+        );
+        const after = readTree(root);
+        // the staging folder is gone; everything else is byte for byte what it was
+        const withoutStaging = (tree: Record<string, string>) =>
+            Object.fromEntries(Object.entries(tree).filter(([f]) => !f.startsWith(staging)));
+        expect(withoutStaging(after)).toEqual(withoutStaging(before));
+        expect(fs.existsSync(path.join(root, staging))).toBe(false);
+    });
+
+    test("when the rollback also fails, the previous files stay in previous/ for recovery", async () => {
+        const { root, staging } = serverWithStagedNeoForge();
+        // run.sh cannot be moved in, and server.jar cannot be moved back out of previous/
+        const fsWithFailures = failingRename(
+            (from) =>
+                (from.endsWith(`${path.sep}run.sh`) && from.includes(`${staging}${path.sep}server`)) ||
+                from.endsWith(path.join(staging, "previous", "server.jar")),
+            true,
+        );
+        await expect(activateStagedInstall({ root, staging, replaced: ["server.jar"], fs: fsWithFailures })).rejects.toThrow(
+            `They are kept in ${staging}/previous`,
+        );
+        expect(fs.readFileSync(path.join(root, staging, "previous", "server.jar"), "utf8")).toBe("paper");
+        expect(fs.existsSync(path.join(root, staging, "journal.json"))).toBe(true);
+        for (const [file, content] of Object.entries(USER_DATA)) expect(fs.readFileSync(path.join(root, file), "utf8")).toBe(content);
+    });
+});

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "destinations": [],
+  "panels": {
+    "dev.paperboard.snapshot": "local"
+  }
+}

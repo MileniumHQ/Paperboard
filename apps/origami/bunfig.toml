@@ -1,0 +1,5 @@
+# test/setup.ts gives the test process a throwaway PAPERBOARD_DIR: the
+# publisher scripts import papercrane modules whose logger writes under it,
+# so without it a run would write into the developer's real ~/.paperboard.
+[test]
+preload = ["./test/setup.ts"]

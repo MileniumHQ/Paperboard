@@ -1,0 +1,11 @@
+{
+  "greeting": "hello from 0.3.0",
+  "count": 3,
+  "nested": {
+    "list": [
+      1,
+      2,
+      3
+    ]
+  }
+}

@@ -1,85 +1,122 @@
-import { describe, test, expect, vi } from "vitest";
-import { render, screen, fireEvent, within } from "@solidjs/testing-library";
+import { describe, expect, test } from "vitest";
 import { createSignal } from "solid-js";
-import { PaperSettingItem, PaperSettingList } from "../templates/PaperSettingList";
-import { PaperToggle } from "../components/PaperToggle";
-import { PaperCheckbox } from "../components/PaperCheckbox";
-import { PaperInput } from "../components/PaperInput";
-import { PaperSelectMenu, PaperSelectMenuItem } from "../components/PaperSelectMenu";
+import { fireEvent, render, screen } from "@solidjs/testing-library";
+import {
+    PaperCheckbox,
+    PaperInput,
+    PaperSelectMenu,
+    PaperSelectMenuItem,
+    PaperSettingItem,
+    PaperSettingList,
+    PaperToggle,
+} from "../index";
 
+function Controls() {
+    return (
+        <>
+            <PaperSettingItem title="Notifications">
+                <PaperToggle name="notify" aria-label="Notifications" />
+            </PaperSettingItem>
+            <PaperSettingItem title="Agree">
+                <PaperCheckbox name="agree" aria-label="Agree" />
+            </PaperSettingItem>
+            <PaperSettingItem title="Nickname">
+                <PaperInput name="nick" aria-label="Nickname" />
+            </PaperSettingItem>
+            <PaperSettingItem title="Mode">
+                <PaperSelectMenu name="mode">
+                    <PaperSelectMenuItem value="easy">Easy</PaperSelectMenuItem>
+                    <PaperSelectMenuItem value="hard">Hard</PaperSelectMenuItem>
+                </PaperSelectMenu>
+            </PaperSettingItem>
+        </>
+    );
+}
+
+const switchEl = () => screen.getByRole("switch");
+const checkboxEl = () => document.querySelector<HTMLElement>('div[role="checkbox"]')!;
+const nick = () => screen.getByLabelText("Nickname") as HTMLInputElement;
+const modeTrigger = () => screen.getByRole("button", { name: /Easy|Hard|Select/ });
+
+// Inventory: Menus and form controls — Setting list record.
 describe("PaperSettingList record", () => {
-    test("defaultValue fills the named controls", () => {
+    test("defaultValue fills named toggles, checkboxes, inputs and select menus", () => {
         render(() => (
-            <PaperSettingList defaultValue={{ secure: true, verbose: true, host: "localhost", mode: "b" }}>
-                <PaperSettingItem title="Secure">
-                    <PaperToggle name="secure" aria-label="Secure" />
-                </PaperSettingItem>
-                <PaperSettingItem title="Verbose">
-                    <PaperCheckbox name="verbose" label="Verbose" />
-                </PaperSettingItem>
-                <PaperSettingItem title="Host">
-                    <PaperInput name="host" label="Host" />
-                </PaperSettingItem>
-                <PaperSettingItem title="Mode">
-                    <PaperSelectMenu name="mode">
-                        <PaperSelectMenuItem value="a">Mode A</PaperSelectMenuItem>
-                        <PaperSelectMenuItem value="b">Mode B</PaperSelectMenuItem>
-                    </PaperSelectMenu>
-                </PaperSettingItem>
+            <PaperSettingList defaultValue={{ notify: true, agree: false, nick: "pxl", mode: "hard" }}>
+                <Controls />
             </PaperSettingList>
         ));
-        expect(screen.getByRole("switch", { name: "Secure" }).getAttribute("aria-checked")).toBe("true");
-        const verbose = screen.getAllByRole("checkbox", { name: /Verbose/ }).find((el) => el.tagName === "DIV")!;
-        expect(verbose.getAttribute("aria-checked")).toBe("true");
-        expect((screen.getByRole("textbox", { name: "Host" }) as HTMLInputElement).value).toBe("localhost");
-        expect(within(screen.getByRole("button", { name: /Mode/ })).getByText("Mode B")).toBeDefined();
+        expect(switchEl().getAttribute("aria-checked")).toBe("true");
+        expect(checkboxEl().getAttribute("aria-checked")).toBe("false");
+        expect(nick().value).toBe("pxl");
+        expect(modeTrigger().textContent).toContain("Hard");
     });
 
-    test("value follows its source, and a control's own prop wins", () => {
-        const [values, setValues] = createSignal<Record<string, unknown>>({ secure: false, host: "a" });
+    test("a controlled value refills the controls when it changes", () => {
+        const [value, setValue] = createSignal<Record<string, unknown>>({ notify: false, agree: true, nick: "a", mode: "easy" });
         render(() => (
-            <PaperSettingList value={values()}>
-                <PaperToggle name="secure" aria-label="Secure" />
-                <PaperInput name="host" label="Host" />
-                <PaperToggle name="pinned" aria-label="Pinned" checked />
+            <PaperSettingList value={value()}>
+                <Controls />
             </PaperSettingList>
         ));
-        setValues({ secure: true, host: "b", pinned: false });
-        expect(screen.getByRole("switch", { name: "Secure" }).getAttribute("aria-checked")).toBe("true");
-        expect((screen.getByRole("textbox", { name: "Host" }) as HTMLInputElement).value).toBe("b");
-        expect(screen.getByRole("switch", { name: "Pinned" }).getAttribute("aria-checked")).toBe("true");
+        expect(switchEl().getAttribute("aria-checked")).toBe("false");
+        expect(checkboxEl().getAttribute("aria-checked")).toBe("true");
+
+        setValue({ notify: true, agree: false, nick: "b", mode: "hard" });
+        expect(switchEl().getAttribute("aria-checked")).toBe("true");
+        expect(checkboxEl().getAttribute("aria-checked")).toBe("false");
+        expect(nick().value).toBe("b");
+        expect(modeTrigger().textContent).toContain("Hard");
     });
 
-    test("a value of the wrong type for its control is an error", () => {
-        vi.spyOn(console, "error").mockImplementation(() => {});
+    test("a value of the wrong type throws naming the key, the value and the type expected", () => {
         expect(() =>
             render(() => (
-                <PaperSettingList defaultValue={{ secure: "yes" }}>
-                    <PaperToggle name="secure" aria-label="Secure" />
+                <PaperSettingList defaultValue={{ notify: "yes" }}>
+                    <PaperToggle name="notify" />
                 </PaperSettingList>
             )),
-        ).toThrow(/"secure" is string "yes", but a PaperToggle takes a boolean/);
-        vi.restoreAllMocks();
+        ).toThrow(/"notify" is string "yes", but a PaperToggle takes a boolean/);
+
+        expect(() =>
+            render(() => (
+                <PaperSettingList defaultValue={{ mode: true }}>
+                    <PaperSelectMenu name="mode">
+                        <PaperSelectMenuItem value="easy">Easy</PaperSelectMenuItem>
+                    </PaperSelectMenu>
+                </PaperSettingList>
+            )),
+        ).toThrow(/"mode" is boolean true, but a PaperSelectMenu takes a string or a number/);
     });
 
-    test("one edit calls onValueChange once", () => {
-        const onValueChange = vi.fn();
+    test("one edit calls onValueChange exactly once with the whole record", () => {
+        const records: Record<string, unknown>[] = [];
         render(() => (
-            <PaperSettingList onValueChange={onValueChange}>
-                <PaperToggle name="secure" aria-label="Secure" />
-                <PaperInput name="host" label="Host" />
+            <PaperSettingList
+                defaultValue={{ notify: false, agree: false, nick: "pxl", mode: "easy" }}
+                onValueChange={(record) => records.push(record)}
+            >
+                <Controls />
             </PaperSettingList>
         ));
-        fireEvent.click(screen.getByRole("switch", { name: "Secure" }));
-        expect(onValueChange).toHaveBeenCalledTimes(1);
-        expect(onValueChange).toHaveBeenLastCalledWith({ secure: true });
 
-        const host = screen.getByRole("textbox", { name: "Host" }) as HTMLInputElement;
-        host.value = "example.com";
-        fireEvent.input(host);
-        // the blur that follows typing fires change with the same value
-        fireEvent.change(host);
-        expect(onValueChange).toHaveBeenCalledTimes(2);
-        expect(onValueChange).toHaveBeenLastCalledWith({ secure: true, host: "example.com" });
+        fireEvent.click(switchEl());
+        expect(records).toEqual([{ notify: true, agree: false, nick: "pxl", mode: "easy" }]);
+
+        fireEvent.click(checkboxEl());
+        expect(records.at(-1)).toEqual({ notify: true, agree: true, nick: "pxl", mode: "easy" });
+        expect(records).toHaveLength(2);
+
+        // a text field fires input and then change for the same edit
+        nick().value = "pxlkt";
+        fireEvent.input(nick());
+        fireEvent.change(nick());
+        expect(records).toHaveLength(3);
+        expect(records.at(-1)).toEqual({ notify: true, agree: true, nick: "pxlkt", mode: "easy" });
+
+        fireEvent.click(modeTrigger());
+        fireEvent.click(screen.getByRole("option", { name: "Hard" }));
+        expect(records).toHaveLength(4);
+        expect(records.at(-1)).toEqual({ notify: true, agree: true, nick: "pxlkt", mode: "hard" });
     });
 });

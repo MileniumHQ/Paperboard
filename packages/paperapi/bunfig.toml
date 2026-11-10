@@ -1,0 +1,5 @@
+# test/setup.ts gives the test process a throwaway PAPERBOARD_DIR: the SDK
+# finds a daemon through PAPERBOARD_DIR/local/crane.json, so without it a
+# suite on a machine running Paperboard could reach the real daemon.
+[test]
+preload = ["./test/setup.ts"]

@@ -6,6 +6,11 @@
 // is not a test. This preload replaces the WebSocket constructor for the whole
 // test process: any connect attempt fails immediately with this message, which
 // makes every suite deterministic no matter what is running on the machine.
+import { afterAll } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 const original = globalThis.WebSocket;
 
 /** endpoints a test is serving itself, on loopback: the only sockets it may open */
@@ -36,3 +41,10 @@ class NoNetworkWebSocket {
 (NoNetworkWebSocket as any).CLOSED = original?.CLOSED ?? 3;
 
 (globalThis as any).WebSocket = NoNetworkWebSocket;
+
+// Nothing a test runs may reach the user's ~/.paperboard: the test process,
+// and every program it starts, gets a throwaway one of its own.
+process.env.PAPERBOARD_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "pb-agents-home-"));
+const throwaway = process.env.PAPERBOARD_DIR;
+// a preload's afterAll runs once, after every suite in the process
+afterAll(() => fs.rmSync(throwaway, { recursive: true, force: true }));

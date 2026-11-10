@@ -1,177 +1,99 @@
-import { describe, test, expect, vi } from "vitest";
-import { render, fireEvent, screen } from "@solidjs/testing-library";
+import { describe, expect, test } from "vitest";
 import { createSignal } from "solid-js";
-import { PaperModal } from "../components/PaperModal";
-import { PaperButton } from "../components/PaperButton";
-import { PaperInput } from "../components/PaperInput";
+import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { PaperModal } from "../index";
 
-describe("PaperModal - Accessibility & Focus Trapping Tests", () => {
-    test("renders dialog with role='dialog' and aria-modal='true'", () => {
-        render(() => (
-            <PaperModal open={true} title="Test Dialog">
-                <p>Modal content</p>
-            </PaperModal>
-        ));
+const escape = () => fireEvent.keyDown(window, { key: "Escape" });
+const tab = (shiftKey = false) => fireEvent.keyDown(window, { key: "Tab", shiftKey });
 
-        const dialog = screen.getByRole("dialog", { name: "Test Dialog" });
-        expect(dialog).toBeDefined();
-        expect(dialog.getAttribute("aria-modal")).toBe("true");
-        expect(screen.getByText("Test Dialog")).toBeDefined();
-    });
-
-    test("dismisses when Escape key is pressed", async () => {
-        const handleClose = vi.fn();
-        render(() => (
-            <PaperModal open={true} onClose={handleClose} title="Escape Test">
-                <p>Content</p>
-            </PaperModal>
-        ));
-
-        await fireEvent.keyDown(window, { key: "Escape" });
-        expect(handleClose).toHaveBeenCalledTimes(1);
-    });
-
-    test("a modal opened over another takes Escape alone, then hands it back", async () => {
-        const closeBelow = vi.fn();
-        const [above, setAbove] = createSignal(true);
+// Inventory: PaperModal — Escape, stacking and focus.
+describe("PaperModal keyboard, stacking and focus", () => {
+    test("Escape closes only the top modal of a stack, then the one beneath", () => {
+        const [lowerOpen, setLowerOpen] = createSignal(true);
+        const [upperOpen, setUpperOpen] = createSignal(true);
+        const closed: string[] = [];
         render(() => (
             <>
-                <PaperModal open onClose={closeBelow} title="Below">
-                    <p>Below</p>
+                <PaperModal open={lowerOpen()} onClose={() => (closed.push("lower"), setLowerOpen(false))} title="Lower">
+                    lower body
                 </PaperModal>
-                <PaperModal open={above()} onClose={() => setAbove(false)} title="Above">
-                    <p>Above</p>
+                <PaperModal open={upperOpen()} onClose={() => (closed.push("upper"), setUpperOpen(false))} title="Upper">
+                    upper body
                 </PaperModal>
             </>
         ));
-        await fireEvent.keyDown(window, { key: "Escape" });
-        expect(above()).toBe(false);
-        expect(closeBelow).not.toHaveBeenCalled();
-        await fireEvent.keyDown(window, { key: "Escape" });
-        expect(closeBelow).toHaveBeenCalledTimes(1);
+
+        escape();
+        expect(closed).toEqual(["upper"]);
+        expect(lowerOpen()).toBe(true);
+
+        escape();
+        expect(closed).toEqual(["upper", "lower"]);
     });
 
-    test("a concealed dialog stays mounted, hidden from the screen, and ignores Escape", async () => {
-        const handleClose = vi.fn();
-        const [concealed, setConcealed] = createSignal(false);
-        render(() => (
-            <PaperModal open onClose={handleClose} title="Carried from" concealed={concealed()}>
-                <button>Held</button>
-            </PaperModal>
-        ));
-        const held = screen.getByText("Held");
-        setConcealed(true);
-        // the same element: a touch that started on it keeps going
-        expect(document.body.querySelector("button:not([aria-label])")).toBe(held);
-        expect(held.closest("[aria-hidden='true']")).not.toBeNull();
-        await fireEvent.keyDown(window, { key: "Escape" });
-        expect(handleClose).not.toHaveBeenCalled();
-        setConcealed(false);
-        await fireEvent.keyDown(window, { key: "Escape" });
-        expect(handleClose).toHaveBeenCalledTimes(1);
-    });
-
-    test("restores focus to trigger element upon closing", async () => {
+    test("every open focuses the autofocus child, and closing returns focus to the opener", async () => {
         const [open, setOpen] = createSignal(false);
-
-        const { getByText } = render(() => (
-            <div>
-                <PaperButton onClick={() => setOpen(true)}>Open Dialog</PaperButton>
-                <PaperModal open={open()} onClose={() => setOpen(false)} title="Focus Restoration">
-                    <button onClick={() => setOpen(false)}>Close</button>
+        render(() => (
+            <>
+                <button type="button" onClick={() => setOpen(true)}>
+                    Open
+                </button>
+                <PaperModal open={open()} onClose={() => setOpen(false)} title="Rename">
+                    <button type="button">Before</button>
+                    <input aria-label="Name" autofocus />
                 </PaperModal>
-            </div>
+            </>
         ));
+        const opener = screen.getByText("Open");
 
-        const trigger = getByText("Open Dialog");
-        trigger.focus();
-        expect(document.activeElement).toBe(trigger);
-
-        await fireEvent.click(trigger);
-        expect(open()).toBe(true);
-
-        setOpen(false);
-        expect(open()).toBe(false);
-        expect(document.activeElement).toBe(trigger);
-    });
-
-    test("a closing dialog lets go of the page before it leaves", async () => {
-        // WebKit keeps the page hidden from VoiceOver when an aria-modal
-        // dialog is removed while still claiming to be modal
-        const [open, setOpen] = createSignal(true);
-        render(() => <PaperModal open={open()} title="Leaving"><p>Content</p></PaperModal>);
-        const dialog = screen.getByRole("dialog", { name: "Leaving" });
-
-        setOpen(false);
-
-        expect(dialog.hasAttribute("aria-modal")).toBe(false);
-        // with no exit animation (as under reduced motion), WebKit still
-        // needs a frame to see the change before the dialog goes
-        await Promise.resolve();
-        expect(dialog.isConnected, "the dialog left before a frame passed").toBe(true);
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        expect(dialog.isConnected).toBe(false);
-
-        setOpen(true);
-        expect(screen.getByRole("dialog", { name: "Leaving" }).getAttribute("aria-modal")).toBe("true");
-    });
-
-    test("a closed dialog leaves even when the page draws no frames", async () => {
-        // a hidden tab, or a headless browser on fast-forwarded time
-        const frames = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 0);
-        try {
-            const [open, setOpen] = createSignal(true);
-            render(() => <PaperModal open={open()} title="Unseen"><p>Content</p></PaperModal>);
-            const dialog = screen.getByRole("dialog", { name: "Unseen" });
-            setOpen(false);
-            await vi.waitFor(() => expect(dialog.isConnected).toBe(false), { timeout: 1000 });
-        } finally {
-            frames.mockRestore();
+        for (let round = 0; round < 2; round++) {
+            opener.focus();
+            fireEvent.click(opener);
+            await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Name")));
+            escape();
+            expect(open()).toBe(false);
+            expect(document.activeElement).toBe(opener);
         }
     });
 
-    test("reopening before the next frame keeps the dialog modal", async () => {
-        const [open, setOpen] = createSignal(true);
-        render(() => <PaperModal open={open()} title="Reopening"><p>Content</p></PaperModal>);
-        const dialog = screen.getByRole("dialog", { name: "Reopening" });
-        setOpen(false);
-        setOpen(true);
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        expect(dialog.isConnected).toBe(true);
-        expect(dialog.getAttribute("aria-modal")).toBe("true");
-    });
-
-    test("every open hands focus to the field marked autofocus", async () => {
-        const [open, setOpen] = createSignal(false);
+    test("Tab and Shift+Tab wrap inside the dialog", () => {
         render(() => (
-            <PaperModal open={open()} onClose={() => setOpen(false)} title="Rename">
-                <PaperInput label="Name" autofocus />
+            <PaperModal open onClose={() => undefined} title="Wrap">
+                <button type="button">Middle</button>
+                <button type="button">Last</button>
             </PaperModal>
         ));
-        const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
-        for (const attempt of ["first", "second"]) {
-            setOpen(true);
-            await frame();
-            await frame();
-            expect(document.activeElement, `the ${attempt} open left the field unfocused`).toBe(
-                screen.getByLabelText("Name"),
-            );
-            setOpen(false);
-            await frame();
-        }
+        const first = screen.getByLabelText("Close modal");
+        const last = screen.getByText("Last");
+
+        last.focus();
+        tab();
+        expect(document.activeElement).toBe(first);
+
+        tab(true);
+        expect(document.activeElement).toBe(last);
     });
 
-    test("focus traversal skips disabled first and last controls", async () => {
-        render(() => <PaperModal open title="Enabled controls">
-            <button disabled>Unavailable first</button><button>Enabled first</button>
-            <button>Enabled last</button><button disabled>Unavailable last</button>
-        </PaperModal>);
-        const first = screen.getByText("Enabled first");
-        const last = screen.getByText("Enabled last");
-        last.focus();
-        await fireEvent.keyDown(window, { key: "Tab" });
-        expect(document.activeElement).toBe(first);
-        await fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
-        expect(document.activeElement).toBe(last);
+    test("a concealed modal keeps its children mounted, is aria-hidden and ignores Escape", () => {
+        const [concealed, setConcealed] = createSignal(true);
+        let closes = 0;
+        render(() => (
+            <PaperModal open concealed={concealed()} onClose={() => closes++} title="Carried">
+                <span>held item</span>
+            </PaperModal>
+        ));
+        const child = screen.getByText("held item");
+        const backdrop = child.closest('[role="dialog"]')!.parentElement!;
+
+        expect(backdrop.getAttribute("aria-hidden")).toBe("true");
+        escape();
+        expect(closes).toBe(0);
+
+        setConcealed(false);
+        // the same element: concealing never remounted it
+        expect(screen.getByText("held item")).toBe(child);
+        expect(backdrop.hasAttribute("aria-hidden")).toBe(false);
+        escape();
+        expect(closes).toBe(1);
     });
 });

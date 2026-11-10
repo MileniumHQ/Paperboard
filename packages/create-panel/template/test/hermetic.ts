@@ -8,13 +8,18 @@
 // throwaway data folder, and replaces the WebSocket constructor so any
 // connect attempt fails immediately with this message, which makes every
 // suite deterministic no matter what is running on the machine.
+import { afterAll } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const dataDir = mkdtempSync(join(tmpdir(), "panel-test-"));
 process.env.PAPERBOARD_DIR = dataDir;
-process.once("exit", () => rmSync(dataDir, { recursive: true, force: true }));
+// bun test fires no process exit handlers; a preload's afterAll runs once,
+// after every test file
+afterAll(() => {
+    rmSync(dataDir, { recursive: true, force: true });
+});
 
 const original = globalThis.WebSocket;
 

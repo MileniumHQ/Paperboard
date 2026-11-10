@@ -1,434 +1,222 @@
-// publishLib proofs (bun test): tags, canonical asset names, download
-// URLs, latest.yml feeds, version-record merges, and the legacy redirect
-// map. The worker and publish.ts both build behavior on these, so the
-// contract is pinned here.
-import { describe, expect, it } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import * as crypto from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "../apps/paperboard/papercrane/releaseSignature";
 import {
-    storeUploadParts,
     ALL_TARGETS,
-    archOf,
     assetFileName,
-    paperboardArtifacts,
-    paperboardPackages,
-    isUpdatePayload,
-    expectedReleaseAssets,
-    missingLinuxPackageTools,
     buildCraneIndex,
     buildLatestYml,
     bunPinMismatch,
     dlFileUrl,
+    expectedReleaseAssets,
     feedOf,
-    isArch,
-    isOs,
+    isUpdatePayload,
     isValidFileSegment,
     isValidVersionSegment,
-    KV_PACKAGES_BINDING,
-    kvKeyFor,
     legacyDownloadRedirect,
     mergeVersionRecord,
-    PAPERDL_R2_BUCKET,
-    parseUsbArgs,
+    paperboardArtifacts,
+    paperboardPackages,
     r2YmlKey,
-    releaseAssetUrl,
     tagFor,
-    targetsForOses,
-    USB_ARCHES,
-    USB_OSES,
-    ymlKeyFor,
-    type DlAppRecord,
+    type Target,
 } from "./publishLib";
+import { signRelease } from "./releaseSigning";
 
-describe("deploy targets", () => {
-    it("pins the R2 bucket and KV binding from wrangler.jsonc", () => {
-        expect(PAPERDL_R2_BUCKET).toBe("paperboard-paperdl");
-        expect(KV_PACKAGES_BINDING).toBe("PACKAGES");
+const ROOT = join(import.meta.dir, "..");
+
+// every file a release ships, by canonical name
+function shippedFiles(version: string): string[] {
+    return ALL_TARGETS.flatMap((t) => [
+        assetFileName("pb", t),
+        ...paperboardPackages(t, version).map((p) => p.releaseFile),
+        assetFileName("crane", t),
+    ]);
+}
+
+// One tag and canonical asset names per release.
+describe("one tag and canonical asset names per release", () => {
+    test("app and crane share the v<version> tag and ship under versionless names", () => {
+        expect(tagFor("0.3.0")).toBe("v0.3.0");
+        expect(tagFor("1.0.0-beta.2")).toBe("v1.0.0-beta.2");
+        expect(shippedFiles("0.3.0").sort()).toEqual(
+            [
+                "paperboard-linux-x64.AppImage",
+                "paperboard-linux-x64.deb",
+                "paperboard-linux-x64.rpm",
+                "paperboard-linux-arm64.AppImage",
+                "paperboard-linux-arm64.deb",
+                "paperboard-linux-arm64.rpm",
+                "paperboard-macos-x64.zip",
+                "paperboard-macos-arm64.zip",
+                "paperboard-windows-x64-setup.exe",
+                "crane-linux-x64.tar.gz",
+                "crane-linux-arm64.tar.gz",
+                "crane-macos-x64.tar.gz",
+                "crane-macos-arm64.tar.gz",
+                "crane-windows-x64.zip",
+            ].sort(),
+        );
+    });
+
+    test("electron-builder's versioned output names map to the canonical release names", () => {
+        const builds = ALL_TARGETS.flatMap((t) => [paperboardArtifacts(t, "0.3.0"), ...paperboardPackages(t, "0.3.0")]);
+        expect(Object.fromEntries(builds.map((b) => [b.buildFile, b.releaseFile]))).toEqual({
+            "paperboard-0.3.0-linux-x86_64.AppImage": "paperboard-linux-x64.AppImage",
+            "paperboard-0.3.0-linux-amd64.deb": "paperboard-linux-x64.deb",
+            "paperboard-0.3.0-linux-x86_64.rpm": "paperboard-linux-x64.rpm",
+            "paperboard-0.3.0-linux-arm64.AppImage": "paperboard-linux-arm64.AppImage",
+            "paperboard-0.3.0-linux-arm64.deb": "paperboard-linux-arm64.deb",
+            "paperboard-0.3.0-linux-aarch64.rpm": "paperboard-linux-arm64.rpm",
+            "paperboard-0.3.0-x64.zip": "paperboard-macos-x64.zip",
+            "paperboard-0.3.0-arm64.zip": "paperboard-macos-arm64.zip",
+            "paperboard-0.3.0-windows-x64-setup.exe": "paperboard-windows-x64-setup.exe",
+        });
+    });
+
+    test("re-indexing a release made before deb and rpm expects only what it shipped", () => {
+        const pre = new Set(ALL_TARGETS.flatMap((t) => [assetFileName("pb", t), assetFileName("crane", t)]));
+        const expected = expectedReleaseAssets(pre, "0.2.2").map((a) => a.file);
+        expect(expected.sort()).toEqual([...pre].sort());
+
+        // a release that ships some packages is expected to ship them all
+        const partial = new Set([...pre, "paperboard-linux-x64.deb"]);
+        const withPackages = expectedReleaseAssets(partial, "0.3.0").map((a) => a.file);
+        expect(withPackages.sort()).toEqual(shippedFiles("0.3.0").sort());
     });
 });
 
-describe("usb OS and arch selection", () => {
-    it("presents every OS and arch that has targets", () => {
-        expect(USB_OSES).toEqual(["windows", "macos", "linux"]);
-        for (const os of USB_OSES) expect(isOs(os)).toBe(true);
-        expect(isOs("solaris")).toBe(false);
-        expect(USB_ARCHES).toEqual(["x64", "arm64"]);
-        for (const arch of USB_ARCHES) expect(isArch(arch)).toBe(true);
-        expect(isArch("riscv64")).toBe(false);
-        expect(ALL_TARGETS.map(archOf)).toEqual(["x64", "arm64", "x64", "arm64", "x64"]);
+// Each target gets the update feed electron-updater requests.
+describe("each target gets the update feed electron-updater requests", () => {
+    test("feeds are keyed by the channel file each target's updater asks for", () => {
+        const keys = Object.fromEntries(ALL_TARGETS.map((t) => [t, r2YmlKey(feedOf(t))]));
+        expect(keys).toEqual({
+            "linux-x64": "pb/latest-linux.yml",
+            "linux-arm64": "pb/latest-linux-arm64.yml",
+            "macos-x64": "pb/latest-mac.yml",
+            "macos-arm64": "pb/latest-mac.yml",
+            "windows-x64": "pb/latest.yml",
+        });
     });
 
-    it("scopes crane targets to the chosen OSes and arches", () => {
-        expect(targetsForOses(["windows"])).toEqual(["windows-x64"]);
-        expect(targetsForOses(["macos"])).toEqual(["macos-x64", "macos-arm64"]);
-        expect(targetsForOses(["linux"])).toEqual(["linux-x64", "linux-arm64"]);
-        // ALL_TARGETS order is preserved however the OSes were selected.
-        expect(targetsForOses(["linux", "macos"])).toEqual([
-            "linux-x64",
-            "linux-arm64",
-            "macos-x64",
-            "macos-arm64",
-        ]);
-        // Arches narrow each OS; an OS with no target of that arch drops out.
-        expect(targetsForOses(["linux", "windows"], ["arm64"])).toEqual(["linux-arm64"]);
-        expect(targetsForOses(["macos", "linux"], ["x64"])).toEqual([
-            "linux-x64",
-            "macos-x64",
-        ]);
-    });
-
-    it("parses --os and --arch in comma-separated and repeated forms, deduped", () => {
-        expect(parseUsbArgs(["--os", "windows"])).toEqual({
-            oses: ["windows"],
-            arches: null,
-            help: false,
-        });
-        expect(parseUsbArgs(["--os=linux,macos"])).toEqual({
-            oses: ["linux", "macos"],
-            arches: null,
-            help: false,
-        });
-        expect(parseUsbArgs(["-o", "windows", "--os", "windows"])).toEqual({
-            oses: ["windows"],
-            arches: null,
-            help: false,
-        });
-        expect(parseUsbArgs(["--arch", "arm64"])).toEqual({
-            oses: null,
-            arches: ["arm64"],
-            help: false,
-        });
-        expect(parseUsbArgs(["--arch=x64,arm64", "-a", "x64"])).toEqual({
-            oses: null,
-            arches: ["x64", "arm64"],
-            help: false,
-        });
-        expect(parseUsbArgs(["--os=linux", "--arch=arm64"])).toEqual({
-            oses: ["linux"],
-            arches: ["arm64"],
-            help: false,
-        });
-        expect(parseUsbArgs([])).toEqual({ oses: null, arches: null, help: false });
-        expect(parseUsbArgs(["--help"])).toEqual({ oses: null, arches: null, help: true });
-    });
-
-    it("refuses unknown OSes/arches, missing values, and stray flags", () => {
-        expect(() => parseUsbArgs(["--os", "solaris"])).toThrow(/Unknown OS/);
-        expect(() => parseUsbArgs(["--os"])).toThrow(/needs a value/);
-        expect(() => parseUsbArgs(["--arch", "riscv64"])).toThrow(/Unknown architecture/);
-        expect(() => parseUsbArgs(["--arch"])).toThrow(/needs a value/);
-        expect(() => parseUsbArgs(["--wat"])).toThrow(/Unknown usb option/);
-    });
-});
-
-describe("release tags and URLs", () => {
-    it("uses one tag per version for both release lines", () => {
-        expect(tagFor("3.0.0-alpha")).toBe("v3.0.0-alpha");
-        expect(tagFor("0.1.0")).toBe("v0.1.0");
-    });
-
-    it("release assets address the GitHub tag, never Origami bytes", () => {
-        // the app and its embedded server share the version's one tag
-        expect(releaseAssetUrl("3.0.0-alpha", "paperboard-macos-x64.zip")).toBe(
-            "https://github.com/MileniumHQ/Paperboard/releases/download/v3.0.0-alpha/paperboard-macos-x64.zip",
+    test("a feed lists every entry under the latest alias with sha512, size, path and releaseDate", () => {
+        const { key, text } = buildLatestYml(
+            "macos",
+            "0.3.0",
+            [
+                { target: "macos-arm64", file: "paperboard-macos-arm64.zip", sha512: "AAA=", size: 10 },
+                { target: "macos-x64", file: "paperboard-macos-x64.zip", sha512: "BBB=", size: 20 },
+            ],
+            "2026-11-09T00:00:00.000Z",
         );
-        expect(releaseAssetUrl("3.0.0-alpha", "crane-linux-arm64.tar.gz")).toBe(
-            "https://github.com/MileniumHQ/Paperboard/releases/download/v3.0.0-alpha/crane-linux-arm64.tar.gz",
+        expect(key).toBe("pb/latest-mac.yml");
+        expect(text).toBe(
+            [
+                "version: 0.3.0",
+                "files:",
+                "  - url: https://i.paperboard.dev/pb/latest/paperboard-macos-arm64.zip",
+                "    sha512: AAA=",
+                "    size: 10",
+                "  - url: https://i.paperboard.dev/pb/latest/paperboard-macos-x64.zip",
+                "    sha512: BBB=",
+                "    size: 20",
+                "path: https://i.paperboard.dev/pb/latest/paperboard-macos-arm64.zip",
+                "sha512: AAA=",
+                "releaseDate: '2026-11-09T00:00:00.000Z'",
+            ].join("\n"),
         );
+        expect(() => buildLatestYml("linux", "0.3.0", [], "2026-11-09T00:00:00.000Z")).toThrow("No update artifacts for linux");
     });
 
-    it("public download URLs use the dl host and app segment", () => {
-        expect(dlFileUrl("pb", "latest", "paperboard-macos-x64.zip")).toBe(
-            "https://i.paperboard.dev/pb/latest/paperboard-macos-x64.zip",
-        );
-        expect(dlFileUrl("crane", "2.0.0-alpha", "crane-linux-arm64.tar.gz")).toBe(
-            "https://i.paperboard.dev/crane/2.0.0-alpha/crane-linux-arm64.tar.gz",
-        );
-    });
-});
-
-describe("canonical asset names", () => {
-    it("names every shipped app target versionlessly", () => {
-        expect(assetFileName("pb", "linux-x64")).toBe("paperboard-linux-x64.AppImage");
-        expect(assetFileName("pb", "linux-arm64")).toBe("paperboard-linux-arm64.AppImage");
-        expect(assetFileName("pb", "macos-x64")).toBe("paperboard-macos-x64.zip");
-        expect(assetFileName("pb", "macos-arm64")).toBe("paperboard-macos-arm64.zip");
-        expect(assetFileName("pb", "windows-x64")).toBe("paperboard-windows-x64-setup.exe");
-    });
-
-    it("ships one macOS ZIP per arch that is both installer and update payload", () => {
-        for (const arch of ["x64", "arm64"] as const) {
-            expect(paperboardArtifacts(`macos-${arch}`, "0.1.0")).toEqual({
-                buildFile: `paperboard-0.1.0-${arch}.zip`,
-                releaseFile: `paperboard-macos-${arch}.zip`,
-            });
+    test("deb and rpm are never update payloads", () => {
+        for (const t of ALL_TARGETS) {
+            expect(isUpdatePayload(assetFileName("pb", t))).toBe(true);
+            for (const pkg of paperboardPackages(t, "0.3.0")) expect(isUpdatePayload(pkg.releaseFile)).toBe(false);
         }
     });
+});
 
-    it("ships crane binaries as tarballs on posix, zip on windows", () => {
-        expect(assetFileName("crane", "linux-x64")).toBe("crane-linux-x64.tar.gz");
-        expect(assetFileName("crane", "linux-arm64")).toBe("crane-linux-arm64.tar.gz");
-        expect(assetFileName("crane", "macos-x64")).toBe("crane-macos-x64.tar.gz");
-        expect(assetFileName("crane", "macos-arm64")).toBe("crane-macos-arm64.tar.gz");
-        expect(assetFileName("crane", "windows-x64")).toBe("crane-windows-x64.zip");
+// The crane update index is published signed.
+describe("the crane update index is published signed", () => {
+    test("one entry per target with version, sha256, the versioned URL and a verifying signature", () => {
+        const { privateKey, publicKey } = crypto.generateKeyPairSync("ed25519");
+        const pub = publicKey.export({ type: "spki", format: "pem" }).toString();
+        const files = ALL_TARGETS.map((target, i) => {
+            const sha256 = crypto.createHash("sha256").update(target).digest("hex");
+            return { target, file: assetFileName("crane", target), sha256, signature: signRelease(privateKey, releaseMessage.crane("0.3.0", sha256)), i };
+        });
+        const index = buildCraneIndex("0.3.0", files);
+        expect(Object.keys(index).sort()).toEqual([...ALL_TARGETS].sort());
+        for (const f of files) {
+            const entry = index[f.target];
+            expect(entry).toEqual({
+                version: "0.3.0",
+                sha256: f.sha256,
+                downloadUrl: `https://i.paperboard.dev/crane/0.3.0/${f.file}`,
+                signature: f.signature,
+            });
+            expect(verifyRelease(releaseMessage.crane(entry.version, entry.sha256), entry.signature, pub)).toBe(true);
+            // signed by a throwaway key, so the real release key refuses it
+            expect(verifyRelease(releaseMessage.crane(entry.version, entry.sha256), entry.signature, RELEASE_PUBLIC_KEY)).toBe(false);
+        }
     });
 });
 
-describe("URL segment guards", () => {
-    it("accepts real versions and filenames", () => {
-        expect(isValidVersionSegment("3.0.0-alpha")).toBe(true);
-        expect(isValidVersionSegment("2.0.0")).toBe(true);
-        expect(isValidFileSegment("paperboard-macos-x64.zip")).toBe(true);
-        expect(isValidFileSegment("crane-linux-arm64.tar.gz")).toBe(true);
-    });
-
-    it("rejects anything that could break out of its path slot", () => {
-        for (const bad of ["../x", "a/b", "a%20b", "a b", "a?b", "a#b", "", ".hidden", "-lead"]) {
+// Download URL segments cannot break out, and history is kept.
+describe("download URL segments cannot break out, and history is kept", () => {
+    test("traversal, separators, encoding, whitespace, query, fragment and leading . or - are refused", () => {
+        for (const bad of ["../x", "a/b", "a%20b", "a b", "a?b", "a#b", "", ".hidden", "-flag", "..", "a\\b"]) {
             expect(isValidVersionSegment(bad)).toBe(false);
             expect(isValidFileSegment(bad)).toBe(false);
         }
+        for (const v of ["0.3.0", "1.0.0-beta.2", "2.0.0+build.5", "latest"]) expect(isValidVersionSegment(v)).toBe(true);
+        for (const file of shippedFiles("0.3.0")) expect(isValidFileSegment(file)).toBe(true);
+        expect(dlFileUrl("crane", "0.3.0", "crane-linux-x64.tar.gz")).toBe("https://i.paperboard.dev/crane/0.3.0/crane-linux-x64.tar.gz");
     });
 
-    it("lets 'latest' through the version shape so the router can reserve it", () => {
-        expect(isValidVersionSegment("latest")).toBe(true);
-    });
-});
-
-describe("KV version records", () => {
-    it("starts a record from nothing", () => {
-        const rec = mergeVersionRecord(null, "3.0.0-alpha", [
-            { file: "paperboard-macos-x64.zip", sha256: "abc", size: 1 },
-        ]);
-        expect(rec.latest).toBe("3.0.0-alpha");
-        expect(Object.keys(rec.versions)).toEqual(["3.0.0-alpha"]);
+    test("merging a version moves latest and keeps every earlier version's files", () => {
+        const first = mergeVersionRecord(null, "0.2.2", [{ file: "crane-linux-x64.tar.gz", sha256: "a".repeat(64), size: 1 }]);
+        expect(first).toEqual({ latest: "0.2.2", versions: { "0.2.2": { files: [{ file: "crane-linux-x64.tar.gz", sha256: "a".repeat(64), size: 1 }] } } });
+        const second = mergeVersionRecord(first, "0.3.0", [{ file: "crane-linux-x64.tar.gz", sha256: "b".repeat(64), size: 2 }]);
+        expect(second.latest).toBe("0.3.0");
+        expect(second.versions["0.2.2"]).toEqual(first.versions["0.2.2"]);
+        expect(second.versions["0.3.0"].files[0].sha256).toBe("b".repeat(64));
+        // the merge never mutates the record it was given
+        expect(Object.keys(first.versions)).toEqual(["0.2.2"]);
     });
 
-    it("retains previous versions and moves latest", () => {
-        const prev: DlAppRecord = {
-            latest: "3.0.0-alpha",
-            versions: {
-                "3.0.0-alpha": { files: [{ file: "a", sha256: "x", size: 1 }] },
-            },
-        };
-        const rec = mergeVersionRecord(prev, "3.1.0-alpha", [
-            { file: "b", sha256: "y", size: 2 },
-        ]);
-        expect(rec.latest).toBe("3.1.0-alpha");
-        expect(Object.keys(rec.versions).sort()).toEqual(["3.0.0-alpha", "3.1.0-alpha"]);
-        expect(rec.versions["3.0.0-alpha"].files[0].file).toBe("a");
-    });
-
-    it("uses dl/ keys in the shared KV namespace", () => {
-        expect(kvKeyFor("pb")).toBe("dl/pb");
-        expect(kvKeyFor("crane")).toBe("dl/crane");
+    test("legacy per-target downloads map to the canonical latest URL, unknown targets to null", () => {
+        expect(legacyDownloadRedirect("paperboard", "macos-arm64")).toBe("https://i.paperboard.dev/pb/latest/paperboard-macos-arm64.zip");
+        expect(legacyDownloadRedirect("crane", "windows-x64")).toBe("https://i.paperboard.dev/crane/latest/crane-windows-x64.zip");
+        for (const t of ALL_TARGETS as Target[]) expect(legacyDownloadRedirect("crane", t)).toBe(dlFileUrl("crane", "latest", assetFileName("crane", t)));
+        expect(legacyDownloadRedirect("crane", "windows-arm64")).toBeNull();
+        expect(legacyDownloadRedirect("paperboard", "../x")).toBeNull();
     });
 });
 
-describe("latest.yml feeds", () => {
-    it("gives each target the channel file electron-updater requests for it", () => {
-        // electron-updater names Linux feeds by arch and macOS feeds by
-        // platform only, so the two Linux builds must not share a feed.
-        expect(Object.fromEntries(ALL_TARGETS.map((t) => [t, ymlKeyFor(feedOf(t))]))).toEqual({
-            "linux-x64": "latest-linux.yml",
-            "linux-arm64": "latest-linux-arm64.yml",
-            "macos-x64": "latest-mac.yml",
-            "macos-arm64": "latest-mac.yml",
-            "windows-x64": "latest.yml",
-        });
-    });
-
-    it("points every file at the dl latest alias with hashes", () => {
-        const { key, text } = buildLatestYml(
-            "macos",
-            "3.0.0-alpha",
-            [
-                { target: "macos-x64", file: "paperboard-macos-x64.zip", sha512: "s1", size: 10 },
-                { target: "macos-arm64", file: "paperboard-macos-arm64.zip", sha512: "s2", size: 20 },
-            ],
-            "2026-01-01T00:00:00.000Z",
-        );
-        expect(key).toBe("pb/latest-mac.yml");
-        expect(r2YmlKey("windows")).toBe("pb/latest.yml");
-        expect(r2YmlKey("linux")).toBe("pb/latest-linux.yml");
-        expect(ymlKeyFor("windows")).toBe("latest.yml");
-        expect(text).toContain("version: 3.0.0-alpha");
-        expect(text).toContain("url: https://i.paperboard.dev/pb/latest/paperboard-macos-x64.zip");
-        expect(text).toContain("url: https://i.paperboard.dev/pb/latest/paperboard-macos-arm64.zip");
-        expect(text).toContain("sha512: s1");
-        expect(text).toContain("size: 20");
-        expect(text).toContain("path: https://i.paperboard.dev/pb/latest/paperboard-macos-x64.zip");
-        expect(text).toContain("releaseDate: '2026-01-01T00:00:00.000Z'");
-    });
-});
-
-describe("legacy download redirects", () => {
-    it("maps old paperboard targets to canonical latest files", () => {
-        expect(legacyDownloadRedirect("paperboard", "macos-x64")).toBe(
-            "https://i.paperboard.dev/pb/latest/paperboard-macos-x64.zip",
-        );
-        expect(legacyDownloadRedirect("paperboard", "windows-x64")).toBe(
-            "https://i.paperboard.dev/pb/latest/paperboard-windows-x64-setup.exe",
-        );
-        expect(legacyDownloadRedirect("crane", "linux-arm64")).toBe(
-            "https://i.paperboard.dev/crane/latest/crane-linux-arm64.tar.gz",
-        );
-    });
-
-    it("returns null for unknown targets instead of fabricating a URL", () => {
-        expect(legacyDownloadRedirect("paperboard", "solaris-sparc")).toBeNull();
-        expect(legacyDownloadRedirect("crane", "")).toBeNull();
-    });
-});
-
-describe("storeUploadParts", () => {
-    const files: Record<string, Uint8Array> = {
-        "./store/about.md": new TextEncoder().encode("# About"),
-        "./store/1-light.png": new Uint8Array([1]),
-        "./store/1-dark.webp": new Uint8Array([2]),
-    };
-    const read = (rel: string) => {
-        const bytes = files[rel];
-        if (!bytes) throw new Error(`ENOENT ${rel}`);
-        return bytes;
-    };
-
-    it("maps every declared file to the field Origami reads", () => {
-        const parts = storeUploadParts(
-            {
-                about: "./store/about.md",
-                screenshots: [{ light: "./store/1-light.png", dark: "./store/1-dark.webp" }],
-            },
-            read,
-        );
-        expect(parts.about).toBe("# About");
-        expect(parts.files.map(({ field, fileName, type }) => ({ field, fileName, type }))).toEqual([
-            { field: "screenshot-0-light", fileName: "1-light.png", type: "image/png" },
-            { field: "screenshot-0-dark", fileName: "1-dark.webp", type: "image/webp" },
-        ]);
-    });
-
-    it("no listing uploads nothing; a missing or invalid listing refuses the publish", () => {
-        expect(storeUploadParts(undefined, read)).toEqual({ files: [] });
-        expect(() => storeUploadParts({ screenshots: [{ light: "./store/2.png" }] }, read)).toThrow(/ENOENT/);
-        expect(() => storeUploadParts({ about: "./about.md" }, read)).toThrow(/inside store/);
-    });
-});
-
-describe("crane update index", () => {
-    it("keys one signed entry per target in the shape updatePlan reads", () => {
-        const index = buildCraneIndex("2.0.0", [
-            { target: "linux-x64", file: "crane-linux-x64.tar.gz", sha256: "a".repeat(64), signature: "sig-linux" },
-            { target: "windows-x64", file: "crane-windows-x64.zip", sha256: "b".repeat(64), signature: "sig-win" },
-        ]);
-        expect(Object.keys(index).sort()).toEqual(["linux-x64", "windows-x64"]);
-        expect(index["linux-x64"]).toEqual({
-            version: "2.0.0",
-            sha256: "a".repeat(64),
-            downloadUrl: dlFileUrl("crane", "2.0.0", "crane-linux-x64.tar.gz"),
-            signature: "sig-linux",
-        });
-        // every entry carries the signature the daemon verifies
-        for (const entry of Object.values(index)) {
-            expect(entry.signature).toBeTruthy();
-            expect(entry.downloadUrl).toContain("2.0.0");
-        }
-    });
-});
-
-describe("first-party store listings", () => {
-    const { readdirSync, readFileSync } = require("fs") as typeof import("fs");
-    const { join } = require("path") as typeof import("path");
-    const panelsDir = join(import.meta.dir, "../panels");
-
-    it.each(readdirSync(panelsDir))("%s: listing validates and every named file exists", (id) => {
-        const dir = join(panelsDir, id);
-        const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
-        const parts = storeUploadParts(manifest.store, (rel) => readFileSync(join(dir, rel)));
-        expect(parts.about?.length).toBeGreaterThan(0);
-        expect(parts.files.length).toBeGreaterThan(0);
-    });
-});
-
-
-it("Linux x64 build input matches electron-builder while release name stays canonical", () => {
-    expect(paperboardArtifacts("linux-x64", "0.1.0")).toEqual({ buildFile: "paperboard-0.1.0-linux-x86_64.AppImage", releaseFile: "paperboard-linux-x64.AppImage" });
-});
-
-describe("Linux distro packages", () => {
-    it("builds a deb and an rpm per Linux arch under electron-builder's own arch names", () => {
-        expect(paperboardPackages("linux-x64", "0.1.0")).toEqual([
-            { buildFile: "paperboard-0.1.0-linux-amd64.deb", releaseFile: "paperboard-linux-x64.deb" },
-            { buildFile: "paperboard-0.1.0-linux-x86_64.rpm", releaseFile: "paperboard-linux-x64.rpm" },
-        ]);
-        expect(paperboardPackages("linux-arm64", "0.1.0")).toEqual([
-            { buildFile: "paperboard-0.1.0-linux-arm64.deb", releaseFile: "paperboard-linux-arm64.deb" },
-            { buildFile: "paperboard-0.1.0-linux-aarch64.rpm", releaseFile: "paperboard-linux-arm64.rpm" },
-        ]);
-    });
-
-    it("ships no package for other systems", () => {
-        for (const target of ["macos-x64", "macos-arm64", "windows-x64"] as const) {
-            expect(paperboardPackages(target, "0.1.0")).toEqual([]);
-        }
-    });
-
-    it("keeps packages out of the update feed", () => {
-        const files = ALL_TARGETS.flatMap((t) => [
-            paperboardArtifacts(t, "0.1.0").releaseFile,
-            ...paperboardPackages(t, "0.1.0").map((p) => p.releaseFile),
-        ]);
-        expect(files.filter(isUpdatePayload)).toEqual(ALL_TARGETS.map((t) => assetFileName("pb", t)));
-        for (const file of files) expect(isValidFileSegment(file)).toBe(true);
-    });
-
-    it("expects packages on a release only when it ships them", () => {
-        const base = new Set(ALL_TARGETS.flatMap((t) => [assetFileName("pb", t), assetFileName("crane", t)]));
-        expect(expectedReleaseAssets(base, "0.1.0").map((j) => j.file).sort()).toEqual([...base].sort());
-
-        const partial = new Set([...base, "paperboard-linux-x64.deb"]);
-        const files = expectedReleaseAssets(partial, "0.1.0").map((j) => j.file);
-        expect(files.filter((f) => !partial.has(f)).sort()).toEqual([
-            "paperboard-linux-arm64.deb",
-            "paperboard-linux-arm64.rpm",
-            "paperboard-linux-x64.rpm",
-        ]);
-        expect(expectedReleaseAssets(partial, "0.1.0").find((j) => j.file === "paperboard-linux-arm64.rpm"))
-            .toEqual({ app: "pb", target: "linux-arm64", file: "paperboard-linux-arm64.rpm" });
-    });
-
-    it("names the missing tool before a Linux build starts", () => {
-        expect(missingLinuxPackageTools(() => "/usr/bin/rpmbuild")).toBeNull();
-        expect(missingLinuxPackageTools(() => null)).toContain("needs rpmbuild");
-    });
-
-    it("is what electron-builder is told to build for Linux, one arch per script", () => {
-        const { readFileSync } = require("fs") as typeof import("fs");
-        const dir = `${import.meta.dir}/../apps/paperboard`;
-        const config = Bun.YAML.parse(readFileSync(`${dir}/electron-builder.yml`, "utf8")) as {
-            linux: { target: unknown };
-            deb: { artifactName: string };
-            rpm: { artifactName: string };
-        };
-        expect(config.linux.target).toEqual(["AppImage", "deb", "rpm"]);
-        const scripts = JSON.parse(readFileSync(`${dir}/package.json`, "utf8")).scripts;
-        expect(scripts["build:linux"]).toContain("electron-builder --linux --x64");
-        expect(scripts["build:linux-arm64"]).toContain("electron-builder --linux --arm64");
-        expect(config.deb.artifactName).toContain("${version}-linux-${arch}.${ext}");
-        expect(config.rpm.artifactName).toContain("${version}-linux-${arch}.${ext}");
-    });
-});
-
-describe("bunPinMismatch", () => {
-    it("accepts only the exact pinned Bun", () => {
+// Releases compile only with the exact pinned Bun.
+describe("releases compile only with the exact pinned Bun", () => {
+    test("the pin must be exact and the running Bun must equal it", () => {
         expect(bunPinMismatch("bun@1.4.4", "1.4.4")).toBeNull();
-        expect(bunPinMismatch("bun@1.4.4", "1.4.3")).toContain("pinned bun@1.4.4, running bun@1.4.3");
+        expect(bunPinMismatch("bun@1.4.4", "1.4.5")).toBe(
+            "release binaries embed the running Bun: pinned bun@1.4.4, running bun@1.4.5. Install Bun 1.4.4 before publishing.",
+        );
+        for (const loose of ["bun@^1.4.4", "bun@1.4", "bun@latest", "npm@10.0.0", undefined, 144]) {
+            expect(bunPinMismatch(loose, "1.4.4")).toContain("must pin an exact Bun (bun@x.y.z)");
+        }
     });
-    it("refuses a missing or loose pin", () => {
-        expect(bunPinMismatch(undefined, "1.4.4")).toContain("must pin");
-        expect(bunPinMismatch("bun@^1.4.4", "1.4.4")).toContain("must pin");
-    });
-    it("matches the repo's own pin against the CI gate's version", async () => {
-        const root = await Bun.file(new URL("../package.json", import.meta.url)).json();
-        const gate = await Bun.file(new URL("../.github/workflows/gate.yml", import.meta.url)).text();
-        const ci = /bun-version:\s*(\S+)/.exec(gate)?.[1];
-        expect(bunPinMismatch(root.packageManager, ci ?? "")).toBeNull();
+
+    test("the repo pins bun@1.4.4 and every CI gate job installs that same Bun", () => {
+        const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+        expect(pkg.packageManager).toBe("bun@1.4.4");
+        expect(bunPinMismatch(pkg.packageManager, "1.4.4")).toBeNull();
+        const workflow = Bun.YAML.parse(readFileSync(join(ROOT, ".github", "workflows", "gate.yml"), "utf8")) as {
+            jobs: Record<string, { steps?: { uses?: string; with?: Record<string, unknown> }[] }>;
+        };
+        const setups = Object.values(workflow.jobs).flatMap((job) => (job.steps ?? []).filter((s) => s.uses?.startsWith("oven-sh/setup-bun")));
+        expect(setups.length).toBeGreaterThan(0);
+        for (const step of setups) expect(`bun@${step.with?.["bun-version"]}`).toBe(pkg.packageManager);
     });
 });

@@ -26,6 +26,22 @@ MCowBQYDK2VwAyEAnPZxRUXmI+YzHGY7gJrpx4R+6+Q0nWQxQ9crtJjdxF8=
 -----END PUBLIC KEY-----
 `;
 
+// The key this daemon trusts for its own binary's updates.
+// PAPERBOARD_RELEASE_PUBLIC_KEY names a different one: a private build's, or
+// the throwaway key the release smoke signs a loopback release with. It can
+// only replace the key, never skip the check, and whoever sets the daemon's
+// environment already controls the binary it runs. A value that is not an
+// ed25519 public key throws, so a mistyped override never verifies anything.
+export function daemonReleaseKey(env: NodeJS.ProcessEnv = process.env): string {
+    const override = env.PAPERBOARD_RELEASE_PUBLIC_KEY;
+    if (override === undefined) return RELEASE_PUBLIC_KEY;
+    const key = crypto.createPublicKey(override);
+    if (key.asymmetricKeyType !== "ed25519") {
+        throw new Error(`PAPERBOARD_RELEASE_PUBLIC_KEY must be an ed25519 public key, not ${key.asymmetricKeyType}`);
+    }
+    return override;
+}
+
 const DOMAIN = "paperboard-release-v1";
 const MAX_SIGNATURE_CHARS = 200;
 

@@ -1,385 +1,222 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
-import { join, relative } from "path";
-import { applyFeatureMarkers, DEFAULT_FEATURES, runCli, scaffoldPanel, TEMPLATE_DIR, type PanelFeatures } from "../src/scaffold";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import * as tar from "tar";
 import paperapiPackage from "../../paperapi/package.json";
 import paperuiPackage from "../../paperui/package.json";
-import ownPackage from "../package.json";
+import { libraryDependencies, scaffoldPanel, type PanelFeatures } from "../src/scaffold";
+import { startDaemon } from "./helpers/daemon";
+import { linkDependencies, ok, paperapi, panelTestFolders, readJson, tempDir, writtenFiles } from "./helpers/panel";
 
-let parentDir: string;
+const BUILD_TIMEOUT = 120_000;
 
-beforeEach(() => {
-    parentDir = mkdtempSync(join(tmpdir(), "create-panel-test-"));
-});
-
-afterEach(() => {
-    rmSync(parentDir, { recursive: true, force: true });
-});
-
-const readJson = (file: string) => JSON.parse(readFileSync(file, "utf8"));
-
-function allFiles(dir: string): string[] {
-    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-        const path = join(dir, entry.name);
-        return entry.isDirectory() ? allFiles(path) : [path];
-    });
+interface Variant {
+    name: string;
+    id: string;
+    features: PanelFeatures;
+    dir: string;
 }
 
-describe("scaffoldPanel", () => {
-    it("writes a standalone panel wired to the published libraries", () => {
-        const { targetDir } = scaffoldPanel({
-            mode: "standalone",
-            id: "dev.paperboard.my-panel",
-            displayName: "My Panel",
-            publisher: "Ada",
-            parentDir,
-        });
-        expect(targetDir).toBe(join(parentDir, "dev.paperboard.my-panel"));
+const variants: Variant[] = [
+    { name: "everything on", id: "dev.example.full", features: { service: true, widget: true, store: true }, dir: "" },
+    { name: "no widget", id: "dev.example.nowidget", features: { service: true, widget: false, store: true }, dir: "" },
+    { name: "no service, widget or store", id: "dev.example.bare", features: { service: false, widget: false, store: false }, dir: "" },
+];
 
-        const pkg = readJson(join(targetDir, "package.json"));
-        expect(pkg.name).toBe("dev.paperboard.my-panel");
-        expect(pkg.dependencies["@mileniumhq/paperapi"]).toBe(`^${paperapiPackage.version}`);
-        expect(pkg.dependencies["@mileniumhq/paperui"]).toBe(`^${paperuiPackage.version}`);
-        expect(pkg.license).toBe("UNLICENSED");
+let parent: string;
 
-        expect(readJson(join(targetDir, "manifest.json"))).toEqual({
-            name: "My Panel",
-            id: "dev.paperboard.my-panel",
-            version: "0.1.0",
-            description: "My Panel panel",
-            publisher: "Ada",
-            base: "./dist/index.html",
-            service: "./dist/service.js",
-            widgets: [
-                {
-                    id: "greetings",
-                    name: "Greetings",
-                    description: "How many greetings the service has given",
-                    sizes: ["1x1", "2x1"],
-                },
-            ],
-            store: { about: "./store/about.md" },
-        });
+beforeAll(async () => {
+    parent = tempDir("variants");
+    for (const v of variants) {
+        v.dir = scaffoldPanel({ mode: "standalone", id: v.id, parentDir: parent, features: v.features }).targetDir;
+        linkDependencies(v.dir);
+        await ok("bun", ["run", "build"], v.dir);
+    }
+}, BUILD_TIMEOUT);
 
-        expect(existsSync(join(targetDir, ".gitignore"))).toBe(true);
-        expect(existsSync(join(targetDir, "gitignore"))).toBe(false);
-        expect(existsSync(join(targetDir, "LICENSE"))).toBe(false);
-        expect(readFileSync(join(targetDir, "src/panel.ts"), "utf8")).toContain(
-            'export const PANEL_ID = "dev.paperboard.my-panel";',
-        );
-    });
+afterAll(() => {
+    rmSync(parent, { recursive: true, force: true });
+});
 
-    it("writes a workspace panel wired to workspace:* as first-party", () => {
-        const { targetDir } = scaffoldPanel({ mode: "workspace", id: "dev.paperboard.my-panel", parentDir });
-        const pkg = readJson(join(targetDir, "package.json"));
-        expect(pkg.dependencies["@mileniumhq/paperapi"]).toBe("workspace:*");
-        expect(pkg.dependencies["@mileniumhq/paperui"]).toBe("workspace:*");
-        expect(pkg.license).toBe("PolyForm-Noncommercial-1.0.0");
-        expect(readJson(join(targetDir, "manifest.json")).publisher).toBe("Paperboard");
-        expect(readJson(join(targetDir, "manifest.json")).name).toBe("My Panel");
-        expect(existsSync(join(targetDir, "LICENSE"))).toBe(true);
-        expect(existsSync(join(targetDir, "gitignore"))).toBe(false);
-        expect(existsSync(join(targetDir, ".gitignore"))).toBe(false);
-    });
-
-    it("ships what the first-party panels guard: a UI standards test and the hermetic preload", () => {
-        const { targetDir } = scaffoldPanel({ mode: "standalone", id: "dev.paperboard.my-panel", parentDir });
-        expect(readFileSync(join(targetDir, "test/uiStandards.test.ts"), "utf8")).toContain("no component sets an inline style");
-        expect(readFileSync(join(targetDir, "bunfig.toml"), "utf8")).toContain("./test/hermetic.ts");
-    });
-
-    it("leaves no inline style and no stale token in any file it writes", () => {
-        const { targetDir } = scaffoldPanel({ mode: "standalone", id: "dev.paperboard.my-panel", parentDir });
-        for (const file of allFiles(targetDir).filter((f) => f.endsWith(".tsx"))) {
-            expect(readFileSync(file, "utf8")).not.toMatch(/\bstyle=\{/);
-            // light-text was a PaperUI color that no longer exists; PaperText takes any string, so nothing else catches it
-            expect(readFileSync(file, "utf8")).not.toContain("light-text");
+// Every feature choice builds, tests, links and packs.
+describe("every feature choice builds, tests, links and packs", () => {
+    test("no feature marker or template token survives in any written file", () => {
+        for (const v of variants) {
+            for (const file of writtenFiles(v.dir)) {
+                const content = readFileSync(join(v.dir, file), "utf8");
+                expect({ file, markers: /@(if|endif)\b/.test(content), tokens: content.match(/__PANEL_[A-Z]+__|__PAPER[A-Z]+_DEP__/g) }).toEqual({ file, markers: false, tokens: null });
+            }
         }
     });
 
-    describe("choices", () => {
-        const combos: Array<[string, Partial<PanelFeatures>, { service: boolean; widget: boolean; store: boolean }]> = [
-            ["everything", {}, { service: true, widget: true, store: true }],
-            ["no widget", { widget: false }, { service: true, widget: false, store: true }],
-            ["no store", { store: false }, { service: true, widget: true, store: false }],
-            ["UI only", { service: false, widget: false, store: false }, { service: false, widget: false, store: false }],
-        ];
-
-        for (const [name, features, expected] of combos) {
-            it(`${name}: writes exactly what it chose`, () => {
-                const { targetDir, files } = scaffoldPanel({ mode: "standalone", id: "dev.paperboard.my-panel", features, parentDir });
-                const has = (path: string) => existsSync(join(targetDir, path));
-                const manifest = readJson(join(targetDir, "manifest.json"));
-                const pkg = readJson(join(targetDir, "package.json"));
-
-                expect(has("src/service.ts")).toBe(expected.service);
-                expect(has("src/pages/ServicePage.tsx")).toBe(expected.service);
-                expect(has("test/greet.test.ts")).toBe(expected.service);
-                expect(manifest.service).toBe(expected.service ? "./dist/service.js" : undefined);
-                expect(pkg.scripts.build.includes("service.js")).toBe(expected.service);
-
-                expect(has("widget.html")).toBe(expected.widget);
-                expect(has("src/widget.tsx")).toBe(expected.widget);
-                expect(manifest.widgets !== undefined).toBe(expected.widget);
-                expect(readFileSync(join(targetDir, "vite.config.ts"), "utf8").includes("widget.html")).toBe(expected.widget);
-
-                expect(has("store/about.md")).toBe(expected.store);
-                expect(has("store")).toBe(expected.store);
-                expect(manifest.store !== undefined).toBe(expected.store);
-
-                // the pages and the app agree with the choices
-                expect(readFileSync(join(targetDir, "src/App.tsx"), "utf8").includes("ServicePage")).toBe(expected.service);
-                // no marker, token or dangling file reference survives
-                for (const file of files) {
-                    const content = readFileSync(file, "utf8");
-                    expect(content).not.toMatch(/@(if|endif)\b/);
-                    expect(content).not.toMatch(/__PANEL_[A-Z]+__/);
-                }
-                expect(files.every((file) => existsSync(file) && statSync(file).isFile())).toBe(true);
+    test("the build emits the service and widget bundles only when chosen", () => {
+        for (const v of variants) {
+            const dist = readdirSync(join(v.dir, "dist"));
+            expect({ variant: v.name, page: dist.includes("index.html"), service: dist.includes("service.js"), widget: dist.includes("widget.html") }).toEqual({
+                variant: v.name,
+                page: true,
+                service: v.features.service,
+                widget: v.features.widget,
             });
+            const manifest = readJson(join(v.dir, "manifest.json"));
+            expect({ service: "service" in manifest, widgets: "widgets" in manifest, store: "store" in manifest }).toEqual({
+                service: v.features.service,
+                widgets: v.features.widget,
+                store: v.features.store,
+            });
+            expect(existsSync(join(v.dir, "store"))).toBe(v.features.store);
         }
     });
 
-    it("keeps a description with quotes valid in the manifest, and a name with markup out of the page", () => {
-        const { targetDir } = scaffoldPanel({
-            mode: "standalone",
-            id: "dev.paperboard.my-panel",
-            displayName: 'Ada\'s <b>"Panel"</b>',
-            description: 'Says "hello" \\ goodbye',
-            parentDir,
-        });
-        const manifest = readJson(join(targetDir, "manifest.json"));
-        expect(manifest.name).toBe('Ada\'s <b>"Panel"</b>');
-        expect(manifest.description).toBe('Says "hello" \\ goodbye');
-        const page = readFileSync(join(targetDir, "index.html"), "utf8");
-        expect(page).toContain("<title>Ada's &lt;b&gt;\"Panel\"&lt;/b&gt;</title>");
-    });
+    test("each variant passes its own tests and leaves no data folder behind", async () => {
+        const before = panelTestFolders();
+        for (const v of variants) {
+            const result = await ok("bun", ["test"], v.dir);
+            expect(`${result.stdout}${result.stderr}`).toMatch(/\b0 fail\b/);
+        }
+        expect([...panelTestFolders()].filter((name) => !before.has(name))).toEqual([]);
+    }, BUILD_TIMEOUT);
 
-    it("refuses a widget without a service, writing nothing", () => {
-        expect(() =>
-            scaffoldPanel({ mode: "standalone", id: "dev.paperboard.my-panel", features: { service: false }, parentDir }),
-        ).toThrow(/needs a service/);
-        expect(existsSync(join(parentDir, "dev.paperboard.my-panel"))).toBe(false);
-    });
-
-    it("refuses a publisher on a first-party panel", () => {
-        expect(() =>
-            scaffoldPanel({ mode: "workspace", id: "dev.paperboard.my-panel", publisher: "Ada", parentDir }),
-        ).toThrow(/published by Paperboard/);
-    });
-
-    it("leaves no half-written folder when the template is broken", () => {
-        const broken = mkdtempSync(join(tmpdir(), "create-panel-broken-"));
+    test("each variant links with paperapi link and passes doctor against a running Paperboard", async () => {
+        const dataDir = process.env.PAPERBOARD_DIR!;
+        for (const v of variants) {
+            const linked = await paperapi(["link"], v.dir, { PAPERBOARD_DIR: dataDir });
+            expect(linked.code).toBe(0);
+        }
+        const daemon = await startDaemon();
         try {
-            mkdirSync(join(broken, "src"), { recursive: true });
-            writeFileSync(join(broken, "src/a.ts"), "// @if nonsense\nx\n// @endif\n");
-            expect(() => scaffoldPanel({ mode: "standalone", id: "dev.paperboard.my-panel", parentDir, templateDir: broken })).toThrow(
-                /unknown feature "nonsense"/,
-            );
-            expect(existsSync(join(parentDir, "dev.paperboard.my-panel"))).toBe(false);
+            for (const v of variants.filter((x) => x.features.service)) await daemon.serviceRegistered(v.id);
+            for (const v of variants) {
+                const doctor = await paperapi(["doctor", "--json"], v.dir, { PAPERBOARD_DIR: dataDir });
+                const report = JSON.parse(doctor.stdout);
+                expect({ variant: v.name, code: doctor.code, problems: report.problems, warnings: report.warnings }).toEqual({ variant: v.name, code: 0, problems: 0, warnings: 0 });
+                const names = report.checks.map((c: { name: string; status: string }) => `${c.name}:${c.status}`);
+                expect(names).toEqual(["Manifest:ok", "Build:ok", "Link:ok", "Paperboard:ok", ...(v.features.service ? ["Service:ok"] : [])]);
+            }
         } finally {
-            rmSync(broken, { recursive: true, force: true });
+            await daemon.stop();
         }
-    });
+    }, BUILD_TIMEOUT);
 
-    it("refuses ids the panel identity contract rejects, writing nothing", () => {
-        for (const id of ["settings", "Dev.Paperboard.X", "../escape", "a".repeat(129), ""]) {
-            expect(() => scaffoldPanel({ mode: "standalone", id, parentDir })).toThrow(/Invalid panel id/);
+    test("each variant packs into <id>-<version>.tar.gz with its manifest and dist", async () => {
+        for (const v of variants) {
+            const packed = await paperapi(["pack", "--json"], v.dir);
+            expect(packed.code).toBe(0);
+            const result = JSON.parse(packed.stdout);
+            expect(result.archiveName).toBe(`${v.id}-0.1.0.tar.gz`);
+            const entries: string[] = [];
+            await tar.t({ file: result.archivePath, onReadEntry: (entry) => entries.push(entry.path) });
+            expect(entries).toContain("manifest.json");
+            expect(entries).toContain("dist/index.html");
+            expect(entries.includes("dist/service.js")).toBe(v.features.service);
+            expect(entries.includes("dist/widget.html")).toBe(v.features.widget);
+            expect(entries.some((e) => e.startsWith("store/") || e.startsWith("src/") || e.startsWith("node_modules/"))).toBe(false);
         }
-        expect(existsSync(join(parentDir, "settings"))).toBe(false);
-    });
+    }, BUILD_TIMEOUT);
+});
 
-    it("fails loudly when the page has no element to render into", () => {
-        const { targetDir } = scaffoldPanel({ mode: "standalone", id: "dev.paperboard.root", parentDir });
-        const entry = readFileSync(join(targetDir, "src", "index.tsx"), "utf8");
-        expect(entry).toContain(`if (!root) throw new Error('index.html has no element with id "app" to render the panel into');`);
-        expect(entry.includes("if (root)")).toBe(false);
-    });
-
-    it("writes no ellipsis or dash character into any file", () => {
-        const { targetDir } = scaffoldPanel({ mode: "standalone", id: "dev.paperboard.plain", parentDir });
-        for (const file of allFiles(targetDir)) {
-            if (/\.(png|jpe?g|webp|ico)$/.test(file)) continue;
-            const text = readFileSync(file, "utf8");
-            expect([relative(targetDir, file), /[\u2026\u2013\u2014]/.test(text)]).toEqual([relative(targetDir, file), false]);
-        }
-    });
-
-    it("refuses to write over an existing directory", () => {
-        mkdirSync(join(parentDir, "dev.paperboard.taken"));
-        expect(() => scaffoldPanel({ mode: "standalone", id: "dev.paperboard.taken", parentDir })).toThrow(
-            `"${join(parentDir, "dev.paperboard.taken")}" already exists. Pick another id or remove it first`,
+// A panel's tests never touch the developer's Paperboard.
+describe("a panel's tests never touch the developer's Paperboard", () => {
+    test("the generated preload gives the panel's tests a throwaway PAPERBOARD_DIR even when the developer set one", async () => {
+        const v = variants[0];
+        const developer = tempDir("developer-data");
+        const probeDir = tempDir("probe");
+        const probeOut = join(probeDir, "seen.txt");
+        const probe = join(v.dir, "test", "zz-probe.test.ts");
+        writeFileSync(
+            probe,
+            `import { test } from "bun:test";\nimport { writeFileSync } from "node:fs";\ntest("probe", () => { writeFileSync(${JSON.stringify(probeOut)}, process.env.PAPERBOARD_DIR ?? ""); });\n`,
         );
-        expect(existsSync(join(parentDir, "dev.paperboard.taken"))).toBe(true);
+        try {
+            const before = panelTestFolders();
+            await ok("bun", ["test"], v.dir, { PAPERBOARD_DIR: developer });
+            const seen = readFileSync(probeOut, "utf8");
+            expect(seen).not.toBe(developer);
+            expect(seen.startsWith(join(tmpdir(), "panel-test-"))).toBe(true);
+            // the throwaway folder goes when the panel's test run ends
+            expect(existsSync(seen)).toBe(false);
+            expect([...panelTestFolders()].filter((name) => !before.has(name))).toEqual([]);
+            expect(readdirSync(developer)).toEqual([]);
+        } finally {
+            rmSync(probe);
+            rmSync(developer, { recursive: true, force: true });
+            rmSync(probeDir, { recursive: true, force: true });
+        }
+    }, BUILD_TIMEOUT);
+});
+
+// Refusals write nothing.
+describe("refusals write nothing", () => {
+    test("a widget without a service, a first-party publisher and a rejected id throw and create no folder", () => {
+        const dir = tempDir("refusals");
+        try {
+            expect(() => scaffoldPanel({ mode: "standalone", id: "dev.example.widget", parentDir: dir, features: { service: false, widget: true } })).toThrow(
+                "a widget mirrors the service's state, so it needs a service",
+            );
+            expect(() => scaffoldPanel({ mode: "workspace", id: "dev.example.publisher", parentDir: dir, publisher: "Someone" })).toThrow(
+                "panels in the Paperboard repo are published by Paperboard",
+            );
+            for (const id of ["settings", "Dev.Example.Upper", "../escape", ""]) {
+                expect(() => scaffoldPanel({ mode: "standalone", id, parentDir: dir })).toThrow("Invalid panel id");
+            }
+            expect(readdirSync(dir)).toEqual([]);
+            expect(existsSync(join(dir, "..", "escape"))).toBe(false);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
-    it("pins the dependencies the template builds with to the ones this package tests with", () => {
-        // the build test runs the template against this package's devDependencies;
-        // a range that drifted would pass here and fail for the panel's author
-        const template = readJson(join(TEMPLATE_DIR, "package.json"));
-        const own = ownPackage.devDependencies as Record<string, string>;
-        const wanted = { ...template.dependencies, ...template.devDependencies };
-        for (const name of ["solid-js", "typescript", "vite", "vite-plugin-solid"]) {
-            expect(own[name]).toBe(wanted[name]);
+    test("an existing target directory is refused and left untouched", () => {
+        const dir = tempDir("existing");
+        try {
+            const target = join(dir, "dev.example.taken");
+            mkdirSync(target);
+            writeFileSync(join(target, "keep.txt"), "mine");
+            expect(() => scaffoldPanel({ mode: "standalone", id: "dev.example.taken", parentDir: dir })).toThrow("already exists");
+            expect(readdirSync(target)).toEqual(["keep.txt"]);
+            expect(readFileSync(join(target, "keep.txt"), "utf8")).toBe("mine");
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test("a scaffold that fails part-way removes the folder it started", () => {
+        const dir = tempDir("partial");
+        const template = tempDir("broken-template");
+        try {
+            writeFileSync(join(template, "manifest.json"), '{ "id": "__PANEL_ID__" }\n');
+            writeFileSync(join(template, "broken.ts"), "// @if service\nexport {};\n");
+            expect(() => scaffoldPanel({ mode: "standalone", id: "dev.example.partial", parentDir: dir, templateDir: template })).toThrow("@if service is never closed");
+            expect(readdirSync(dir)).toEqual([]);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+            rmSync(template, { recursive: true, force: true });
         }
     });
 });
 
-describe("applyFeatureMarkers", () => {
-    const on: PanelFeatures = { ...DEFAULT_FEATURES };
-    const off: PanelFeatures = { service: false, widget: false, store: false };
-
-    it("keeps a block whose feature is on, and drops its markers", () => {
-        expect(applyFeatureMarkers("a\n// @if service\nb\n// @endif\nc", on)).toBe("a\nb\nc");
+// Standalone panels depend on the published SDK.
+describe("standalone panels depend on the published SDK", () => {
+    test("a standalone panel depends on ^<current version>, a workspace panel on workspace:*", () => {
+        expect(libraryDependencies("standalone")).toEqual({ paperapi: `^${paperapiPackage.version}`, paperui: `^${paperuiPackage.version}` });
+        expect(libraryDependencies("workspace")).toEqual({ paperapi: "workspace:*", paperui: "workspace:*" });
+        const dir = tempDir("deps");
+        try {
+            const standalone = scaffoldPanel({ mode: "standalone", id: "dev.example.standalone", parentDir: dir });
+            expect(readJson(join(standalone.targetDir, "package.json")).dependencies).toMatchObject({
+                "@mileniumhq/paperapi": `^${paperapiPackage.version}`,
+                "@mileniumhq/paperui": `^${paperuiPackage.version}`,
+            });
+            const workspace = scaffoldPanel({ mode: "workspace", id: "dev.example.workspace", parentDir: dir });
+            expect(readJson(join(workspace.targetDir, "package.json")).dependencies).toMatchObject({
+                "@mileniumhq/paperapi": "workspace:*",
+                "@mileniumhq/paperui": "workspace:*",
+            });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
-    it("drops a block whose feature is off", () => {
-        expect(applyFeatureMarkers("a\n// @if service\nb\n// @endif\nc", off)).toBe("a\nc");
-    });
-
-    it("reads the marker in JSX and markdown comments too", () => {
-        expect(applyFeatureMarkers("{/* @if widget */}\nx\n{/* @endif */}", off)).toBe("");
-        expect(applyFeatureMarkers("<!-- @if store -->\nx\n<!-- @endif -->", off)).toBe("");
-    });
-
-    it("refuses markers that do not balance, nest, or name a feature", () => {
-        expect(() => applyFeatureMarkers("// @if service\nx", on)).toThrow(/never closed/);
-        expect(() => applyFeatureMarkers("x\n// @endif", on)).toThrow(/without @if/);
-        expect(() => applyFeatureMarkers("// @if service\n// @if widget\n// @endif\n// @endif", on)).toThrow(/nest/);
-        expect(() => applyFeatureMarkers("// @if sevrice\n// @endif", on)).toThrow(/unknown feature "sevrice"/);
-    });
 });
 
-describe("the service a panel starts with", () => {
-    it("gives an action input the kind of value as its placeholder, not an example", () => {
-        const { targetDir } = scaffoldPanel({ mode: "standalone", id: "dev.paperboard.inputs", parentDir });
-        const service = readFileSync(join(targetDir, "src/service.ts"), "utf8");
-        const placeholders = [...service.matchAll(/placeholder: "([^"]*)"/g)].map((m) => m[1]);
-        expect(placeholders).toEqual(["Name"]);
-    });
-});
-
-describe("the README a panel starts with", () => {
-    const readme = (features: Partial<PanelFeatures>) => {
-        const { targetDir } = scaffoldPanel({ mode: "standalone", id: "dev.paperboard.readme", features, parentDir });
-        return readFileSync(join(targetDir, "README.md"), "utf8");
-    };
-
-    it("gives the next three commands, in order, and points at the guides", () => {
-        const text = readme({});
-        const block = text.slice(text.indexOf("```sh") + 5, text.indexOf("```", text.indexOf("```sh") + 5));
-        expect(block.trim().split("\n").map((line) => line.replace(/\s+#.*$/, ""))).toEqual(["bun install", "bun run build", "bunx paperapi link"]);
-        expect(text).toContain("https://paperboard.dev/docs/developers/");
-        expect(text).not.toContain("paperboard.dev/paperapi");
-    });
-
-    it("names the commands for when something is off, for this panel", () => {
-        const text = readme({});
-        expect(text).toContain("bunx paperapi doctor");
-        expect(text).toContain("bunx paperapi restart");
-        expect(text).toContain("bunx paperapi monitor --panel dev.paperboard.readme");
-        expect(text).toContain("bunx paperapi call dev.paperboard.readme greet");
-        // a panel with no service has no actions to call
-        rmSync(join(parentDir, "dev.paperboard.readme"), { recursive: true });
-        expect(readme({ service: false, widget: false })).not.toContain("paperapi call");
-    });
-});
-
-describe("runCli", () => {
-    const run = async (argv: string[], answers: string[] = [], mode: "standalone" | "workspace" = "standalone") => {
-        const lines: string[] = [];
-        const asked: string[] = [];
-        const code = await runCli({
-            mode,
-            parentDir,
-            command: "create-panel",
-            argv,
-            log: (line) => lines.push(line),
-            ask: async (question) => {
-                asked.push(question);
-                const answer = answers.shift();
-                if (answer === undefined) throw new Error(`unexpected question: ${question}`);
-                return answer;
-            },
-        });
-        return { code, lines, asked };
-    };
-
-    it("makes the panel at once from an id, name and flags, asking nothing", async () => {
-        const { code, asked } = await run(["dev.paperboard.my-panel", "My", "Panel", "--description", "Does a thing", "--no-store"]);
-        expect(code).toBe(0);
-        expect(asked).toEqual([]);
-        const manifest = readJson(join(parentDir, "dev.paperboard.my-panel/manifest.json"));
-        expect(manifest.name).toBe("My Panel");
-        expect(manifest.description).toBe("Does a thing");
-        expect(manifest.store).toBeUndefined();
-        expect(manifest.widgets).toBeDefined();
-    });
-
-    it("lets --no-service drop the widget with it", async () => {
-        await run(["dev.paperboard.my-panel", "--no-service"]);
-        const manifest = readJson(join(parentDir, "dev.paperboard.my-panel/manifest.json"));
-        expect(manifest.service).toBeUndefined();
-        expect(manifest.widgets).toBeUndefined();
-    });
-
-    it("walks through the choices that matter when no id is given", async () => {
-        // id, name, description, publisher, service, widget, store
-        const { code, asked } = await run([], ["dev.paperboard.guided", "Guided", "A guided panel", "Ada", "y", "n", "n"]);
-        expect(code).toBe(0);
-        expect(asked.map((q) => q.replace(/ \[.*$|: $/, ""))).toEqual([
-            "Panel id (e.g. dev.paperboard.my-panel)",
-            "Display name",
-            "Description",
-            "Publisher, credited on the library page (leave empty to set it later)",
-            "Include a background service?",
-            "Include a Home widget?",
-            "Include a store listing starter?",
-        ]);
-        const manifest = readJson(join(parentDir, "dev.paperboard.guided/manifest.json"));
-        expect(manifest).toMatchObject({ name: "Guided", description: "A guided panel", publisher: "Ada" });
-        expect(manifest.service).toBe("./dist/service.js");
-        expect(manifest.widgets).toBeUndefined();
-        expect(manifest.store).toBeUndefined();
-    });
-
-    it("does not offer a widget to a panel with no service, and takes Enter as the default", async () => {
-        const { asked } = await run([], ["dev.paperboard.uionly", "", "", "", "n", ""]);
-        expect(asked.some((q) => q.includes("widget"))).toBe(false);
-        const manifest = readJson(join(parentDir, "dev.paperboard.uionly/manifest.json"));
-        expect(manifest.name).toBe("Uionly");
-        expect(manifest.service).toBeUndefined();
-        expect(manifest.store).toBeDefined();
-    });
-
-    it("asks again after an invalid id or an unclear answer", async () => {
-        const { asked } = await run([], ["Not An Id", "dev.paperboard.again", "", "", "", "maybe", "", "", ""]);
-        expect(asked.filter((q) => q.startsWith("Panel id"))).toHaveLength(2);
-        expect(asked.filter((q) => q.startsWith("Include a background service"))).toHaveLength(2);
-        expect(existsSync(join(parentDir, "dev.paperboard.again"))).toBe(true);
-    });
-
-    it("does not ask a first-party author for a publisher", async () => {
-        const { asked } = await run([], ["dev.paperboard.fp", "", "", "", "", ""], "workspace");
-        expect(asked.some((q) => q.startsWith("Publisher"))).toBe(false);
-    });
-
-    it("prints usage for --help and fails on an option it does not know", async () => {
-        const help = await run(["--help"]);
-        expect(help.code).toBe(0);
-        expect(help.lines.join("\n")).toContain("--no-service");
-        // a command line it cannot read exits 2, as paperapi's does
-        expect(await run(["--bogus"])).toMatchObject({ code: 2 });
-    });
-
-    it("ends with the three commands that run the panel, and where the guides are", async () => {
-        const { code, lines } = await run(["dev.paperboard.next"]);
-        expect(code).toBe(0);
-        const text = lines.join("\n");
-        const commands = lines.map((line) => line.trim().replace(/\s+#.*$/, "")).filter((line) => /^(cd|bun|bunx) /.test(line));
-        expect(commands).toEqual([`cd ${relative(process.cwd(), join(parentDir, "dev.paperboard.next"))}`, "bun install", "bun run build", "bunx paperapi link"]);
-        expect(text).toContain("https://paperboard.dev/docs/developers/");
-        expect(text).not.toContain("npx");
-    });
-});

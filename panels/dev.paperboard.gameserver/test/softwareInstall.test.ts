@@ -1,277 +1,199 @@
-// installServerSoftware end to end over a real server folder. Downloads,
-// the installer child and panel config are the daemon's; they are faked at
-// the SDK seam, and the fake installer writes exactly the layout the real
-// NeoForge installer produced. The real-daemon run is the e2e check.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
-import { installServerSoftware, isInstallRunning, type InstallDeps } from "../src/games/minecraft/softwareInstall";
-import { InstallerStillRunningError, type InstallerRun } from "../src/service/installerProcess";
-import { SOFTWARE_PROVIDERS } from "../src/games/minecraft/providers";
-import type { ServerSoftwareType } from "../src/software/catalog";
-import type { SoftwareProvider } from "../src/software/types";
+import { startTestDaemon, type TestDaemon } from "./helpers/crane";
+import { minecraftServer, type McServer } from "./helpers/minecraft";
+import { fakeJavaBinary } from "./helpers/fakeJava";
+import { loopbackServer, type LoopbackServer } from "./helpers/http";
+import { readTree, tempDir } from "./helpers/tmp";
+import { files, processApi } from "../src/service/api";
+import { PANEL_ID } from "../src/servers";
+import { installServerSoftware, withInstallLock, type InstallDeps } from "../src/games/minecraft/softwareInstall";
+import { neoforgeProvider } from "../src/games/minecraft/providers/neoforge";
+import { InstallerStillRunningError, runInstallerProcess, type InstallerRun } from "../src/service/installerProcess";
+import { startServerInstance } from "../src/service/lifecycle";
+import { INSTALL_RECORD_KEY } from "../src/software/installRecord";
+import { ACTION_IDS } from "../src/service/contract";
+import { installFakeJava } from "./helpers/fakeJava";
+import { createRoot } from "solid-js";
 
-let root: string;
-let config: Record<string, unknown>;
-let progress: unknown[];
-const ctx = {
-    state: { serverStatus: "offline" },
-    setState: (patch: Record<string, unknown>) => {
-        if ("installProgress" in patch) progress.push(patch.installProgress);
-    },
-} as any;
-
-beforeEach(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), "pb-install-"));
-    config = {};
-    progress = [];
+const INSTALLER = "fake neoforge installer jar";
+let daemon: TestDaemon;
+let maven: LoopbackServer;
+beforeAll(async () => {
+    daemon = await startTestDaemon();
+    maven = loopbackServer(() => new Response(INSTALLER));
 });
-afterEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
+afterAll(async () => {
+    await daemon?.stop();
 });
 
-function write(relative: string, content = relative) {
-    const full = path.join(root, relative);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content);
-}
-const has = (relative: string) => fs.existsSync(path.join(root, relative));
-const read = (relative: string) => fs.readFileSync(path.join(root, relative), "utf8");
-const stagingLeft = () => fs.readdirSync(root).filter((e) => e.startsWith(".install-"));
+const USER = { "world/level.dat": "level", "server.properties": "motd=mine\n", "plugins/x.jar": "plugin", "eula.txt": "eula=true\n" };
 
-function withBuild(id: ServerSoftwareType, build: string | null): SoftwareProvider {
-    return {
-        ...SOFTWARE_PROVIDERS[id],
-        resolveBuild: async () => ({ build, artifact: { url: `https://example.invalid/${id}.jar`, sha256: "a".repeat(64) } }),
-    };
-}
-
-// what `java -jar neoforge-21.1.256-installer.jar --installServer <out>` wrote
-function neoForgeOutput(out: string) {
-    const lib = path.join(out, "libraries/net/neoforged/neoforge/21.1.256");
-    fs.mkdirSync(lib, { recursive: true });
-    fs.writeFileSync(path.join(lib, "unix_args.txt"), "-cp a:b");
-    fs.writeFileSync(path.join(lib, "win_args.txt"), "-cp a;b");
-    fs.writeFileSync(path.join(out, "run.sh"), "#!/bin/sh");
-    fs.writeFileSync(path.join(out, "user_jvm_args.txt"), "# jvm");
-}
-
-function deps(overrides: Partial<InstallDeps> & { software: ServerSoftwareType; build?: string | null }): InstallDeps {
-    const { software, build = "21.1.256", ...rest } = overrides;
-    return {
-        serverDir: async () => root,
-        download: async ({ targetPath }) => {
-            write(targetPath, `downloaded:${targetPath}`);
+/** a Paper server whose install deps are the real daemon, a loopback Maven and the stand-in installer */
+function paperServer(installerPlan: Record<string, unknown>, overrides: Partial<InstallDeps> = {}) {
+    const mc = minecraftServer({ software: "paper", files: { ...USER, "server.jar": "paper" } });
+    const javaHome = tempDir("gameserver-javahome-");
+    fs.writeFileSync(path.join(javaHome, "installer.json"), JSON.stringify(installerPlan));
+    const runs: InstallerRun[] = [];
+    const deps: InstallDeps = {
+        serverDir: () => files.getPath("", PANEL_ID),
+        download: (opts) => files.download({ ...opts, appId: PANEL_ID }),
+        javaBinary: async () => ({ bin: fakeJavaBinary(), home: javaHome }),
+        runInstaller: (run) => {
+            runs.push(run);
+            return runInstallerProcess(run);
         },
-        javaBinary: async () => ({ bin: "/java/bin/java", home: "/java" }),
-        runInstaller: async (run: InstallerRun) => {
-            neoForgeOutput(run.args[3]!);
-            return { exitCode: 0, tail: [] };
-        },
-        readConfig: async () => config,
+        readConfig: async () => mc.scope.server.settings,
         writeConfig: async (patch) => {
-            config = { ...config, ...patch };
+            await mc.scope.saveSettings({ ...mc.scope.server.settings, ...patch });
         },
-        provider: () => withBuild(software, build),
-        ...rest,
+        provider: () => ({
+            ...neoforgeProvider,
+            resolveBuild: async () => ({
+                build: "21.1.256",
+                artifact: { url: `${maven.url}/neoforge-21.1.256-installer.jar`, sha256: createHash("sha256").update(INSTALLER).digest("hex") },
+            }),
+        }),
+        ...overrides,
     };
+    const install = () => mc.run(() => installServerSoftware(mc.scope.ctx, "neoforge", "1.21.1", deps));
+    return { mc, deps, runs, install };
 }
 
-function paperServer() {
-    write("server.jar", "paper");
-    write("world/level.dat", "world");
-    write("server.properties", "motd=hi");
-    config = { software: "paper", version: "1.21.1", configured: true, ramGB: 4 };
-}
+const stagingLeft = (mc: McServer) => fs.readdirSync(mc.dir).filter((e) => e.startsWith(".install-"));
 
-describe("installServerSoftware", () => {
-    test("Paper -> NeoForge: installer output goes live and the launch is recorded from it", async () => {
-        paperServer();
-        const runs: InstallerRun[] = [];
-        const outcome = await installServerSoftware(ctx, "neoforge", "1.21.1", deps({
-            software: "neoforge",
-            runInstaller: async (run) => {
-                runs.push(run);
-                neoForgeOutput(run.args[3]!);
-                return { exitCode: 0, tail: [] };
-            },
-        }));
-
+// Installs are staged, locked and never cut short.
+describe("software installs", () => {
+    test("the installer runs into staging, and the NeoForge layout it writes is activated and recorded", async () => {
+        const { mc, runs, install } = paperServer({ mode: "ok" });
+        const outcome = await install();
         expect(outcome).toEqual({ software: "neoforge", version: "1.21.1", build: "21.1.256" });
-        // the installer ran into staging, never into the live folder
-        expect(runs[0]!.args[3]).toMatch(/\/\.install-[^/]+\/server$/);
-        expect(runs[0]!.args[1]).toMatch(/\/\.install-[^/]+\/installer\.jar$/);
-        expect(has("libraries/net/neoforged/neoforge/21.1.256/unix_args.txt")).toBe(true);
-        expect(has("server.jar")).toBe(false);
-        expect(has("installer.jar")).toBe(false);
-        expect(stagingLeft()).toEqual([]);
-        expect(read("world/level.dat")).toBe("world");
-        expect(read("server.properties")).toBe("motd=hi");
-        expect(config).toMatchObject({
+        // never the live folder
+        const outDir = runs[0]!.args[runs[0]!.args.indexOf("--installServer") + 1]!;
+        expect(path.relative(mc.dir, outDir)).toMatch(/^\.install-[A-Za-z0-9-]+[\\/]server$/);
+
+        const tree = readTree(mc.dir);
+        for (const [file, content] of Object.entries(USER)) expect(tree[file]).toBe(content);
+        expect(tree["server.jar"]).toBeUndefined();
+        expect(tree["libraries/net/neoforged/neoforge/21.1.256/unix_args.txt"]).toBeDefined();
+        expect(stagingLeft(mc)).toEqual([]);
+        const record = mc.scope.server.settings[INSTALL_RECORD_KEY] as Record<string, unknown>;
+        expect(record).toMatchObject({
             software: "neoforge",
             version: "1.21.1",
-            configured: true,
-            install: {
-                software: "neoforge",
-                build: "21.1.256",
-                launch: {
-                    type: "argfile",
-                    unix: "libraries/net/neoforged/neoforge/21.1.256/unix_args.txt",
-                    windows: "libraries/net/neoforged/neoforge/21.1.256/win_args.txt",
-                },
-                files: ["libraries", "run.sh", "user_jvm_args.txt"],
+            build: "21.1.256",
+            launch: {
+                type: "argfile",
+                unix: "libraries/net/neoforged/neoforge/21.1.256/unix_args.txt",
+                windows: "libraries/net/neoforged/neoforge/21.1.256/win_args.txt",
+            },
+            files: ["libraries", "run.bat", "run.sh", "user_jvm_args.txt"],
+        });
+        expect(mc.scope.server.settings.software).toBe("neoforge");
+    });
+
+    test("an installer that exits non-zero fails with its output and leaves the old server as it was", async () => {
+        const { mc, install } = paperServer({ mode: "fail" });
+        const before = readTree(mc.dir);
+        await expect(install()).rejects.toThrow(/installer failed \(exit code 1\):[\s\S]*There was an error during installation/);
+        expect(readTree(mc.dir)).toEqual(before);
+        expect(mc.scope.server.settings[INSTALL_RECORD_KEY]).toBeUndefined();
+    });
+
+    test("an installer that exits 0 but leaves nothing launchable fails and leaves the old server as it was", async () => {
+        const { mc, install } = paperServer({ mode: "empty" });
+        const before = readTree(mc.dir);
+        await expect(install()).rejects.toThrow("reported success but left no server to launch");
+        expect(readTree(mc.dir)).toEqual(before);
+    });
+
+    test("a record that cannot be written puts the old server back", async () => {
+        const { mc, install } = paperServer({ mode: "ok" }, {
+            writeConfig: async () => {
+                throw new Error("config store is read-only");
             },
         });
-        expect(progress).toContainEqual({ stage: "installing", percent: 0 });
-        expect(progress.at(-1)).toEqual({ stage: "completed", percent: 100 });
+        const before = readTree(mc.dir);
+        await expect(install()).rejects.toThrow("Could not record the new install, so the previous server was restored: config store is read-only");
+        expect(readTree(mc.dir)).toEqual(before);
     });
 
-    test("a pinned build is what the provider is asked for", async () => {
-        paperServer();
-        const asked: [string, string | undefined][] = [];
-        await installServerSoftware(
-            ctx,
-            "neoforge",
-            "1.21.1",
-            deps({
-                software: "neoforge",
-                provider: () => ({
-                    ...withBuild("neoforge", "21.1.256"),
-                    resolveBuild: async (mc: string, pinned?: string) => {
-                        asked.push([mc, pinned]);
-                        return { build: "21.1.256", artifact: { url: "https://example.invalid/n.jar", sha256: "a".repeat(64) } };
-                    },
-                }),
-            }),
-            { build: "21.1.256" },
-        );
-        expect(asked).toEqual([["1.21.1", "21.1.256"]]);
-    });
-
-    test("NeoForge -> Paper removes every NeoForge file and launches server.jar", async () => {
-        paperServer();
-        await installServerSoftware(ctx, "neoforge", "1.21.1", deps({ software: "neoforge" }));
-        await installServerSoftware(ctx, "paper", "1.21.1", deps({ software: "paper", build: "130" }));
-        expect(has("libraries")).toBe(false);
-        expect(has("run.sh")).toBe(false);
-        expect(has("user_jvm_args.txt")).toBe(false);
-        expect(read("server.jar")).toContain("server.jar");
-        expect(config).toMatchObject({
-            software: "paper",
-            install: { launch: { type: "jar", jar: "server.jar" }, files: ["server.jar"], build: "130" },
-        });
-        expect(fs.readdirSync(root).some((e) => e.startsWith(".trash-"))).toBe(false);
-    });
-
-    test("a failing installer leaves the previous server exactly as it was", async () => {
-        paperServer();
-        await expect(
-            installServerSoftware(ctx, "neoforge", "1.21.1", deps({
-                software: "neoforge",
-                runInstaller: async (run) => {
-                    fs.mkdirSync(path.join(run.args[3]!, "libraries"), { recursive: true });
-                    return { exitCode: 1, tail: ["Downloading library from https://…", "There was an error during installation"] };
-                },
-            })),
-        ).rejects.toThrow(/installer failed \(exit code 1\):[\s\S]*error during installation/);
-        expect(read("server.jar")).toBe("paper");
-        expect(has("libraries")).toBe(false);
-        expect(stagingLeft()).toEqual([]);
-        expect(config.software).toBe("paper");
-        expect(progress.at(-1)).toEqual({ stage: "error", percent: 0 });
-    });
-
-    test("exit code 0 with nothing launchable is a failure, not an install", async () => {
-        paperServer();
-        await expect(
-            installServerSoftware(ctx, "neoforge", "1.21.1", deps({
-                software: "neoforge",
-                runInstaller: async (run) => {
-                    fs.mkdirSync(run.args[3]!, { recursive: true });
-                    fs.writeFileSync(path.join(run.args[3]!, "run.sh"), "");
-                    return { exitCode: 0, tail: [] };
-                },
-            })),
-        ).rejects.toThrow("left no server to launch");
-        expect(read("server.jar")).toBe("paper");
-        expect(config.install).toBeUndefined();
-    });
-
-    test("a record that cannot be written puts the previous server back", async () => {
-        paperServer();
-        await expect(
-            installServerSoftware(ctx, "neoforge", "1.21.1", deps({
-                software: "neoforge",
-                writeConfig: async () => {
-                    throw new Error("config locked");
-                },
-            })),
-        ).rejects.toThrow("previous server was restored: config locked");
-        expect(read("server.jar")).toBe("paper");
-        expect(has("libraries")).toBe(false);
-        expect(stagingLeft()).toEqual([]);
-    });
-
-    test("an installer that would not stop keeps its staging folder for start-up recovery", async () => {
-        paperServer();
-        await expect(
-            installServerSoftware(ctx, "neoforge", "1.21.1", deps({
-                software: "neoforge",
-                runInstaller: async () => {
-                    throw new InstallerStillRunningError("did not exit");
-                },
-            })),
-        ).rejects.toThrow("did not exit");
-        expect(stagingLeft().length).toBe(1);
-        expect(read("server.jar")).toBe("paper");
-    });
-
-    test("one install at a time, and the lock is released after failure", async () => {
-        paperServer();
+    test("one install at a time, and the server cannot start while an install holds the folder", async () => {
+        const { mc, install } = paperServer({ mode: "ok" });
         let release!: () => void;
-        const gate = new Promise<void>((resolve) => {
-            release = resolve;
+        const holding = mc.run(() => withInstallLock(() => new Promise<void>((resolve) => (release = resolve))));
+        await expect(install()).rejects.toThrow("A server install is already running");
+        // a refused Minecraft start says why in the console
+        await mc.run(() => startServerInstance(mc.scope.ctx));
+        expect(mc.scope.ctx.state.serverStatus).toBe("offline");
+        expect(mc.scope.ctx.state.serverEntries.at(-1)).toEqual({
+            type: "error",
+            content: "[Server] Failed to launch: A server install is running; start the server once it finishes.",
         });
-        const first = installServerSoftware(ctx, "neoforge", "1.21.1", deps({
-            software: "neoforge",
-            runInstaller: async (run) => {
-                await gate;
-                neoForgeOutput(run.args[3]!);
-                return { exitCode: 0, tail: [] };
-            },
-        }));
-        expect(isInstallRunning()).toBe(true);
-        await expect(
-            installServerSoftware(ctx, "paper", "1.21.1", deps({ software: "paper" })),
-        ).rejects.toThrow("already running");
+        expect(await mc.run(() => processApi.exists("mc-server"))).toBe(false);
         release();
-        await first;
-        expect(isInstallRunning()).toBe(false);
-
-        await expect(
-            installServerSoftware(ctx, "paper", "1.21.1", deps({
-                software: "paper",
-                javaBinary: async () => {
-                    throw new Error("no java");
-                },
-            })),
-        ).rejects.toThrow("no java");
-        expect(isInstallRunning()).toBe(false);
+        await holding;
+        expect((await install()).build).toBe("21.1.256");
     });
-});
 
-test("activation and rollback failure preserve parked originals for recovery", async () => {
-    paperServer();
-    const faultyFs = { ...fs.promises, rename: async (from: string, to: string) => {
-        if (to === path.join(root, "server.jar") && from.includes(".install-")) throw new Error("rename blocked");
-        await fs.promises.rename(from, to);
-    } };
-    await expect(installServerSoftware(ctx, "paper", "1.21.2", deps({ software: "paper", fs: faultyFs }))).rejects.toThrow("restoring the previous files also failed");
-    const staging = stagingLeft()[0]!;
-    expect(read(`${staging}/previous/server.jar`)).toBe("paper");
-    const { recoverStagedInstalls } = await import("../src/service/activation");
-    await recoverStagedInstalls(root, null);
-    expect(read("server.jar")).toBe("paper");
-    expect(stagingLeft()).toEqual([]);
+    test("an installer that ignores SIGTERM is killed and the install fails saying it was stopped", async () => {
+        const javaHome = tempDir("gameserver-javahome-");
+        fs.writeFileSync(path.join(javaHome, "installer.json"), JSON.stringify({ mode: "hang" }));
+        const out = tempDir();
+        const lines: string[] = [];
+        const mc = minecraftServer();
+        await expect(
+            mc.run(() =>
+                runInstallerProcess({
+                    command: fakeJavaBinary(),
+                    args: ["-jar", "installer.jar", "--installServer", out],
+                    cwd: out,
+                    env: { JAVA_HOME: javaHome },
+                    timeoutMs: 1_000,
+                    exitGraceMs: 1_000,
+                    onLine: (line) => lines.push(line),
+                }),
+            ),
+        ).rejects.toThrow("did not finish within");
+        expect(lines).toContain("ignoring SIGTERM");
+        expect(await mc.run(() => processApi.exists("mc-installer"))).toBe(false);
+    });
+
+    test("an installer that cannot be confirmed stopped fails distinctly and keeps its staging", async () => {
+        const { mc, install } = paperServer({ mode: "ok" }, {
+            runInstaller: async () => {
+                throw new InstallerStillRunningError("The installer did not finish in time and did not exit when stopped");
+            },
+        });
+        await expect(install()).rejects.toBeInstanceOf(InstallerStillRunningError);
+        expect(stagingLeft(mc)).toHaveLength(1);
+        expect(fs.readFileSync(path.join(mc.dir, "server.jar"), "utf8")).toBe("paper");
+    });
+
+    test("the UI waits out install and modpack calls instead of cutting them off at the bridge's default timeout", async () => {
+        // the panel's Java check finds the runtime installed on the test daemon
+        installFakeJava("java-21");
+        const { serverBridge } = await import("../src/lib/server");
+        const { createInstallRun } = await import("../src/lib/installRun");
+        const modpacks = await import("../src/lib/modpacks");
+        const calls: { action: string; options: unknown }[] = [];
+        // the bridge's one entry point, recorded: what each call asks of the transport
+        serverBridge.call = (async (action: string, _params?: unknown, options?: unknown) => {
+            calls.push({ action, options });
+            return { software: "neoforge", version: "1.21.1", build: "21.1.256" };
+        }) as typeof serverBridge.call;
+        await createRoot(async (dispose) => {
+            await createInstallRun().run("neoforge", "1.21.1");
+            dispose();
+        });
+        await modpacks.installModpack("AANobbMI", "abc123");
+        await modpacks.removeModpack();
+        expect(calls).toEqual([
+            { action: ACTION_IDS.installServerVersion, options: { timeoutMs: null } },
+            { action: ACTION_IDS.installModpack, options: { timeoutMs: null } },
+            { action: ACTION_IDS.removeModpack, options: { timeoutMs: null } },
+        ]);
+    });
 });

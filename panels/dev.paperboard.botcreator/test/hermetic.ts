@@ -1,3 +1,25 @@
+import { afterAll } from "bun:test";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+// Discovery must not even read the developer's .paperboard before the
+// no-network guard below refuses a connection: every test process gets its
+// own throwaway data directory, and the test daemon (test/helpers/daemon.ts)
+// writes its handshake there.
+const testData = fs.mkdtempSync(path.join(os.tmpdir(), "botcreator-test-"));
+process.env.PAPERBOARD_DIR = testData;
+
+// What the suite started that must not outlive it (the daemon, its
+// workloads), ended once every file has run: an afterAll in a preload runs
+// after the last file. `bun test` exits without running process "exit"
+// listeners, so nothing may rely on one.
+const TEARDOWN = Symbol.for("paperboard.botcreator.test.teardown");
+const teardown: (() => Promise<void> | void)[] = ((globalThis as any)[TEARDOWN] ??= []);
+afterAll(async () => {
+    for (const work of teardown.splice(0).reverse()) await work();
+    fs.rmSync(testData, { recursive: true, force: true });
+});
+
 // Hermetic test guard: unit tests must never open network connections.
 // The panel SDK discovers a running daemon through ~/.paperboard/local/crane.json,
 // so on a dev machine with Paperboard live, a lazy transport connect reaches the
@@ -8,12 +30,27 @@
 // makes every suite deterministic no matter what is running on the machine.
 const original = globalThis.WebSocket;
 
+// The one exception: a daemon, browser or loopback Discord a test started
+// itself, on a port registered here by the helper that started it, so no other
+// daemon, the developer's included, is ever reachable.
+const ALLOWED = Symbol.for("paperboard.botcreator.test.ports");
+const allowedPorts: Set<number> = ((globalThis as any)[ALLOWED] ??= new Set<number>());
+
 class NoNetworkWebSocket {
-    constructor() {
+    constructor(url: string | URL, protocols?: string | string[]) {
+        const target = new URL(String(url));
+        if (
+            original &&
+            target.protocol === "ws:" &&
+            target.hostname === "127.0.0.1" &&
+            allowedPorts.has(Number(target.port))
+        ) {
+            return new original(target, protocols) as unknown as NoNetworkWebSocket;
+        }
         throw new Error(
             "unit tests must not open network connections (a live daemon " +
                 "would make test results environment-dependent); if a test " +
-                "needs the wire, inject a stub transport instead",
+                "needs the wire, start a loopback server and register its port",
         );
     }
 }
@@ -25,3 +62,14 @@ class NoNetworkWebSocket {
 (NoNetworkWebSocket as any).CLOSED = original?.CLOSED ?? 3;
 
 (globalThis as any).WebSocket = NoNetworkWebSocket;
+
+// The same guard for HTTP: a test reaches only loopback servers it started.
+const originalFetch = globalThis.fetch;
+const guardedFetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") {
+        return Promise.reject(new Error(`unit tests must not reach the network (fetch ${url.origin}); serve it from a loopback server`));
+    }
+    return originalFetch(input, init);
+}) as typeof fetch;
+globalThis.fetch = Object.assign(guardedFetch, originalFetch);

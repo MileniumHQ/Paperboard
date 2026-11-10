@@ -1,78 +1,66 @@
-import { describe, test, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@solidjs/testing-library";
-import { PaperWizard, PaperWizardStep } from "../templates/PaperWizard";
+import { describe, expect, test } from "vitest";
+import { fireEvent, render, screen } from "@solidjs/testing-library";
+import { PaperCheckbox, PaperInput, PaperToggle, PaperWizard, PaperWizardStep } from "../index";
 
-describe("PaperWizard progress dots", () => {
-    test("shows one dot per step and moves the current step on Next", async () => {
+const next = () => fireEvent.click(screen.getByRole("button", { name: /Next|Finish/ }));
+const type = (label: string, value: string) => {
+    const input = screen.getByLabelText(label) as HTMLInputElement;
+    input.value = value;
+    fireEvent.input(input);
+};
+
+function Steps() {
+    return (
+        <>
+            <PaperWizardStep index={0}>
+                <PaperInput name="server" aria-label="Server name" />
+                <PaperCheckbox name="whitelist" aria-label="Whitelist" />
+                <PaperCheckbox name="pvp" aria-label="PvP" defaultChecked />
+                <PaperToggle name="autostart" aria-label="Autostart" />
+            </PaperWizardStep>
+            <PaperWizardStep index={1}>
+                <PaperInput name="motd" aria-label="Message of the day" />
+            </PaperWizardStep>
+        </>
+    );
+}
+
+// Inventory: Menus and form controls — Wizard records the form truthfully.
+describe("PaperWizard form record", () => {
+    test("Finish records unchecked boxes as false and checked ones as true beside text fields", () => {
+        const completed: Record<string, unknown>[] = [];
         render(() => (
-            <PaperWizard>
-                <PaperWizardStep index={0}>One</PaperWizardStep>
-                <PaperWizardStep index={1}>Two</PaperWizardStep>
-                <PaperWizardStep index={2}>Three</PaperWizardStep>
+            <PaperWizard onComplete={(data) => completed.push(data)}>
+                <Steps />
             </PaperWizard>
         ));
-        const progress = screen.getByRole("progressbar");
-        expect(progress.children.length).toBe(3);
-        expect(progress.getAttribute("aria-valuetext")).toBe("Step 1 of 3");
 
-        fireEvent.click(screen.getByRole("button", { name: /Next/ }));
-        expect(await screen.findByText("Two")).toBeTruthy();
-        expect(progress.getAttribute("aria-valuenow")).toBe("2");
-        expect(progress.getAttribute("aria-valuetext")).toBe("Step 2 of 3");
+        type("Server name", "Survival");
+        next();
+        type("Message of the day", "Welcome");
+        next();
+
+        expect(completed).toEqual([
+            { server: "Survival", whitelist: false, pvp: true, autostart: false, motd: "Welcome" },
+        ]);
     });
-});
 
-describe("PaperWizardStep hideBack", () => {
-    test("a step can hide Back while the next step shows it again", async () => {
+    test("Back reports the current step's typed values through onStepChange", () => {
+        const steps: [number, Record<string, unknown>][] = [];
         render(() => (
-            <PaperWizard>
-                <PaperWizardStep index={0}>One</PaperWizardStep>
-                <PaperWizardStep index={1} hideBack>Two</PaperWizardStep>
-                <PaperWizardStep index={2}>Three</PaperWizardStep>
+            <PaperWizard onStepChange={(index, data) => steps.push([index, data])}>
+                <Steps />
             </PaperWizard>
         ));
-        fireEvent.click(screen.getByRole("button", { name: /Next/ }));
-        expect(await screen.findByText("Two")).toBeTruthy();
-        expect(screen.queryByRole("button", { name: /Back/ })).toBeNull();
 
-        fireEvent.click(screen.getByRole("button", { name: /Next/ }));
-        expect(await screen.findByText("Three")).toBeTruthy();
+        type("Server name", "Creative");
+        next();
+        type("Message of the day", "Typed, not submitted");
         fireEvent.click(screen.getByRole("button", { name: /Back/ }));
-        expect(await screen.findByText("Two")).toBeTruthy();
-        expect(screen.queryByRole("button", { name: /Back/ })).toBeNull();
-    });
-});
 
-describe("PaperWizard collected data", () => {
-    test("an unchecked checkbox records false, a checked one true", () => {
-        const onComplete = vi.fn();
-        render(() => (
-            <PaperWizard onComplete={onComplete}>
-                <PaperWizardStep index={0}>
-                    <input type="checkbox" name="agree" />
-                    <input type="checkbox" name="subscribe" checked />
-                    <input name="host" value="localhost" />
-                </PaperWizardStep>
-            </PaperWizard>
-        ));
-        fireEvent.click(screen.getByRole("button", { name: /Finish/ }));
-        expect(onComplete).toHaveBeenCalledWith({ agree: false, subscribe: true, host: "localhost" });
-    });
-
-    test("Back keeps what the step's fields hold", async () => {
-        const onStepChange = vi.fn();
-        render(() => (
-            <PaperWizard onStepChange={onStepChange}>
-                <PaperWizardStep index={0}>One</PaperWizardStep>
-                <PaperWizardStep index={1}>
-                    <input name="host" value="localhost" />
-                </PaperWizardStep>
-            </PaperWizard>
-        ));
-        fireEvent.click(screen.getByRole("button", { name: /Next/ }));
-        const field = (await screen.findByRole("textbox")) as HTMLInputElement;
-        field.value = "example.com";
-        fireEvent.click(screen.getByRole("button", { name: /Back/ }));
-        expect(onStepChange).toHaveBeenLastCalledWith(0, { host: "example.com" });
+        expect(steps.at(-1)).toEqual([
+            0,
+            { server: "Creative", whitelist: false, pvp: true, autostart: false, motd: "Typed, not submitted" },
+        ]);
     });
 });

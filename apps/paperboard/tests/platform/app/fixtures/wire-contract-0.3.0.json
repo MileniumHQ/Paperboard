@@ -1,0 +1,34 @@
+{
+    "release": "0.3.0",
+    "protocolVersion": 2,
+    "handshake": {
+        "challengeHeader": "x-papercrane-challenge",
+        "proofFrameType": "daemon-proof",
+        "proofMessage": "papercrane-local-proof-v1\n<challenge>",
+        "proofAlgorithm": "hex(HMAC-SHA256(key = token, message))",
+        "vector": {
+            "token": "pc_a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "challenge": "5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c",
+            "proof": "65d92317ff76bd6b1f03990a1d6763f6c7c6d232529f874015e4f054a46688aa"
+        }
+    },
+    "request": { "fields": ["action", "id", "params"], "transportParams": ["token", "v"] },
+    "calls": {
+        "auth:verify": {
+            "params": ["token", "v"],
+            "result": { "success": true, "hostname": "rack", "os": "linux", "osVersion": "24.04", "distroId": "ubuntu", "distroName": "Ubuntu", "arch": "x64" }
+        },
+        "system:info": {
+            "params": ["token", "v"],
+            "result": { "service": "papercrane", "version": "0.3.0", "hostname": "rack", "os": "linux", "osVersion": "24.04", "distroId": "ubuntu", "distroName": "Ubuntu", "arch": "x64", "ip": "127.0.0.1", "username": "paperboard" }
+        },
+        "system:update": {
+            "params": ["downloadUrl", "sha256", "signature", "token", "v", "version"],
+            "result": { "accepted": true, "status": "awaiting-restart", "restartRequired": true, "message": "Verified daemon replacement saved; restart the daemon to activate it" }
+        }
+    },
+    "badProtocol": {
+        "code": "BAD_PROTOCOL",
+        "error": "Protocol version mismatch: daemon speaks <daemon>, client offered <client>"
+    }
+}

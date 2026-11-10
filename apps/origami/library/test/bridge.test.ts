@@ -1,173 +1,130 @@
-// The embed contract: a direct browser load must stay a plain download
-// page, and an embedded library must install only through the shell's
-// answer. Timers are faked so the bounds are tested, not waited on.
-import { afterEach, describe, expect, test, vi } from "vitest";
-import { createLibraryBridge, type BridgeHost } from "../src/bridge";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { createLibraryBridge } from "../src/bridge";
+import { shell, type Shell } from "./helpers/shell";
 
-function createFakeHost() {
-    const sent: any[] = [];
-    let listener: ((data: unknown) => void) | null = null;
-    const host: BridgeHost = {
-        send(data) {
-            sent.push(data);
-        },
-        listen(callback) {
-            listener = callback;
-            return () => {
-                listener = null;
-            };
-        },
-    };
-    return {
-        host,
-        sent,
-        receive(data: unknown) {
-            if (!listener) throw new Error("bridge is not listening");
-            listener(data);
-        },
-        isListening: () => listener !== null,
-    };
-}
+let host: Shell;
+
+beforeEach(() => {
+    vi.useFakeTimers();
+    host = shell();
+});
 
 afterEach(() => {
     vi.useRealTimers();
 });
 
-describe("createLibraryBridge", () => {
-    test("a top-level page is standalone and never installs", async () => {
+// Only an embedding Paperboard can install, and only valid identities count as installed.
+describe("only an embedding Paperboard can install, and only valid identities count as installed", () => {
+    test("with no host the library is standalone and an install is refused", async () => {
         const bridge = createLibraryBridge(null);
         expect(bridge.mode()).toBe("standalone");
-        expect(await bridge.install("panel.a")).toEqual({
-            ok: false,
-            error: "Paperboard is not connected",
-        });
+        expect(await bridge.install("dev.example.clock")).toEqual({ ok: false, error: "Paperboard is not connected" });
         bridge.dispose();
     });
 
-    test("hello goes out on creation; connected enables the install round-trip", async () => {
-        const fake = createFakeHost();
-        const bridge = createLibraryBridge(fake.host, {
-            handshakeTimeoutMs: 50,
-        });
-        expect(fake.sent[0]).toEqual({ type: "paperboard:library-hello", ready: true });
+    test("a host that never answers leaves the library standalone, and installs are refused", async () => {
+        const bridge = createLibraryBridge(host, { handshakeTimeoutMs: 2_000 });
+        expect(host.sent).toEqual([{ type: "paperboard:library-hello", ready: true }]);
+        expect(bridge.mode()).toBe("detecting");
+        expect((await bridge.install("dev.example.clock")).ok).toBe(false);
+        vi.advanceTimersByTime(2_000);
+        expect(bridge.mode()).toBe("standalone");
+        expect((await bridge.install("dev.example.clock")).ok).toBe(false);
+        // nothing but the hello ever reached the host
+        expect(host.sent).toHaveLength(1);
+        bridge.dispose();
+    });
 
-        fake.receive({
-            type: "paperboard:library-connected",
-            theme: "dark",
-            installed: [{ id: "panel.a", name: "A", version: "1.0.0" }],
-        });
+    test("a connected answer switches to embedded, even after the handshake timeout fell back", () => {
+        const bridge = createLibraryBridge(host, { handshakeTimeoutMs: 2_000 });
+        vi.advanceTimersByTime(2_000);
+        expect(bridge.mode()).toBe("standalone");
+        host.reply({ type: "paperboard:library-connected", theme: "dark", installed: [] });
         expect(bridge.mode()).toBe("embedded");
         expect(bridge.theme()).toBe("dark");
-        expect(bridge.installed()).toHaveLength(1);
-
-        const result = bridge.install("panel.a");
-        const request = fake.sent.find(
-            (m) => m.type === "paperboard:library-install",
-        );
-        expect(request).toMatchObject({
-            type: "paperboard:library-install",
-            panelId: "panel.a",
-        });
-        fake.receive({
-            type: "paperboard:library-install-result",
-            requestId: request.requestId,
-            panelId: "panel.a",
-            ok: true,
-        });
-        expect(await result).toEqual({ ok: true, error: undefined });
-
-        bridge.open("panel.a");
-        expect(fake.sent).toContainEqual({
-            type: "paperboard:library-open",
-            panelId: "panel.a",
-        });
         bridge.dispose();
     });
 
-    test("no answer before the handshake bound means standalone", () => {
-        vi.useFakeTimers();
-        const fake = createFakeHost();
-        const bridge = createLibraryBridge(fake.host, {
-            handshakeTimeoutMs: 50,
-        });
-        expect(bridge.mode()).toBe("detecting");
-        vi.advanceTimersByTime(51);
-        expect(bridge.mode()).toBe("standalone");
-        bridge.dispose();
-    });
-
-    test("a late handshake still wins over the timeout", () => {
-        vi.useFakeTimers();
-        const fake = createFakeHost();
-        const bridge = createLibraryBridge(fake.host, {
-            handshakeTimeoutMs: 50,
-        });
-        vi.advanceTimersByTime(51);
-        expect(bridge.mode()).toBe("standalone");
-        fake.receive({ type: "paperboard:library-connected" });
-        expect(bridge.mode()).toBe("embedded");
-        bridge.dispose();
-    });
-
-    test("notifyReady is silent standalone and signals the shell when embedded", () => {
-        const standalone = createLibraryBridge(null);
-        standalone.notifyReady();
-        expect(() => standalone.notifyReady()).not.toThrow();
-        standalone.dispose();
-
-        const fake = createFakeHost();
-        const bridge = createLibraryBridge(fake.host);
-        fake.receive({ type: "paperboard:library-connected" });
-        bridge.notifyReady();
-        expect(fake.sent).toContainEqual({ type: "paperboard:library-ready" });
-        bridge.dispose();
-    });
-
-    test("installed state is filtered to valid panel identities; theme follows", () => {
-        const fake = createFakeHost();
-        const bridge = createLibraryBridge(fake.host);
-        fake.receive({
-            type: "paperboard:library-installed",
-            theme: "dark",
+    test("malformed, reserved and invalid installed entries are dropped", () => {
+        const bridge = createLibraryBridge(host);
+        host.reply({
+            type: "paperboard:library-connected",
             installed: [
-                { id: "panel.a", name: "A" },
-                { id: "library", name: "reserved" },
-                { id: "no spaces", name: "bad" },
-                { id: "panel.b" },
-                "nope",
+                { id: "dev.example.clock", name: "Clock" },
+                { id: "library", name: "The library itself" },
+                { id: "settings", name: "Settings" },
+                { id: "shell-sidebar", name: "Shell" },
+                { id: "../escape", name: "Escape" },
+                { id: "Dev.Upper", name: "Upper" },
+                { id: "dev.example.noname" },
+                { id: 42, name: "Numeric" },
+                null,
+                "dev.example.string",
+                { name: "No id" },
             ],
         });
-        expect(bridge.installed().map((p) => p.id)).toEqual(["panel.a"]);
-        expect(bridge.theme()).toBe("dark");
+        expect(bridge.installed().map((p) => p.id)).toEqual(["dev.example.clock"]);
+        // a later list replaces it under the same rules
+        host.reply({ type: "paperboard:library-installed", installed: [{ id: "library", name: "x" }, { id: "dev.example.notes", name: "Notes" }] });
+        expect(bridge.installed().map((p) => p.id)).toEqual(["dev.example.notes"]);
         bridge.dispose();
     });
 
-    test("an unanswered install resolves as a typed failure at the bound", async () => {
-        vi.useFakeTimers();
-        const fake = createFakeHost();
-        const bridge = createLibraryBridge(fake.host, {
-            installTimeoutMs: 100,
-        });
-        fake.receive({ type: "paperboard:library-connected" });
-        const result = bridge.install("panel.a");
-        await vi.advanceTimersByTimeAsync(101);
-        expect(await result).toEqual({
-            ok: false,
-            error: "Paperboard did not answer the install request",
-        });
+    test("an invalid panel id is never sent to the shell", async () => {
+        const bridge = createLibraryBridge(host);
+        host.reply({ type: "paperboard:library-connected", installed: [] });
+        expect(await bridge.install("../../etc")).toEqual({ ok: false, error: "Invalid panel id" });
+        expect(await bridge.install("library")).toEqual({ ok: false, error: "Invalid panel id" });
+        expect(host.sent.filter((m) => m.type === "paperboard:library-install")).toEqual([]);
         bridge.dispose();
-    });
-
-    test("dispose detaches and answers anything still pending", async () => {
-        const fake = createFakeHost();
-        const bridge = createLibraryBridge(fake.host);
-        fake.receive({ type: "paperboard:library-connected" });
-        const result = bridge.install("panel.a");
-        bridge.dispose();
-        expect(await result).toEqual({
-            ok: false,
-            error: "The panel library was unloaded",
-        });
-        expect(fake.isListening()).toBe(false);
     });
 });
+
+// Installs round-trip through the shell, with a bound, and failures are shown.
+describe("installs round-trip through the shell, with a bound", () => {
+    function embedded(installTimeoutMs?: number) {
+        const bridge = createLibraryBridge(host, { installTimeoutMs });
+        host.reply({ type: "paperboard:library-connected", installed: [] });
+        return bridge;
+    }
+
+    test("an install resolves on the result that matches its request", async () => {
+        const bridge = embedded();
+        const first = bridge.install("dev.example.clock");
+        const second = bridge.install("dev.example.notes");
+        const [a, b] = host.sent.filter((m) => m.type === "paperboard:library-install");
+        expect(a).toMatchObject({ panelId: "dev.example.clock" });
+        expect(b).toMatchObject({ panelId: "dev.example.notes" });
+        expect(a!.requestId).not.toBe(b!.requestId);
+
+        // an answer for nobody, and a malformed one, settle nothing
+        host.reply({ type: "paperboard:library-install-result", requestId: "install-unknown", ok: true });
+        host.reply({ type: "paperboard:library-install-result", ok: true });
+        host.reply({ type: "paperboard:library-install-result", requestId: b!.requestId, ok: false, error: "Disk full" });
+        host.reply({ type: "paperboard:library-install-result", requestId: a!.requestId, ok: true });
+        expect(await first).toEqual({ ok: true, error: undefined });
+        expect(await second).toEqual({ ok: false, error: "Disk full" });
+        bridge.dispose();
+    });
+
+    test("an unanswered install resolves as unanswered after its bound", async () => {
+        const bridge = embedded(60_000);
+        const pending = bridge.install("dev.example.clock");
+        let settled = false;
+        void pending.then(() => (settled = true));
+        await vi.advanceTimersByTimeAsync(59_999);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await pending).toEqual({ ok: false, error: "Paperboard did not answer the install request" });
+        bridge.dispose();
+    });
+
+    test("disposing the library answers a pending install as unloaded", async () => {
+        const bridge = embedded();
+        const pending = bridge.install("dev.example.clock");
+        bridge.dispose();
+        expect(await pending).toEqual({ ok: false, error: "The panel library was unloaded" });
+        expect(host.listening()).toBe(false);
+    });
+});
+

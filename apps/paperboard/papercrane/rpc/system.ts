@@ -10,6 +10,7 @@ import { getGpuReport } from "../gpu";
 import { usageSampler, type UsageRoots } from "../usage";
 import { requireReleaseOrder } from "../releasePolicy";
 import { installCraneRelease, confirmCraneUpdate } from "../craneUpdate";
+import { daemonReleaseKey } from "../releaseSignature";
 
 // self-update URL must be https or loopback http
 function isSafeUpdateUrl(rawUrl: string): boolean {
@@ -160,7 +161,7 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
                 reply(id, null, `Refusing update: ${version} is not newer than the running ${PAPERCRANE_VERSION}`);
                 return true;
             }
-            const outcome = await installCraneRelease({ downloadUrl, sha256, version, signature, execPath: process.execPath });
+            const outcome = await installCraneRelease({ downloadUrl, sha256, version, signature, execPath: process.execPath, releaseKey: daemonReleaseKey() });
             // Saved, not activated. Starting a replacement before this daemon
             // releases its listener races index.ts's stale-instance takeover.
             // A restart supervisor must observe old exit and new authenticated

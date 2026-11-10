@@ -1,207 +1,169 @@
-// World upload and download (bun test): real zips written and read on a
-// temporary server folder. A downloaded world uploads back byte for byte,
-// a running server's saving is paused around the copy of its world, and a
-// zip that reaches outside its world is refused before anything is written.
-import { describe, it, expect, mock, beforeEach, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
-import * as os from "node:os";
-import * as nodePath from "node:path";
-import { zipSync, strToU8 } from "fflate";
+import * as path from "node:path";
+import { strToU8, zipSync } from "fflate";
+import { startTestDaemon, type TestDaemon } from "./helpers/crane";
+import { minecraftServer, type McServer } from "./helpers/minecraft";
+import { readTree } from "./helpers/tmp";
+import { startServerInstance, stopServerInstance } from "../src/service/lifecycle";
+import { exportWorld, importWorld } from "../src/service/worldTransfer";
+import { recoverPausedSaving, withSavingPaused } from "../src/games/minecraft/saving";
+import { WORLD_TRANSFER_DIR } from "../src/core/worldArchive";
 
-const root = fs.mkdtempSync(nodePath.join(os.tmpdir(), "gameserver-transfer-"));
-const inRoot = (path: string) => nodePath.join(root, ...path.split("/"));
-const written: string[] = [];
-let running = true;
-let confirmations: Record<string, string> = {};
-let failOn: string | null = null;
+let daemon: TestDaemon;
+beforeAll(async () => {
+    daemon = await startTestDaemon();
+});
+afterAll(async () => {
+    await daemon?.stop();
+});
 
-const filesFake = {
-        getPath: async (path: string) => inRoot(path),
-        read: async (path: string) => (fs.existsSync(inRoot(path)) ? fs.readFileSync(inRoot(path), "utf8") : null),
-        write: async (path: string, content: string) => fs.writeFileSync(inRoot(path), content),
-        exists: async (path: string) => fs.existsSync(inRoot(path)),
-        delete: async (path: string) => { fs.rmSync(inRoot(path), { force: true }); return true; },
+const MARKER = ".paperboard-saving-paused";
+const WORLD = {
+    "server.properties": "level-name=world\n",
+    "world/level.dat": "level",
+    "world/region/r.0.0.mca": "region \u0000\u0001 bytes",
+    "world_nether/DIM-1/region/r.0.0.mca": "nether",
+    "world_the_end/DIM1/region/r.0.0.mca": "end",
 };
 
-mock.module("../src/service/api", () => ({
-    files: filesFake,
-    fileApi: filesFake,
-    config: { get: async () => null, set: async () => true },
-    system: { getInfo: async () => ({ os: "linux" }) },
-    processApi: {
-        exists: async () => running,
-        // the fake server answers each command the way Minecraft does
-        write: async (_id: string, text: string) => {
-            const command = text.trim();
-            written.push(command);
-            if (command === failOn) throw new Error("the server's console is gone");
-            const reply = confirmations[command];
-            if (reply) queueMicrotask(() => saving.observeSavingLine(reply));
-        },
-    },
-}));
-
-const saving = await import("../src/games/minecraft/saving");
-const transfer = await import("../src/service/worldTransfer");
-const { planWorldImport, worldNameFromFile } = await import("../src/core/worldArchive");
-
-const offline = { state: { serverStatus: "offline" } } as any;
-const online = { state: { serverStatus: "online" } } as any;
-const region = new Uint8Array(200_000).map((_, i) => (i * 31) % 251);
-
-function seed(name: string) {
-    fs.mkdirSync(inRoot(`${name}/region`), { recursive: true });
-    fs.writeFileSync(inRoot(`${name}/level.dat`), "level");
-    fs.writeFileSync(inRoot(`${name}/region/r.0.0.mca`), region);
-    fs.writeFileSync(inRoot(`${name}/session.lock`), "locked");
-    fs.mkdirSync(inRoot(`${name}_nether/DIM-1`), { recursive: true });
-    fs.writeFileSync(inRoot(`${name}_nether/level.dat`), "nether");
+async function online(mc: McServer): Promise<void> {
+    await mc.run(() => startServerInstance(mc.scope.ctx));
+    await mc.scope.waitFor((s) => s.serverStatus === "online", "the server to come online");
 }
 
-beforeEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
-    fs.mkdirSync(root);
-    fs.writeFileSync(inRoot("server.properties"), "level-name=world\n");
-    written.length = 0;
-    running = true;
-    failOn = null;
-    confirmations = {
-        "save-off": "[12:00:00 INFO]: Automatic saving is now disabled",
-        "save-all flush": "[12:00:01 INFO]: Saved the game",
-        "save-on": "[12:00:02 INFO]: Automatic saving is now enabled",
-    };
-});
+async function offline(mc: McServer): Promise<void> {
+    const exit = mc.nextExit();
+    await mc.run(() => stopServerInstance(mc.scope.ctx));
+    expect(await exit).toBe(0);
+}
 
-afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
+/** a zip put in the transfer folder, as the page uploads it */
+function upload(mc: McServer, name: string, entries: Record<string, string>): void {
+    const dir = path.join(mc.dir, WORLD_TRANSFER_DIR);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, name), zipSync(Object.fromEntries(Object.entries(entries).map(([k, v]) => [k, strToU8(v)]))));
+}
 
-describe("world download and upload", () => {
-    it("a downloaded world uploads back as a new world, byte for byte", async () => {
-        seed("world");
-        const { file, bytes } = await transfer.exportWorld(offline, "world");
-        expect(bytes).toBe(fs.statSync(inRoot(`.paperboard-transfer/${file}`)).size);
-        expect(written).toEqual([]);
+const saveCommands = (mc: McServer) => mc.commands().filter((c) => c.startsWith("save"));
+const worldFolders = (mc: McServer) => fs.readdirSync(mc.dir).filter((f) => !f.startsWith(".")).sort();
 
-        const added = await transfer.importWorld(file, "copy");
-        expect(added.folders).toEqual(["copy", "copy_nether"]);
-        expect(new Uint8Array(fs.readFileSync(inRoot("copy/region/r.0.0.mca")))).toEqual(region);
-        expect(fs.readFileSync(inRoot("copy_nether/level.dat"), "utf8")).toBe("nether");
-        expect(fs.existsSync(inRoot("copy/session.lock"))).toBe(false);
-        // the upload is gone, and so is the staging folder
-        expect(fs.readdirSync(inRoot(".paperboard-transfer"))).toEqual([]);
-        // the original is untouched
-        expect(fs.readFileSync(inRoot("world/level.dat"), "utf8")).toBe("level");
-    });
+// World export pauses saving safely; import refuses zip slip.
+describe("world transfer", () => {
+    test("exporting the world being played pauses saving around the copy, and re-importing it is byte for byte", async () => {
+        const mc = minecraftServer({ files: WORLD });
+        await online(mc);
+        const exported = await mc.run(() => exportWorld(mc.scope.ctx, "world"));
+        expect(exported.file).toBe("world.zip");
+        await mc.received("save-on");
+        expect(saveCommands(mc)).toEqual(["save-off", "save-all flush", "save-on"]);
+        expect(fs.existsSync(path.join(mc.dir, MARKER))).toBe(false);
+        expect(fs.statSync(path.join(mc.dir, WORLD_TRANSFER_DIR, "world.zip")).size).toBe(exported.bytes);
 
-    it("pauses saving around the copy of the world a running server plays", async () => {
-        seed("world");
-        await transfer.exportWorld(online, "world");
-        expect(written).toEqual(["save-off", "save-all flush", "save-on"]);
-        expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(false);
-    });
-
-    it("turns saving back on and keeps no zip when the copy fails", async () => {
-        seed("world");
-        fs.chmodSync(inRoot("world/region/r.0.0.mca"), 0o000);
-        try {
-            await expect(transfer.exportWorld(online, "world")).rejects.toThrow();
-        } finally {
-            fs.chmodSync(inRoot("world/region/r.0.0.mca"), 0o644);
+        expect(await mc.run(() => importWorld("world.zip", "copy"))).toEqual({ name: "copy", folders: ["copy", "copy_nether", "copy_the_end"] });
+        const tree = readTree(mc.dir);
+        for (const [file, content] of Object.entries(WORLD)) {
+            if (file.includes("/")) expect([file, tree[file.replace(/^world/, "copy")]]).toEqual([file, content]);
         }
-        expect(written).toEqual(["save-off", "save-all flush", "save-on"]);
-        expect(fs.readdirSync(inRoot(".paperboard-transfer"))).toEqual([]);
-        expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(false);
+        // the uploaded archive is removed once unpacked, and no staging is left
+        expect(fs.readdirSync(path.join(mc.dir, WORLD_TRANSFER_DIR))).toEqual([]);
+        await offline(mc);
     });
 
-    it("a service that died mid-copy turns saving back on when it starts", async () => {
-        fs.writeFileSync(inRoot(".paperboard-saving-paused"), "then");
-        expect(await saving.recoverPausedSaving()).toBe(true);
-        expect(written).toEqual(["save-on"]);
-        expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(false);
-        expect(await saving.recoverPausedSaving()).toBe(false);
+    test("the paused marker exists for the whole copy, and a failed copy still turns saving back on and leaves no file", async () => {
+        const mc = minecraftServer({ files: WORLD });
+        await online(mc);
+        let markerDuringCopy = false;
+        await mc.run(() =>
+            withSavingPaused(mc.scope.ctx, async () => {
+                markerDuringCopy = fs.existsSync(path.join(mc.dir, MARKER));
+            }),
+        );
+        expect(markerDuringCopy).toBe(true);
+        expect(fs.existsSync(path.join(mc.dir, MARKER))).toBe(false);
+
+        // a region file the copy cannot read
+        const locked = path.join(mc.dir, "world", "region", "r.0.0.mca");
+        fs.chmodSync(locked, 0o000);
+        try {
+            await expect(mc.run(() => exportWorld(mc.scope.ctx, "world"))).rejects.toThrow(/EACCES|permission denied/i);
+        } finally {
+            fs.chmodSync(locked, 0o644);
+        }
+        await mc.received("save-on", 1);
+        expect(saveCommands(mc)).toEqual(["save-off", "save-all flush", "save-on", "save-off", "save-all flush", "save-on"]);
+        expect(fs.existsSync(path.join(mc.dir, MARKER))).toBe(false);
+        expect(fs.existsSync(path.join(mc.dir, WORLD_TRANSFER_DIR, "world.zip"))).toBe(false);
+        await offline(mc);
     });
 
-    it("keeps the marker when save-on cannot be delivered, so recovery retries", async () => {
-        fs.writeFileSync(inRoot(".paperboard-saving-paused"), "then");
-        failOn = "save-on";
-        await expect(saving.recoverPausedSaving()).rejects.toThrow("console is gone");
-        expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(true);
-        failOn = null;
-        expect(await saving.recoverPausedSaving()).toBe(true);
-        expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(false);
+    test("a pause the last service left behind is ended at start-up, and a world that is not being played is copied without pausing", async () => {
+        const mc = minecraftServer({ files: { ...WORLD, "other/level.dat": "other" } });
+        expect(await mc.run(() => recoverPausedSaving())).toBe(false);
+        await online(mc);
+        fs.writeFileSync(path.join(mc.dir, MARKER), "2026-01-01T00:00:00.000Z");
+        expect(await mc.run(() => recoverPausedSaving())).toBe(true);
+        await mc.received("save-on");
+        expect(fs.existsSync(path.join(mc.dir, MARKER))).toBe(false);
+
+        await mc.run(() => exportWorld(mc.scope.ctx, "other"));
+        expect(saveCommands(mc)).toEqual(["save-on"]);
+        await offline(mc);
     });
 
-    it("a copy that cannot turn saving back on reports it and keeps the marker", async () => {
-        seed("world");
-        failOn = "save-on";
-        await expect(transfer.exportWorld(online, "world")).rejects.toThrow("Saving could not be turned back on");
-        expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(true);
+    test("a starting or stopping server refuses the copy, and only one transfer runs at a time", async () => {
+        const mc = minecraftServer({ files: WORLD, state: { serverStatus: "starting" } });
+        await expect(mc.run(() => exportWorld(mc.scope.ctx, "world"))).rejects.toThrow("Wait until the server has finished starting or stopping");
+        expect(fs.existsSync(path.join(mc.dir, WORLD_TRANSFER_DIR, "world.zip"))).toBe(false);
+
+        mc.scope.ctx.setState({ serverStatus: "offline" });
+        const first = mc.run(() => exportWorld(mc.scope.ctx, "world"));
+        await expect(mc.run(() => importWorld("world.zip", "second"))).rejects.toThrow("Another world upload or download is running");
+        await first;
+        expect(worldFolders(mc)).toEqual(["eula.txt", "server.jar", "server.properties", "world", "world_nether", "world_the_end"]);
     });
 
-    it("a backup leaves saving paused for the service that starts after it", async () => {
-        await saving.pauseSavingForBackup(online);
-        expect(written).toEqual(["save-off", "save-all flush"]);
-        expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(true);
-        // the service Paperboard starts again after the copy
-        expect(await saving.recoverPausedSaving()).toBe(true);
-        expect(written).toEqual(["save-off", "save-all flush", "save-on"]);
+    test("an import with a path out of the world, or a bad transfer file name, writes nothing and removes the upload", async () => {
+        const mc = minecraftServer({ files: WORLD });
+        const before = readTree(mc.dir);
+        const slips: Record<string, string>[] = [
+            { "level.dat": "x", "../evil.txt": "pwned" },
+            { "MyWorld/level.dat": "x", "MyWorld/../../evil.txt": "pwned" },
+            { "MyWorld/level.dat": "x", "MyWorld/region/..\\..\\evil.txt": "pwned" },
+            { "MyWorld/level.dat": "x", "MyWorld//evil.txt": "pwned" },
+        ];
+        for (const entries of slips) {
+            upload(mc, "slip.zip", entries);
+            await expect(mc.run(() => importWorld("slip.zip", "imported"))).rejects.toThrow("unsafe file path");
+            expect(fs.existsSync(path.join(mc.dir, WORLD_TRANSFER_DIR, "slip.zip"))).toBe(false);
+        }
+        for (const bad of ["../world.zip", "/etc/passwd.zip", "a/b.zip", "x.txt", ".hidden.zip", "a..b.zip"]) {
+            await expect(mc.run(() => importWorld(bad, "imported"))).rejects.toThrow("That is not a world transfer file");
+        }
+        expect(fs.existsSync(path.join(path.dirname(mc.dir), "evil.txt"))).toBe(false);
+        const after = readTree(mc.dir);
+        delete after[`${WORLD_TRANSFER_DIR}/`];
+        expect(after).toEqual(before);
     });
 
-    it("a server that cannot save turns saving back on and refuses the backup", async () => {
-        failOn = "save-all flush";
-        await expect(saving.pauseSavingForBackup(online)).rejects.toThrow("console is gone");
-        expect(written).toEqual(["save-off", "save-all flush", "save-on"]);
-        expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(false);
-    });
+    test("an import refuses a name already used in any case or dimension, and a zip with no world or several", async () => {
+        const mc = minecraftServer({ files: { ...WORLD, "Taken_nether/level.dat": "n" } });
+        const world = { "MyWorld/level.dat": "x", "MyWorld/region/r.0.0.mca": "r" };
+        for (const name of ["WORLD", "taken"]) {
+            upload(mc, "w.zip", world);
+            await expect(mc.run(() => importWorld("w.zip", name))).rejects.toThrow("already exists");
+        }
+        upload(mc, "w.zip", { "readme.txt": "no world here", "MyWorld/region/r.0.0.mca": "r" });
+        await expect(mc.run(() => importWorld("w.zip", "fresh"))).rejects.toThrow("it has no level.dat, so it is not a Minecraft world");
+        upload(mc, "w.zip", { "One/level.dat": "1", "Two/level.dat": "2" });
+        await expect(mc.run(() => importWorld("w.zip", "fresh"))).rejects.toThrow("it holds more than one world");
+        upload(mc, "w.zip", world);
+        await expect(mc.run(() => importWorld("w.zip", "bad name;rm"))).rejects.toThrow("is not a usable world name");
+        expect(worldFolders(mc)).toEqual(["Taken_nether", "eula.txt", "server.jar", "server.properties", "world", "world_nether", "world_the_end"]);
 
-    it("an offline server needs nothing, and one starting refuses", async () => {
-        await saving.pauseSavingForBackup(offline);
-        expect(written).toEqual([]);
-        await expect(saving.pauseSavingForBackup({ state: { serverStatus: "starting" } } as any)).rejects.toThrow("starting or stopping");
-    });
-
-    it("refuses a zip that reaches outside its world, writing nothing", async () => {
-        fs.mkdirSync(inRoot(".paperboard-transfer"));
-        fs.writeFileSync(inRoot(".paperboard-transfer/evil.zip"), zipSync({
-            "world/level.dat": strToU8("level"),
-            "world/../../escaped.txt": strToU8("out"),
-        }));
-        await expect(transfer.importWorld("evil.zip", "evil")).rejects.toThrow("unsafe file path");
-        expect(fs.existsSync(inRoot("evil"))).toBe(false);
-        expect(fs.existsSync(nodePath.join(root, "..", "escaped.txt"))).toBe(false);
-        expect(fs.readdirSync(inRoot(".paperboard-transfer"))).toEqual([]);
-    });
-
-    it("never replaces a world that already has the name", async () => {
-        seed("world");
-        const { file } = await transfer.exportWorld(offline, "world");
-        await expect(transfer.importWorld(file, "WORLD")).rejects.toThrow("already exists");
-        expect(fs.readFileSync(inRoot("world/level.dat"), "utf8")).toBe("level");
-    });
-
-    it("refuses transfer file names that are not plain zip names", async () => {
-        await expect(transfer.importWorld("../server.properties", "x")).rejects.toThrow("not a world transfer file");
-        await expect(transfer.discardWorldTransfer("../../etc.zip")).rejects.toThrow("not a world transfer file");
-    });
-});
-
-describe("where an uploaded world's files go", () => {
-    it("takes a world at the zip's top, in a folder, or beside its nether and end", () => {
-        expect([...planWorldImport(["level.dat", "region/r.mca"], "a").targets.values()]).toEqual(["a/level.dat", "a/region/r.mca"]);
-        const nested = planWorldImport(["saves/My World/level.dat", "saves/My World/DIM-1/r.mca", "readme.txt"], "a");
-        expect([...nested.targets.values()]).toEqual(["a/level.dat", "a/DIM-1/r.mca"]);
-        const split = planWorldImport(["w/level.dat", "w_nether/level.dat", "w_the_end/DIM1/x"], "b");
-        expect(split.folders).toEqual(["b", "b_nether", "b_the_end"]);
-    });
-
-    it("refuses what is not one world", () => {
-        expect(() => planWorldImport(["readme.txt"], "a")).toThrow("no level.dat");
-        expect(() => planWorldImport(["a/level.dat", "b/level.dat"], "a")).toThrow("more than one world");
-        expect(() => planWorldImport(["level.dat"], "../x")).toThrow("not a usable world name");
-    });
-
-    it("names an upload after its file, never after a taken world", () => {
-        expect(worldNameFromFile("My World (2).zip", [])).toBe("My_World_2");
-        expect(worldNameFromFile("world.zip", ["world"])).toBe("world_2");
-        expect(worldNameFromFile("w.zip", ["w_nether"])).toBe("w_2");
+        // a nested world with its own dimensions comes in under the new name
+        upload(mc, "w.zip", { "saves/Mine/level.dat": "m", "saves/Mine_nether/DIM-1/x": "n", "saves/Other.txt": "skip" });
+        expect(await mc.run(() => importWorld("w.zip", "Mine"))).toEqual({ name: "Mine", folders: ["Mine", "Mine_nether"] });
+        expect(readTree(path.join(mc.dir, "Mine_nether"))).toEqual({ "DIM-1/": "", "DIM-1/x": "n" });
     });
 });

@@ -1,117 +1,76 @@
-// pack-refusal regression (bun test): a manifest without a version is the
-// package that must not ship, and the packer must say so loudly
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import * as tar from "tar";
 import { packPanel } from "../src/pack";
 
-let tmp: string;
+let dir: string;
 
 beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "packer-"));
+    dir = mkdtempSync(join(tmpdir(), "paperapi-pack-"));
 });
 
 afterEach(() => {
-    fs.rmSync(tmp, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
 });
 
-function writeManifest(extra: Record<string, unknown>) {
-    const dir = path.join(tmp, "panel");
-    fs.mkdirSync(path.join(dir, "dist"), { recursive: true });
-    fs.writeFileSync(path.join(dir, "dist", "index.html"), "<html></html>");
-    fs.writeFileSync(
-        path.join(dir, "manifest.json"),
-        JSON.stringify({ id: "dev.test.pack", name: "Pack Test", ...extra }),
-    );
-    return dir;
+function write(rel: string, content = ""): void {
+    const file = join(dir, rel);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, content);
 }
 
-describe("packPanel version fence", () => {
-    it("refuses to pack a manifest without a version, naming the panel", () => {
-        const dir = writeManifest({ version: undefined });
-        expect(() => packPanel({ targetDir: dir, autoBuild: false })).toThrow(
-            /Pack Test/,
-        );
+function panel(manifest: Record<string, unknown>, files: string[] = ["dist/index.html"]): void {
+    write("manifest.json", JSON.stringify({ id: "dev.test.packed", name: "Packed", version: "0.2.0", ...manifest }));
+    for (const f of files) write(f, "<!doctype html>");
+}
+
+const pack = () => packPanel({ targetDir: dir, autoBuild: false, log: () => {} });
+
+const tutorialStep = { title: "Tabs", body: "Tabs stay open", image: { light: "./tutorial/1.webp", alt: "Tabs" } };
+
+// The packer refuses what must not ship.
+describe("the packer refuses what must not ship", () => {
+    test("a manifest without a version is refused", () => {
+        panel({ version: undefined });
+        expect(pack).toThrow("Panel manifest must specify a 'version'");
     });
 
-    it("packs a manifest that declares a version", () => {
-        const dir = writeManifest({ version: "3.0.0-alpha" });
-        const result = packPanel({ targetDir: dir, autoBuild: false });
-        expect(result.version).toBe("3.0.0-alpha");
-        expect(result.archiveName).toBe("dev.test.pack-3.0.0-alpha.tar.gz");
-    });
-});
-
-describe("packPanel manifest.base packing", () => {
-    it("packs the directory holding manifest.base, not just dist/", () => {
-        const dir = writeManifest({ version: "1.0.0", base: "./ui/index.html" });
-        fs.mkdirSync(path.join(dir, "ui"), { recursive: true });
-        fs.writeFileSync(path.join(dir, "ui", "index.html"), "<html></html>");
-        const result = packPanel({ targetDir: dir, autoBuild: false });
-
-        // extract and verify the base directory's entry made the archive
-        const extractDir = path.join(tmp, "extract");
-        fs.mkdirSync(extractDir);
-        tar.extract({ file: result.archivePath, cwd: extractDir, sync: true });
-        expect(fs.existsSync(path.join(extractDir, "ui", "index.html"))).toBe(
-            true,
-        );
-        expect(fs.existsSync(path.join(extractDir, "dist", "index.html"))).toBe(
-            true,
-        );
-        expect(fs.existsSync(path.join(extractDir, "manifest.json"))).toBe(true);
-    });
-});
-describe("packPanel widgets", () => {
-    const widgets = [{ id: "status", name: "Status", sizes: ["2x1"] }];
-
-    it("refuses widgets whose declaration the daemon would refuse", () => {
-        const dir = writeManifest({ version: "0.1.0", widgets: [{ id: "status", name: "Status", sizes: ["9x9"] }] });
-        expect(() => packPanel({ targetDir: dir, autoBuild: false })).toThrow(/size/);
+    test("widget and tutorial declarations the daemon would refuse are refused", () => {
+        panel({ widgets: [{ id: "Bad Id", name: "W", sizes: ["1x1"] }] }, ["dist/index.html", "dist/widget.html"]);
+        expect(pack).toThrow("widget 0 needs an id of lowercase letters, digits and dashes");
+        panel({ widgets: [{ id: "w", name: "W", sizes: ["9x9"] }] }, ["dist/index.html", "dist/widget.html"]);
+        expect(pack).toThrow('size "9x9" must look like "2x1"');
+        panel({ tutorial: [] });
+        expect(pack).toThrow("a tutorial has 1 to 6 steps");
+        panel({ tutorial: [{ ...tutorialStep, image: { light: "../outside.webp", alt: "x" } }] });
+        expect(pack).toThrow("image paths must be relative");
     });
 
-    it("refuses widgets without the dist/widget.html they load from", () => {
-        const dir = writeManifest({ version: "0.1.0", widgets });
-        expect(() => packPanel({ targetDir: dir, autoBuild: false })).toThrow(/widget\.html/);
+    test("widgets without dist/widget.html, a non-boolean unlisted and missing tutorial images are refused", () => {
+        panel({ widgets: [{ id: "status", name: "Status", sizes: ["2x1"] }] });
+        expect(pack).toThrow("manifest declares widgets but dist/widget.html does not exist");
+        panel({ unlisted: "yes" });
+        expect(pack).toThrow("Panel manifest 'unlisted' must be true or false");
+        panel({ tutorial: [tutorialStep] });
+        expect(pack).toThrow("manifest tutorial shows ./tutorial/1.webp but dist/tutorial/1.webp does not exist");
     });
 
-    it("packs widgets with their page", () => {
-        const dir = writeManifest({ version: "0.1.0", widgets });
-        fs.writeFileSync(path.join(dir, "dist", "widget.html"), "<html></html>");
-        expect(packPanel({ targetDir: dir, autoBuild: false }).version).toBe("0.1.0");
-    });
-});
-describe("packPanel unlisted", () => {
-    it("refuses an unlisted that isn't true or false", () => {
-        const dir = writeManifest({ version: "0.1.0", unlisted: "yes" });
-        expect(() => packPanel({ targetDir: dir, autoBuild: false })).toThrow(/unlisted' must be true or false/);
-    });
-
-    it("packs an unlisted panel", () => {
-        const dir = writeManifest({ version: "0.1.0", unlisted: true });
-        expect(packPanel({ targetDir: dir, autoBuild: false }).version).toBe("0.1.0");
-    });
-});
-describe("packPanel tutorial", () => {
-    it("refuses a tutorial the daemon would refuse", () => {
-        const dir = writeManifest({ version: "0.1.0", tutorial: [{ title: "Hi" }] });
-        expect(() => packPanel({ targetDir: dir, autoBuild: false })).toThrow(/body/);
-    });
-});
-describe("packPanel tutorial images", () => {
-    const tutorial = [{ title: "Hi", body: "There", image: { light: "./tutorial/1.webp", alt: "A panel" } }];
-
-    it("refuses a tutorial whose picture is not in dist", () => {
-        const dir = writeManifest({ version: "0.1.0", tutorial });
-        expect(() => packPanel({ targetDir: dir, autoBuild: false })).toThrow(/tutorial\/1\.webp/);
-    });
-
-    it("packs a tutorial whose picture is in dist", () => {
-        const dir = writeManifest({ version: "0.1.0", tutorial });
-        fs.mkdirSync(path.join(dir, "dist", "tutorial"));
-        fs.writeFileSync(path.join(dir, "dist", "tutorial", "1.webp"), "x");
-        expect(packPanel({ targetDir: dir, autoBuild: false }).version).toBe("0.1.0");
+    test("a valid panel packs to <id>-<version>.tar.gz holding manifest.json, dist/ and the manifest.base directory", async () => {
+        panel({ base: "./web/index.html", widgets: [{ id: "status", name: "Status", sizes: ["2x1"] }], tutorial: [tutorialStep], unlisted: true }, [
+            "web/index.html",
+            "dist/widget.html",
+            "dist/tutorial/1.webp",
+            "src/secret-source.ts",
+            "store/about.md",
+        ]);
+        const result = pack();
+        expect(result.archiveName).toBe("dev.test.packed-0.2.0.tar.gz");
+        expect(result.archivePath).toBe(join(dir, "out", "dev.test.packed-0.2.0.tar.gz"));
+        const entries: string[] = [];
+        await tar.t({ file: result.archivePath, onReadEntry: (entry) => entries.push(entry.path) });
+        expect(entries.sort()).toEqual(["dist/", "dist/tutorial/", "dist/tutorial/1.webp", "dist/widget.html", "manifest.json", "web/", "web/index.html"]);
+        expect(result.sha256).toMatch(/^[a-f0-9]{64}$/);
     });
 });

@@ -20,12 +20,18 @@
 #     origami        registry worker: typecheck, tests, silent-catches
 #     origami-library  library UI: tests, build, silent-catches
 #     pbd            pbd.lc short-link worker: typecheck, tests, silent-catches
+#     panelapis      third-party API proxy worker: typecheck, tests, silent-catches
 #     scripts        root dev/publish scripts: tests, silent-catches
 #     actions agents ai botcreator gameserver terminal   first-party panels
+#     global         repo-wide checks (changelog-existence, todo-expiry)
+#     platform       the cross-platform suites only: each `tests/platform` or
+#                    `test/platform` directory below. CI runs this on every
+#                    release target other than linux-x64, which runs it as
+#                    part of the full suites.
 #   e.g. `bun run gate terminal`, `bun run gate paperapi paperui`
 #
-# Repo-wide checks (changelog-existence, todo-expiry) run only in the full
-# gate; a filtered run is about the named targets.
+# Repo-wide checks (changelog-existence, todo-expiry) run in the full gate or
+# when `global` is named; any other filtered run is about the named targets.
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -57,7 +63,7 @@ run_in() {
 # Every selectable target. The *-build names are prerequisites, not
 # user-facing: they exist so a filtered run can pull in the shared library
 # artifact a consumer needs without running that library's whole suite.
-KNOWN_TARGETS="packages paperapi paperui create-panel crane-launcher paperapi-build paperui-build create-panel-build paperboard paperdocs origami origami-library pbd scripts actions agents ai botcreator gameserver terminal"
+KNOWN_TARGETS="global platform packages paperapi paperui create-panel crane-launcher paperapi-build paperui-build create-panel-build paperboard paperdocs origami origami-library pbd panelapis scripts actions agents ai botcreator gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the
@@ -68,7 +74,7 @@ target_deps() {
         paperui) echo "paperui-build" ;;
         create-panel) echo "paperapi-build paperui-build create-panel-build" ;;
         packages) echo "paperapi-build paperui-build create-panel-build" ;;
-        paperboard | paperdocs | origami-library) echo "paperapi-build paperui-build" ;;
+        paperboard | paperdocs | origami-library | platform) echo "paperapi-build paperui-build" ;;
         actions | agents | ai | botcreator | gameserver | terminal) echo "paperapi-build paperui-build" ;;
         *) echo "" ;;
     esac
@@ -188,6 +194,11 @@ gstep pbd "pbd typecheck" run_in "$ROOT/apps/pbd" bun run typecheck
 gstep pbd "pbd tests" run_in "$ROOT/apps/pbd" bun run test
 gstep pbd "pbd silent-catches" run_in "$ROOT/apps/pbd" bash "$CATCH" src test
 
+# ── panelapis: third-party API proxy worker ─────────────────────────────────
+gstep panelapis "panelapis typecheck" run_in "$ROOT/apps/panelapis" bun run typecheck
+gstep panelapis "panelapis tests" run_in "$ROOT/apps/panelapis" bun run test
+gstep panelapis "panelapis silent-catches" run_in "$ROOT/apps/panelapis" bash "$CATCH" src test
+
 # ── the panel library division of origami: browser-logic suite and the
 # production build that static assets serve (typecheck rides origami's) ──────
 gstep origami-library "origami library tests" run_in "$ROOT/apps/origami/library" bun run test
@@ -207,6 +218,15 @@ for short in actions agents ai botcreator gameserver terminal; do
     gstep "$short" "$panel silent-catches" run_in "$ROOT/$panel" bash "$CATCH" src test
     gwarn "$short" "$panel styling literals" bash "$ROOT/scripts/check-app-styling.sh" "$panel"
 done
+
+# ── cross-platform suites: what depends on the OS or CPU (booting and
+# updating the built app and daemon, processes, signals, paths, archives,
+# file modes). The full suites above already include these directories. ────
+gstep platform "paperboard platform tests" run_in "$ROOT/apps/paperboard" bun test ./tests/platform
+gstep platform "gameserver platform tests" run_in "$ROOT/panels/dev.paperboard.gameserver" bun test --isolate --conditions browser ./test/platform
+gstep platform "agents platform tests" run_in "$ROOT/panels/dev.paperboard.agents" bun test ./test/platform
+gstep platform "terminal platform tests" run_in "$ROOT/panels/dev.paperboard.terminal" bun test ./test/platform
+gstep platform "crane-launcher platform tests" run_in "$ROOT/packages/crane-launcher" bash -c "bun run build && bun test ./test/platform"
 
 # ── repo-wide checks (full gate only) ────────────────────────────────────────
 if want global; then

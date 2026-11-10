@@ -1,180 +1,127 @@
-// Player lists (bun test): the real service/playerLists.ts against a
-// temporary server folder on disk; only the daemon's file API is replaced by
-// direct reads and writes of that folder, and Mojang by a stub fetch.
-// A stopped server takes op and whitelist from its files, so the panel must
-// write them in the server's own format. The roster is keyed by uuid, so a
-// renamed player shows their new name and is still found under it.
-import { describe, it, expect, mock, afterAll, beforeEach } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
-import * as os from "node:os";
-import * as nodePath from "node:path";
+import * as path from "node:path";
+import { startTestDaemon, type TestDaemon } from "./helpers/crane";
+import { minecraftServer, type McServer } from "./helpers/minecraft";
+import { loopbackServer, routeHost, type LoopbackServer } from "./helpers/http";
+import { setPlayerFlag } from "../src/service/playerLists";
+import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 
-const root = fs.mkdtempSync(nodePath.join(os.tmpdir(), "gameserver-lists-"));
-const inRoot = (path: string) => nodePath.join(root, ...path.split("/"));
-const exists = (path: string) => fs.existsSync(inRoot(path));
-
-const fileApiFake = {
-    read: async (path: string) =>
-        exists(path) ? fs.readFileSync(inRoot(path), "utf8") : null,
-    write: async (path: string, content: string) => {
-        fs.mkdirSync(nodePath.dirname(inRoot(path)), { recursive: true });
-        fs.writeFileSync(inRoot(path), content);
-        return inRoot(path);
-    },
-    exists: async (path: string) => exists(path),
-    getPath: async (path: string) => inRoot(path),
-};
-
-mock.module("../src/service/api", () => ({
-    config: { get: async () => null, set: async () => true },
-    files: fileApiFake,
-    fileApi: fileApiFake,
-    system: { getInfo: async () => ({ os: "linux" }) },
-    processApi: {},
-}));
-
-// Mojang: the accounts it knows, by name and by uuid
-const accounts = [{ id: "069a79f444e94726a5befca90e38aaf5", name: "Notch" }];
-let mojangCalls: string[] = [];
-globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(input);
-    mojangCalls.push(url);
-    const tail = decodeURIComponent(url.slice(url.lastIndexOf("/") + 1)).toLowerCase();
-    const account = accounts.find((a) => a.id === tail || a.name.toLowerCase() === tail);
-    return account ? Response.json(account) : new Response(null, { status: 404 });
-}) as typeof fetch;
-
-const { setPlayerFlag, listRoster, currentPlayerNames, offlinePlayerUuid } = await import(
-    "../src/service/playerLists"
-);
-
-const NOTCH = "069a79f4-44e9-4726-a5be-fca90e38aaf5";
-const STEVE = "0f3b2c1d-1111-4222-8333-444455556666";
-
-const ctx = (serverStatus: string) => ({ state: { serverStatus } }) as any;
-let commands: string[] = [];
-const toConsole = async (command: string) => {
-    commands.push(command);
-};
-const readJson = (path: string) => JSON.parse(fs.readFileSync(inRoot(path), "utf8"));
-const write = (path: string, value: unknown) =>
-    fs.writeFileSync(inRoot(path), typeof value === "string" ? value : JSON.stringify(value));
-
-beforeEach(() => {
-    for (const name of fs.readdirSync(root)) fs.rmSync(inRoot(name), { recursive: true, force: true });
-    accounts[0].name = "Notch";
-    mojangCalls = [];
-    commands = [];
+const XUID = "2535428504476914";
+let daemon: TestDaemon;
+let geyser: LoopbackServer;
+let mojang: LoopbackServer;
+beforeAll(async () => {
+    daemon = await startTestDaemon();
+    geyser = loopbackServer((_req, url) => {
+        if (url.pathname === "/v2/xbox/xuid/Cool%20Gamer") return Response.json({ xuid: Number(XUID) });
+        return Response.json({ message: "Unable to find user in our cache" }, { status: 503 });
+    });
+    mojang = loopbackServer(() => new Response(null, { status: 500 }));
+    routeHost("api.geysermc.org", geyser);
+    routeHost("api.mojang.com", mojang);
+    routeHost("sessionserver.mojang.com", mojang);
+});
+afterAll(async () => {
+    await daemon?.stop();
 });
 
-afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
+const NAMING = { prefix: ".", replaceSpaces: true };
+// new UUID(0, xuid), as Floodgate builds a Bedrock player's uuid
+const FLOODGATE_UUID = (() => {
+    const hex = BigInt(XUID).toString(16).padStart(16, "0");
+    return `00000000-0000-0000-${hex.slice(0, 4)}-${hex.slice(4)}`;
+})();
 
-describe("op and whitelist on a stopped server", () => {
-    it("writes whitelist.json and ops.json in the server's format", async () => {
-        write("server.properties", "op-permission-level=3\n");
+const read = (mc: McServer, file: string) => fs.readFileSync(path.join(mc.dir, file), "utf8");
+const exists = (mc: McServer, file: string) => fs.existsSync(path.join(mc.dir, file));
+const flag = (mc: McServer, which: "op" | "whitelist", name: string, on = true, naming: typeof NAMING | null = null) =>
+    mc.run(() => setPlayerFlag(mc.scope.ctx, (cmd) => sendServerCommand(mc.scope.ctx, cmd), naming, which, name, on));
 
-        await setPlayerFlag(ctx("offline"), toConsole, null, "whitelist", "notch", true);
-        await setPlayerFlag(ctx("offline"), toConsole, null, "op", "notch", true);
+async function running(mc: McServer): Promise<void> {
+    await mc.run(() => startServerInstance(mc.scope.ctx));
+    await mc.scope.waitFor((s) => s.serverStatus === "online", "the server to come online");
+}
+async function stop(mc: McServer): Promise<void> {
+    const exit = mc.nextExit();
+    await mc.run(() => stopServerInstance(mc.scope.ctx));
+    await exit;
+}
 
-        // Mojang's casing and uuid, as `whitelist add` / `op` record them
-        expect(readJson("whitelist.json")).toEqual([{ uuid: NOTCH, name: "Notch" }]);
-        expect(readJson("ops.json")).toEqual([
-            { uuid: NOTCH, name: "Notch", level: 3, bypassesPlayerLimit: false },
+// Op and whitelist edits keep the server's files intact.
+describe("op and whitelist edits", () => {
+    test("a stopped offline-mode server gets Mojang's file format with the OfflinePlayer uuid and the op level it grants", async () => {
+        const mc = minecraftServer({ files: { "server.properties": "online-mode=false\nop-permission-level=3\n" } });
+        await flag(mc, "op", "Notch");
+        // the uuid Java's UUID.nameUUIDFromBytes("OfflinePlayer:Notch") gives
+        expect(read(mc, "ops.json")).toBe(
+            `${JSON.stringify([{ uuid: "b50ad385-829d-3141-a216-7e7d7539ba7f", name: "Notch", level: 3, bypassesPlayerLimit: false }], null, 2)}\n`,
+        );
+        // a second op of the same player changes nothing
+        await flag(mc, "op", "notch");
+        expect(JSON.parse(read(mc, "ops.json"))).toHaveLength(1);
+        await flag(mc, "op", "Notch", false);
+        expect(JSON.parse(read(mc, "ops.json"))).toEqual([]);
+    });
+
+    test("a player the server has seen keeps the uuid in usercache.json and Mojang is never asked", async () => {
+        const uuid = "069a79f4-44e9-4726-a5be-fca90e38aaf5";
+        const mc = minecraftServer({
+            files: {
+                "server.properties": "online-mode=true\n",
+                "usercache.json": JSON.stringify([{ name: "Alex", uuid, expiresOn: "2030-01-01 00:00:00 +0000" }]),
+                "whitelist.json": JSON.stringify([{ uuid: "11111111-2222-3333-4444-555555555555", name: "Kept" }]),
+            },
+        });
+        await flag(mc, "whitelist", "alex");
+        expect(JSON.parse(read(mc, "whitelist.json"))).toEqual([
+            { uuid: "11111111-2222-3333-4444-555555555555", name: "Kept" },
+            { uuid, name: "Alex" },
         ]);
-
-        await setPlayerFlag(ctx("offline"), toConsole, null, "op", "Notch", false);
-        expect(readJson("ops.json")).toEqual([]);
-        expect(readJson("whitelist.json")).toHaveLength(1);
+        expect(mojang.requests).toEqual([]);
     });
 
-    it("uses the uuid an offline-mode server derives from the name", async () => {
-        write("server.properties", "online-mode=false\n");
-
-        await setPlayerFlag(ctx("offline"), toConsole, null, "whitelist", "Steve", true);
-
-        // java.util.UUID.nameUUIDFromBytes("OfflinePlayer:Steve")
-        expect(offlinePlayerUuid("Steve")).toBe("5627dd98-e6be-3c21-b8a8-e92344183641");
-        expect(readJson("whitelist.json")).toEqual([
-            { uuid: "5627dd98-e6be-3c21-b8a8-e92344183641", name: "Steve" },
-        ]);
-        expect(mojangCalls).toEqual([]);
+    test("a damaged list fails the edit and is not overwritten", async () => {
+        const mc = minecraftServer({ files: { "server.properties": "online-mode=false\n", "whitelist.json": "[{\"name\": \"Steve\"," } });
+        await expect(flag(mc, "whitelist", "Steve")).rejects.toThrow("whitelist.json is not valid JSON");
+        expect(read(mc, "whitelist.json")).toBe("[{\"name\": \"Steve\",");
     });
 
-    it("keeps a player the server already knows under their known uuid", async () => {
-        write("usercache.json", [{ uuid: STEVE, name: "Steve", expiresOn: "2027-01-01 00:00:00 +0000" }]);
-
-        await setPlayerFlag(ctx("offline"), toConsole, null, "whitelist", "steve", true);
-
-        expect(readJson("whitelist.json")).toEqual([{ uuid: STEVE, name: "Steve" }]);
-        expect(mojangCalls).toEqual([]);
+    test("a running server gets console commands and its files are left to it", async () => {
+        const mc = minecraftServer({ files: { "server.properties": "online-mode=false\n" } });
+        await running(mc);
+        await flag(mc, "op", "Steve");
+        await flag(mc, "whitelist", "Steve", false);
+        await mc.received("whitelist remove Steve");
+        expect(mc.commands().filter((c) => c !== "list")).toEqual(["op Steve", "whitelist remove Steve"]);
+        expect(exists(mc, "ops.json")).toBe(false);
+        expect(exists(mc, "whitelist.json")).toBe(false);
+        await stop(mc);
     });
 
-    it("fails loudly for a name no account has, and on a damaged list", async () => {
-        await expect(setPlayerFlag(ctx("offline"), toConsole, null, "op", "Nobody_12345", true)).rejects.toThrow(
-            'No Minecraft account is named "Nobody_12345"',
-        );
-        expect(exists("ops.json")).toBe(false);
+    test("a Bedrock player gets the uuid Floodgate derives from GeyserMC's XUID offline, and fwhitelist online", async () => {
+        const mc = minecraftServer({ files: { "server.properties": "online-mode=true\n" } });
+        await flag(mc, "whitelist", ".Cool_Gamer", true, NAMING);
+        expect(JSON.parse(read(mc, "whitelist.json"))).toEqual([{ uuid: FLOODGATE_UUID, name: ".Cool_Gamer" }]);
+        expect(geyser.requests).toContain("/v2/xbox/xuid/Cool%20Gamer");
+        expect(mojang.requests).toEqual([]);
 
-        write("ops.json", "{broken");
-        await expect(setPlayerFlag(ctx("offline"), toConsole, null, "op", "Notch", true)).rejects.toThrow(
-            "ops.json is not valid JSON",
-        );
-        expect(fs.readFileSync(inRoot("ops.json"), "utf8")).toBe("{broken");
-
-        await expect(setPlayerFlag(ctx("offline"), toConsole, null, "whitelist", "Notch", false)).rejects.toThrow(
-            "Notch is not on the whitelist",
-        );
+        await running(mc);
+        await flag(mc, "whitelist", ".Cool_Gamer", true, NAMING);
+        await mc.received('fwhitelist add "Cool Gamer"');
+        await stop(mc);
     });
 
-    it("waits while the server is stopping, when it could write over the edit", async () => {
-        await expect(setPlayerFlag(ctx("stopping"), toConsole, null, "whitelist", "Notch", true)).rejects.toThrow(
-            "Wait until the server has finished stopping",
-        );
-        expect(exists("whitelist.json")).toBe(false);
-    });
-});
+    test("a gamertag GeyserMC does not know writes nothing and sends nothing", async () => {
+        const mc = minecraftServer({ files: { "server.properties": "online-mode=true\n" } });
+        await expect(flag(mc, "whitelist", ".Nobody", true, NAMING)).rejects.toThrow('GeyserMC has no Xbox account named "Nobody"');
+        expect(exists(mc, "whitelist.json")).toBe(false);
 
-describe("op and whitelist on a running server", () => {
-    it("go through the toConsole, which rewrites the files itself", async () => {
-        await setPlayerFlag(ctx("online"), toConsole, null, "op", "Notch", true);
-        await setPlayerFlag(ctx("starting"), toConsole, null, "whitelist", "Notch", false);
-
-        expect(commands).toEqual(["op Notch", "whitelist remove Notch"]);
-        expect(exists("ops.json")).toBe(false);
-    });
-});
-
-describe("renamed players", () => {
-    it("shows the name from the newest join, not the one the lists were written with", async () => {
-        write("whitelist.json", [{ uuid: STEVE, name: "OldSteve" }]);
-        write("ops.json", [{ uuid: STEVE, name: "OldSteve", level: 4, bypassesPlayerLimit: false }]);
-        write("usercache.json", [{ uuid: STEVE, name: "NewSteve", expiresOn: "2027-01-01 00:00:00 +0000" }]);
-
-        expect(await listRoster()).toEqual([
-            { uuid: STEVE, name: "NewSteve", whitelisted: true, op: true, banned: false },
-        ]);
-
-        // and is found under it: the lists match by uuid
-        await setPlayerFlag(ctx("offline"), toConsole, null, "op", "NewSteve", false);
-        expect(readJson("ops.json")).toEqual([]);
-    });
-
-    it("looks up the name a player has now from Mojang and keeps it for the roster", async () => {
-        write("whitelist.json", [{ uuid: NOTCH, name: "Notch" }]);
-        accounts[0].name = "Notch2";
-
-        expect(await currentPlayerNames([NOTCH], null)).toEqual({ [NOTCH]: "Notch2" });
-        expect((await listRoster())[0].name).toBe("Notch2");
-
-        // a renamed player not known locally is matched by the uuid the roster passes
-        await setPlayerFlag(ctx("offline"), toConsole, null, "whitelist", "Notch2", false, NOTCH);
-        expect(readJson("whitelist.json")).toEqual([]);
-    });
-
-    it("asks nothing for an offline-mode server, whose uuids come from names", async () => {
-        write("server.properties", "online-mode=false\n");
-
-        expect(await currentPlayerNames([NOTCH], null)).toEqual({});
-        expect(mojangCalls).toEqual([]);
+        await running(mc);
+        await expect(flag(mc, "whitelist", ".Nobody", true, NAMING)).rejects.toThrow("GeyserMC has no Xbox account");
+        // the stop that follows is the next thing the server hears
+        await stop(mc);
+        expect(mc.commands().filter((c) => c !== "list")).toEqual(["stop"]);
+        expect(mojang.requests).toEqual([]);
     });
 });

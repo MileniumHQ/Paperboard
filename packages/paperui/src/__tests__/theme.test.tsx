@@ -1,57 +1,74 @@
-import { describe, test, expect } from "vitest";
-import {
-    resolveSpacing,
-    resolveColor,
-    resolveBackground,
-    getVarCss,
-} from "../utils/theme";
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, test } from "vitest";
+import { getVarCss, paperSizes, resolveBackground, resolveColor, resolveSpacing } from "../index";
 
-describe("Theme & Token Resolution Tests", () => {
-    test("resolves spacing tokens to CSS variables without var()", () => {
-        expect(resolveSpacing("half")).toBe("var(--paper-uigap-half)");
-        expect(resolveSpacing("full")).toBe("var(--paper-uigap)");
-        expect(resolveSpacing("onefourth")).toBe("var(--paper-uigap-onefourth)");
-        expect(resolveSpacing("none")).toBe("0");
-        expect(resolveSpacing(16)).toBe("16px");
-        expect(resolveSpacing("20px")).toBe("20px");
-        expect(resolveSpacing(undefined)).toBeUndefined();
-    });
+const STYLES = join(dirname(fileURLToPath(import.meta.url)), "..", "styles");
 
-    test("resolves background surface tokens to CSS variables without var()", () => {
-        expect(resolveBackground("surface")).toBe("var(--paper-surface)");
-        expect(resolveBackground("surface-app")).toBe("var(--paper-surface-app)");
-        expect(resolveBackground("#ff0000")).toBe("#ff0000");
-        expect(resolveBackground("var(--custom-bg)")).toBe("var(--custom-bg)");
-        expect(resolveBackground(undefined)).toBeUndefined();
-    });
+// styles.css and every stylesheet it imports, as one text
+function tokenSheets(): string {
+    const entry = readFileSync(join(STYLES, "styles.css"), "utf8");
+    const imports = [...entry.matchAll(/@import\s+"\.\/([^"]+)"/g)].map((m) => m[1]);
+    expect(imports.length).toBeGreaterThan(0);
+    return [entry, ...imports.map((file) => readFileSync(join(STYLES, file), "utf8"))].join("\n");
+}
 
-    test("resolves roles and token names to CSS variables without var()", () => {
-        expect(resolveColor("primary")).toBe("var(--paper-primary)");
-        expect(resolveColor("brand")).toBe("var(--paper-brand)");
-        expect(resolveColor("danger")).toBe("var(--paper-danger)");
-        expect(resolveColor("text-subtle")).toBe("var(--paper-text-subtle)");
-        expect(resolveColor("#ffffff")).toBe("#ffffff");
-        expect(resolveColor("currentColor")).toBe("currentColor");
-        expect(resolveColor(undefined)).toBeUndefined();
-    });
-
-    test("passes any CSS colour function through untouched", () => {
+// Inventory: Layout and navigation — Theme and token helpers (resolvers and size tokens;
+// PaperProvider's theme choice is proven in Chrome, test/browser/theme.test.ts).
+describe("theme and token helpers", () => {
+    test("resolveColor passes CSS colours through and resolves token names to --paper variables", () => {
         for (const css of [
-            "rgb(1 2 3)",
-            "hsl(10 50% 50%)",
-            "oklch(0.5 0.2 275)",
-            "light-dark(#000000, #ffffff)",
-            "color-mix(in oklch, red, blue)",
-            "var(--paper-primary)",
+            "#ff8800",
+            "#fff",
+            "rgb(1, 2, 3)",
+            "rgba(1, 2, 3, 0.5)",
+            "hsl(10 20% 30%)",
+            "oklch(0.7 0.1 200)",
+            "color-mix(in srgb, red 50%, blue)",
+            "light-dark(white, black)",
+            "var(--brand)",
+            "currentColor",
+            "transparent",
         ]) {
             expect(resolveColor(css)).toBe(css);
         }
+        expect(resolveColor("primary")).toBe("var(--paper-primary)");
+        expect(resolveColor("text-subtle")).toBe("var(--paper-text-subtle)");
+        expect(resolveColor(undefined)).toBeUndefined();
     });
 
-    test("formats getVarCss accurately", () => {
-        expect(getVarCss("text-subtle")).toBe("var(--paper-text-subtle)");
-        expect(getVarCss("--paper-primary")).toBe("var(--paper-primary)");
-        expect(getVarCss("paper-primary")).toBe("var(--paper-primary)");
-        expect(getVarCss("text-subtle", "#000")).toBe("var(--paper-text-subtle, #000)");
+    test("getVarCss maps a token name, a paper- name or a raw custom property to var()", () => {
+        expect(getVarCss("surface")).toBe("var(--paper-surface)");
+        expect(getVarCss("paper-surface")).toBe("var(--paper-surface)");
+        expect(getVarCss("--panel-accent")).toBe("var(--panel-accent)");
+        expect(getVarCss("uigap", "8px")).toBe("var(--paper-uigap, 8px)");
+    });
+
+    test("resolveSpacing maps spacing tokens and passes lengths through", () => {
+        expect(resolveSpacing("none")).toBe("0");
+        expect(resolveSpacing("half")).toBe("var(--paper-uigap-half)");
+        expect(resolveSpacing("full")).toBe("var(--paper-uigap)");
+        expect(resolveSpacing("double")).toBe("var(--paper-uigap-double)");
+        expect(resolveSpacing(12)).toBe("12px");
+        for (const css of ["4px", "1.5rem", "50%", "calc(1px + 2px)", "var(--x)"]) expect(resolveSpacing(css)).toBe(css);
+        expect(resolveSpacing("inset")).toBe("var(--paper-inset)");
+        expect(resolveSpacing(undefined)).toBeUndefined();
+    });
+
+    test("resolveBackground maps surfaces to tokens and passes colours through", () => {
+        expect(resolveBackground("surface-raised")).toBe("var(--paper-surface-raised)");
+        expect(resolveBackground("paper-surface")).toBe("var(--paper-surface)");
+        expect(resolveBackground("--paper-surface")).toBe("var(--paper-surface)");
+        for (const css of ["#102030", "rgb(0 0 0)", "hsl(0 0% 0%)", "var(--x)", "transparent"]) {
+            expect(resolveBackground(css)).toBe(css);
+        }
+    });
+
+    test("every paperSizes name is defined as --paper-size-<name>", () => {
+        const sheets = tokenSheets();
+        const missing = paperSizes.filter((name) => !new RegExp(`--paper-size-${name}\\s*:`).test(sheets));
+        expect(missing).toEqual([]);
     });
 });
