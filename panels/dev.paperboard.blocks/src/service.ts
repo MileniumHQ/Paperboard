@@ -22,18 +22,32 @@ function log(level: LogEntry["level"], message: string, blockId?: string): void 
     ctx.setState((prev) => ({ log: [...prev.log, entry].slice(-MAX_LOG) }));
 }
 
+/**
+ * A call to another panel, as long as it takes (a backup or an install can
+ * take minutes), unless the run is stopped first: then the flow stops
+ * waiting for it. The other panel still finishes what it started.
+ */
+function untilStopped<T>(signal: AbortSignal, call: Promise<T>): Promise<T> {
+    if (signal.aborted) return Promise.reject(new Error("The run was stopped"));
+    return new Promise<T>((resolve, reject) => {
+        const stop = () => reject(new Error("The run was stopped"));
+        signal.addEventListener("abort", stop, { once: true });
+        call.then(resolve, reject).finally(() => signal.removeEventListener("abort", stop));
+    });
+}
+
 function host(signal: AbortSignal): Host {
     return {
         signal,
         run: (panelId, entry, inputs) => {
             const { project, id } = parseEntry(entry);
-            return blocksApi.run(panelId, id, inputs, project ? { project } : {});
+            return untilStopped(signal, blocksApi.run(panelId, id, inputs, { ...(project ? { project } : {}), timeoutMs: null }));
         },
         read: (panelId, entry, inputs) => {
             const { project, id } = parseEntry(entry);
-            return blocksApi.read(panelId, id, inputs, project ? { project } : {});
+            return untilStopped(signal, blocksApi.read(panelId, id, inputs, project ? { project } : {}));
         },
-        property: (typeRef, field, value) => blocksApi.property(typeRef, field, value),
+        property: (typeRef, field, value) => untilStopped(signal, blocksApi.property(typeRef, field, value)),
         log: (message, blockId) => log("info", message, blockId),
     };
 }
