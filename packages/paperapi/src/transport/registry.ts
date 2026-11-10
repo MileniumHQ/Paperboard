@@ -13,7 +13,16 @@ export interface RegisteredProject {
 
 export type ActionHandler = (...args: any[]) => Promise<any> | any;
 
+/**
+ * Which daemon registry this mirrors: "actions" (v1, actions:* RPCs, entries
+ * named by "action") or "blocks" (v2, blocks:* RPCs, entries named by
+ * "entry"). Both replay the same way after a reconnect.
+ */
+export type RegistryPrefix = "actions" | "blocks";
+
 export class TransportRegistry {
+    constructor(private readonly prefix: RegistryPrefix = "actions") {}
+
     // handlers keyed by "panelId:action": every name is owned by its panel,
     // so two panels may register the same action name without colliding
     public readonly actionHandlers = new Map<string, ActionHandler>();
@@ -74,16 +83,16 @@ export class TransportRegistry {
     ): Promise<void> {
         await Promise.all(
             [...this.registeredProjects.entries()].map(([key, p]) =>
-                call("actions:project-define", { panelId: p.panelId, project: p.id, name: p.name, icon: p.icon })
-                    .catch((err) => onError(`actions:project-define resubscribe ${key}`, err)),
+                call(`${this.prefix}:project-define`, { panelId: p.panelId, project: p.id, name: p.name, icon: p.icon })
+                    .catch((err) => onError(`${this.prefix}:project-define resubscribe ${key}`, err)),
             ),
         );
         for (const [key, entry] of this.registeredActions.entries()) {
-            call("actions:register", {
+            call(`${this.prefix}:register`, {
                 panelId: entry.panelId,
-                action: entry.action,
+                [this.prefix === "actions" ? "action" : "entry"]: entry.action,
                 schema: entry.schema,
-            }).catch((err) => onError(`actions:register resubscribe ${key}`, err));
+            }).catch((err) => onError(`${this.prefix}:register resubscribe ${key}`, err));
         }
 
     }

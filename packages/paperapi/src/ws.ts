@@ -181,6 +181,8 @@ export class CraneTransport {
     private attachedTerminals = new Set<string>();
     private attachedProcesses = new Set<string>();
     private registry = new TransportRegistry();
+    // the Blocks registry (blocksApi): its own names, handlers and replay
+    private blocksRegistry = new TransportRegistry("blocks");
     // null tunnel means remote frames must fail
     private tunnelId: string | null = null;
     private isNode =
@@ -552,8 +554,10 @@ export class CraneTransport {
         if (msg.type === "action_call") {
             const { callId, panelId, action, args } = msg;
             // namespaced dispatch: unique composite owner only; ambiguous
-            // bare names are refused rather than resolved last-writer-wins
-            const handler = this.registry.getHandler(`${panelId}:${action}`);
+            // bare names are refused rather than resolved last-writer-wins.
+            // A Blocks call names its registry; an Actions call names none.
+            const registry = msg.registry === "blocks" ? this.blocksRegistry : this.registry;
+            const handler = registry.getHandler(`${panelId}:${action}`);
             if (!handler) {
                 this.frame({
                     type: "action_reply",
@@ -850,6 +854,31 @@ export class CraneTransport {
         await this.call("actions:project-remove", { panelId, project: projectId });
     }
 
+    /** Registers one Blocks entry ("kind.id" or "project/kind.id") and its handler. */
+    public async registerBlock(panelId: string, entry: string, handler: (...args: any[]) => Promise<any> | any, schema: unknown): Promise<void> {
+        this.blocksRegistry.addAction(panelId, entry, handler, schema);
+        await this.ensureConnected();
+        await this.call("blocks:register", { panelId, entry, schema });
+    }
+
+    public async unregisterBlock(panelId: string, entry: string): Promise<void> {
+        this.blocksRegistry.removeAction(panelId, entry);
+        await this.ensureConnected();
+        await this.call("blocks:unregister", { panelId, entry });
+    }
+
+    public async defineBlocksProject(panelId: string, project: { id: string; name: string; icon?: string }): Promise<void> {
+        await this.ensureConnected();
+        await this.call("blocks:project-define", { panelId, project: project.id, name: project.name, icon: project.icon });
+        this.blocksRegistry.addProject({ panelId, ...project });
+    }
+
+    public async removeBlocksProject(panelId: string, projectId: string): Promise<void> {
+        this.blocksRegistry.removeProject(panelId, projectId);
+        await this.ensureConnected();
+        await this.call("blocks:project-remove", { panelId, project: projectId });
+    }
+
     // replays attachments and registrations after reconnect
     private async resubscribe(): Promise<void> {
         // the daemon forgot this socket's subscriptions; re-announce the set
@@ -864,6 +893,10 @@ export class CraneTransport {
         }
 
         await this.registry.resubscribe(
+            (action, params) => this.request(action, params),
+            (label, err) => debugErr(label, err),
+        );
+        await this.blocksRegistry.resubscribe(
             (action, params) => this.request(action, params),
             (label, err) => debugErr(label, err),
         );

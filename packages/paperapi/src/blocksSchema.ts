@@ -1,0 +1,508 @@
+// Actions API v2: what a panel registers for the Blocks panel, and the one
+// validator for it. Pure, so the SDK, the Blocks panel and tests share it.
+//
+// Four kinds of block, all drawn from definitions:
+//   - event: a hat block. Fires with a payload; each payload value is a
+//     typed reporter inside the flow it starts.
+//   - command: a statement block that does something, and may return a
+//     typed value.
+//   - value: a reporter for live state the panel keeps (player count). It
+//     only reads. One that says when it changes also offers "when it changes".
+//   - type: what a value is. A type's fields become properties: one
+//     "[field] of [value]" reporter, read off the value itself or looked up
+//     by the panel.
+//
+// Values travel as JSON. A type names its base (text, number, boolean or
+// object), and a value of the type is that JSON.
+
+/** The types every panel shares. A timestamp and a duration are milliseconds. */
+export const CORE_TYPES = ["text", "number", "boolean", "timestamp", "duration", "color", "url", "any"] as const;
+export type CoreType = (typeof CORE_TYPES)[number];
+
+/** What a custom type's values are on the wire. */
+export type TypeBase = "text" | "number" | "boolean" | "object";
+
+/**
+ * A type reference: a core type ("text"), a type this panel defines
+ * ("player"), another panel's type ("dev.paperboard.botcreator:channel"),
+ * or a list of any of these ("list<player>").
+ */
+export type TypeRef = string;
+
+export type ParsedType =
+    | { kind: "core"; name: CoreType }
+    | { kind: "custom"; panelId: string | null; id: string }
+    | { kind: "list"; item: ParsedType };
+
+const ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const PANEL_ID = /^[a-z0-9][a-z0-9.-]{0,127}$/;
+const MAX_LIST_DEPTH = 4;
+const MAX_NAME = 64;
+const MAX_DESCRIPTION = 512;
+const MAX_TEXT = 160;
+const MAX_INPUTS = 16;
+const MAX_FIELDS = 32;
+const MAX_CHOICES = 256;
+
+export function parseTypeRef(ref: unknown, depth = 0): ParsedType {
+    if (typeof ref !== "string" || !ref) throw new Error(`a type must be named, got ${JSON.stringify(ref)}`);
+    const list = /^list<(.+)>$/.exec(ref);
+    if (list) {
+        if (depth >= MAX_LIST_DEPTH) throw new Error(`"${ref}" nests lists deeper than ${MAX_LIST_DEPTH}`);
+        return { kind: "list", item: parseTypeRef(list[1], depth + 1) };
+    }
+    if ((CORE_TYPES as readonly string[]).includes(ref)) return { kind: "core", name: ref as CoreType };
+    const colon = ref.indexOf(":");
+    if (colon === -1) {
+        if (!ID.test(ref)) throw new Error(`"${ref}" is not a type: use a core type (${CORE_TYPES.join(", ")}), a type id, "panel:type" or "list<type>"`);
+        return { kind: "custom", panelId: null, id: ref };
+    }
+    const panelId = ref.slice(0, colon);
+    const id = ref.slice(colon + 1);
+    if (!PANEL_ID.test(panelId) || !ID.test(id)) throw new Error(`"${ref}" is not a type: another panel's type is "panel.id:type"`);
+    return { kind: "custom", panelId, id };
+}
+
+/** The reference with every custom type named by its panel, as the registry stores it. */
+export function qualifyTypeRef(ref: TypeRef, panelId: string): TypeRef {
+    const write = (t: ParsedType): string =>
+        t.kind === "list" ? `list<${write(t.item)}>` : t.kind === "core" ? t.name : `${t.panelId ?? panelId}:${t.id}`;
+    return write(parseTypeRef(ref));
+}
+
+// ─── Definitions ────────────────────────────────────────────────────────────
+
+/** What a block call knows about where it runs. */
+export interface BlockContext {
+    panelId: string;
+    /** the project the block belongs to; absent on the panel's own blocks */
+    project?: string;
+}
+
+export interface BlockChoice {
+    label: string;
+    value: string | number | boolean;
+}
+
+export interface BlockInputDefinition {
+    type: TypeRef;
+    /** what the input is called where the block's text can't show it */
+    name: string;
+    description?: string;
+    /** the block runs without it; the run sees it absent */
+    optional?: boolean;
+    /** a dropdown of these instead of a socket */
+    choices?: BlockChoice[];
+    /** limits a number (min, max, integer) or text (maxLength) */
+    min?: number;
+    max?: number;
+    integer?: boolean;
+    maxLength?: number;
+}
+
+export interface BlockFieldDefinition<V = any> {
+    type: TypeRef;
+    name: string;
+    description?: string;
+    /**
+     * Looks the field up. Without it the field is read off the value
+     * itself (an object value's own key), which costs nothing.
+     */
+    resolve?: (value: V, ctx: BlockContext) => unknown | Promise<unknown>;
+}
+
+export interface BlockTypeDefinition<V = any> {
+    id: string;
+    /** what a value of the type is called ("Player") */
+    name: string;
+    description?: string;
+    /** a Material Symbols name */
+    icon?: string;
+    base: TypeBase;
+    fields?: Record<string, BlockFieldDefinition<V>>;
+}
+
+interface BlockDefinitionBase {
+    id: string;
+    name: string;
+    description?: string;
+    /** the toolbox section the block sits in */
+    category?: string;
+    /** a Material Symbols name */
+    icon?: string;
+    /**
+     * What the block says, with each input in braces where its socket sits:
+     * "Kick {player} because {reason}". Defaults to the name, with any
+     * inputs after it.
+     */
+    text?: string;
+    inputs?: Record<string, BlockInputDefinition>;
+}
+
+export interface BlockCommandDefinition<I = any, O = any> extends BlockDefinitionBase {
+    /** the type of what it returns; absent when it returns nothing */
+    output?: TypeRef;
+    run: (inputs: I, ctx: BlockContext) => O | Promise<O>;
+}
+
+export interface BlockValueDefinition<I = any, O = any> extends BlockDefinitionBase {
+    type: TypeRef;
+    /**
+     * The panel says when the value changes (the handle's `changed`), so
+     * the Blocks panel offers "when it changes". Leave it off for a value
+     * that never says so.
+     */
+    changes?: boolean;
+    read: (inputs: I, ctx: BlockContext) => O | Promise<O>;
+}
+
+export interface BlockEventValueDefinition {
+    type: TypeRef;
+    name: string;
+    description?: string;
+}
+
+export interface BlockEventDefinition extends BlockDefinitionBase {
+    /** the payload it fires with: each key a typed value inside the flow */
+    values?: Record<string, BlockEventValueDefinition>;
+    /**
+     * Inputs that narrow which firings start the flow: the flow runs only
+     * when payload[value] equals the input's literal. Unset means any.
+     */
+    filters?: Record<string, string>;
+}
+
+export type BlockKind = "type" | "command" | "value" | "event";
+
+// ─── What reaches the registry ──────────────────────────────────────────────
+
+/** A definition as the registry lists it: code removed, every type qualified. */
+export type BlockSchema =
+    | ({ kind: "type" } & Omit<BlockTypeDefinition, "fields"> & { fields?: Record<string, Omit<BlockFieldDefinition, "resolve"> & { resolved?: true }> })
+    | ({ kind: "command" } & Omit<BlockCommandDefinition, "run">)
+    | ({ kind: "value" } & Omit<BlockValueDefinition, "read">)
+    | ({ kind: "event" } & BlockEventDefinition);
+
+/** The registry entry a definition is registered under. */
+export function blockEntry(kind: BlockKind, id: string, project?: string): string {
+    return project ? `${project}/${kind}.${id}` : `${kind}.${id}`;
+}
+
+// ─── Validation ─────────────────────────────────────────────────────────────
+
+const describe = (kind: BlockKind, id: unknown) => `${kind[0]!.toUpperCase()}${kind.slice(1)} "${String(id)}"`;
+
+function assertLabel(value: unknown, what: string, max = MAX_NAME): void {
+    if (typeof value !== "string" || !value.trim()) throw new Error(`${what} needs a name`);
+    if (value.length > max) throw new Error(`${what} is longer than ${max} characters`);
+}
+
+function assertOptionalText(value: unknown, what: string, max: number): void {
+    if (value === undefined) return;
+    if (typeof value !== "string") throw new Error(`${what} must be text`);
+    if (value.length > max) throw new Error(`${what} is longer than ${max} characters`);
+}
+
+function assertType(ref: unknown, what: string, known: (t: ParsedType) => string | null): void {
+    let parsed: ParsedType;
+    try {
+        parsed = parseTypeRef(ref);
+    } catch (err) {
+        throw new Error(`${what}: ${(err as Error).message}`);
+    }
+    const walk = (t: ParsedType): void => {
+        if (t.kind === "list") return walk(t.item);
+        const problem = known(t);
+        if (problem) throw new Error(`${what}: ${problem}`);
+    };
+    walk(parsed);
+}
+
+function assertInputs(def: BlockDefinitionBase, label: string, known: (t: ParsedType) => string | null): void {
+    const inputs = def.inputs ?? {};
+    const keys = Object.keys(inputs);
+    if (keys.length > MAX_INPUTS) throw new Error(`${label} has more than ${MAX_INPUTS} inputs`);
+    for (const key of keys) {
+        const input = inputs[key]!;
+        const what = `${label} input "${key}"`;
+        if (!ID.test(key)) throw new Error(`${what} must be named with lowercase letters, digits and dashes`);
+        assertLabel(input.name, what);
+        assertOptionalText(input.description, `${what} description`, MAX_DESCRIPTION);
+        assertType(input.type, what, known);
+        const parsed = parseTypeRef(input.type);
+        for (const limit of ["min", "max"] as const) {
+            const v = input[limit];
+            if (v !== undefined && !Number.isFinite(v)) throw new Error(`${what} declares a ${limit} that is not a number`);
+        }
+        if (input.min !== undefined && input.max !== undefined && input.min > input.max) throw new Error(`${what} declares a min above its max`);
+        if (input.maxLength !== undefined && !(Number.isInteger(input.maxLength) && input.maxLength >= 0)) {
+            throw new Error(`${what} declares a maxLength that is not a whole number`);
+        }
+        const numeric = input.min !== undefined || input.max !== undefined || input.integer;
+        if (numeric && !(parsed.kind === "core" && ["number", "timestamp", "duration"].includes(parsed.name))) {
+            throw new Error(`${what} limits a number, but takes ${input.type}`);
+        }
+        if (input.choices !== undefined) {
+            if (!Array.isArray(input.choices) || input.choices.length === 0) throw new Error(`${what} declares choices, but none`);
+            if (input.choices.length > MAX_CHOICES) throw new Error(`${what} has more than ${MAX_CHOICES} choices`);
+            const seen = new Set<unknown>();
+            for (const choice of input.choices) {
+                assertLabel(choice?.label, `${what} choice`);
+                if (!["string", "number", "boolean"].includes(typeof choice.value)) throw new Error(`${what} choice "${choice.label}" needs a text, number or boolean value`);
+                if (seen.has(choice.value)) throw new Error(`${what} offers the value ${JSON.stringify(choice.value)} twice`);
+                seen.add(choice.value);
+            }
+        }
+    }
+    if (def.text !== undefined) {
+        assertLabel(def.text, `${label} text`, MAX_TEXT);
+        const named = [...def.text.matchAll(/\{([^}]*)\}/g)].map((m) => m[1]!);
+        for (const name of named) {
+            if (!(name in inputs)) throw new Error(`${label} text names {${name}}, which is not one of its inputs`);
+        }
+        for (const key of keys) {
+            const count = named.filter((n) => n === key).length;
+            if (count !== 1) throw new Error(`${label} text must show {${key}} once, not ${count} times`);
+        }
+    }
+}
+
+function assertBase(def: BlockDefinitionBase, kind: BlockKind): string {
+    if (!def || typeof def !== "object") throw new Error(`A ${kind} definition must be an object`);
+    const label = describe(kind, def.id);
+    if (typeof def.id !== "string" || !ID.test(def.id)) throw new Error(`${label} needs an id of lowercase letters, digits and dashes, at most 64`);
+    assertLabel(def.name, label);
+    assertOptionalText(def.description, `${label} description`, MAX_DESCRIPTION);
+    assertOptionalText(def.category, `${label} category`, MAX_NAME);
+    assertOptionalText(def.icon, `${label} icon`, MAX_NAME);
+    return label;
+}
+
+/**
+ * Checks a panel's definitions as one set: ids are unique per kind, and
+ * every custom type a definition names is one of `types` or another
+ * panel's ("panel:type"). Throws a message the panel's author can act on.
+ */
+export function validateBlockDefinitions(set: {
+    types?: BlockTypeDefinition[];
+    commands?: BlockCommandDefinition[];
+    values?: BlockValueDefinition[];
+    events?: BlockEventDefinition[];
+}, panelId: string, availableTypes: ReadonlySet<string> = new Set()): void {
+    const own = new Set<string>(availableTypes);
+    for (const type of set.types ?? []) own.add(type?.id);
+    const known = (t: ParsedType): string | null => {
+        if (t.kind !== "custom") return null;
+        if (t.panelId !== null && t.panelId !== panelId) return null;
+        return own.has(t.id) ? null : `the type "${t.id}" is not defined by this panel`;
+    };
+    const unique = (kind: BlockKind, defs: { id: string }[]) => {
+        const seen = new Set<string>();
+        for (const def of defs) {
+            if (seen.has(def.id)) throw new Error(`${describe(kind, def.id)} is defined twice`);
+            seen.add(def.id);
+        }
+    };
+
+    for (const type of set.types ?? []) {
+        const label = assertBase(type as unknown as BlockDefinitionBase, "type");
+        if (!["text", "number", "boolean", "object"].includes(type.base)) throw new Error(`${label} needs a base of text, number, boolean or object`);
+        const fields = Object.entries(type.fields ?? {});
+        if (fields.length > MAX_FIELDS) throw new Error(`${label} has more than ${MAX_FIELDS} fields`);
+        for (const [key, field] of fields) {
+            const what = `${label} field "${key}"`;
+            if (!ID.test(key)) throw new Error(`${what} must be named with lowercase letters, digits and dashes`);
+            assertLabel(field.name, what);
+            assertOptionalText(field.description, `${what} description`, MAX_DESCRIPTION);
+            assertType(field.type, what, known);
+            if (field.resolve !== undefined && typeof field.resolve !== "function") throw new Error(`${what} resolve must be a function`);
+            if (!field.resolve && type.base !== "object") throw new Error(`${what} has nothing to read: a ${type.base} value has no keys, so the field needs resolve`);
+        }
+    }
+    for (const command of set.commands ?? []) {
+        const label = assertBase(command, "command");
+        assertInputs(command, label, known);
+        if (command.output !== undefined) assertType(command.output, `${label} output`, known);
+        if (typeof command.run !== "function") throw new Error(`${label} needs run`);
+    }
+    for (const value of set.values ?? []) {
+        const label = assertBase(value, "value");
+        assertInputs(value, label, known);
+        assertType(value.type, `${label} type`, known);
+        if (typeof value.read !== "function") throw new Error(`${label} needs read`);
+        if (value.changes !== undefined && typeof value.changes !== "boolean") throw new Error(`${label} changes must be true or false`);
+    }
+    for (const event of set.events ?? []) {
+        const label = assertBase(event, "event");
+        assertInputs(event, label, known);
+        const values = event.values ?? {};
+        if (Object.keys(values).length > MAX_FIELDS) throw new Error(`${label} fires more than ${MAX_FIELDS} values`);
+        for (const [key, v] of Object.entries(values)) {
+            const what = `${label} value "${key}"`;
+            if (!ID.test(key)) throw new Error(`${what} must be named with lowercase letters, digits and dashes`);
+            assertLabel(v.name, what);
+            assertType(v.type, what, known);
+        }
+        for (const [input, valueKey] of Object.entries(event.filters ?? {})) {
+            if (!event.inputs?.[input]) throw new Error(`${label} filters on "${input}", which is not one of its inputs`);
+            if (!values[valueKey]) throw new Error(`${label} filters "${input}" against "${valueKey}", which it does not fire`);
+            if (qualifyTypeRef(event.inputs[input]!.type, panelId) !== qualifyTypeRef(values[valueKey]!.type, panelId)) {
+                throw new Error(`${label} filters "${input}" (${event.inputs[input]!.type}) against "${valueKey}" (${values[valueKey]!.type}); they must be one type`);
+            }
+        }
+    }
+    unique("type", set.types ?? []);
+    unique("command", set.commands ?? []);
+    unique("value", set.values ?? []);
+    unique("event", set.events ?? []);
+}
+
+// ─── Schemas ────────────────────────────────────────────────────────────────
+
+function qualifyInputs(inputs: BlockDefinitionBase["inputs"], panelId: string) {
+    if (!inputs) return undefined;
+    return Object.fromEntries(Object.entries(inputs).map(([k, v]) => [k, { ...v, type: qualifyTypeRef(v.type, panelId) }]));
+}
+
+function strip<T extends object>(def: T, drop: string[]): T {
+    return Object.fromEntries(Object.entries(def).filter(([k, v]) => !drop.includes(k) && v !== undefined)) as T;
+}
+
+/** The registry's copy of a definition: no code, every type qualified by panel. */
+export function blockSchema(kind: BlockKind, def: any, panelId: string): BlockSchema {
+    switch (kind) {
+        case "type":
+            return {
+                kind,
+                ...strip(def, ["fields"]),
+                ...(def.fields
+                    ? {
+                          fields: Object.fromEntries(
+                              Object.entries(def.fields as Record<string, BlockFieldDefinition>).map(([k, f]) => [
+                                  k,
+                                  { ...strip(f, ["resolve"]), type: qualifyTypeRef(f.type, panelId), ...(f.resolve ? { resolved: true as const } : {}) },
+                              ]),
+                          ),
+                      }
+                    : {}),
+            } as BlockSchema;
+        case "command":
+            return { kind, ...strip(def, ["run", "inputs", "output"]), ...(def.inputs ? { inputs: qualifyInputs(def.inputs, panelId) } : {}), ...(def.output ? { output: qualifyTypeRef(def.output, panelId) } : {}) } as BlockSchema;
+        case "value":
+            return { kind, ...strip(def, ["read", "inputs", "type"]), ...(def.inputs ? { inputs: qualifyInputs(def.inputs, panelId) } : {}), type: qualifyTypeRef(def.type, panelId) } as BlockSchema;
+        case "event":
+            return {
+                kind,
+                ...strip(def, ["inputs", "values"]),
+                ...(def.inputs ? { inputs: qualifyInputs(def.inputs, panelId) } : {}),
+                ...(def.values
+                    ? { values: Object.fromEntries(Object.entries(def.values as Record<string, BlockEventValueDefinition>).map(([k, v]) => [k, { ...v, type: qualifyTypeRef(v.type, panelId) }])) }
+                    : {}),
+            } as BlockSchema;
+    }
+}
+
+// ─── Values ─────────────────────────────────────────────────────────────────
+
+/**
+ * What a value is checked against: a type's base, and its readable fields.
+ * undefined means no such type; null means it is not the checker's to
+ * check (another panel's type, which that panel checks), so any value passes.
+ */
+export type TypeLookup = (qualified: string) => { base: TypeBase; fields?: Record<string, { type: TypeRef; resolved?: true }> } | null | undefined;
+
+/**
+ * Why `value` is not a `ref`, or null when it is. Lists check every item,
+ * custom types their base and every field read off the value itself.
+ * `ref` is qualified; `lookup` answers the custom types it names.
+ */
+export function valueProblem(ref: TypeRef, value: unknown, lookup: TypeLookup, depth = 0): string | null {
+    const t = parseTypeRef(ref);
+    if (t.kind === "list") {
+        if (!Array.isArray(value)) return `expected a list, got ${describeValue(value)}`;
+        for (let i = 0; i < value.length; i++) {
+            const problem = valueProblem(`${listItemRef(ref)}`, value[i], lookup, depth);
+            if (problem) return `item ${i + 1}: ${problem}`;
+        }
+        return null;
+    }
+    if (t.kind === "core") return coreProblem(t.name, value);
+    const qualified = `${t.panelId}:${t.id}`;
+    const type = lookup(qualified);
+    if (type === null) return value === undefined ? "expected a value, got nothing" : null;
+    if (!type) return `the type "${qualified}" is not registered`;
+    const baseProblem = coreProblem(type.base === "object" ? "any" : type.base, value);
+    if (baseProblem) return baseProblem;
+    if (type.base === "object") {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return `expected an object, got ${describeValue(value)}`;
+        if (depth >= 8) return null;
+        for (const [key, field] of Object.entries(type.fields ?? {})) {
+            if (field.resolved) continue;
+            if (!(key in value)) return `the field "${key}" is missing`;
+            const problem = valueProblem(field.type, (value as Record<string, unknown>)[key], lookup, depth + 1);
+            if (problem) return `the field "${key}": ${problem}`;
+        }
+    }
+    return null;
+}
+
+function listItemRef(ref: TypeRef): TypeRef {
+    return ref.slice("list<".length, -1);
+}
+
+function coreProblem(name: CoreType | "any", value: unknown): string | null {
+    switch (name) {
+        case "any":
+            return value === undefined ? "expected a value, got nothing" : null;
+        case "text":
+            return typeof value === "string" ? null : `expected text, got ${describeValue(value)}`;
+        case "number":
+            return typeof value === "number" && Number.isFinite(value) ? null : `expected a number, got ${describeValue(value)}`;
+        case "boolean":
+            return typeof value === "boolean" ? null : `expected true or false, got ${describeValue(value)}`;
+        case "timestamp":
+        case "duration":
+            return typeof value === "number" && Number.isFinite(value) ? null : `expected a ${name} in milliseconds, got ${describeValue(value)}`;
+        case "color":
+            return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? null : `expected a color like #3366ff, got ${describeValue(value)}`;
+        case "url":
+            return typeof value === "string" && URL.canParse(value) ? null : `expected a web address, got ${describeValue(value)}`;
+    }
+}
+
+function describeValue(value: unknown): string {
+    if (value === null) return "nothing";
+    if (value === undefined) return "nothing";
+    if (Array.isArray(value)) return "a list";
+    if (typeof value === "string") return `the text ${JSON.stringify(value.length > 40 ? `${value.slice(0, 40)}…` : value)}`;
+    if (typeof value === "object") return "an object";
+    return `${typeof value} ${String(value)}`;
+}
+
+/** Why `inputs` can't be passed to a block with these inputs, or null. */
+export function inputsProblem(inputs: unknown, defs: Record<string, BlockInputDefinition & { type: TypeRef }> | undefined, lookup: TypeLookup): string | null {
+    if (inputs !== undefined && inputs !== null && (typeof inputs !== "object" || Array.isArray(inputs))) return "inputs must be an object of values by input";
+    const given = (inputs ?? {}) as Record<string, unknown>;
+    for (const key of Object.keys(given)) {
+        if (!defs?.[key]) return `there is no input "${key}"`;
+    }
+    for (const [key, def] of Object.entries(defs ?? {})) {
+        const value = given[key];
+        if (value === undefined || value === null || value === "") {
+            if (def.optional) continue;
+            return `"${def.name}" is required`;
+        }
+        const problem = valueProblem(def.type, value, lookup);
+        if (problem) return `"${def.name}": ${problem}`;
+        if (def.choices && !def.choices.some((c) => c.value === value)) return `"${def.name}" must be one of ${def.choices.map((c) => c.label).join(", ")}`;
+        if (typeof value === "number") {
+            if (def.integer && !Number.isInteger(value)) return `"${def.name}" must be a whole number`;
+            if (def.min !== undefined && value < def.min) return `"${def.name}" must be at least ${def.min}`;
+            if (def.max !== undefined && value > def.max) return `"${def.name}" must be at most ${def.max}`;
+        }
+        if (typeof value === "string" && def.maxLength !== undefined && value.length > def.maxLength) {
+            return `"${def.name}" must be at most ${def.maxLength} characters`;
+        }
+    }
+    return null;
+}

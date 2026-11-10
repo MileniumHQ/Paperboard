@@ -2,6 +2,7 @@
 // environment the daemon gives services. PANEL_SCENARIO picks what it
 // registers; it prints READY once every registration is acknowledged.
 import { actionsApi, defineAction, defineType } from "../../src/actions";
+import { blocksApi } from "../../src/blocks";
 import { getPanelId } from "../../src/ipc";
 
 const panelId = getPanelId();
@@ -63,7 +64,83 @@ async function owner(): Promise<void> {
     await actionsApi.register("whoami", () => panelId);
 }
 
-const scenarios: Record<string, () => Promise<void>> = { inputs, owner };
+// Blocks (Actions API v2): a type with a field read off the value and one
+// the panel looks up, and a project with a command, a value that says when
+// it changes, and an event. "join" fires the event and the change, so the
+// test drives both from outside; "misfire" tries payloads the event never
+// declared and answers what the SDK refused.
+async function blocks(): Promise<void> {
+    const online: string[] = [];
+    let kicks = 0;
+    await blocksApi.panel().register({
+        types: [
+            {
+                id: "player",
+                name: "Player",
+                base: "object",
+                fields: {
+                    name: { type: "text", name: "Name" },
+                    shout: { type: "text", name: "Shout", resolve: (p: { name: string }) => `${p.name.toUpperCase()}!` },
+                },
+            },
+        ],
+    });
+    const server = await blocksApi.defineProject({ id: "s1", name: "Survival", icon: "dns" });
+    await server.register({
+        commands: [
+            {
+                id: "kick",
+                name: "Kick Player",
+                text: "Kick {player} because {reason}",
+                inputs: {
+                    player: { type: "player", name: "Player" },
+                    reason: { type: "text", name: "Reason", optional: true, maxLength: 20 },
+                },
+                output: "number",
+                run: () => ++kicks,
+            },
+            { id: "lie", name: "Lie", output: "number", run: () => "not a number" },
+            {
+                id: "join",
+                name: "Join",
+                inputs: { name: { type: "text", name: "Name" } },
+                run: async ({ name }: { name: string }) => {
+                    online.push(name);
+                    await server.fire("joined", { player: { name } });
+                    await server.changed("online");
+                },
+            },
+            {
+                id: "misfire",
+                name: "Misfire",
+                output: "list<text>",
+                run: async () => {
+                    const refused: string[] = [];
+                    for (const payload of [{ player: { name: 7 } }, { player: { name: "a" }, extra: 1 }, {}]) {
+                        await server.fire("joined", payload as never).then(
+                            () => refused.push("fired"),
+                            (err: Error) => refused.push(err.message),
+                        );
+                    }
+                    return refused;
+                },
+            },
+        ],
+        values: [
+            { id: "online", name: "Online Players", type: "list<player>", changes: true, read: () => online.map((name) => ({ name })) },
+            { id: "kicks", name: "Kicks", type: "number", read: () => kicks },
+        ],
+        events: [
+            {
+                id: "joined",
+                name: "When a Player Joins",
+                values: { player: { type: "player", name: "Player" } },
+            },
+        ],
+    });
+}
+
+const scenarios: Record<string, () => Promise<void>> = { inputs, owner, blocks };
 const scenario = scenarios[process.env.PANEL_SCENARIO ?? ""];
 if (!scenario) throw new Error(`unknown PANEL_SCENARIO ${process.env.PANEL_SCENARIO}`);
 await scenario();

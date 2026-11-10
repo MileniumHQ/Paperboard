@@ -22,6 +22,7 @@ export * from "./process";
 export * from "./panels";
 export * from "./system";
 export * from "./actions";
+export * from "./blocks";
 export * from "./service";
 export * from "./bridge";
 export * from "./channels";
