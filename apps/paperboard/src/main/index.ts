@@ -44,6 +44,7 @@ import icon from "../../resources/icon.png?asset";
 import { installScreenshotTool } from "./screenshotTool";
 import { installTextEditContextMenu } from "./contextMenu";
 import { relocateElectronData } from "./electronData";
+import { chooseLinuxDisplay } from "./linuxDisplay";
 import { setDesktopSupervisorEntry } from "../../papercrane/engineSupervisor";
 
 const log = logger;
@@ -88,6 +89,9 @@ function ensureDesktopTray(): void {
         onError: (err) => log.debug("[Tray] service count refresh failed:", err),
     });
 }
+
+// display backend switches only count before app ready
+chooseLinuxDisplay(app);
 
 // before the single-instance lock: it lives in userData
 const electronDataError = relocateElectronData(app);
