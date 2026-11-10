@@ -166,12 +166,9 @@ export async function setActiveWorld(
         throw new Error("Refusing multi-line seed");
     }
 
-    let content: string | null = null;
-    try {
-        content = await fileApi.read("server.properties", PANEL_ID);
-    } catch (err) {
-        console.debug("[Service:Worlds] server.properties unreadable, writing fresh:", String(err));
-    }
+    // an unreadable file fails the switch: writing "fresh" over it would
+    // drop every other setting the server had
+    const content = await fileApi.read("server.properties", PANEL_ID);
     const props = content ? parseProperties(content) : {};
     props["level-name"] = plan.name;
     if (plan.kind === "create") {
