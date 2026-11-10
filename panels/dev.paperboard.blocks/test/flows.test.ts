@@ -6,10 +6,11 @@
 // blocks.test.ts; here the host records what a flow asked of it.
 import { beforeAll, describe, expect, test } from "bun:test";
 import * as Blockly from "blockly";
+import { block, find, num, saved, steps, text, top, type Json } from "./helpers/workspace";
 import type { BlockInfo } from "@mileniumhq/paperapi";
 import { BUILTIN_BLOCKS, registryDefinitions } from "../src/lib/blockDefs";
 import { readFlows } from "../src/lib/flows";
-import { BlockError, MAX_LOOP_ITERATIONS, hatInputs, runHat, type Host, type SavedBlock, type SavedWorkspace } from "../src/lib/interpreter";
+import { BlockError, MAX_LOOP_ITERATIONS, hatInputs, runHat, type Host } from "../src/lib/interpreter";
 import { BUILTIN, propertyBlockType, registryBlockType } from "../src/lib/names";
 
 const GAME = "dev.test.game";
@@ -51,26 +52,6 @@ beforeAll(() => {
     Blockly.common.defineBlocksWithJsonArray([...BUILTIN_BLOCKS, ...registryDefinitions(ENTRIES).blocks]);
 });
 
-type Json = Record<string, unknown>;
-const text = (t: string) => ({ shadow: { type: "text", fields: { TEXT: t } } });
-const num = (n: number) => ({ shadow: { type: "math_number", fields: { NUM: n } } });
-const block = (type: string, rest: Json = {}) => ({ block: { type, ...rest } });
-const steps = (...blocks: Json[]): Json | undefined => {
-    let next: Json | undefined;
-    for (const b of [...blocks].reverse()) next = { block: { ...b, ...(next ? { next } : {}) } };
-    return next;
-};
-
-/** A workspace as the editor would save it: loaded into Blockly and saved back. */
-function saved(blocks: Json[], variables: { name: string; id: string }[] = []): SavedWorkspace {
-    const ws = new Blockly.Workspace();
-    try {
-        Blockly.serialization.workspaces.load({ blocks: { languageVersion: 0, blocks }, ...(variables.length ? { variables } : {}) }, ws);
-        return Blockly.serialization.workspaces.save(ws) as SavedWorkspace;
-    } finally {
-        ws.dispose();
-    }
-}
 
 interface Recorded {
     host: Host;
@@ -110,23 +91,6 @@ function recorder(answers: { read?: Record<string, unknown>; run?: (entry: strin
     };
 }
 
-const top = (ws: SavedWorkspace, type: string) => ws.blocks!.blocks.find((b) => b.type === type)!;
-const find = (ws: SavedWorkspace, type: string): SavedBlock => {
-    const walk = (b: SavedBlock | undefined): SavedBlock | undefined => {
-        if (!b) return undefined;
-        if (b.type === type) return b;
-        for (const input of Object.values(b.inputs ?? {})) {
-            const hit = walk(input.block) ?? walk(input.shadow);
-            if (hit) return hit;
-        }
-        return walk(b.next?.block);
-    };
-    for (const b of ws.blocks!.blocks) {
-        const hit = walk(b);
-        if (hit) return hit;
-    }
-    throw new Error(`no ${type} block`);
-};
 
 describe("a flow the editor saved runs the way it reads", () => {
     test("a command gets its typed inputs and its dropdown's value, and Log writes what it's given", async () => {
@@ -250,6 +214,13 @@ describe("a failing flow stops and names the block it failed on", () => {
         expect(err.message).toBe('Kick Player: "Reason" is required');
         expect(err.blockId).toBe(find(ws, KICK).id);
         expect(r.logs).toEqual([]);
+    });
+
+    test("a value the owning panel can't read fails on that value, not on the step that used it", async () => {
+        const ws = saved([{ type: BUILTIN.onRun, inputs: { DO: steps({ type: BUILTIN.log, inputs: { TEXT: block(COUNT) } }) } }]);
+        const err = await runHat(top(ws, BUILTIN.onRun), null, ws, recorder().host).catch((e) => e);
+        expect(err.message).toBe("nothing to read for s1/value.count");
+        expect(err.blockId).toBe(find(ws, COUNT).id);
     });
 
     test("dividing by zero, or arithmetic on a variable holding text, fails on the arithmetic block", async () => {

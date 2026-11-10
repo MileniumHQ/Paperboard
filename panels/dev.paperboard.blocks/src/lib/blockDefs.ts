@@ -83,8 +83,8 @@ export interface Definitions {
     blocks: Json[];
     /** each block's schema, saved with the flows */
     schemas: Record<string, { panelId: string; entry: string; schema: BlockSchema }>;
-    /** toolbox entries per section: panel or project */
-    sections: { key: string; panelId: string; project?: string; contents: Json[] }[];
+    /** toolbox entries per section: a panel or project, and a block's category in it */
+    sections: { key: string; panelId: string; project?: string; category?: string; contents: Json[] }[];
 }
 
 /** Blockly definitions and toolbox sections for every registry entry. */
@@ -94,11 +94,11 @@ export function registryDefinitions(entries: BlockInfo[]): Definitions {
         if (e.schema.kind === "type") bases.set(`${e.panelId}:${e.schema.id}`, e.schema.base);
     }
     const out: Definitions = { blocks: [], schemas: {}, sections: [] };
-    const section = (panelId: string, project?: string) => {
-        const key = project ? `${panelId}/${project}` : panelId;
+    const section = (panelId: string, project?: string, category?: string) => {
+        const key = [panelId, project ?? "", category ?? ""].join("\u0000");
         let found = out.sections.find((s) => s.key === key);
         if (!found) {
-            found = { key, panelId, ...(project ? { project } : {}), contents: [] };
+            found = { key, panelId, ...(project ? { project } : {}), ...(category ? { category } : {}), contents: [] };
             out.sections.push(found);
         }
         return found.contents;
@@ -115,7 +115,7 @@ export function registryDefinitions(entries: BlockInfo[]): Definitions {
 
     for (const { panelId, entry, schema } of entries) {
         const { project } = parseEntry(entry);
-        const contents = section(panelId, project);
+        const contents = section(panelId, project, "category" in schema ? schema.category : undefined);
         const record = (type: string) => {
             out.schemas[type] = { panelId, entry, schema };
         };
@@ -200,70 +200,172 @@ export function registryDefinitions(entries: BlockInfo[]): Definitions {
     return out;
 }
 
-/** This panel's own blocks: the Run hat, Wait and Log. */
+const statement = (type: string, message0: string, args0: Json[], tooltip: string, colour: number = HUE.builtin): Json => ({
+    type,
+    message0,
+    args0,
+    previousStatement: null,
+    nextStatement: null,
+    colour,
+    tooltip,
+});
+const reporter = (type: string, message0: string, args0: Json[], output: string | null, tooltip: string, colour: number): Json => ({
+    type,
+    message0,
+    args0,
+    output,
+    colour,
+    tooltip,
+    inputsInline: true,
+});
+const socket = (name: string, check?: string): Json => ({ type: "input_value", name, ...(check ? { check } : {}) });
+const dropdown = (name: string, options: [string, string][]): Json => ({ type: "field_dropdown", name, options });
+
+/** Blockly's own category colours, so the built-ins read like Blockly's blocks. */
+const HUES = { logic: 210, loops: 120, math: 230, text: 160, lists: 260, time: 330, web: 190, data: 290 } as const;
+
+/** This panel's own blocks, beside Blockly's. */
 export const BUILTIN_BLOCKS: Json[] = [
     hat(BUILTIN.onRun, { message0: "When Run is clicked", args0: [] }, "Runs when you click Run"),
+    statement(BUILTIN.wait, "Wait %1 seconds", [socket("SECONDS", "Number")], "Waits before the next step"),
+    statement(BUILTIN.waitUntil, "Wait until %1", [socket("BOOL", "Boolean")], "Waits until the condition is true, checking twice a second"),
+    statement(BUILTIN.log, "Log %1", [socket("TEXT")], "Writes to the run log"),
+    statement(BUILTIN.stop, "Stop this flow", [], "Ends this run here, without an error"),
+    statement(BUILTIN.fail, "Fail with %1", [socket("MESSAGE", "String")], "Ends this run with an error, unless an \"if it fails\" catches it"),
     {
-        type: BUILTIN.wait,
-        message0: "Wait %1 seconds",
-        args0: [{ type: "input_value", name: "SECONDS", check: ["Number"] }],
+        type: BUILTIN.attempt,
+        message0: "Try %1",
+        args0: [{ type: "input_dummy" }],
+        message1: "%1",
+        args1: [{ type: "input_statement", name: "DO" }],
+        message2: "If it fails %1",
+        args2: [{ type: "input_dummy" }],
+        message3: "%1",
+        args3: [{ type: "input_statement", name: "CATCH" }],
         previousStatement: null,
         nextStatement: null,
         colour: HUE.builtin,
-        tooltip: "Waits before the next step",
+        tooltip: "Runs the first steps; if one fails, runs the second ones instead of ending the flow",
     },
-    {
-        type: BUILTIN.log,
-        message0: "Log %1",
-        args0: [{ type: "input_value", name: "TEXT" }],
-        previousStatement: null,
-        nextStatement: null,
-        colour: HUE.builtin,
-        tooltip: "Writes to the run log",
-    },
+    reporter(BUILTIN.errorMessage, "error message", [], "String", "What went wrong, inside \"If it fails\"", HUE.builtin),
+    reporter(BUILTIN.textTest, "%1 %2 %3", [socket("TEXT", "String"), dropdown("OP", [["contains", "CONTAINS"], ["starts with", "STARTS"], ["ends with", "ENDS"]]), socket("PART", "String")], "Boolean", "Checks for a piece of text", HUES.text),
+    reporter(BUILTIN.regexTest, "%1 matches pattern %2", [socket("TEXT", "String"), socket("PATTERN", "String")], "Boolean", "Checks text against a regular expression", HUES.text),
+    reporter(BUILTIN.regexFind, "find pattern %1 in %2", [socket("PATTERN", "String"), socket("TEXT", "String")], "String", "The first match (or its first group); empty text when nothing matches", HUES.text),
+    reporter(BUILTIN.toNumber, "number from %1", [socket("TEXT", "String")], "Number", "Reads text as a number", HUES.text),
+    reporter(BUILTIN.base64, "%1 %2 as base64", [dropdown("MODE", [["encode", "ENCODE"], ["decode", "DECODE"]]), socket("TEXT", "String")], "String", "Base64 encoding", HUES.text),
+    reporter(BUILTIN.randomId, "random ID", [], "String", "A new random unique ID", HUES.math),
+    reporter(BUILTIN.jsonParse, "read JSON %1", [socket("TEXT", "String")], null, "Turns JSON text into a value", HUES.data),
+    reporter(BUILTIN.jsonText, "%1 as JSON", [socket("VALUE")], "String", "Turns a value into JSON text", HUES.data),
+    reporter(BUILTIN.getKey, "%1 of object %2", [socket("KEY", "String"), socket("OBJECT")], null, "One key of an object, like a web answer's", HUES.data),
+    reporter(BUILTIN.now, "now", [], "Number", "This moment, as a timestamp", HUES.time),
+    reporter(BUILTIN.timeFormat, "%1 as %2", [socket("TIME", "Number"), dropdown("FORMAT", [["date and time", "DATETIME"], ["date", "DATE"], ["time", "TIME"], ["weekday", "WEEKDAY"], ["ISO text", "ISO"]])], "String", "A timestamp as text, in this computer's time zone", HUES.time),
+    reporter(BUILTIN.timePart, "%1 of %2", [dropdown("PART", [["year", "YEAR"], ["month", "MONTH"], ["day", "DAY"], ["hour", "HOUR"], ["minute", "MINUTE"], ["second", "SECOND"]]), socket("TIME", "Number")], "Number", "One part of a timestamp, in this computer's time zone", HUES.time),
+    reporter(BUILTIN.timeAdd, "%1 %2 after %3", [socket("AMOUNT", "Number"), dropdown("UNIT", [["seconds", "SECONDS"], ["minutes", "MINUTES"], ["hours", "HOURS"], ["days", "DAYS"]]), socket("TIME", "Number")], "Number", "A later timestamp; a negative amount goes back", HUES.time),
+    reporter(BUILTIN.webGet, "get %1 as %2", [socket("URL", "String"), dropdown("AS", [["text", "TEXT"], ["JSON", "JSON"]])], null, "Fetches a web address (https, or http on this computer)", HUES.web),
+    reporter(BUILTIN.webPost, "post %1 to %2 and read %3", [socket("BODY"), socket("URL", "String"), dropdown("AS", [["JSON", "JSON"], ["text", "TEXT"]])], null, "Sends a value as JSON to a web address (https, or http on this computer)", HUES.web),
 ];
 
 const num = (n: number) => ({ shadow: { type: "math_number", fields: { NUM: n } } });
 const txt = (t: string) => ({ shadow: { type: "text", fields: { TEXT: t } } });
+const b = (type: string, inputs?: Json, extra: Json = {}): Json => ({ kind: "block", type, ...(inputs ? { inputs } : {}), ...extra });
 
-/** Blockly's own blocks that the interpreter runs, by section. */
+/** The built-in blocks the interpreter runs, by section. */
 export const BUILTIN_SECTIONS: { name: string; contents: Json[]; custom?: string }[] = [
     {
         name: "Flow",
         contents: [
-            { kind: "block", type: BUILTIN.onRun },
-            { kind: "block", type: BUILTIN.wait, inputs: { SECONDS: num(1) } },
-            { kind: "block", type: BUILTIN.log, inputs: { TEXT: txt("") } },
-            { kind: "block", type: "controls_if" },
-            { kind: "block", type: "controls_repeat_ext", inputs: { TIMES: num(10) } },
-            { kind: "block", type: "controls_whileUntil" },
-            { kind: "block", type: "controls_forEach" },
-            { kind: "block", type: "controls_flow_statements" },
+            b(BUILTIN.onRun),
+            b(BUILTIN.wait, { SECONDS: num(1) }),
+            b(BUILTIN.waitUntil),
+            b(BUILTIN.log, { TEXT: txt("") }),
+            b("controls_if"),
+            b("controls_repeat_ext", { TIMES: num(10) }),
+            b("controls_whileUntil"),
+            b("controls_forEach"),
+            b("controls_flow_statements"),
+            b(BUILTIN.attempt),
+            b(BUILTIN.errorMessage),
+            b(BUILTIN.fail, { MESSAGE: txt("") }),
+            b(BUILTIN.stop),
         ],
     },
     {
         name: "Logic",
-        contents: ["logic_compare", "logic_operation", "logic_negate", "logic_boolean"].map((type) => ({ kind: "block", type })),
+        contents: ["logic_compare", "logic_operation", "logic_negate", "logic_boolean", "logic_ternary"].map((type) => b(type)),
     },
     {
         name: "Math",
         contents: [
-            { kind: "block", type: "math_number", fields: { NUM: 0 } },
-            { kind: "block", type: "math_arithmetic", inputs: { A: num(1), B: num(1) } },
+            b("math_number", undefined, { fields: { NUM: 0 } }),
+            b("math_arithmetic", { A: num(1), B: num(1) }),
+            b("math_single", { NUM: num(9) }),
+            b("math_round", { NUM: num(3.1) }),
+            b("math_modulo", { DIVIDEND: num(64), DIVISOR: num(10) }),
+            b("math_constrain", { VALUE: num(50), LOW: num(1), HIGH: num(100) }),
+            b("math_number_property", { NUMBER_TO_CHECK: num(0) }),
+            b("math_on_list"),
+            b("math_random_int", { FROM: num(1), TO: num(100) }),
+            b("math_random_float"),
+            b(BUILTIN.randomId),
         ],
     },
     {
         name: "Text",
         contents: [
-            { kind: "block", type: "text" },
-            { kind: "block", type: "text_join" },
-            { kind: "block", type: "text_length", inputs: { VALUE: txt("") } },
-            { kind: "block", type: "text_isEmpty", inputs: { VALUE: txt("") } },
+            b("text"),
+            b("text_join"),
+            b("text_length", { VALUE: txt("") }),
+            b("text_isEmpty", { VALUE: txt("") }),
+            b(BUILTIN.textTest, { TEXT: txt(""), PART: txt("") }),
+            b("text_indexOf", { FIND: txt("") }),
+            b("text_charAt"),
+            b("text_getSubstring"),
+            b("text_changeCase", { TEXT: txt("") }),
+            b("text_trim", { TEXT: txt("") }),
+            b("text_replace", { FROM: txt(""), TO: txt(""), TEXT: txt("") }),
+            b("text_count", { SUB: txt(""), TEXT: txt("") }),
+            b("text_reverse", { TEXT: txt("") }),
+            b(BUILTIN.toNumber, { TEXT: txt("") }),
+            b(BUILTIN.regexTest, { TEXT: txt(""), PATTERN: txt("") }),
+            b(BUILTIN.regexFind, { PATTERN: txt(""), TEXT: txt("") }),
+            b(BUILTIN.base64, { TEXT: txt("") }),
         ],
     },
     {
         name: "Lists",
-        contents: ["lists_create_with", "lists_length", "lists_isEmpty"].map((type) => ({ kind: "block", type })),
+        contents: [
+            b("lists_create_empty"),
+            b("lists_create_with"),
+            b("lists_repeat", { NUM: num(5) }),
+            b("lists_length"),
+            b("lists_isEmpty"),
+            b("lists_indexOf"),
+            b("lists_getIndex"),
+            b("lists_setIndex"),
+            b("lists_getSublist"),
+            b("lists_split", { DELIM: txt(",") }),
+            b("lists_sort"),
+            b("lists_reverse"),
+        ],
+    },
+    {
+        name: "Time",
+        contents: [
+            b(BUILTIN.now),
+            b(BUILTIN.timeFormat, { TIME: { block: { type: BUILTIN.now } } }),
+            b(BUILTIN.timePart, { TIME: { block: { type: BUILTIN.now } } }),
+            b(BUILTIN.timeAdd, { AMOUNT: num(1), TIME: { block: { type: BUILTIN.now } } }),
+        ],
+    },
+    {
+        name: "Web",
+        contents: [
+            b(BUILTIN.webGet, { URL: txt("") }),
+            b(BUILTIN.webPost, { URL: txt("") }),
+            b(BUILTIN.jsonParse, { TEXT: txt("") }),
+            b(BUILTIN.jsonText),
+            b(BUILTIN.getKey, { KEY: txt("") }),
+        ],
     },
     { name: "Variables", contents: [], custom: "VARIABLE" },
 ];

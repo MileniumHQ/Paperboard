@@ -52,12 +52,24 @@ export default function App() {
 
         const panelName = (id: string) => panels.find((p) => p.id === id)?.name ?? id;
         const projectName = (panelId: string, id: string) => projects.find((p) => p.panelId === panelId && p.id === id)?.name ?? id;
-        const byPanel = new Map<string, Record<string, unknown>[]>();
-        for (const section of liveDefs.sections) {
-            const list = byPanel.get(section.panelId) ?? [];
-            if (section.project) list.push({ kind: "category", name: projectName(section.panelId, section.project), contents: section.contents });
-            else list.unshift(...section.contents);
-            byPanel.set(section.panelId, list);
+        // panel > project > the blocks' own categories; a level with one group shows its blocks directly
+        type Json = Record<string, unknown>;
+        const grouped = (sections: typeof liveDefs.sections): Json[] => {
+            const named = sections.filter((s) => s.category);
+            if (named.length === 0 || (named.length === sections.length && named.length === 1)) return sections.flatMap((s) => s.contents);
+            return [
+                ...sections.filter((s) => !s.category).flatMap((s) => s.contents),
+                ...named.map((s) => ({ kind: "category", name: s.category, contents: s.contents })),
+            ];
+        };
+        const byPanel = new Map<string, Json[]>();
+        for (const panelId of new Set(liveDefs.sections.map((s) => s.panelId))) {
+            const mine = liveDefs.sections.filter((s) => s.panelId === panelId);
+            const projects = [...new Set(mine.filter((s) => s.project).map((s) => s.project!))];
+            byPanel.set(panelId, [
+                ...grouped(mine.filter((s) => !s.project)),
+                ...projects.map((project) => ({ kind: "category", name: projectName(panelId, project), contents: grouped(mine.filter((s) => s.project === project)) })),
+            ]);
         }
         return {
             kind: "categoryToolbox",
