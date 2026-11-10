@@ -6,11 +6,13 @@ import {
     processApi,
     files,
     resolveOneShotShell,
+    blocksApi,
     type ServiceContext,
 } from "@mileniumhq/paperapi";
 import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scrollback";
 import { errorMessage } from "./lib/failure";
 import { SavedCommands, type CommandRun, type SavedCommand } from "./lib/savedCommands";
+import { BlocksAnnouncer, exitPayload, finishedPayload, terminalBlocks } from "./blocks";
 
 // pass PANEL_ID explicitly, ambient scope resolves to last-imported panel
 const PANEL_ID = "dev.paperboard.terminal";
@@ -64,8 +66,13 @@ function schedulePersist(id: string) {
     );
 }
 
+// the Blocks panel's handle, and what it was last told changed
+const blocks = blocksApi.panel(PANEL_ID);
+const announcer = new BlocksAnnouncer(blocks);
+
 function publishTabs(ctx: Ctx) {
     ctx.setState({ tabs: tabs.map((t) => ({ ...t })), activeTabId });
+    announcer.list("tabs", tabs.map((t) => t.id));
 }
 
 async function persistTabs(ctx: Ctx | null) {
@@ -95,6 +102,7 @@ export function subscribeSession(id: string, ctx: Ctx | null) {
             }),
             terminalApi.onExit(id, (exitCode) => {
                 ctx?.emitTrigger("terminal-exit", { tabId: id, exitCode });
+                announcer.fire("terminal-exit", exitPayload(id, exitCode));
             }),
         ];
         sessionUnsubs.set(id, unsubs);
@@ -238,7 +246,7 @@ export async function writeToTerminal(
 const SAVED_COMMANDS_FILE = "saved-commands.json";
 
 // publishes into whichever service context is live; null until onInit
-let savedCommandsCtx: Ctx | null = null;
+let serviceCtx: Ctx | null = null;
 
 export const savedCommands = new SavedCommands({
     load: () => config.get(PANEL_ID, SAVED_COMMANDS_FILE),
@@ -255,7 +263,11 @@ export const savedCommands = new SavedCommands({
     onExit: (procId, callback) => processApi.onExit(procId, callback),
     kill: (procId) => processApi.kill(procId),
     exists: (procId) => processApi.exists(procId),
-    publish: (view) => savedCommandsCtx?.setState(view),
+    publish: (view) => {
+        serviceCtx?.setState(view);
+        announcer.list("saved-commands", view.savedCommands.map((c) => c.id));
+    },
+    onFinished: (command, outcome) => announcer.fire("saved-command-finished", finishedPayload(command, outcome)),
 });
 
 // the daemon stops this service with SIGTERM: the runs it started are its to
@@ -264,6 +276,79 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
     process.once(signal, () => {
         savedCommands.dispose().finally(() => process.exit(0));
     });
+}
+
+// What the actions (v1) and the blocks (v2) both do: one implementation each.
+
+function liveCtx(): Ctx {
+    if (!serviceCtx) throw new Error("The terminal service is still starting");
+    return serviceCtx;
+}
+
+export async function createTab(ctx: Ctx, label?: string): Promise<string> {
+    const id = `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const name = (label || "").trim() || `Tab ${tabs.length + 1}`;
+    tabs.push({ id, label: name });
+    activeTabId = id;
+    await tryEnsureSession(id);
+    subscribeSession(id, ctx);
+    await persistTabs(ctx);
+    return id;
+}
+
+export async function renameTab(ctx: Ctx, id: string | undefined, label: string | undefined): Promise<void> {
+    const tab = tabs.find((t) => t.id === id);
+    if (!tab) throw new Error(`Unknown terminal tab "${id}"`);
+    const name = (label || "").trim();
+    if (!name) throw new Error("Label is required");
+    tab.label = name;
+    await persistTabs(ctx);
+}
+
+export async function closeTab(ctx: Ctx, input: string | undefined): Promise<void> {
+    const id = (input || "").trim();
+    if (!tabs.some((t) => t.id === id)) throw new Error(`Unknown terminal tab "${input}"`);
+    // a shell that would not stop keeps its tab, so it stays reachable
+    await terminalApi.destroy(id);
+    tabs = tabs.filter((t) => t.id !== id);
+    buffers.delete(id);
+    // teardown: detach listeners and drop the subscription id, then
+    // cancel the pending debounce so no write fires for a dead tab
+    unsubscribeSession(id);
+    cancelPersistTimer(id);
+    await files.delete(scrollbackPath(id), PANEL_ID);
+    if (activeTabId === id) activeTabId = tabs[0]?.id || "";
+    await persistTabs(ctx);
+}
+
+/** The tab's last whole lines, 1 to 1000 of them (100 when not given). */
+export function readOutput(tabId: string | undefined, lines?: number): string {
+    const id = resolveTabId(tabId);
+    const count = Math.max(1, Math.min(1000, Math.trunc(Number(lines ?? 100))));
+    return readWholeLines(buffers.get(id) || "", count);
+}
+
+export async function runShellCommand(command: string | undefined): Promise<string> {
+    const cmd = (command || "").trim();
+    if (!cmd) throw new Error("Command is required");
+    try {
+        const shell = resolveOneShotShell();
+        const res = await processApi.exec(shell.command, [...shell.baseArgs, cmd]);
+        return res.stdout || res.stderr || "";
+    } catch (err: any) {
+        throw new Error(err?.message || String(err));
+    }
+}
+
+function tabLabel(id: string): string {
+    const known = resolveTabId(id);
+    return tabs.find((t) => t.id === known)!.label;
+}
+
+function savedCommand(id: string): SavedCommand {
+    const command = savedCommands.view().savedCommands.find((c) => c.id === id);
+    if (!command) throw new Error(`No saved command "${id}"; it may have been removed`);
+    return command;
 }
 
 const actions = [
@@ -290,16 +375,7 @@ const actions = [
         },
         output: { type: "string", label: "Tab ID" },
         icon: "add",
-        run: async (ctx: Ctx, inputs: { label?: string }) => {
-            const id = `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-            const label = (inputs?.label || "").trim() || `Tab ${tabs.length + 1}`;
-            tabs.push({ id, label });
-            activeTabId = id;
-            await tryEnsureSession(id);
-            subscribeSession(id, ctx);
-            await persistTabs(ctx);
-            return id;
-        },
+        run: async (ctx: Ctx, inputs: { label?: string }) => createTab(ctx, inputs?.label),
     }),
 
     defineAction({
@@ -341,12 +417,7 @@ const actions = [
         output: { type: "boolean", label: "Success" },
         icon: "edit",
         run: async (ctx: Ctx, inputs: { id: string; label: string }) => {
-            const tab = tabs.find((t) => t.id === inputs?.id);
-            if (!tab) throw new Error(`Unknown terminal tab "${inputs?.id}"`);
-            const label = (inputs?.label || "").trim();
-            if (!label) throw new Error("Label is required");
-            tab.label = label;
-            await persistTabs(ctx);
+            await renameTab(ctx, inputs?.id, inputs?.label);
             return true;
         },
     }),
@@ -363,19 +434,7 @@ const actions = [
         output: { type: "boolean", label: "Success" },
         icon: "close",
         run: async (ctx: Ctx, inputs: { id: string }) => {
-            const id = (inputs?.id || "").trim();
-            if (!tabs.some((t) => t.id === id)) throw new Error(`Unknown terminal tab "${inputs?.id}"`);
-            // a shell that would not stop keeps its tab, so it stays reachable
-            await terminalApi.destroy(id);
-            tabs = tabs.filter((t) => t.id !== id);
-            buffers.delete(id);
-            // teardown: detach listeners and drop the subscription id, then
-            // cancel the pending debounce so no write fires for a dead tab
-            unsubscribeSession(id);
-            cancelPersistTimer(id);
-            await files.delete(scrollbackPath(id), PANEL_ID);
-            if (activeTabId === id) activeTabId = tabs[0]?.id || "";
-            await persistTabs(ctx);
+            await closeTab(ctx, inputs?.id);
             return true;
         },
     }),
@@ -453,11 +512,7 @@ const actions = [
         },
         output: { type: "string", label: "Output" },
         icon: "article",
-        run: async (_ctx: Ctx, inputs: { tabId?: string; lines?: number }) => {
-            const id = resolveTabId(inputs?.tabId);
-            const count = Math.max(1, Math.min(1000, Math.trunc(Number(inputs?.lines ?? 100))));
-            return readWholeLines(buffers.get(id) || "", count);
-        },
+        run: async (_ctx: Ctx, inputs: { tabId?: string; lines?: number }) => readOutput(inputs?.tabId, inputs?.lines),
     }),
 
     defineAction({
@@ -471,17 +526,7 @@ const actions = [
         },
         output: { type: "string", label: "Output" },
         icon: "terminal",
-        run: async (_ctx: Ctx, inputs: { command: string }) => {
-            const cmd = (inputs?.command || "").trim();
-            if (!cmd) throw new Error("Command is required");
-            try {
-                const shell = resolveOneShotShell();
-                const res = await processApi.exec(shell.command, [...shell.baseArgs, cmd]);
-                return res.stdout || res.stderr || "";
-            } catch (err: any) {
-                throw new Error(err?.message || String(err));
-            }
-        },
+        run: async (_ctx: Ctx, inputs: { command: string }) => runShellCommand(inputs?.command),
     }),
 
     defineAction({
@@ -581,7 +626,7 @@ export const terminalService = definePanelService({
     ],
     actions: [...actions, ...eventActions],
     async onInit(ctx: Ctx) {
-        savedCommandsCtx = ctx;
+        serviceCtx = ctx;
         await savedCommands.init();
 
         try {
@@ -625,6 +670,25 @@ export const terminalService = definePanelService({
             }
         }
 
+        await announcer.register(
+            terminalBlocks({
+                tabs: () => tabs.map((t) => t.id),
+                tabLabel,
+                createTab: (label) => createTab(liveCtx(), label),
+                renameTab: (id, label) => renameTab(liveCtx(), id, label),
+                closeTab: (id) => closeTab(liveCtx(), id),
+                write: (id, text) => writeToTerminal(liveCtx(), { tabId: id, text }),
+                readOutput,
+                runShellCommand,
+                savedCommands: () => savedCommands.view().savedCommands.map((c) => c.id),
+                savedCommand,
+                savedCommandRunning: (id) => savedCommands.view().commandRuns[savedCommand(id).id]?.state === "running",
+                saveCommand: (label, command) => savedCommands.add(label, command),
+                removeSavedCommand: (id) => savedCommands.remove(id),
+                runSavedCommand: async (id) => void (await savedCommands.run(id)),
+            }),
+            { tabs: tabs.map((t) => t.id), "saved-commands": savedCommands.view().savedCommands.map((c) => c.id) },
+        );
         publishTabs(ctx);
         console.log(`[TerminalService] Ready with ${tabs.length} persistent session(s).`);
     },

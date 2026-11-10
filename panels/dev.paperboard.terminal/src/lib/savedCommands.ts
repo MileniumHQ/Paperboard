@@ -67,6 +67,8 @@ export interface SavedCommandsDeps {
     /** Whether the daemon still has this child. */
     exists(procId: string): Promise<boolean>;
     publish(view: SavedCommandsView): void;
+    /** A run of a command that is still saved ended: its outcome, as the view now shows it. */
+    onFinished?(command: SavedCommand, outcome: Exclude<CommandRun, { state: "running" }>): void;
     now?: () => number;
     newId?: () => string;
     timeoutMs?: number;
@@ -450,9 +452,11 @@ export class SavedCommands {
         if (this.live.get(live.commandId) === live) this.live.delete(live.commandId);
         // removed while running: nothing to show the outcome on, but the run
         // is over and its record leaves the file
-        if (this.commands.some((c) => c.id === live.commandId)) {
+        const command = this.commands.find((c) => c.id === live.commandId);
+        if (command) {
             this.runs = { ...this.runs, [live.commandId]: outcome };
             this.publish();
+            if (outcome.state !== "running") this.deps.onFinished?.({ ...command }, outcome);
         }
         this.transaction(() => this.deps.save(this.docNow())).catch((err) =>
             console.error(`[TerminalService] could not keep the last run of ${live.commandId}:`, err),
