@@ -6,7 +6,7 @@
 import * as crypto from "crypto";
 import { logger } from "../logger";
 import { assertSecureUrl, expectOk, httpRequest } from "./http";
-import { BackupListingError, backupArchiveDownloadCap, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage, type BytesProgress } from "./types";
+import { BACKUP_ARCHIVE_MAX_BYTES, BackupListingError, backupArchiveDownloadCap, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage, type BytesProgress } from "./types";
 
 export interface DriveEndpoints {
     tokenUrl: string;
@@ -165,6 +165,7 @@ export class DriveBackupStore implements BackupStore {
     }
 
     async put(record: BackupRecord, archivePath: string, onProgress?: BytesProgress): Promise<void> {
+        if (record.size > BACKUP_ARCHIVE_MAX_BYTES) throw new Error("Google Drive backups accept at most 5 GiB in one archive");
         const metadata = {
             name: `${record.id}.pbbackup`,
             parents: [this.settings.folderId],
