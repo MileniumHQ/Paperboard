@@ -43,13 +43,36 @@ async function endSupervisors(): Promise<void> {
     }
 }
 
+// Windows: the processes still running an executable from `dir`, whether
+// or not a record names them (a supervisor whose workload ended drops its
+// record before it exits). Elsewhere a running program can be deleted.
+function runningFrom(dir: string): number[] {
+    if (process.platform !== "win32") return [];
+    // the OS names executables by long path; the temp dir may be a short
+    // 8.3 one (RUNNER~1)
+    dir = fs.realpathSync.native(dir);
+    const query = `Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith('${dir.replace(/'/g, "''")}\\', 'OrdinalIgnoreCase') } | ForEach-Object { $_.ProcessId }`;
+    const out = Bun.spawnSync(["powershell", "-NoProfile", "-NonInteractive", "-Command", query], { stdout: "pipe", stderr: "pipe" });
+    if (out.exitCode !== 0) throw new Error(`listing the processes run from ${dir} failed: ${out.stderr.toString()}`);
+    return out.stdout.toString().split(/\s+/).filter(Boolean).map(Number);
+}
+
+async function removeBuild(dir: string): Promise<void> {
+    const pids = runningFrom(dir);
+    for (const pid of pids) if (alive(pid)) process.kill(pid, "SIGKILL");
+    const deadline = Date.now() + 10_000;
+    while (pids.some(alive)) {
+        if (Date.now() > deadline) throw new Error(`processes ${pids.filter(alive).join(", ")} run from ${dir} did not end`);
+        await Bun.sleep(50);
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // bun test never fires exit handlers; a preload afterAll runs once the
 // process's test files are done
 afterAll(async () => {
     await endSupervisors();
-    for (const dir of ((globalThis as any)[DAEMON_BUILDS] ?? []).splice(0) as string[]) {
-        fs.rmSync(dir, { recursive: true, force: true });
-    }
+    for (const dir of ((globalThis as any)[DAEMON_BUILDS] ?? []).splice(0) as string[]) await removeBuild(dir);
     fs.rmSync(testData, { recursive: true, force: true });
 });
 
