@@ -129,7 +129,9 @@ export async function applyPendingRuntimeProperties(
     }
 
     try {
-        await config.set({ ...(saved ?? {}), pendingProperties: {} }, PANEL_ID);
+        // re-read: the config may have changed while the commands went out
+        const fresh = await config.get<Record<string, unknown> | null>(PANEL_ID);
+        await config.set({ ...(fresh && typeof fresh === "object" ? fresh : {}), pendingProperties: {} }, PANEL_ID);
     } catch (err) {
         console.error("[Service:Properties] clearing applied edits failed:", err);
     }

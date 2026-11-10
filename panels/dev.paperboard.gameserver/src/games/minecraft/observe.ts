@@ -84,14 +84,17 @@ function handleGameruleResponse(
 export function onReady(ctx: ServiceContext<GameServerState>): void {
     // one `list` so the player cap is known from the start
     queryOnlinePlayers(ctx);
-    // boot-time truth: offline gamerule edits re-apply, then
-    // every rule is queried so the UI reads live values
-    onServerOnline(ctx).catch((err) =>
-        console.error("[Service:Lifecycle] gamerule boot sync failed:", err),
-    );
-    applyPendingRuntimeProperties(ctx).catch((err) =>
-        console.error("[Service:Lifecycle] runtime property boot sync failed:", err),
-    );
+    // boot-time truth: offline gamerule and property edits re-apply. One
+    // after the other: each clears its pending edits by rewriting the whole
+    // panel config, so running both at once puts back the other's edits.
+    void (async () => {
+        await onServerOnline(ctx).catch((err) =>
+            console.error("[Service:Lifecycle] gamerule boot sync failed:", err),
+        );
+        await applyPendingRuntimeProperties(ctx).catch((err) =>
+            console.error("[Service:Lifecycle] runtime property boot sync failed:", err),
+        );
+    })();
 }
 
 export function observeLine(ctx: ServiceContext<GameServerState>, line: string, final = false): void {
