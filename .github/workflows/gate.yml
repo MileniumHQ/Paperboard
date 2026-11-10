@@ -56,7 +56,7 @@ jobs:
           case "${{ matrix.group }}" in
             libraries) targets="packages paperapi paperui create-panel crane-launcher scripts" ;;
             app) targets="paperboard" ;;
-            panels) targets="agents botcreator gameserver terminal" ;;
+            panels) targets="agents blocks botcreator gameserver terminal" ;;
             web) targets="paperdocs origami origami-library pbd panelapis global" ;;
             *) echo "unknown gate group ${{ matrix.group }}" >&2; exit 2 ;;
           esac
