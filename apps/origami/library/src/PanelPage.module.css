@@ -218,28 +218,33 @@
     font-size: var(--paper-text-size-2);
 }
 
-.rows th,
-.rows td {
+/* each row stacks its name over its detail: a card is too narrow for two
+   columns once a name or a detail runs long */
+.rows tr {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
     padding: var(--paper-uigap-half) 0;
-    vertical-align: top;
-    text-align: left;
 }
 
-.rows tr + tr th,
-.rows tr + tr td {
+.rows tr + tr {
     border-top: var(--paper-border-width) solid var(--paper-border-subtle);
+}
+
+.rows th,
+.rows td {
+    padding: 0;
+    text-align: left;
+    overflow-wrap: anywhere;
 }
 
 .rows th {
     font-weight: var(--paper-weight-bold);
     color: var(--paper-text);
-    padding-right: var(--paper-uigap);
-    white-space: nowrap;
 }
 
 .rows td {
     color: var(--paper-text-subtle);
-    text-align: right;
 }
 
 /* narrow frames: the hero stacks and centers, the facts fold into two rows */
