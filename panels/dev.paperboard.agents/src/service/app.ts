@@ -42,8 +42,9 @@ import { SignIns } from "./signIn";
 import { describeSchedule, localStamp } from "../routineText";
 import { toolbox, type Toolbox } from "./toolsets";
 import { Asker } from "./ask";
-import { flowActions, type ConversationChoice, type MessageReceived } from "./flowActions";
-import type { ActionDefinition } from "@mileniumhq/paperapi";
+import { flowActions, type ConversationChoice, type FlowHost, type MessageReceived } from "./flowActions";
+import { flowBlocks, replyPayload, type ConversationFacts } from "./flowBlocks";
+import type { ActionDefinition, BlocksHandle } from "@mileniumhq/paperapi";
 export { findProgram } from "./which";
 import type { Launch } from "./which";
 
@@ -72,6 +73,8 @@ export interface AppHost extends Omit<ComputerHost, "packages">, Omit<TurnHost, 
     findProgram(command: string, args: readonly string[]): Launch | null;
     /** register an action again, as it is now: the flow actions' conversation dropdown follows the history */
     registerAction(def: ActionDefinition): Promise<void>;
+    /** the panel's blocks for the Blocks panel (Actions API v2) */
+    blocks: BlocksHandle;
 }
 
 export interface AppContext {
@@ -101,6 +104,9 @@ export class AiApp {
     /** the conversation dropdown as flows last got it, and the registration in flight */
     private published = "";
     private publishing: Promise<void> = Promise.resolve();
+    /** the blocks are registered, and the conversation values as Blocks was last told they were */
+    private blocksRegistered = false;
+    private announced = { current: "", list: "" };
     private settle!: (failure: Error | null) => void;
     private readonly settled = new Promise<Error | null>((ok) => (this.settle = ok));
 
@@ -115,6 +121,14 @@ export class AiApp {
     async init(ctx: AppContext) {
         try {
             await this.prepare(ctx);
+        } catch (e) {
+            this.settle(e instanceof Error ? e : new Error(String(e)));
+            throw e;
+        }
+        try {
+            await this.host.blocks.register(this.flowBlocks());
+            this.announced = { current: this.conversation.id(), list: JSON.stringify(this.conversationIds()) };
+            this.blocksRegistered = true;
         } catch (e) {
             this.settle(e instanceof Error ? e : new Error(String(e)));
             throw e;
@@ -245,6 +259,11 @@ export class AiApp {
                         replyTo: entry.replyTo ?? "",
                     };
                     this.ctx.trigger(TRIGGER_IDS.messageReceived, message);
+                    if (this.blocksRegistered) {
+                        this.host.blocks.fire(TRIGGER_IDS.messageReceived, replyPayload(message)).catch((e) =>
+                            console.error("[ai] When the Agent Replies didn't reach Blocks:", String(e)),
+                        );
+                    }
                 }
                 // its first message names the current conversation in the dropdown
                 if (entry.kind === "user" || entry.kind === "agent") this.publish();
@@ -437,19 +456,61 @@ export class AiApp {
 
     /** The actions flows use, with the conversation dropdown as the history is now. */
     flowActions(): ActionDefinition[] {
-        return flowActions(
-            {
-                ready: () => this.ready(),
-                switchConversation: async (id) => {
-                    if (id === null) await this.newConversation();
-                    else if (id !== this.conversation.id()) await this.openConversation(id);
-                    return this.conversation.id();
-                },
-                send: (text, instructions) => this.conversation.send(text, null, [], { fromFlow: true, instructions }).id,
-                ask: (question, instructions) => this.asker.ask(question, instructions),
+        return flowActions(this.flowHost(), this.conversation ? this.conversationChoices() : []);
+    }
+
+    /** The blocks flows use in the Blocks panel: the same host as the actions. */
+    flowBlocks() {
+        return flowBlocks({
+            ...this.flowHost(),
+            currentConversation: () => this.conversation.id(),
+            conversations: () => this.conversationIds(),
+            conversation: (id) => this.conversationFacts(id),
+        });
+    }
+
+    private flowHost(): FlowHost {
+        return {
+            ready: () => this.ready(),
+            switchConversation: async (id) => {
+                if (id === null) await this.newConversation();
+                else if (id !== this.conversation.id()) await this.openConversation(id);
+                return this.conversation.id();
             },
-            this.conversation ? this.conversationChoices() : [],
-        );
+            send: (text, instructions) => this.conversation.send(text, null, [], { fromFlow: true, instructions }).id,
+            ask: (question, instructions) => this.asker.ask(question, instructions),
+        };
+    }
+
+    private conversationIds(): string[] {
+        return this.conversationChoices().map((c) => c.value);
+    }
+
+    private conversationFacts(id: string): ConversationFacts {
+        if (id === this.conversation.id()) {
+            const current = this.conversation.current();
+            return current ? { title: current.title, messages: current.messages } : { title: "New conversation", messages: 0 };
+        }
+        const past = this.conversation.past().find((c) => c.id === id);
+        if (!past) throw new Error(`the agent has no conversation "${id}"; it may have been deleted`);
+        return { title: past.title, messages: past.messages };
+    }
+
+    /** Tell Blocks which conversation values changed since it was last told. */
+    private announceConversations() {
+        if (!this.blocksRegistered) return;
+        let next: { current: string; list: string };
+        try {
+            next = { current: this.conversation.id(), list: JSON.stringify(this.conversationIds()) };
+        } catch (e) {
+            console.error("[ai] the conversations can't be listed for Blocks:", String(e));
+            return;
+        }
+        const changed = [...(next.current === this.announced.current ? [] : ["current-conversation"]), ...(next.list === this.announced.list ? [] : ["conversations"])];
+        this.announced = next;
+        for (const value of changed) {
+            this.host.blocks.changed(value).catch((e) => console.error(`[ai] the change to ${value} didn't reach Blocks:`, String(e)));
+        }
     }
 
     /** The current conversation (once it has messages), then the history, newest first. */
@@ -466,6 +527,7 @@ export class AiApp {
      * flows with the last list they got, so it's reported and the next change tries again.
      */
     publish(): Promise<void> {
+        this.announceConversations();
         this.publishing = this.publishing.then(async () => {
             let choices: string;
             try {

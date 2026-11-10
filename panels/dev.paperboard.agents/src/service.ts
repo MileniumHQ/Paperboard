@@ -1,4 +1,4 @@
-import { actionsApi, configApi, defineAction, definePanelService, fileApi, packageApi, processApi, secretsApi, type ActionDefinition } from "@mileniumhq/paperapi";
+import { actionsApi, blocksApi, configApi, defineAction, definePanelService, fileApi, packageApi, processApi, secretsApi, type ActionDefinition } from "@mileniumhq/paperapi";
 import { DEFAULT_STATE, PANEL_ID, UI_ACTION_IDS, type AiState } from "./contract";
 import { TOOLS_ACTION_IDS } from "./toolsContract";
 import { AiApp, findProgram, type AppHost } from "./service/app";
@@ -58,6 +58,7 @@ const host: AppHost = {
         },
     },
     registerAction: (def) => actionsApi.register(def, undefined, PANEL_ID),
+    blocks: blocksApi.panel(PANEL_ID),
 };
 
 const app = new AiApp(host);

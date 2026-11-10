@@ -8,6 +8,7 @@ import type { ActionDefinition } from "@mileniumhq/paperapi";
 import { DEFAULT_STATE, type AiState, type ChatEntry, type Settings } from "../../src/contract";
 import { AiApp, findProgram, type AppHost } from "../../src/service/app";
 import type { ActionEntry } from "../../src/service/actionsToolset";
+import { TestBlocks } from "./blocks";
 import { brainPackage, fakeEnv, fakeLog, packageHost, Recorder, TestHost, tempDir } from "./host";
 
 export interface AppRig {
@@ -18,6 +19,7 @@ export interface AppRig {
     entries: Recorder<ChatEntry>;
     triggers: Recorder<{ id: string; payload: any }>;
     registered: ActionDefinition[];
+    blocks: TestBlocks;
     log(): any[];
     close(): Promise<void>;
 }
@@ -32,6 +34,7 @@ export async function appRig(o: { settings?: Settings; actions?: ActionEntry[] }
     fs.writeFileSync(path.join(storage, "brains", "codex", "auth.json"), "{}");
     const vault = new Map<string, string>();
     const registered: ActionDefinition[] = [];
+    const blocks = new TestBlocks();
     let tools: unknown = null;
     const appHost: AppHost = {
         start: host.start,
@@ -65,6 +68,7 @@ export async function appRig(o: { settings?: Settings; actions?: ActionEntry[] }
             },
         },
         registerAction: async (def) => void registered.push(def),
+        blocks,
     };
     const app = new AiApp(appHost);
     const entries = new Recorder<ChatEntry>();
@@ -88,6 +92,7 @@ export async function appRig(o: { settings?: Settings; actions?: ActionEntry[] }
         entries,
         triggers,
         registered,
+        blocks,
         log: () => fakeLog(root),
         close: async () => {
             await app.shutdown();
