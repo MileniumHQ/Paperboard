@@ -403,6 +403,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         updateStatus: () => steamUpdateStatus(steam),
         installUpdate: steamInstall(steam),
         initialState: () => ({ ...initialServerState(), serverSoftware: spec.id, serverPort: String(spec.defaultPort), serverMotd: "" }),
+        blocks: async () => ({ events: (await import("../../service/blocks")).playerEvents() }),
         actions: async () => { const { sharedActions, backupAction } = await import("../../service/actions"); return [...sharedActions, backupAction,
             action(ACTION_IDS.readGameOptions, "Read options", async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; }),
             action(ACTION_IDS.writeGameOptions, "Save options", async (ctx, { patch }) => {

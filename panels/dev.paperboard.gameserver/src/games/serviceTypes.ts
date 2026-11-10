@@ -24,8 +24,10 @@ type Context = ServiceContext<GameServerState>;
 export interface GameService {
     initialState(): GameServerState;
     actions(): Promise<readonly ActionDefinition[]>;
-    /** The game's own blocks for the Blocks panel, beside the ones every game shares. */
+    /** The game's own blocks for the Blocks panel, beside the ones every game shares; its joins, leaves and chat among them. */
     blocks?(ctx: Context): Promise<import("@mileniumhq/paperapi").BlockSet>;
+    /** The Blocks types the game's own blocks use; the panel registers them. */
+    blockTypes?(): Promise<import("@mileniumhq/paperapi").BlockTypeDefinition[]>;
     initialize(ctx: Context, running: boolean): Promise<void>;
     dispose(): Promise<void>;
     beforeRemove(): Promise<void>;

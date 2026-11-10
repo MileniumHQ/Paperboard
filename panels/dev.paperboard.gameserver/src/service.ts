@@ -22,7 +22,7 @@ import {
 } from "./servers";
 import * as nodeFs from "node:fs/promises";
 import { inServer, type ServerScope } from "./service/scope";
-import { announcePlayerChanges, bindBlocks, mergeBlocks, PLAYER_TYPE, sharedBlocks } from "./service/blocks";
+import { announceChanges, bindBlocks, fireTrigger, mergeBlocks, SHARED_TYPES, sharedBlocks } from "./service/blocks";
 import { processApi as scopedProcess, LEGACY_DEPRECATION } from "./service/api";
 import { type GameServerState, SERVER_PROC_ID, appendCapped } from "./service/types";
 import { setRecoveryBlock } from "./service/recoveryState";
@@ -172,7 +172,7 @@ function createScope(server: StoredServer): ServerScope {
             setState(patch) {
                 const before = state;
                 state = { ...state, ...(typeof patch === "function" ? patch(state) : patch) };
-                announcePlayerChanges(scope.blocks, before, state, server.name);
+                announceChanges(scope.blocks, before, state, server.name);
                 publish(scope);
                 histories.get(server.id)?.changed(state);
             },
@@ -180,6 +180,7 @@ function createScope(server: StoredServer): ServerScope {
             emitTrigger(id, output) {
                 rootContext.emitTrigger(`${server.id}/${id}`, output);
                 if (scope.legacy) rootContext.emitTrigger(id, output);
+                fireTrigger(scope.blocks, id, output, server.name);
             },
         } as ServiceContext<GameServerState>,
         saveSettings: async (settings) => {
@@ -246,7 +247,8 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
             { id: server.id, name: server.name, icon: gameFor(server.game).icon },
             PANEL_ID,
         );
-        await scope.blocks.register(bindBlocks(scope, mergeBlocks(sharedBlocks(scope.ctx), await game.blocks?.(scope.ctx))));
+        const blocks = scope.blocks;
+        await inServer(scope, async () => blocks.register(bindBlocks(scope, mergeBlocks(sharedBlocks(scope.ctx), await game.blocks?.(scope.ctx)))));
         let wasRunning = false;
         try {
             const history = await readHistory(await historyFile(server.id));
@@ -430,7 +432,8 @@ export const gameServerService = definePanelService({
     async onInit(ctx) {
         rootContext = ctx;
         try {
-            await blocksApi.panel(PANEL_ID).register({ types: [PLAYER_TYPE] });
+            const gameTypes = await Promise.all(games.map((g) => gameServiceFor(g.id).blockTypes?.() ?? []));
+            await blocksApi.panel(PANEL_ID).register({ types: [...SHARED_TYPES, ...gameTypes.flat()] });
             const original = await config.get(PANEL_ID);
             saved = readServersConfig(original);
             // No file operations or data moves: installed records and all config

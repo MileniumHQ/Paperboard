@@ -187,6 +187,7 @@ const action = gameAction;
 export const terrariaService: GameService = {
     primaryProcessId: PROC, processIds: [PROC],
     initialState: () => ({ ...initialServerState(), serverSoftware: "vanilla", serverPort: "7777", serverMotd: "" }),
+    blocks: async () => ({ events: (await import("../../service/blocks")).playerEvents() }),
     actions: async () => { const { sharedActions, backupAction } = await import("../../service/actions"); return [ ...sharedActions, backupAction,
         action(ACTION_IDS.readGameOptions, "Read options", async ctx => { await loadOptions(ctx); return ctx.state.gameSettings; }),
         action(ACTION_IDS.writeGameOptions, "Save options", (ctx, { patch }) => exclusive(ctx, local(), "Terraria", async () => {

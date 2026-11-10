@@ -10,9 +10,22 @@ import { loadServerOptions } from "./options";
 import { currentServer } from "./scope";
 import { automationView, readAutomation, writeAutomation } from "./automation";
 const loaderDeps = { serverDir: () => fileApi.getPath("", PANEL_ID) };
+/** The current server's backups, as the backup service keeps them. */
+export function serverBackups() {
+    const server = currentServer();
+    if (!server) throw new Error("Choose a server");
+    return backupApi.forSource(PANEL_ID, server.server.id);
+}
+/** Says a message in the game's chat; one line, so it can't carry a second console command. */
+export async function sayInChat(ctx: ServiceContext<GameServerState>, message: unknown): Promise<string> {
+    const msg = assertSingleLine(String(message ?? "").trim(), "chat message", 500);
+    if (!msg) throw new Error("Message is required");
+    await sendChatMessage(ctx, msg);
+    return msg;
+}
 export const backupAction = defineAction({
     id: "backup-server", name: "Back up server", description: "Create a named server backup at its chosen destination", category: "Server", inputs: {}, output: { type: "object", label: "Backup" },
-    run: async () => { const server = currentServer(); if (!server) throw new Error("Choose a server"); return backupApi.forSource(PANEL_ID, server.server.id).create(); },
+    run: async () => serverBackups().create(),
 });
 export const sharedActions = [
     defineAction({
@@ -177,11 +190,7 @@ export const sharedActions = [
             ctx: ServiceContext<GameServerState>,
             inputs: { message: string },
         ) => {
-            // single-line: a line break would inject a second console command
-            const msg = assertSingleLine((inputs?.message || "").trim(), "chat message", 500);
-            if (!msg) throw new Error("Message is required");
-            await sendChatMessage(ctx, msg);
-            return msg;
+            return sayInChat(ctx, inputs?.message);
         },
     }),
     defineAction({

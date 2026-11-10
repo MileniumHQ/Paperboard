@@ -220,6 +220,7 @@ export const palworldService: GameService = {
     updateStatus: () => steamUpdateStatus(steam),
     installUpdate: steamInstall(steam),
     initialState: () => ({ ...initialServerState(), serverSoftware: "palworld", serverPort: String(DEFAULT_PORT), serverMotd: "" }),
+    blocks: async () => ({ events: (await import("../../service/blocks")).playerEvents() }),
     actions: async () => { const { sharedActions, backupAction } = await import("../../service/actions"); return [...sharedActions, backupAction,
         gameAction(ACTION_IDS.readGameOptions, "Read options", async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; }),
         gameAction(ACTION_IDS.writeGameOptions, "Save options", async (ctx, { patch }) => {

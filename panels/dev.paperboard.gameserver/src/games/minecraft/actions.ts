@@ -37,13 +37,14 @@ import {
     listWorlds,
     setActiveWorld,
     deleteActiveWorldDirs,
+    type SetActiveWorldResult,
 } from "../../service/worlds";
 import { loadConfigAndProperties, updatePanelConfig } from "./config";
 import { listMapRegions, renderMapTile } from "../../service/map";
 import { discardWorldTransfer, exportWorld, importWorld } from "../../service/worldTransfer";
 import type { MapDimension } from "../../core/map";
 import { listPlayerStats } from "../../service/playerStats";
-import { currentPlayerNames, listRoster, setPlayerFlag } from "../../service/playerLists";
+import { currentPlayerNames, listRoster, setPlayerFlag, type PlayerFlag } from "../../service/playerLists";
 import { getHeadDataUrl } from "../../service/skins";
 import { listLogFiles, readLogFile } from "../../service/logs";
 import { queryGamerules, setGamerule } from "../../service/gamerules";
@@ -122,6 +123,84 @@ const loaderDeps = { serverDir: () => fileApi.getPath("", PANEL_ID) };
 const bedrockNaming = (ctx: ServiceContext<GameServerState>) =>
     readBedrockNaming(minecraftSoftware(ctx.state.serverSoftware), loaderDeps);
 
+// What the Actions (v1) and the Blocks (v2) of a Minecraft server both run.
+
+/** Kicks or bans a player, with the reason they see when one is given. */
+export async function punishPlayer(ctx: ServiceContext<GameServerState>, verb: "kick" | "ban", player: unknown, reason?: unknown): Promise<void> {
+    const name = assertPlayerName(player);
+    const why = reason ? assertSingleLine(String(reason).trim(), `${verb} reason`) : "";
+    await sendServerCommand(ctx, why ? `${verb} ${name} ${why}` : `${verb} ${name}`);
+}
+
+/** Pardons or kills a player. */
+export async function playerCommand(ctx: ServiceContext<GameServerState>, verb: "pardon" | "kill", player: unknown): Promise<void> {
+    await sendServerCommand(ctx, `${verb} ${assertPlayerName(player)}`);
+}
+
+/** Makes a player an operator or whitelisted, or takes it back; edits the lists' files while offline. */
+export async function flagPlayer(ctx: ServiceContext<GameServerState>, flag: PlayerFlag, player: unknown, on: boolean, uuid?: string): Promise<void> {
+    await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), await bedrockNaming(ctx), flag, player, on, uuid);
+}
+
+/** Makes a world the one the server starts with; a new name is made on the next start. */
+export async function activateWorld(ctx: ServiceContext<GameServerState>, levelName: unknown, seed?: string, createOnly = false): Promise<SetActiveWorldResult> {
+    if (!levelName || typeof levelName !== "string") throw new Error("World name is required");
+    const result = await setActiveWorld(ctx, levelName, seed, createOnly);
+    await republishDynamicActions(ctx);
+    return result;
+}
+
+/** Moves a world's folders to the trash. */
+export async function removeWorld(ctx: ServiceContext<GameServerState>, levelName: unknown): Promise<void> {
+    if (!levelName || typeof levelName !== "string") throw new Error("World name is required");
+    await deleteActiveWorldDirs(ctx, levelName);
+    await republishDynamicActions(ctx);
+}
+
+/** Moves the active world's folders to the trash; false when that failed (the service log says why). */
+export async function resetWorld(ctx: ServiceContext<GameServerState>): Promise<boolean> {
+    const result = await resetWorldFiles(ctx);
+    await republishDynamicActions(ctx);
+    return result;
+}
+
+/** Moves one plugin's jar to the trash. */
+export async function removePlugin(ctx: ServiceContext<GameServerState>, filename: unknown): Promise<void> {
+    if (!filename || typeof filename !== "string") throw new Error("Filename is required");
+    await deletePlugin(ctx, filename);
+    await republishDynamicActions(ctx);
+}
+
+/** Installs a server software for a Minecraft version over the stopped server. */
+export async function installVersion(ctx: ServiceContext<GameServerState>, rawSoftware: unknown, rawVersion: unknown) {
+    if (!isServerSoftware(rawSoftware)) {
+        throw new Error(`Unknown server software: ${JSON.stringify(rawSoftware)}`);
+    }
+    const version = assertSingleLine(rawVersion, "version", 64);
+    if (!isSupportedMcVersion(version)) {
+        throw new Error(
+            `Minecraft ${version} is below Paperboard's minimum supported version (${MIN_SUPPORTED_MC_VERSION}).`,
+        );
+    }
+    // the owner enforces offline, not just the button
+    if (ctx.state.serverStatus !== "offline") {
+        throw new Error("Stop the server before switching versions");
+    }
+    const outcome = await installServerSoftware(ctx, rawSoftware, version, liveInstallDeps(ctx));
+    // the version decides which gamerules exist: refresh the rule
+    // dropdown so the flow builder can't offer a rule this jar lacks
+    await republishDynamicActions(ctx);
+    return outcome;
+}
+
+/** The name the server's player files give a UUID. */
+export async function playerForUuid(uuid: unknown): Promise<string> {
+    if (!uuid || typeof uuid !== "string") throw new Error("UUID is required");
+    const name = await usernameFromUuid(uuid);
+    if (!name) throw new Error(`No username on file for UUID ${uuid}`);
+    return name;
+}
+
 export const customTypes: CustomTypeDefinition[] = [
     playerType,
     messageType,
@@ -190,6 +269,12 @@ export async function republishDynamicActions(
             );
         }
     }
+    // the Blocks' game rule dropdowns follow the version the same way
+    try {
+        await (await import("./blocks")).refreshGameruleBlocks(ctx);
+    } catch (err) {
+        console.error("[Gameserver] failed to republish the game rule blocks:", err);
+    }
 }
 
 /**
@@ -250,15 +335,7 @@ export function setActiveWorldAction(worlds: string[]): ActionDefinition {
             ctx: ServiceContext<GameServerState>,
             inputs: { levelName: string; seed?: string; createOnly?: boolean },
         ) => {
-            if (!inputs?.levelName) throw new Error("World name is required");
-            const result = await setActiveWorld(
-                ctx,
-                inputs.levelName,
-                inputs.seed,
-                inputs.createOnly === true,
-            );
-            await republishDynamicActions(ctx);
-            return result;
+            return activateWorld(ctx, inputs?.levelName, inputs?.seed, inputs?.createOnly === true);
         },
     });
 }
@@ -321,9 +398,7 @@ export function deleteWorldAction(worlds: string[]): ActionDefinition {
             ctx: ServiceContext<GameServerState>,
             inputs: { levelName: string },
         ) => {
-            if (!inputs?.levelName) throw new Error("World name is required");
-            await deleteActiveWorldDirs(ctx, inputs.levelName);
-            await republishDynamicActions(ctx);
+            await removeWorld(ctx, inputs?.levelName);
             return true;
         },
     });
@@ -354,9 +429,7 @@ export function deletePluginAction(filenames: string[]): ActionDefinition {
             ctx: ServiceContext<GameServerState>,
             inputs: { filename: string },
         ) => {
-            if (!inputs?.filename) throw new Error("Filename is required");
-            await deletePlugin(ctx, inputs.filename);
-            await republishDynamicActions(ctx);
+            await removePlugin(ctx, inputs?.filename);
             return true;
         },
     });
@@ -394,11 +467,7 @@ export const panelActions: ActionDefinition[] = [
             ctx: ServiceContext<GameServerState>,
             inputs: { player: string; reason?: string },
         ) => {
-            const name = assertPlayerName(inputs?.player);
-            const reason = inputs?.reason
-                ? assertSingleLine(inputs.reason.trim(), "kick reason")
-                : "";
-            await sendServerCommand(ctx, reason ? `kick ${name} ${reason}` : `kick ${name}`);
+            await punishPlayer(ctx, "kick", inputs?.player, inputs?.reason);
             return true;
         },
     }),
@@ -432,11 +501,7 @@ export const panelActions: ActionDefinition[] = [
             ctx: ServiceContext<GameServerState>,
             inputs: { player: string; reason?: string },
         ) => {
-            const name = assertPlayerName(inputs?.player);
-            const reason = inputs?.reason
-                ? assertSingleLine(inputs.reason.trim(), "ban reason")
-                : "";
-            await sendServerCommand(ctx, reason ? `ban ${name} ${reason}` : `ban ${name}`);
+            await punishPlayer(ctx, "ban", inputs?.player, inputs?.reason);
             return true;
         },
     }),
@@ -460,7 +525,7 @@ export const panelActions: ActionDefinition[] = [
         icon: "shield",
         run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
             // uuid is an optional input for the panel's own roster
-            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), await bedrockNaming(ctx), "op", inputs?.player, true, inputs?.uuid);
+            await flagPlayer(ctx, "op", inputs?.player, true, inputs?.uuid);
             return true;
         },
     }),
@@ -479,7 +544,7 @@ export const panelActions: ActionDefinition[] = [
         icon: "shield_person",
         run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
             // uuid is an optional input for the panel's own roster
-            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), await bedrockNaming(ctx), "op", inputs?.player, false, inputs?.uuid);
+            await flagPlayer(ctx, "op", inputs?.player, false, inputs?.uuid);
             return true;
         },
     }),
@@ -498,7 +563,7 @@ export const panelActions: ActionDefinition[] = [
         icon: "verified_user",
         run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
             // uuid is an optional input for the panel's own roster
-            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), await bedrockNaming(ctx), "whitelist", inputs?.player, true, inputs?.uuid);
+            await flagPlayer(ctx, "whitelist", inputs?.player, true, inputs?.uuid);
             return true;
         },
     }),
@@ -517,7 +582,7 @@ export const panelActions: ActionDefinition[] = [
         icon: "person_off",
         run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string; uuid?: string }) => {
             // uuid is an optional input for the panel's own roster
-            await setPlayerFlag(ctx, (cmd) => sendServerCommand(ctx, cmd), await bedrockNaming(ctx), "whitelist", inputs?.player, false, inputs?.uuid);
+            await flagPlayer(ctx, "whitelist", inputs?.player, false, inputs?.uuid);
             return true;
         },
     }),
@@ -535,8 +600,7 @@ export const panelActions: ActionDefinition[] = [
         quick: false,
         icon: "undo",
         run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string }) => {
-            const name = assertPlayerName(inputs?.player);
-            await sendServerCommand(ctx, `pardon ${name}`);
+            await playerCommand(ctx, "pardon", inputs?.player);
             return true;
         },
     }),
@@ -554,8 +618,7 @@ export const panelActions: ActionDefinition[] = [
         quick: false,
         icon: "heart_broken",
         run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string }) => {
-            const name = assertPlayerName(inputs?.player);
-            await sendServerCommand(ctx, `kill ${name}`);
+            await playerCommand(ctx, "kill", inputs?.player);
             return true;
         },
     }),
@@ -639,9 +702,7 @@ export const panelActions: ActionDefinition[] = [
         quick: false,
         icon: "restart_alt",
         run: async (ctx: ServiceContext<GameServerState>) => {
-            const result = await resetWorldFiles(ctx);
-            await republishDynamicActions(ctx);
-            return result;
+            return resetWorld(ctx);
         },
     }),
 
@@ -809,25 +870,7 @@ export const panelActions: ActionDefinition[] = [
             ctx: ServiceContext<GameServerState>,
             inputs: { software: string; version: string },
         ) => {
-            const software = inputs?.software;
-            if (!isServerSoftware(software)) {
-                throw new Error(`Unknown server software: ${JSON.stringify(inputs?.software)}`);
-            }
-            const version = assertSingleLine(inputs?.version, "version", 64);
-            if (!isSupportedMcVersion(version)) {
-                throw new Error(
-                    `Minecraft ${version} is below Paperboard's minimum supported version (${MIN_SUPPORTED_MC_VERSION}).`,
-                );
-            }
-            // the owner enforces offline, not just the button
-            if (ctx.state.serverStatus !== "offline") {
-                throw new Error("Stop the server before switching versions");
-            }
-            const outcome = await installServerSoftware(ctx, software, version, liveInstallDeps(ctx));
-            // the version decides which gamerules exist: refresh the rule
-            // dropdown so the flow builder can't offer a rule this jar lacks
-            await republishDynamicActions(ctx);
-            return outcome;
+            return installVersion(ctx, inputs?.software, inputs?.version);
         },
     }),
 
@@ -1433,12 +1476,7 @@ export const panelActions: ActionDefinition[] = [
             _ctx: ServiceContext<GameServerState>,
             inputs: { uuid?: string },
         ) => {
-            if (!inputs?.uuid) throw new Error("UUID is required");
-            const name = await usernameFromUuid(inputs.uuid);
-            if (!name) {
-                throw new Error(`No username on file for UUID ${inputs.uuid}`);
-            }
-            return name;
+            return playerForUuid(inputs?.uuid);
         },
     }),
 
