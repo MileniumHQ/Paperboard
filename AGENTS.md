@@ -28,7 +28,7 @@ Tests:
 - **Real boundaries:** real filesystem, processes, Electron and browser over mocks.
 - **Platform tests:** CI runs everything once on Linux x64. Only tests whose outcome depends on the OS or CPU go in a `tests/platform` (or `test/platform`) directory, which also runs on Linux arm64, macOS x64/arm64 and Windows x64. Those stay portable: no POSIX-only shells, paths or signals outside a per-platform branch.
 - **Fewer, stronger tests:** only data loss, security, install/update/release, core contracts and shipped bugs in core flows. `tests-inventory.md` lists what the suite covers; add to it when you add a test.
-- **Prove it:** a fix comes with a small test that fails without it.
+- **Not every fix needs a test:** add one only when the fix meets the bar above. Then it's a small test that fails without the fix. Otherwise check the fix by hand and move on.
 - **Don't cheat tests:** never skip, loosen, `.todo` or delete a failing test. A test that can't run fails with the reason. If a test expects broken behavior, fix the test.
 
 Some rules about Git:
