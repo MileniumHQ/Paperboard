@@ -43,8 +43,8 @@ export interface DatapackDeps {
     /** server.properties' level-name: the world whose datapacks apply */
     levelName(): Promise<string>;
     fetchJson<T>(url: string): Promise<T>;
-    /** downloads into the server folder, verifying sha1; targetPath is relative to it */
-    download(opts: { url: string; targetPath: string; sha1: string }): Promise<unknown>;
+    /** downloads into the server folder, verifying both of Modrinth's hashes; targetPath is relative to it */
+    download(opts: { url: string; targetPath: string; sha1: string; sha512: string }): Promise<unknown>;
     readConfig(): Promise<Record<string, unknown>>;
     writeConfig(patch: Record<string, unknown>): Promise<void>;
     /** recoverable removal of server-folder-relative paths */
@@ -197,7 +197,7 @@ export async function installDatapack(
     if (await exists(fs, nodePath.join(root, ...target.split("/")))) {
         throw new Error(`${file.filename} is already in ${relative}/`);
     }
-    await deps.download({ url: file.url, targetPath: target, sha1: file.sha1 });
+    await deps.download({ url: file.url, targetPath: target, sha1: file.sha1, sha512: file.sha512 });
     await updateRecords(deps, (records) => {
         records[datapackRecordKey(world, file.filename)] = {
             projectId,

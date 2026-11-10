@@ -13,7 +13,8 @@ export function liveDatapackDeps(ctx: ServiceContext<GameServerState>): Datapack
         serverDir: () => fileApi.getPath("", PANEL_ID),
         levelName: resolveLevelName,
         fetchJson,
-        download: (opts) => fileApi.download({ ...opts, appId: PANEL_ID }),
+        download: ({ url, targetPath, sha1, sha512 }) =>
+            fileApi.download({ url, targetPath, sha1, checksum: { algorithm: "sha512", value: sha512 }, appId: PANEL_ID }),
         readConfig: async () => {
             const saved = await config.get<Record<string, unknown>>(PANEL_ID);
             return saved && typeof saved === "object" ? saved : {};
