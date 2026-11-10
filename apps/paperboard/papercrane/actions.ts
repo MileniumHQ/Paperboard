@@ -102,7 +102,27 @@ export class ProjectError extends Error {
     name = "ProjectError";
 }
 
+/**
+ * Which registry this is. Actions (v1) and Blocks (v2) are separate
+ * registries over the same machinery: their names never collide, and a
+ * Blocks call frame names its registry so the panel's transport dispatches
+ * it to its own handlers.
+ */
+export type RegistryKind = "action" | "block";
+
 export class ActionsRegistry {
+    private readonly noun: string;
+    private readonly Noun: string;
+    private readonly article: string;
+    private readonly tag: string;
+
+    constructor(readonly kind: RegistryKind = "action") {
+        this.noun = kind;
+        this.Noun = kind === "action" ? "Action" : "Block";
+        this.article = kind === "action" ? "An" : "A";
+        this.tag = kind === "action" ? "Actions" : "Blocks";
+    }
+
     // ONE key space for every registrable thing: callable actions and event
     // actions share the `panelId:action` namespace, so a callable action and
     // an event can never shadow each other's identity. Mirrored per-kind
@@ -128,10 +148,10 @@ export class ActionsRegistry {
         const owned = this.socketActions.get(ws);
         const added = new Set(keys.filter((key) => !owned?.has(key) && !this.actions.has(key))).size;
         if ((owned?.size ?? 0) + added > MAX_ACTIONS_PER_SOCKET) {
-            throw new LimitError(`A connection may register at most ${MAX_ACTIONS_PER_SOCKET} actions`);
+            throw new LimitError(`A connection may register at most ${MAX_ACTIONS_PER_SOCKET} ${this.noun}s`);
         }
         if (this.actions.size + added > MAX_ACTIONS) {
-            throw new LimitError(`The action registry is full (${MAX_ACTIONS} actions)`);
+            throw new LimitError(`The ${this.noun} registry is full (${MAX_ACTIONS} ${this.noun}s)`);
         }
     }
 
@@ -145,13 +165,13 @@ export class ActionsRegistry {
         const existing = this.actions.get(key);
         if (existing && existing.ws !== ws) {
             logger.warn(
-                `[Actions] Refused to register "${actionName}" for panel "${panelId}": already registered by another socket`,
+                `[${this.tag}] Refused to register "${actionName}" for panel "${panelId}": already registered by another socket`,
             );
             return { ok: false, code: "CONFLICT", owner: existing.ws };
         }
         this.assertProjectOwned(panelId, actionName, ws);
         if (schema !== undefined && Buffer.byteLength(JSON.stringify(schema) ?? "", "utf8") > MAX_ACTION_SCHEMA_BYTES) {
-            throw new LimitError(`An action schema may be at most ${MAX_ACTION_SCHEMA_BYTES} bytes`);
+            throw new LimitError(`${this.article} ${this.noun} schema may be at most ${MAX_ACTION_SCHEMA_BYTES} bytes`);
         }
         this.assertRoom(ws, [key]);
 
@@ -165,7 +185,7 @@ export class ActionsRegistry {
         set.add(key);
 
         logger.info(
-            `[Actions] Registered action "${actionName}" for panel "${panelId}"`,
+            `[${this.tag}] Registered ${this.noun} "${actionName}" for panel "${panelId}"`,
         );
         return { ok: true };
     }
@@ -179,7 +199,7 @@ export class ActionsRegistry {
             const existing = this.actions.get(this.actionKey(panelId, actionName));
             if (existing && existing.ws !== ws) {
                 logger.warn(
-                    `[Actions] Refused batch registration for panel "${panelId}": action "${actionName}" already registered by another socket`,
+                    `[${this.tag}] Refused batch registration for panel "${panelId}": ${this.noun} "${actionName}" already registered by another socket`,
                 );
                 return { ok: false, code: "CONFLICT", owner: existing.ws };
             }
@@ -203,7 +223,7 @@ export class ActionsRegistry {
             const existing = this.actions.get(key);
             if (existing && ws && existing.ws !== ws) {
                 logger.warn(
-                    `[Actions] Refused to unregister "${actionName}" for panel "${panelId}": registered by another socket`,
+                    `[${this.tag}] Refused to unregister "${actionName}" for panel "${panelId}": registered by another socket`,
                 );
                 return { ok: false, code: "CONFLICT", owner: existing.ws };
             }
@@ -252,7 +272,7 @@ export class ActionsRegistry {
         const key = this.actionKey(panelId, project.id);
         const existing = this.projects.get(key);
         if (existing && existing.ws !== ws) {
-            logger.warn(`[Actions] Refused to define project "${project.id}" for panel "${panelId}": defined by another socket`);
+            logger.warn(`[${this.tag}] Refused to define project "${project.id}" for panel "${panelId}": defined by another socket`);
             return { ok: false, code: "CONFLICT", owner: existing.ws };
         }
         if (!existing) {
@@ -271,7 +291,7 @@ export class ActionsRegistry {
             this.socketProjects.set(ws, set);
         }
         set.add(key);
-        logger.info(`[Actions] ${existing ? "Updated" : "Defined"} project "${project.id}" for panel "${panelId}"`);
+        logger.info(`[${this.tag}] ${existing ? "Updated" : "Defined"} project "${project.id}" for panel "${panelId}"`);
         return { ok: true };
     }
 
@@ -281,11 +301,11 @@ export class ActionsRegistry {
         const existing = this.projects.get(key);
         if (!existing) return { ok: true };
         if (existing.ws !== ws) {
-            logger.warn(`[Actions] Refused to remove project "${projectId}" for panel "${panelId}": defined by another socket`);
+            logger.warn(`[${this.tag}] Refused to remove project "${projectId}" for panel "${panelId}": defined by another socket`);
             return { ok: false, code: "CONFLICT", owner: existing.ws };
         }
         this.dropProject(key, existing);
-        logger.info(`[Actions] Removed project "${projectId}" for panel "${panelId}"`);
+        logger.info(`[${this.tag}] Removed project "${projectId}" for panel "${panelId}"`);
         return { ok: true };
     }
 
@@ -335,7 +355,7 @@ export class ActionsRegistry {
                 // must still settle — a stuck call is a leaked slot
                 pending.reject(
                     new Error(
-                        `Action call "${pending.panelId}:${pending.action}" aborted: caller socket closed`,
+                        `${this.Noun} call "${pending.panelId}:${pending.action}" aborted: caller socket closed`,
                     ),
                 );
             } else if (pending.carried && pending.targetWs === ws) {
@@ -349,7 +369,7 @@ export class ActionsRegistry {
                     this.pendingCalls.delete(callId);
                     pending.reject(
                         new Error(
-                            `Action service for "${pending.panelId}:${pending.action}" disconnected`,
+                            `${this.Noun} service for "${pending.panelId}:${pending.action}" disconnected`,
                         ),
                     );
                 }
@@ -378,14 +398,14 @@ export class ActionsRegistry {
         const registered = this.actions.get(key);
         if (!registered || registered.ws.readyState !== WebSocket.OPEN) {
             throw new Error(
-                `Action "${action}" on panel "${panelId}" is not registered or unavailable`,
+                `${this.Noun} "${action}" on panel "${panelId}" is not registered or unavailable`,
             );
         }
         if (registered.schema?.internal === true && callerPanelId !== null && callerPanelId !== panelId) {
-            logger.warn(`[Actions] "${callerPanelId}" refused internal action "${panelId}:${action}"`);
+            logger.warn(`[${this.tag}] "${callerPanelId}" refused internal ${this.noun} "${panelId}:${action}"`);
             throw new RpcError(
                 ErrorCode.FORBIDDEN,
-                `Action "${action}" is internal to panel "${panelId}"`,
+                `${this.Noun} "${action}" is internal to panel "${panelId}"`,
             );
         }
 
@@ -397,22 +417,22 @@ export class ActionsRegistry {
         const globalCount = this.pendingCalls.size;
         if (globalCount >= MAX_PENDING_CALLS) {
             logger.warn(
-                `[Actions] Call refused: ${globalCount} outstanding calls (global cap ${MAX_PENDING_CALLS})`,
+                `[${this.tag}] Call refused: ${globalCount} outstanding calls (global cap ${MAX_PENDING_CALLS})`,
             );
             throw new RpcError(
                 ErrorCode.FORBIDDEN,
-                `Too many outstanding action calls: ${globalCount} (global cap ${MAX_PENDING_CALLS})`,
+                `Too many outstanding ${this.noun} calls: ${globalCount} (global cap ${MAX_PENDING_CALLS})`,
             );
         }
         const socketSet = this.socketPendingCalls.get(callerWs);
         const socketCount = socketSet?.size ?? 0;
         if (socketCount >= MAX_PENDING_CALLS_PER_SOCKET) {
             logger.warn(
-                `[Actions] Call refused: caller socket has ${socketCount} outstanding calls (per-socket cap ${MAX_PENDING_CALLS_PER_SOCKET})`,
+                `[${this.tag}] Call refused: caller socket has ${socketCount} outstanding calls (per-socket cap ${MAX_PENDING_CALLS_PER_SOCKET})`,
             );
             throw new RpcError(
                 ErrorCode.FORBIDDEN,
-                `Too many outstanding action calls on this connection: ${socketCount} (cap ${MAX_PENDING_CALLS_PER_SOCKET})`,
+                `Too many outstanding ${this.noun} calls on this connection: ${socketCount} (cap ${MAX_PENDING_CALLS_PER_SOCKET})`,
             );
         }
 
@@ -431,7 +451,7 @@ export class ActionsRegistry {
                           this.pendingCalls.delete(callId);
                           reject(
                               new Error(
-                                  `Action call "${panelId}:${action}" timed out after ${timeoutMs}ms`,
+                                  `${this.Noun} call "${panelId}:${action}" timed out after ${timeoutMs}ms`,
                               ),
                           );
                       }, timeoutMs);
@@ -457,6 +477,7 @@ export class ActionsRegistry {
                 registered.ws.send(
                     JSON.stringify({
                         type: "action_call",
+                        ...(this.kind === "block" ? { registry: "blocks" } : {}),
                         callId,
                         panelId,
                         action,
@@ -487,7 +508,7 @@ export class ActionsRegistry {
         const pending = this.pendingCalls.get(callId);
         if (!pending) return false;
         if (pending.targetWs !== fromWs) {
-            logger.warn(`[Actions] dropped action_reply for "${pending.panelId}:${pending.action}" from a socket that was not called`);
+            logger.warn(`[${this.tag}] dropped reply for "${pending.panelId}:${pending.action}" from a socket that was not called`);
             return false;
         }
 
@@ -557,3 +578,5 @@ export class ActionsRegistry {
 }
 
 export const actionsRegistry = new ActionsRegistry();
+/** The Blocks panel's registry (Actions API v2, PaperAPI blocksApi). */
+export const blocksRegistry = new ActionsRegistry("block");

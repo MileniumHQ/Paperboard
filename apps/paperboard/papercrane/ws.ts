@@ -7,7 +7,7 @@ import { pinnedTlsOptions } from "./pinnedTls";
 import { pinnableWebSocket } from "./pinnableWebSocket";
 import { getDetailedOsInfo } from "./index";
 import { logger } from "./logger";
-import { actionsRegistry } from "./actions";
+import { actionsRegistry, blocksRegistry } from "./actions";
 import type { RpcContext } from "./rpc/context";
 import { handleTerminal } from "./rpc/terminal";
 import { handleProcess } from "./rpc/process";
@@ -15,6 +15,7 @@ import { handleFiles } from "./rpc/files";
 import { handlePackages } from "./rpc/packages";
 import { handlePanels } from "./rpc/panels";
 import { handleActions } from "./rpc/actions";
+import { handleBlocks } from "./rpc/blocks";
 import { handleSystem } from "./rpc/system";
 import { handleSecrets } from "./rpc/secrets";
 import { backupServiceFor, handleBackups } from "./rpc/backups";
@@ -335,6 +336,9 @@ export function setupWebSocketServer(
             if (registryChanged) {
                 broadcastEvent("actions:registry-updated", { type: "socket:closed" });
             }
+            if (blocksRegistry.handleSocketClose(ws)) {
+                broadcastEvent("blocks:registry-updated", { type: "socket:closed" });
+            }
             // the socket is dead: close upstreams, notify no one
             for (const id of [...tunnels.keys()]) {
                 closeTunnel(id, { notify: false });
@@ -370,7 +374,11 @@ export function setupWebSocketServer(
                         logger.debug("[ws] dropping pre-auth action_reply frame");
                         return;
                     }
-                    actionsRegistry.handleReply(maybe.callId, maybe.result, maybe.error, ws);
+                    // call ids are unique across both registries: the one
+                    // that sent the call settles it
+                    if (!actionsRegistry.handleReply(maybe.callId, maybe.result, maybe.error, ws)) {
+                        blocksRegistry.handleReply(maybe.callId, maybe.result, maybe.error, ws);
+                    }
                     return;
                 }
 
@@ -798,6 +806,7 @@ export function setupWebSocketServer(
                     (await handlePackages(action, id, params, rpcCtx)) ||
                     (await handlePanels(action, id, params, rpcCtx)) ||
                     (await handleActions(action, id, params, rpcCtx)) ||
+                    (await handleBlocks(action, id, params, rpcCtx)) ||
                     (await handleSystem(action, id, params, rpcCtx)) ||
                     (await handleSecrets(action, id, params, rpcCtx)) ||
                     (await handleBackups(action, id, params, rpcCtx)) ||
