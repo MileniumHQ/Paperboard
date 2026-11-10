@@ -73,6 +73,12 @@ export function spawnPty(
 
 // Bun.Terminal hands data to one constructor callback, so early output is
 // buffered until onData subscribes and flushed in order.
+//
+// The terminal is created by spawn itself (inline options, not a
+// `new Bun.Terminal`): only then does Bun start the child in its own session
+// with the pty as its controlling terminal. Handed a prebuilt Terminal, the
+// child keeps the supervisor's session and an interactive shell runs with
+// "no job control" (no Ctrl+Z, no fg/bg, Ctrl+C not delivered to the job).
 function spawnBunPty(
     shell: string,
     args: string[],
@@ -85,18 +91,22 @@ function spawnBunPty(
     let onData: ((data: string) => void) | null = null;
     const buffered: string[] = [];
 
-    const terminal = new BunRuntime.Terminal({
-        cols,
-        rows,
-        name: env.TERM || "xterm-256color",
-        data: (_term: unknown, data: Uint8Array) => {
-            const text = decoder.decode(data, { stream: true });
-            if (!text) return;
-            if (onData) onData(text);
-            else buffered.push(text);
+    const proc = BunRuntime.spawn([shell, ...args], {
+        cwd,
+        env,
+        terminal: {
+            cols,
+            rows,
+            name: env.TERM || "xterm-256color",
+            data: (_term: unknown, data: Uint8Array) => {
+                const text = decoder.decode(data, { stream: true });
+                if (!text) return;
+                if (onData) onData(text);
+                else buffered.push(text);
+            },
         },
     });
-    const proc = BunRuntime.spawn([shell, ...args], { terminal, cwd, env });
+    const terminal = proc.terminal;
 
     let closed = false;
     const close = () => {
