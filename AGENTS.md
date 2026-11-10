@@ -23,12 +23,10 @@ Paperboard is a dashboard for self-hostable programs. Panels are like the apps. 
 
 Tests:
 
-- **Tests are CI:** deterministic, no sleeps or timing races, no network, nothing from the dev's machine. Temp dirs only, via `PAPERBOARD_DIR`.
-- **Real boundaries:** real filesystem, processes, Electron and browser over mocks.
-- **Platform tests:** CI runs everything once on Linux x64. Only tests whose outcome depends on the OS or CPU go in a `tests/platform` (or `test/platform`) directory, which also runs on Linux arm64, macOS x64/arm64 and Windows x64. Those stay portable: no POSIX-only shells, paths or signals outside a per-platform branch.
-- **Fewer, stronger tests:** only data loss, security, install/update/release, core contracts and shipped bugs in core flows. `tests-inventory.md` lists what the suite covers; add to it when you add a test.
-- **Not every fix needs a test:** add one only when the fix meets the bar above. Then it's a small test that fails without the fix. Otherwise check the fix by hand and move on.
-- **Don't cheat tests:** never skip, loosen, `.todo` or delete a failing test. A test that can't run fails with the reason. If a test expects broken behavior, fix the test.
+- **Tests are CI:** deterministic, no network, temp dirs via `PAPERBOARD_DIR`. Real boundaries over mocks.
+- **Platform tests:** only OS-dependent tests go in `test/platform`; CI runs those on every release target.
+- **Only what matters:** data loss, security, updates/releases, core contracts. Listed in `tests-inventory.md`.
+- **Never skip or loosen a failing test.** Fix the code, or the test if it expects broken behavior.
 
 Some rules about Git:
 
