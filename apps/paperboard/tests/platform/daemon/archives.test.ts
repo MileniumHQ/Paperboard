@@ -48,9 +48,6 @@ const hostile: Record<string, TarMember[]> = {
 	"a member too deep for node-tar": [{ name: `${Array.from({ length: 1100 }, () => "d").join("/")}/f.txt`, content: "x" }],
 };
 
-// refused before anything is written
-const refusedUpFront = new Set(Object.keys(hostile).filter((kind) => kind !== "a member too deep for node-tar"));
-
 // Archives can't write outside their destination.
 describe("archives cannot write outside their destination", () => {
 	for (const [kind, members] of Object.entries(hostile)) {
@@ -59,8 +56,7 @@ describe("archives cannot write outside their destination", () => {
 			const file = archiveFile("hostile.tar", tar([{ name: "first.txt", content: "ok" }, ...members]));
 			await expect(extractTarSafely(file, dest)).rejects.toThrow();
 			expect(fs.readdirSync(parent)).toEqual(["dest"]);
-			if (refusedUpFront.has(kind)) expect(listTree(dest)).toEqual([]);
-			expect(listTree(dest).some((f) => f.endsWith("f.txt"))).toBe(false);
+			expect(listTree(dest)).toEqual([]);
 		});
 	}
 

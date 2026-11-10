@@ -370,7 +370,17 @@ export function coerceRegistryRecord(
 export const TAR_BUDGET = {
     maxEntries: 100_000,
     maxBytes: 4 * 1024 * 1024 * 1024,
+    // node-tar's own default, passed to it explicitly: the scan refuses a
+    // deeper member up front, so extraction never meets one half way through
+    maxDepth: 1024,
 };
+
+// a member's depth as node-tar counts it: path segments after the strip,
+// with backslashes as separators only on Windows
+function tarMemberDepth(entryPath: string, strip: number): number {
+    const normalized = process.platform === "win32" ? entryPath.replace(/\\/g, "/") : entryPath;
+    return normalized.split("/").length - strip;
+}
 
 // Classification shared by the refuser (scanTarMembers) and the extractor
 // (makeSafeTarFilter): a member is written ("ok"), legitimately absent
@@ -456,6 +466,10 @@ export async function scanTarMembers(
                 total += entry.size ?? 0;
                 if (++count > TAR_BUDGET.maxEntries || total > TAR_BUDGET.maxBytes) {
                     settle(new LimitError(`Archive exceeds extraction budget at member: ${entry.path}`));
+                    return;
+                }
+                if (tarMemberDepth(String(entry.path), strip) > TAR_BUDGET.maxDepth) {
+                    settle(new LimitError(`Archive member nests deeper than ${TAR_BUDGET.maxDepth} levels: ${String(entry.path).slice(0, 200)}`));
                     return;
                 }
                 const refusal = refuse?.({ path: String(entry.path), type: String(entry.type) });
@@ -568,7 +582,7 @@ export async function extractTarSafely(archive: string, dest: string, strip = 0)
     }
     let warning: Error | undefined;
     await tar.extract({
-        file: archive, cwd: dest, strip,
+        file: archive, cwd: dest, strip, maxDepth: TAR_BUDGET.maxDepth,
         filter: (name, entry) => {
             const verdict = classifyTarMember(dest, name, strip,
                 "type" in entry && entry.type === "SymbolicLink" ? { type: entry.type } : entry);

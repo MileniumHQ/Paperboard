@@ -155,7 +155,7 @@ export async function extractPanelArchive(
             ? `The backup holds entries that are not this panel's data: ${type} ${member}`
             : null,
     );
-    await tar.x({ file: archive, cwd: stagingDir, filter: makeSafeTarFilter(stagingDir) });
+    await tar.x({ file: archive, cwd: stagingDir, maxDepth: TAR_BUDGET.maxDepth, filter: makeSafeTarFilter(stagingDir) });
     const filesDir = path.join(stagingDir, entries.files);
     fs.mkdirSync(filesDir, { recursive: true });
     const configFile = path.join(stagingDir, entries.config);
