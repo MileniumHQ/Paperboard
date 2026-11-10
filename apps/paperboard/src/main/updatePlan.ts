@@ -59,7 +59,7 @@ export async function withInstalledRecords(
     computers: ComputerUpdateState[],
     registryPanels: Record<string, any>,
     fetchRecord: (id: string) => Promise<Record<string, any> | null>,
-): Promise<{ panels: Record<string, any>; failures: number }> {
+): Promise<{ panels: Record<string, any>; failures: number; reasons: string[] }> {
     const missing = new Set<string>();
     for (const comp of computers) {
         for (const panel of comp.panels) {
@@ -68,17 +68,18 @@ export async function withInstalledRecords(
         }
     }
     const panels = { ...registryPanels };
-    let failures = 0;
+    const reasons: string[] = [];
     await Promise.all([...missing].map(async (id) => {
         try {
             const record = await fetchRecord(id);
             if (record?.id === id) panels[id] = record;
         } catch (err) {
-            failures++;
-            logger.warn(`[Updater] could not read the registry record for ${id}:`, err instanceof Error ? err.message : err);
+            const reason = err instanceof Error ? err.message : String(err);
+            reasons.push(`${id}: ${reason}`);
+            logger.warn(`[Updater] could not read the registry record for ${id}:`, reason);
         }
     }));
-    return { panels, failures };
+    return { panels, failures: reasons.length, reasons };
 }
 
 export async function planUpdateTasks(

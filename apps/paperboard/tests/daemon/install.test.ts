@@ -231,10 +231,12 @@ describe("update planning", () => {
 		expect(signed.map((t) => t.type)).toEqual(["ext_crane"]);
 	});
 
-	test("unlisted panels update through their own registry record, and an unreadable record counts as a failure", async () => {
+	test("unlisted panels update through their own registry record, and an unreadable record counts as a failure with its reason", async () => {
 		await release(origami, { id: "test.unlisted", version: "5.0.0", manifest: { unlisted: true } });
 		expect(JSON.parse(origami.kv.get("panels:index")!)["test.unlisted"]).toBeUndefined();
-		const computers = [computer({ panels: [{ id: "test.unlisted", version: "4.0.0" }, { id: "test.unreadable", version: "1.0.0" }] })];
+		// test.broken's record is damaged in the registry itself: Origami says so
+		origami.kv.set("panel:test.broken", "{damaged");
+		const computers = [computer({ panels: [{ id: "test.unlisted", version: "4.0.0" }, { id: "test.unreadable", version: "1.0.0" }, { id: "test.broken", version: "1.0.0" }] })];
 		const index = await (await fetch(`${origami.url}/panels/index.json`)).json();
 		// the updater's own record fetch; test.unreadable's record comes back as
 		// bytes that are not JSON (a registry or proxy answering garbage)
@@ -248,9 +250,11 @@ describe("update planning", () => {
 				throw err;
 			}
 		};
-		const { panels, failures } = await withInstalledRecords(computers, index, fetchRecord);
+		const { panels, failures, reasons } = await withInstalledRecords(computers, index, fetchRecord);
 		await garbage.close();
-		expect(failures).toBe(1);
+		expect(failures).toBe(2);
+		// the updater shows the registry's own reason, not a bare status
+		expect(reasons).toContain("test.broken: Registry returned HTTP 500: The registry record for test.broken could not be read");
 		const tasks = await plan(computers, panels);
 		expect(tasks.map((t) => [t.id, t.version])).toEqual([["test.unlisted", "5.0.0"]]);
 	});
