@@ -47,8 +47,9 @@ describe("compiled daemon", () => {
 
         const exit = await daemon.stop();
         if (process.platform === "win32") {
-            // TerminateProcess ends it where it stands: no handler runs
-            expect(exit.code).not.toBeNull();
+            // TerminateProcess ends it where it stands: no handler runs, and
+            // the child reports the emulated signal instead of an exit code
+            expect(exit).toEqual({ code: null, signal: "SIGTERM" });
         } else {
             // SIGTERM runs the daemon's own shutdown: exit 0, handshake gone
             expect(exit).toEqual({ code: 0, signal: null });
