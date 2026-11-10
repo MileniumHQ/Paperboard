@@ -1,3 +1,4 @@
+import { afterAll } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -5,7 +6,9 @@ import * as path from "node:path";
 // no-network guard below refuses a connection.
 const testData = fs.mkdtempSync(path.join(os.tmpdir(), "gameserver-unit-"));
 process.env.PAPERBOARD_DIR = testData;
-process.once("exit", () => fs.rmSync(testData, { recursive: true, force: true }));
+// bun test never fires exit handlers; a preload afterAll runs once the
+// process's test files are done
+afterAll(() => fs.rmSync(testData, { recursive: true, force: true }));
 
 // Hermetic test guard: unit tests must never open network connections.
 // The panel SDK discovers a running daemon through ~/.paperboard/local/crane.json,
