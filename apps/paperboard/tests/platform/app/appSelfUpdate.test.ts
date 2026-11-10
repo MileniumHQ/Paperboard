@@ -1,9 +1,11 @@
 import { afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { BUILD_TIMEOUT_MS, APP_PACKAGE } from "./support/build";
 import { WAIT_MS } from "./support/crane";
+import { electronBinary } from "./support/electron";
 import { buildUpdaterApp, Feed, FEED_FILE, filesUnder, PAYLOAD_FILE, runUpdater } from "./support/updater/run";
 import { tempDir } from "./support/temp";
 
@@ -20,6 +22,19 @@ function runningInstall(): { env: Record<string, string>; file: string } {
         return { env: { APPIMAGE: file }, file };
     }
     return { env: {}, file: path.join(tempDir("install"), "unused") };
+}
+
+// Squirrel.Mac takes an update only into an app with a code signature:
+// setFeedURL refuses one that has none. Electron's arm64 build is ad-hoc
+// signed (Apple silicon runs no unsigned code); its x64 build is not.
+function electronIsSigned(): boolean {
+    const bundle = path.resolve(electronBinary(), "..", "..", "..");
+    const check = spawnSync("codesign", ["--display", bundle], { encoding: "utf8" });
+    if (check.error) throw check.error;
+    if (check.status !== 0 && !/not signed at all/.test(check.stderr)) {
+        throw new Error(`codesign could not read ${bundle}: ${check.stderr}`);
+    }
+    return check.status === 0;
 }
 
 const digest = (file: string) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
@@ -45,15 +60,15 @@ describe("app self-update from a feed", () => {
         // the verified bytes are in the updater's cache
         expect(downloaded(run.cacheDir).length).toBeGreaterThan(0);
         const final = run.results![0];
-        if (process.platform === "darwin") {
+        if (process.platform === "darwin" && !electronIsSigned()) {
             // an unsigned build cannot hand the verified zip to Squirrel.Mac:
             // the native step refuses, and that is reported, not hidden
             expect(final.status).toBe("failed");
             expect(final.error).not.toMatch(/sha512/i);
         } else {
             expect(final).toMatchObject({ status: "ready", version: NEWER, error: null });
-            // the stand-in AppImage carries no embedded blockmap, so the
-            // updater says it takes the full download instead; nothing else
+            // the stand-in payload carries no blockmap, so the updater says
+            // it takes the full download instead; nothing else
             const errors = run.log.filter((l) => l.level === "error" && !l.message.startsWith("Cannot download differentially, fallback to full download"));
             expect(errors).toEqual([]);
         }
