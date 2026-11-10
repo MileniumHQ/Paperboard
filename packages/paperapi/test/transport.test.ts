@@ -93,6 +93,45 @@ describe("handlers are owned by the panel that registers them", () => {
         expect(registry.getHandler("dev.a:ping")).toBeUndefined();
         expect(registry.getHandler("dev.b:ping")?.()).toBe("b");
     });
+
+    test("a reply that finishes after the connection closed is reported loudly, never thrown into the service", async () => {
+        const t = transport({ panelId: "dev.ambient" });
+        const entered = { ok: deferred(), fail: deferred() };
+        const finish = { ok: deferred<string>(), fail: deferred<void>() };
+        await t.registerAction("dev.a", "slow", () => {
+            entered.ok.resolve(undefined);
+            return finish.ok.promise;
+        });
+        await t.registerAction("dev.a", "doomed", async () => {
+            entered.fail.resolve(undefined);
+            await finish.fail.promise;
+            throw new Error("boom");
+        });
+        server.sendRaw({ type: "action_call", callId: "late-ok", panelId: "dev.a", action: "slow", args: [] });
+        server.sendRaw({ type: "action_call", callId: "late-fail", panelId: "dev.a", action: "doomed", args: [] });
+        await Promise.all([entered.ok.promise, entered.fail.promise]);
+
+        const unhandled: unknown[] = [];
+        const onUnhandled = (reason: unknown) => unhandled.push(reason);
+        process.on("unhandledRejection", onUnhandled);
+        const lines: string[] = [];
+        const consoleError = console.error;
+        console.error = (...args: unknown[]) => void lines.push(args.map(String).join(" "));
+        try {
+            t.close();
+            finish.ok.resolve("too late");
+            finish.fail.resolve();
+            await flushMicrotasks();
+            // one macrotask turn: where an unhandled rejection is reported
+            await new Promise((r) => setImmediate(r));
+            expect(unhandled).toEqual([]);
+            expect(lines.some((l) => l.includes("reply to dev.a:slow (call late-ok) was not delivered") && l.includes("connection closed"))).toBe(true);
+            expect(lines.some((l) => l.includes("reply to dev.a:doomed (call late-fail) was not delivered") && l.includes("connection closed"))).toBe(true);
+        } finally {
+            console.error = consoleError;
+            process.off("unhandledRejection", onUnhandled);
+        }
+    });
 });
 
 // Reconnect replays registrations faithfully.
