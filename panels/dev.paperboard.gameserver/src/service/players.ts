@@ -346,8 +346,10 @@ export async function deletePlayerData(
         }
         safeUuid = resolved;
     }
-    await disconnectBeforeDelete(ctx, safeName);
+    // the level first: an unreadable server.properties refuses before the
+    // player is kicked for a delete that can't happen
     const level = await resolveLevelName();
+    await disconnectBeforeDelete(ctx, safeName);
     // both layouts: 26.x worlds nest player files under players/, older
     // ones keep them at the world root, and an upgraded server can hold both
     await trashRemovePathsWith(

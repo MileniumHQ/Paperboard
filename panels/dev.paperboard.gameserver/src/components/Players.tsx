@@ -196,11 +196,19 @@ export default function Players() {
         }
     };
 
+    // offline stats from the world's files; a failed read says why instead
+    // of leaving the last numbers (or none) looking current
+    const reloadStats = () =>
+        loadPlayerStats().catch((err) => {
+            console.error("[Players] list-player-stats failed:", err);
+            setFeedback({ title: "Player stats not loaded", message: errorMessage(err) });
+        });
+
     onMount(() => {
         queryOnlinePlayers();
-        loadPlayerStats();
+        void reloadStats();
         const poll = setInterval(queryOnlinePlayers, LIST_POLL_MS);
-        const statsPoll = setInterval(loadPlayerStats, STATS_POLL_MS);
+        const statsPoll = setInterval(() => void reloadStats(), STATS_POLL_MS);
         onCleanup(() => {
             clearInterval(poll);
             clearInterval(statsPoll);
@@ -502,7 +510,7 @@ export default function Players() {
         // a player on the whitelist, an operator or banned stays listed,
         // now without data; anyone else leaves the roster
         await loadRoster();
-        loadPlayerStats();
+        await reloadStats();
         if (!allPlayers().some((p) => p.name === player.name)) setOpenPlayerName(undefined);
     };
 

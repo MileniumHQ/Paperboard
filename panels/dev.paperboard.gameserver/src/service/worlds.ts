@@ -93,10 +93,15 @@ export async function listWorlds(): Promise<WorldInfo[]> {
     // prune names that have since generated, keeping the pending list bounded
     const generatedKeys = new Set(generated.map((name) => name.toLowerCase()));
     const pendingOnly = pending.filter((name) => !generatedKeys.has(name.toLowerCase()));
+    // awaited: a failed write is a config Paperboard couldn't save, and the
+    // listing must say so instead of looking fine until the next read
     if (pendingOnly.length !== pending.length) {
-        void writePendingWorlds(pendingOnly).catch((err) =>
-            console.debug("[Service:Worlds] pending prune failed:", String(err)),
-        );
+        try {
+            await writePendingWorlds(pendingOnly);
+        } catch (err) {
+            const reason = err instanceof Error ? err.message : String(err);
+            throw new Error(`Couldn't save the list of created worlds: ${reason}`);
+        }
     }
     // every generated directory and every not-yet-generated created world;
     // the level-name only marks which of them is active
@@ -186,15 +191,17 @@ export async function setActiveWorld(
 
 // the server's actual level-name from server.properties — the Worlds tab
 // lets the user rename it, so deletes must follow the file, not a
-// hardcoded "world". Missing file means a fresh server ("world"); a
-// present-but-shell-unsafe name refuses loudly instead of deleting the
-// wrong directory.
+// hardcoded "world". Missing file means a fresh server ("world"). An
+// unreadable file throws: guessing "world" would point a reset, a player
+// delete or an export at a world the server isn't using. A present but
+// shell-unsafe name refuses loudly instead of deleting the wrong directory.
 export async function resolveLevelName(): Promise<string> {
-    let content: string | null = null;
+    let content: string | null;
     try {
         content = await fileApi.read("server.properties", PANEL_ID);
     } catch (err) {
-        console.debug("[Service:Worlds] server.properties unreadable, assuming default level:", String(err));
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(`Couldn't read server.properties to find the active world: ${reason}`);
     }
     if (!content) return "world";
     const raw = extractLevelName(parseProperties(content));
