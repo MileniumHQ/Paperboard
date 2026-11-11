@@ -4,6 +4,7 @@
     "version": "0.3.0",
     "description": "Visual automation and workflow builder",
     "publisher": "Paperboard",
+    "unlisted": true,
     "base": "./dist/index.html",
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
