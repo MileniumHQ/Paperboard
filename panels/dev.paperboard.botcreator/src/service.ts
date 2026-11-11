@@ -2696,16 +2696,14 @@ function parseCommandOptions(raw: unknown): SlashCommandOption[] {
 }
 
 /**
- * Adds a bot whose token is in the vault under its id (or saves `token`
- * there first), once it logs in. A bot that doesn't log in is forgotten,
- * token and all.
+ * Adds a bot whose token the panel saved in the vault under its id, once it
+ * logs in. A bot that doesn't log in is forgotten, token and all.
  */
-async function addBot(id: unknown, token?: string): Promise<BotSummary> {
+async function addBot(id: unknown): Promise<BotSummary> {
     requireReadable();
     if (!isBotId(id)) throw new Error("A bot id is required.");
     if (bots.has(id)) throw new Error("This bot is already added.");
     if (bots.size >= MAX_BOTS) throw new Error(`Bot Creator runs at most ${MAX_BOTS} bots.`);
-    if (token !== undefined) await secretsApi.set(tokenName(id), token, PANEL_ID);
     const saved = await readToken(id);
     if (!saved) throw new Error("No token was saved for the new bot.");
     const forget = () => secretsApi.delete(tokenName(id), PANEL_ID).catch(logFailure("forgetting the refused token failed"));
@@ -2750,17 +2748,9 @@ async function addBot(id: unknown, token?: string): Promise<BotSummary> {
     return summary(entry);
 }
 
-/** Reconnects a bot that's on with the new token in the vault (or saves `token` there first: it must be the same bot's). */
-async function replaceToken(entry: BotEntry, token?: string): Promise<void> {
+/** Reconnects a bot that's on with the new token the panel saved in the vault. */
+async function replaceToken(entry: BotEntry): Promise<void> {
     requireReadable();
-    if (token !== undefined) {
-        const applicationId = extractApplicationIdFromToken(token);
-        if (!applicationId) throw new Error("That isn't a Discord bot token.");
-        if (entry.stored.applicationId && applicationId !== entry.stored.applicationId) {
-            throw new Error(`That token is for a different bot than ${entry.stored.name}. Add it as a new bot instead.`);
-        }
-        await secretsApi.set(tokenName(entry.stored.id), token, PANEL_ID);
-    }
     const saved = await readToken(entry.stored.id);
     if (!saved) throw new Error("No token was saved for this bot.");
     entry.hasToken = true;
@@ -2952,13 +2942,6 @@ const blocksBots: BotsBlocksHost = {
             uptime: entry.session.health().uptimeMs,
         };
     },
-    add: async (token) => {
-        const trimmed = token.trim();
-        if (!trimmed) throw new Error("A bot token is required.");
-        // checked before it reaches the vault, so a token that isn't one is never saved
-        if (!extractApplicationIdFromToken(trimmed)) throw new Error("That isn't a Discord bot token.");
-        return (await addBot(createBotId(), trimmed)).id;
-    },
     remove: async (id) => {
         await deleteBot(blocksBot(id));
     },
@@ -2971,11 +2954,6 @@ const blocksBots: BotsBlocksHost = {
         const entry = blocksBot(id);
         if (!entry.stored.enabled) throw new Error(`${entry.stored.name} is turned off. Turn it on instead.`);
         await connect(entry);
-    },
-    replaceToken: async (id, token) => {
-        const trimmed = token.trim();
-        if (!trimmed) throw new Error("A bot token is required.");
-        await replaceToken(blocksBot(id), trimmed);
     },
     createCommand: (id, input) => createCommand(blocksBot(id), input),
     deleteCommand: (id, commandId) => deleteCommand(blocksBot(id), commandId),

@@ -2,8 +2,10 @@
 // Blocks project of its own, with its commands, values and events; the
 // panel's own handle holds the types every bot shares (a Channel, a User,
 // a Message...), the builders that never reach Discord (embeds, buttons),
-// and the blocks that run Bot Creator itself: adding, turning on and off,
-// and deleting bots, and their slash commands.
+// and the blocks that run Bot Creator itself: turning bots on and off,
+// deleting them, and their slash commands. A bot is added, and its token
+// replaced, in Bot Creator only: a token typed into a flow would be saved in
+// it as plain text.
 //
 // What the blocks do is botOps.ts and discordOps.ts, the same code the
 // Actions blocks run; this file only says what each block takes and gives.
@@ -1637,13 +1639,9 @@ export interface BotsBlocksHost {
     ids(): string[];
     /** the bot, or why there is none */
     bot(id: unknown): BotView;
-    /** saves the token in the vault, logs the new bot in and keeps it; gives its id */
-    add(token: string): Promise<string>;
     remove(id: string): Promise<void>;
     setOn(id: string, on: boolean): Promise<void>;
     restart(id: string): Promise<void>;
-    /** saves a new token for the same Discord application, then reconnects it if it's on */
-    replaceToken(id: string, token: string): Promise<void>;
     createCommand(id: string, input: Record<string, unknown>): Promise<CommandMutationResult>;
     deleteCommand(id: string, commandId: string): Promise<CommandMutationResult>;
     inviteLink(id: string, permissions: string[] | undefined): string;
@@ -1761,7 +1759,49 @@ export function botTypes(host: BotsBlocksHost): BlockTypeDefinition[] {
 }
 
 const botInput = { type: "bot", name: "Bot" } as const;
-const tokenInput = { type: "text", name: "Token", maxLength: 200 } as const;
+
+/**
+ * Why a flow can't hold a bot token: a block's inputs are saved in the flow
+ * as plain text, where anyone who sees the flow (a backup, a shared copy)
+ * has the bot. Tokens go in Bot Creator, which keeps them in the vault.
+ */
+export const TOKEN_IN_FLOW =
+    "Bot tokens can't be typed into flows any more: a flow keeps them as plain text. " +
+    "Add the bot, or replace its token, in Bot Creator, which keeps it in the vault, then delete this block. " +
+    "If this block held a real token, reset it in Discord's developer portal.";
+
+/**
+ * The two blocks that once took a token. TODO(remove after v0.5): flows
+ * saved with them still name them, so they stay, with their token socket
+ * (a flow saved with one loads only if it's there), to refuse saying why.
+ */
+const retiredTokenBlocks: BlockCommandDefinition<Inputs>[] = [
+    {
+        id: "add-bot",
+        name: "Add Bot (Retired)",
+        category: "Retired",
+        icon: "key_off",
+        description: TOKEN_IN_FLOW,
+        text: "Add a bot with token {token}",
+        inputs: { token: { type: "text", name: "Token", optional: true } },
+        output: "bot",
+        run: () => {
+            throw new Error(TOKEN_IN_FLOW);
+        },
+    },
+    {
+        id: "replace-bot-token",
+        name: "Replace Bot Token (Retired)",
+        category: "Retired",
+        icon: "key_off",
+        description: TOKEN_IN_FLOW,
+        text: "Replace the token of {bot} with {token}",
+        inputs: { bot: { ...botInput, optional: true }, token: { type: "text", name: "Token", optional: true } },
+        run: () => {
+            throw new Error(TOKEN_IN_FLOW);
+        },
+    },
+];
 
 /** Every command a block made, or why Discord or Blocks didn't take it. */
 function committed(result: CommandMutationResult, what: string): CommandMutationResult {
@@ -1775,17 +1815,6 @@ export function botsBlocks(host: BotsBlocksHost): BlockSet {
     const idOfBot = (value: unknown) => host.bot(value).summary.id;
     const choices = (): BlockChoice[] => host.ids().map((id) => choice(host.bot(id).summary.name, id));
     const commands: BlockCommandDefinition<Inputs>[] = [
-        {
-            id: "add-bot",
-            name: "Add Bot",
-            category: "Bots",
-            icon: "add",
-            description: "Logs a new bot in with its token from Discord's developer portal and keeps it. The token is kept in the vault",
-            text: "Add a bot with token {token}",
-            inputs: { token: tokenInput },
-            output: "bot",
-            run: (i) => host.add(i.token),
-        },
         {
             id: "turn-on-bot",
             name: "Turn On Bot",
@@ -1815,16 +1844,6 @@ export function botsBlocks(host: BotsBlocksHost): BlockSet {
             text: "Restart {bot}",
             inputs: { bot: botInput },
             run: (i) => host.restart(idOfBot(i.bot)),
-        },
-        {
-            id: "replace-bot-token",
-            name: "Replace Bot Token",
-            category: "Bots",
-            icon: "key",
-            description: "A new token for the same bot, after it was reset in Discord's developer portal. A bot that's on reconnects with it",
-            text: "Replace the token of {bot} with {token}",
-            inputs: { bot: botInput, token: tokenInput },
-            run: (i) => host.replaceToken(idOfBot(i.bot), i.token),
         },
         {
             id: "delete-bot",
@@ -1903,6 +1922,7 @@ export function botsBlocks(host: BotsBlocksHost): BlockSet {
                 committed(await host.deleteCommand(idOfBot(command.bot), command.id), `/${command.name}`);
             },
         },
+        ...retiredTokenBlocks,
     ];
     const values: BlockValueDefinition<Inputs>[] = [
         {
