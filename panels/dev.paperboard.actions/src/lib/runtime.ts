@@ -643,39 +643,21 @@ export async function initVariablesStore(): Promise<void> {
     }
 }
 
-let variablesWriting = 0;
-let variablesSaveListener: (() => void) | null = null;
-
-/** A variable changed and the change is not written yet. */
-export const variablesUnsaved = (): boolean => variablesPersistTimer !== undefined || variablesWriting > 0;
-
-/** Calls back each time a variable change starts waiting to be written, and each time a write ends. */
-export function onVariablesSaveChange(listener: () => void): void {
-    variablesSaveListener = listener;
-}
-
 function schedulePersistVariables() {
     if (variablesPersistTimer) clearTimeout(variablesPersistTimer);
     variablesPersistTimer = setTimeout(() => {
         variablesPersistTimer = undefined;
         try {
             const obj = Object.fromEntries(flowVariablesStore);
-            variablesWriting++;
             files
                 .write(VARIABLES_PATH, JSON.stringify(obj), ACTIONS_PANEL_ID)
                 .catch((err) =>
                     console.error("[ActionsRuntime] variables persist failed:", err),
-                )
-                .finally(() => {
-                    variablesWriting--;
-                    variablesSaveListener?.();
-                });
+                );
         } catch (err) {
             console.error("[ActionsRuntime] variables serialize failed:", err);
-            variablesSaveListener?.();
         }
     }, 250);
-    variablesSaveListener?.();
 }
 
 // responses are text-only feature data: cap what a block will hold

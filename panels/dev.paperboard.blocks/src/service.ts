@@ -32,30 +32,15 @@ export const MAX_RUNS_PER_PROJECT = 50;
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-// the projects are read and this panel's blocks registered: until then the service is starting, not idle
-let started = false;
-/**
- * Says whether the service has nothing to do until an action calls it: no
- * event or change listened for, no flow running, and nothing shown that
- * only this process knows (the run log, an error). Called after every
- * change to any of those.
- */
-function updateIdle(): void {
-    const { log: shown, projectsError, blocksError } = ctx.state;
-    ctx.setIdle(started && listening.size === 0 && runs.size === 0 && shown.length === 0 && !projectsError && !blocksError);
-}
-
 function log(project: string, level: LogEntry["level"], text: string, blockId?: string): void {
     const entry: LogEntry = { id: nextLogId++, at: Date.now(), level, message: text, project, ...(blockId ? { blockId } : {}) };
     ctx.setState((prev) => ({ log: [...prev.log, entry].slice(-MAX_LOG) }));
-    updateIdle();
 }
 
 function publishRunning(): void {
     const running: Record<string, number> = {};
     for (const project of runs.values()) running[project] = (running[project] ?? 0) + 1;
     ctx.setState({ running });
-    updateIdle();
 }
 
 /** The project list changed: every window hears it, and the listening follows. */
@@ -177,7 +162,6 @@ function listen(): void {
                 : blocksApi.onChange(name.panelId, id, () => void fire(type, null), project),
         );
     }
-    updateIdle();
 }
 
 function stop(project: string): number {
@@ -241,7 +225,6 @@ export default definePanelService({
         internal(SERVICE_ACTIONS.stop, ({ project }) => stop(String(project))),
         internal(SERVICE_ACTIONS.clearLog, ({ project }) => {
             ctx.setState((prev) => ({ log: prev.log.filter((entry) => entry.project !== project) }));
-            updateIdle();
             return true;
         }),
         internal(SERVICE_ACTIONS.createProject, ({ name }) => changing(store.create(name))),
@@ -287,7 +270,5 @@ export default definePanelService({
         }
         const flows = store.running().reduce((n, p) => n + topBlocks(p.flows).filter((b) => isHat(b.type)).length, 0);
         console.log(`[${PANEL_ID}] ${store.list().length} project(s), ${flows} flow(s) switched on.`);
-        started = true;
-        updateIdle();
     },
 });

@@ -231,21 +231,6 @@ export class BotSession {
         return this.client !== null && this.connectionStatus.connected;
     }
 
-    /**
-     * Nothing of this session runs, and it holds nothing only this process
-     * knows: no client (connected, logging in, or reconnecting), no
-     * interaction waiting for an answer, and no message or command recorded.
-     */
-    quiet(): boolean {
-        return this.client === null
-            && !this.loggingIn
-            && this.pending.size === 0
-            && this.recentMessages.length === 0
-            && this.commandsReceived === 0
-            && this.activity.empty()
-            && this.commandUses.empty();
-    }
-
     getRecentMessages(): RecentMessage[] {
         return [...this.recentMessages];
     }

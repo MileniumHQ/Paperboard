@@ -82,8 +82,7 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
             // who uses this computer, panel by panel: host equipment for
             // Home, not something one panel's token reads about the others
             if (ctx.callerPanelId()) throw forbidden("system:usage is host-only");
-            // a sleeping service uses nothing, which is not the same as stopped
-            reply(id, { ...(await usageSampler.sample(() => usageRoots(ctx))), sleeping: ctx.engine.sleepingServices() });
+            reply(id, await usageSampler.sample(() => usageRoots(ctx)));
             return true;
         }
         // pairing a new computer, for `papercrane pair` on a daemon that has

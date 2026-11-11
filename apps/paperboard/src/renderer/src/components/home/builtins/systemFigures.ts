@@ -47,19 +47,17 @@ export function formatUptime(seconds: number): string {
     return `${mins} min`;
 }
 
-export type PanelRunState = "running" | "sleeping" | "stopped" | "no-service" | "unknown";
+export type PanelRunState = "running" | "stopped" | "no-service" | "unknown";
 
 /**
  * A panel is running when the daemon's ownership ledger has live processes
- * for it, sleeping when its service had nothing to do and waits to be called,
- * stopped when it has a service and neither, and has no state to show when it
- * runs no service. Without a usage report, it is unknown, not stopped.
+ * for it, stopped when it has a service and none, and has no state to show
+ * when it runs no service. Without a usage report, it is unknown, not stopped.
  */
-export function panelRunState(hasService: boolean, liveOwners: ReadonlySet<string> | null, panelId: string, sleeping: ReadonlySet<string> = new Set()): PanelRunState {
+export function panelRunState(hasService: boolean, liveOwners: ReadonlySet<string> | null, panelId: string): PanelRunState {
     if (!hasService) return "no-service";
     if (!liveOwners) return "unknown";
-    if (liveOwners.has(panelId)) return "running";
-    return sleeping.has(panelId) ? "sleeping" : "stopped";
+    return liveOwners.has(panelId) ? "running" : "stopped";
 }
 
 /** A widget's title, naming its computer when more than one is paired. */

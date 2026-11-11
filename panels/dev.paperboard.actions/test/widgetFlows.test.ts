@@ -41,7 +41,6 @@ const patches: any[] = [];
 const ctx: any = {
     setState: (patch: any) => patches.push(patch),
     emitTrigger: () => {},
-    setIdle: () => {},
     emit: () => {},
 };
 

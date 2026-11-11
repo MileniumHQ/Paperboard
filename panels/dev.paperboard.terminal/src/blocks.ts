@@ -403,9 +403,8 @@ export class BlocksAnnouncer {
         this.handle.changed(value).catch((err) => console.error(`[TerminalService] the change to ${value} did not reach Blocks:`, err));
     }
 
-    /** Resolves once the event reached Blocks, or was reported as not reaching it. */
-    fire(event: string, payload: Record<string, unknown>): Promise<void> {
-        if (!this.registered) return Promise.resolve();
-        return this.handle.fire(event, payload).catch((err) => console.error(`[TerminalService] ${event} did not reach Blocks:`, err));
+    fire(event: string, payload: Record<string, unknown>): void {
+        if (!this.registered) return;
+        this.handle.fire(event, payload).catch((err) => console.error(`[TerminalService] ${event} did not reach Blocks:`, err));
     }
 }

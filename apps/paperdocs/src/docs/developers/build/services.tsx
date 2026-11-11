@@ -266,15 +266,6 @@ export default function ServicesDoc() {
                 Installing or updating the panel stops every program it started.
             </PaperText>
 
-            <PaperText preset="subheader" as="h2" id="sleep">Let it sleep</PaperText>
-            <PaperText preset="body" as="p">
-                A service is a whole program kept running, and most of the time most services have nothing to do.
-                Call <PaperCode>ctx.setIdle(true)</PaperCode> whenever yours has no program to watch, no timer due and no connection to keep, and <PaperCode>ctx.setIdle(false)</PaperCode> the moment that changes.
-                After 2 quiet minutes Paperboard stops an idle service and starts it again for the next call, with its actions listed the whole time.
-                It starts from nothing then, so keep what it knows in the panel's config or files, not only in memory.
-                A service that never says it is idle is never stopped this way. The details are on the <PaperLink href="/docs/paperapi/service/#lifecycle">service reference</PaperLink>.
-            </PaperText>
-
             <PaperText preset="subheader" as="h2" id="backups">Backups</PaperText>
             <PaperText preset="body" as="p">
                 A backup of the panel is one archive of its config and its files folder, copied while its service is stopped.

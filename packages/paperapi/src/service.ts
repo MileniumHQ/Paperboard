@@ -36,17 +36,6 @@ export interface ServiceContext<TState> {
     ) => void;
     emit: (event: string, payload?: unknown) => void;
     emitTrigger: <T = any>(triggerId: string, output: T) => void;
-    /**
-     * Tells Paperboard whether this service has nothing to do until
-     * something calls it: no process to watch, no timer due, no connection
-     * to keep. While it says so and nothing has called it for a couple of
-     * minutes, Paperboard stops the service to free its memory, keeps its
-     * actions listed, and starts it again for the next call. The service
-     * starts from nothing then (onInit runs again), so what it knows must be
-     * on disk. A service that never says it is idle is never stopped this
-     * way. Call it again with false the moment there is something to do.
-     */
-    setIdle: (idle: boolean) => void;
 }
 
 export interface DefinePanelServiceOptions<
@@ -201,17 +190,6 @@ export function definePanelService<
         if (!syncing) syncState();
     };
 
-    // the daemon hears each change once; outside a daemon (a test that
-    // imports the service) there is nobody to tell
-    let saidIdle: boolean | null = null;
-    const setIdle = (idle: boolean) => {
-        if (saidIdle === idle) return;
-        saidIdle = idle;
-        if (typeof process !== "undefined" && typeof process.send === "function") {
-            process.send({ type: "paperboard:service-idle", panelId, idle });
-        }
-    };
-
     const ctx: ServiceContext<TState> = {
         get state() {
             return currentState;
@@ -219,7 +197,6 @@ export function definePanelService<
         setState,
         emit,
         emitTrigger,
-        setIdle,
     };
 
     const registrations: Promise<void>[] = [];

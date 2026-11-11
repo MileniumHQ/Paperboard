@@ -61,11 +61,6 @@ export interface UsageReport {
     network?: { receivePerSecond: number; sendPerSecond: number } | null;
     /** how long the computer has been running, in seconds */
     uptimeSeconds?: number;
-    /**
-     * panels whose service is asleep: it had nothing to do, so Paperboard
-     * stopped it, and the next call to it starts it again
-     */
-    sleeping?: string[];
 }
 
 export const systemApi = {

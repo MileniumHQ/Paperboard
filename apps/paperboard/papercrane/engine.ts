@@ -1619,16 +1619,6 @@ export class PaperCraneEngine {
     }
 
     /** Panel service children that have not exited. */
-    /** The panel services, for whoever wires what they registered to their sleep (ws.ts). */
-    public panelServices(): PanelServicesManager {
-        return this.services;
-    }
-
-    /** Panels whose service is asleep: idle, and started again by the next call. */
-    public sleepingServices(): string[] {
-        return this.services.sleepingPanels();
-    }
-
     public runningServiceCount(): number {
         return this.services.runningCount();
     }

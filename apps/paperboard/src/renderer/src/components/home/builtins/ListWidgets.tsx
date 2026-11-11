@@ -6,17 +6,15 @@ import { useUsage } from "./usageStore";
 
 const RUN_LABEL: Record<PanelRunState, string> = {
     running: "Running",
-    sleeping: "Sleeping",
     stopped: "Stopped",
     "no-service": "No service",
     unknown: "",
 };
 
-// a running service is green; a sleeping or stopped one is hollow; a panel
-// with no service, or a state not known yet, has no dot to show
+// a running service is green; a stopped one is hollow; a panel with no
+// service, or a state not known yet, has no dot to show
 const RUN_TONE: Record<PanelRunState, PaperWidgetRow["tone"]> = {
     running: "success",
-    sleeping: "none",
     stopped: "none",
     "no-service": undefined,
     unknown: undefined,
@@ -32,13 +30,9 @@ export const Panels: Component<BuiltinWidgetProps> = (props) => {
             ? new Set(state.report.groups.filter((g) => g.kind === "panel" && g.memoryBytes > 0).map((g) => g.id))
             : null;
     });
-    const sleeping = createMemo<ReadonlySet<string>>(() => {
-        const state = usage.state();
-        return new Set(state.kind === "ready" ? state.report.sleeping : []);
-    });
     const rows = (): PaperWidgetRow[] =>
         (props.panels ?? []).map((panel) => {
-            const state = panelRunState(!!panel.service, live(), panel.id, sleeping());
+            const state = panelRunState(!!panel.service, live(), panel.id);
             const open = props.onOpenPanel;
             return {
                 id: panel.id,

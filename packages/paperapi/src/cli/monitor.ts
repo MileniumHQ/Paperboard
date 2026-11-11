@@ -104,7 +104,7 @@ export class MonitorFormatter {
             case "service": {
                 const label = `service ${record.state}`;
                 const cols = this.columns.fit(who, label);
-                const tone = record.state === "ready" || record.state === "starting" ? p.blue : record.state === "stopped" || record.state === "asleep" ? p.dim : p.red;
+                const tone = record.state === "ready" || record.state === "starting" ? p.blue : record.state === "stopped" ? p.dim : p.red;
                 const detail = [
                     record.pid !== undefined ? `pid ${record.pid}` : "",
                     record.code !== undefined ? `code ${record.code}` : "",
