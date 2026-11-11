@@ -17,8 +17,17 @@ const type = (id: string) => `${PANEL_ID}:${id}`;
 const run = <T = any>(command: string, inputs: Record<string, unknown>) => blocksApi.run<T>(PANEL_ID, command, inputs, { project: BOT });
 const read = <T = any>(value: string, inputs?: Record<string, unknown>) => blocksApi.read<T>(PANEL_ID, value, inputs, { project: BOT });
 
-const TYPES = ["channel", "component", "embed", "interaction", "member", "message", "poll", "poll-answer", "reaction", "role", "server", "text-field", "user"];
-const BUILDERS = ["create-button", "create-embed", "create-interaction-row", "create-select-menu", "create-text-field"];
+const TYPES = [
+    "bot", "channel", "command-option", "component", "embed", "interaction", "member", "message", "poll", "poll-answer", "reaction", "role",
+    "server", "slash-command", "text-field", "user",
+];
+// the panel's own: the builders, and the blocks that run Bot Creator itself (botsBlocks.test.ts)
+const PANEL_COMMANDS = [
+    "add-bot", "create-button", "create-command-option", "create-embed", "create-interaction-row", "create-select-menu", "create-slash-command",
+    "create-text-field", "delete-bot", "delete-slash-command", "replace-bot-token", "restart-bot", "turn-off-bot", "turn-on-bot",
+];
+const PANEL_VALUES = ["bot", "bots", "invite-link"];
+const PANEL_EVENTS = ["bot-added", "bot-connection-failed", "bot-deleted", "bot-offline", "bot-online"];
 const COMMANDS = [
     "add-reaction", "add-role", "ban-user", "create-channel", "create-event", "create-invite", "create-role", "create-thread",
     "crosspost-message", "delete-channel", "delete-message", "delete-role", "disconnect-member", "edit-message", "edit-thread",
@@ -116,13 +125,15 @@ describe("a bot is a Blocks project, used through the daemon", () => {
         discord.stop();
     });
 
-    test("the panel has the types and builders; the bot's project has its commands, values and events", async () => {
+    test("the panel has the types, builders and bot blocks; the bot's project has its commands, values and events", async () => {
         expect(await blocksApi.projects(PANEL_ID)).toEqual([{ panelId: PANEL_ID, id: BOT, name: "Blocky", icon: "smart_toy" }]);
         const entries = (await blocksApi.list(PANEL_ID)).map((b) => b.entry).sort();
         expect(entries).toEqual(
             [
                 ...TYPES.map((id) => `type.${id}`),
-                ...BUILDERS.map((id) => `command.${id}`),
+                ...PANEL_COMMANDS.map((id) => `command.${id}`),
+                ...PANEL_VALUES.map((id) => `value.${id}`),
+                ...PANEL_EVENTS.map((id) => `event.${id}`),
                 ...COMMANDS.map((id) => `${BOT}/command.${id}`),
                 ...VALUES.map((id) => `${BOT}/value.${id}`),
                 ...EVENTS.map((id) => `${BOT}/event.${id}`),

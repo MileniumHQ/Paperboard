@@ -90,9 +90,11 @@ import {
     panelBlocks,
     valueChanges,
     type BotBlocksHost,
+    type BotsBlocksHost,
 } from "./blocks";
 import { randomUUID } from "node:crypto";
 import {
+    DEFAULT_SELECTED_PERMISSIONS,
     extractApplicationIdFromToken,
     GLOBAL_SCOPE,
     MAX_COMMANDS_PER_SCOPE,
@@ -114,6 +116,7 @@ import {
     LEGACY_TOKEN_NAME,
     MAX_BOTS,
     PANEL_ID,
+    byCreation,
     createBotId,
     isBotId,
     readBotsConfig,
@@ -2105,6 +2108,8 @@ interface BotEntry {
     blocks: BlocksProjectHandle | null;
     /** tells Blocks which of the bot's values changed, once its project is registered */
     blocksChanged: (() => void) | null;
+    /** online as of the last change Blocks heard of, for When a Bot Goes Online and Offline */
+    online: boolean;
 }
 
 const bots = new Map<string, BotEntry>();
@@ -2115,6 +2120,8 @@ let savedExtras: Record<string, unknown> = {};
 let botsError: string | null = null;
 // why the panel's Blocks types and builders couldn't be registered; no bot's blocks can be then
 let panelBlocksError: string | null = null;
+// the panel's own blocks are registered, so its events can fire
+let panelBlocksReady = false;
 let serviceCtx: ServiceContext<BotsServiceState> | null = null;
 
 function summary(entry: BotEntry): BotSummary {
@@ -2187,14 +2194,39 @@ function sessionHost(id: string, entry: () => BotEntry) {
                     .catch(logFailure(`event ${trigger} failed`));
             }
             fireBlocksEvent(entry(), trigger, output).catch(logFailure(`Blocks event ${id}/${trigger} failed`));
+            if (trigger === "on-connection-error" && bots.has(id)) {
+                firePanelEvent("bot-connection-failed", { bot: id, error: String((output as { error?: unknown } | null)?.error ?? "") });
+            }
         },
         changed() {
             const known = bots.get(id);
             if (known) noteIdentity(known);
             publish();
             entry().blocksChanged?.();
+            if (known) noteOnline(known);
         },
     };
+}
+
+/** One of the panel's own Blocks events, once the panel's blocks are registered. */
+function firePanelEvent(event: string, payload: Record<string, unknown>): void {
+    if (!panelBlocksReady) return;
+    blocksApi.panel(PANEL_ID).fire(event, payload).catch(logFailure(`Blocks event ${event} failed`));
+}
+
+/** Tells Blocks the list of bots changed. */
+function botsChanged(): void {
+    if (!panelBlocksReady) return;
+    blocksApi.panel(PANEL_ID).changed("bots").catch(logFailure("the change to the bot list did not reach Blocks"));
+}
+
+/** Fires When a Bot Goes Online or Offline, when the bot did since Blocks last heard. */
+function noteOnline(entry: BotEntry): void {
+    const online = entry.session.connected();
+    if (online === entry.online) return;
+    entry.online = online;
+    if (online) firePanelEvent("bot-online", { bot: entry.stored.id });
+    else firePanelEvent("bot-offline", { bot: entry.stored.id, error: entry.session.status().error ?? null });
 }
 
 /** The trigger as the bot's Blocks event, once the bot's blocks are registered. */
@@ -2229,7 +2261,7 @@ function createEntry(stored: StoredBot, hasToken: boolean): BotEntry {
     const session = new BotSession(stored.id, sessionHost(stored.id, () => entry!));
     session.applicationId = stored.applicationId;
     session.commands = stored.commands;
-    entry = { stored, session, hasToken, project: null, actionsError: null, blocks: null, blocksChanged: null };
+    entry = { stored, session, hasToken, project: null, actionsError: null, blocks: null, blocksChanged: null, online: false };
     return entry;
 }
 
@@ -2663,6 +2695,123 @@ function parseCommandOptions(raw: unknown): SlashCommandOption[] {
     }));
 }
 
+/**
+ * Adds a bot whose token is in the vault under its id (or saves `token`
+ * there first), once it logs in. A bot that doesn't log in is forgotten,
+ * token and all.
+ */
+async function addBot(id: unknown, token?: string): Promise<BotSummary> {
+    requireReadable();
+    if (!isBotId(id)) throw new Error("A bot id is required.");
+    if (bots.has(id)) throw new Error("This bot is already added.");
+    if (bots.size >= MAX_BOTS) throw new Error(`Bot Creator runs at most ${MAX_BOTS} bots.`);
+    if (token !== undefined) await secretsApi.set(tokenName(id), token, PANEL_ID);
+    const saved = await readToken(id);
+    if (!saved) throw new Error("No token was saved for the new bot.");
+    const forget = () => secretsApi.delete(tokenName(id), PANEL_ID).catch(logFailure("forgetting the refused token failed"));
+    const applicationId = extractApplicationIdFromToken(saved);
+    if (!applicationId) {
+        await forget();
+        throw new Error("That isn't a Discord bot token.");
+    }
+    const twin = [...bots.values()].find((entry) => entry.stored.applicationId === applicationId);
+    if (twin) {
+        await forget();
+        throw new Error(`${twin.stored.name} already uses this bot. One bot can only run once.`);
+    }
+    const entry = createEntry({
+        id,
+        name: "Discord bot",
+        avatar: "",
+        applicationId,
+        enabled: true,
+        commands: [],
+        createdAt: Date.now(),
+    }, true);
+    // the project first, so the bot's first events have somewhere to go
+    try {
+        await registerBot(entry);
+        await entry.session.start(saved);
+        bots.set(id, entry);
+        noteIdentity(entry);
+        await saveBots();
+    } catch (err) {
+        bots.delete(id);
+        await entry.session.stop();
+        if (entry.project) await entry.project.remove().catch(logFailure("removing the refused bot's project failed"));
+        if (entry.blocks) await entry.blocks.remove().catch(logFailure("removing the refused bot's Blocks project failed"));
+        await forget();
+        throw err;
+    }
+    publish();
+    botsChanged();
+    firePanelEvent("bot-added", { bot: id });
+    noteOnline(entry);
+    return summary(entry);
+}
+
+/** Reconnects a bot that's on with the new token in the vault (or saves `token` there first: it must be the same bot's). */
+async function replaceToken(entry: BotEntry, token?: string): Promise<void> {
+    requireReadable();
+    if (token !== undefined) {
+        const applicationId = extractApplicationIdFromToken(token);
+        if (!applicationId) throw new Error("That isn't a Discord bot token.");
+        if (entry.stored.applicationId && applicationId !== entry.stored.applicationId) {
+            throw new Error(`That token is for a different bot than ${entry.stored.name}. Add it as a new bot instead.`);
+        }
+        await secretsApi.set(tokenName(entry.stored.id), token, PANEL_ID);
+    }
+    const saved = await readToken(entry.stored.id);
+    if (!saved) throw new Error("No token was saved for this bot.");
+    entry.hasToken = true;
+    if (entry.stored.enabled) await connect(entry);
+    else publish();
+}
+
+/** Stops a bot and removes it, its token, its commands, and its Actions and Blocks projects; gives its id. */
+async function deleteBot(entry: BotEntry): Promise<string> {
+    requireReadable();
+    const id = entry.stored.id;
+    // each step lands before the next, so a retry picks up where a
+    // failed one stopped
+    let step = "stop the bot";
+    try {
+        await entry.session.stop();
+        step = "remove its actions from Actions";
+        if (entry.project) {
+            await entry.project.remove();
+            entry.project = null;
+        }
+        if (legacyBot === id) {
+            await unregisterLegacyForwarders(entry);
+            legacyBot = undefined;
+        }
+        step = "remove its blocks from Blocks";
+        if (entry.blocks) {
+            await entry.blocks.remove();
+            entry.blocks = null;
+            entry.blocksChanged = null;
+        }
+        step = "delete its token";
+        await secretsApi.delete(tokenName(id), PANEL_ID);
+        step = "save the bot list";
+        bots.delete(id);
+        try {
+            await saveBots();
+        } catch (err) {
+            bots.set(id, entry);
+            throw err;
+        }
+    } catch (err) {
+        publish();
+        throw new Error(`Couldn't ${step}: ${errorToMessage(err)}`);
+    }
+    publish();
+    botsChanged();
+    firePanelEvent("bot-deleted", { name: entry.stored.name });
+    return id;
+}
+
 // a widget placed before several bots has no bot chosen: it meant the one
 // there was. TODO(remove after v0.5): with the deprecated forwarders.
 function widgetBot(id: unknown): BotEntry {
@@ -2708,52 +2857,7 @@ export const internalActions = [
         "add-bot",
         "Add Bot",
         "Panel UI only: adds a bot whose token the panel saved in the vault under the bot's id, once it logs in.",
-        async (inputs): Promise<BotSummary> => {
-            requireReadable();
-            const id = inputs?.bot;
-            if (!isBotId(id)) throw new Error("A bot id is required.");
-            if (bots.has(id)) throw new Error("This bot is already added.");
-            if (bots.size >= MAX_BOTS) throw new Error(`Bot Creator runs at most ${MAX_BOTS} bots.`);
-            const token = await readToken(id);
-            if (!token) throw new Error("No token was saved for the new bot.");
-            const forget = () => secretsApi.delete(tokenName(id), PANEL_ID).catch(logFailure("forgetting the refused token failed"));
-            const applicationId = extractApplicationIdFromToken(token);
-            if (!applicationId) {
-                await forget();
-                throw new Error("That isn't a Discord bot token.");
-            }
-            const twin = [...bots.values()].find((entry) => entry.stored.applicationId === applicationId);
-            if (twin) {
-                await forget();
-                throw new Error(`${twin.stored.name} already uses this bot. One bot can only run once.`);
-            }
-            const entry = createEntry({
-                id,
-                name: "Discord bot",
-                avatar: "",
-                applicationId,
-                enabled: true,
-                commands: [],
-                createdAt: Date.now(),
-            }, true);
-            // the project first, so the bot's first events have somewhere to go
-            try {
-                await registerBot(entry);
-                await entry.session.start(token);
-                bots.set(id, entry);
-                noteIdentity(entry);
-                await saveBots();
-            } catch (err) {
-                bots.delete(id);
-                await entry.session.stop();
-                if (entry.project) await entry.project.remove().catch(logFailure("removing the refused bot's project failed"));
-                if (entry.blocks) await entry.blocks.remove().catch(logFailure("removing the refused bot's Blocks project failed"));
-                await forget();
-                throw err;
-            }
-            publish();
-            return summary(entry);
-        },
+        (inputs): Promise<BotSummary> => addBot(inputs?.bot),
     ),
 
     internalAction("connect-bot", "Connect Bot", "Panel UI only: turns a bot on with its vault token. Never accepts a token over the wire.", async (inputs) => {
@@ -2773,13 +2877,7 @@ export const internalActions = [
         "Replace Bot Token",
         "Panel UI only: the panel saved a new token for the same bot in the vault; reconnects with it when the bot is on.",
         async (inputs) => {
-            requireReadable();
-            const entry = requireBot(inputs?.bot);
-            const token = await readToken(entry.stored.id);
-            if (!token) throw new Error("No token was saved for this bot.");
-            entry.hasToken = true;
-            if (entry.stored.enabled) await connect(entry);
-            else publish();
+            await replaceToken(requireBot(inputs?.bot));
             return true;
         },
     ),
@@ -2788,47 +2886,7 @@ export const internalActions = [
         "delete-bot",
         "Delete Bot",
         "Panel UI only: stops a bot and removes it, its token, its commands, and its Actions and Blocks projects.",
-        async (inputs) => {
-            requireReadable();
-            const entry = requireBot(inputs?.bot);
-            const id = entry.stored.id;
-            // each step lands before the next, so a retry picks up where a
-            // failed one stopped
-            let step = "stop the bot";
-            try {
-                await entry.session.stop();
-                step = "remove its actions from Actions";
-                if (entry.project) {
-                    await entry.project.remove();
-                    entry.project = null;
-                }
-                if (legacyBot === id) {
-                    await unregisterLegacyForwarders(entry);
-                    legacyBot = undefined;
-                }
-                step = "remove its blocks from Blocks";
-                if (entry.blocks) {
-                    await entry.blocks.remove();
-                    entry.blocks = null;
-                    entry.blocksChanged = null;
-                }
-                step = "delete its token";
-                await secretsApi.delete(tokenName(id), PANEL_ID);
-                step = "save the bot list";
-                bots.delete(id);
-                try {
-                    await saveBots();
-                } catch (err) {
-                    bots.set(id, entry);
-                    throw err;
-                }
-            } catch (err) {
-                publish();
-                throw new Error(`Couldn't ${step}: ${errorToMessage(err)}`);
-            }
-            publish();
-            return { deleted: id };
-        },
+        async (inputs) => ({ deleted: await deleteBot(requireBot(inputs?.bot)) }),
     ),
 
     internalAction("get-health", "Get Health", "Panel UI only: gateway, cache and memory health read.", (inputs) =>
@@ -2873,6 +2931,64 @@ const botChoices = () =>
         .sort((a, b) => a.stored.createdAt - b.stored.createdAt)
         .map((entry) => ({ value: entry.stored.id, label: entry.stored.name }));
 
+/** A bot a Blocks block names, or why it can't be found. */
+function blocksBot(id: unknown): BotEntry {
+    const entry = typeof id === "string" ? bots.get(id) : undefined;
+    if (entry) return entry;
+    if (typeof id !== "string" || !id.trim()) throw new Error("Pick a bot with the Bot block.");
+    throw new Error(`There's no bot "${id}" in Bot Creator: it was deleted, or that isn't a bot. Pick one with the Bot block.`);
+}
+
+/** What the panel's own bot blocks run: the same code as Bot Creator's home screen. */
+const blocksBots: BotsBlocksHost = {
+    ids: () => byCreation([...bots.values()].map(summary)).map((bot) => bot.id),
+    bot: (id) => {
+        const entry = blocksBot(id);
+        const client = entry.session.connected() ? entry.session.client : null;
+        return {
+            summary: summary(entry),
+            servers: client ? [...client.guilds.cache.keys()] : [],
+            commands: entry.stored.commands,
+            uptime: entry.session.health().uptimeMs,
+        };
+    },
+    add: async (token) => {
+        const trimmed = token.trim();
+        if (!trimmed) throw new Error("A bot token is required.");
+        // checked before it reaches the vault, so a token that isn't one is never saved
+        if (!extractApplicationIdFromToken(trimmed)) throw new Error("That isn't a Discord bot token.");
+        return (await addBot(createBotId(), trimmed)).id;
+    },
+    remove: async (id) => {
+        await deleteBot(blocksBot(id));
+    },
+    setOn: async (id, on) => {
+        requireReadable();
+        await setEnabled(blocksBot(id), on);
+    },
+    restart: async (id) => {
+        requireReadable();
+        const entry = blocksBot(id);
+        if (!entry.stored.enabled) throw new Error(`${entry.stored.name} is turned off. Turn it on instead.`);
+        await connect(entry);
+    },
+    replaceToken: async (id, token) => {
+        const trimmed = token.trim();
+        if (!trimmed) throw new Error("A bot token is required.");
+        await replaceToken(blocksBot(id), trimmed);
+    },
+    createCommand: (id, input) => createCommand(blocksBot(id), input),
+    deleteCommand: (id, commandId) => deleteCommand(blocksBot(id), commandId),
+    inviteLink: (id, permissions) => {
+        const entry = blocksBot(id);
+        return buildInviteUrl(entry.session.client?.user?.id || entry.stored.applicationId, permissions ?? DEFAULT_SELECTED_PERMISSIONS);
+    },
+    userInstallLink: (id) => {
+        const entry = blocksBot(id);
+        return buildUserInstallUrl(entry.session.client?.user?.id || entry.stored.applicationId);
+    },
+};
+
 /**
  * Starts each bot without waiting for it. Logging in to Discord (and syncing commands after) can stall for minutes on a
  * rate limit; the service is ready before then, and a bot still connecting says so on its card.
@@ -2903,7 +3019,8 @@ export const botService = definePanelService({
         }
         // the types first: every bot's blocks use them
         try {
-            await blocksApi.panel(PANEL_ID).register(panelBlocks(connectedClients));
+            await blocksApi.panel(PANEL_ID).register(panelBlocks(connectedClients, blocksBots));
+            panelBlocksReady = true;
         } catch (err) {
             panelBlocksError = errorToMessage(err);
             console.error("[DiscordService] registering the Blocks types failed:", panelBlocksError);
