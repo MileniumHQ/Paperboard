@@ -412,6 +412,21 @@ describe("failures reach the caller", () => {
         expect(kill).toMatchObject({ id: run.id, signal: "SIGTERM" });
     });
 
+    test("a process.run timeout stays a timeout when the killed child's exit arrives before the kill is answered", async () => {
+        await initPaperApi({ port: server.port, token: server.token });
+        let answerKill!: () => void;
+        server.answer = (action, params) => {
+            if (action !== "process:kill") return { success: true };
+            // the child dies of the SIGTERM and its exit is pushed first
+            server.emit("process:exit", { id: params.id, exitCode: 143 });
+            return new Promise((resolve) => (answerKill = () => resolve({})));
+        };
+        const run = processApi.run({ command: "sleep-forever" }, 50);
+        await server.next("the kill", isAction("process:kill"));
+        expect(await run).toEqual({ exitCode: -1, code: "RUN_TIMEOUT" });
+        answerKill();
+    });
+
     test("a process.run timeout whose kill is refused rejects, and exec rejects instead of returning output", async () => {
         await initPaperApi({ port: server.port, token: server.token });
         server.answer = (action) => {

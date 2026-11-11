@@ -117,11 +117,16 @@ export const processApi = {
             // bounded: a timeout must kill the child it started, not quietly
             // leave it running while reporting a synthetic exit code; a kill
             // the daemon refused rejects the run, since the child lives on.
-            // null timeout waits for the real exit
+            // null timeout waits for the real exit. Once the deadline passes
+            // the run is a timeout however it ends: the child the kill ends
+            // can report its exit before the kill's answer arrives, and the
+            // code it dies with (143 for SIGTERM) is not the command's verdict
+            let timedOut = false;
             const timer =
                 timeoutMs === null
                     ? null
                     : setTimeout(() => {
+                          timedOut = true;
                           send("process-kill", { id, signal: "SIGTERM" }).then(
                               () => resolve({ exitCode: -1, code: "RUN_TIMEOUT" }),
                               (err) =>
@@ -135,6 +140,10 @@ export const processApi = {
 
             const off = on(`process-exit:${id}`, (_event: unknown, payload: any) => {
                 if (timer !== null) clearTimeout(timer);
+                if (timedOut) {
+                    resolve({ exitCode: -1, code: "RUN_TIMEOUT" });
+                    return;
+                }
                 const raw = payload !== undefined ? payload : _event;
                 const code = typeof raw === "number" ? raw : raw?.exitCode ?? 0;
                 resolve({ exitCode: code });
