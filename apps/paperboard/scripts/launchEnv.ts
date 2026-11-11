@@ -18,7 +18,7 @@ export function electronChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 // comes after `--`. The launcher moves them there, so `bun run dev --mobile`
 // works as well as `bun run dev -- --mobile`.
 const APP_FLAGS = ["--mobile", "--no-tutorial", "--browser", "--devtools"];
-const APP_FLAG_PREFIXES = ["--browser-port="];
+const APP_FLAG_PREFIXES = ["--browser-port=", "--ozone-platform="];
 
 function isAppFlag(arg: string): boolean {
     return APP_FLAGS.includes(arg) || APP_FLAG_PREFIXES.some((prefix) => arg.startsWith(prefix));
