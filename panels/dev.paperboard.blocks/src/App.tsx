@@ -164,7 +164,12 @@ export default function App() {
         }
         const builtin = BUILTIN_SECTIONS.find((s) => builtinId(s.name) === selected());
         if (builtin) {
-            if (builtin.custom === "VARIABLE") return ready() && workspace ? [{ blocks: Blockly.Variables.flyoutCategory(workspace) as unknown as Json[] }] : [];
+            if (builtin.custom === "VARIABLE") {
+                // its "Create variable" button is the header's PaperButton, not Blockly's
+                if (!ready() || !workspace) return [];
+                const contents = Blockly.Variables.flyoutCategory(workspace) as unknown as Json[];
+                return [{ blocks: contents.filter((item) => item.kind !== "button") }];
+            }
             return [{ blocks: builtin.contents }];
         }
         const id = shownPanel();
@@ -457,6 +462,7 @@ export default function App() {
                             sections={sectionNames()}
                             onJump={jump}
                             onCollapse={() => setCollapsed(true)}
+                            onCreateVariable={BUILTIN_SECTIONS.find((s) => builtinId(s.name) === selected())?.custom === "VARIABLE" && workspace ? () => Blockly.Variables.createVariableButtonHandler(workspace!) : undefined}
                             headerRef={headerRef}
                         />
                     </Show>

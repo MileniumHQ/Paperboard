@@ -272,3 +272,52 @@
 :global(.paperMenuDanger) :global(.paperMenuIcon) {
     color: var(--paper-danger);
 }
+
+/* A block's gear opens Blockly's bubble: here it's a PaperUI card, not a
+   speech bubble. No tail or emboss; the card's fill, border and radius; and
+   its contents scale in from the corner nearest the gear. Blockly places
+   the bubble with its own transform, so only what's inside it animates. */
+.stage :global(.blocklyBubbleTail) {
+    display: none;
+}
+
+.stage :global(.blocklyBubble) > :global(.blocklyEmboss) {
+    filter: none;
+}
+
+.stage :global(.blocklyBubble) > :global(.blocklyEmboss) > rect {
+    fill: var(--paper-surface);
+    stroke: var(--paper-border);
+    stroke-width: var(--paper-border-width);
+    rx: var(--paper-border-radius);
+    ry: var(--paper-border-radius);
+}
+
+.stage :global(.blocklyBubble) > g {
+    transform-box: fill-box;
+    transform-origin: top left;
+    animation: cardIn var(--paper-short-transition) var(--paper-ease-standard);
+}
+
+@keyframes cardIn {
+    from {
+        opacity: 0;
+        transform: translateY(calc(var(--paper-uigap-half) * -1)) scale(var(--paper-scale-press));
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* the card's own canvas shows the card through it (Blockly paints it with
+   an inline style, so only !important reaches it); its list of parts sits
+   sunken beside it, as PaperCard's back surface */
+.stage :global(.blocklyMiniWorkspaceBubble) :global(.blocklyMutatorBackground) {
+    fill: transparent !important;
+    stroke: none !important;
+}
+
+.stage :global(.blocklyMiniWorkspaceBubble) :global(.blocklyFlyoutBackground) {
+    fill: var(--paper-surface-sunken);
+}

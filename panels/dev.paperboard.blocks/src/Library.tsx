@@ -37,6 +37,8 @@ export interface LibraryProps {
     sections: string[];
     onJump(section: string): void;
     onCollapse(): void;
+    /** shown for the Variables category: makes a new variable */
+    onCreateVariable?: () => void;
     headerRef(el: HTMLDivElement): void;
 }
 
@@ -90,6 +92,14 @@ export function LibraryHeader(props: Omit<LibraryProps, "builtins" | "panels" | 
                     </PaperButton>
                 </PaperFlex>
                 <PaperInput fullWidth icon="search" placeholder="Search blocks..." value={props.search} onInput={(e) => props.onSearch(e.currentTarget.value)} />
+                <Show when={!props.search && props.onCreateVariable}>
+                    {(create) => (
+                        <PaperButton fullWidth onClick={() => create()()}>
+                            <PaperIcon>add</PaperIcon>
+                            Create variable
+                        </PaperButton>
+                    )}
+                </Show>
                 <Show when={!props.search && props.project}>
                     {(project) => (
                         <PaperSelectMenu name="libraryProject" fullWidth value={project()} aria-label="Project" onValueChange={(value) => props.onProject(String(value))}>
