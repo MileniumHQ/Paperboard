@@ -28,6 +28,7 @@ import { addTrash, type TrashState } from "./lib/trashZone";
 import { tokenPixels } from "./lib/tokens";
 import { Console } from "./Console";
 import { paperContextMenus } from "./lib/contextMenu";
+import { appendWorkspace } from "./lib/appendWorkspace";
 import { paperDropdowns } from "./lib/dropdownPlacement";
 import { errorMessage } from "./lib/failure";
 import type { SavedWorkspace } from "./lib/interpreter";
@@ -547,19 +548,7 @@ export default function Editor(props: {
         const below = workspace.getTopBlocks(false).reduce((y, b) => Math.max(y, b.getBoundingRectangle().bottom), -Infinity);
         const fileTop = Math.min(...(flows.workspace.blocks?.blocks ?? []).map((b) => b.y ?? 0));
         const shift = Number.isFinite(below) && Number.isFinite(fileTop) ? below + uiGap() * 4 - fileTop : 0;
-        Blockly.Events.setGroup(true);
-        try {
-            for (const variable of flows.workspace.variables ?? []) {
-                if (!workspace.getVariableMap().getVariableById(variable.id) && !workspace.getVariableMap().getVariable(variable.name, variable.type ?? "")) {
-                    workspace.getVariableMap().createVariable(variable.name, variable.type ?? "", variable.id);
-                }
-            }
-            for (const block of flows.workspace.blocks?.blocks ?? []) {
-                Blockly.serialization.blocks.append({ ...block, y: (block.y ?? 0) + shift } as Blockly.serialization.blocks.State, workspace);
-            }
-        } finally {
-            Blockly.Events.setGroup(false);
-        }
+        appendWorkspace(workspace, flows.workspace, shift);
         markAway();
         await saveNow();
     }
