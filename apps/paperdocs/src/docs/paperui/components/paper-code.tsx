@@ -119,7 +119,7 @@ export function Example() {
             <PaperTextList>
                 <li>The copy button copies the child string exactly, using the clipboard API with a textarea fallback for sandboxed frames.</li>
                 <li>The button's name changes to <PaperCode>Copied</PaperCode> for 2 seconds after a copy and to <PaperCode>Copy failed</PaperCode> when both clipboard paths are rejected. A failed copy is never shown as success.</li>
-                <li>A block wraps long lines and scrolls horizontally when a word cannot wrap. Text in both forms is selectable.</li>
+                <li>A block never wraps. Long lines scroll horizontally. Text in both forms is selectable.</li>
                 <li>Inline code never wraps.</li>
                 <li>Markup in the string is escaped, not rendered: <PaperCode>&lt;b&gt;</PaperCode> shows as the text <PaperCode>&lt;b&gt;</PaperCode>.</li>
             </PaperTextList>
