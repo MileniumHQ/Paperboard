@@ -113,6 +113,26 @@ export class ProjectError extends Error {
 }
 
 /**
+ * What a registry asks about panel services that sleep (panelServices.ts): a
+ * service with nothing to do is stopped, and what it registered stays listed
+ * so the next call starts it again.
+ */
+export interface ServiceSleeper {
+    /** the panel's service is asleep, or on its way there */
+    asleep(panelId: string): boolean;
+    /** starts it again; resolves once it is ready and has registered */
+    wake(panelId: string): Promise<void>;
+    /** something called the panel's service, or it answered */
+    touch(panelId: string): void;
+}
+
+/** What a sleeping service had registered. */
+interface DormantPanel {
+    actions: Map<string, { panelId: string; action: string; schema?: any }>;
+    projects: Map<string, ActionProject>;
+}
+
+/**
  * Which registry this is. Actions (v1) and Blocks (v2) are separate
  * registries over the same machinery: their names never collide, and a
  * Blocks call frame names its registry so the panel's transport dispatches
@@ -147,6 +167,45 @@ export class ActionsRegistry {
     // projects keyed "panelId:projectId", owned by the socket that defined them
     private projects = new Map<string, RegisteredProject>();
     private socketProjects = new Map<WebSocket, Set<string>>();
+    // what each sleeping service had registered, by panel: listed like the
+    // rest, and a call to one of them wakes the service first
+    private dormant = new Map<string, DormantPanel>();
+    private sleeper: ServiceSleeper | null = null;
+
+    public setSleeper(sleeper: ServiceSleeper | null): void {
+        this.sleeper = sleeper;
+    }
+
+    /**
+     * Remembers what a service registered over these sockets, as it is put to
+     * sleep. Bounded by the registry's own caps: every entry was registered.
+     */
+    public hibernate(panelId: string, sockets: ReadonlySet<WebSocket>): void {
+        const kept: DormantPanel = { actions: new Map(), projects: new Map() };
+        for (const [key, entry] of this.actions) {
+            if (entry.panelId === panelId && sockets.has(entry.ws)) kept.actions.set(key, { panelId, action: entry.action, schema: entry.schema });
+        }
+        for (const [key, p] of this.projects) {
+            if (p.panelId !== panelId || !sockets.has(p.ws)) continue;
+            kept.projects.set(key, { panelId, id: p.id, name: p.name, ...(p.icon ? { icon: p.icon } : {}), ...(p.image ? { image: p.image } : {}) });
+        }
+        this.dormant.set(panelId, kept);
+    }
+
+    /** Forgets a sleeping service's registrations: it is awake again, or gone. True when there were any. */
+    public forget(panelId: string): boolean {
+        const kept = this.dormant.get(panelId);
+        this.dormant.delete(panelId);
+        return !!kept && (kept.actions.size > 0 || kept.projects.size > 0);
+    }
+
+    /** A call to this panel is still waiting for its answer. */
+    public hasPendingCalls(panelId: string): boolean {
+        for (const pending of this.pendingCalls.values()) {
+            if (pending.panelId === panelId) return true;
+        }
+        return false;
+    }
 
     private actionKey(panelId: string, action: string): string {
         return `${panelId}:${action}`;
@@ -342,6 +401,12 @@ export class ActionsRegistry {
             if (filterPanelId && p.panelId !== filterPanelId) continue;
             list.push({ panelId: p.panelId, id: p.id, name: p.name, ...(p.icon ? { icon: p.icon } : {}), ...(p.image ? { image: p.image } : {}) });
         }
+        for (const [panelId, kept] of this.dormant) {
+            if (filterPanelId && panelId !== filterPanelId) continue;
+            for (const [key, project] of kept.projects) {
+                if (!this.projects.has(key)) list.push({ ...project });
+            }
+        }
         return list;
     }
 
@@ -411,19 +476,32 @@ export class ActionsRegistry {
         callerPanelId: string | null = null,
     ): Promise<unknown> {
         const key = this.actionKey(panelId, action);
+        const refuseInternal = (schema: any) => {
+            if (schema?.internal !== true || callerPanelId === null || callerPanelId === panelId) return;
+            logger.warn(`[${this.tag}] "${callerPanelId}" refused internal ${this.noun} "${panelId}:${action}"`);
+            throw new RpcError(
+                ErrorCode.FORBIDDEN,
+                `${this.Noun} "${action}" is internal to panel "${panelId}"`,
+            );
+        };
+        // a sleeping service is started by the call that needs it; a caller
+        // who may not make the call does not get to start anything
+        if (this.sleeper?.asleep(panelId)) {
+            // still registered while the service is on its way to sleep
+            const known = this.dormant.get(panelId)?.actions.get(key) ?? this.actions.get(key);
+            if (known) {
+                refuseInternal(known.schema);
+                await this.sleeper.wake(panelId);
+            }
+        }
         const registered = this.actions.get(key);
         if (!registered || registered.ws.readyState !== WebSocket.OPEN) {
             throw new Error(
                 `${this.Noun} "${action}" on panel "${panelId}" is not registered or unavailable`,
             );
         }
-        if (registered.schema?.internal === true && callerPanelId !== null && callerPanelId !== panelId) {
-            logger.warn(`[${this.tag}] "${callerPanelId}" refused internal ${this.noun} "${panelId}:${action}"`);
-            throw new RpcError(
-                ErrorCode.FORBIDDEN,
-                `${this.Noun} "${action}" is internal to panel "${panelId}"`,
-            );
-        }
+        refuseInternal(registered.schema);
+        this.sleeper?.touch(panelId);
 
         // unguessable: a reply must name a call it was actually sent
         const callId = `call_${randomUUID()}`;
@@ -535,6 +613,7 @@ export class ActionsRegistry {
     private settle(pending: PendingActionCall, { result, error }: CarriedOutcome): void {
         this.pendingCalls.delete(pending.callId);
         clearTimeout(pending.timer);
+        this.sleeper?.touch(pending.panelId);
 
         const held = this.socketPendingCalls.get(pending.callerWs);
         held?.delete(pending.callId);
@@ -587,6 +666,14 @@ export class ActionsRegistry {
                     ...(project !== undefined ? { project } : {}),
                     schema: entry.schema,
                 });
+            }
+        }
+        for (const [panelId, kept] of this.dormant) {
+            if (filterPanelId && panelId !== filterPanelId) continue;
+            for (const [key, entry] of kept.actions) {
+                if (this.actions.has(key)) continue;
+                const project = projectOfAction(entry.action);
+                list.push({ panelId, action: entry.action, ...(project !== undefined ? { project } : {}), schema: entry.schema });
             }
         }
         return list;

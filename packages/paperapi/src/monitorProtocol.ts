@@ -58,7 +58,8 @@ export interface MonitorEventRecord {
     recipients: number;
 }
 
-export type MonitorServiceState = "starting" | "ready" | "exited" | "stopped" | "failed";
+/** asleep: stopped for having nothing to do; the next call to it starts it again */
+export type MonitorServiceState = "starting" | "ready" | "exited" | "stopped" | "asleep" | "failed";
 
 /** A panel service changed state. */
 export interface MonitorServiceRecord {
@@ -67,7 +68,7 @@ export interface MonitorServiceRecord {
     panel: string;
     state: MonitorServiceState;
     pid?: number;
-    /** exit code, for exited and stopped */
+    /** exit code, for exited, stopped and asleep */
     code?: number | null;
     /** why, for failed */
     error?: string;

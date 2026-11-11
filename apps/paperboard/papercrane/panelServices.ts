@@ -34,6 +34,35 @@ interface RunningService {
     afterUpdate?: boolean;
     /** the one backup, restore or update it is getting ready for now */
     backupPrepare?: { requestId: string; settle: (error: Error | null) => void };
+    /** the service said it has nothing to do until something calls it */
+    idle: boolean;
+    /** when it last became ready, was called, or answered */
+    lastActivity: number;
+    sleepTimer?: ReturnType<typeof setTimeout>;
+    /** it is being stopped because it was idle, not because someone stopped it */
+    sleeping?: boolean;
+}
+
+/** How long an idle service is left running after its last call. */
+export const SERVICE_SLEEP_AFTER_MS = 2 * 60_000;
+
+/**
+ * What the manager asks of whoever holds what services registered (ws.ts,
+ * for the Actions and Blocks registries), so a sleeping service's actions
+ * stay listed and a call still waiting keeps it awake.
+ */
+export interface SleepHooks {
+    /** a call to the panel's service is still waiting for its answer */
+    busy(panelId: string): boolean;
+    /** the service is about to be stopped for being idle: remember what it registered */
+    beforeSleep(panelId: string): void;
+    /**
+     * the service's process has exited: resolves once its connections are
+     * closed too, so the service started next can register the same names
+     */
+    released(panelId: string): Promise<void>;
+    /** the service is running again, or gone for another reason: what was remembered is stale */
+    forget(panelId: string): void;
 }
 
 // How to spawn a panel service on this host. Node, Bun and Electron-as-node
@@ -76,7 +105,98 @@ export class PanelServicesManager {
     // who hears about services starting, getting ready, exiting and failing
     // (the traffic monitor); empty unless someone is watching
     private lifecycleListeners = new Set<(change: MonitorLifecycle) => void>();
-    constructor(private baseDir = getPaperboardDir()) {}
+    // Services stopped for being idle. A service with nothing to do until it
+    // is called (it says so, see definePanelService's setIdle) costs a whole
+    // runtime to keep around, so it is stopped and the next call to it
+    // starts it again (wake). One that never says it is idle is never
+    // stopped this way.
+    private asleep = new Set<string>();
+    private wakes = new Map<string, Promise<void>>();
+    private sleeps = new Map<string, Promise<void>>();
+    private sleepHooks: SleepHooks | null = null;
+    private readonly sleepAfterMs: number;
+    constructor(private baseDir = getPaperboardDir(), options: { sleepAfterMs?: number } = {}) {
+        this.sleepAfterMs = options.sleepAfterMs ?? SERVICE_SLEEP_AFTER_MS;
+    }
+
+    public setSleepHooks(hooks: SleepHooks | null): void { this.sleepHooks = hooks; }
+    /** The panel's service is asleep, or being put to sleep. */
+    public isAsleep(panelId: string): boolean { return this.asleep.has(panelId); }
+    /** Panels whose service is asleep. */
+    public sleepingPanels(): string[] { return [...this.asleep]; }
+
+    /** Something called the panel's service, or it answered: it stays up a while longer. */
+    public noteActivity(panelId: string): void {
+        const entry = this.services.get(panelId);
+        if (!entry) return;
+        entry.lastActivity = Date.now();
+        this.considerSleep(panelId, entry);
+    }
+
+    private considerSleep(id: string, entry: RunningService): void {
+        clearTimeout(entry.sleepTimer);
+        entry.sleepTimer = undefined;
+        if (!entry.idle || entry.stopped || entry.state !== "ready") return;
+        const wait = Math.max(0, entry.lastActivity + this.sleepAfterMs - Date.now());
+        entry.sleepTimer = setTimeout(() => {
+            this.sleep(id, entry).catch((err) => logger.error(`[services] ${id} could not be put to sleep`, err));
+        }, wait);
+        entry.sleepTimer.unref?.();
+    }
+
+    private async sleep(id: string, entry: RunningService): Promise<void> {
+        if (this.services.get(id) !== entry || !entry.idle || entry.stopped || entry.state !== "ready") return;
+        // a call still waiting, or a backup it is getting ready for, keeps it up
+        const held = !!entry.backupPrepare || !!this.sleepHooks?.busy(id);
+        if (held) entry.lastActivity = Date.now();
+        if (held || Date.now() - entry.lastActivity < this.sleepAfterMs) {
+            this.considerSleep(id, entry);
+            return;
+        }
+        // asleep from here: a call that arrives while it stops waits for the
+        // stop and then starts it again, instead of reaching a dying service
+        this.asleep.add(id);
+        entry.sleeping = true;
+        this.sleepHooks?.beforeSleep(id);
+        const stopping = (async () => {
+            await this.halt(id);
+            await this.sleepHooks?.released(id);
+        })().finally(() => this.sleeps.delete(id));
+        this.sleeps.set(id, stopping);
+        try {
+            await stopping;
+        } catch (err) {
+            this.asleep.delete(id);
+            this.sleepHooks?.forget(id);
+            throw err;
+        }
+        logger.info(`[services] ${id} is idle and was put to sleep; the next call starts it`);
+    }
+
+    /** Starts a sleeping service again. Resolves once it is ready; every caller waits on the one start. */
+    public wake(panelId: string): Promise<void> {
+        const id = requirePanelId(panelId);
+        if (!this.asleep.has(id)) return Promise.resolve();
+        let waking = this.wakes.get(id);
+        if (!waking) {
+            waking = (async () => {
+                await this.sleeps.get(id);
+                if (!this.asleep.has(id)) return;
+                try {
+                    if (!this.startService(id)) throw new Error(`Panel ${id} no longer has a service to start`);
+                    await this.waitUntilReady(id);
+                } catch (err) {
+                    // it could not come back: it is a failed service now, not a
+                    // sleeping one, and what it had registered is gone with it
+                    this.asleep.delete(id);
+                    this.sleepHooks?.forget(id);
+                    throw err;
+                }
+            })().finally(() => this.wakes.delete(id));
+            this.wakes.set(id, waking);
+        }
+        return waking;
+    }
 
     /** Hears every service state change from now on; returns the unsubscribe. */
     public onLifecycle(listener: (change: MonitorLifecycle) => void): () => void {
@@ -145,7 +265,8 @@ export class PanelServicesManager {
         // and waitUntilReady still rejects for an installing caller.
         void ready.catch((err) => logger.error(`[services] ${id} readiness failed`, err));
         const entry: RunningService = { process: child, state: "starting", ready, rejectReady,
-            exited: new Promise<void>((resolve) => { resolveExit = resolve; }), stopped: false, crashCount, startedAt: Date.now() };
+            exited: new Promise<void>((resolve) => { resolveExit = resolve; }), stopped: false, crashCount, startedAt: Date.now(),
+            idle: false, lastActivity: Date.now() };
         this.services.set(id, entry);
         this.announce(id, { state: "starting", ...(child.pid !== undefined ? { pid: child.pid } : {}) });
         entry.readyTimer = setTimeout(() => {
@@ -164,6 +285,12 @@ export class PanelServicesManager {
                 }
                 return;
             }
+            if (message?.type === "paperboard:service-idle") {
+                if (message.panelId !== id || entry.stopped) return;
+                entry.idle = message.idle === true;
+                this.considerSleep(id, entry);
+                return;
+            }
             if (message?.type !== "paperboard:service-ready" || message.panelId !== id || entry.stopped) return;
             clearTimeout(entry.readyTimer);
             entry.beforeBackup = message.beforeBackup === true;
@@ -173,8 +300,15 @@ export class PanelServicesManager {
             entry.beforeUpdate = message.beforeUpdate === true;
             entry.afterUpdate = message.afterUpdate === true;
             entry.state = "ready";
+            entry.lastActivity = Date.now();
+            // It has registered everything again: its sleep is over, and what
+            // was kept from it is stale. Not before: a call that arrives while
+            // it starts must wait for this, like the call that woke it.
+            this.asleep.delete(id);
+            this.sleepHooks?.forget(id);
             this.announce(id, { state: "ready", ...(child.pid !== undefined ? { pid: child.pid } : {}) });
             resolveReady();
+            this.considerSleep(id, entry);
         });
         child.stdout?.on("data", (chunk: Buffer) => logger.info(`[service:${id}] ${chunk.toString("utf8").slice(0, 65536)}`));
         child.stderr?.on("data", (chunk: Buffer) => logger.warn(`[service:${id}] ${chunk.toString("utf8").slice(0, 65536)}`));
@@ -186,7 +320,8 @@ export class PanelServicesManager {
         });
         child.once("close", (code) => {
             clearTimeout(entry.readyTimer);
-            this.announce(id, { state: entry.stopped ? "stopped" : "exited", code });
+            clearTimeout(entry.sleepTimer);
+            this.announce(id, { state: entry.sleeping ? "asleep" : entry.stopped ? "stopped" : "exited", code });
             entry.backupPrepare?.settle(new Error(`Service ${id} exited while getting ready`));
             resolveExit();
             rejectReady(new Error(`Service ${id} exited before readiness (code ${code})`));
@@ -279,10 +414,10 @@ export class PanelServicesManager {
         if (entry) await entry.ready;
     }
     /** true while the service is meant to run (started and not stopped),
-     * including while it waits to restart after a crash */
+     * including while it waits to restart after a crash, and while it sleeps */
     public isActive(id: string): boolean {
         const entry = this.services.get(requirePanelId(id));
-        return !!entry && !entry.stopped;
+        return (!!entry && !entry.stopped) || this.asleep.has(id);
     }
     /** Live service children, including those whose stop has not finished. */
     public runningCount(): number {
@@ -301,13 +436,22 @@ export class PanelServicesManager {
         }
         return roots;
     }
+    /** Stops a service for good: one that was asleep is no longer waiting to be started. */
     public async stopService(id: string, graceMs = 3000): Promise<void> {
+        // a stop that began as a sleep finishes first, so the files it guards are free
+        try { await this.sleeps.get(requirePanelId(id)); }
+        catch (err) { logger.debug(`[services] ${id} was not asleep after all:`, err); }
+        if (this.asleep.delete(id)) this.sleepHooks?.forget(id);
+        await this.halt(id, graceMs);
+    }
+    private async halt(id: string, graceMs = 3000): Promise<void> {
         const entry = this.services.get(requirePanelId(id));
         if (!entry) return;
         entry.stopped = true;
         entry.state = "stopping";
         clearTimeout(entry.restartTimer);
         clearTimeout(entry.readyTimer);
+        clearTimeout(entry.sleepTimer);
         entry.rejectReady(new Error(`Service ${id} was stopped`));
         if (entry.process.exitCode === null && entry.process.signalCode === null) {
             entry.process.kill("SIGTERM");
@@ -326,11 +470,12 @@ export class PanelServicesManager {
     public stopAll(): void {
         for (const entry of this.services.values()) {
             entry.stopped = true;
-            clearTimeout(entry.restartTimer); clearTimeout(entry.readyTimer);
+            clearTimeout(entry.restartTimer); clearTimeout(entry.readyTimer); clearTimeout(entry.sleepTimer);
             entry.rejectReady(new Error("Daemon is stopping"));
             try { entry.process.kill("SIGKILL"); } catch (err) { logger.error("[services] final kill failed", err); }
         }
         this.services.clear();
+        this.asleep.clear();
     }
 }
 export const panelServices = new PanelServicesManager();

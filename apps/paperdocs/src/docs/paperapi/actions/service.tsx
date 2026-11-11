@@ -170,6 +170,8 @@ export default service;`}
     emit(event: string, payload?: unknown): void;
     /** fires one of this panel's triggers, starting the flows built on it */
     emitTrigger<T = any>(triggerId: string, output: T): void;
+    /** says whether the service has nothing to do until something calls it */
+    setIdle(idle: boolean): void;
 }`}
             </PaperCode>
             <PaperTable>
@@ -187,6 +189,10 @@ export default service;`}
                     <tr>
                         <td><PaperCode>emit</PaperCode>, <PaperCode>emitTrigger</PaperCode></td>
                         <td>Return at once. A failure is logged to the service's standard error with <PaperCode>{"[Service:<id>] Failed to emit"}</PaperCode>; call <PaperLink href="/docs/paperapi/actions/">actionsApi.emit</PaperLink> directly to await and handle it.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>setIdle</PaperCode></td>
+                        <td>Tells the daemon whether the service has nothing to do until something calls it. A service starts as not idle, and one that never calls this is never put to sleep. See <PaperLink href="/docs/paperapi/service/#lifecycle">Sleep</PaperLink> below.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -219,6 +225,10 @@ export default service;`}
                     <tr>
                         <td>Crash</td>
                         <td>Restarts it after 1, 2, 4, 8, then 10 seconds. A crash counts as consecutive when the service ran for less than 30 seconds. After the sixth consecutive crash, the daemon stops restarting it until the next restart or daemon start.</td>
+                    </tr>
+                    <tr>
+                        <td>Sleep</td>
+                        <td>Stops a service that has said <PaperCode>ctx.setIdle(true)</PaperCode> once 2 minutes have passed with no call to it and none still running. Its actions, blocks and projects stay listed. The next call to one of them starts the service again and waits for it to be ready, so <PaperCode>onInit</PaperCode> runs again and whatever the service knew must be on disk. Events are not kept for a sleeping service, so one that listens for another panel's events is not idle.</td>
                     </tr>
                     <tr>
                         <td>Stop</td>

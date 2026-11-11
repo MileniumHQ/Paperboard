@@ -281,6 +281,9 @@ export interface ServerOptions {
     remotesFile?: string;
     // mDNS announcement on non-loopback binds (default on)
     advertise?: boolean;
+    // how long an idle panel service is left running after its last call
+    // (default SERVICE_SLEEP_AFTER_MS)
+    serviceSleepAfterMs?: number;
 }
 
 // handshake file for local clients, written on every listen. Throws: a
@@ -384,7 +387,7 @@ function listenPaperCraneServer(
 
         const tryStart = (currentPort: number) => {
             let advertisement: AdvertisementHandle | null = null;
-            const panelServices = new PanelServicesManager(getPaperboardDir());
+            const panelServices = new PanelServicesManager(getPaperboardDir(), { sleepAfterMs: options.serviceSleepAfterMs });
             const engine = new PaperCraneEngine(undefined, panelServices);
             const auth = new PaperCraneAuth(noAuth, undefined, undefined);
             const sessions = new DavSessionStore();

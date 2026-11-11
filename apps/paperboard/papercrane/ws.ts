@@ -189,6 +189,47 @@ export function setupWebSocketServer(
             socket.close(4401, "Credential revoked");
         }
     };
+    // A service that sleeps (panelServices.ts) keeps what it registered
+    // listed, and the call that needs it starts it again. Its own connection
+    // is the one holding the panel's own token; a panel's pages hold others.
+    const services = engine.panelServices();
+    // the connections of each service being put to sleep, until they close
+    const sleepingSockets = new Map<string, Set<WebSocket>>();
+    const registries = [
+        { registry: actionsRegistry, event: "actions:registry-updated" },
+        { registry: blocksRegistry, event: "blocks:registry-updated" },
+    ];
+    services.setSleepHooks({
+        busy: (panelId) => registries.some(({ registry }) => registry.hasPendingCalls(panelId)),
+        beforeSleep: (panelId) => {
+            const sockets = new Set(byToken.get(services.tokenForPanel(panelId)));
+            for (const { registry } of registries) registry.hibernate(panelId, sockets);
+            sleepingSockets.set(panelId, sockets);
+        },
+        released: async (panelId) => {
+            const sockets = sleepingSockets.get(panelId) ?? [];
+            sleepingSockets.delete(panelId);
+            // a process that is gone can leave its connection open for a
+            // moment; this socket's own close handler has run by the time
+            // the one added here does
+            await Promise.all([...sockets].map((socket) => socket.readyState === WebSocket.CLOSED ? undefined : new Promise<void>((resolve) => {
+                socket.once("close", () => resolve());
+                socket.terminate();
+            })));
+        },
+        forget: (panelId) => {
+            for (const { registry, event } of registries) {
+                if (registry.forget(panelId)) deliverEvent(event, { type: "service:awake", panelId }, null);
+            }
+        },
+    });
+    const sleeper = {
+        asleep: (panelId: string) => services.isAsleep(panelId),
+        wake: (panelId: string) => services.wake(panelId),
+        touch: (panelId: string) => services.noteActivity(panelId),
+    };
+    for (const { registry } of registries) registry.setSleeper(sleeper);
+
     const onRevoked = (entry: AuthorizedToken) => revokeSockets(byToken.get(entry.token));
     const onPanelRevoked = (panelId: string) => revokeSockets(byPanel.get(panelId));
     auth.on("revoked", onRevoked);
@@ -196,6 +237,8 @@ export function setupWebSocketServer(
     wss.once("close", () => {
         auth.off("revoked", onRevoked);
         auth.off("panel-revoked", onPanelRevoked);
+        services.setSleepHooks(null);
+        for (const { registry } of registries) registry.setSleeper(null);
         offBackupProgress();
         byToken.clear();
         byPanel.clear();
