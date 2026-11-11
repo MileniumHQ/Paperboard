@@ -46,7 +46,7 @@ describe("the agent's blocks", () => {
             attachments: [],
             message: entry.id,
             conversation: current,
-            "reply-to": "",
+            "reply-to": null,
         });
         expect(rig.app.conversation.history()[0]).toMatchObject({ id: message, kind: "user", text: "what's up?" });
 

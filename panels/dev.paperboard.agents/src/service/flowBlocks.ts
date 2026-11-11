@@ -162,7 +162,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                     attachments: { type: "list<attachment>", name: "Attachments", description: "The files sent with it; empty when there are none" },
                     message: { type: "message", name: "Message" },
                     conversation: { type: "conversation", name: "Conversation" },
-                    "reply-to": { type: "message", name: "Replying To", description: "The message it quotes; empty when it quotes none" },
+                    "reply-to": { type: "message", name: "Replying To", description: "The message it quotes; none when it quotes none", optional: true },
                 },
             },
         ],
@@ -176,6 +176,7 @@ export function replyPayload(message: MessageReceived): Record<string, unknown> 
         attachments: message.attachments.map((a) => ({ ...a })),
         message: message.messageId,
         conversation: message.conversationId,
-        "reply-to": message.replyTo,
+        // the Actions payload says "none" with empty text; a block says it with no value
+        "reply-to": message.replyTo || null,
     };
 }
