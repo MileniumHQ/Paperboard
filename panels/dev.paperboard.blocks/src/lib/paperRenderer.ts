@@ -45,7 +45,7 @@ export function paperTheme(): Blockly.Theme {
     return Blockly.Theme.defineTheme("paper", {
         name: "paper",
         blockStyles: blockStyles(),
-        // the Actions canvas: the app's surface, dotted (the grid, in App.tsx)
+        // the Actions canvas: the app's surface, dotted (the grid, in Editor.tsx)
         componentStyles: {
             workspaceBackgroundColour: token("--paper-surface-app"),
             scrollbarColour: token("--paper-border-strong"),

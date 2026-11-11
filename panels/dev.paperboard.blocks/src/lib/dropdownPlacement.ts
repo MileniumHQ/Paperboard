@@ -2,7 +2,7 @@
 // up, as PaperSelectMenu's list sits under its button. Blockly centres it
 // under the field and slides it in; once it has opened, it's moved under the
 // field (or over it, when there's no room below) and PaperUI's scale-in
-// (App.module.css) is all the motion it has.
+// (Editor.module.css) is all the motion it has.
 import * as Blockly from "blockly";
 import { tokenPixels } from "./tokens";
 
