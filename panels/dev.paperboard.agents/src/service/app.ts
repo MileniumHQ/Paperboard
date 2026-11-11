@@ -229,6 +229,7 @@ export class AiApp {
             },
         });
         this.apps = apps;
+        apps.watch();
         const checkpoints = new Checkpoints({ home, dir: path.join(root, "checkpoints") });
         const tools = toolbox([
             { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },

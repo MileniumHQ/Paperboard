@@ -185,6 +185,9 @@ export class Apps {
     private server: http.Server | null = null;
     private starting: Promise<number> | null = null;
     private installing = new Map<string, Promise<unknown>>();
+    private watchers: { home: fs.FSWatcher | null; apps: fs.FSWatcher | null } = { home: null, apps: null };
+    private seen = "";
+    private looking: ReturnType<typeof setTimeout> | null = null;
     port: number | null = null;
 
     constructor(private o: AppsOptions) {}
@@ -462,7 +465,64 @@ export class Apps {
         res.end(req.method === "HEAD" ? undefined : data);
     }
 
+    /**
+     * Follow ~/Apps for folders made or removed some other way than the tools,
+     * like the agent's shell or the user: the list changes for them too.
+     */
+    watch() {
+        this.seen = this.names();
+        const home = this.o.home.resolve("~");
+        this.watchers.home = fs.watch(home, () => this.look());
+        this.watchers.home.on("error", (e) => console.error("[ai] the home folder can't be followed for apps:", String(e)));
+        this.followApps();
+    }
+
+    private followApps() {
+        if (this.watchers.apps) return;
+        const dir = this.o.home.resolve(APPS);
+        if (!fs.statSync(dir, { throwIfNoEntry: false })?.isDirectory()) return;
+        const watcher = fs.watch(dir, () => this.look());
+        watcher.on("error", (e) => {
+            // ~/Apps itself was removed: it's followed again once it's back
+            watcher.close();
+            if (this.watchers.apps === watcher) this.watchers.apps = null;
+            if ((e as NodeJS.ErrnoException).code !== "ENOENT" && (e as NodeJS.ErrnoException).code !== "EPERM") console.error("[ai] ~/Apps can't be followed:", String(e));
+            this.look();
+        });
+        this.watchers.apps = watcher;
+    }
+
+    /** A burst of changes is read once, and only a different list is a change. */
+    private look() {
+        if (this.looking) return;
+        this.looking = setTimeout(() => {
+            this.looking = null;
+            try {
+                if (this.watchers.apps && !fs.existsSync(this.o.home.resolve(APPS))) {
+                    this.watchers.apps.close();
+                    this.watchers.apps = null;
+                }
+                this.followApps();
+                const now = this.names();
+                if (now === this.seen) return;
+                this.seen = now;
+                this.o.onChange();
+            } catch (e) {
+                console.error("[ai] the apps couldn't be listed after a change:", String(e));
+            }
+        }, 100);
+    }
+
+    private names(): string {
+        return JSON.stringify(this.list().map((a) => a.name).sort());
+    }
+
     async close() {
+        if (this.looking) clearTimeout(this.looking);
+        this.looking = null;
+        this.watchers.home?.close();
+        this.watchers.apps?.close();
+        this.watchers = { home: null, apps: null };
         const server = this.server;
         this.server = null;
         if (!server) return;
