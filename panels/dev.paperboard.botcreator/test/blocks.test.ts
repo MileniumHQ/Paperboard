@@ -1,7 +1,7 @@
 // Bot Creator's blocks (Actions API v2), used the way the Blocks panel uses
 // them: through the real daemon, from the service, against a loopback Discord.
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { blocksApi, qualifyTypeRef, valueProblem, type TypeLookup } from "@mileniumhq/paperapi";
+import { blocksApi, memoryBlocks, type BlockEventDefinition } from "@mileniumhq/paperapi";
 import type { BotsServiceState } from "../src/bots";
 import { blockEvent, blockTypes, commandEvent, commandEventId, staticEvents } from "../src/blocks";
 import { GLOBAL_SCOPE, type SlashCommandDefinition } from "../src/types";
@@ -52,33 +52,29 @@ function nextEvent(event: string): { payload: Promise<Record<string, unknown>>; 
 }
 
 describe("each trigger a session fires is one of the bot's Blocks events, with a payload of its types", () => {
-    // what each type's own value is checked against, as the service checks a fire
-    const types = new Map(blockTypes(() => []).map((t) => [type(t.id), t]));
-    const lookup: TypeLookup = (qualified) => {
-        const t = types.get(qualified);
-        if (!t) return undefined;
-        return { base: t.base, fields: Object.fromEntries(Object.entries(t.fields ?? {}).map(([k, f]) => [k, { type: qualifyTypeRef(f.type, PANEL_ID), ...(f.resolve ? { resolved: true as const } : {}) }])) };
-    };
-    const firesAs = (event: { values?: Record<string, { type: string }> }, payload: Record<string, unknown>) => {
+    // fired through PaperAPI's own checks, in memory: the payload is every value the event declares, of its type
+    const firesAs = async (event: BlockEventDefinition, payload: Record<string, unknown>) => {
         expect(Object.keys(payload).sort()).toEqual(Object.keys(event.values ?? {}).sort());
-        for (const [key, value] of Object.entries(event.values ?? {})) {
-            expect([key, valueProblem(qualifyTypeRef(value.type, PANEL_ID), payload[key], lookup)]).toEqual([key, null]);
-        }
+        const memory = memoryBlocks(PANEL_ID);
+        await memory.panel.register({ types: blockTypes(() => []) });
+        const bot = await memory.defineProject({ id: "bot", name: "Bot" });
+        await bot.register({ events: [event] });
+        await bot.fire(event.id, payload);
     };
 
-    test("every static trigger, even with nothing in its payload", () => {
+    test("every static trigger, even with nothing in its payload", async () => {
         const mapped = new Set<string>();
         for (const trigger of TRIGGERS) {
             const { event, payload } = blockEvent(trigger, {}, []);
             const definition = staticEvents.find((e) => e.id === event);
             expect([trigger, definition?.id]).toEqual([trigger, event]);
-            firesAs(definition!, payload);
+            await firesAs(definition!, payload);
             mapped.add(event);
         }
         expect([...mapped].sort()).toEqual(EVENTS);
     });
 
-    test("a slash command, its options typed, and an optional one not given empty", () => {
+    test("a slash command, its options typed, and an optional one not given is none", async () => {
         const command: SlashCommandDefinition = {
             id: "c1",
             name: "give_role",
@@ -92,10 +88,10 @@ describe("each trigger a session fires is one of the bot's Blocks events, with a
         };
         const event = commandEvent(command);
         expect(event.id).toBe(commandEventId(command));
-        expect(event.values).toMatchObject({ "option-user": { type: "user", name: "user" }, "option-days": { type: "any", name: "days" } });
+        expect(event.values).toMatchObject({ "option-user": { type: "user", name: "user" }, "option-days": { type: "number", name: "days", optional: true } });
         const { payload } = blockEvent("command:global:give_role", { interactionId: "1", userId: "2", channelId: "3", guildId: null, values: { user: "123456789012345678" } }, [command]);
-        firesAs(event, payload);
-        expect(payload).toMatchObject({ "option-user": "123456789012345678", "option-days": "", server: "" });
+        await firesAs(event, payload);
+        expect(payload).toMatchObject({ "option-user": "123456789012345678", "option-days": null, server: null });
         expect(() => blockEvent("command:global:gone", {}, [command])).toThrow("The trigger command:global:gone has no Blocks event");
         // the same name in another scope is another event; the same scope and name is the same one
         expect(commandEventId({ scope: "123456789012345678", name: "give_role" })).not.toBe(event.id);

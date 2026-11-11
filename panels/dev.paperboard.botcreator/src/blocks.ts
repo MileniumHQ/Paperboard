@@ -235,11 +235,12 @@ export function blockTypes(clients: ConnectedClients): BlockTypeDefinition[] {
                 topic: {
                     type: "text",
                     name: "Topic",
-                    description: "Empty when it has none",
+                    description: "None when it has none",
+                    optional: true,
                     resolve: async (v: string) => {
                         const channel = await channelOf(v);
                         if (!("topic" in channel)) throw new Error(`Channel ${channel.id} is a kind that has no topic`);
-                        return channel.topic ?? "";
+                        return channel.topic || null;
                     },
                 },
                 server: {
@@ -289,8 +290,9 @@ export function blockTypes(clients: ConnectedClients): BlockTypeDefinition[] {
                 nickname: {
                     type: "text",
                     name: "Nickname",
-                    description: "Empty when they have none",
-                    resolve: async (v: MemberRef) => (await find.member(v)).found.nickname ?? "",
+                    description: "None when they have none",
+                    optional: true,
+                    resolve: async (v: MemberRef) => (await find.member(v)).found.nickname || null,
                 },
                 "display-name": { type: "text", name: "Display Name", resolve: async (v: MemberRef) => (await find.member(v)).found.displayName },
                 roles: {
@@ -1258,7 +1260,7 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
 
 // ─── events ─────────────────────────────────────────────────────────────────
 
-const inServer = { type: "server", name: "Server", description: "Empty in a direct message" } as const;
+const inServer = { type: "server", name: "Server", description: "None in a direct message", optional: true } as const;
 const messageValues = {
     message: { type: "message", name: "Message" },
     content: { type: "text", name: "Content" },
@@ -1330,7 +1332,7 @@ export const staticEvents: BlockEventDefinition[] = [
             channel: { type: "channel", name: "Channel" },
             server: inServer,
             message: { type: "message", name: "Message" },
-            pick: { type: "text", name: "Pick", description: "The first pick; empty for a button" },
+            pick: { type: "text", name: "Pick", description: "The first pick; none for a button", optional: true },
             picks: { type: "list<text>", name: "Picks", description: "Every pick; none for a button" },
         },
     },
@@ -1349,7 +1351,9 @@ export const staticEvents: BlockEventDefinition[] = [
             user: { type: "user", name: "User" },
             channel: { type: "channel", name: "Channel" },
             server: inServer,
-            ...Object.fromEntries(Array.from({ length: MAX_MODAL_FIELDS }, (_, i) => [`field-${i + 1}`, { type: "text", name: `Field ${i + 1}` }])),
+            ...Object.fromEntries(
+                Array.from({ length: MAX_MODAL_FIELDS }, (_, i) => [`field-${i + 1}`, { type: "text", name: `Field ${i + 1}`, description: "None when the modal has fewer fields", optional: true }]),
+            ),
         },
     },
     {
@@ -1380,7 +1384,7 @@ export const staticEvents: BlockEventDefinition[] = [
         text: "When a user is banned from {server}",
         inputs: serverFilter,
         filters: { server: "server" },
-        values: { user: { type: "user", name: "User" }, server: { type: "server", name: "Server" }, reason: { type: "text", name: "Reason", description: "Empty when none was given" } },
+        values: { user: { type: "user", name: "User" }, server: { type: "server", name: "Server" }, reason: { type: "text", name: "Reason", description: "None when none was given", optional: true } },
     },
     {
         id: "voice-changed",
@@ -1390,8 +1394,8 @@ export const staticEvents: BlockEventDefinition[] = [
         values: {
             member: { type: "member", name: "Member" },
             user: { type: "user", name: "User" },
-            channel: { type: "channel", name: "Channel", description: "Empty when they left voice" },
-            "previous-channel": { type: "channel", name: "Previous Channel", description: "Empty when they just joined" },
+            channel: { type: "channel", name: "Channel", description: "None when they left voice", optional: true },
+            "previous-channel": { type: "channel", name: "Previous Channel", description: "None when they just joined", optional: true },
             server: { type: "server", name: "Server" },
         },
     },
@@ -1450,8 +1454,7 @@ function optionKeys(command: SlashCommandDefinition): string[] {
 
 /**
  * The event a slash command starts. Each option is a value of its type; an
- * optional one is empty when it wasn't given, so an optional number or
- * true/false option is "any".
+ * optional one is none when it wasn't given.
  */
 export function commandEvent(command: SlashCommandDefinition): BlockEventDefinition {
     const keys = optionKeys(command);
@@ -1473,14 +1476,13 @@ export function commandEvent(command: SlashCommandDefinition): BlockEventDefinit
             server: inServer,
             ...Object.fromEntries(
                 command.options.map((option, index) => {
-                    const type = OPTION_TYPES[option.type];
-                    const loose = !option.required && (type === "number" || type === "boolean");
                     return [
                         keys[index],
                         {
-                            type: loose ? "any" : type,
+                            type: OPTION_TYPES[option.type],
                             name: option.name,
-                            ...(option.description ? { description: option.required ? option.description : `${option.description}. Empty when not given` } : {}),
+                            ...(option.required ? {} : { optional: true }),
+                            ...(option.description ? { description: option.required ? option.description : `${option.description}. None when not given` } : {}),
                         },
                     ];
                 }),
@@ -1492,6 +1494,10 @@ export function commandEvent(command: SlashCommandDefinition): BlockEventDefinit
 // ─── what a session fires, as Blocks events ─────────────────────────────────
 
 const text = (value: unknown) => (value === undefined || value === null ? "" : String(value));
+/** an optional value: none when the session left it out */
+const maybe = (value: unknown) => (value === undefined || value === null ? null : String(value));
+/** an optional id: none when it's left out or empty, as a direct message's server is */
+const maybeId = (value: unknown) => (value === undefined || value === null || value === "" ? null : String(value));
 const at = (id: unknown, channelId: unknown): MessageRef => ({ id: text(id), channel: text(channelId) });
 
 /**
@@ -1500,7 +1506,7 @@ const at = (id: unknown, channelId: unknown): MessageRef => ({ id: text(id), cha
  */
 export function blockEvent(trigger: string, output: any, commands: SlashCommandDefinition[]): { event: string; payload: Record<string, unknown> } {
     const o = output ?? {};
-    const message = () => ({ message: at(o.messageId, o.channelId), content: text(o.content), author: text(o.authorId), channel: text(o.channelId), server: text(o.guildId) });
+    const message = () => ({ message: at(o.messageId, o.channelId), content: text(o.content), author: text(o.authorId), channel: text(o.channelId), server: maybeId(o.guildId) });
     const reaction = () => ({ emoji: text(o.emoji), user: text(o.userId), message: at(o.messageId, o.channelId), channel: text(o.channelId) });
     const roleChange = () => ({ member: { user: text(o.userId), server: text(o.guildId) }, user: text(o.userId), role: text(o.roleId), server: text(o.guildId) });
     switch (trigger) {
@@ -1509,7 +1515,7 @@ export function blockEvent(trigger: string, output: any, commands: SlashCommandD
         case "on-message-edited":
             return { event: "message-edited", payload: message() };
         case "on-message-deleted":
-            return { event: "message-deleted", payload: { message: at(o.messageId, o.channelId), channel: text(o.channelId), server: text(o.guildId) } };
+            return { event: "message-deleted", payload: { message: at(o.messageId, o.channelId), channel: text(o.channelId), server: maybeId(o.guildId) } };
         case "on-reaction-add":
             return { event: "reaction-added", payload: reaction() };
         case "on-reaction-removed":
@@ -1522,9 +1528,9 @@ export function blockEvent(trigger: string, output: any, commands: SlashCommandD
                     interaction: text(o.interactionId),
                     user: text(o.userId),
                     channel: text(o.channelId),
-                    server: text(o.guildId),
+                    server: maybeId(o.guildId),
                     message: at(o.messageId, o.channelId),
-                    pick: text(o.value),
+                    pick: maybe(o.value),
                     picks: Array.isArray(o.values) ? o.values.map(text) : [],
                 },
             };
@@ -1536,8 +1542,8 @@ export function blockEvent(trigger: string, output: any, commands: SlashCommandD
                     interaction: text(o.interactionId),
                     user: text(o.userId),
                     channel: text(o.channelId),
-                    server: text(o.guildId),
-                    ...Object.fromEntries(Array.from({ length: MAX_MODAL_FIELDS }, (_, i) => [`field-${i + 1}`, text(o[`field${i + 1}`])])),
+                    server: maybeId(o.guildId),
+                    ...Object.fromEntries(Array.from({ length: MAX_MODAL_FIELDS }, (_, i) => [`field-${i + 1}`, maybe(o[`field${i + 1}`])])),
                 },
             };
         case "on-member-join":
@@ -1545,15 +1551,15 @@ export function blockEvent(trigger: string, output: any, commands: SlashCommandD
         case "on-member-leave":
             return { event: "member-left", payload: { user: text(o.userId), server: text(o.guildId) } };
         case "on-member-banned":
-            return { event: "member-banned", payload: { user: text(o.userId), server: text(o.guildId), reason: text(o.reason) } };
+            return { event: "member-banned", payload: { user: text(o.userId), server: text(o.guildId), reason: maybeId(o.reason) } };
         case "on-voice-state-change":
             return {
                 event: "voice-changed",
                 payload: {
                     member: { user: text(o.userId), server: text(o.guildId) },
                     user: text(o.userId),
-                    channel: text(o.channelId),
-                    "previous-channel": text(o.previousChannelId),
+                    channel: maybeId(o.channelId),
+                    "previous-channel": maybeId(o.previousChannelId),
                     server: text(o.guildId),
                 },
             };
@@ -1578,8 +1584,8 @@ export function blockEvent(trigger: string, output: any, commands: SlashCommandD
             interaction: text(o.interactionId),
             user: text(o.userId),
             channel: text(o.channelId),
-            server: text(o.guildId),
-            ...Object.fromEntries(command.options.map((option, index) => [keys[index], values[option.name] ?? ""])),
+            server: maybeId(o.guildId),
+            ...Object.fromEntries(command.options.map((option, index) => [keys[index], values[option.name] ?? null])),
         },
     };
 }
