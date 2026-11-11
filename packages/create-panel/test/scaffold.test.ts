@@ -5,6 +5,7 @@ import { join } from "node:path";
 import * as tar from "tar";
 import paperapiPackage from "../../paperapi/package.json";
 import paperuiPackage from "../../paperui/package.json";
+import { assertRelativePanelBuild } from "../../../scripts/publishManifest";
 import { libraryDependencies, scaffoldPanel, type PanelFeatures } from "../src/scaffold";
 import { startDaemon } from "./helpers/daemon";
 import { linkDependencies, ok, paperapi, panelTestFolders, readJson, tempDir, writtenFiles } from "./helpers/panel";
@@ -67,6 +68,11 @@ describe("every feature choice builds, tests, links and packs", () => {
             });
             expect(existsSync(join(v.dir, "store"))).toBe(v.features.store);
         }
+    });
+
+    // a browser serves the panel from a folder of the shell's origin
+    test("the build links its files by relative address", () => {
+        for (const v of variants) expect(() => assertRelativePanelBuild(v.dir, v.id)).not.toThrow();
     });
 
     test("each variant passes its own tests and leaves no data folder behind", async () => {
