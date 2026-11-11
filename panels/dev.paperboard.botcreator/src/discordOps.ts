@@ -3,23 +3,21 @@
 // service.ts stay thin: they parse inputs and call these classes — channel
 // resolution, embed/component payload building, and the Discord
 // not-text-based errors live here once, not per action.
-import {
-    ButtonBuilder,
+import type {
     ButtonStyle,
     Client,
-    ComponentType,
-    EmbedBuilder,
-    MessageFlags,
+    MessageComponentInteraction,
+    ModalSubmitInteraction,
+    ColorResolvable,
     PermissionsBitField,
-    TextInputStyle,
-    type MessageComponentInteraction,
-    type ModalSubmitInteraction,
-    type ColorResolvable,
-    type RepliableInteraction,
-    type Guild,
-    type GuildMember,
+    RepliableInteraction,
+    Guild,
+    GuildMember,
 } from "discord.js";
+import { loadDiscord } from "./discord";
 import { errorToMessage } from "./types";
+
+type Discord = Awaited<ReturnType<typeof loadDiscord>>;
 
 // ─── embeds ─────────────────────────────────────────────────────────────────
 
@@ -34,7 +32,14 @@ export interface DiscordEmbedData {
     image?: string | { url?: string };
 }
 
-export function buildDiscordEmbed(data: DiscordEmbedData) {
+export async function buildDiscordEmbed(data: DiscordEmbedData) {
+    return embedFrom(await loadDiscord(), data);
+}
+
+// The builders below take the loaded library and stay synchronous: each
+// exported one waits for discord.js exactly once, so two answers built at the
+// same moment still reach Discord in the order they were asked for.
+function embedFrom({ EmbedBuilder }: Discord, data: DiscordEmbedData) {
     const embed = new EmbedBuilder();
     if (data.title) embed.setTitle(data.title);
     if (data.description) embed.setDescription(data.description);
@@ -340,7 +345,7 @@ export function layoutComponentRows(
     return rows;
 }
 
-function buttonToApi(component: DiscordButtonData) {
+function buttonToApi({ ButtonBuilder, ButtonStyle }: Discord, component: DiscordButtonData) {
     const button = new ButtonBuilder().setLabel(component.label ?? "");
     if (component.disabled) button.setDisabled(true);
     if (component.emoji) {
@@ -368,7 +373,7 @@ function buttonToApi(component: DiscordButtonData) {
     return button.toJSON();
 }
 
-function selectToApi(component: DiscordSelectMenuData) {
+function selectToApi({ ComponentType }: Discord, component: DiscordSelectMenuData) {
     const base = {
         custom_id: component.customId,
         ...(component.placeholder ? { placeholder: component.placeholder } : {}),
@@ -396,11 +401,15 @@ function selectToApi(component: DiscordSelectMenuData) {
 }
 
 /** Discord API action rows for the Components field, or none when empty. */
-export function componentsToActionRows(input: unknown) {
+export async function componentsToActionRows(input: unknown) {
+    return actionRows(await loadDiscord(), input);
+}
+
+function actionRows(lib: Discord, input: unknown) {
     return layoutComponentRows(input).map((row) => ({
-        type: ComponentType.ActionRow,
+        type: lib.ComponentType.ActionRow,
         components: row.map((component) =>
-            isSelect(component) ? selectToApi(component) : buttonToApi(component),
+            isSelect(component) ? selectToApi(lib, component) : buttonToApi(lib, component),
         ),
     }));
 }
@@ -413,11 +422,15 @@ export interface MessagePayloadInput {
     components?: unknown;
 }
 
-export function buildMessagePayload(input: MessagePayloadInput) {
-    const rows = componentsToActionRows(input.components);
+export async function buildMessagePayload(input: MessagePayloadInput) {
+    return messagePayload(await loadDiscord(), input);
+}
+
+function messagePayload(lib: Discord, input: MessagePayloadInput) {
+    const rows = actionRows(lib, input.components);
     return {
         content: input.content ?? "",
-        embeds: normalizeEmbeds(input.embeds).map((data) => buildDiscordEmbed(data)),
+        embeds: normalizeEmbeds(input.embeds).map((data) => embedFrom(lib, data)),
         ...(rows.length > 0 ? { components: rows } : {}),
     };
 }
@@ -477,7 +490,7 @@ export function modalFieldId(index: number): string {
     return `field${index + 1}`;
 }
 
-export function buildModalPayload(input: {
+export async function buildModalPayload(input: {
     modalId?: string;
     title?: string;
     fields?: unknown;
@@ -497,6 +510,7 @@ export function buildModalPayload(input: {
         }
         return item as DiscordModalFieldData;
     });
+    const { ComponentType, TextInputStyle } = await loadDiscord();
     return {
         custom_id: customId,
         title,
@@ -807,7 +821,7 @@ export class MessageOps {
     /** Sends to a channel; the sent message, for a caller that needs more than its id. */
     async sendMessage(channelId: string, payload: MessagePayloadInput): Promise<any> {
         const channel = await this.textChannel(channelId);
-        return channel.send(buildMessagePayload(payload));
+        return channel.send(await buildMessagePayload(payload));
     }
 
     async reply(
@@ -825,7 +839,7 @@ export class MessageOps {
     ): Promise<any> {
         const channel = await this.textChannel(channelId);
         const target = await channel.messages.fetch(replyTo.trim());
-        return target.reply(buildMessagePayload(payload));
+        return target.reply(await buildMessagePayload(payload));
     }
 
     async edit(
@@ -841,13 +855,14 @@ export class MessageOps {
             throw new Error("Edit Message needs new content, embeds, or components");
         }
         const message = await this.message(channelId, messageId);
+        const lib = await loadDiscord();
         const embeds = normalizeEmbeds(payload.embeds);
         const components = payload.components === undefined
             ? message.components
-            : componentsToActionRows(payload.components);
+            : actionRows(lib, payload.components);
         await message.edit({
             content: payload.content ?? message.content,
-            embeds: embeds.length > 0 ? embeds.map((data) => buildDiscordEmbed(data)) : message.embeds,
+            embeds: embeds.length > 0 ? embeds.map((data) => embedFrom(lib, data)) : message.embeds,
             ...(components.length > 0 ? { components } : {}),
         });
         return message.id;
@@ -875,7 +890,7 @@ export class MessageOps {
 
     async dmMessage(userId: string, payload: MessagePayloadInput): Promise<any> {
         const user = await this.bot.users.fetch(userId.trim());
-        return user.send(buildMessagePayload(payload));
+        return user.send(await buildMessagePayload(payload));
     }
 
     async delete(channelId: string, messageId: string): Promise<boolean> {
@@ -1022,7 +1037,7 @@ export function autoAcknowledge(interaction: RepliableInteraction): Promise<void
     });
 }
 
-type MessageBody = ReturnType<typeof buildMessagePayload>;
+type MessageBody = Awaited<ReturnType<typeof buildMessagePayload>>;
 
 // One class owns answering pending interactions: the reply / edit / new
 // message decision, ephemeral flags, and the pending-map lookup live here,
@@ -1048,6 +1063,7 @@ export class InteractionOps {
             const edited = await interaction.webhook.editMessage(answerId, body);
             return { messageId: async () => edited.id };
         }
+        const { MessageFlags } = await loadDiscord();
         const flags = ephemeral ? MessageFlags.Ephemeral : undefined;
         if (!interaction.deferred && !interaction.replied) {
             await interaction.reply({ ...body, flags });
@@ -1075,8 +1091,10 @@ export class InteractionOps {
         payload: { content?: string; embeds?: unknown; components?: unknown; ephemeral?: boolean },
     ): Promise<string> {
         const interaction = this.take(interactionId.trim());
-        const body = buildMessagePayload(payload);
+        // queued before anything is awaited, so this answer keeps its place
+        // ahead of whatever is asked of the interaction next
         return serialize(interaction, async () => {
+            const body = await buildMessagePayload(payload);
             await this.deliver(interaction, body, Boolean(payload.ephemeral), false);
             return interaction.id;
         });
@@ -1088,8 +1106,10 @@ export class InteractionOps {
         payload: { content?: string; embeds?: unknown; components?: unknown; ephemeral?: boolean },
     ): Promise<string> {
         const interaction = this.take(interactionId.trim());
-        const body = buildMessagePayload(payload);
+        // queued before anything is awaited, so this answer keeps its place
+        // ahead of whatever is asked of the interaction next
         return serialize(interaction, async () => {
+            const body = await buildMessagePayload(payload);
             const sent = await this.deliver(interaction, body, Boolean(payload.ephemeral), true);
             return sent.messageId();
         });
@@ -1108,7 +1128,7 @@ export class InteractionOps {
     /** Opens a modal; only possible as the very first answer. */
     async showModal(
         interactionId: string,
-        modal: ReturnType<typeof buildModalPayload>,
+        modal: Awaited<ReturnType<typeof buildModalPayload>>,
     ): Promise<boolean> {
         const interaction = this.take(interactionId.trim()) as RepliableInteraction & {
             showModal?: (modal: unknown) => Promise<unknown>;
@@ -1180,8 +1200,9 @@ export function fileFromUrl(url: unknown, name?: unknown): { attachment: string;
 }
 
 /** Discord permission names (SendMessages, ViewChannel, ...), each checked; a typo is refused, never dropped. */
-export function permissionNames(value: unknown): (keyof typeof PermissionsBitField.Flags)[] {
+export async function permissionNames(value: unknown): Promise<(keyof typeof PermissionsBitField.Flags)[]> {
     const names = listInput(value, true);
+    const { PermissionsBitField } = await loadDiscord();
     const unknown = names.filter((n) => !(n in PermissionsBitField.Flags));
     if (unknown.length) throw new Error(`Unknown Discord permission(s): ${unknown.join(", ")}`);
     return names as (keyof typeof PermissionsBitField.Flags)[];

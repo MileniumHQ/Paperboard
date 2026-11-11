@@ -1,17 +1,14 @@
 // What a bot does in Discord, once: each operation takes the bot's client
 // and plain inputs. Actions (service.ts) and Blocks (blocks.ts) both call
 // these, so the two APIs never drift; each only shapes what it returns.
-import {
-    ActivityType,
-    ChannelType,
-    GuildScheduledEventEntityType,
-    GuildScheduledEventPrivacyLevel,
-    type Client,
-    type ColorResolvable,
-    type Guild,
-    type GuildMember,
-    type Message,
+import type {
+    Client,
+    ColorResolvable,
+    Guild,
+    GuildMember,
+    Message,
 } from "discord.js";
+import { loadDiscord } from "./discord";
 import {
     MessageOps,
     buildPoll,
@@ -158,8 +155,9 @@ export async function showTyping(bot: Client, channelId: string): Promise<void> 
 
 // ─── the bot ────────────────────────────────────────────────────────────────
 
-export function setActivity(bot: Client, activity: string, status?: string): void {
+export async function setActivity(bot: Client, activity: string, status?: string): Promise<void> {
     const presence = validatePresenceStatus(status || "online");
+    const { ActivityType } = await loadDiscord();
     bot.user?.setPresence({
         activities: [{ name: activity, type: ActivityType.Custom }],
         status: presence,
@@ -278,15 +276,15 @@ export async function disconnectMember(bot: Client, userId: string, guildId?: st
 
 // ─── channels ───────────────────────────────────────────────────────────────
 
-const CHANNEL_KINDS = {
-    text: ChannelType.GuildText,
-    voice: ChannelType.GuildVoice,
-    announcement: ChannelType.GuildAnnouncement,
-    category: ChannelType.GuildCategory,
-} as const;
-
 export async function createChannel(bot: Client, inputs: { name: string; kind?: string; topic?: string; guildId?: string }) {
     const guild = await resolveGuild(bot, inputs.guildId);
+    const { ChannelType } = await loadDiscord();
+    const CHANNEL_KINDS = {
+        text: ChannelType.GuildText,
+        voice: ChannelType.GuildVoice,
+        announcement: ChannelType.GuildAnnouncement,
+        category: ChannelType.GuildCategory,
+    } as const;
     const kind = (CHANNEL_KINDS as Record<string, (typeof CHANNEL_KINDS)[keyof typeof CHANNEL_KINDS]>)[(inputs.kind || "text").toLowerCase()];
     if (kind === undefined) throw new Error(`Unknown channel kind "${inputs.kind}"`);
     return guild.channels.create({
@@ -324,11 +322,11 @@ export async function createInvite(bot: Client, channelId: string, maxUses?: num
 }
 
 /** Set Channel Permissions' inputs as one overwrite: true allows, false denies, null resets. */
-export function channelPermissionChanges(inputs: { allow?: unknown; deny?: unknown; reset?: unknown }): Record<string, boolean | null> {
+export async function channelPermissionChanges(inputs: { allow?: unknown; deny?: unknown; reset?: unknown }): Promise<Record<string, boolean | null>> {
     const changes: Record<string, boolean | null> = {};
     const lists: [unknown, boolean | null][] = [[inputs.allow, true], [inputs.deny, false], [inputs.reset, null]];
     for (const [list, value] of lists) {
-        for (const name of permissionNames(list)) {
+        for (const name of await permissionNames(list)) {
             if (name in changes && changes[name] !== value) throw new Error(`${name} is named in more than one list`);
             changes[name] = value;
         }
@@ -341,7 +339,7 @@ export async function setChannelPermissions(
     bot: Client,
     inputs: { channel: string; target: string; allow?: unknown; deny?: unknown; reset?: unknown; reason?: string },
 ): Promise<void> {
-    const changes = channelPermissionChanges(inputs);
+    const changes = await channelPermissionChanges(inputs);
     const channel = await new MessageOps(bot).fetchChannel(inputs.channel);
     if (!channel.guild || !channel.permissionOverwrites) throw new Error(`Channel ${inputs.channel} isn't a server channel with permissions`);
     const raw = inputs.target.trim();
@@ -376,6 +374,7 @@ export async function scheduledEventOptions(
     const end = inputs.end === undefined || inputs.end === "" ? undefined : parseMoment(inputs.end, "Ends");
     if (end && end.getTime() <= start.getTime()) throw new Error("An event ends after it starts");
     const description = inputs.description?.trim() ? { description: inputs.description.trim() } : {};
+    const { ChannelType, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel } = await loadDiscord();
     const base = { name, scheduledStartTime: start, privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly, ...description };
     if (inputs.channel && inputs.channel.trim()) {
         const channel = await bot.channels.fetch(inputs.channel.trim());

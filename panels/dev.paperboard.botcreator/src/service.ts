@@ -4,10 +4,8 @@
 // two bots share nothing in a flow; the builders that never touch Discord
 // (embeds, buttons, menus) are global. The panel's own controls reach the
 // service through internal actions that name the bot.
-import {
-    PermissionsBitField,
-    type Client,
-} from "discord.js";
+import type { Client } from "discord.js";
+import { loadDiscord } from "./discord";
 import {
     INPUTS,
     MessageOps,
@@ -289,12 +287,14 @@ function interactionsOf(ctx: unknown): InteractionOps {
     return new InteractionOps((id) => session.takeInteraction(id));
 }
 
-export function buildInviteUrl(appId: string, permissions: string[]): string {
+export async function buildInviteUrl(appId: string, permissions: string[]): Promise<string> {
     if (!appId) {
         throw new Error("Cannot build an invite URL: no application ID is known.");
     }
     // typo'd permission names must fail loud, never silently vanish
-    const bitfield = new PermissionsBitField(permissionNames(permissions));
+    const names = await permissionNames(permissions);
+    const { PermissionsBitField } = await loadDiscord();
+    const bitfield = new PermissionsBitField(names);
     // applications.commands is requested because the panel now registers
     // slash commands (see syncSlashCommands); an invite without it produces
     // a bot that registers commands it can never receive interactions for
@@ -499,7 +499,7 @@ export const actions = [
         },
         icon: "article",
         run: async (ctx, inputs: DiscordEmbedData) => {
-            const embed = buildDiscordEmbed(inputs || {});
+            const embed = await buildDiscordEmbed(inputs || {});
             return embed.toJSON();
         },
     }),
@@ -617,7 +617,7 @@ export const actions = [
         },
         icon: "tune",
         run: async (ctx, inputs: { activity: string; status?: string }) => {
-            setActivity(clientOf(ctx), inputs.activity, inputs.status);
+            await setActivity(clientOf(ctx), inputs.activity, inputs.status);
             return true;
         },
     }),
@@ -939,7 +939,7 @@ export const actions = [
             ctx,
             inputs: { interactionId: string; title?: string; modalId?: string; fields?: unknown },
         ) => {
-            const modal = buildModalPayload(inputs);
+            const modal = await buildModalPayload(inputs);
             const ops = interactionsOf(ctx);
             return ops.showModal(inputs.interactionId, modal);
         },

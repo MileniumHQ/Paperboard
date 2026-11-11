@@ -2,19 +2,14 @@
 // interactions, recent messages and slash-command sync. Every bot gets its
 // own, so two bots share nothing but the code; the service owns the list
 // and tells each session where its triggers go.
-import {
+import type {
     Client,
-    GatewayCloseCodes,
-    GatewayIntentBits,
-    ChannelType,
-    ApplicationCommandOptionType,
-    ApplicationCommandType,
-    ApplicationIntegrationType,
-    type ApplicationCommandOptionData,
-    type ChatInputApplicationCommandData,
-    type ChatInputCommandInteraction,
-    type RepliableInteraction,
+    ApplicationCommandOptionData,
+    ChatInputApplicationCommandData,
+    ChatInputCommandInteraction,
+    RepliableInteraction,
 } from "discord.js";
+import { discord, loadDiscord } from "./discord";
 import {
     AUTO_ACK_DELAY_MS,
     autoAcknowledge,
@@ -123,14 +118,19 @@ function serializeCommandOptions(
 
 // what a close that ends the session means for the person running the bot;
 // these are the codes discord.js gives up on instead of reconnecting
-const GATEWAY_CLOSE_REASONS: Partial<Record<number, string>> = {
-    [GatewayCloseCodes.AuthenticationFailed]: "the bot token was rejected",
-    [GatewayCloseCodes.InvalidShard]: "the shard was invalid",
-    [GatewayCloseCodes.ShardingRequired]: "the bot is in too many servers to run without sharding",
-    [GatewayCloseCodes.InvalidAPIVersion]: "the gateway version is not supported",
-    [GatewayCloseCodes.InvalidIntents]: "the requested intents are invalid",
-    [GatewayCloseCodes.DisallowedIntents]: "the bot asked for a privileged intent that is not enabled in the Discord Developer Portal",
-};
+// (a close code only ever comes from a client, so discord.js is loaded here)
+function gatewayCloseReason(code: number): string | undefined {
+    const { GatewayCloseCodes } = discord();
+    const reasons: Partial<Record<number, string>> = {
+        [GatewayCloseCodes.AuthenticationFailed]: "the bot token was rejected",
+        [GatewayCloseCodes.InvalidShard]: "the shard was invalid",
+        [GatewayCloseCodes.ShardingRequired]: "the bot is in too many servers to run without sharding",
+        [GatewayCloseCodes.InvalidAPIVersion]: "the gateway version is not supported",
+        [GatewayCloseCodes.InvalidIntents]: "the requested intents are invalid",
+        [GatewayCloseCodes.DisallowedIntents]: "the bot asked for a privileged intent that is not enabled in the Discord Developer Portal",
+    };
+    return reasons[code];
+}
 
 const gatewayErrorMessage = (err: unknown): string => {
     if (err instanceof Error) return err.message;
@@ -141,7 +141,7 @@ const gatewayErrorMessage = (err: unknown): string => {
         // discord.js 14 fills a close event's reason with a deprecation
         // notice, never what Discord sent: the code is the only truth
         if (typeof obj.code === "number") {
-            const why = GATEWAY_CLOSE_REASONS[obj.code];
+            const why = gatewayCloseReason(obj.code);
             return why ? `Discord closed the gateway (${obj.code}): ${why}` : `Discord closed the gateway (${obj.code})`;
         }
         if (obj.code !== undefined) return `Discord closed the gateway (${String(obj.code)})`;
@@ -324,6 +324,7 @@ export class BotSession {
     listGuilds(): BotGuildInfo[] {
         const bot = this.client;
         if (!bot) return [];
+        const { ChannelType } = discord();
         return [...bot.guilds.cache.values()].slice(0, 100).map((guild) => ({
             id: guild.id,
             name: guild.name,
@@ -446,6 +447,10 @@ export class BotSession {
         if (!token) throw new Error("No bot token is stored for this bot.");
         const attempt = ++this.connectSequence;
         await this.release();
+        // discord.js arrives with the first bot that starts; a service whose
+        // bots are all off never loads it. Loaded for a test's own client
+        // too, since everything a session does afterwards counts on it.
+        const { Client, GatewayIntentBits } = await this.loadLibrary(attempt);
         // A newer attempt (or a stop) may have started while we awaited the
         // release: from here on every write to session state
         // (client/connectionStatus) is sequence-checked — a losing attempt
@@ -524,6 +529,22 @@ export class BotSession {
             this.host.changed();
             this.emit("on-connection-error", { error: message });
             throw new Error(`Discord login failed: ${message}`);
+        }
+    }
+
+    // a library that will not load is a failed connection like any other:
+    // the bot's status says so, and start() throws it
+    private async loadLibrary(attempt: number): Promise<Awaited<ReturnType<typeof loadDiscord>>> {
+        try {
+            return await loadDiscord();
+        } catch (err) {
+            const message = `discord.js could not be loaded: ${errorToMessage(err)}`;
+            console.error("[DiscordService]", message);
+            if (attempt === this.connectSequence) {
+                this.connectionStatus = { connected: false, error: message };
+                this.host.changed();
+            }
+            throw new Error(message);
         }
     }
 
@@ -904,6 +925,7 @@ export class BotSession {
 }
 
 function optionPayload(option: SlashCommandOption): ApplicationCommandOptionData {
+    const { ApplicationCommandOptionType } = discord();
     const base = {
         name: option.name,
         description: option.description,
@@ -938,6 +960,7 @@ export function commandPayload(
     // configured contexts, which would silently promote a guild-only
     // command to user installs once the portal enables them. contexts is
     // left unset so a user-install command works on every surface.
+    const { ApplicationCommandType, ApplicationIntegrationType } = discord();
     return {
         type: ApplicationCommandType.ChatInput,
         name: def.name,
@@ -964,6 +987,7 @@ export async function syncSlashCommands(
     commands: SlashCommandDefinition[],
     scopesToClear: string[] = [],
 ): Promise<string[]> {
+    await loadDiscord();
     const application = bot.application;
     if (!application) {
         throw new Error(
@@ -1011,18 +1035,23 @@ export async function syncSlashCommands(
 // server explorer
 // ---------------------------------------------------------------------------
 
-const CHANNEL_KIND_BY_TYPE: Record<number, DiscordChannelKind> = {
-    [ChannelType.GuildText]: "text",
-    [ChannelType.GuildVoice]: "voice",
-    [ChannelType.GuildCategory]: "category",
-    [ChannelType.GuildAnnouncement]: "announcement",
-    [ChannelType.GuildStageVoice]: "stage",
-    [ChannelType.GuildForum]: "forum",
-    [ChannelType.GuildMedia]: "media",
-};
+let channelKindByType: Record<number, DiscordChannelKind> | undefined;
 
+// (a channel's type only ever comes from a client, so discord.js is loaded here)
 export function describeChannelKind(type: number): DiscordChannelKind {
-    return CHANNEL_KIND_BY_TYPE[type] ?? "other";
+    if (!channelKindByType) {
+        const { ChannelType } = discord();
+        channelKindByType = {
+            [ChannelType.GuildText]: "text",
+            [ChannelType.GuildVoice]: "voice",
+            [ChannelType.GuildCategory]: "category",
+            [ChannelType.GuildAnnouncement]: "announcement",
+            [ChannelType.GuildStageVoice]: "stage",
+            [ChannelType.GuildForum]: "forum",
+            [ChannelType.GuildMedia]: "media",
+        };
+    }
+    return channelKindByType[type] ?? "other";
 }
 
 // bounded slices: Discord caps channels and roles per guild, and these caps

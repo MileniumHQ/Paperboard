@@ -475,8 +475,8 @@ export const builderCommands: BlockCommandDefinition[] = [
             image: { type: "url", name: "Image", optional: true },
         },
         output: "embed",
-        run: (inputs: { title: string; description?: string; color?: string; url?: string; footer?: string; image?: string }) =>
-            buildDiscordEmbed(inputs).toJSON(),
+        run: async (inputs: { title: string; description?: string; color?: string; url?: string; footer?: string; image?: string }) =>
+            (await buildDiscordEmbed(inputs)).toJSON(),
     },
     {
         id: "create-button",
@@ -863,7 +863,7 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
                 interaction,
             },
             run: async (i) => {
-                await bot.interactions().showModal(i.interaction, buildModalPayload({ title: i.title, modalId: i["modal-id"], fields: i.fields }));
+                await bot.interactions().showModal(i.interaction, await buildModalPayload({ title: i.title, modalId: i["modal-id"], fields: i.fields }));
             },
         },
         // channels
@@ -1883,7 +1883,7 @@ export interface BotsBlocksHost {
     restart(id: string): Promise<void>;
     createCommand(id: string, input: Record<string, unknown>): Promise<CommandMutationResult>;
     deleteCommand(id: string, commandId: string): Promise<CommandMutationResult>;
-    inviteLink(id: string, permissions: string[] | undefined): string;
+    inviteLink(id: string, permissions: string[] | undefined): Promise<string>;
     userInstallLink(id: string): string;
 }
 
