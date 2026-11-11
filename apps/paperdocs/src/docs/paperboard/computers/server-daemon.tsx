@@ -141,14 +141,15 @@ Paired Computers (0):
 
             <PaperText preset="subheader" as="h2" id="npx">Run it with npx</PaperText>
             <PaperText preset="body" as="p">
-                On a computer with Node.js 18 or newer, the <PaperCode>@mileniumhq/paperboard</PaperCode> package downloads the server daemon and runs it in one step:
+                On a computer with Node.js 18 or newer, the <PaperCode>@mileniumhq/paperboard</PaperCode> package downloads the server daemon and runs it in one step, without the desktop app:
             </PaperText>
             <PaperCode block language="sh">
 {`npx @mileniumhq/paperboard serve`}
             </PaperCode>
             <PaperText preset="body" as="p">
                 It downloads the same signed program as the table above, checks its signature and checksum before unpacking it, and keeps it in a folder of its own: <PaperCode>~/.local/share/papercrane/&lt;version&gt;</PaperCode> on Linux, <PaperCode>~/Library/Application Support/papercrane/&lt;version&gt;</PaperCode> on macOS, and <PaperCode>%LOCALAPPDATA%\papercrane\&lt;version&gt;</PaperCode> on Windows.
-                Every word after the package name goes to the daemon, so <PaperCode>npx @mileniumhq/paperboard pair</PaperCode> and <PaperCode>npx @mileniumhq/paperboard install-service</PaperCode> work too.
+                Every command but <PaperCode>install</PaperCode>, <PaperCode>web</PaperCode> and <PaperCode>help</PaperCode> goes to the daemon, so <PaperCode>npx @mileniumhq/paperboard pair</PaperCode> and <PaperCode>npx @mileniumhq/paperboard install-service</PaperCode> work too.
+                With no command, the package opens the desktop app instead; see <PaperLink href="/docs/paperboard/install/#terminal">Install from a terminal</PaperLink>.
             </PaperText>
             <PaperText preset="body" as="p">
                 The package runs server daemon 0.3.0 or newer. If the newest published daemon is older, it stops with an error that names both versions, and downloads nothing.

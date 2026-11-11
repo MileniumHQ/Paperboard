@@ -8,7 +8,7 @@ Paperboard runs on your own computers. Your panels, their files and settings, an
 
 ## What reaches our servers
 
-Paperboard downloads panels from our panel library (origami.ariapis.com), and app updates from i.paperboard.dev and GitHub. Like any website, these servers see your IP address and which file you asked for. Our host, Cloudflare, keeps request logs for a few days so we can keep the service running and fix problems. We do not combine them with anything else.
+Paperboard downloads panels from our panel library (origami.ariapis.com), and app updates from i.paperboard.dev and GitHub. The install command (`curl -fsSL https://i.paperboard.dev | sh`, or `npx @mileniumhq/paperboard install`) downloads Paperboard from the same two places. Like any website, these servers see your IP address and which file you asked for. Our host, Cloudflare, keeps request logs for a few days so we can keep the service running and fix problems. We do not combine them with anything else.
 
 This website stores your light or dark theme choice in your browser and nothing else. It sets no cookies.
 

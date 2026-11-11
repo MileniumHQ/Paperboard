@@ -2,12 +2,13 @@
     "name": "@mileniumhq/paperboard",
     "version": "0.3.0",
     "type": "module",
-    "description": "Run the Paperboard server daemon: npx @mileniumhq/paperboard serve",
+    "description": "Install and open Paperboard, or run its server daemon: npx @mileniumhq/paperboard",
     "bin": {
         "paperboard": "./dist/cli.js"
     },
     "files": [
-        "dist"
+        "dist",
+        "install"
     ],
     "engines": {
         "node": ">=18"
@@ -15,7 +16,8 @@
     "scripts": {
         "build": "tsc --noEmit && bun build ./src/cli.ts --outfile dist/cli.js --target=node",
         "test": "bun run build && bun test ./test",
-        "prepublishOnly": "bun run build"
+        "prepublishOnly": "bun run build",
+        "postinstall": "node install/postinstall.mjs"
     },
     "devDependencies": {
         "@types/node": "^22.20.5",
@@ -28,7 +30,8 @@
     "keywords": [
         "paperboard",
         "server",
-        "self-hosted"
+        "self-hosted",
+        "dashboard"
     ],
     "author": "Paperboard <https://paperboard.dev>",
     "homepage": "https://paperboard.dev",

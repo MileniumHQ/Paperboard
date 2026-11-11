@@ -17,6 +17,43 @@ export default function InstallDoc() {
                 For a computer without a screen, install the server daemon instead.
             </PaperText>
 
+            <PaperText preset="subheader" as="h2" id="terminal">Install from a terminal</PaperText>
+            <PaperText preset="body" as="p">
+                One command downloads the right file for your computer, checks it against the release's checksums, and installs it. On Linux or macOS:
+            </PaperText>
+            <PaperCode block language="sh">
+{`curl -fsSL https://i.paperboard.dev | sh`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                On Windows, in PowerShell:
+            </PaperText>
+            <PaperCode block language="text">
+{`irm https://i.paperboard.dev | iex`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                With Node.js 18 or newer, <PaperCode>npx @mileniumhq/paperboard install</PaperCode> and <PaperCode>npm install -g @mileniumhq/paperboard</PaperCode> run the same installer.
+                <PaperCode>npx @mileniumhq/paperboard</PaperCode> opens Paperboard, and asks to install it first if it isn't installed. <PaperCode>npx @mileniumhq/paperboard web</PaperCode> opens it in your browser.
+            </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Computer</th>
+                        <th>What it installs</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>Windows</td><td>Paperboard's installer, run for your account only.</td></tr>
+                    <tr><td>macOS</td><td>Paperboard.app, in <PaperCode>/Applications</PaperCode>. Quit Paperboard first if it's running.</td></tr>
+                    <tr><td>Debian, Ubuntu</td><td>The deb, with apt. It asks for your password through sudo.</td></tr>
+                    <tr><td>Fedora, openSUSE</td><td>The rpm, with dnf or zypper. It asks for your password through sudo.</td></tr>
+                    <tr><td>Any other Linux</td><td>The AppImage, in <PaperCode>~/.local/share/paperboard</PaperCode>, with an applications menu entry and the <PaperCode>paperboard</PaperCode> command in <PaperCode>~/.local/bin</PaperCode>.</td></tr>
+                </tbody>
+            </PaperTable>
+            <PaperText preset="body" as="p">
+                To pick the Linux format yourself, set <PaperCode>PAPERBOARD_INSTALL_AS</PaperCode> to <PaperCode>deb</PaperCode>, <PaperCode>rpm</PaperCode> or <PaperCode>appimage</PaperCode>.
+                Running it again updates Paperboard to the latest release.
+            </PaperText>
+
             <PaperText preset="subheader" as="h2" id="download">Download</PaperText>
             <PaperText preset="body" as="p">
                 Pick the file for your computer. The same links are on the <PaperLink href="/downloads/">Downloads</PaperLink> page.
@@ -175,8 +212,10 @@ export default function InstallDoc() {
                 <li>An update of something a panel is running, such as a game server, waits instead of stopping it. The top bar shows <b>1 update is waiting</b>. Select it, then <b>Stop and update</b>: the panel stops what it runs, the update installs, and the panel starts it again.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
-                Paperboard installed on Linux from the deb or rpm does not update itself.
-                It tells you when a new version is out, and <b>Download update</b> gets the new package. Install it over the old one the same way you installed it.
+                Paperboard installed on Linux from its deb or rpm updates the same way: the new package downloads in the background, and <b>Restart to update</b> installs it with your package manager.
+                Installing a package needs your password, so your computer asks for it first.
+                On a computer without <PaperCode>pkexec</PaperCode>, which asks for it, Paperboard tells you when a new version is out, and <b>Download update</b> gets the new package to install over the old one.
+                Paperboard installed by a package that isn't ours updates through the package manager it came from.
             </PaperText>
 
             <PaperText preset="body" as="p">
