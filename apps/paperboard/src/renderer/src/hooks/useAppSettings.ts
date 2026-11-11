@@ -39,7 +39,7 @@ export function useAppSettings() {
     // Mirrors the motion preference onto the document for PaperUI tokens
     createEffect(() => {
         if (typeof document !== "undefined") {
-            if (look().reducedMotion) {
+            if (look().disableAnimations) {
                 document.documentElement.setAttribute(
                     "data-paperui-motion",
                     "reduced",

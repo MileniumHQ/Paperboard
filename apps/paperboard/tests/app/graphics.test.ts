@@ -8,15 +8,22 @@ describe("drawing without a GPU", () => {
         for (const status of ["disabled_software", "unavailable_software", "disabled_off", "unavailable_off"]) expect(graphicsFrom(status)).toEqual({ gpu: false });
     });
 
-    test("without one, animations and blur are off whatever the settings say", () => {
-        expect(effectiveLook({ reducedMotion: false, disableBlur: false }, { gpu: false })).toEqual({ reducedMotion: true, disableBlur: true });
+    test("with nothing chosen, animations and blur are off only without one", () => {
+        expect(effectiveLook({}, { gpu: false })).toEqual({ disableAnimations: true, disableBlur: true });
+        expect(effectiveLook({}, { gpu: true })).toEqual({ disableAnimations: false, disableBlur: false });
     });
 
-    test("with one, the settings are what shows", () => {
-        for (const reducedMotion of [false, true]) {
-            for (const disableBlur of [false, true]) {
-                expect(effectiveLook({ reducedMotion, disableBlur }, { gpu: true })).toEqual({ reducedMotion, disableBlur });
+    test("a choice is what shows, with a GPU or without", () => {
+        for (const gpu of [false, true]) {
+            for (const disableAnimations of [false, true]) {
+                for (const disableBlur of [false, true]) {
+                    expect(effectiveLook({ disableAnimations, disableBlur }, { gpu })).toEqual({ disableAnimations, disableBlur });
+                }
             }
         }
+    });
+
+    test("each is chosen on its own", () => {
+        expect(effectiveLook({ disableBlur: false }, { gpu: false })).toEqual({ disableAnimations: true, disableBlur: false });
     });
 });

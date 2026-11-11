@@ -58,7 +58,7 @@ export default function MotionDoc() {
             </PaperText>
             <PaperTextList>
                 <li>The operating system's <PaperCode>prefers-reduced-motion: reduce</PaperCode> setting applies on <PaperCode>:root</PaperCode>.</li>
-                <li>An ancestor with <PaperCode>data-paperui-motion="reduced"</PaperCode> applies to its subtree, and also cuts every transition and animation in it to 0.01 milliseconds and runs animations once. Paperboard writes this attribute on a panel's <PaperCode>html</PaperCode> element: <PaperCode>"reduced"</PaperCode> when the user turns on Disable animations in Paperboard's settings or the computer has no graphics card, <PaperCode>"auto"</PaperCode> otherwise.</li>
+                <li>An ancestor with <PaperCode>data-paperui-motion="reduced"</PaperCode> applies to its subtree, and also cuts every transition and animation in it to 0.01 milliseconds and runs animations once. Paperboard writes this attribute on a panel's <PaperCode>html</PaperCode> element: <PaperCode>"reduced"</PaperCode> when Disable animations is on in Paperboard's settings, which it is until the user chooses on a computer with no graphics card, <PaperCode>"auto"</PaperCode> otherwise.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
                 Under reduced motion <PaperLink href="/docs/paperui/papereffect/">PaperEffect</PaperLink> stops moving on hover and press, and <PaperLink href="/docs/paperui/paperpresence/">PaperPresence</PaperLink> removes an element at once instead of waiting for its exit animation.
@@ -99,7 +99,7 @@ export function scrollToEnd(el: HTMLElement) {
             </PaperText>
             <PaperTextList>
                 <li>The operating system's <PaperCode>prefers-reduced-transparency: reduce</PaperCode> setting applies on <PaperCode>:root</PaperCode>.</li>
-                <li>An ancestor with <PaperCode>data-paperui-blur="off"</PaperCode> applies to its subtree, and also removes every backdrop filter in it, even one written without the variables. Paperboard writes this attribute on a panel's <PaperCode>html</PaperCode> element: <PaperCode>"off"</PaperCode> when the user turns on Disable blur in Paperboard's settings or the computer has no graphics card, <PaperCode>"auto"</PaperCode> otherwise.</li>
+                <li>An ancestor with <PaperCode>data-paperui-blur="off"</PaperCode> applies to its subtree, and also removes every backdrop filter in it, even one written without the variables. Paperboard writes this attribute on a panel's <PaperCode>html</PaperCode> element: <PaperCode>"off"</PaperCode> when Disable blur is on in Paperboard's settings, which it is until the user chooses on a computer with no graphics card, <PaperCode>"auto"</PaperCode> otherwise.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
                 Blur your own elements with these variables so they obey the same switch, and give them a background that stays legible without it.

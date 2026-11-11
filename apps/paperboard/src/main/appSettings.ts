@@ -17,15 +17,15 @@ import {
 // when it has no explicit theme, and it also applies CSS tokens immediately.
 export interface AppSettings {
     darkMode: "system" | "light" | "dark";
-    reducedMotion: boolean;
-    disableBlur: boolean;
+    /** absent until chosen: off on a GPU, on without one (shared/graphics.ts) */
+    disableAnimations?: boolean;
+    /** absent until chosen, the same way */
+    disableBlur?: boolean;
     runOnStartup: boolean;
 }
 
 const DEFAULTS: AppSettings = {
     darkMode: "system",
-    reducedMotion: false,
-    disableBlur: false,
     runOnStartup: false,
 };
 
@@ -96,7 +96,7 @@ async function applyToFrame(frame: WebFrameMain): Promise<void> {
         const js = `
             (() => {
                 document.documentElement.setAttribute('data-paperui-motion', ${JSON.stringify(
-                    look.reducedMotion ? "reduced" : "auto",
+                    look.disableAnimations ? "reduced" : "auto",
                 )});
                 document.documentElement.setAttribute('data-paperui-theme', ${JSON.stringify(
                     resolvedTheme,

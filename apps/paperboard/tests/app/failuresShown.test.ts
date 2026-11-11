@@ -58,7 +58,7 @@ describe("failures reach the caller", () => {
         const second = await launchElectron({ appDir: app.dir, dataDir: saveDir, args: ["--skip-update"] });
         await shellReady(second);
         await second.evalIn(SHELL, `document.querySelector('[role=radio][aria-label="Settings"]').click()`);
-        // Run on startup: animations and blur are locked on a runner without a GPU, and a failed save applies nothing
+        // Run on startup: a failed save applies nothing, so no login item is made
         const toggle = `document.querySelector('[role=switch]:has(input[name=runOnStartup])')`;
         await second.evalIn(SHELL, domCondition(toggle));
         // the settings folder stops taking writes

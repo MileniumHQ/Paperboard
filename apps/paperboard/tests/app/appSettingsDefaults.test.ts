@@ -1,17 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { withAppSettingsDefaults } from "../../src/shared/appSettingsDefaults";
 
-const DEFAULTS = { darkMode: "system", reducedMotion: false, disableBlur: false, runOnStartup: false };
+const DEFAULTS: { darkMode: string; runOnStartup: boolean; disableAnimations?: boolean; disableBlur?: boolean } = { darkMode: "system", runOnStartup: false };
 
 describe("app settings over their defaults", () => {
-    test("settings saved before blur was its own setting keep blur off when reduce motion was on", () => {
-        expect(withAppSettingsDefaults(DEFAULTS, { reducedMotion: true })).toMatchObject({ reducedMotion: true, disableBlur: true });
-        expect(withAppSettingsDefaults(DEFAULTS, { reducedMotion: false })).toMatchObject({ reducedMotion: false, disableBlur: false });
+    test("reduce motion turned on before the split keeps animations and blur off", () => {
+        expect(withAppSettingsDefaults(DEFAULTS, { reducedMotion: true })).toEqual({ ...DEFAULTS, disableAnimations: true, disableBlur: true });
     });
 
-    test("a saved blur setting is kept as it is, whatever motion says", () => {
-        expect(withAppSettingsDefaults(DEFAULTS, { reducedMotion: true, disableBlur: false })).toMatchObject({ reducedMotion: true, disableBlur: false });
-        expect(withAppSettingsDefaults(DEFAULTS, { reducedMotion: false, disableBlur: true })).toMatchObject({ reducedMotion: false, disableBlur: true });
+    test("reduce motion left off before the split is no choice at all", () => {
+        expect(withAppSettingsDefaults(DEFAULTS, { reducedMotion: false })).toEqual(DEFAULTS);
+    });
+
+    test("a saved choice is kept as it is, and the other one stays unchosen", () => {
+        expect(withAppSettingsDefaults(DEFAULTS, { disableAnimations: true })).toEqual({ ...DEFAULTS, disableAnimations: true });
+        expect(withAppSettingsDefaults(DEFAULTS, { disableBlur: false })).toEqual({ ...DEFAULTS, disableBlur: false });
+        expect(withAppSettingsDefaults(DEFAULTS, { reducedMotion: true, disableBlur: false })).toEqual({ ...DEFAULTS, disableAnimations: true, disableBlur: false });
     });
 
     test("nothing saved is the defaults", () => {

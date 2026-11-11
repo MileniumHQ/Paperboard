@@ -27,11 +27,14 @@ import styles from "./AppSettings.module.css";
 // in this repo, so the text cannot drift from the license on disk.
 import paperboardLicenseText from "../../../../../LICENSE?raw";
 import mitLicenseText from "../../../../../../../packages/paperui/LICENSE?raw";
+import { effectiveLook } from "../../../../shared/graphics";
 
 export interface AppSettingsData {
     darkMode: "system" | "light" | "dark";
-    reducedMotion: boolean;
-    disableBlur: boolean;
+    /** absent until chosen: off on a GPU, on without one */
+    disableAnimations?: boolean;
+    /** absent until chosen, the same way */
+    disableBlur?: boolean;
     runOnStartup: boolean;
     /** where Paperboard opens: Home, or a computer's id */
     startOn: string;
@@ -39,8 +42,6 @@ export interface AppSettingsData {
 
 export const APP_SETTINGS_DEFAULTS: AppSettingsData = {
     darkMode: "system",
-    reducedMotion: false,
-    disableBlur: false,
     runOnStartup: false,
     startOn: START_ON_HOME,
 };
@@ -53,7 +54,7 @@ export interface StartComputer {
 }
 
 const START_ON_NOTE = "Open Paperboard on Home or on a computer's panels.";
-const NO_GPU = "Always on here: this computer has no graphics card, and Paperboard would lag with it off.";
+const NO_GPU = "On because this computer has no graphics card, and Paperboard would lag with it off.";
 const START_ON_MISSING = "That computer isn't listed anymore, so Paperboard opens Home.";
 
 // Home, then each computer the rail lists, the way the rail shows them. A
@@ -113,7 +114,7 @@ export default function AppSettings(props: {
     compact?: boolean;
     /** a load or save that didn't go through */
     failure?: SettingsFailure | null;
-    /** false where there's no GPU: animations and blur are off whatever the settings say */
+    /** false where there's no GPU: animations and blur are off until the user chooses */
     gpu: boolean;
     onRetryLoad?: () => void;
     onDismissFailure?: () => void;
@@ -127,6 +128,13 @@ export default function AppSettings(props: {
     };
 
     const startOnMissing = () => startTarget(props.settings.startOn, props.computers).missing;
+
+    // what shows, and whether it's on only because there's no GPU
+    const look = () => ({
+        ...effectiveLook(props.settings, { gpu: props.gpu }),
+        animationsByDefault: !props.gpu && props.settings.disableAnimations === undefined,
+        blurByDefault: !props.gpu && props.settings.disableBlur === undefined,
+    });
 
     const handleChange = (next: Record<string, any>) => {
         props.onChange({ ...props.settings, ...next });
@@ -161,7 +169,7 @@ export default function AppSettings(props: {
                             load: `These are the defaults, not your settings: ${failure().message}`,
                             save: `Your change was not kept: ${failure().message}`,
                             apply: failure().message,
-                            graphics: `Animations and blur follow your settings, even if this computer has no graphics card: ${failure().message}`,
+                            graphics: `Animations and blur stay on unless you turn them off, even if this computer has no graphics card: ${failure().message}`,
                         }[failure().kind]}
                         <Show when={failure().kind === "load" && props.onRetryLoad}>
                             <PaperButton size="tiny" onClick={() => props.onRetryLoad?.()}>Retry loading</PaperButton>
@@ -224,23 +232,21 @@ export default function AppSettings(props: {
 
                 <PaperSettingItem
                     title="Disable animations"
-                    description={props.gpu ? "Turns off animations and transitions." : NO_GPU}
+                    description={look().animationsByDefault ? NO_GPU : "Turns off animations and transitions."}
                 >
                     <PaperToggle
-                        name="reducedMotion"
-                        checked={props.settings.reducedMotion || !props.gpu}
-                        disabled={!props.gpu}
+                        name="disableAnimations"
+                        checked={look().disableAnimations}
                     />
                 </PaperSettingItem>
 
                 <PaperSettingItem
                     title="Disable blur"
-                    description={props.gpu ? "Turns off the blur behind dialogs and overlays." : NO_GPU}
+                    description={look().blurByDefault ? NO_GPU : "Turns off the blur behind dialogs and overlays."}
                 >
                     <PaperToggle
                         name="disableBlur"
-                        checked={props.settings.disableBlur || !props.gpu}
-                        disabled={!props.gpu}
+                        checked={look().disableBlur}
                     />
                 </PaperSettingItem>
 
@@ -384,11 +390,11 @@ function CompactSettings(props: {
                         </div>
                         <label class={styles.row}>
                             <PaperText preset="label" class={styles.label}>Disable animations</PaperText>
-                            <PaperToggle name="reducedMotion" checked={props.settings.reducedMotion || !props.gpu} disabled={!props.gpu} />
+                            <PaperToggle name="disableAnimations" checked={effectiveLook(props.settings, { gpu: props.gpu }).disableAnimations} />
                         </label>
                         <label class={styles.row}>
                             <PaperText preset="label" class={styles.label}>Disable blur</PaperText>
-                            <PaperToggle name="disableBlur" checked={props.settings.disableBlur || !props.gpu} disabled={!props.gpu} />
+                            <PaperToggle name="disableBlur" checked={effectiveLook(props.settings, { gpu: props.gpu }).disableBlur} />
                         </label>
                     </div>
                 </section>
