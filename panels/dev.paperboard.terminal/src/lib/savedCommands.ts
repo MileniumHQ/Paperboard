@@ -71,6 +71,8 @@ export interface SavedCommandsDeps {
     publish(view: SavedCommandsView): void;
     /** A run of a command that is still saved ended: its outcome, as the view now shows it. */
     onFinished?(command: SavedCommand, outcome: Exclude<CommandRun, { state: "running" }>): void;
+    /** What busy() answers may have changed. */
+    onBusyChange?(): void;
     now?: () => number;
     newId?: () => string;
     timeoutMs?: number;
@@ -178,6 +180,8 @@ export class SavedCommands {
     private loadError = "";
     private loaded = false;
     private transactions: Promise<void> = Promise.resolve();
+    /** transactions asked for and not finished yet */
+    private writing = 0;
     private readonly now: () => number;
     private readonly newId: () => string;
     private readonly timeoutMs: number;
@@ -285,6 +289,7 @@ export class SavedCommands {
         const procId = `pinned_${command.id}_${startedAt.toString(36)}`;
         const live: LiveRun = { commandId: command.id, procId, startedAt, accepted: false, offExit: () => {}, timedOut: false, stopping: false, settled: false };
         this.live.set(command.id, live);
+        this.deps.onBusyChange?.();
         this.listen(live);
         const previousRun = this.runs[command.id];
         this.runs = { ...this.runs, [command.id]: { state: "running", startedAt } };
@@ -389,6 +394,11 @@ export class SavedCommands {
         }
     }
 
+    /** A run is in flight, or a change to the file is still being written. */
+    busy(): boolean {
+        return this.live.size > 0 || this.writing > 0;
+    }
+
     /** Test/diagnostic: how many children are in flight. */
     liveCount(): number {
         return this.live.size;
@@ -416,6 +426,7 @@ export class SavedCommands {
         live.settled = true;
         live.offExit();
         if (this.live.get(live.commandId) === live) this.live.delete(live.commandId);
+        this.deps.onBusyChange?.();
         live.onSettled?.();
         if (previousRun) this.runs = { ...this.runs, [live.commandId]: previousRun };
         else {
@@ -467,6 +478,7 @@ export class SavedCommands {
             }
             const live: LiveRun = { commandId: rec.commandId, procId: rec.procId, startedAt: rec.startedAt, accepted: true, offExit: () => {}, timedOut: false, stopping: false, settled: false };
             this.live.set(rec.commandId, live);
+            this.deps.onBusyChange?.();
             this.listen(live);
             this.runs = { ...this.runs, [rec.commandId]: { state: "running", startedAt: rec.startedAt } };
             const left = Math.max(0, this.timeoutMs - (this.now() - rec.startedAt));
@@ -536,11 +548,14 @@ export class SavedCommands {
      */
     private transaction<T>(work: () => Promise<T>): Promise<T> {
         const result = this.transactions.then(work);
+        this.writing++;
+        this.deps.onBusyChange?.();
+        const done = () => {
+            this.writing--;
+            this.deps.onBusyChange?.();
+        };
         // the chain only orders transactions; each one's failure reaches its own caller
-        this.transactions = result.then(
-            () => undefined,
-            () => undefined,
-        );
+        this.transactions = result.then(done, done);
         return result;
     }
 

@@ -7,6 +7,7 @@ import {
     files,
     resolveOneShotShell,
     blocksApi,
+    actionsApi,
     type ServiceContext,
 } from "@mileniumhq/paperapi";
 import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scrollback";
@@ -53,6 +54,41 @@ const subscribedSessions = new Set<string>();
 // teardown handles for the listeners above: a closed tab must detach, not
 // just hide behind the tabs.some() guard inside the callbacks
 const sessionUnsubs = new Map<string, Array<() => void>>();
+// tabs whose shell is running, as far as this service knows: the daemon said
+// so, or this service started it and has not heard it exit. One that could
+// not be checked counts, so its output is never left uncaptured.
+const liveSessions = new Set<string>();
+// what this service sent the daemon that nobody waits for (an event, a
+// scrollback write) and has not landed yet
+let unsettled = 0;
+// the tabs are read and the running shells taken back: until then the service is starting, not idle
+let started = false;
+
+/**
+ * Says whether the service has nothing to do until an action calls it: no
+ * shell whose output and exit it must hear, no scrollback waiting to be
+ * written, no saved command running or being recorded, and nothing still on
+ * its way to the daemon. Called after every change to any of those.
+ */
+function updateIdle(): void {
+    serviceCtx?.setIdle(started && liveSessions.size === 0 && persistTimers.size === 0 && unsettled === 0 && !savedCommands.busy());
+}
+
+function setLive(id: string, live: boolean): void {
+    if (live) liveSessions.add(id);
+    else liveSessions.delete(id);
+    updateIdle();
+}
+
+/** Keeps the service awake until `work`, which nobody waits for, has ended. */
+function settling(work: Promise<unknown>): void {
+    unsettled++;
+    updateIdle();
+    work.finally(() => {
+        unsettled--;
+        updateIdle();
+    });
+}
 
 function scrollbackPath(id: string): string {
     return `${SCROLLBACK_DIR}/${id}.log`;
@@ -65,9 +101,9 @@ function schedulePersist(id: string) {
         id,
         setTimeout(() => {
             persistTimers.delete(id);
-            files.write(scrollbackPath(id), buffers.get(id) || "", PANEL_ID).catch((err) =>
+            settling(files.write(scrollbackPath(id), buffers.get(id) || "", PANEL_ID).catch((err) =>
                 console.error(`[TerminalService] scrollback persist failed for ${id}:`, err),
-            );
+            ));
         }, 500),
     );
 }
@@ -95,6 +131,7 @@ function cancelPersistTimer(id: string) {
     const timer = persistTimers.get(id);
     if (timer) clearTimeout(timer);
     persistTimers.delete(id);
+    updateIdle();
 }
 
 export function subscribeSession(id: string, ctx: Ctx | null) {
@@ -108,8 +145,13 @@ export function subscribeSession(id: string, ctx: Ctx | null) {
                 schedulePersist(id);
             }),
             terminalApi.onExit(id, (exitCode) => {
-                ctx?.emitTrigger("terminal-exit", { tabId: id, exitCode });
-                announcer.fire("terminal-exit", exitPayload(id, exitCode));
+                if (ctx) {
+                    settling(actionsApi.emitTrigger("terminal-exit", { tabId: id, exitCode }, PANEL_ID).catch((err) =>
+                        console.error("[TerminalService] Failed to emit trigger 'terminal-exit':", err),
+                    ));
+                }
+                settling(announcer.fire("terminal-exit", exitPayload(id, exitCode)));
+                setLive(id, false);
             }),
         ];
         sessionUnsubs.set(id, unsubs);
@@ -172,8 +214,11 @@ async function ensureSession(id: string, cols?: number, rows?: number): Promise<
         exists = await terminalApi.exists(id);
     } catch (err) {
         console.error(`[TerminalService] session probe failed for ${id}:`, err);
+        // it may be running: counted as live until it is heard to exit
+        setLive(id, true);
     }
     if (exists) {
+        setLive(id, true);
         // an existing session keeps whatever size its pty was spawned or
         // last set to: a viewer returning with a different size (window
         // resized while away, fonts changed) would otherwise desync the
@@ -195,11 +240,12 @@ async function ensureSession(id: string, cols?: number, rows?: number): Promise<
     buffers.set(id, "");
     await files.write(scrollbackPath(id), "", PANEL_ID);
     await terminalApi.create(id, { cols, rows });
+    setLive(id, true);
 }
 
-// startup and create-tab start shells ahead of any viewer; one shell that
-// cannot start must not stop the others or lose the tab. Opening the tab
-// (open-tab) retries and reports the failure to the viewer.
+// create-tab starts its shell ahead of any viewer; a shell that cannot
+// start must not lose the tab. Opening the tab (open-tab) retries and
+// reports the failure to the viewer.
 async function tryEnsureSession(id: string): Promise<void> {
     try {
         await ensureSession(id);
@@ -274,7 +320,8 @@ export const savedCommands = new SavedCommands({
         serviceCtx?.setState(view);
         announcer.list("saved-commands", view.savedCommands.map((c) => c.id));
     },
-    onFinished: (command, outcome) => announcer.fire("saved-command-finished", finishedPayload(command, outcome)),
+    onFinished: (command, outcome) => settling(announcer.fire("saved-command-finished", finishedPayload(command, outcome))),
+    onBusyChange: () => updateIdle(),
 });
 
 // the daemon stops this service with SIGTERM: the runs it started are its to
@@ -320,6 +367,7 @@ export async function closeTab(ctx: Ctx, input: string | undefined): Promise<voi
     // a shell that would not stop keeps its tab, so it stays reachable
     await terminalApi.destroy(id);
     tabs = tabs.filter((t) => t.id !== id);
+    liveSessions.delete(id);
     buffers.delete(id);
     // teardown: detach listeners and drop the subscription id, then
     // cancel the pending debounce so no write fires for a dead tab
@@ -687,15 +735,21 @@ export const terminalService = definePanelService({
         if (tabs.length === 0) {
             tabs.push({ id: "tab1", label: "Tab 1" });
             activeTabId = "tab1";
-            await tryEnsureSession("tab1");
             subscribeSession("tab1", ctx);
             await persistTabs(ctx);
-        } else {
-            if (!tabs.some((t) => t.id === activeTabId)) {
-                activeTabId = tabs[0].id;
-            }
-            for (const tab of tabs) {
-                await tryEnsureSession(tab.id);
+        } else if (!tabs.some((t) => t.id === activeTabId)) {
+            activeTabId = tabs[0].id;
+        }
+        // No shell is started here: a tab's shell starts when the tab is
+        // opened or written to. The shells still running from before this
+        // service started are found, so they are heard again.
+        for (const tab of tabs) {
+            try {
+                if (await terminalApi.exists(tab.id)) setLive(tab.id, true);
+            } catch (err) {
+                console.error(`[TerminalService] session probe failed for ${tab.id}:`, err);
+                // it may be running: counted as live until it is heard to exit
+                setLive(tab.id, true);
             }
         }
 
@@ -724,6 +778,8 @@ export const terminalService = definePanelService({
             { tabs: tabs.map((t) => t.id), "active-tab": [activeTabId], "saved-commands": savedCommands.view().savedCommands.map((c) => c.id) },
         );
         publishTabs(ctx);
+        started = true;
+        updateIdle();
         console.log(`[TerminalService] Ready with ${tabs.length} persistent session(s).`);
     },
 });
