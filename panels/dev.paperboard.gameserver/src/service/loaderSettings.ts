@@ -118,7 +118,7 @@ async function locate(fs: LoaderFs, root: string, file: LoaderFile, world: strin
     return null;
 }
 
-function readValue(file: LoaderFile, text: string, setting: LoaderSetting): string | null {
+async function readValue(file: LoaderFile, text: string, setting: LoaderSetting): Promise<string | null> {
     switch (file.format) {
         case "yaml":
             return readYamlValue(text, setting.path);
@@ -129,7 +129,7 @@ function readValue(file: LoaderFile, text: string, setting: LoaderSetting): stri
     }
 }
 
-function writeValue(file: LoaderFile, text: string, setting: LoaderSetting, value: string): string {
+async function writeValue(file: LoaderFile, text: string, setting: LoaderSetting, value: string): Promise<string> {
     if (file.seeded) {
         if (file.format !== "yaml") throw new Error(`${file.label}: only YAML files can be seeded`);
         const type = setting.control === "toggle" ? "boolean" : setting.control === "number" ? "number" : "string";
@@ -190,7 +190,7 @@ export async function readSchemaSettings(
             const text = await readCapped(fs, nodePath.join(root, ...relative.split("/")));
             const shown: LoaderSettingView[] = [];
             for (const setting of settings) {
-                const value = readValue(file, text, setting) ?? (file.seeded ? defaultOf(setting) : null);
+                const value = (await readValue(file, text, setting)) ?? (file.seeded ? defaultOf(setting) : null);
                 // a key this version's file does not have is not this version's setting
                 if (value !== null) shown.push(view(setting, value));
             }
@@ -242,7 +242,7 @@ export async function writeSchemaSetting(
             await fs.mkdir(nodePath.dirname(absolute), { recursive: true });
         }
         // written whole or not at all: the server reads this file at start
-        await writeFileAtomic(fs, absolute, writeValue(file, text, setting, value));
+        await writeFileAtomic(fs, absolute, await writeValue(file, text, setting, value));
         return { id: setting.id, value, path: relative };
     });
 }

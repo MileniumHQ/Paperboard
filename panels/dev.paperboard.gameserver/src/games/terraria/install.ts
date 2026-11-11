@@ -2,7 +2,7 @@ import { PANEL_ID } from "../../service/contract";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { unzipSync } from "fflate";
+import { loadZip } from "../../core/lazy";
 import { files, type ServiceContext } from "../../service/api";
 import type { GameServerState } from "../../service/types";
 import { archiveFor, entrypoint, releaseFor, tmodloaderReleaseFor, TMODLOADER_ENTRYPOINT, type TerrariaSoftware } from "./catalog";
@@ -12,6 +12,7 @@ export async function unpackArchive(archive: Uint8Array, target: string, version
     if (archive.length !== release.size || createHash("sha256").update(archive).digest("hex") !== release.sha256) throw new Error("Terraria archive size/SHA-256 mismatch; nothing was installed");
     const folder = entrypoint(os).split("/")[0]!;
     const prefix = `${release.directory}/${folder}/`;
+    const { unzipSync } = await loadZip();
     const entries = unzipSync(archive, { filter: file => file.name.startsWith(prefix) });
     for (const [name, bytes] of Object.entries(entries)) {
         const relative = name.slice(prefix.length);
@@ -33,6 +34,7 @@ function safeRelative(name: string): string {
 export async function unpackTmodloader(archive: Uint8Array, target: string, version: string): Promise<void> {
     const release = tmodloaderReleaseFor(version);
     if (archive.length !== release.size || createHash("sha256").update(archive).digest("hex") !== release.sha256) throw new Error("tModLoader archive size/SHA-256 mismatch; nothing was installed");
+    const { unzipSync } = await loadZip();
     const names: string[] = [];
     unzipSync(archive, { filter: file => { names.push(safeRelative(file.name)); return false; } });
     for (let i = 0; i < names.length; i += 64) {

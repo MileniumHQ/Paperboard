@@ -171,7 +171,7 @@ async function resolveHead(
     if (kept) return kept;
     const bytes = await fetchSkinBytes(skin.url);
     if (!bytes) return null;
-    const head = composeHeadFromSkin(bytes, size);
+    const head = await composeHeadFromSkin(bytes, size);
     if (!head) return null;
     const dataUrl = `data:image/png;base64,${Buffer.from(head).toString("base64")}`;
     keep(heads, headKey, dataUrl);

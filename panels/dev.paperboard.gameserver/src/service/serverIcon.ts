@@ -1,6 +1,7 @@
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
-import { PNG } from "pngjs";
+import type { PNG as Png } from "pngjs";
+import { loadPng } from "../core/lazy";
 import { serializedFileTask, writeFileAtomic } from "./fileWrites";
 import { SERVER_ICON_FILE, SERVER_ICON_SIZE } from "../core/serverIcon";
 
@@ -36,7 +37,8 @@ export async function setServerIcon(png: unknown, deps: ServerIconDeps): Promise
     if (bytes.length > MAX_ICON_BYTES) {
         throw new Error(`The icon is ${Math.ceil(bytes.length / 1024)} KB; a server icon is at most ${MAX_ICON_BYTES / 1024} KB.`);
     }
-    let image: PNG;
+    const { PNG } = await loadPng();
+    let image: Png;
     try {
         image = PNG.sync.read(bytes);
     } catch (err) {

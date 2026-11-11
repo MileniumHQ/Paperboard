@@ -1,5 +1,6 @@
 // Game Server installed in the test daemon's data dir the way an install
-// leaves it (panels/<id>/manifest.json and the built dist/service.js), so the
+// leaves it (panels/<id>/manifest.json and the built dist/service.js with the
+// parts it loads later beside it, built as package.json builds them), so the
 // daemon runs the panel's real service itself, restarts it, and backs it up.
 // Its state is watched through the panel bridge, as the panel's page does.
 import { spawnSync } from "node:child_process";
@@ -17,7 +18,7 @@ export function installPanel(dataDir = process.env.PAPERBOARD_DIR!): void {
     const target = path.join(dataDir, "panels", PANEL_ID);
     fs.mkdirSync(path.join(target, "dist"), { recursive: true });
     fs.copyFileSync(path.join(PANEL, "manifest.json"), path.join(target, "manifest.json"));
-    const build = spawnSync(process.execPath, ["build", "./src/service.ts", "--outfile", path.join(target, "dist", "service.js"), "--target=node", "--external", "@mileniumhq/paperui"], { cwd: PANEL, encoding: "utf8" });
+    const build = spawnSync(process.execPath, ["build", "./src/service.ts", "--outdir", path.join(target, "dist"), "--entry-naming", "[name].[ext]", "--chunk-naming", "service/[name]-[hash].[ext]", "--splitting", "--target=node", "--external", "@mileniumhq/paperui"], { cwd: PANEL, encoding: "utf8" });
     if (build.status !== 0) throw new Error(`Building the panel service failed (exit ${build.status}):\n${build.stdout}\n${build.stderr}`);
 }
 

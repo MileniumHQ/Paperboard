@@ -1,5 +1,5 @@
 import * as nodePath from "node:path";
-import { parse as parseYaml } from "yaml";
+import { loadYaml } from "../core/lazy";
 import { isValidEntryName } from "../core/dirs";
 import { pluginDirName } from "../core/plugins";
 import { SOFTWARE, type ServerSoftwareType } from "../software/catalog";
@@ -28,10 +28,11 @@ function stringField(value: unknown): string | null {
 }
 
 /** the plugin's `name` from paper-plugin.yml or plugin.yml */
-export function pluginNameFrom(entries: Map<string, string>): string | null {
+export async function pluginNameFrom(entries: Map<string, string>): Promise<string | null> {
     for (const file of PLUGIN_DESCRIPTORS) {
         const text = entries.get(file);
         if (text === undefined) continue;
+        const { parse: parseYaml } = await loadYaml();
         const doc = parseYaml(text) as { name?: unknown } | null;
         const name = stringField(doc?.name);
         if (name) return name;
@@ -123,7 +124,7 @@ export async function locateAddonConfig(
     const jarPath = nodePath.join(root, jarDir, filename);
 
     if (addons.kind === "plugin") {
-        const name = pluginNameFrom(await readJarEntries(jarPath, PLUGIN_DESCRIPTORS));
+        const name = await pluginNameFrom(await readJarEntries(jarPath, PLUGIN_DESCRIPTORS));
         if (!name) {
             return { name, reveal: null, message: `${filename} does not name itself, so Paperboard cannot tell which folder is its own.` };
         }

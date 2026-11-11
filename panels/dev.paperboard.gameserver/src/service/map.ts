@@ -2,8 +2,8 @@ import { minecraftSoftware } from "../games/minecraft/index";
 import { serverLocal } from "./scope";
 import * as fs from "node:fs";
 import { gunzipSync, inflateSync } from "node:zlib";
-import nbt from "prismarine-nbt";
-import { PNG } from "pngjs";
+import type { PNG as Png } from "pngjs";
+import { loadNbt, loadPng } from "../core/lazy";
 import { files as fileApi, type ServiceContext } from "./api";
 import { tryListDirectory } from "./filesystem";
 import { resolveVersionProfile, worldPathsFor, type VersionProfile } from "../lib/versionProfile";
@@ -256,6 +256,8 @@ function surfaceBlockAt(
 // prismarine-nbt long arrays are [high, low] pairs; longPairToBigInt in
 // core/map.ts owns the conversion (and its test)
 async function parseChunk(buffer: Buffer): Promise<ChunkNbt | null> {
+    // outside the try below: a library that won't load is an error, not an unreadable chunk
+    const nbt = await loadNbt();
     try {
         const parsed = await nbt.parse(buffer);
         return nbt.simplify(parsed.parsed) as ChunkNbt;
@@ -324,6 +326,7 @@ export async function renderMapTile(
         return { dataUrl: cached.dataUrl, dimension, rx, rz };
     }
 
+    const { PNG } = await loadPng();
     const buffer = fs.readFileSync(absolute);
     const png = new PNG({ width: REGION_BLOCKS, height: REGION_BLOCKS });
     const minY = DIMENSION_MIN_BUILD[dimension];
@@ -391,7 +394,7 @@ function readChunkBuffer(region: Buffer, cx: number, cz: number): ChunkBuffer | 
 }
 
 async function paintChunk(
-    png: PNG,
+    png: Png,
     chunkBuffer: Buffer,
     cx: number,
     cz: number,

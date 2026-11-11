@@ -1,4 +1,4 @@
-import { isMap, isScalar, parseDocument } from "yaml";
+import { loadYaml } from "./lazy";
 
 // Reads and edits one scalar in a loader's config file without rewriting
 // the rest of it: comments, ordering and indentation stay as the software
@@ -10,7 +10,8 @@ export type ScalarText = string;
 
 // ─── YAML (Paper, Spigot, Bukkit) ─────────────────────────────────────
 
-export function readYamlValue(text: string, path: string[]): ScalarText | null {
+export async function readYamlValue(text: string, path: string[]): Promise<ScalarText | null> {
+    const { isScalar, parseDocument } = await loadYaml();
     const doc = parseDocument(text);
     if (doc.errors.length > 0) throw new Error(`Could not parse the file: ${doc.errors[0]!.message}`);
     const node = doc.getIn(path, true);
@@ -28,7 +29,8 @@ export function readYamlValue(text: string, path: string[]): ScalarText | null {
  * re-serializing the document re-indents lists and trims comment lines
  * elsewhere in the file.
  */
-export function setYamlValue(text: string, path: string[], value: ScalarText): string {
+export async function setYamlValue(text: string, path: string[], value: ScalarText): Promise<string> {
+    const { isMap, isScalar, parseDocument } = await loadYaml();
     const doc = parseDocument(text);
     if (doc.errors.length > 0) throw new Error(`Could not parse the file: ${doc.errors[0]!.message}`);
     const parent = doc.getIn(path.slice(0, -1), true);
@@ -55,7 +57,8 @@ export type YamlScalarType = "boolean" | "number" | "string";
  * creating its parent maps. Adding re-serializes the document, which is
  * why only seeded files use this.
  */
-export function upsertYamlValue(text: string, path: string[], value: ScalarText, type: YamlScalarType): string {
+export async function upsertYamlValue(text: string, path: string[], value: ScalarText, type: YamlScalarType): Promise<string> {
+    const { isMap, isScalar, parseDocument } = await loadYaml();
     const doc = parseDocument(text);
     if (doc.errors.length > 0) throw new Error(`Could not parse the file: ${doc.errors[0]!.message}`);
     if (isScalar(doc.getIn(path, true))) return setYamlValue(text, path, value);

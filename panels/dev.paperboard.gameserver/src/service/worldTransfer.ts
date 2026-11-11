@@ -2,7 +2,8 @@ import { serverLocal } from "./scope";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { randomUUID } from "node:crypto";
-import { Unzip, UnzipInflate, Zip, ZipDeflate, ZipPassThrough, type UnzipFile } from "fflate";
+import type { UnzipFile } from "fflate";
+import { loadZip } from "../core/lazy";
 import { files as fileApi, type ServiceContext } from "./api";
 import {
     DIMENSION_SUFFIXES,
@@ -109,6 +110,7 @@ export async function writeZip(root: string, folders: string[], target: string):
         throw new Error(`This world has over ${MAX_WORLD_EXPORT_ENTRIES} files, more than one download can hold`);
     }
 
+    const { Zip, ZipDeflate, ZipPassThrough } = await loadZip();
     const out = await nodeFs.open(target, "w");
     let written = 0;
     let failure: unknown = null;
@@ -203,6 +205,7 @@ export function importWorld(file: unknown, requestedName: unknown): Promise<{ na
 }
 
 async function readZip(archive: string, onFile: (file: UnzipFile) => void, settle: () => Promise<void>): Promise<void> {
+    const { Unzip, UnzipInflate } = await loadZip();
     const unzip = new Unzip(onFile);
     unzip.register(UnzipInflate);
     const handle = await nodeFs.open(archive, "r");

@@ -1,6 +1,7 @@
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
-import { Unzip, UnzipInflate, type UnzipFile } from "fflate";
+import type { UnzipFile } from "fflate";
+import { loadZip } from "../core/lazy";
 import {
     INDEX_ENTRY,
     MAX_INDEX_BYTES,
@@ -40,6 +41,7 @@ export async function extractMrpack(opts: {
     layersDir: string;
     levelName: string;
 }): Promise<ExtractedPack> {
+    const { Unzip, UnzipInflate } = await loadZip();
     const layers: Map<string, string>[] = OVERRIDE_DIRS.map(() => new Map());
     const kept: string[] = [];
     const indexChunks: Uint8Array[] = [];

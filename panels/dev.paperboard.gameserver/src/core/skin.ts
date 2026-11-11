@@ -2,7 +2,8 @@
 // head is an 8×8 face at (8,8) plus an 8×8 hat overlay at (40,8); the hat
 // layer carries the alpha. Pure and testable so the service never ships an
 // image it cannot verify.
-import { PNG } from "pngjs";
+import type { PNG as Png } from "pngjs";
+import { loadPng } from "./lazy";
 
 const FACE_X = 8;
 const FACE_Y = 8;
@@ -44,7 +45,7 @@ interface Rgba {
  * and smaller. Returns null when the pixel falls outside the layer.
  */
 function sampleLayer(
-    skin: PNG,
+    skin: Png,
     originX: number,
     originY: number,
     scale: number,
@@ -74,7 +75,7 @@ function sampleLayer(
  * nothing to show, that layer has no visible extent, so the face fills the
  * frame instead of reserving an invisible 0.5-texel border.
  */
-function hatLayerHasAlpha(skin: PNG): boolean {
+function hatLayerHasAlpha(skin: Png): boolean {
     for (let y = 0; y < LAYER; y++) {
         for (let x = 0; x < LAYER; x++) {
             const i = ((HAT_Y + y) * skin.width + (HAT_X + x)) * 4;
@@ -89,11 +90,13 @@ function hatLayerHasAlpha(skin: PNG): boolean {
  * square image. Returns null when the bytes are not a skin we understand
  * (corrupt PNG, or smaller than the head regions) — never a blank image.
  */
-export function composeHeadFromSkin(
+export async function composeHeadFromSkin(
     skinBytes: Uint8Array,
     size: number = DEFAULT_HEAD_SIZE,
-): Uint8Array | null {
-    let skin: PNG;
+): Promise<Uint8Array | null> {
+    // outside the try below: a library that won't load is an error, not a bad skin
+    const { PNG } = await loadPng();
+    let skin: Png;
     try {
         skin = PNG.sync.read(Buffer.from(skinBytes));
     } catch (err) {
