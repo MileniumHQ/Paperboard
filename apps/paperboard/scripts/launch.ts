@@ -9,12 +9,22 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { electronChildEnv, electronViteArgs } from "./launchEnv";
+import { buildSupervisor } from "../../../scripts/supervisor";
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const isWindows = process.platform === "win32";
 const shim = join(appDir, "node_modules", ".bin", isWindows ? "electron-vite.cmd" : "electron-vite");
 if (!existsSync(shim)) {
     console.error(`electron-vite is not installed at ${shim}. Run bun install first.`);
+    process.exit(1);
+}
+
+// the app reads its workload supervisor from resources/; a stale or missing
+// one would only show when the first terminal or server is started
+try {
+    buildSupervisor();
+} catch (err) {
+    console.error((err as Error).message);
     process.exit(1);
 }
 

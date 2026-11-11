@@ -203,3 +203,21 @@ export function getLinuxDistroInfo(): {
     }
     return { distroId: "linux", distroName: "Linux" };
 }
+
+// the shell a terminal runs when its creator named none
+export function getDefaultShell(): string {
+    if (process.platform === "win32") {
+        return process.env.COMSPEC || "powershell.exe";
+    }
+    if (process.platform === "darwin") {
+        if (fs.existsSync("/bin/zsh")) return "/bin/zsh";
+        if (fs.existsSync("/bin/bash")) return "/bin/bash";
+        return "/bin/sh";
+    }
+    if (process.env.SHELL && fs.existsSync(process.env.SHELL)) {
+        return process.env.SHELL;
+    }
+    if (fs.existsSync("/bin/bash")) return "/bin/bash";
+    if (fs.existsSync("/usr/bin/bash")) return "/usr/bin/bash";
+    return "/bin/sh";
+}

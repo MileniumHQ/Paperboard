@@ -4,7 +4,8 @@ import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { SupervisedProcessClient, supervisorPresent } from "./supervisor";
-import { mountAppImage, inMount, stopMountHolder, supervisorLaunch, type AppImageMount } from "./supervisorLaunch";
+import { supervisorLaunch } from "./supervisorLaunch";
+import { supervisorBinary } from "./supervisorBinary";
 import { logger } from "./logger";
 import { LimitError } from "./storage";
 import { getLogsDir } from "./paths";
@@ -63,20 +64,6 @@ export interface PreListeners {
     attach?: (client: any) => void;
 }
 
-// electron-vite bundles the supervisor entry beside the app's main bundle
-// (electron.vite.config.ts); the main bundle says where that is at launch.
-// require.main can't: Electron's app mode names its main module "electron".
-let desktopEntry: string | null = null;
-export function setDesktopSupervisorEntry(entry: string): void {
-    if (!path.isAbsolute(entry)) throw new Error(`The desktop app's supervisor must be an absolute path: ${entry}`);
-    desktopEntry = entry;
-}
-function desktopSupervisorEntry(): string {
-    if (!desktopEntry) throw new Error("The desktop app did not say where its supervisor is");
-    if (!fs.existsSync(desktopEntry)) throw new Error(`The desktop app's supervisor is missing: ${desktopEntry}`);
-    return desktopEntry;
-}
-
 export async function spawnSupervisedClient(
     id: string,
     supervisorConfig: any,
@@ -107,28 +94,13 @@ export async function spawnSupervisedClient(
         if (live) throw new Error(`Process ${id} is already running; attach to it instead of starting it again`);
     }
 
-    const launch = supervisorLaunch(id, {
-        execPath: process.execPath,
-        electron: Boolean(process.versions.electron),
-        platform: process.platform,
-        env: process.env,
-        entry: process.versions.electron ? desktopSupervisorEntry() : undefined,
-    });
-    let { command, args } = launch;
-    let config = supervisorConfig;
-    let mount: AppImageMount | null = null;
-    if (launch.appImage) {
-        mount = await mountAppImage(launch.appImage.image);
-        command = inMount(command, launch.appImage.appDir, mount.dir);
-        args = [inMount(args[0]!, launch.appImage.appDir, mount.dir), ...args.slice(1)];
-        config = { ...supervisorConfig, mountHolderPid: mount.holder.pid };
-    }
+    const launch = supervisorLaunch(id, await supervisorBinary());
 
     let supervisorProc: ChildProcess;
     let startupStderr: StartupStderr | undefined;
     try {
         startupStderr = StartupStderr.open();
-        supervisorProc = spawn(command, args, {
+        supervisorProc = spawn(launch.command, launch.args, {
             detached: true,
             env: launch.env,
             stdio: ["pipe", "ignore", startupStderr.fd],
@@ -136,22 +108,14 @@ export async function spawnSupervisedClient(
         });
     } catch (err) {
         startupStderr?.discard();
-        stopMountHolder(mount?.holder.pid);
         throw err;
-    }
-    // the supervisor stops its mount as it exits; one that dies before it
-    // can (a bad config, a crash) is caught here while this host is up, and
-    // by the adoption sweep (engine.ts) after a restart
-    if (mount) {
-        const holder = mount.holder.pid;
-        supervisorProc.once("exit", () => stopMountHolder(holder));
     }
 
     if (supervisorProc.stdin) {
         // a supervisor that dies before reading its config must not leave
         // an unhandled EPIPE rejection behind
         supervisorProc.stdin.on("error", (err) => logger.debug(`[engineSupervisor] supervisor ${id} stdin closed early:`, err));
-        supervisorProc.stdin.write(JSON.stringify(config));
+        supervisorProc.stdin.write(JSON.stringify(supervisorConfig));
         supervisorProc.stdin.end();
     }
     supervisorProc.unref();
@@ -166,11 +130,14 @@ export async function spawnSupervisedClient(
     if (preListeners?.onExit) client.on("exit", preListeners.onExit);
     preListeners?.attach?.(client);
 
-    // up to 5 s: the desktop app's supervisor is an Electron binary starting
-    // in node mode, sometimes from a fresh AppImage mount. One that has
-    // exited is never coming up.
+    // up to 5 s for the endpoint to appear. A supervisor that has exited is
+    // never coming up.
     let supervisorExited = supervisorProc.exitCode !== null || supervisorProc.signalCode !== null;
     supervisorProc.once("exit", () => { supervisorExited = true; });
+    // a binary the system refuses to run (a data directory mounted noexec)
+    // is reported here, with no exit to follow
+    let spawnFailure: Error | null = null;
+    supervisorProc.once("error", (err) => { spawnFailure = err; supervisorExited = true; });
     for (let i = 0; i < 100 && !supervisorExited; i++) {
         const connected = await client.connect();
         if (connected) break;
@@ -180,7 +147,8 @@ export async function spawnSupervisedClient(
     if (!client.isConnected()) {
         client.destroy(); clientsMap.delete(id);
         // read before the stop below: that one's own exit is not the cause
-        const cause = supervisorExited ? exitDescription(supervisorProc) : "it did not answer within 5 s";
+        const failure = spawnFailure as Error | null;
+        const cause = failure ? `${launch.command} could not be run: ${failure.message}` : supervisorExited ? exitDescription(supervisorProc) : "it did not answer within 5 s";
         let stderr: string;
         try { stderr = startupStderr.tail(); }
         catch (err) { stderr = `(its stderr could not be read: ${err instanceof Error ? err.message : String(err)})`; }
@@ -214,11 +182,11 @@ export async function spawnSupervisedClient(
 // A start failure must not leave the detached supervisor (or its child)
 // running unclaimed: it is not in the clients map, so nothing without this
 // teardown reaches it. The supervisor handles SIGTERM explicitly
-// (supervisor.ts: cleanupAndExit), which unlinks the endpoint too. Each
+// (supervisor/supervisor.go: cleanupAndExit), which unlinks the endpoint too. Each
 // signal is a request; the exit is what is observed.
 export async function stopSpawnedSupervisor(id: string, supervisorProc: ChildProcess): Promise<void> {
     if (supervisorProc.exitCode !== null || supervisorProc.signalCode !== null) return;
-    // SIGTERM → supervisor.ts's cleanupAndExit stops the workload too
+    // SIGTERM → the supervisor's cleanupAndExit stops the workload too
     try {
         supervisorProc.kill("SIGTERM");
     } catch (err) {

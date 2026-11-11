@@ -17,6 +17,8 @@ tmp/
 coverage/
 # generated USB bundle (installers + panels), built by scripts/publish.ts
 apps/usb/
+# the workload supervisor, built from apps/paperboard/supervisor by scripts/supervisor.ts
+apps/paperboard/resources/supervisor/
 logs/
 report.[0-9]*.json
 .idea

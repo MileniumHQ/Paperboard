@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import AdmZip from "adm-zip";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { Data, Format, NtExecutable, NtExecutableResource, Resource } from "resedit";
-import { writeNodePtySidecar } from "./craneSidecar";
+import { buildSupervisor, SUPERVISOR_TARGETS, type SupervisorTarget } from "./supervisor";
 import { patchPeIcon } from "./windowsIcon";
 
 const ROOT = join(import.meta.dir, "..");
@@ -161,22 +161,21 @@ function iconResources(bytes: Uint8Array): { groups: (string | number)[]; frames
     };
 }
 
-// Windows crane binaries ship working.
-describe("Windows crane binaries ship working", () => {
-    test("the sidecar from the app's resolved node-pty has its JS entry and the win32-x64 conpty addon", () => {
-        const nodePty = dirname(appRequire.resolve("node-pty/package.json"));
-        writeNodePtySidecar(work, nodePty);
-        const sidecar = join(work, "node-pty");
-        expect(statSync(join(sidecar, "lib", "index.js")).isFile()).toBe(true);
-        expect(statSync(join(sidecar, "prebuilds", "win32-x64", "conpty.node")).isFile()).toBe(true);
-        const agent = readFileSync(join(sidecar, "lib", "windowsPtyAgent.js"), "utf8");
-        expect(agent).toContain("Paperboard sidecar patch");
-        expect(agent).not.toContain("this._inSocket = new net_1.Socket({");
-        const shipped = readdirSync(join(sidecar, "prebuilds", "win32-x64"), { recursive: true }) as string[];
-        expect(shipped.filter((f) => f.endsWith(".pdb") || f.endsWith(".map"))).toEqual([]);
-        // only the Windows prebuilds ship
-        expect(readdirSync(join(sidecar, "prebuilds"))).toEqual(["win32-x64"]);
-    });
+// Server binaries ship working.
+describe("server binaries ship working", () => {
+    test("the workload supervisor builds for every release target, as the kind of program that target runs", () => {
+        // what each system's loader looks for at the start of a program
+        const magic: Record<string, number[]> = {
+            linux: [0x7f, 0x45, 0x4c, 0x46],
+            darwin: [0xcf, 0xfa, 0xed, 0xfe],
+            win32: [0x4d, 0x5a],
+        };
+        for (const target of Object.keys(SUPERVISOR_TARGETS) as SupervisorTarget[]) {
+            const built = readFileSync(buildSupervisor(target));
+            const expected = magic[SUPERVISOR_TARGETS[target].platform]!;
+            expect({ target, magic: [...built.subarray(0, expected.length)] }).toEqual({ target, magic: expected });
+        }
+    }, 300_000);
 
     test("stamping the icon onto a Bun-shaped PE keeps the sections after .rsrc where they were", () => {
         const { bytes, payload } = bunShapedPe();

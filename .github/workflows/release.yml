@@ -65,6 +65,11 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+      # the workload supervisor (apps/paperboard/supervisor) is Go
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/paperboard/supervisor/go.mod
+          cache-dependency-path: apps/paperboard/supervisor/go.sum
       - name: Cache Bun packages and electron-builder's downloads
         uses: actions/cache@v4
         with:

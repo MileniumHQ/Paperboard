@@ -61,7 +61,7 @@ export default function ServerDaemonDoc() {
                     <tr>
                         <td>Windows, x64</td>
                         <td><PaperLink href="https://i.paperboard.dev/crane/latest/crane-windows-x64.zip">crane-windows-x64.zip</PaperLink></td>
-                        <td><PaperCode>papercrane-windows-x64.exe</PaperCode> and a <PaperCode>node-pty</PaperCode> folder</td>
+                        <td><PaperCode>papercrane-windows-x64.exe</PaperCode></td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -100,7 +100,7 @@ install -m 755 papercrane-linux-x64 ~/.local/bin/papercrane
             <PaperText preset="subheader" as="h2" id="windows">Install on Windows</PaperText>
             <PaperTextList ordered>
                 <li>Download <PaperCode>crane-windows-x64.zip</PaperCode>, right-click it and choose <b>Extract All</b>.</li>
-                <li>Move the extracted folder where it can stay. Keep the <PaperCode>node-pty</PaperCode> folder next to <PaperCode>papercrane-windows-x64.exe</PaperCode>: terminals need it.</li>
+                <li>Move <PaperCode>papercrane-windows-x64.exe</PaperCode> where it can stay.</li>
                 <li>Open a terminal in that folder and run <PaperCode>.\papercrane-windows-x64.exe</PaperCode>.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">

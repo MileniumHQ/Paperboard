@@ -5,7 +5,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { BUN_TARGET_MAP, type Target } from "../../../../../../scripts/publishLib";
-import { writeNodePtySidecar } from "../../../../../../scripts/craneSidecar";
+import { buildSupervisor } from "../../../../../../scripts/supervisor";
 import { tempDir } from "./temp";
 
 export const APP_DIR = path.resolve(import.meta.dir, "../../../..");
@@ -140,10 +140,9 @@ export async function compileCrane(options: { version?: string; bootFailure?: bo
         }],
     });
     if (!result.success) throw new Error(`crane bundle failed:\n${result.logs.map(String).join("\n")}`);
-    await run([process.execPath, "build", "--compile", `--target=${BUN_TARGET_MAP[target]}`, path.join(bundleDir, "main.js"), "--outfile", file], bundleDir);
+    // the workload supervisor travels inside the server, as in a release
+    await run([process.execPath, "build", "--compile", `--target=${BUN_TARGET_MAP[target]}`, path.join(bundleDir, "main.js"), buildSupervisor(target), "--outfile", file], bundleDir);
     if (!fs.existsSync(file)) throw new Error(`crane compile produced no ${file}`);
-    // every Windows crane ships the node-pty sidecar beside it
-    if (target.startsWith("windows")) writeNodePtySidecar(dir, path.join(APP_DIR, "node_modules", "node-pty"));
     return { file, version, target };
 }
 

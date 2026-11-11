@@ -36,7 +36,7 @@ import {
 import { join, basename, extname } from "path";
 import { tmpdir } from "os";
 import * as tar from "tar";
-import { writeNodePtySidecar } from "./craneSidecar";
+import { buildSupervisor } from "./supervisor";
 import { discoverPanels, PANELS_ROOT } from "./publishManifest";
 import {
     ALL_TARGETS,
@@ -376,18 +376,6 @@ function applyCraneWindowsIcon(filePath: string): void {
     if (existsSync(icon)) applyWindowsIcon(filePath, icon);
 }
 
-// npm ships node-pty's spawn-helper without the exec bit and electron-builder
-// copies it verbatim, so an unsigned macOS .app packaged on any host (Linux
-// CI included) would get a pty helper that can never execute. Restore the bit
-// in-place before packaging; a missing helper is left as-is (node-pty may not
-// ship every arch).
-function ensureMacSpawnHelpers(): void {
-    for (const arch of ["x64", "arm64"]) {
-        const helper = join(HERE, "node_modules", "node-pty", "prebuilds", `darwin-${arch}`, "spawn-helper");
-        if (existsSync(helper)) chmodSync(helper, 0o755);
-    }
-}
-
 interface BuiltBinary {
     app: DlApp;
     target: Target;
@@ -423,7 +411,6 @@ async function signMacBinary(filePath: string): Promise<void> {
 // distro packages the same pass produced (Linux).
 async function buildPbTarget(target: Target): Promise<BuiltBinary[]> {
     assertMacHost(target);
-    if (osOf(target) === "macos") ensureMacSpawnHelpers();
     await sh([process.execPath, "run", PB_BUILD_SCRIPT[target]], { quiet: false });
     const artifacts = [paperboardArtifacts(target, version), ...paperboardPackages(target, version)];
     const built: BuiltBinary[] = [];
@@ -458,6 +445,8 @@ async function buildCraneTarget(target: Target): Promise<BuiltBinary> {
             `--target=${bunTarget}`,
             ...craneCompileFlags(target),
             "./papercrane/main.ts",
+            // the workload supervisor travels inside the server (papercrane/main.ts)
+            buildSupervisor(target),
             "--outfile",
             `./dist/${outName}`,
         ],
@@ -501,11 +490,6 @@ async function stageReleaseAssets(built: BuiltBinary[]): Promise<BuiltBinary[]> 
             if (osOf(b.target) === "windows") {
                 const zip = new AdmZip();
                 zip.addFile(b.filename, readFileSync(b.filePath));
-                const sidecarDir = join(distDir, "release-sidecar");
-                rmSync(sidecarDir, { recursive: true, force: true });
-                writeNodePtySidecar(sidecarDir, join(HERE, "node_modules", "node-pty"));
-                zip.addLocalFolder(join(sidecarDir, "node-pty"), "node-pty");
-                rmSync(sidecarDir, { recursive: true, force: true });
                 zip.writeZip(outPath);
             } else {
                 tar.create(
@@ -1346,12 +1330,8 @@ async function buildUsbFolder(oses: Os[], arches: Arch[]) {
     mkdirSync(craneDir, { recursive: true });
     mkdirSync(panelsDir, { recursive: true });
 
-    // A packaged mac app gets a pty helper that can never execute unless
-    // its exec bit is restored first. (Runtime self-heal in pty.ts covers
-    // copies; this covers the build.)
     if (selected.has("macos")) {
         for (const target of targetsForOses(["macos"], arches)) assertMacHost(target);
-        ensureMacSpawnHelpers();
     }
 
     const snapshotDist = () => Date.now();
@@ -1416,18 +1396,13 @@ async function buildUsbFolder(oses: Os[], arches: Arch[]) {
         const bunTarget = BUN_TARGET_MAP[target];
         const outName = os === "windows" ? `papercrane-${target}.exe` : `papercrane-${target}`;
         console.log(`\n🔨 Building Paperboard Server for ${target}…`);
-        await $`bun build --compile --target=${bunTarget} ${craneCompileFlags(target)} ./papercrane/main.ts --outfile ./dist/${outName}`.cwd(HERE);
+        await $`bun build --compile --target=${bunTarget} ${craneCompileFlags(target)} ./papercrane/main.ts ${buildSupervisor(target)} --outfile ./dist/${outName}`.cwd(HERE);
         const built = join(usbDistDir, outName);
         if (!existsSync(built)) throw new Error(`No Paperboard Server binary found at ${built}`);
         if (os === "windows") applyCraneWindowsIcon(built);
         if (os === "macos") await signMacBinary(built);
         cpSync(built, join(craneDir, outName));
         craneFiles.push(`crane/${outName}`);
-    }
-
-    if (selected.has("windows")) {
-        writeNodePtySidecar(craneDir, join(HERE, "node_modules", "node-pty"));
-        console.log(`   → node-pty sidecar (win32-x64)`);
     }
 
     // 3. All panels under panels/ (shared discovery with the publish flow —
@@ -1508,8 +1483,6 @@ ${installerFiles.map((f) => `  ${f}`).join("\n")}
   PAPERBOARD SERVER BINARIES (crane/)
   Standalone Paperboard server daemon per target. Mostly useful for headless boxes:
     ./papercrane-linux-x64 --help
-  Plus node-pty/: helper files the Windows binary needs for real terminal
-  emulation (keep the folder next to the .exe).
 ${craneFiles.map((f) => `  ${f}`).join("\n")}
 
 PANELS (panels/)

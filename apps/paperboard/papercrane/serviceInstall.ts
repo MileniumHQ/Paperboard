@@ -47,13 +47,13 @@ interface Plan {
 const READY_TIMEOUT_MS = 20_000;
 
 // The binary the service runs. From source (`bun papercrane/main.ts`) the
-// runtime is bare bun, which cannot re-invoke itself as a supervisor, so
-// only a compiled papercrane can be a service.
+// runtime is bare bun, which cannot re-invoke itself to run a panel's
+// service, so only a compiled papercrane can be a service.
 function daemonExecutable(): string {
     const main = (globalThis as { Bun?: { main?: string } }).Bun?.main ?? "";
     const compiled = main.startsWith("/$bunfs/") || /^[A-Za-z]:[\\/]~BUN[\\/]/.test(main);
     if (!compiled) {
-        throw new Error("install-service needs the compiled papercrane binary (this is a source checkout). Build it with `bun build --compile ./papercrane/main.ts --outfile papercrane` and run that.");
+        throw new Error("install-service needs the compiled papercrane binary (this is a source checkout). Build it with `bun build --compile ./papercrane/main.ts \`bun ../../scripts/supervisor.ts --path\` --outfile papercrane` and run that.");
     }
     return process.execPath;
 }

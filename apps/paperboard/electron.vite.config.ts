@@ -8,8 +8,6 @@ export default defineConfig({
             rollupOptions: {
                 input: {
                     index: resolve(__dirname, "src/main/index.ts"),
-                    // detached workload supervisor, see papercrane/supervisorLaunch.ts
-                    supervisor: resolve(__dirname, "papercrane/supervisorEntry.ts"),
                 },
             },
         },

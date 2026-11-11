@@ -106,8 +106,8 @@ export async function installCraneRelease(
     if (!verifyRelease(releaseMessage.crane(release.version, release.sha256), release.signature, release.releaseKey ?? RELEASE_PUBLIC_KEY)) {
         throw new Error("Refusing update: the binary is not signed by the Paperboard release key");
     }
-    // Windows cannot replace a running executable (and ships a node-pty
-    // sidecar). Keep its existing refusal until a restart supervisor owns it.
+    // Windows cannot replace a running executable. Keep its existing refusal
+    // until a restart supervisor owns it.
     if (process.platform === "win32") throw new Error("Self-update is not supported on Windows yet");
     const target = `${process.platform === "darwin" ? "macos" : "linux"}-${process.arch}`;
     const name = `papercrane-${target}`;

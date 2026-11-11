@@ -2,7 +2,8 @@
 // Paperboard developer bootstrap. One command takes a fresh checkout to a
 // running dev environment:
 //
-//   bun run setup          install, fetch Electron, build shared libs + panels, link
+//   bun run setup          install, fetch Electron, build shared libs + the
+//                          workload supervisor + panels, link
 //   bun run build:panels   build shared libs + every panel
 //   bun run link:panels    symlink panels/* into $PAPERBOARD_DIR/panels
 //   bun run unlink:panels  remove the links created by link:panels
@@ -18,6 +19,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { linkAllPanels, unlinkPanel, listLinkedPanels } from "../packages/paperapi/src/link";
 import { ensureElectron } from "./ensureElectron";
+import { buildSupervisor } from "./supervisor";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SHARED_PACKAGES = ["packages/paperapi", "packages/paperui"];
@@ -65,6 +67,9 @@ function install(): void {
 
 function buildShared(): void {
     for (const pkg of SHARED_PACKAGES) run(`build ${pkg}`, "bun", ["run", "build"], join(ROOT, pkg));
+    // the workload supervisor the app and the server start (needs Go)
+    console.log("\n=== build the workload supervisor");
+    console.log(buildSupervisor());
 }
 
 function buildPanels(): void {

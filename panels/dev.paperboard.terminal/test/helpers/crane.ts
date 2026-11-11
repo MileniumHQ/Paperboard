@@ -18,6 +18,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { buildSupervisor } from "../../../../scripts/supervisor";
 import { processApi, terminalApi } from "@mileniumhq/paperapi";
 import { within } from "./wait";
 
@@ -47,7 +48,8 @@ export function testDaemon(): Promise<TestDaemon> {
 
 function buildCrane(outDir: string): string {
     const binary = path.join(outDir, process.platform === "win32" ? "papercrane.exe" : "papercrane");
-    const build = spawnSync(process.execPath, ["build", "--compile", CRANE_ENTRY, "--outfile", binary], {
+    // the workload supervisor travels inside the server, as in a release
+    const build = spawnSync(process.execPath, ["build", "--compile", CRANE_ENTRY, buildSupervisor(), "--outfile", binary], {
         cwd: path.join(REPO, "apps/paperboard"),
         encoding: "utf8",
     });

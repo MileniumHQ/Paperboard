@@ -16,7 +16,6 @@ import { createHostAuthorityCheck } from "./hostAuthority";
 import { davMaxUploadBytes, DavSessionStore } from "./dav";
 import { setupWebSocketServer } from "./ws";
 import { PaperCraneTui } from "./tui";
-import { ensureNativeHelpersExecutable } from "./pty";
 import { advertisePaperCrane, isLoopbackHost, type AdvertisementHandle } from "./discovery";
 import { writeFileAtomicSync } from "./storage";
 import { getDisplayHost, getLinuxDistroInfo } from "./util";
@@ -34,7 +33,6 @@ import { readDaemonStatus } from "./localControl";
 export * from "./types";
 export * from "./engine";
 export * from "./auth";
-export * from "./pty";
 export * from "./http";
 export * from "./ws";
 export * from "./tui";
@@ -347,7 +345,6 @@ function listenPaperCraneServer(
     options: ServerOptions,
 ): Promise<ServerInstance> {
     return new Promise((resolve, reject) => {
-        ensureNativeHelpersExecutable();
         // malformed requests must never kill the daemon wordlessly
         const g = globalThis as any;
         if (!g.__papercraneRejectionGuard) {

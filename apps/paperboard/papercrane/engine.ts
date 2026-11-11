@@ -28,7 +28,7 @@ import { getSocketsDir, getPaperboardDir } from "./paths";
 import { logger } from "./logger";
 import { stopMountHolder } from "./supervisorLaunch";
 import { spawnSupervisedClient } from "./engineSupervisor";
-import { getDefaultShell } from "./pty";
+import { getDefaultShell } from "./util";
 import { applyPackageRecipe, extractArchive, extractPackageArchive, findBinDir, packageArchiveSuffix, parsePackageLayout, RECIPE_SUFFIX } from "./engineArchives";
 import { assertRecipeRunsHere, parsePackageRecipe, recipeDigest } from "./packageRecipe";
 import { panelServices, PanelServicesManager } from "./panelServices";

@@ -2,15 +2,15 @@ import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
-import { getSupervisorSocketPath, supervisorEndpointName, supervisorPresent, SupervisedProcessClient } from "../../../papercrane/supervisor";
+import { getSupervisorSocketPath, supervisorEndpointName, supervisorPresent } from "../../../papercrane/supervisor";
 import { supervisorLaunch } from "../../../papercrane/supervisorLaunch";
 import { PaperCraneAuth } from "../../../papercrane/auth";
 import { PanelServicesManager } from "../../../papercrane/panelServices";
-import { APP_DIR, childEnv, killWorkloads, startCrane, workloadRecords, type CraneProcess } from "../../daemon/support/crane";
+import { killWorkloads, startCrane, workloadRecords, type CraneProcess } from "../../daemon/support/crane";
 import { dataDir, tempDir } from "../../daemon/support/fs";
 import { installPanelFiles, serviceSource } from "../../daemon/support/panels";
 import { Rpc } from "../../daemon/support/rpc";
-import { isAlive, TEST_TIMEOUT_MS, waitFor, within } from "../../daemon/support/wait";
+import { isAlive, TEST_TIMEOUT_MS, waitFor } from "../../daemon/support/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 
@@ -83,39 +83,50 @@ describe("stopping the daemon never stops its workloads", () => {
 		await rpc.close();
 	});
 
-	test("the crane supervises with its own binary, and the desktop supervisor drops ELECTRON_RUN_AS_NODE before its workload starts", async () => {
-		expect(supervisorLaunch("w1", { execPath: "/opt/papercrane", electron: false, platform: "linux", env: {} })).toEqual({ command: "/opt/papercrane", args: ["--supervise", "w1"], env: {} });
-		const desktop = supervisorLaunch("w1", { execPath: "/opt/Paperboard", electron: true, platform: "linux", env: { APPIMAGE: "/home/u/Paperboard.AppImage", APPDIR: "/tmp/.mount_x" }, entry: "/tmp/.mount_x/out/main/supervisor.js" });
-		expect(desktop.args).toEqual(["/tmp/.mount_x/out/main/supervisor.js", "--supervise", "w1"]);
-		expect(desktop.env.ELECTRON_RUN_AS_NODE).toBe("1");
-		expect(desktop.appImage).toEqual({ image: "/home/u/Paperboard.AppImage", appDir: "/tmp/.mount_x" });
+	test("every host starts the supervisor from its own copy in the data directory, and a copy that was changed is replaced", async () => {
+		expect(supervisorLaunch("w1", "/data/local/bin/paperboard-supervisor-0123456789abcdef", "/data", { A: "1" })).toEqual({
+			command: "/data/local/bin/paperboard-supervisor-0123456789abcdef",
+			args: ["--data-dir", "/data", "--supervise", "w1"],
+			env: { A: "1" },
+		});
 
-		// the real supervisor entry, started the way the desktop app starts it
 		const dir = dataDir();
-		const probe = path.join(tempDir(), "env.txt");
-		const env = childEnv(dir, { ELECTRON_RUN_AS_NODE: "1" });
-		const entry = spawn(process.execPath, [path.join(APP_DIR, "papercrane/supervisorEntry.ts"), "--supervise", "leak-probe"], env);
-		entry.stdin.end(JSON.stringify({ command: process.execPath, args: ["-e", `require("fs").writeFileSync(${JSON.stringify(probe)}, process.env.ELECTRON_RUN_AS_NODE ?? "unset")`] }));
-		const previous = process.env.PAPERBOARD_DIR;
-		process.env.PAPERBOARD_DIR = dir;
-		try {
-			await waitFor("the supervisor to listen", () => supervisorPresent("leak-probe"));
-			const client = new SupervisedProcessClient("leak-probe");
-			expect(await client.connect()).toBe(true);
-			await waitFor("the workload to report its env", () => fs.existsSync(probe) && fs.readFileSync(probe, "utf8"));
-			client.destroy();
-		} finally {
-			process.env.PAPERBOARD_DIR = previous;
-		}
-		expect(fs.readFileSync(probe, "utf8")).toBe("unset");
-		await within("the supervisor to exit", entry.exited);
+		const bin = path.join(dir, "local", "bin");
+		const copies = () => (fs.existsSync(bin) ? fs.readdirSync(bin).filter((name) => /^paperboard-supervisor-[0-9a-f]{16}(\.exe)?$/.test(name)) : []);
+		const first = await crane(dir);
+		const rpc = await first.rpc();
+		// nothing is copied until a workload needs it
+		expect(copies()).toEqual([]);
+		await rpc.ok("process:run", { id: "copied", ...forever });
+		expect(copies()).toHaveLength(1);
+		const copy = path.join(bin, copies()[0]!);
+		const shipped = fs.readFileSync(copy);
+		if (process.platform !== "win32") expect(fs.statSync(copy).mode & 0o111).not.toBe(0);
+		await rpc.ok("process:kill", { id: "copied" });
+		await exitOf(rpc, "copied");
+		await rpc.close();
+		await stopped(first);
+
+		// a copy someone changed is not what this build ships: it is replaced
+		// before anything runs from it, and an older build's copy is cleared
+		// (swapped in by rename: a program that is still exiting cannot be written to)
+		fs.writeFileSync(`${copy}.swap`, "not the supervisor");
+		await waitFor("the first workload's supervisor to let go of its file", () => {
+			try { fs.renameSync(`${copy}.swap`, copy); return true; }
+			catch (err) { if ((err as NodeJS.ErrnoException).code === "ENOENT") throw err; return false; }
+		});
+		const older = path.join(bin, `paperboard-supervisor-0000000000000000${process.platform === "win32" ? ".exe" : ""}`);
+		fs.writeFileSync(older, "an older build's supervisor");
+		const next = await crane(dir);
+		const again = await next.rpc();
+		await again.ok("process:run", { id: "restored", ...js("console.log('ran')") });
+		expect(await exitOf(again, "restored")).toBe(0);
+		expect(dataOf(again, "restored")).toContain("ran");
+		expect(fs.readFileSync(copy).equals(shipped)).toBe(true);
+		expect(fs.existsSync(older)).toBe(false);
+		await again.close();
 	});
 });
-
-function spawn(command: string, args: string[], env: NodeJS.ProcessEnv) {
-	const child = Bun.spawn([command, ...args], { env: env as Record<string, string>, stdin: "pipe", stdout: "ignore", stderr: "ignore" });
-	return { stdin: { end: (text: string) => { child.stdin.write(text); child.stdin.end(); } }, exited: child.exited };
-}
 
 // Supervised workloads are adopted, reported and stopped faithfully.
 describe("supervised workloads are reported faithfully", () => {
@@ -306,14 +317,21 @@ describe("workloads and terminals take input on every platform", () => {
 			await rpc.close();
 		});
 
-		test("the compiled crane names the node-pty path it needs when the sidecar is missing", async () => {
+		test("a terminal runs its shell behind a pseudoconsole, and takes input and a resize", async () => {
 			const c = await crane();
 			const rpc = await c.rpc();
-			expect((await rpc.fail("term:create", { id: "nopty" })).error).toContain("node-pty");
+			await rpc.ok("term:create", { id: "conpty" });
+			const output = () => rpc.frames.filter((f) => f.event === "term:data" && f.payload.id === "conpty").map((f) => f.payload.data).join("");
+			await rpc.ok("term:write", { id: "conpty", data: "Write-Output ('PTY-' + (6*7))\r" });
+			await waitFor("the terminal's answer", () => output().includes("PTY-42"));
+			await rpc.ok("term:resize", { id: "conpty", cols: 132, rows: 43 });
+			await rpc.ok("term:write", { id: "conpty", data: "Write-Output ('WIDE-' + $Host.UI.RawUI.WindowSize.Width)\r" });
+			await waitFor("the resized terminal's width", () => output().includes("WIDE-132"));
+			await rpc.ok("term:destroy", { id: "conpty" });
 			await rpc.close();
 		});
 	} else {
-		test("under Bun the terminal is a real tty", async () => {
+		test("the terminal is a real tty", async () => {
 			const c = await crane();
 			const rpc = await c.rpc();
 			await rpc.ok("term:create", { id: "tty" });
@@ -324,17 +342,6 @@ describe("workloads and terminals take input on every platform", () => {
 			await rpc.close();
 		});
 	}
-
-	test("the node-pty pin ships a prebuilt native module for every release target", () => {
-		const pkg = JSON.parse(fs.readFileSync(path.join(APP_DIR, "package.json"), "utf8"));
-		expect(pkg.dependencies["node-pty"]).not.toBe("1.1.0");
-		const prebuilds = path.join(path.dirname(require.resolve("node-pty/package.json", { paths: [APP_DIR] })), "prebuilds");
-		for (const target of ["darwin-x64", "darwin-arm64", "linux-x64", "linux-arm64", "win32-x64", "win32-arm64"]) {
-			// Windows builds name theirs after ConPTY
-			const native = target.startsWith("win32") ? "conpty.node" : "pty.node";
-			expect({ target, ok: fs.existsSync(path.join(prebuilds, target, native)) }).toEqual({ target, ok: true });
-		}
-	});
 });
 
 // Panel services start and hydrate.

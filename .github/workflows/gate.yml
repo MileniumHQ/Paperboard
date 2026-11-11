@@ -29,6 +29,11 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+      # the workload supervisor (apps/paperboard/supervisor) is Go
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/paperboard/supervisor/go.mod
+          cache-dependency-path: apps/paperboard/supervisor/go.sum
       - name: Cache Bun packages and the Electron binary
         uses: actions/cache@v4
         with:
@@ -136,6 +141,11 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         with:
           node-version: 24
+      - uses: actions/setup-go@v5
+        if: steps.scope.outputs.run == 'true'
+        with:
+          go-version-file: apps/paperboard/supervisor/go.mod
+          cache-dependency-path: apps/paperboard/supervisor/go.sum
       # On macOS and Windows, restoring Bun's package cache takes longer than
       # a cold install, so only Linux keeps it
       - name: Cache Bun packages (Linux)

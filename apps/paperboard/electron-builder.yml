@@ -7,6 +7,7 @@ files:
     - "!**/.vscode/*"
     - "!src/*"
     - "!papercrane/*"
+    - "!supervisor/**"
     - "!tests/**"
     - "!dev/**"
     - "!electron.vite.config.{js,ts,mjs,cjs}"
@@ -18,7 +19,6 @@ files:
 asarUnpack:
     - resources/**
     - "**/*.node"
-    - "**/node-pty/**"
     - "**/node-notifier/**"
     - "**/screenshot-desktop/**"
     - "**/loudness/**"

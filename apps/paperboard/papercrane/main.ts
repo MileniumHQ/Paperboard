@@ -8,10 +8,12 @@
 // in ./index — importing ./index has zero autostart side effects in any
 // host, so a GUI import can never shadow the embedded daemon and a test
 // import can never boot a server.
-import { pathToFileURL } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { startPaperCraneServer } from "./index";
 import { CliHandledExit, CliUsageError, EXIT, parseCli } from "./cli";
-import { consoleRelayArgs, runConsoleRelay } from "./consoleRelay";
+import * as fs from "fs";
+import * as path from "path";
+import { setSupervisorBinary } from "./supervisorBinary";
 import { getPaperboardDir } from "./paths";
 
 // clean one-line startup failures instead of raw stacks
@@ -44,14 +46,25 @@ async function finish(command: () => Promise<number>): Promise<void> {
     process.exit(code);
 }
 
-async function main(): Promise<void> {
-    // a supervisor's console relay (consoleRelay.ts): its arguments are the
-    // program's, so they never reach the option parser
-    const relay = consoleRelayArgs(process.argv);
-    if (relay) {
-        runConsoleRelay(relay.command, relay.args);
-        return;
+// The workload supervisor this server starts (supervisorBinary.ts). The
+// compiled binary carries it inside itself (`bun build --compile` is given
+// the file); run from source, it is the one scripts/supervisor.ts built.
+async function readSupervisor(): Promise<Uint8Array> {
+    const embedded = ((globalThis as { Bun?: { embeddedFiles?: Array<Blob & { name: string }> } }).Bun?.embeddedFiles ?? [])
+        .find((file) => file.name.startsWith("paperboard-supervisor"));
+    if (embedded) return new Uint8Array(await embedded.arrayBuffer());
+    const built = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "resources", "supervisor", `${process.platform}-${process.arch}`,
+        process.platform === "win32" ? "paperboard-supervisor.exe" : "paperboard-supervisor");
+    try {
+        return await fs.promises.readFile(built);
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+        throw new Error("This Paperboard Server was built without its workload supervisor, so it cannot start anything. Build it with `bun scripts/supervisor.ts`, and compile the server with the built file beside main.ts.");
     }
+}
+
+async function main(): Promise<void> {
+    setSupervisorBinary(readSupervisor);
     // a wrong command line was printed with its usage; nothing starts
     let command;
     try {
@@ -61,11 +74,6 @@ async function main(): Promise<void> {
         throw err;
     }
     switch (command.kind) {
-        case "supervise": {
-            const { runSupervisor } = await import("./supervisor");
-            await runSupervisor(command.procId);
-            return;
-        }
         // Compiled-binary service mode: the daemon re-invokes itself to run
         // an installed panel's service module in its own process, so a
         // remote needs no separate Node/Bun. The parent daemon owns this

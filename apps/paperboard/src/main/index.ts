@@ -48,11 +48,17 @@ import { installScreenshotTool } from "./screenshotTool";
 import { installTextEditContextMenu } from "./contextMenu";
 import { relocateElectronData } from "./electronData";
 import { relaunchOnX11IfNeeded } from "./displayBackend";
-import { setDesktopSupervisorEntry } from "../../papercrane/engineSupervisor";
+import { setSupervisorBinary } from "../../papercrane/supervisorBinary";
 
 const log = logger;
-// workload supervisors run the bundle electron-vite builds beside this one
-setDesktopSupervisorEntry(path.join(__dirname, "supervisor.js"));
+// the workload supervisor ships in the app's resources (scripts/supervisor.ts
+// builds it); supervisorBinary.ts copies it out before anything runs from it
+setSupervisorBinary(() =>
+    fs.promises.readFile(
+        path.join(app.getAppPath(), "resources", "supervisor", `${process.platform}-${process.arch}`,
+            process.platform === "win32" ? "paperboard-supervisor.exe" : "paperboard-supervisor"),
+    ),
+);
 
 let mainWindowRef: BrowserWindow | null = null;
 // communicator teardown, captured when the shell boots; fired in before-quit

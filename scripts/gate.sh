@@ -15,7 +15,8 @@
 #     create-panel   panel scaffolder: build, tests, silent-catches
 #     crane-launcher @mileniumhq/paperboard (npx launcher for the daemon):
 #                    build, tests, silent-catches
-#     paperboard     desktop app: typechecks, tests, lint, silent-catches
+#     paperboard     desktop app: typechecks, tests, lint, silent-catches, and
+#                    the workload supervisor's (Go) format, vet and tests
 #     paperdocs      docs site: tests, build
 #     origami        registry worker: typecheck, tests, silent-catches
 #     origami-library  library UI: tests, build, silent-catches
@@ -57,6 +58,23 @@ run_in() {
     local dir="$1"
     shift
     (cd "$dir" && "$@")
+}
+
+# The workload supervisor (Go) is formatted and vets clean for every system it
+# ships on; its Windows and macOS code is only run on those systems (the
+# platform target), so a mistake there has to be caught by the compiler here.
+supervisor_vet() {
+    (
+        cd "$ROOT/apps/paperboard/supervisor" || exit 1
+        unformatted="$(gofmt -l .)" || exit 1
+        if [ -n "$unformatted" ]; then
+            echo "not gofmt-formatted: $unformatted" >&2
+            exit 1
+        fi
+        for os in linux darwin windows; do
+            GOOS="$os" go vet ./... || exit 1
+        done
+    )
 }
 
 # ── target selection ─────────────────────────────────────────────────────────
@@ -181,6 +199,8 @@ gstep paperboard "paperboard typecheck:node" run_in "$ROOT/apps/paperboard" bun 
 gstep paperboard "paperboard typecheck:web" run_in "$ROOT/apps/paperboard" bun run typecheck:web
 gstep paperboard "paperboard tests" run_in "$ROOT/apps/paperboard" bun test
 gstep paperboard "paperboard lint" run_in "$ROOT/apps/paperboard" bunx biome lint
+gstep paperboard "supervisor format and vet (linux, macOS, Windows)" supervisor_vet
+gstep paperboard "supervisor tests" run_in "$ROOT/apps/paperboard/supervisor" go test -count=1 ./...
 gstep paperboard "paperboard silent-catches" run_in "$ROOT/apps/paperboard" bash "$CATCH"
 gwarn paperboard "paperboard styling literals" bash "$ROOT/scripts/check-app-styling.sh" apps/paperboard
 
@@ -244,6 +264,7 @@ done
 # ── cross-platform suites: what depends on the OS or CPU (booting and
 # updating the built app and daemon, processes, signals, paths, archives,
 # file modes). The full suites above already include these directories. ────
+gstep platform "supervisor tests" run_in "$ROOT/apps/paperboard/supervisor" go test -count=1 ./...
 gstep platform "paperboard platform tests" run_in "$ROOT/apps/paperboard" bun test ./tests/platform
 gstep platform "gameserver platform tests" run_in "$ROOT/panels/dev.paperboard.gameserver" bun test --isolate --conditions browser ./test/platform
 gstep platform "agents platform tests" run_in "$ROOT/panels/dev.paperboard.agents" bun test ./test/platform

@@ -5,8 +5,8 @@
 //
 // `serve` is the default command, so every flag the daemon has always taken
 // still works without it: `papercrane --headless` is `papercrane serve
-// --headless`. --supervise and --panel-service are how the daemon re-invokes
-// its own binary; they stay out of the help.
+// --headless`. --panel-service is how the daemon re-invokes its own binary;
+// it stays out of the help.
 import * as path from "path";
 import { Command, CommanderError, Help, InvalidArgumentError, Option } from "commander";
 import pkg from "../package.json";
@@ -46,7 +46,6 @@ export interface ServiceTarget {
 
 export type CliCommand =
     | { kind: "serve"; options: ServeOptions }
-    | { kind: "supervise"; procId: string }
     | { kind: "panel-service"; module: string }
     | { kind: "status"; json: boolean }
     | { kind: "pair" }
@@ -213,14 +212,12 @@ function buildProgram(env: NodeJS.ProcessEnv, run: (command: CliCommand) => void
         .option("--start-pairing", "show a pairing code as soon as the interactive screen opens (otherwise press p)")
         .option("--no-auth", "turn off authentication, for development on a trusted single-user computer (127.0.0.1 only)")
         .addOption(new Option("--allow-registry-override", "honor ORIGAMI_REGISTRY_URL in a production build").hideHelp())
-        .addOption(new Option("--supervise <procId>").hideHelp())
         .addOption(new Option("--panel-service <module>").hideHelp())
         .action(guarded((opts: Record<string, unknown>, cmd: Command) => {
             if (cmd.args.length > 0) {
                 throw new InvalidArgumentError(`unknown command '${cmd.args[0]}'.`);
             }
             applyDataDir(opts, env);
-            if (typeof opts.supervise === "string") return run({ kind: "supervise", procId: opts.supervise });
             if (typeof opts.panelService === "string") return run({ kind: "panel-service", module: opts.panelService });
             run({ kind: "serve", options: serveOptions(opts, env) });
         }));
@@ -338,11 +335,10 @@ export function parseCli(argv: string[] = process.argv, env: NodeJS.ProcessEnv =
 
 // the daemon's own flags, for callers that only start a server (tests, the
 // historical API): anything other than a serve command line is an error
-export function parseCliArgs(argv: string[] = process.argv): ServeOptions & { supervise?: string; panelService?: string } {
+export function parseCliArgs(argv: string[] = process.argv): ServeOptions & { panelService?: string } {
     const command = parseCli(argv);
     switch (command.kind) {
         case "serve": return command.options;
-        case "supervise": return { supervise: command.procId };
         case "panel-service": return { panelService: command.module };
         default: throw new Error(`parseCliArgs only parses serve options, not the ${command.kind} command`);
     }
