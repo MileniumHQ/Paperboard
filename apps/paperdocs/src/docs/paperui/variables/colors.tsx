@@ -11,16 +11,16 @@ import {
 } from "@mileniumhq/paperui";
 import type { PaperRole } from "@mileniumhq/paperui";
 
-const roles: Array<{ role: PaperRole; value: string; deep: string; hue: string; meaning: string }> = [
-    { role: "primary", value: "#2981e5", deep: "#1764bc", hue: "Blue", meaning: "The action color: primary buttons, selection, focus rings, the active scrollbar thumb." },
-    { role: "brand", value: "#2981e5", deep: "#1764bc", hue: "Blue", meaning: "An alias of primary. It resolves to the primary variable." },
-    { role: "success", value: "#0d9d0d", deep: "#0a7a0a", hue: "Green", meaning: "Healthy, running, completed, created." },
-    { role: "danger", value: "#e73648", deep: "#c71829", hue: "Red", meaning: "Errors, destructive actions, stopped or failed." },
-    { role: "warning", value: "#d7a51d", deep: "#a88117", hue: "Amber", meaning: "Cautions, pending work, things worth a second look." },
-    { role: "attention", value: "#e66d30", deep: "#c15017", hue: "Orange", meaning: "A notice that needs the user, stronger than warning." },
-    { role: "extra-1", value: "#08d1a9", deep: "#06a384", hue: "Teal", meaning: "A category color with no fixed meaning." },
-    { role: "extra-2", value: "#8312e0", deep: "#660eaf", hue: "Purple", meaning: "A category color with no fixed meaning." },
-    { role: "extra-3", value: "#d450d9", deep: "#b929be", hue: "Magenta", meaning: "A category color with no fixed meaning." },
+const roles: Array<{ role: PaperRole; light: [string, string]; dark: [string, string]; hue: string; meaning: string }> = [
+    { role: "primary", light: ["#217bf4", "#025dc9"], dark: ["#3e89f7", "#1b6ad4"], hue: "Blue", meaning: "The action color: primary buttons, selection, focus rings, the active scrollbar thumb." },
+    { role: "brand", light: ["#217bf4", "#025dc9"], dark: ["#3e89f7", "#1b6ad4"], hue: "Blue", meaning: "An alias of primary. It resolves to the primary variable." },
+    { role: "success", light: ["#059a46", "#057836"], dark: ["#15a84f", "#06853c"], hue: "Green", meaning: "Healthy, running, completed, created." },
+    { role: "danger", light: ["#e6293f", "#ba0329"], dark: ["#ec4a52", "#c82235"], hue: "Red", meaning: "Errors, destructive actions, stopped or failed." },
+    { role: "warning", light: ["#e7a203", "#bf8608"], dark: ["#f3b031", "#cf9105"], hue: "Amber", meaning: "Cautions, pending work, things worth a second look." },
+    { role: "attention", light: ["#e66006", "#b84b03"], dark: ["#f26f27", "#ca5302"], hue: "Orange", meaning: "A notice that needs the user, stronger than warning." },
+    { role: "extra-1", light: ["#039b8c", "#037a6e"], dark: ["#04a999", "#04877a"], hue: "Teal", meaning: "A category color with no fixed meaning." },
+    { role: "extra-2", light: ["#8a3feb", "#6e0fc8"], dark: ["#9357ed", "#7634cb"], hue: "Purple", meaning: "A category color with no fixed meaning." },
+    { role: "extra-3", light: ["#d82aaf", "#af038c"], dark: ["#df4ab8", "#bc2498"], hue: "Magenta", meaning: "A category color with no fixed meaning." },
 ];
 
 const textTokens: Array<{ token: string; light: string; dark: string; use: string }> = [
@@ -97,7 +97,8 @@ export default function ColorsDoc() {
             <PaperText preset="subheader" as="h2" id="roles">Color roles</PaperText>
             <PaperText preset="body" as="p">
                 The nine roles are the type <PaperCode>PaperRole</PaperCode>, and the array <PaperCode>paperRoles</PaperCode> lists them.
-                Role values are the same in light and dark.
+                Each role is built in OKLCH: one perceived lightness for every role (warning sits higher, so it stays yellow) at the most chroma the screen can show.
+                Dark mode lifts each role a little and softens it a little, so it doesn't buzz against the dark surfaces.
                 Each role also has a deep shade, <PaperCode>--paper-name-deep</PaperCode>: the same hue, darker. Components use it as the edge of the <PaperLink href="/docs/paperui/papereffect/">PaperEffect</PaperLink> shadow and for text on a tinted fill.
             </PaperText>
             <PaperTable>
@@ -105,8 +106,8 @@ export default function ColorsDoc() {
                     <tr>
                         <th>Token</th>
                         <th>Sample</th>
-                        <th>Value</th>
-                        <th>Deep value</th>
+                        <th>Light</th>
+                        <th>Dark</th>
                         <th>Meaning</th>
                     </tr>
                 </thead>
@@ -115,8 +116,8 @@ export default function ColorsDoc() {
                         <tr>
                             <td><PaperCode>{r.role}</PaperCode></td>
                             <td><PaperSwatch color={r.role} size="large" /></td>
-                            <td><PaperCode>{r.value}</PaperCode> ({r.hue})</td>
-                            <td><PaperCode>{r.deep}</PaperCode></td>
+                            <td><PaperCode>{r.light[0]}</PaperCode>, deep <PaperCode>{r.light[1]}</PaperCode> ({r.hue})</td>
+                            <td><PaperCode>{r.dark[0]}</PaperCode>, deep <PaperCode>{r.dark[1]}</PaperCode></td>
                             <td>{r.meaning}</td>
                         </tr>
                     ))}
@@ -179,7 +180,7 @@ export default function ColorsDoc() {
             <PaperText preset="subheader" as="h2" id="primary-ink">Primary ink</PaperText>
             <PaperText preset="body" as="p">
                 <PaperCode>--paper-primary-ink</PaperCode> is the action color as text or a glyph on a plain or tinted surface.
-                It is the deep blue <PaperCode>#1764bc</PaperCode> in light and a lifted blue <PaperCode>#6fadf2</PaperCode> in dark, so it reads in both themes.
+                It is the deep blue <PaperCode>#025dc9</PaperCode> in light and a lifted blue <PaperCode>#74acfe</PaperCode> in dark, so it reads in both themes.
                 Use it, not the plain role, for blue text. Other roles have no ink token.
             </PaperText>
 
@@ -238,8 +239,8 @@ export default function ColorsDoc() {
                     </tr>
                     <tr>
                         <td><PaperCode>--paper-selection</PaperCode></td>
-                        <td><PaperCode>#2981e54d</PaperCode></td>
-                        <td><PaperCode>#2981e54d</PaperCode></td>
+                        <td><PaperCode>#217bf44d</PaperCode></td>
+                        <td><PaperCode>#217bf44d</PaperCode></td>
                         <td>Text selection fill for surfaces the browser's own <PaperCode>::selection</PaperCode> cannot reach, such as terminals and canvases.</td>
                     </tr>
                 </tbody>

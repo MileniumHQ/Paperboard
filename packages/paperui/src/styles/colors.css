@@ -1,30 +1,34 @@
 /* forced theme wins over OS preference */
 :root {
     /* roles, not hues: primary/brand are the action color, the rest are
-       meanings. brand is an alias of primary by design. deep is the same
-       hue and saturation at 78% lightness, for text on tinted surfaces. */
-    --paper-primary: #2981e5;
-    --paper-primary-deep: #1764bc;
+       meanings. brand is an alias of primary by design. Built in OKLCH so
+       every role sits at one perceived lightness (warning, a yellow, sits
+       higher to stay yellow) at the most chroma sRGB holds; deep is the
+       same hue 0.10 darker, for edges and text on tinted surfaces. Dark
+       mode lifts each role 0.04 and takes a tenth of its chroma off, so it
+       doesn't vibrate on near-black. Keep the two themes' lists in step. */
+    --paper-primary: #217bf4;
+    --paper-primary-deep: #025dc9;
     --paper-brand: var(--paper-primary);
     --paper-brand-deep: var(--paper-primary-deep);
     /* the action color as text or a glyph on a tinted fill or a plain
        surface: deep on light, lifted on dark, so it reads in both themes.
        deep stays the darker edge colour for 3D bevels. */
     --paper-primary-ink: var(--paper-primary-deep);
-    --paper-success: #0d9d0d;
-    --paper-success-deep: #0a7a0a;
-    --paper-danger: #e73648;
-    --paper-danger-deep: #c71829;
-    --paper-warning: #d7a51d;
-    --paper-warning-deep: #a88117;
-    --paper-attention: #e66d30;
-    --paper-attention-deep: #c15017;
-    --paper-extra-1: #08d1a9;
-    --paper-extra-1-deep: #06a384;
-    --paper-extra-2: #8312e0;
-    --paper-extra-2-deep: #660eaf;
-    --paper-extra-3: #d450d9;
-    --paper-extra-3-deep: #b929be;
+    --paper-success: #059a46;
+    --paper-success-deep: #057836;
+    --paper-danger: #e6293f;
+    --paper-danger-deep: #ba0329;
+    --paper-warning: #e7a203;
+    --paper-warning-deep: #bf8608;
+    --paper-attention: #e66006;
+    --paper-attention-deep: #b84b03;
+    --paper-extra-1: #039b8c;
+    --paper-extra-1-deep: #037a6e;
+    --paper-extra-2: #8a3feb;
+    --paper-extra-2-deep: #6e0fc8;
+    --paper-extra-3: #d82aaf;
+    --paper-extra-3-deep: #af038c;
 
     /* Panel identities shared by the marketing site and future panel chrome. */
     --paper-marketing-ink: #080c12;
@@ -45,7 +49,7 @@
     /* inverted scrim for dark surfaces (light dim behind overlays) */
     --paper-scrim-light: rgba(255, 255, 255, 0.7);
     /* text selection fill for surfaces that cannot use ::selection (terminals, canvases) */
-    --paper-selection: #2981e54d;
+    --paper-selection: #217bf44d;
 
     /* OS brand colors — semantic identities, not theme colors (an OS is
        its color); they survive theming by design */
@@ -123,7 +127,24 @@
         --paper-text-faint: #858585;
 
         --paper-contrast: #ffffff;
-        --paper-primary-ink: #6fadf2;
+        --paper-primary-ink: #74acfe;
+
+        --paper-primary: #3e89f7;
+        --paper-primary-deep: #1b6ad4;
+        --paper-success: #15a84f;
+        --paper-success-deep: #06853c;
+        --paper-danger: #ec4a52;
+        --paper-danger-deep: #c82235;
+        --paper-warning: #f3b031;
+        --paper-warning-deep: #cf9105;
+        --paper-attention: #f26f27;
+        --paper-attention-deep: #ca5302;
+        --paper-extra-1: #04a999;
+        --paper-extra-1-deep: #04877a;
+        --paper-extra-2: #9357ed;
+        --paper-extra-2-deep: #7634cb;
+        --paper-extra-3: #df4ab8;
+        --paper-extra-3-deep: #bc2498;
 
         --paper-scrim: rgba(0, 0, 0, 0.6);
     }
@@ -155,6 +176,23 @@
 
     --paper-contrast: #000000;
     --paper-primary-ink: var(--paper-primary-deep);
+
+    --paper-primary: #217bf4;
+    --paper-primary-deep: #025dc9;
+    --paper-success: #059a46;
+    --paper-success-deep: #057836;
+    --paper-danger: #e6293f;
+    --paper-danger-deep: #ba0329;
+    --paper-warning: #e7a203;
+    --paper-warning-deep: #bf8608;
+    --paper-attention: #e66006;
+    --paper-attention-deep: #b84b03;
+    --paper-extra-1: #039b8c;
+    --paper-extra-1-deep: #037a6e;
+    --paper-extra-2: #8a3feb;
+    --paper-extra-2-deep: #6e0fc8;
+    --paper-extra-3: #d82aaf;
+    --paper-extra-3-deep: #af038c;
 }
 
 [data-paperui-theme="dark"],
@@ -179,5 +217,22 @@
     --paper-text-faint: #858585;
 
     --paper-contrast: #ffffff;
-    --paper-primary-ink: #6fadf2;
+    --paper-primary-ink: #74acfe;
+
+    --paper-primary: #3e89f7;
+    --paper-primary-deep: #1b6ad4;
+    --paper-success: #15a84f;
+    --paper-success-deep: #06853c;
+    --paper-danger: #ec4a52;
+    --paper-danger-deep: #c82235;
+    --paper-warning: #f3b031;
+    --paper-warning-deep: #cf9105;
+    --paper-attention: #f26f27;
+    --paper-attention-deep: #ca5302;
+    --paper-extra-1: #04a999;
+    --paper-extra-1-deep: #04877a;
+    --paper-extra-2: #9357ed;
+    --paper-extra-2-deep: #7634cb;
+    --paper-extra-3: #df4ab8;
+    --paper-extra-3-deep: #bc2498;
 }

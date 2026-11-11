@@ -73,7 +73,7 @@ const width = getVarCss("size-panel-small");`}
 
             <PaperText preset="subheader" as="h3" id="getvar">getVar</PaperText>
             <PaperText preset="body" as="p">
-                <PaperCode>getVar(name: string, fallback?: string): string</PaperCode> reads a token's current computed value, such as <PaperCode>#2981e5</PaperCode>, from the root element (then the body).
+                <PaperCode>getVar(name: string, fallback?: string): string</PaperCode> reads a token's current computed value, such as <PaperCode>#217bf4</PaperCode>, from the root element (then the body).
                 The name takes the same three forms as getVarCss.
                 It returns the fallback, or an empty string when none is given, when the token is not set or when there is no document.
                 Use it for code that needs a real color, such as a canvas.
