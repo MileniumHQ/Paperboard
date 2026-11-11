@@ -156,13 +156,14 @@
 /* Actions' dots: Blockly's grid, each line one round point */
 .stage :global(.blocklyGridPattern) line,
 .stage :global(pattern) line {
-    stroke: color-mix(in srgb, var(--paper-contrast) 22%, transparent);
+    stroke: var(--paper-border);
     stroke-width: calc(var(--paper-border-width) * 3);
     stroke-linecap: round;
 }
 
 /* Blockly's menus (a block's right-click menu, a dropdown's choices) as
-   PaperUI's menu: the same panel and items as ../paperui's shared menu */
+   PaperUI's compact menu: the same panel and items as ../paperui's shared
+   menu at its compact size */
 :global(.blocklyWidgetDiv) :global(.blocklyMenu),
 :global(.blocklyDropDownDiv) {
     font-family: var(--paper-font-family);
@@ -173,7 +174,7 @@
 }
 
 :global(.blocklyWidgetDiv) :global(.blocklyMenu) {
-    padding: var(--paper-uigap-half);
+    padding: var(--paper-uigap-onefourth);
 }
 
 :global(.blocklyDropDownDiv) {
@@ -181,7 +182,7 @@
 }
 
 :global(.blocklyDropDownDiv) :global(.blocklyMenu) {
-    padding: var(--paper-uigap-half);
+    padding: var(--paper-uigap-onefourth);
     background: transparent;
     border: none;
     box-shadow: none;
@@ -194,13 +195,13 @@
 :global(.blocklyMenuItem) {
     display: flex;
     align-items: center;
-    gap: var(--paper-uigap-threefourths);
-    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths) !important;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half) !important;
     margin: 0;
     border: none !important;
     border-radius: var(--paper-border-radius-half);
     font-family: var(--paper-font-family) !important;
-    font-size: var(--paper-text-size-3);
+    font-size: var(--paper-text-size-2);
     color: var(--paper-text) !important;
     cursor: pointer;
 }
@@ -228,7 +229,7 @@
     content: "check";
     margin-left: var(--paper-uigap);
     font-family: var(--paper-icon-font-family);
-    font-size: var(--paper-icon-size-small);
+    font-size: var(--paper-icon-size-tiny);
     color: var(--paper-primary);
     vertical-align: middle;
 }
@@ -243,9 +244,9 @@
 /* a right-click item's symbol and its delete item, as PaperContextMenuItem's */
 :global(.paperMenuIcon) {
     font-family: var(--paper-icon-font-family);
-    font-size: var(--paper-icon-size-medium);
+    font-size: var(--paper-icon-size-small);
     color: var(--paper-primary-ink);
-    margin-right: var(--paper-uigap-threefourths);
+    margin-right: var(--paper-uigap-half);
     vertical-align: middle;
 }
 

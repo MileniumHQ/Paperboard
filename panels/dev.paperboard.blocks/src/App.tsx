@@ -463,15 +463,21 @@ export default function App() {
                     </div>
                     <div class={styles.bottomRight}>
                         <PaperFlex direction="column" gap="half">
-                            <PaperButton variant="outline" icon onClick={() => zoom(1)} title="Zoom in" aria-label="Zoom in">
-                                <PaperIcon>add</PaperIcon>
-                            </PaperButton>
-                            <PaperButton variant="outline" icon onClick={() => zoom(-1)} title="Zoom out" aria-label="Zoom out">
-                                <PaperIcon>remove</PaperIcon>
-                            </PaperButton>
-                            <PaperButton variant="outline" icon onClick={resetView} title="Reset the view" aria-label="Reset the view">
-                                <PaperIcon>center_focus_strong</PaperIcon>
-                            </PaperButton>
+                            <PaperEffect variant="primary">
+                                <PaperButton variant="primary" icon onClick={() => zoom(1)} title="Zoom in" aria-label="Zoom in">
+                                    <PaperIcon>add</PaperIcon>
+                                </PaperButton>
+                            </PaperEffect>
+                            <PaperEffect variant="primary">
+                                <PaperButton variant="primary" icon onClick={() => zoom(-1)} title="Zoom out" aria-label="Zoom out">
+                                    <PaperIcon>remove</PaperIcon>
+                                </PaperButton>
+                            </PaperEffect>
+                            <PaperEffect variant="primary">
+                                <PaperButton variant="primary" icon onClick={resetView} title="Reset the view" aria-label="Reset the view">
+                                    <PaperIcon>center_focus_strong</PaperIcon>
+                                </PaperButton>
+                            </PaperEffect>
                         </PaperFlex>
                         <div
                             ref={trashTile}
