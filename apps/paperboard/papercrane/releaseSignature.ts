@@ -26,7 +26,8 @@ MCowBQYDK2VwAyEAnPZxRUXmI+YzHGY7gJrpx4R+6+Q0nWQxQ9crtJjdxF8=
 -----END PUBLIC KEY-----
 `;
 
-// The key this daemon trusts for its own binary's updates.
+// The key this daemon trusts for its own binary's updates, and for the
+// panel and package releases it installs.
 // PAPERBOARD_RELEASE_PUBLIC_KEY names a different one: a private build's, or
 // the throwaway key the release smoke signs a loopback release with. It can
 // only replace the key, never skip the check, and whoever sets the daemon's

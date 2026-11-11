@@ -41,7 +41,7 @@ import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import type { MonitorLifecycle } from "../../../packages/paperapi/src/monitorProtocol";
 import type { BackupEnded } from "./backups/types";
 import { fetchRegistryRecord } from "./registryRecord";
-import { RELEASE_PUBLIC_KEY, releaseMessage, requireReleaseSignature } from "./releaseSignature";
+import { daemonReleaseKey, releaseMessage, requireReleaseSignature } from "./releaseSignature";
 
 export const REGISTRY_URL = resolveRegistryUrl();
 
@@ -128,12 +128,13 @@ export class PaperCraneEngine {
     private recovery: Promise<void> = Promise.resolve();
 
     // registryUrl and releaseKey are fixed in production; tests point them
-    // at a loopback registry signed with a fixture key
+    // at a loopback registry signed with a fixture key, in process or
+    // through the same environment the daemon's own updates honor
     constructor(
         baseDir?: string,
         services?: PanelServicesManager,
         private registryUrl = REGISTRY_URL,
-        private releaseKey = RELEASE_PUBLIC_KEY,
+        private releaseKey = daemonReleaseKey(),
     ) {
         this.services = services ?? (baseDir ? new PanelServicesManager(baseDir) : panelServices);
         this.appDataDir = baseDir || getPaperboardDir();
