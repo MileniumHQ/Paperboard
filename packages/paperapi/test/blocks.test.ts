@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { actionsApi } from "../src/actions";
-import { blocksApi, validateBlockDefinitions, valueProblem, type BlockSet } from "../src/blocks";
+import { blocksApi, memoryBlocks, validateBlockDefinitions, valueProblem, type BlockSet } from "../src/blocks";
 import { closeTransport } from "../src/ipc";
 import { startDaemon, type Daemon, type PanelProcess } from "./helpers/daemon";
 
@@ -32,11 +32,15 @@ describe("a panel's blocks reach the registry as data", () => {
         const listed = await blocksApi.list(PANEL);
         const byEntry = Object.fromEntries(listed.map((b) => [b.entry, b]));
         expect(Object.keys(byEntry).sort()).toEqual([
+            "s1/command.create-world",
             "s1/command.join",
             "s1/command.kick",
+            "s1/command.leave",
             "s1/command.lie",
             "s1/command.misfire",
+            "s1/command.warp",
             "s1/event.joined",
+            "s1/event.left",
             "s1/value.kicks",
             "s1/value.online",
             "type.player",
@@ -60,7 +64,16 @@ describe("a panel's blocks reach the registry as data", () => {
             id: "player",
             name: "Player",
             base: "object",
-            fields: { name: { type: "text", name: "Name" }, shout: { type: "text", name: "Shout", resolved: true } },
+            fields: {
+                name: { type: "text", name: "Name" },
+                shout: { type: "text", name: "Shout", resolved: true },
+                nickname: { type: "text", name: "Nickname", optional: true },
+                online: { type: "boolean", name: "Online", perProject: true, resolved: true },
+            },
+        });
+        // choices worked out on demand say so, without the code; a default is listed as is
+        expect(byEntry["s1/command.warp"]!.schema).toMatchObject({
+            inputs: { world: { type: "text", name: "World", dynamicChoices: true }, times: { type: "number", name: "Times", default: 1, min: 1 } },
         });
         expect(await blocksApi.projects(PANEL)).toEqual([{ panelId: PANEL, id: "s1", name: "Survival", icon: "dns" }]);
     });
@@ -87,6 +100,25 @@ describe("commands and values run in their panel, checked at its boundary", () =
         expect(await read("kicks")).toBe(before);
     });
 
+    test("an input left out takes its default, and is still checked", async () => {
+        expect(await run("warp", { world: "world" })).toBe("world x1");
+        expect(await run("warp", { world: "world", times: 3 })).toBe("world x3");
+        await expect(run("warp", { world: "world", times: 0 })).rejects.toThrow('"Times" must be at least 1');
+    });
+
+    test("choices worked out on demand follow the panel, and a choice that's gone is refused by name", async () => {
+        const warp = "s1/command.warp";
+        expect(await blocksApi.choices(PANEL, warp, "world")).toEqual([{ label: "world", value: "world" }]);
+        await expect(run("warp", { world: "nether" })).rejects.toThrow('Warp: "World" must be one of world');
+        await run("create-world", { world: "nether" });
+        expect(await blocksApi.choices(PANEL, warp, "world")).toEqual([
+            { label: "world", value: "world" },
+            { label: "nether", value: "nether" },
+        ]);
+        expect(await run("warp", { world: "nether" })).toBe("nether x1");
+        await expect(blocksApi.choices(PANEL, warp, "times")).rejects.toThrow('Warp input "Times" has no choices');
+    });
+
     test("a command that returns something other than its declared type fails loudly instead of handing it on", async () => {
         await expect(run("lie")).rejects.toThrow('Lie returned: expected a number, got the text "not a number"');
     });
@@ -101,6 +133,20 @@ describe("properties read a field off the value, or ask its panel", () => {
     test("a stored field comes off the value and a resolved field is answered by the panel", async () => {
         expect(await blocksApi.property(`${PANEL}:player`, "name", { name: "Steve" })).toBe("Steve");
         expect(await blocksApi.property(`${PANEL}:player`, "shout", { name: "Steve" })).toBe("STEVE!");
+    });
+
+    test("an optional field a value doesn't have reads as nothing", async () => {
+        expect(await blocksApi.property(`${PANEL}:player`, "nickname", { name: "Steve" })).toBeNull();
+        expect(await blocksApi.property(`${PANEL}:player`, "nickname", { name: "Steve", nickname: "Stevie" })).toBe("Stevie");
+        await expect(blocksApi.property(`${PANEL}:player`, "nickname", { name: "Steve", nickname: 4 })).rejects.toThrow('the field "nickname": expected text');
+    });
+
+    test("a per-project field is looked up in the project that asks, and refuses without one", async () => {
+        await run("join", { name: "Herobrine" });
+        expect(await blocksApi.property(`${PANEL}:player`, "online", { name: "Herobrine" }, { project: "s1" })).toBe(true);
+        expect(await blocksApi.property(`${PANEL}:player`, "online", { name: "Notch" }, { project: "s1" })).toBe(false);
+        await expect(blocksApi.property(`${PANEL}:player`, "online", { name: "Herobrine" })).rejects.toThrow("Online of Player is read in a project: say which one");
+        await expect(blocksApi.property(`${PANEL}:player`, "online", { name: "Herobrine" }, { project: "s9" })).rejects.toThrow('there is no project "s9"');
     });
 
     test("an unknown field, or a value that isn't the type, is refused", async () => {
@@ -140,6 +186,10 @@ describe("events and changes reach whoever listens", () => {
         }
     });
 
+    test("an optional value may be left out of a firing", async () => {
+        expect(await run("leave", { name: "Steve" })).toBeNull();
+    });
+
     test("a payload the event doesn't declare is refused in the panel before anything is sent", async () => {
         expect(await run("misfire")).toEqual([
             'When a Player Joins value "player": the field "name": expected text, got number 7',
@@ -176,6 +226,13 @@ describe("a broken definition is refused before it reaches the registry", () => 
         expect(refuse({ events: [{ ...base, inputs: { who: { type: "text", name: "Who" } }, filters: { who: "nobody" } }] })).toThrow('which it does not fire');
     });
 
+    test("a default must fit its input, and a per-project field needs resolve", () => {
+        expect(refuse({ commands: [{ id: "a", name: "A", inputs: { n: { type: "number", name: "N", default: "x" } }, run }] })).toThrow('input "n" default: "N": expected a number');
+        expect(refuse({ commands: [{ id: "a", name: "A", inputs: { n: { type: "number", name: "N", max: 3, default: 9 } }, run }] })).toThrow('"N" must be at most 3');
+        expect(refuse({ commands: [{ id: "a", name: "A", inputs: { n: { type: "text", name: "N", choices: [{ label: "B", value: "b" }], default: "c" } }, run }] })).toThrow('"N" must be one of B');
+        expect(refuse({ types: [{ id: "t", name: "T", base: "object", fields: { x: { type: "text", name: "X", perProject: true } } }] })).toThrow("needs resolve to look it up in the project");
+    });
+
     test("ids are unique per kind", () => {
         expect(refuse({ commands: [{ id: "a", name: "A", run }, { id: "a", name: "B", run }] })).toThrow('Command "a" is defined twice');
     });
@@ -197,5 +254,37 @@ describe("values are checked against their type", () => {
         expect(valueProblem("url", "not a url", lookup)).toContain("expected a web address");
         expect(valueProblem("list<number>", [1, 2, "3"], lookup)).toBe('item 3: expected a number, got the text "3"');
         expect(valueProblem("list<list<boolean>>", [[true], [false]], lookup)).toBeNull();
+    });
+});
+
+describe("a registry in memory checks what the daemon's does, for a panel's tests", () => {
+    test("blocks run through the same checks, a firing is heard once checked, and only JSON crosses", async () => {
+        const fired: unknown[] = [];
+        const changed: string[] = [];
+        const memory = memoryBlocks("dev.test.memory", { fired: (event, payload, project) => fired.push([event, payload, project]), changed: (value) => changed.push(value) });
+        await memory.panel.register({
+            types: [{ id: "player", name: "Player", base: "text", fields: { online: { type: "boolean", name: "Online", perProject: true, resolve: (_name, ctx) => ctx.project === "s1" } } }],
+        });
+        const server = await memory.defineProject({ id: "s1", name: "Survival" });
+        await server.register({
+            commands: [
+                { id: "greet", name: "Greet", inputs: { who: { type: "player", name: "Who" }, times: { type: "number", name: "Times", default: 2 } }, output: "text", run: ({ who, times }) => `${who} x${times}` },
+                { id: "when", name: "When", output: "any", run: () => ({ at: new Date(0) }) },
+            ],
+            values: [{ id: "count", name: "Count", type: "number", changes: true, read: () => 1 }],
+            events: [{ id: "left", name: "Left", values: { who: { type: "player", name: "Who" }, reason: { type: "text", name: "Reason", optional: true } } }],
+        });
+        expect(memory.list().map((b) => b.entry).sort()).toEqual(["s1/command.greet", "s1/command.when", "s1/event.left", "s1/value.count", "type.player"]);
+        expect(await memory.run("greet", { who: "alex" }, { project: "s1" })).toBe("alex x2");
+        await expect(memory.run("greet", {}, { project: "s1" })).rejects.toThrow('Greet: "Who" is required');
+        // a Date isn't JSON: it arrives as the text the wire would carry
+        expect(await memory.run("when", {}, { project: "s1" })).toEqual({ at: "1970-01-01T00:00:00.000Z" });
+        expect(await memory.property("player", "online", "alex", { project: "s1" })).toBe(true);
+        await expect(memory.property("player", "online", "alex")).rejects.toThrow("is read in a project");
+        await server.fire("left", { who: "alex" });
+        await expect(server.fire("left", { who: 4 } as never)).rejects.toThrow('Left value "who": expected text');
+        await server.changed("count");
+        expect(fired).toEqual([["left", { who: "alex" }, "s1"]]);
+        expect(changed).toEqual(["count"]);
     });
 });

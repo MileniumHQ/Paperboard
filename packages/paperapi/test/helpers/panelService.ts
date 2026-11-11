@@ -71,6 +71,7 @@ async function owner(): Promise<void> {
 // declared and answers what the SDK refused.
 async function blocks(): Promise<void> {
     const online: string[] = [];
+    const worlds = ["world"];
     let kicks = 0;
     await blocksApi.panel().register({
         types: [
@@ -81,6 +82,16 @@ async function blocks(): Promise<void> {
                 fields: {
                     name: { type: "text", name: "Name" },
                     shout: { type: "text", name: "Shout", resolve: (p: { name: string }) => `${p.name.toUpperCase()}!` },
+                    nickname: { type: "text", name: "Nickname", optional: true },
+                    online: {
+                        type: "boolean",
+                        name: "Online",
+                        perProject: true,
+                        resolve: (p: { name: string }, ctx) => {
+                            if (ctx.project !== "s1") throw new Error(`asked in ${String(ctx.project)}`);
+                            return online.includes(p.name);
+                        },
+                    },
                 },
             },
         ],
@@ -100,6 +111,35 @@ async function blocks(): Promise<void> {
                 run: () => ++kicks,
             },
             { id: "lie", name: "Lie", output: "number", run: () => "not a number" },
+            {
+                id: "warp",
+                name: "Warp",
+                text: "Warp to {world} {times} times",
+                inputs: {
+                    world: { type: "text", name: "World", choices: () => worlds.map((w) => ({ label: w, value: w })) },
+                    times: { type: "number", name: "Times", default: 1, min: 1 },
+                },
+                output: "text",
+                run: ({ world, times }: { world: string; times: number }) => `${world} x${times}`,
+            },
+            {
+                id: "create-world",
+                name: "Create World",
+                inputs: { world: { type: "text", name: "World" } },
+                run: ({ world }: { world: string }) => {
+                    worlds.push(world);
+                },
+            },
+            {
+                id: "leave",
+                name: "Leave",
+                inputs: { name: { type: "text", name: "Name" } },
+                run: async ({ name }: { name: string }) => {
+                    await server.fire("left", { player: { name } });
+                    await server.fire("left", { player: { name }, reason: null });
+                    await server.fire("left", { player: { name }, reason: "kicked" });
+                },
+            },
             {
                 id: "join",
                 name: "Join",
@@ -135,6 +175,11 @@ async function blocks(): Promise<void> {
                 id: "joined",
                 name: "When a Player Joins",
                 values: { player: { type: "player", name: "Player" } },
+            },
+            {
+                id: "left",
+                name: "When a Player Leaves",
+                values: { player: { type: "player", name: "Player" }, reason: { type: "text", name: "Reason", optional: true } },
             },
         ],
     });

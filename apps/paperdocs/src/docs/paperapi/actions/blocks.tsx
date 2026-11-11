@@ -142,6 +142,10 @@ interface BlockSet {
         type: TypeRef;
         name: string;
         description?: string;
+        /** a value may not have it; it reads as nothing */
+        optional?: boolean;
+        /** resolve needs the project that asks; each project gets the field */
+        perProject?: boolean;
         /** looks the field up; without it the field is the object value's own key */
         resolve?: (value: V, ctx: BlockContext) => unknown | Promise<unknown>;
     }>;
@@ -152,6 +156,10 @@ interface BlockSet {
                 A field with <PaperCode>resolve</PaperCode> asks the panel, which can look it up: a channel's name from Discord.
                 A text, number or boolean value has no keys, so each of its fields needs <PaperCode>resolve</PaperCode>.
             </PaperText>
+            <PaperTextList>
+                <li>An <PaperCode>optional</PaperCode> field may be missing from the value, or <PaperCode>resolve</PaperCode> may give back <PaperCode>null</PaperCode>: a member with no nickname. It reads as nothing, and the "has a value" block tells it apart.</li>
+                <li>A <PaperCode>perProject</PaperCode> field depends on the project that asks: whether a player is online on this server. Each project's section in the toolbox gets its own "[field] of [value]" block for these fields, and <PaperCode>resolve</PaperCode> gets that project in <PaperCode>ctx.project</PaperCode>. It needs <PaperCode>resolve</PaperCode>.</li>
+            </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="blocks">Commands, values and events</PaperText>
             <PaperCode block language="tsx">
@@ -185,7 +193,7 @@ interface BlockEventDefinition {
     name: string;
     // description, category, icon, text and inputs as for a command
     /** what it fires with: each one a typed value in the flow */
-    values?: Record<string, { type: TypeRef; name: string; description?: string }>;
+    values?: Record<string, { type: TypeRef; name: string; description?: string; optional?: boolean }>;
     /** input -> value: the flow starts only when the value equals the input */
     filters?: Record<string, string>;
 }
@@ -201,6 +209,7 @@ interface BlockContext {
                 <li><PaperCode>text</PaperCode> shows each input once, in braces. Without it the block shows its name, with the inputs after it.</li>
                 <li>The panel that owns a block checks every call: inputs before <PaperCode>run</PaperCode> or <PaperCode>read</PaperCode>, and the result against the declared type after. A result that isn't its type fails the block, so nothing wrong reaches the next one: <PaperCode>Lie returned: expected a number, got the text "not a number"</PaperCode>.</li>
                 <li>A filter's input and the value it compares have one type.</li>
+                <li>An <PaperCode>optional</PaperCode> event value may be left out of a firing, or be <PaperCode>null</PaperCode>: the channel someone left, when they only joined. Inside the flow it reads as nothing. Don't fire empty text in its place.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="inputs">Inputs</PaperText>
@@ -217,7 +226,8 @@ interface BlockContext {
                     <tr><td><PaperCode>name</PaperCode></td><td><PaperCode>string</PaperCode></td><td>Required. The input's name, and the name in its errors.</td></tr>
                     <tr><td><PaperCode>description</PaperCode></td><td><PaperCode>string</PaperCode></td><td>More about the value.</td></tr>
                     <tr><td><PaperCode>optional</PaperCode></td><td><PaperCode>boolean</PaperCode></td><td>The block runs without it. Without this, an empty input is refused: <PaperCode>"Player" is required</PaperCode>.</td></tr>
-                    <tr><td><PaperCode>choices</PaperCode></td><td><PaperCode>{"{ label: string; value: string | number | boolean }[]"}</PaperCode></td><td>A dropdown of these, in place of a socket.</td></tr>
+                    <tr><td><PaperCode>choices</PaperCode></td><td><PaperCode>{"BlockChoice[] | (ctx) => BlockChoice[]"}</PaperCode></td><td>A dropdown of these, in place of a socket. A function is asked each time the dropdown opens and each time the block runs, so it follows what the panel has now, such as the game rules of the installed version. A choice that's gone stays in a saved flow, and running it says so.</td></tr>
+                    <tr><td><PaperCode>default</PaperCode></td><td><PaperCode>string | number | boolean</PaperCode></td><td>What a new block holds, and what a call that leaves the input out gets. It's checked against the input when registered.</td></tr>
                     <tr><td><PaperCode>min</PaperCode>, <PaperCode>max</PaperCode>, <PaperCode>integer</PaperCode></td><td><PaperCode>number</PaperCode>, <PaperCode>boolean</PaperCode></td><td>Limits on a number, timestamp or duration.</td></tr>
                     <tr><td><PaperCode>maxLength</PaperCode></td><td><PaperCode>number</PaperCode></td><td>Most characters in text.</td></tr>
                 </tbody>
@@ -233,8 +243,10 @@ blocksApi.projects(panelId?: string): Promise<BlockProjectInfo[]>;
 
 blocksApi.run<T>(panelId, command, inputs?, options?: { project?: string; timeoutMs?: number | null }): Promise<T>;
 blocksApi.read<T>(panelId, value, inputs?, options?: { project?: string; timeoutMs?: number | null }): Promise<T>;
-/** typeRef is "panel.id:type" */
-blocksApi.property<T>(typeRef, field, value, options?): Promise<T>;
+/** typeRef is "panel.id:type"; a perProject field needs options.project */
+blocksApi.property<T>(typeRef, field, value, options?: { project?: string; timeoutMs?: number | null }): Promise<T>;
+/** a dropdown's choices now, for an input whose choices are a function */
+blocksApi.choices(panelId, entry, input): Promise<BlockChoice[]>;
 
 blocksApi.onEvent(panelId, event, callback: (payload) => void, project?): () => void;
 blocksApi.onChange(panelId, value, callback: () => void, project?): () => void;
@@ -252,7 +264,30 @@ interface BlockInfo {
                 <li>A listed schema is the definition without its code, with every custom type named by its panel: <PaperCode>dev.paperboard.gameserver:player</PaperCode>. A field the panel looks up is marked <PaperCode>resolved: true</PaperCode>.</li>
                 <li>A call waits 30 seconds by default and 60 at most. <PaperCode>timeoutMs: null</PaperCode> waits it out.</li>
                 <li>A change says only that the value changed. Read it again for the new one.</li>
+                <li>An input whose choices are a function is listed with <PaperCode>dynamicChoices: true</PaperCode> and no choices.</li>
             </PaperTextList>
+
+            <PaperText preset="subheader" as="h2" id="testing">Testing</PaperText>
+            <PaperText preset="body" as="p">
+                <PaperCode>memoryBlocks</PaperCode> is a Blocks registry in memory, for a panel's tests. Hand its handle to the code that registers, and it checks everything the daemon's registry would: definitions, inputs, results and payloads. Every request and answer goes through JSON, as it would over the wire.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { memoryBlocks } from "@mileniumhq/paperapi";
+
+const fired: unknown[] = [];
+const blocks = memoryBlocks("dev.paperboard.gameserver", {
+    fired: (event, payload, project) => fired.push({ event, payload, project }),
+    changed: (value, project) => {},
+});
+await blocks.panel.register({ types });
+const server = await blocks.defineProject({ id: "s1", name: "Survival" });
+await server.register(serverBlocks);
+
+await blocks.run("kick-player", { player: "Steve" }, { project: "s1" });
+await blocks.read("player-count", {}, { project: "s1" });
+await blocks.property("player", "online", "Steve", { project: "s1" });
+await blocks.choices("s1/command.set-game-rule", "rule");`}
+            </PaperCode>
         </PaperFlex>
     );
 }
