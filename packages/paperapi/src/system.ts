@@ -79,25 +79,6 @@ export const systemApi = {
      * scoped token is refused.
      */
     getUsage: (computerId?: string): Promise<UsageReport> => invokeIn<UsageReport>(computerId, "system-usage"),
-
-    /** OS notification with fallback */
-    notify: (title: string, message: string): Promise<unknown> =>
-        invoke<unknown>("system-notify", { title, message }),
-
-    /** screenshot, resolves the path written */
-    screenshot: (savePath: string): Promise<string> =>
-        invoke<string>("system-screenshot", { savePath }),
-
-    /** output volume (0-100) */
-    setVolume: (volume: number): Promise<number> =>
-        invoke<number>("system-set-volume", { volume }),
-
-    /** mute/unmute */
-    setMuted: (muted: boolean): Promise<boolean> =>
-        invoke<boolean>("system-set-muted", { muted }),
-
-    /** short alert sound */
-    beep: (): Promise<unknown> => invoke<unknown>("system-beep"),
 };
 
 export const system = systemApi;

@@ -938,30 +938,8 @@ const builtinHandlers: Record<string, BuiltinHandler> = {
         });
         return msg;
     },
-    "play-beep": async () => {
-        await systemApi.beep();
-        return true;
-    },
     "run-command": async (inputs) => {
         return await runHostShell(inputs.command || "");
-    },
-    "take-screenshot": async (inputs) => {
-        const savePath = inputs.savePath || "screenshot.png";
-        return await systemApi.screenshot(savePath);
-    },
-    "set-volume": async (inputs) => {
-        const vol = Math.max(0, Math.min(100, Math.round(Number(inputs.volume ?? 50))));
-        return await systemApi.setVolume(vol);
-    },
-    "mute-audio": async (inputs) => {
-        const muted = Boolean(inputs.muted);
-        return await systemApi.setMuted(muted);
-    },
-    "send-notification": async (inputs) => {
-        const title = String(inputs.title || "Paperboard");
-        const message = String(inputs.message || "Notification");
-        await systemApi.notify(title, message);
-        return true;
     },
     "lock-screen": async () => {
         const plat = await getHostPlatform();

@@ -24,17 +24,7 @@ export const utilityBuiltins: BuiltinDef[] = [
                         },
                     },
                 } },
-    { id: "play-beep", category: "logic.utility", panelId: "builtin.logic", item: {
-                    panelId: "builtin.logic",
-                    action: "play-beep",
-                    schema: {
-                        id: "play-beep",
-                        name: "Play Alert Beep",
-                        description: "Plays an OS chime on the host computer",
-                        template: "Play alert sound",
-                        icon: "notifications",
-                    },
-                } },    { id: "throw-error", category: "logic.utility", panelId: "builtin.logic", item: {
+    { id: "throw-error", category: "logic.utility", panelId: "builtin.logic", item: {
                     panelId: "builtin.logic",
                     action: "throw-error",
                     schema: {

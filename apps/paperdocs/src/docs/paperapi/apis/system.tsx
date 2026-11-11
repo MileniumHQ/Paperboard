@@ -1,7 +1,6 @@
 import {
     PaperCode,
     PaperFlex,
-    PaperTable,
     PaperText,
     PaperTextList,
 } from "@mileniumhq/paperui";
@@ -103,25 +102,6 @@ interface GpuInfo {
                 <li><PaperCode>getUsage</PaperCode> reports CPU, memory, disk and network use split by panel, for Paperboard's computer page. A panel's call is refused with <PaperCode>system:usage is host-only</PaperCode> (<PaperCode>FORBIDDEN</PaperCode>).</li>
             </PaperTextList>
 
-            <PaperText preset="subheader" as="h2" id="unavailable-methods">Unavailable methods</PaperText>
-            <PaperText preset="body" as="p">
-                The SDK declares five more methods that the daemon does not answer. Each one rejects with <PaperCode>NOT_FOUND</PaperCode>, so don't build on them.
-            </PaperText>
-            <PaperTable>
-                <thead>
-                    <tr>
-                        <th>Method</th>
-                        <th>Error</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr><td><PaperCode>notify(title, message)</PaperCode></td><td><PaperCode>Unknown action: system:notify</PaperCode></td></tr>
-                    <tr><td><PaperCode>screenshot(savePath)</PaperCode></td><td><PaperCode>Unknown action: system:screenshot</PaperCode></td></tr>
-                    <tr><td><PaperCode>setVolume(volume)</PaperCode></td><td><PaperCode>Unknown action: system:set-volume</PaperCode></td></tr>
-                    <tr><td><PaperCode>setMuted(muted)</PaperCode></td><td><PaperCode>Unknown action: system:set-muted</PaperCode></td></tr>
-                    <tr><td><PaperCode>beep()</PaperCode></td><td><PaperCode>Unknown action: system:beep</PaperCode></td></tr>
-                </tbody>
-            </PaperTable>
         </PaperFlex>
     );
 }

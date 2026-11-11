@@ -271,26 +271,6 @@ export const RPC_ROUTES: Record<string, WsRoute> = {
         action: "system:usage",
         timeoutMs: 15_000,
     },
-    "system-notify": {
-        action: "system:notify",
-        unwrap: (r) => r,
-    },
-    "system-screenshot": {
-        action: "system:screenshot",
-        unwrap: (r) => r?.savePath ?? r,
-    },
-    "system-set-volume": {
-        action: "system:set-volume",
-        unwrap: (r) => r?.volume ?? r,
-    },
-    "system-set-muted": {
-        action: "system:set-muted",
-        unwrap: (r) => r?.muted ?? r,
-    },
-    "system-beep": {
-        action: "system:beep",
-        unwrap: (r) => r,
-    },
 };
 
 // bespoke channels (progress subscriptions, registry lookups)
