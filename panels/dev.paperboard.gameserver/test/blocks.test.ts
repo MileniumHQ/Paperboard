@@ -96,8 +96,11 @@ describe("each server is a Blocks project with its game's blocks", () => {
         expect(schema("s-a/command.kick-player")).toMatchObject({ text: "Kick {player} because {reason}", inputs: { player: { type: `${PANEL_ID}:player` } } });
         expect(schema("s-a/command.back-up")).toMatchObject({ output: `${PANEL_ID}:backup` });
         expect(schema("s-t/event.chat-message")).toMatchObject({ values: { player: { type: `${PANEL_ID}:player` }, message: { type: "text" } }, filters: { player: "player", message: "message" } });
-        // the rule dropdown follows the installed version, which the service reads after the first registration
-        expect(schema("s-a/command.set-game-rule").inputs.rule.choices.map((c: { value: string }) => c.value)).toEqual(gamerulesFor("1.21.1").map((r) => r.name));
+        // the rule dropdown asks the server, so it lists the rules of the version it has now
+        expect(schema("s-a/command.set-game-rule").inputs.rule).toMatchObject({ dynamicChoices: true });
+        const rules = await blocksApi.choices(PANEL_ID, "s-a/command.set-game-rule", "rule");
+        expect(rules.map((c) => c.value)).toEqual(gamerulesFor("1.21.1").map((r) => r.name));
+        await expect(run("set-game-rule", { rule: "notARule", value: "true" })).rejects.toThrow('"Game Rule" must be one of');
     });
 
     test("the world blocks make, switch and list worlds while the server is stopped, and refuse a world that isn't there", async () => {
@@ -123,6 +126,9 @@ describe("each server is a Blocks project with its game's blocks", () => {
             expect(await read("player-count")).toBe(2);
             expect(await read("online-players")).toEqual(["alice", "bob"]);
             expect(changed.has("server-status")).toBe(true);
+            // whether a player is online is read on the server that asks
+            expect(await blocksApi.property(`${PANEL_ID}:player`, "online", "alice", { project: "s-a" })).toBe(true);
+            expect(await blocksApi.property(`${PANEL_ID}:player`, "online", "alice", { project: "s-t" })).toBe(false);
 
             changed.clear();
             expect(await run("kick-player", { player: "alice", reason: "testing" })).toBeNull();

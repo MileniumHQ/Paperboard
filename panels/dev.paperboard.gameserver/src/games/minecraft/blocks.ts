@@ -3,8 +3,7 @@
 import type { BlockCommandDefinition, BlockSet, BlockTypeDefinition, BlockValueDefinition, ServiceContext } from "../../service/api";
 import type { GameServerState } from "../../service/types";
 import { ACTION_IDS } from "../../service/contract";
-import { bindBlocks, needsAction, playerEvents } from "../../service/blocks";
-import { currentServer, serverLocal } from "../../service/scope";
+import { needsAction, playerEvents } from "../../service/blocks";
 import { listRoster } from "../../service/playerLists";
 import { listPlayerStats } from "../../service/playerStats";
 import { listWorlds, resolveLevelName } from "../../service/worlds";
@@ -118,9 +117,13 @@ function playerCommands(ctx: Context): BlockCommandDefinition[] {
     ];
 }
 
-/** The game rule blocks, whose dropdown lists the rules the server's version has; refreshGameruleBlocks registers them. */
-function gameruleBlocks(ctx: Context, rules: string[]): { command: BlockCommandDefinition; value: BlockValueDefinition } {
-    const rule = { type: "text", name: "Game Rule", choices: rules.map((name) => ({ label: name, value: name })) };
+/** The game rule blocks; the dropdown asks for the rules of the version the server has when it opens. */
+function gameruleBlocks(ctx: Context): { command: BlockCommandDefinition; value: BlockValueDefinition } {
+    const rule = {
+        type: "text",
+        name: "Game Rule",
+        choices: () => gamerulesFor(ctx.state.serverVersion).map((rule) => ({ label: rule.name, value: rule.name })),
+    };
     return {
         command: {
             id: "set-game-rule",
@@ -152,41 +155,17 @@ function gameruleBlocks(ctx: Context, rules: string[]): { command: BlockCommandD
     };
 }
 
-const ruleNames = (ctx: Context) => gamerulesFor(ctx.state.serverVersion).map((rule) => rule.name);
-const registeredRules = serverLocal(() => ({ names: null as string | null }));
-
-/**
- * Registers the game rule blocks when the rules of the server's version are
- * not the ones they list. A server with no version yet (one still being set
- * up) has no rules, so it has no game rule blocks until one is installed.
- */
-export async function refreshGameruleBlocks(ctx: Context): Promise<void> {
-    const scope = currentServer();
-    if (!scope?.blocks) return;
-    const names = ruleNames(ctx);
-    const key = names.join();
-    if (registeredRules().names === key) return;
-    if (names.length === 0) {
-        if (registeredRules().names !== null) {
-            await scope.blocks.unregister("command", "set-game-rule");
-            await scope.blocks.unregister("value", "game-rule");
-        }
-    } else {
-        const { command, value } = gameruleBlocks(ctx, names);
-        await scope.blocks.register(bindBlocks(scope, { commands: [command], values: [value] }));
-    }
-    registeredRules().names = key;
-}
-
 export function minecraftBlocks(ctx: Context): BlockSet {
     const world = { type: "text", name: "World" } as const;
     const roster = (id: string, name: string, icon: string, flag: "whitelisted" | "op" | "banned"): BlockValueDefinition => ({
         id, name, category: "Players", icon, type: "list<player>",
         read: async () => (await listRoster()).filter((entry) => entry[flag]).map((entry) => entry.name),
     });
+    const rules = gameruleBlocks(ctx);
     return {
         commands: [
             ...playerCommands(ctx),
+            rules.command,
             {
                 id: "switch-world",
                 name: "Switch World",
@@ -270,6 +249,7 @@ export function minecraftBlocks(ctx: Context): BlockSet {
             }),
         ],
         values: [
+            rules.value,
             roster("whitelisted-players", "Whitelisted Players", "verified_user", "whitelisted"),
             roster("operators", "Operators", "shield", "op"),
             roster("banned-players", "Banned Players", "gavel", "banned"),

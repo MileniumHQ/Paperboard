@@ -269,12 +269,6 @@ export async function republishDynamicActions(
             );
         }
     }
-    // the Blocks' game rule dropdowns follow the version the same way
-    try {
-        await (await import("./blocks")).refreshGameruleBlocks(ctx);
-    } catch (err) {
-        console.error("[Gameserver] failed to republish the game rule blocks:", err);
-    }
 }
 
 /**

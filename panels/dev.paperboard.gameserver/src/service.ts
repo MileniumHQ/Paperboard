@@ -22,7 +22,7 @@ import {
 } from "./servers";
 import * as nodeFs from "node:fs/promises";
 import { inServer, type ServerScope } from "./service/scope";
-import { announceChanges, bindBlocks, fireTrigger, mergeBlocks, SHARED_TYPES, sharedBlocks } from "./service/blocks";
+import { announceChanges, bindBlocks, fireTrigger, mergeBlocks, sharedBlocks, sharedTypes } from "./service/blocks";
 import { processApi as scopedProcess, LEGACY_DEPRECATION } from "./service/api";
 import { type GameServerState, SERVER_PROC_ID, appendCapped } from "./service/types";
 import { setRecoveryBlock } from "./service/recoveryState";
@@ -433,7 +433,12 @@ export const gameServerService = definePanelService({
         rootContext = ctx;
         try {
             const gameTypes = await Promise.all(games.map((g) => gameServiceFor(g.id).blockTypes?.() ?? []));
-            await blocksApi.panel(PANEL_ID).register({ types: [...SHARED_TYPES, ...gameTypes.flat()] });
+            const onlinePlayers = (server: string) => {
+                const scope = entries.get(server);
+                if (!scope) throw new Error(`There is no server "${server}"`);
+                return scope.ctx.state.onlinePlayers;
+            };
+            await blocksApi.panel(PANEL_ID).register({ types: [...sharedTypes(onlinePlayers), ...gameTypes.flat()] });
             const original = await config.get(PANEL_ID);
             saved = readServersConfig(original);
             // No file operations or data moves: installed records and all config

@@ -23,13 +23,27 @@ import { assertGameAction, gameFor } from "../games";
 
 type Context = ServiceContext<GameServerState>;
 
-/** A player, by the name the server knows them by. The panel's own type. */
-export const PLAYER_TYPE: BlockTypeDefinition<string> = {
-    id: "player",
-    name: "Player",
-    icon: "person",
-    base: "text",
-};
+/**
+ * A player, by the name the server knows them by. The panel's own type.
+ * Whether they're online depends on the server asking, so it's per project.
+ */
+function playerType(onlinePlayers: (server: string) => readonly string[]): BlockTypeDefinition<string> {
+    return {
+        id: "player",
+        name: "Player",
+        icon: "person",
+        base: "text",
+        fields: {
+            online: {
+                type: "boolean",
+                name: "Online",
+                description: "On this server, right now",
+                perProject: true,
+                resolve: (name, { project }) => onlinePlayers(project!).includes(name),
+            },
+        },
+    };
+}
 
 const BACKUP_TYPE: BlockTypeDefinition = {
     id: "backup",
@@ -38,7 +52,7 @@ const BACKUP_TYPE: BlockTypeDefinition = {
     base: "object",
     fields: {
         id: { type: "text", name: "ID" },
-        name: { type: "text", name: "Name", description: "Empty when the backup was not named" },
+        name: { type: "text", name: "Name", description: "A backup nobody named has none", optional: true },
         created: { type: "timestamp", name: "Created" },
         size: { type: "number", name: "Size", description: "In bytes" },
     },
@@ -56,12 +70,14 @@ const LOG_FILE_TYPE: BlockTypeDefinition = {
     },
 };
 
-/** The types every game's blocks use. A game adds its own through blockTypes(). */
-export const SHARED_TYPES: BlockTypeDefinition[] = [PLAYER_TYPE, BACKUP_TYPE, LOG_FILE_TYPE];
+/** The types every game's blocks use, reading who's online on each server. A game adds its own through blockTypes(). */
+export function sharedTypes(onlinePlayers: (server: string) => readonly string[]): BlockTypeDefinition[] {
+    return [playerType(onlinePlayers), BACKUP_TYPE, LOG_FILE_TYPE];
+}
 
 const backupValue = (record: BackupRecord) => ({
     id: record.id,
-    name: record.label ?? "",
+    name: record.label ?? null,
     created: Date.parse(record.createdAt),
     size: record.size,
 });
@@ -291,9 +307,22 @@ export function bindBlocks(scope: ServerScope, set: BlockSet): BlockSet {
     const live = () => {
         if (scope.removing) throw new Error("This server was removed or is being removed");
     };
+    // choices worked out on demand are asked in the server too
+    const inputs = <T extends { inputs?: BlockCommandDefinition["inputs"] }>(def: T): T => {
+        if (!def.inputs) return def;
+        const bound = Object.fromEntries(
+            Object.entries(def.inputs).map(([key, input]) => {
+                const choices = input.choices;
+                if (typeof choices !== "function") return [key, input];
+                return [key, { ...input, choices: (ctx: Parameters<typeof choices>[0]) => (live(), inServer(scope, () => choices(ctx))) }];
+            }),
+        );
+        return { ...def, inputs: bound };
+    };
     return {
         ...set,
-        commands: set.commands?.map((command) => ({
+        events: set.events?.map(inputs),
+        commands: set.commands?.map(inputs).map((command) => ({
             ...command,
             run: async (inputs, ctx) => {
                 live();
@@ -305,7 +334,7 @@ export function bindBlocks(scope: ServerScope, set: BlockSet): BlockSet {
                 }
             },
         })),
-        values: set.values?.map((value) => ({
+        values: set.values?.map(inputs).map((value) => ({
             ...value,
             read: (inputs, ctx) => {
                 live();
