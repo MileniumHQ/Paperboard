@@ -5,6 +5,7 @@
 // as a chatty mod would, so the console must hide the password.
 // What it was started with goes to started-with.json in its working directory (the install).
 // `relay <text>` prints <text> as if the game had: how a test makes a player speak.
+// A relayed join or leave changes who `playing` lists, and `kick` disconnects one.
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
@@ -26,6 +27,13 @@ listener.listen(Number(config.port ?? 7777), "127.0.0.1", () => {
     say("Server started");
     prompt();
 });
+const players: string[] = [];
+const leave = (name: string) => {
+    const at = players.indexOf(name);
+    if (at < 0) return;
+    players.splice(at, 1);
+    say(`${name} has left.`);
+};
 let pending = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk: string) => {
@@ -39,9 +47,17 @@ process.stdin.on("data", (chunk: string) => {
             say("Saving world data: 100%");
             process.exit(0);
         }
-        if (verb === "playing") say("No players connected.");
-        else if (verb === "say") say(`<Server> ${rest.join(" ")}`);
-        else if (verb === "relay") say(rest.join(" "));
+        if (verb === "playing") {
+            players.forEach((name, i) => say(`${name} (127.0.0.1:${50000 + i})`));
+            say(players.length === 0 ? "No players connected." : `${players.length} player${players.length === 1 ? "" : "s"} connected.`);
+        } else if (verb === "say") say(`<Server> ${rest.join(" ")}`);
+        else if (verb === "kick") leave(rest.join(" "));
+        else if (verb === "relay") {
+            const text = rest.join(" ");
+            const joined = text.match(/^(.+) has joined\.$/);
+            if (joined && !players.includes(joined[1]!)) players.push(joined[1]!);
+            say(text);
+        }
         prompt();
     }
 });

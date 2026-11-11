@@ -6,6 +6,7 @@ import { cvarValue, mapName } from "../src/games/source/config";
 import { checkRotation } from "../src/games/source/mapcycle";
 import { configText, validateOptions, worldName } from "../src/games/terraria/config";
 import { playerName } from "../src/games/terraria/roster";
+import { onlyIdNamed } from "../src/service/blocks";
 
 // Other games' inputs cannot be injected.
 describe("other games' inputs", () => {
@@ -55,6 +56,14 @@ describe("other games' inputs", () => {
         const text = configText("/srv/t", { world: "Big World", motd: "hello" }, "pw", "# keep me\nnpcstream=60\nmotd=old\n");
         expect(text.split("\n")).toEqual(expect.arrayContaining(["# keep me", "npcstream=60", "motd=hello", "worldname=Big World"]));
         expect(text).not.toContain("motd=old");
+    });
+
+    test("a block names a player once: a name two players share is refused, never guessed", () => {
+        const players = [{ name: "Ann", id: "steam_1" }, { name: "Sam", id: "steam_2" }, { name: "Sam", id: "steam_3" }, { name: "Ann", id: "steam_1" }];
+        const pick = (name: string) => onlyIdNamed(name, players, (p) => p.name, (p) => p.id, "online");
+        expect(pick("Ann")).toBe("steam_1");
+        expect(() => pick("Sam")).toThrow("2 players are named Sam");
+        expect(() => pick("ann")).toThrow("There's no player named ann online");
     });
 
     test("Terraria kick names must be one line", () => {

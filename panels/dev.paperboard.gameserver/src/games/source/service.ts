@@ -403,7 +403,25 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         updateStatus: () => steamUpdateStatus(steam),
         installUpdate: steamInstall(steam),
         initialState: () => ({ ...initialServerState(), serverSoftware: spec.id, serverPort: String(spec.defaultPort), serverMotd: "" }),
-        blocks: async () => ({ events: (await import("../../service/blocks")).playerEvents() }),
+        blocks: async (ctx) => {
+            const { mergeBlocks, onlyIdNamed, playerEvents, rosterBlocks, runGameAction } = await import("../../service/blocks");
+            // the server kicks by its own user id and bans by Steam id: a block's
+            // player name is looked up among the players online, then the ones it has seen
+            const people = () => [...local().online.values()].filter((p) => p.steamId !== "BOT");
+            const nameOf = (p: { name: string }) => p.name;
+            const steamOf = (p: { steamId: string }) => p.steamId;
+            return mergeBlocks({ events: playerEvents() }, rosterBlocks({
+                kick: (name) => runGameAction(ctx, ids.kick, { userId: onlyIdNamed(name, [...local().online.values()], nameOf, (p) => String(p.userId), "online") }),
+                ban: async (name) => runGameAction(ctx, ids.ban, { steamId: onlyIdNamed(name, [...people(), ...await roster().seen()], nameOf, steamOf, "on this server") }),
+                unban: async (name) => {
+                    const bans = await roster().bans();
+                    // listed by their Steam id when Paperboard never saw them
+                    const byId = bans.find((ban) => ban.steamId === name);
+                    return runGameAction(ctx, ids.unban, { steamId: byId ? byId.steamId : onlyIdNamed(name, bans, nameOf, steamOf, "banned") });
+                },
+                banned: async () => (await roster().bans()).map((ban) => ban.name || ban.steamId),
+            }));
+        },
         actions: async () => { const { sharedActions, backupAction } = await import("../../service/actions"); return [...sharedActions, backupAction,
             action(ACTION_IDS.readGameOptions, "Read options", async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; }),
             action(ACTION_IDS.writeGameOptions, "Save options", async (ctx, { patch }) => {

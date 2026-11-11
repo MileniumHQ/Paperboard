@@ -187,7 +187,16 @@ const action = gameAction;
 export const terrariaService: GameService = {
     primaryProcessId: PROC, processIds: [PROC],
     initialState: () => ({ ...initialServerState(), serverSoftware: "vanilla", serverPort: "7777", serverMotd: "" }),
-    blocks: async () => ({ events: (await import("../../service/blocks")).playerEvents() }),
+    blocks: async (ctx) => {
+        const { mergeBlocks, playerEvents, rosterBlocks, runGameAction } = await import("../../service/blocks");
+        // each runs what the Players tab runs, by the name Terraria knows the player by
+        return mergeBlocks({ events: playerEvents() }, rosterBlocks({
+            kick: (name) => runGameAction(ctx, "terraria-kick", { name }),
+            ban: (name) => runGameAction(ctx, "terraria-ban", { name }),
+            unban: (name) => runGameAction(ctx, "terraria-unban", { name }),
+            banned: async () => (await store().bans()).map((ban) => ban.name),
+        }));
+    },
     actions: async () => { const { sharedActions, backupAction } = await import("../../service/actions"); return [ ...sharedActions, backupAction,
         action(ACTION_IDS.readGameOptions, "Read options", async ctx => { await loadOptions(ctx); return ctx.state.gameSettings; }),
         action(ACTION_IDS.writeGameOptions, "Save options", (ctx, { patch }) => exclusive(ctx, local(), "Terraria", async () => {

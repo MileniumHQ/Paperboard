@@ -33,6 +33,7 @@ import { cancelAutomation, readAutomation, scheduleDailyRestart, scheduleUpdateC
 import { historyWriter, readHistory } from "./service/history";
 
 import { currentGameService, gameServiceFor } from "./games/service";
+import { settingsBlocks } from "./service/settingsBlocks";
 import { assertGameAction, gameFor, games } from "./games";
 import { loadServerOptions } from "./service/options";
 import { livePortDeps } from "./service/portDeps";
@@ -270,7 +271,7 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
         }
         scope.blocks = await blocksApi.defineProject({ id: server.id, ...blocksProject(server) }, PANEL_ID);
         const blocks = scope.blocks;
-        await inServer(scope, async () => blocks.register(bindBlocks(scope, mergeBlocks(sharedBlocks(scope.ctx), await game.blocks?.(scope.ctx)))));
+        await inServer(scope, async () => blocks.register(bindBlocks(scope, mergeBlocks(sharedBlocks(scope.ctx), settingsBlocks(scope.ctx), await game.blocks?.(scope.ctx)))));
         let wasRunning = false;
         try {
             const history = await readHistory(await historyFile(server.id));

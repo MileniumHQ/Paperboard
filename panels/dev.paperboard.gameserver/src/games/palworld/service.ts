@@ -220,7 +220,30 @@ export const palworldService: GameService = {
     updateStatus: () => steamUpdateStatus(steam),
     installUpdate: steamInstall(steam),
     initialState: () => ({ ...initialServerState(), serverSoftware: "palworld", serverPort: String(DEFAULT_PORT), serverMotd: "" }),
-    blocks: async () => ({ events: (await import("../../service/blocks")).playerEvents() }),
+    blocks: async (ctx) => {
+        const { mergeBlocks, onlyIdNamed, playerEvents, rosterBlocks, runGameAction } = await import("../../service/blocks");
+        // Palworld kicks and bans by user id: a block's player name is looked up
+        // among the players online, then the ones the server has seen
+        const known = async () => [...local().online, ...await roster().seen()];
+        const nameOf = (p: { name: string }) => p.name;
+        const idOf = (p: { userId: string }) => p.userId;
+        return mergeBlocks({ events: playerEvents() }, rosterBlocks({
+            kick: (name) => runGameAction(ctx, "palworld-kick", { userId: onlyIdNamed(name, local().online, nameOf, idOf, "online") }),
+            ban: async (name) => runGameAction(ctx, "palworld-ban", { userId: onlyIdNamed(name, await known(), nameOf, idOf, "on this server") }),
+            unban: async (name) => {
+                const bans = new Set(await roster().bans());
+                // listed by their user id when Paperboard never saw them
+                if (bans.has(name)) return runGameAction(ctx, "palworld-unban", { userId: name });
+                const banned = (await roster().seen()).filter((p) => bans.has(p.userId));
+                return runGameAction(ctx, "palworld-unban", { userId: onlyIdNamed(name, banned, nameOf, idOf, "banned") });
+            },
+            // a ban of a player Paperboard never saw shows as their user id, as the Players tab shows it
+            banned: async () => {
+                const seen = new Map((await roster().seen()).map((p) => [p.userId, p.name]));
+                return (await roster().bans()).map((id) => seen.get(id) ?? id);
+            },
+        }));
+    },
     actions: async () => { const { sharedActions, backupAction } = await import("../../service/actions"); return [...sharedActions, backupAction,
         gameAction(ACTION_IDS.readGameOptions, "Read options", async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; }),
         gameAction(ACTION_IDS.writeGameOptions, "Save options", async (ctx, { patch }) => {

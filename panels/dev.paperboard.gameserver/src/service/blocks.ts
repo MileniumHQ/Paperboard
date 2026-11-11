@@ -428,6 +428,58 @@ export function playerEvents(): BlockEventDefinition[] {
     ];
 }
 
+/** Runs one of the game's Actions (v1) the way its tab does, so a block is checked as the tab's edit is. */
+export async function runGameAction<T>(ctx: Context, id: string, inputs: Record<string, unknown>): Promise<T> {
+    const action = (await currentGameService().actions()).find((a) => a.id === id);
+    if (!action?.run) throw new Error(`${gameFor(currentServer()!.server.game).name} has no "${id}" action`);
+    return (await action.run(ctx, inputs)) as T;
+}
+
+/** How a game kicks, bans and unbans a player by the name Blocks knows them by, and who it has banned. */
+export interface PlayerRoster {
+    kick(player: string): Promise<unknown>;
+    ban(player: string): Promise<unknown>;
+    unban(player: string): Promise<unknown>;
+    banned(): Promise<string[]>;
+}
+
+/** Kick, ban and unban, and the banned players, for a game whose Players tab has them. */
+export function rosterBlocks(roster: PlayerRoster): BlockSet {
+    const player = { type: "player", name: "Player" } as const;
+    const command = (id: string, name: string, icon: string, description: string, text: string, run: (player: string) => Promise<unknown>): BlockCommandDefinition => ({
+        id, name, category: "Players", icon, description, text, inputs: { player }, run: async ({ player }: { player: string }) => void (await run(player)),
+    });
+    return {
+        commands: [
+            command("kick-player", "Kick Player", "person_remove", "Disconnects a player from the server", "Kick {player}", roster.kick),
+            command("ban-player", "Ban Player", "gavel", "Bans a player from the server, and disconnects them if they're on it", "Ban {player}", roster.ban),
+            command("unban-player", "Unban Player", "undo", "Lets a banned player join again", "Unban {player}", roster.unban),
+        ],
+        values: [
+            {
+                id: "banned-players",
+                name: "Banned Players",
+                category: "Players",
+                icon: "block",
+                description: "The players banned from the server, as the Players tab lists them",
+                type: "list<player>",
+                read: () => roster.banned(),
+            },
+        ],
+    };
+}
+
+/**
+ * The one id a game knows a player by, from the players with that name; a
+ * name two players share is refused, since a block can't tell them apart.
+ */
+export function onlyIdNamed<T>(name: string, players: readonly T[], nameOf: (p: T) => string, idOf: (p: T) => string, where: string): string {
+    const ids = [...new Set(players.filter((p) => nameOf(p) === name).map(idOf))];
+    if (ids.length === 0) throw new Error(`There's no player named ${name} ${where}`);
+    if (ids.length > 1) throw new Error(`${ids.length} players are named ${name}; use the Players tab to pick one`);
+    return ids[0]!;
+}
+
 /** Every set as one: a game's blocks beside the shared ones. */
 export function mergeBlocks(...sets: (BlockSet | undefined)[]): BlockSet {
     return {

@@ -41,8 +41,8 @@ function nextEvent(event: string, project: string | undefined, timeoutMs = 10_00
 const settle = () => new Promise((resolve) => setTimeout(resolve, 300));
 
 const SHARED = {
-    commands: ["back-up", "delete-backup", "restart-server", "restore-backup", "run-command", "save-world", "say", "set-automatic-updates", "set-daily-restart", "set-restart-after-crash", "start-server", "stop-server"],
-    values: ["automation", "backups", "console-output", "log", "log-files", "online-players", "player-count", "server-status"],
+    commands: ["back-up", "delete-backup", "restart-server", "restore-backup", "run-command", "save-world", "say", "set-automatic-updates", "set-daily-restart", "set-option", "set-restart-after-crash", "start-server", "stop-server", "write-file"],
+    values: ["automation", "backups", "console-output", "file-text", "files", "log", "log-files", "online-players", "option", "player-count", "server-status"],
     events: ["backup-failed", "backup-finished", "server-crashed", "server-started", "server-stopped"],
 };
 const PLAYER_EVENTS = ["chat-message", "player-joined", "player-left"];
@@ -90,7 +90,11 @@ describe("each server is a Blocks project with its game's blocks", () => {
             values: [...SHARED.values, "active-world", "banned-players", "game-rule", "operators", "player-by-uuid", "player-statistics", "plugins", "statistics-of", "whitelisted-players", "worlds"],
             events: [...SHARED.events, ...PLAYER_EVENTS],
         }).sort());
-        expect(of("s-t/")).toEqual(entriesOf("s-t", { ...SHARED, events: [...SHARED.events, ...PLAYER_EVENTS] }).sort());
+        expect(of("s-t/")).toEqual(entriesOf("s-t", {
+            commands: [...SHARED.commands, "ban-player", "kick-player", "unban-player"],
+            values: [...SHARED.values, "banned-players"],
+            events: [...SHARED.events, ...PLAYER_EVENTS],
+        }).sort());
 
         const schema = (entry: string) => all.find((b) => b.entry === entry)!.schema as any;
         expect(schema("s-a/command.kick-player")).toMatchObject({ text: "Kick {player} because {reason}", inputs: { player: { type: `${PANEL_ID}:player` } } });
@@ -112,6 +116,37 @@ describe("each server is a Blocks project with its game's blocks", () => {
         await expect(run("switch-world", { world: "Elsewhere" })).rejects.toThrow('This server has no world named "Elsewhere"');
         await expect(run("restart-server")).rejects.toThrow("The server is not online, so it can't restart");
         expect(await read("active-world")).toBe("Second");
+    });
+
+    test("the option blocks read and change what the Options tab does, and refuse what it would", async () => {
+        const options = await blocksApi.choices(PANEL_ID, "s-a/command.set-option", "option");
+        expect(options.map((c) => c.value)).toEqual(expect.arrayContaining(["difficulty", "max-players", "pvp"]));
+        expect(await run("set-option", { option: "difficulty", value: "hard" })).toBeNull();
+        // a Text block's words become the option's own kind
+        expect(await run("set-option", { option: "pvp", value: "false" })).toBeNull();
+        expect(await run("set-option", { option: "max-players", value: "12" })).toBeNull();
+        expect(await read("option", { option: "difficulty" })).toBe("hard");
+        expect(await read("option", { option: "pvp" })).toBe(false);
+        expect(await read("option", { option: "max-players" })).toBe(12);
+        expect(fs.readFileSync(path.join(serverDir, "server.properties"), "utf8")).toMatch(/^difficulty=hard$/m);
+        await expect(run("set-option", { option: "max-players", value: "lots" })).rejects.toThrow("Max Players");
+        await expect(run("set-option", { option: "difficulty", value: "impossible" })).rejects.toThrow("Difficulty must be one of");
+        await expect(read("option", { option: "no-such-option" })).rejects.toThrow('"Option" must be one of');
+        // each game's own options
+        const terrariaOptions = await blocksApi.choices(PANEL_ID, "s-t/command.set-option", "option");
+        expect(terrariaOptions.map((c) => c.value)).toContain("maxplayers");
+        expect(terrariaOptions.map((c) => c.value)).not.toContain("password");
+    });
+
+    test("the file blocks list, read and replace the server's text files, and stay inside its folder", async () => {
+        expect(await read("files")).toEqual(expect.arrayContaining(["eula.txt", "server.properties"]));
+        expect(await read("file-text", { file: "eula.txt" })).toBe("eula=true\n");
+        expect(await run("write-file", { file: "eula.txt", text: "eula=true\n# kept\n" })).toBeNull();
+        expect(fs.readFileSync(path.join(serverDir, "eula.txt"), "utf8")).toBe("eula=true\n# kept\n");
+        await expect(run("write-file", { file: "new.txt", text: "x" })).rejects.toThrow();
+        expect(fs.existsSync(path.join(serverDir, "new.txt"))).toBe(false);
+        await expect(read("file-text", { file: "../s-t/secret.txt" })).rejects.toThrow();
+        await expect(read("files", { folder: ".." })).rejects.toThrow();
     });
 
     test("the values read the players online, and a kick announces the change before a fresh read shows it", async () => {
@@ -183,6 +218,18 @@ describe("each server is a Blocks project with its game's blocks", () => {
         await run("run-command", { command: "relay <Bob> hello there" }, "s-t");
         expect(await joined).toEqual({ player: "Bob" });
         expect(await chatted).toEqual({ player: "Bob", message: "hello there" });
+
+        // the Players tab's kick and ban, by the name the server knows
+        await state.waitFor("s-t", (s) => s.onlinePlayers.includes("Bob"), "Bob online");
+        expect(await run("kick-player", { player: "Bob" }, "s-t")).toBeNull();
+        await state.waitFor("s-t", (s) => !s.onlinePlayers.includes("Bob"), "Bob kicked");
+        await expect(run("kick-player", { player: "Carol" }, "s-t")).rejects.toThrow("Carol is not online");
+        await expect(run("ban-player", { player: "Carol" }, "s-t")).rejects.toThrow("Carol has never joined this server");
+        // Bob left, so the ban is kept by the address he joined from
+        expect(await run("ban-player", { player: "Bob" }, "s-t")).toBeNull();
+        expect(await read("banned-players", undefined, "s-t")).toEqual(["Bob"]);
+        expect(await run("unban-player", { player: "Bob" }, "s-t")).toBeNull();
+        expect(await read("banned-players", undefined, "s-t")).toEqual([]);
 
         const stopped = nextEvent("server-stopped", "s-t");
         await settle();
