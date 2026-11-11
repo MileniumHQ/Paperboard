@@ -37,6 +37,7 @@ import { settingsBlocks } from "./service/settingsBlocks";
 import { assertGameAction, gameFor, games } from "./games";
 import { loadServerOptions } from "./service/options";
 import { livePortDeps } from "./service/portDeps";
+import { waitUntil } from "./games/serviceKit";
 export * from "./service/types";
 export * from "./games/minecraft/actions";
 export { LEGACY_DEPRECATION };
@@ -326,6 +327,12 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
         throw err;
     }
 }
+/** The servers that run any of these processes (their ids as the daemon knows them). */
+function serversRunning(processes: string[]): ServerScope[] {
+    return [...entries.values()].filter((scope) =>
+        gameServiceFor(scope.server.game).processIds.some((id) => processes.includes(scope.legacy ? id : `${scope.server.id}-${id}`)),
+    );
+}
 /** Makes a server, as New server does; gives its id. */
 function addServer(name: unknown, game: unknown): Promise<string> {
     return serial(async () => {
@@ -530,6 +537,31 @@ export const gameServerService = definePanelService({
         } catch (err) {
             ctx.setState({ serversError: err instanceof Error ? err.message : String(err) });
             console.error("[gameserver] servers could not be loaded:", err);
+        }
+    },
+    // an update of Game Server, or of a runtime its servers run on (Java),
+    // stops each server in its way the way Stop does, saving the world,
+    // and starts it again once the update ends
+    async beforeUpdate(_ctx, { processes }) {
+        for (const scope of serversRunning(processes)) {
+            await inServer(scope, async () => {
+                if (scope.ctx.state.serverStatus === "restarting")
+                    throw new Error(`${scope.server.name} is restarting; update once it's back online`);
+                scope.ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "info", content: "[Server] Stopping for an update..." }) }));
+                await stopServerInstance(scope.ctx);
+                await waitUntil(async () => !(await scopedProcess.exists(currentGameService().primaryProcessId)), 90_000, `${scope.server.name} to stop`);
+            });
+        }
+    },
+    async afterUpdate(_ctx, { processes, ok, error }) {
+        for (const scope of serversRunning(processes)) {
+            const why = ok
+                ? { type: "info" as const, content: "[Server] Updated. Starting again." }
+                : { type: "warn" as const, content: `[Server] The update failed, so nothing changed: ${error ?? "no reason given"}. Starting again.` };
+            // a launch that fails says so in the console itself
+            await inServer(scope, () => startServerInstance(scope.ctx, [why])).catch((err) =>
+                console.error(`[gameserver] ${scope.server.name} could not start again after the update:`, err),
+            );
         }
     },
     async beforeRestore(_ctx, { sourceId }) {
