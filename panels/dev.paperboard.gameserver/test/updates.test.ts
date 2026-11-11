@@ -59,7 +59,7 @@ beforeAll(async () => {
     await restartService();
 });
 afterAll(async () => {
-    await call(`${ID}/stop-server`).catch(() => {});
+    await call(`${ID}/stop-server`);
     await daemon?.stop();
     await registry?.close();
     delete process.env.ORIGAMI_REGISTRY_URL;

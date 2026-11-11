@@ -76,6 +76,6 @@ describe("a PaperModal's backdrop blur", () => {
     test("is none under the operating system's reduced transparency", async () => {
         await open();
         await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-transparency", value: "reduce" }] });
-        expect(await backdropFilter()).toBe("none");
+        await settlesAt("none");
     });
 });

@@ -4,6 +4,7 @@ import { Dynamic } from "solid-js/web";
 import { marked, type Token, type Tokens } from "marked";
 import { PaperCode } from "../PaperCode";
 import { PaperLink } from "../PaperLink";
+import { prefersReducedMotion } from "../PaperPresence";
 import { PaperQuote } from "../PaperQuote";
 import { PaperSeparator } from "../PaperSeparator";
 import { PaperTable } from "../PaperTable";
@@ -112,6 +113,46 @@ function safeImageSrc(raw: string | null | undefined): string | null {
     return value;
 }
 
+// what a heading reads as, for its slug: text, code and alt text, no markup
+function plainText(tokens: Token[] | undefined): string {
+    return (tokens ?? [])
+        .map((token) => {
+            if (token.type === "html") return "";
+            if (token.type === "image") return (token as Tokens.Image).text;
+            const nested = (token as Tokens.Generic).tokens as Token[] | undefined;
+            if (nested) return plainText(nested);
+            return (token as Tokens.Text).text ?? "";
+        })
+        .join("");
+}
+
+// GitHub's heading slugs, so a README's `[Install](#install)` lands: lower
+// case, punctuation dropped, spaces to hyphens, and a repeat gets -1, -2
+function headingSlugs(tokens: Token[]): Map<Token, string> {
+    const slugs = new Map<Token, string>();
+    const seen = new Map<string, number>();
+    const walk = (list: Token[] | undefined) => {
+        for (const token of list ?? []) {
+            if (token.type === "heading") {
+                const base = plainText((token as Tokens.Heading).tokens)
+                    .toLowerCase()
+                    .trim()
+                    .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, "")
+                    .replace(/ /g, "-");
+                const count = seen.get(base) ?? 0;
+                seen.set(base, count + 1);
+                slugs.set(token, count ? `${base}-${count}` : base);
+            } else if (token.type === "list") {
+                for (const item of (token as Tokens.List).items) walk(item.tokens);
+            } else if (token.type === "blockquote") {
+                walk((token as Tokens.Blockquote).tokens);
+            }
+        }
+    };
+    walk(tokens);
+    return slugs;
+}
+
 // the paragraph's one image, if it has nothing else but surrounding whitespace
 function soleImage(tokens: Token[] | undefined): Tokens.Image | null {
     const content = (tokens ?? []).filter(
@@ -140,6 +181,27 @@ export function PaperMarkdown(props: PaperMarkdownProps) {
     const tokens = createMemo<Token[]>(() =>
         marked.lexer(local.text ?? "", { gfm: true, breaks: true }),
     );
+    const slugs = createMemo(() => headingSlugs(tokens()));
+
+    // a #link goes to its heading in this block, found by slug rather than
+    // by a document id: an id from the text could clash with the page's own,
+    // or with another PaperMarkdown's. Matched raw or percent-encoded, as a
+    // link to a non-ASCII heading is usually written.
+    let root: HTMLDivElement | undefined;
+    const followAnchor = (event: MouseEvent) => {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const link = (event.target as globalThis.Element | null)?.closest?.("a[href^='#']");
+        if (!link || !root?.contains(link)) return;
+        const target = (link.getAttribute("href") ?? "").slice(1);
+        const heading = [...root.querySelectorAll<HTMLElement>("[data-anchor]")].find((el) => {
+            const slug = el.dataset.anchor ?? "";
+            return slug === target || encodeURIComponent(slug).toLowerCase() === target.toLowerCase();
+        });
+        if (!heading) return;
+        event.preventDefault();
+        heading.scrollIntoView({ block: "start", behavior: prefersReducedMotion(root) ? "auto" : "smooth" });
+        heading.focus({ preventScroll: true });
+    };
 
     const InlineImage = (image: { src: string; alt: string; title: string | null; width?: string; height?: string }): JSX.Element => {
         const custom = local.renderImage?.({ src: image.src, alt: image.alt, title: image.title, block: false });
@@ -466,8 +528,9 @@ export function PaperMarkdown(props: PaperMarkdownProps) {
                 const preset =
                     HEADING_PRESETS[Math.min(heading.depth, 4) - 1] ??
                     "subtitle";
+                // tabindex -1: a #link moves focus here without adding a tab stop
                 return (
-                    <PaperText preset={preset} as={`h${heading.depth}`}>
+                    <PaperText preset={preset} as={`h${heading.depth}`} data-anchor={slugs().get(token)} tabIndex={-1}>
                         <Inline tokens={heading.tokens} />
                     </PaperText>
                 );
@@ -604,8 +667,10 @@ export function PaperMarkdown(props: PaperMarkdownProps) {
 
     return (
         <div
+            ref={root}
             class={[styles.PaperMarkdown, local.class].filter(Boolean).join(" ")}
             classList={local.classList}
+            onClick={followAnchor}
         >
             <Blocks tokens={tokens()} />
         </div>
