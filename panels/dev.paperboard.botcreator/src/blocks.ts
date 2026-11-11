@@ -452,7 +452,7 @@ export const builderCommands: BlockCommandDefinition[] = [
     {
         id: "create-embed",
         name: "Embed",
-        category: "Message Parts",
+        category: "Embeds",
         icon: "article",
         description: "A rich box of text for Send, Reply, Respond or Follow Up",
         text: "Embed {title} saying {description} in {color}, linking {url}, with footer {footer} and image {image}",
@@ -471,7 +471,7 @@ export const builderCommands: BlockCommandDefinition[] = [
     {
         id: "create-button",
         name: "Button",
-        category: "Message Parts",
+        category: "Buttons & Menus",
         icon: "smart_button",
         description: "A button for a message's Components. A click starts When a Button or Menu Is Used with its Component ID; a link button opens its link instead",
         text: "{style} button {label} with ID {component-id}, link {url} and emoji {emoji}, {disabled}",
@@ -506,7 +506,7 @@ export const builderCommands: BlockCommandDefinition[] = [
     {
         id: "create-select-menu",
         name: "Select Menu",
-        category: "Message Parts",
+        category: "Buttons & Menus",
         icon: "arrow_drop_down_circle",
         description: "A dropdown for a message's Components. It fills a row of its own; a pick starts When a Button or Menu Is Used with its Component ID. Options are only for a menu of options",
         text: "Menu of {menu} with ID {component-id}: {options}, {min-picks} to {max-picks} picks, hint {placeholder}",
@@ -532,7 +532,7 @@ export const builderCommands: BlockCommandDefinition[] = [
     {
         id: "create-interaction-row",
         name: "Component Row",
-        category: "Message Parts",
+        category: "Buttons & Menus",
         icon: "view_week",
         description: "Up to five buttons, or one select menu, on one row. Components before or after it go on their own rows",
         text: "Row of {components}",
@@ -797,7 +797,7 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
         {
             id: "respond-to-interaction",
             name: "Respond to Interaction",
-            category: "Interactions",
+            category: "Responses",
             icon: "reply",
             description: "Answers a slash command, button, menu or modal. Responding again edits the answer",
             text: "Respond to {interaction} with {content}, {embeds} and {components}, {ephemeral}",
@@ -814,7 +814,7 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
         {
             id: "follow-up-interaction",
             name: "Follow Up to Interaction",
-            category: "Interactions",
+            category: "Responses",
             icon: "forward",
             description: "Sends another message after the answer to an interaction",
             text: "Follow up {interaction} with {content}, {embeds} and {components}, {ephemeral}",
@@ -833,7 +833,7 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
         {
             id: "show-modal",
             name: "Show Modal",
-            category: "Interactions",
+            category: "Modals",
             icon: "dynamic_form",
             description: "Opens a form for whoever used a slash command, button or menu. It must be the first answer; the reply starts When a Modal Is Submitted",
             text: "Show modal {title} with ID {modal-id} and {fields} for {interaction}",
@@ -1319,7 +1319,7 @@ export const staticEvents: BlockEventDefinition[] = [
     {
         id: "component-used",
         name: "When a Button or Menu Is Used",
-        category: "Interactions",
+        category: "Buttons & Menus",
         icon: "touch_app",
         description: "A click on a button, or a pick from a menu, of a message this bot sent. Answer it with Respond to Interaction",
         text: "When {component-id} is used",
@@ -1339,7 +1339,7 @@ export const staticEvents: BlockEventDefinition[] = [
     {
         id: "modal-submitted",
         name: "When a Modal Is Submitted",
-        category: "Interactions",
+        category: "Modals",
         icon: "dynamic_form",
         description: "Field 1 is the first text field's answer, and so on",
         text: "When modal {modal-id} is submitted",
@@ -1462,7 +1462,7 @@ export function commandEvent(command: SlashCommandDefinition): BlockEventDefinit
     return {
         id: commandEventId(command),
         name: global ? `When /${command.name} Is Used` : `When /${command.name} Is Used in Its Server`,
-        category: "Commands",
+        category: "Slash Commands",
         icon: "terminal",
         description: global
             ? command.userInstall
