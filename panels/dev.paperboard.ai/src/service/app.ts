@@ -174,6 +174,10 @@ export class AiApp {
     private resolveReady!: () => void;
     private updateTimer: ReturnType<typeof setTimeout> | undefined;
     private updateWatchClosed = false;
+    // init has finished and started its background checks: until then the service is starting, not idle
+    private started = false;
+    // work started that nobody waits for (a check, a write, an install) and has not ended
+    private pending = 0;
     private readonly updateCheckMs: number;
     readonly ready = new Promise<void>((resolve) => (this.resolveReady = resolve));
     /** the panel's blocks for the Blocks panel (Actions API v2) */
@@ -196,7 +200,7 @@ export class AiApp {
             onModels: (models, modelErrors) => {
                 this.ctx.setState({ models, modelErrors });
                 // the model dropdowns on Ask AI and the triggers follow this list
-                void republishPublicActions(this).catch((err) =>
+                void this.track(republishPublicActions(this)).catch((err) =>
                     console.error("[ai] republishing action options failed:", String(err)),
                 );
                 this.blocks.list("models", () => this.blockModels());
@@ -206,6 +210,47 @@ export class AiApp {
     }
 
     private readonly findAgent: (command: string, args: readonly string[]) => Promise<Launch | null>;
+
+    /**
+     * Says whether the service has nothing to do until an action calls it:
+     * no Local AI (its runtime watch and update restarts) and no coding
+     * agent added, so no process to watch; Local AI not running, starting
+     * or installing; no reply, model download, approval, agent or agent
+     * session; nothing started that is still under way; and nothing shown
+     * that only this process knows (an error, a chat waiting to be opened).
+     * An added endpoint has no duty of its own: its replies are the
+     * generating ones. Called after every state change and every start or
+     * end of pending work.
+     */
+    private updateIdle(): void {
+        const state = this.ctx.state;
+        this.ctx.setIdle(
+            this.started
+            && this.pending === 0
+            && state.connections.every((c) => c.kind === "openai-compatible")
+            && (state.runtime.status === "missing" || state.runtime.status === "stopped")
+            && state.runtime.install === undefined
+            && state.generating.length === 0
+            && state.pulls.length === 0
+            && state.approvals.length === 0
+            && Object.keys(state.agents).length === 0
+            && Object.keys(state.agentSessions).length === 0
+            && state.storageError === undefined
+            && state.openRequest === null,
+        );
+    }
+
+    /** Keeps the service awake until `work` ends; the work's own failure still reaches whoever handles it. */
+    private track<T>(work: Promise<T>): Promise<T> {
+        this.pending++;
+        this.updateIdle();
+        const done = () => {
+            this.pending--;
+            this.updateIdle();
+        };
+        work.then(done, done);
+        return work;
+    }
 
     private patchRuntime(patch: Partial<RuntimeState>): void {
         this.ctx.setState((prev) => ({ runtime: { ...prev.runtime, ...patch } }));
@@ -357,7 +402,7 @@ export class AiApp {
             // runtime, and never await its boot: readiness and failure travel
             // through state.runtime
             if (this.ctx.state.runtime.status !== "ready") {
-                void this.startIfInstalled().catch((err) => console.error("[ai] Ollama did not start:", String(err)));
+                void this.track(this.startIfInstalled()).catch((err) => console.error("[ai] Ollama did not start:", String(err)));
             }
             return this.connection(added.id);
         }
@@ -528,7 +573,19 @@ export class AiApp {
     }
 
     async init(ctx: Ctx): Promise<void> {
-        this.ctx = ctx;
+        // every change to the state can change whether the service is idle
+        this.ctx = {
+            get state() {
+                return ctx.state;
+            },
+            setState: (patch) => {
+                ctx.setState(patch);
+                this.updateIdle();
+            },
+            emit: (event, payload) => ctx.emit(event, payload),
+            emitTrigger: (id, output) => ctx.emitTrigger(id, output),
+            setIdle: (idle) => ctx.setIdle(idle),
+        };
         this.filesDir = await fileApi.getPath("", PANEL_ID);
         for (const dir of ["models", "home", "conversations"]) {
             await fs.promises.mkdir(path.join(this.filesDir, dir), { recursive: true });
@@ -558,7 +615,7 @@ export class AiApp {
                     return { agents };
                 }),
             onModels: (connectionId, models) =>
-                void this.rememberAgentModels(connectionId, models).catch((err) => console.error("[ai] saving an agent's models failed:", String(err))),
+                void this.track(this.rememberAgentModels(connectionId, models)).catch((err) => console.error("[ai] saving an agent's models failed:", String(err))),
             onSessionInfo: (conversationId, info) =>
                 this.ctx.setState((prev) => {
                     const agentSessions = { ...prev.agentSessions };
@@ -591,7 +648,7 @@ export class AiApp {
             onSummaries: (conversations) => this.ctx.setState({ conversations }),
             onGenerating: (generating) => this.ctx.setState({ generating }),
             onApprovals: (approvals) => this.ctx.setState({ approvals }),
-            onSpeed: (model, tps) => void this.recordSpeed(model, tps),
+            onSpeed: (model, tps) => void this.track(this.recordSpeed(model, tps)),
             onReplyFinished: (payload) => {
                 this.ctx.emitTrigger(TRIGGER_IDS.replyFinished, payload);
                 this.blocks.fire(TRIGGER_IDS.replyFinished, { text: payload.text, chat: payload.conversationId, model: this.chatModel(payload.conversationId, payload.model) });
@@ -608,22 +665,24 @@ export class AiApp {
         // (the Windows GPU-crash report). Start it in the background; its
         // state surfaces through patchRuntime either way.
         this.resolveReady();
-        void this.refreshHardware();
+        void this.track(this.refreshHardware());
         // endpoints need no runtime; their models list right away, and
         // Ollama's join once its runtime reports ready
-        void this.models.refresh().catch((err) => console.error("[ai] listing models failed:", String(err)));
+        void this.track(this.models.refresh()).catch((err) => console.error("[ai] listing models failed:", String(err)));
         // an agent a previous service run left behind has lost its sessions
-        void this.agents
-            .stopLeftovers(this.connections.filter((c) => c.kind === "agent"))
+        void this.track(this.agents
+            .stopLeftovers(this.connections.filter((c) => c.kind === "agent")))
             .catch((err) => console.error("[ai] stopping agents left from an earlier run failed:", String(err)));
         if (this.hasOllama()) {
-            void this.startIfInstalled().catch((err) => console.error("[ai] Ollama startup task failed:", String(err)));
+            void this.track(this.startIfInstalled()).catch((err) => console.error("[ai] Ollama startup task failed:", String(err)));
         } else {
             // not added, so not started; setup still needs to know whether
             // adding it means installing or only starting
-            void this.checkInstalled().catch((err) => console.error("[ai] Ollama package check failed:", String(err)));
+            void this.track(this.checkInstalled()).catch((err) => console.error("[ai] Ollama package check failed:", String(err)));
         }
         this.scheduleUpdateCheck();
+        this.started = true;
+        this.updateIdle();
     }
 
     // ─── Ollama updates ────────────────────────────────────────────────────
@@ -704,7 +763,7 @@ export class AiApp {
             this.stored = draft;
         });
         this.configQueue = next.catch((err) => console.debug("[ai] config write failed:", String(err)));
-        return next;
+        return this.track(next);
     }
 
     async updateSettings(patch: Partial<Settings>): Promise<Settings> {
@@ -760,7 +819,7 @@ export class AiApp {
         });
         this.ctx.setState({ favorites });
         // the model dropdowns of Ask AI and the reply trigger are the favorites
-        void republishPublicActions(this).catch((err) => console.error("[ai] republishing action options failed:", String(err)));
+        void this.track(republishPublicActions(this)).catch((err) => console.error("[ai] republishing action options failed:", String(err)));
         this.blocks.list("favorite-models", () => this.favoriteModels());
         return favorites;
     }
@@ -1169,7 +1228,7 @@ export class AiApp {
         // the download can outlive any caller's patience: acknowledge now,
         // and let progress/failure travel through state.runtime (the UI
         // renders `install` and `error`), never a request/response deadline
-        void this.runInstall();
+        void this.track(this.runInstall());
     }
 
     private async runInstall(): Promise<void> {
@@ -1185,7 +1244,7 @@ export class AiApp {
             return;
         }
         // start reports its own progress and failure through state too
-        void this.startRuntime().catch((err) => console.error("[ai] Ollama did not start:", String(err)));
+        void this.track(this.startRuntime()).catch((err) => console.error("[ai] Ollama did not start:", String(err)));
     }
 
     // ─── hardware & fit ────────────────────────────────────────────────────

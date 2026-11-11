@@ -133,6 +133,7 @@ function makeCtx() {
         },
         emit() {},
         emitTrigger() {},
+        setIdle() {},
     };
 }
 
