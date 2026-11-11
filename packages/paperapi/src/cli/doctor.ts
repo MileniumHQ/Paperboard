@@ -5,7 +5,6 @@ import fs from "fs";
 import path from "path";
 import { requirePanelId } from "../panelIdentity";
 import { validateWidgetDeclarations, WIDGET_ENTRY } from "../widgetManifest";
-import { tutorialImagePaths, validateTutorialDeclaration } from "../tutorialManifest";
 import { HostConnection } from "./daemon";
 import { panelsDir, paperboardDir } from "./paths";
 import { CliError, EXIT_FAILED, EXIT_OK, shownPath, type Output } from "./output";
@@ -88,11 +87,6 @@ function checkManifest(dir: string, checks: Check[]): Record<string, any> | null
     } catch (err) {
         problems.push(`"widgets": ${(err as Error).message}`);
     }
-    try {
-        validateTutorialDeclaration(manifest.tutorial);
-    } catch (err) {
-        problems.push(`"tutorial": ${(err as Error).message}`);
-    }
     if (problems.length > 0) {
         for (const problem of problems) checks.push({ name: "Manifest", status: "fail", detail: problem });
         return null;
@@ -111,7 +105,6 @@ function checkBuild(dir: string, manifest: Record<string, any>, checks: Check[])
     const expected = [String(manifest.base ?? "./dist/index.html")];
     if (manifest.service) expected.push(String(manifest.service));
     if (validateWidgetDeclarations(manifest.widgets).length > 0) expected.push(`./dist/${WIDGET_ENTRY}`);
-    for (const image of tutorialImagePaths(validateTutorialDeclaration(manifest.tutorial))) expected.push(`./dist/${image.replace(/^\.\//, "")}`);
 
     const missing = expected.filter((file) => !fs.existsSync(path.resolve(dir, file)));
     if (missing.length > 0) {

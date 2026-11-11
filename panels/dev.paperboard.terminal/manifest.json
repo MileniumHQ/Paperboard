@@ -16,11 +16,6 @@
             "options": [{ "id": "command", "label": "Command" }]
         }
     ],
-    "tutorial": [
-        {"image": {"light": "./tutorial/1-light.webp", "dark": "./tutorial/1-dark.webp", "alt": "Three terminal tabs: system info, a git log and the weather"}, "title": "Tabs keep running", "body": "Each tab stays alive until you close it. Start a long job, switch panels or close the window, and it keeps going."},
-        {"image": {"light": "./tutorial/2-light.webp", "dark": "./tutorial/2-dark.webp", "alt": "The Saved commands menu with Disk usage, Repo status, Weather and Update system"}, "title": "Save the commands you repeat", "body": "Save a command once and run it from the tab bar, or pin it to Home to run it in one click."},
-        {"image": {"light": "./tutorial/3-light.webp", "dark": "./tutorial/3-dark.webp", "alt": "A weather forecast drawn in a terminal tab"}, "title": "Bring any tool", "body": "If it runs in a terminal it runs here, colors and all. Even the weather forecast."}
-    ],
     "store": {
         "about": "./store/about.md",
         "screenshots": [

@@ -168,7 +168,7 @@ export function createShellInvokeHandlers(
         // app version for shell label
         "app-version": () => deps.appVersion(),
 
-        // command-line switches the shell honors, e.g. --no-tutorial
+        // command-line switches the shell honors, e.g. --mobile
         "launch-options": () => deps.launchOptions(),
     };
 }

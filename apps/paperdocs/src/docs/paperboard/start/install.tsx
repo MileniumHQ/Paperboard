@@ -136,8 +136,7 @@ export default function InstallDoc() {
 
             <PaperText preset="subheader" as="h2" id="first-start">The first start</PaperText>
             <PaperText preset="body" as="p">
-                Paperboard checks for updates each time it opens, then shows a short tutorial.
-                Run the tutorial again from <b>Settings</b> with <b>Show tutorial</b>.
+                Paperboard checks for updates each time it opens.
             </PaperText>
             <PaperText preset="body" as="p">
                 Everything Paperboard keeps is in one folder, <PaperCode>.paperboard</PaperCode> in your home folder.
@@ -171,8 +170,9 @@ export default function InstallDoc() {
             </PaperText>
             <PaperTextList>
                 <li>A new app version downloads in the background. When it is ready, <b>Restart to update</b> appears at the top of the window.</li>
-                <li>To check right away, open <b>Settings</b> and select <b>Update everything now</b>. Paperboard updates every panel, package and computer, then restarts.</li>
-                <li>A package update that a running panel is using waits. The top bar shows <b>1 update waiting</b>. Stop that panel's processes and the update installs.</li>
+                <li>Panel, package and computer updates run in the background. While they run, the top bar shows how many are left; select it to see each one.</li>
+                <li>To check right away, open <b>Settings</b> and select <b>Update everything now</b>.</li>
+                <li>An update of something a panel is running, such as a game server, waits instead of stopping it. The top bar shows <b>1 update is waiting</b>. Select it, then <b>Stop and update</b>: the panel stops what it runs, the update installs, and the panel starts it again.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
                 Paperboard installed on Linux from the deb or rpm does not update itself.

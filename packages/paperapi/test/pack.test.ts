@@ -28,8 +28,6 @@ function panel(manifest: Record<string, unknown>, files: string[] = ["dist/index
 
 const pack = () => packPanel({ targetDir: dir, autoBuild: false, log: () => {} });
 
-const tutorialStep = { title: "Tabs", body: "Tabs stay open", image: { light: "./tutorial/1.webp", alt: "Tabs" } };
-
 // The packer refuses what must not ship.
 describe("the packer refuses what must not ship", () => {
     test("a manifest without a version is refused", () => {
@@ -37,31 +35,25 @@ describe("the packer refuses what must not ship", () => {
         expect(pack).toThrow("Panel manifest must specify a 'version'");
     });
 
-    test("widget and tutorial declarations the daemon would refuse are refused", () => {
+    test("widget declarations the daemon would refuse are refused", () => {
         panel({ widgets: [{ id: "Bad Id", name: "W", sizes: ["1x1"] }] }, ["dist/index.html", "dist/widget.html"]);
         expect(pack).toThrow("widget 0 needs an id of lowercase letters, digits and dashes");
         panel({ widgets: [{ id: "w", name: "W", sizes: ["9x9"] }] }, ["dist/index.html", "dist/widget.html"]);
         expect(pack).toThrow('size "9x9" must look like "2x1"');
-        panel({ tutorial: [] });
-        expect(pack).toThrow("a tutorial has 1 to 6 steps");
-        panel({ tutorial: [{ ...tutorialStep, image: { light: "../outside.webp", alt: "x" } }] });
-        expect(pack).toThrow("image paths must be relative");
     });
 
-    test("widgets without dist/widget.html, a non-boolean unlisted and missing tutorial images are refused", () => {
+    test("widgets without dist/widget.html and a non-boolean unlisted are refused", () => {
         panel({ widgets: [{ id: "status", name: "Status", sizes: ["2x1"] }] });
         expect(pack).toThrow("manifest declares widgets but dist/widget.html does not exist");
         panel({ unlisted: "yes" });
         expect(pack).toThrow("Panel manifest 'unlisted' must be true or false");
-        panel({ tutorial: [tutorialStep] });
-        expect(pack).toThrow("manifest tutorial shows ./tutorial/1.webp but dist/tutorial/1.webp does not exist");
     });
 
     test("a valid panel packs to <id>-<version>.tar.gz holding manifest.json, dist/ and the manifest.base directory", async () => {
-        panel({ base: "./web/index.html", widgets: [{ id: "status", name: "Status", sizes: ["2x1"] }], tutorial: [tutorialStep], unlisted: true }, [
+        panel({ base: "./web/index.html", widgets: [{ id: "status", name: "Status", sizes: ["2x1"] }], unlisted: true }, [
             "web/index.html",
             "dist/widget.html",
-            "dist/tutorial/1.webp",
+            "dist/images/1.webp",
             "src/secret-source.ts",
             "store/about.md",
         ]);
@@ -70,7 +62,7 @@ describe("the packer refuses what must not ship", () => {
         expect(result.archivePath).toBe(join(dir, "out", "dev.test.packed-0.2.0.tar.gz"));
         const entries: string[] = [];
         await tar.t({ file: result.archivePath, onReadEntry: (entry) => entries.push(entry.path) });
-        expect(entries.sort()).toEqual(["dist/", "dist/tutorial/", "dist/tutorial/1.webp", "dist/widget.html", "manifest.json", "web/", "web/index.html"]);
+        expect(entries.sort()).toEqual(["dist/", "dist/images/", "dist/images/1.webp", "dist/widget.html", "manifest.json", "web/", "web/index.html"]);
         expect(result.sha256).toMatch(/^[a-f0-9]{64}$/);
     });
 });

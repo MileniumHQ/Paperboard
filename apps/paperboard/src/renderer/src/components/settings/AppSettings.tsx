@@ -100,8 +100,6 @@ const quitApp = () => shellIpc().send("quit-app");
 export default function AppSettings(props: {
     settings: AppSettingsData;
     onChange: (next: AppSettingsData) => void;
-    /** reopens Paperboard's own tutorial */
-    onShowTutorial: () => void;
     /** the computers Paperboard can open on, besides Home */
     computers: StartComputer[];
     /** a panel's name, for the permissions you've given panels */
@@ -172,7 +170,6 @@ export default function AppSettings(props: {
                 notice={failureNotice}
                 settings={props.settings}
                 onChange={handleChange}
-                onShowTutorial={props.onShowTutorial}
                 computers={props.computers}
                 onViewLicense={viewLicense}
                 licenseModal={licenseModal}
@@ -239,16 +236,6 @@ export default function AppSettings(props: {
                         name="runOnStartup"
                         checked={props.settings.runOnStartup}
                     />
-                </PaperSettingItem>
-
-                <PaperSettingItem
-                    title="Tutorial"
-                    description="Walk through what Paperboard can do again."
-                >
-                    <PaperButton onClick={props.onShowTutorial}>
-                        <PaperIcon>school</PaperIcon>
-                        Show tutorial
-                    </PaperButton>
                 </PaperSettingItem>
 
                 {/* browser mode runs no updates */}
@@ -322,7 +309,6 @@ export default function AppSettings(props: {
 function CompactSettings(props: {
     settings: AppSettingsData;
     onChange: (next: Record<string, any>) => void;
-    onShowTutorial: () => void;
     computers: StartComputer[];
     onViewLicense: (kind: LicenseKind) => void;
     licenseModal: JSX.Element;
@@ -378,7 +364,6 @@ function CompactSettings(props: {
                                 <StartOnItems computers={props.computers} startOn={props.settings.startOn} />
                             </PaperSelectMenu>
                         </div>
-                        <ActionRow label="Show tutorial" onClick={props.onShowTutorial} chevron />
                     </div>
                 </section>
             </PaperSettingList>

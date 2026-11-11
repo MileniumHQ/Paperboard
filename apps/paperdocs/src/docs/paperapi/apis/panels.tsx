@@ -105,7 +105,6 @@ panelsApi.install(panelId: string, scope?: string): Promise<PanelItem>;`}
     isLinked?: boolean;
     /** from the installed manifest, already validated */
     widgets?: WidgetDeclaration[];
-    tutorial?: TutorialStep[];
     service?: string;
 }`}
             </PaperCode>

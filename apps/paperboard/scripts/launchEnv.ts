@@ -17,7 +17,7 @@ export function electronChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 // rejects any option it doesn't know ("Unknown option `--mobile`") unless it
 // comes after `--`. The launcher moves them there, so `bun run dev --mobile`
 // works as well as `bun run dev -- --mobile`.
-const APP_FLAGS = ["--mobile", "--no-tutorial", "--browser", "--devtools"];
+const APP_FLAGS = ["--mobile", "--browser", "--devtools"];
 const APP_FLAG_PREFIXES = ["--browser-port=", "--ozone-platform="];
 
 function isAppFlag(arg: string): boolean {

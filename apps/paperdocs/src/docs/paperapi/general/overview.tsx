@@ -95,7 +95,7 @@ export default function PaperApiOverviewDoc() {
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                The manifest, its <PaperLink href="/docs/paperapi/store-listing/">store listing</PaperLink> and its <PaperLink href="/docs/paperapi/tutorials/">tutorial</PaperLink> describe the panel to Paperboard.
+                The manifest and its <PaperLink href="/docs/paperapi/store-listing/">store listing</PaperLink> describe the panel to Paperboard.
                 The <PaperLink href="/docs/paperapi/cli/">paperapi command</PaperLink> links, checks, calls, watches and packs a panel during development.
             </PaperText>
 

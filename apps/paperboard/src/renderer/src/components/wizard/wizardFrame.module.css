@@ -1,4 +1,4 @@
-/* The setup and tutorial wizards fill their modal at the shell's wizard
+/* The setup wizard fills its modal at the shell's wizard
  * height, which on a phone is the whole screen (shell.css). */
 .wizard {
     width: 100%;

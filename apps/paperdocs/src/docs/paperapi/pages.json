@@ -27,10 +27,6 @@
                 "widgets": {
                     "name": "Widgets",
                     "index": 5
-                },
-                "tutorials": {
-                    "name": "Tutorials",
-                    "index": 6
                 }
             }
         },

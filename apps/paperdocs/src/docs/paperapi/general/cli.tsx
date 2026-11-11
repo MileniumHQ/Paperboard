@@ -214,7 +214,7 @@ $ bunx paperapi links --json
                 <tbody>
                     <tr>
                         <td>Manifest</td>
-                        <td><PaperCode>manifest.json</PaperCode> is missing, not JSON, not an object, has an invalid id, has a <PaperCode>base</PaperCode> or <PaperCode>service</PaperCode> path that leaves the folder, or breaks a widget or tutorial rule.</td>
+                        <td><PaperCode>manifest.json</PaperCode> is missing, not JSON, not an object, has an invalid id, has a <PaperCode>base</PaperCode> or <PaperCode>service</PaperCode> path that leaves the folder, or breaks a widget rule.</td>
                         <td><PaperCode>name</PaperCode> or <PaperCode>version</PaperCode> is missing, which <PaperCode>pack</PaperCode> refuses.</td>
                     </tr>
                     <tr>
@@ -422,9 +422,9 @@ sha256 08cad371ad5ed1e5b6b4b858859cb1cee5a7875b9ce6bb7e152f2428fe7c4eee`}
             </PaperText>
             <PaperTextList ordered>
                 <li>Requires a valid <PaperCode>id</PaperCode>, a <PaperCode>name</PaperCode> and a <PaperCode>version</PaperCode>, and <PaperCode>unlisted</PaperCode> to be <PaperCode>true</PaperCode> or <PaperCode>false</PaperCode> when present.</li>
-                <li>Checks <PaperCode>widgets</PaperCode> and <PaperCode>tutorial</PaperCode> with the same rules the daemon uses.</li>
+                <li>Checks <PaperCode>widgets</PaperCode> with the same rules the daemon uses.</li>
                 <li>Runs <PaperCode>bun run build</PaperCode> when the entry page (<PaperCode>base</PaperCode>, default <PaperCode>./dist/index.html</PaperCode>) is missing. The build's output goes to standard error.</li>
-                <li>Refuses widgets without <PaperCode>dist/widget.html</PaperCode>, and tutorial images missing from <PaperCode>dist/</PaperCode>.</li>
+                <li>Refuses widgets without <PaperCode>dist/widget.html</PaperCode>.</li>
                 <li>Archives <PaperCode>manifest.json</PaperCode>, the folder holding <PaperCode>base</PaperCode>, <PaperCode>dist/</PaperCode>, and <PaperCode>branding/</PaperCode> (or <PaperCode>icon.png</PaperCode> when there is no <PaperCode>branding/</PaperCode>). Nothing else goes in: not <PaperCode>src/</PaperCode>, not <PaperCode>store/</PaperCode>, not <PaperCode>node_modules/</PaperCode>.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">

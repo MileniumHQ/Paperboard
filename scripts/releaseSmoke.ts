@@ -163,8 +163,7 @@ async function smokeApp(target: Target, dir: string): Promise<void> {
         return devtools !== "";
     });
 
-    // textContent: a fresh profile opens on the welcome tutorial, which
-    // covers the sidebar that lists this computer
+    // the sidebar lists this computer once the shell is up
     await untilShell(Number(devtools), `document.body?.textContent.includes("This Computer") === true`, app.output);
 
     // the daemon the app started answers as this release

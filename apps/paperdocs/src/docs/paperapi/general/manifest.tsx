@@ -12,7 +12,7 @@ export default function ManifestDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">manifest.json</PaperText>
             <PaperText preset="body" as="p">
-                manifest.json at the root of a panel folder tells Paperboard the panel's id, name, version, pages, service, widgets and tutorial.
+                manifest.json at the root of a panel folder tells Paperboard the panel's id, name, version, pages, service and widgets.
                 The Paperboard server daemon reads it to list the panel and start its service, and <PaperCode>paperapi pack</PaperCode> reads it to build the release.
                 The <PaperCode>store</PaperCode> block describes the panel's page in the Panel Library.
             </PaperText>
@@ -104,12 +104,6 @@ export default function ManifestDoc() {
                         <td>Up to 8 widgets the panel offers for Home. See <PaperLink href="/docs/paperapi/widgets/">Widgets</PaperLink>.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>tutorial</PaperCode></td>
-                        <td><PaperCode>TutorialStep[]</PaperCode></td>
-                        <td>No</td>
-                        <td>1 to 6 pages the shell shows the first time someone opens the panel. See <PaperLink href="/docs/paperapi/tutorials/">Tutorials</PaperLink>.</td>
-                    </tr>
-                    <tr>
                         <td><PaperCode>store</PaperCode></td>
                         <td><PaperCode>object</PaperCode></td>
                         <td>No</td>
@@ -157,7 +151,6 @@ export default function ManifestDoc() {
                     <tr><td><PaperCode>Invalid base path in manifest for &lt;id&gt;</PaperCode></td><td><PaperCode>base</PaperCode> is absolute or contains <PaperCode>..</PaperCode>.</td></tr>
                     <tr><td><PaperCode>Invalid service path in manifest for &lt;id&gt;</PaperCode></td><td><PaperCode>service</PaperCode> is absolute or contains <PaperCode>..</PaperCode>.</td></tr>
                     <tr><td><PaperCode>Invalid widgets in manifest for &lt;id&gt;: &lt;reason&gt;</PaperCode></td><td>A widget breaks a rule on <PaperLink href="/docs/paperapi/widgets/">Widgets</PaperLink>.</td></tr>
-                    <tr><td><PaperCode>Invalid tutorial in manifest for &lt;id&gt;: &lt;reason&gt;</PaperCode></td><td>A step breaks a rule on <PaperLink href="/docs/paperapi/tutorials/">Tutorials</PaperLink>.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
@@ -173,7 +166,6 @@ branding/icon.png       the icon, shipped in the archive
 dist/index.html         the panel page
 dist/widget.html        the widget page, when the panel has widgets
 dist/service.js         the service, when the panel has one
-dist/tutorial/          tutorial images
 store/                  Panel Library media, never shipped in the archive
 src/                    your source, never shipped`}
             </PaperCode>
@@ -184,7 +176,7 @@ src/                    your source, never shipped`}
 
             <PaperText preset="subheader" as="h2" id="example">Example</PaperText>
             <PaperText preset="body" as="p">
-                The Terminal panel's manifest, with a service, a widget, a tutorial and a store listing:
+                The Terminal panel's manifest, with a service, a widget and a store listing:
             </PaperText>
             <PaperCode block language="json">
 {`{
@@ -204,11 +196,6 @@ src/                    your source, never shipped`}
             "sizes": ["2x1"],
             "options": [{ "id": "command", "label": "Command" }]
         }
-    ],
-    "tutorial": [
-        {"image": {"light": "./tutorial/1-light.webp", "dark": "./tutorial/1-dark.webp", "alt": "Three terminal tabs: system info, a git log and the weather"}, "title": "Tabs keep running", "body": "Each tab stays alive until you close it. Start a long job, switch panels or close the window, and it keeps going."},
-        {"image": {"light": "./tutorial/2-light.webp", "dark": "./tutorial/2-dark.webp", "alt": "The Saved commands menu with Disk usage, Repo status, Weather and Update system"}, "title": "Save the commands you repeat", "body": "Save a command once and run it from the tab bar, or pin it to Home to run it in one click."},
-        {"image": {"light": "./tutorial/3-light.webp", "dark": "./tutorial/3-dark.webp", "alt": "A weather forecast drawn in a terminal tab"}, "title": "Bring any tool", "body": "If it runs in a terminal it runs here, colors and all. Even the weather forecast."}
     ],
     "store": {
         "about": "./store/about.md",

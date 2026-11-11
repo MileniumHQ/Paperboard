@@ -1,4 +1,4 @@
-import { type Component, type JSX, batch, createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
+import { type Component, type JSX, createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import {
     PaperProvider,
     PaperFlex,
@@ -32,9 +32,6 @@ import PanelPermissionPrompt from "./components/panels/PanelPermissionPrompt";
 import PanelView from "./components/panels/PanelView";
 import LibraryFrame from "./components/panels/LibraryFrame";
 import PanelContextMenu from "./components/panels/PanelContextMenu";
-import TutorialDialog, { type OpenTutorial } from "./components/layout/TutorialDialog";
-import { APP_TUTORIAL } from "./lib/appTutorial";
-import { type SeenTutorials, loadSeenTutorials, markTutorialSeen, withSeen } from "./lib/panelTutorials";
 import LibraryContextMenu from "./components/panels/LibraryContextMenu";
 import type { RestartState } from "./components/panels/PanelView";
 import UninstallPanelModal, {
@@ -101,11 +98,6 @@ const App: Component = () => {
     const [isSetupOpen, setIsSetupOpen] = createSignal<boolean>(false);
     // the wizard stays through the fade and starts over on the next open
     const setupShown = createShownWhileClosing(isSetupOpen);
-    // which first-open tutorials were shown; null until the record loads,
-    // and it stays null if it can't be read or --no-tutorial is set, so
-    // nothing opens by itself (an unreadable record never replays them all)
-    const [seenTutorials, setSeenTutorials] = createSignal<SeenTutorials | null>(null);
-    const [openTutorial, setOpenTutorial] = createSignal<"app" | { compId: string; panel: PanelItem } | null>(null);
     const panelContextMenu = useContextMenuState();
     const [contextMenuPanel, setContextMenuPanel] = createSignal<{
         compId: string;
@@ -324,69 +316,13 @@ const App: Component = () => {
         try {
             options = await shellApi.getLaunchOptions();
         } catch (err) {
-            logToMain("error", "Couldn't read the launch options; first-open tutorials are off and the layout is the desktop one until restart:", err);
+            logToMain("error", "Couldn't read the launch options; the layout is the desktop one until restart:", err);
             setLayoutKnown(true);
             return;
         }
         setMobile(options.mobile);
         setLayoutKnown(true);
-        if (!options.firstOpenTutorials) return;
-        try {
-            setSeenTutorials(await loadSeenTutorials());
-        } catch (err) {
-            logToMain("error", "Couldn't read which tutorials were shown; first-open tutorials are off until restart:", err);
-        }
     });
-
-    // Paperboard's own tutorial the first time the app opens, then each
-    // panel's the first time it is the open tab
-    createEffect(() => {
-        const seen = seenTutorials();
-        if (!seen || openTutorial() || isSetupOpen()) return;
-        if (!seen.app) {
-            setOpenTutorial("app");
-            return;
-        }
-        if (railMode() !== "computer") return;
-        const compId = activeComputerId();
-        const tab = getSelectedTab(compId);
-        if (!tab || isShellTab(tab) || seen.panels.includes(tab)) return;
-        const panel = panelsByComputer()[compId]?.find((p) => p.id === tab);
-        if (panel?.tutorial?.length) setOpenTutorial({ compId, panel });
-    });
-
-    const finishTutorial = () => {
-        const open = openTutorial();
-        if (!open) return;
-        const which = open === "app" ? "app" : { panelId: open.panel.id };
-        const name = open === "app" ? "Paperboard" : open.panel.name;
-        // seen before closed, or the first-open effect reopens it; this
-        // session stops offering it whether or not the record saves
-        batch(() => {
-            setSeenTutorials((seen) => seen && withSeen(seen, which));
-            setOpenTutorial(null);
-        });
-        // a null record stays null: finishing a tutorial opened by hand
-        // doesn't turn first-open tutorials back on under --no-tutorial
-        markTutorialSeen(which).then((stored) => setSeenTutorials((seen) => seen && stored), (err) =>
-            logToMain("error", `Couldn't record that the ${name} tutorial was shown; it will show again next launch:`, err));
-    };
-
-    const handleShowTutorial = () => {
-        const target = contextMenuPanel();
-        if (!target) return;
-        panelContextMenu.close();
-        setOpenTutorial(target);
-    };
-
-    const tutorialDialog = (): OpenTutorial | null => {
-        const open = openTutorial();
-        if (open === "app") return { name: "Paperboard", steps: APP_TUTORIAL, imageSrc: (path) => path };
-        if (!open) return null;
-        const { compId, panel } = open;
-        if (!panel.tutorial) return null;
-        return { name: panel.name, steps: panel.tutorial, imageSrc: (path) => panelUrl(compId, panel.id, path) };
-    };
 
     onMount(async () => {
         // Restores the active computer over privileged IPC
@@ -707,7 +643,6 @@ const App: Component = () => {
                                     settings={appSettings()}
                                     panelName={(panelId) => Object.values(panelsByComputer()).flat().find((p) => p.id === panelId)?.name || panelId}
                                     onChange={handleAppSettingsChange}
-                                    onShowTutorial={() => setOpenTutorial("app")}
                                     computers={listedComputers()}
                                     failure={settingsFailure()}
                                     onRetryLoad={() => void retryLoadAppSettings()}
@@ -1001,7 +936,6 @@ const App: Component = () => {
                             compact
                             settings={appSettings()}
                             onChange={handleAppSettingsChange}
-                            onShowTutorial={() => setOpenTutorial("app")}
                             computers={listedComputers()}
                             failure={settingsFailure()}
                             onRetryLoad={() => void retryLoadAppSettings()}
@@ -1064,14 +998,6 @@ const App: Component = () => {
                 }}
                 onRestart={handleRestartPanel}
                 onUninstall={handleRequestUninstall}
-                onShowTutorial={contextMenuPanel()?.panel.tutorial?.length ? handleShowTutorial : undefined}
-            />
-
-            <TutorialDialog
-                tutorial={tutorialDialog()}
-                theme={appSettings().darkMode}
-                onDone={finishTutorial}
-                compact={mobile()}
             />
 
             <ComputerContextMenu

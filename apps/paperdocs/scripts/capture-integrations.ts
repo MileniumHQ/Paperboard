@@ -39,13 +39,6 @@ try {
         .locator(`iframe[title="${panelId}"]`)
         .elementHandle())!.contentFrame();
     assert.ok(frame);
-    // The host shows a panel's tutorial the first time it opens; once closed,
-    // the install remembers it.
-    const tutorial = page.getByRole("dialog").filter({ hasText: "Snap blocks together" });
-    if (await tutorial.waitFor({ timeout: 5000 }).then(() => true, () => false)) {
-        await tutorial.getByRole("button", { name: /close/i }).first().click();
-        await tutorial.waitFor({ state: "hidden" });
-    }
     await frame.waitForFunction(() => Boolean((window as any).__PAPERBOARD_CRANE));
     const grant = await frame.evaluate(() => (window as any).__PAPERBOARD_CRANE);
     assert.equal(grant.port, expectedPort);

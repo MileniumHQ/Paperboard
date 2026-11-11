@@ -45,14 +45,13 @@ export default function PanelsDoc() {
             </PaperText>
             <PaperText preset="body" as="p">
                 Some panels use packages, such as a Java runtime for a Minecraft server.
-                When a package needs an update while a panel is using it, the top bar shows <b>1 update waiting</b>.
-                Select it to see which panel holds the package. Stop that panel's processes and the update installs.
+                When a package needs an update while a panel is using it, the top bar shows <b>1 update is waiting</b>.
+                Select it to see which panel is using the package, then <b>Stop and update</b>. The panel stops what it runs, the update installs, and the panel starts it again.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="restart-a-panel">Restart a panel</PaperText>
             <PaperText preset="body" as="p">
                 Right-click the panel in the sidebar and choose <b>Restart Panel</b>.
-                The same menu has <b>Show Tutorial</b> when the panel has a tutorial.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="uninstall-a-panel">Uninstall a panel</PaperText>
