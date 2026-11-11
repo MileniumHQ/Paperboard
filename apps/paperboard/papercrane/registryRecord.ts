@@ -7,6 +7,17 @@ import { PAPERBOARD_USER_AGENT } from "./userAgent";
 export const RECORD_TIMEOUT_MS = 10_000;
 export const RECORD_MAX_BYTES = 256 * 1024;
 
+// The registry names what went wrong in a small {"error": "..."} body (a
+// record it can't read, say); carry that reason instead of a bare status.
+// Only a declared, small body is read, and only a well-formed JSON string.
+const REFUSAL_MAX_BYTES = 4096;
+async function registryRefusal(res: Response): Promise<string> {
+    const declared = Number(res.headers.get("content-length"));
+    if (!Number.isFinite(declared) || declared <= 0 || declared > REFUSAL_MAX_BYTES) return "";
+    const match = /"error"\s*:\s*("(?:[^"\\]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*")/.exec(await res.text());
+    return match ? `: ${JSON.parse(match[1]) as string}` : "";
+}
+
 export async function fetchRegistryRecord(
     url: string,
     fetchFn: typeof fetch = fetch,
@@ -18,7 +29,7 @@ export async function fetchRegistryRecord(
             headers: { "User-Agent": PAPERBOARD_USER_AGENT },
             signal: ctrl.signal,
         });
-        if (!res.ok) throw new Error(`registry answered HTTP ${res.status}`);
+        if (!res.ok) throw new Error(`registry answered HTTP ${res.status}${await registryRefusal(res)}`);
         if (!res.body) throw new Error("registry answered with no body");
         // read under the cap: the whole body is never buffered past it
         const reader = res.body.getReader();

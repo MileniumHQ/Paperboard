@@ -6,6 +6,17 @@
 export const REGISTRY_INDEX_MAX_BYTES = 1024 * 1024;
 export const REGISTRY_INDEX_TIMEOUT_MS = 10_000;
 
+// The registry names what went wrong in a small {"error": "..."} body (a
+// record it can't read, say); carry that reason instead of a bare status.
+// Only a declared, small body is read, and only a well-formed JSON string.
+const REFUSAL_MAX_BYTES = 4096;
+async function registryRefusal(res: Response): Promise<string> {
+    const declared = Number(res.headers.get("content-length"));
+    if (!Number.isFinite(declared) || declared <= 0 || declared > REFUSAL_MAX_BYTES) return "";
+    const match = /"error"\s*:\s*("(?:[^"\\]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*")/.exec(await res.text());
+    return match ? `: ${JSON.parse(match[1]) as string}` : "";
+}
+
 export async function fetchRegistryJson(
     url: string,
     timeoutMs = REGISTRY_INDEX_TIMEOUT_MS,
@@ -19,7 +30,7 @@ export async function fetchRegistryJson(
         });
         if (!res.ok) {
             // the status rides along: a 404 means the registry has no such record
-            throw Object.assign(new Error(`Registry returned HTTP ${res.status}`), { status: res.status });
+            throw Object.assign(new Error(`Registry returned HTTP ${res.status}${await registryRefusal(res)}`), { status: res.status });
         }
         // bound at the stream boundary: a declared Content-Length over the
         // cap is refused before a single byte is buffered

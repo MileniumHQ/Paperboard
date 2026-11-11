@@ -139,6 +139,20 @@ describe("the worker is read-only and its indexes are faithful", () => {
         expect(res.status).toBeGreaterThanOrEqual(500);
         expect(await res.text()).not.toContain("dev.example.clock");
     });
+
+    test("an unreadable panel record answers 500 with the reason, never 404", async () => {
+        await publishPanel(upload("dev.example.clock", "1.0.0"), ctx);
+        for (const broken of ["{ not json", "\"a string\"", "[]"]) {
+            registry.kv.values.set("panel:dev.example.clock", broken);
+            for (const route of ["/panel/dev.example.clock.json", "/panel/dev.example.clock/download"]) {
+                const res = await request(route);
+                expect({ broken, route, status: res.status }).toEqual({ broken, route, status: 500 });
+                expect((await res.json()) as object).toEqual({ error: "The registry record for dev.example.clock could not be read" });
+            }
+        }
+        // a panel that was never published is still a 404
+        expect((await request("/panel/dev.example.never.json")).status).toBe(404);
+    });
 });
 
 // Panel id and version are validated before any write.

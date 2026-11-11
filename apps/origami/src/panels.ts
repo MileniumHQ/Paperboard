@@ -114,19 +114,35 @@ export async function getPanelsIndex(
     return index;
 }
 
+// A record that exists but can't be read. The message is the caller's
+// answer: it names the panel, never the KV error behind it (O9).
+export class UnreadablePanelError extends Error {
+    constructor(id: string) {
+        super(`The registry record for ${id} could not be read`);
+        this.name = "UnreadablePanelError";
+    }
+}
+
+// null only when there is no record: a record that can't be read is not a
+// panel that doesn't exist, and answering 404 for it would tell the updater
+// the panel was never published
 export async function getPanel(
     kv: KVNamespace,
     id: string,
 ): Promise<PanelRecord | null> {
+    let record: unknown;
     try {
-        const record = await kv.get(`${PANEL_KEY_PREFIX}${id}`, {
-            type: "json",
-        });
-        return (record as PanelRecord) || null;
+        record = await kv.get(`${PANEL_KEY_PREFIX}${id}`, { type: "json" });
     } catch (err) {
         console.error(`[origami] panel read failed for ${id}:`, err);
-        return null;
+        throw new UnreadablePanelError(id);
     }
+    if (record === null) return null;
+    if (typeof record !== "object" || Array.isArray(record)) {
+        console.error(`[origami] panel record for ${id} is not an object`);
+        throw new UnreadablePanelError(id);
+    }
+    return record as PanelRecord;
 }
 
 // Media keys are shared by the write path (panelPublish.ts, operator-side)

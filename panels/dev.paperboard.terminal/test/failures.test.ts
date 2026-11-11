@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { clearWorkloads } from "./helpers/crane";
-import { openPage, servePanel } from "./helpers/browser";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { clearWorkloads, testDaemon } from "./helpers/crane";
+import { openPage, servePanel, type Page } from "./helpers/browser";
 import { call, panelFiles, startService, stopServices } from "./helpers/service";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
@@ -24,6 +26,14 @@ const screenShows = (index: number, text: string) => `(${screens})[${index}]?.in
 const alertShows = (title: string, text: string) =>
     `[...document.querySelectorAll("[role=alert]")].some((q) => q.innerText.includes(${JSON.stringify(title)}) && q.innerText.includes(${JSON.stringify(text)}))`;
 
+const textarea = `document.querySelectorAll(".xterm-helper-textarea")[0]`;
+// a clipboard paste into the first terminal, as Ctrl+V delivers it; `text` is a page expression
+const paste = (page: Page, text: string) =>
+    page.evaluate(`(() => { const dt = new DataTransfer(); dt.setData("text/plain", ${text}); ${textarea}.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true })); })()`);
+// Enter, down and up, so xterm takes typed text again after it
+const pressEnter = (page: Page) =>
+    page.evaluate(`for (const type of ["keydown", "keyup"]) ${textarea}.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", keyCode: 13, bubbles: true, cancelable: true }))`);
+
 // Failures are shown.
 describe("failures are shown", () => {
     test("a write into a session that couldn't be created and an open that failed reject with the daemon's reason", async () => {
@@ -37,7 +47,7 @@ describe("failures are shown", () => {
         expect(typeof (await call("open-tab", { id: "tab1", cols: 80, rows: 24 }))).toBe("string");
     });
 
-    test("in the panel, a terminal that can't open, a lost session, a refused rename and a refused new tab say why", async () => {
+    test("in the panel, a terminal that can't open, a large paste, a refused rename and a refused new tab say why", async () => {
         await panelFiles({ "tabs.json": TABS });
         const service = await startService();
         const served = await servePanel();
@@ -46,17 +56,24 @@ describe("failures are shown", () => {
             // the active tab's shell could not start: its screen says why, never blank
             await page.waitFor(screenShows(1, `Could not open this terminal: Request failed: ${DAEMON_REASON}`), "the refused tab to say why");
 
-            // a keystroke the daemon refuses (a paste past the 64 KiB one
-            // write may carry): the terminal says it lost the session, and why
+            // a paste past the 64 KiB one daemon write may carry reaches the
+            // shell whole and in order; one past the panel's paste cap is
+            // refused whole, says why, and leaves the session working
             await page.click('label[data-value="tab1"]');
             await page.waitFor(screenShows(0, "$"), "the working tab's prompt");
             await page.evaluate(`document.querySelectorAll(".xterm-helper-textarea")[0].focus()`);
-            await page.insertText("y".repeat(70_000));
-            await page.waitFor(
-                screenShows(0, 'Lost this terminal: Request failed: Parameter "data" exceeds 65536 characters'),
-                "the refused write to be reported",
-            );
-            expect(await page.evaluate<string>(`(${screens})[0]`)).toContain("Press any key to try again.");
+            const lines = Array.from({ length: 100 }, (_, i) => `${String(i).padStart(3, "0")}${"y".repeat(997)}\n`).join("");
+            await page.insertText(`head -n 100 > "$HOME/paste.txt"; echo pasted-$((1+1))`);
+            await pressEnter(page);
+            await paste(page, JSON.stringify(lines));
+            await page.waitFor(screenShows(0, "pasted-2"), "the pasted lines to be read");
+            expect(fs.readFileSync(path.join((await testDaemon()).home, "paste.txt"), "utf8")).toBe(lines);
+            await paste(page, `"z".repeat(${17 * 1024 * 1024})`);
+            await page.waitFor(alertShows("Nothing pasted", "a terminal takes at most 16 MB at once. Nothing was sent."), "the refused paste");
+            await page.insertText("echo alive-$((2+2))");
+            await pressEnter(page);
+            await page.waitFor(screenShows(0, "alive-4"), "the session to keep working");
+            expect(await page.evaluate<string>(`(${screens})[0]`)).not.toContain("Lost this terminal");
 
             // a rename the service refuses (the tab was closed from another
             // window meanwhile) keeps the modal open with the reason

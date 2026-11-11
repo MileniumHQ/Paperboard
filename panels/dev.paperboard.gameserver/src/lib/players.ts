@@ -30,21 +30,16 @@ export const [playerStatSummaries, setPlayerStatSummaries] = createSignal<
     Map<string, PlayerStatSummary>
 >(new Map());
 
-export function loadPlayerStats() {
-    serverBridge
-        .call<PlayerStatSummary[]>(ACTION_IDS.listPlayerStats)
-        .then((list) => {
-            const next = new Map<string, PlayerStatSummary>();
-            for (const entry of list ?? []) {
-                if (entry && typeof entry.uuid === "string") {
-                    next.set(entry.uuid.toLowerCase(), entry);
-                }
-            }
-            setPlayerStatSummaries(next);
-        })
-        .catch((err) =>
-            console.debug("[players] loadPlayerStats failed:", String(err)),
-        );
+// rejects when the stats can't be read; the caller shows why
+export async function loadPlayerStats(): Promise<void> {
+    const list = await serverBridge.call<PlayerStatSummary[]>(ACTION_IDS.listPlayerStats);
+    const next = new Map<string, PlayerStatSummary>();
+    for (const entry of list ?? []) {
+        if (entry && typeof entry.uuid === "string") {
+            next.set(entry.uuid.toLowerCase(), entry);
+        }
+    }
+    setPlayerStatSummaries(next);
 }
 
 export function getPlayerPlaytimeSeconds(name: string): number | undefined {

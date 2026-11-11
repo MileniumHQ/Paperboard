@@ -9,6 +9,7 @@ import { readTree, tempDir, writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { trashRemovePathsWith, type TrashFs } from "../src/service/trash";
 import { deleteActiveWorldDirs, listWorlds, setActiveWorld } from "../src/service/worlds";
+import { resetWorldFiles } from "../src/service/diagnostics";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -89,6 +90,15 @@ describe("world deletion", () => {
         expect(fs.readFileSync(path.join(mc.dir, "server.properties"), "utf8")).toContain("level-name=Survival");
         await expect(mc.run(() => setActiveWorld(mc.scope.ctx, "OTHER", "42"))).rejects.toThrow("\"other\" already exists — a seed only applies to a new world");
         await expect(mc.run(() => setActiveWorld(mc.scope.ctx, "OTHER", undefined, true))).rejects.toThrow('A world named "other" already exists');
+    });
+
+    test("an unreadable server.properties refuses a reset instead of trashing the \"world\" folders", async () => {
+        // a folder where the file should be: present, but no read succeeds
+        const mc = minecraftServer({ files: { "server.properties/.keep": "", "world/level.dat": "w", "survival/level.dat": "s" } });
+        await expect(mc.run(() => resetWorldFiles(mc.scope.ctx))).rejects.toThrow("Couldn't read server.properties to find the active world");
+        await expect(mc.run(() => listWorlds())).rejects.toThrow("Couldn't read server.properties to find the active world");
+        expect(trashed(mc.dir)).toEqual([]);
+        expect(fs.readFileSync(path.join(mc.dir, "world", "level.dat"), "utf8")).toBe("w");
     });
 
     test("an unreadable panel config is never overwritten when a created world is recorded", async () => {

@@ -342,7 +342,7 @@ async function runOrchestratorInner(
         const message = unavailableComputers
             ? `Could not check ${unavailableComputers} computer(s). Reconnect and try again`
             : installed.failures
-              ? `Could not check ${installed.failures} panel(s). Try again when the registry is reachable`
+              ? `Could not check ${installed.failures} panel(s) (${installed.reasons[0]})`
               : "Panel and server check complete";
         sendProgress(win, 100, message, unavailableComputers + installed.failures > 0);
         return unavailableComputers + installed.failures;

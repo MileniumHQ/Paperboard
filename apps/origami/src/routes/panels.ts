@@ -2,6 +2,7 @@ import {
     getPanelsIndex,
     getPanel,
     storeMediaPrefix,
+    UnreadablePanelError,
 } from "../panels";
 import { jsonResponse, type Env } from "../lib";
 
@@ -10,6 +11,22 @@ import { jsonResponse, type Env } from "../lib";
 // publish route and no registry key. The registry serves what the operator
 // wrote and verified.
 export async function handlePanelsRoutes(
+    request: Request,
+    env: Env,
+    pathname: string,
+    bucket: R2Bucket | undefined,
+): Promise<Response | null> {
+    try {
+        return await routePanels(request, env, pathname, bucket);
+    } catch (err) {
+        if (err instanceof UnreadablePanelError) {
+            return jsonResponse({ error: err.message }, 500);
+        }
+        throw err;
+    }
+}
+
+async function routePanels(
     request: Request,
     env: Env,
     pathname: string,

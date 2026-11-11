@@ -281,7 +281,8 @@ export default function Commands(props: { bot: () => BotSummary }) {
                         subtitle="Slash commands this bot registers with Discord"
                     >
                         <PaperEffect>
-                            <PaperButton onClick={openCreate}>
+                            {/* the duplicate check needs the stored list */}
+                            <PaperButton onClick={openCreate} disabled={Boolean(loadError())}>
                                 <PaperIcon>add</PaperIcon>
                                 Create command
                             </PaperButton>
@@ -321,16 +322,19 @@ export default function Commands(props: { bot: () => BotSummary }) {
                         )}
                     </Show>
 
+                    {/* an unreadable list is unknown, not empty */}
                     <Show
                         when={commands().length > 0}
                         fallback={
-                            <PaperCard>
-                                <PaperEmptyState
-                                    icon="terminal"
-                                    title="No slash commands yet"
-                                    description="Create one, then build a flow on its trigger to answer it."
-                                />
-                            </PaperCard>
+                            <Show when={!loadError()}>
+                                <PaperCard>
+                                    <PaperEmptyState
+                                        icon="terminal"
+                                        title="No slash commands yet"
+                                        description="Create one, then build a flow on its trigger to answer it."
+                                    />
+                                </PaperCard>
+                            </Show>
                         }
                     >
                         <PaperSettingList autoHeight>
