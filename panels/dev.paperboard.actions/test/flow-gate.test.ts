@@ -14,6 +14,7 @@ import type { CanvasBlock } from "../src/lib/tree";
 const emitted: { trigger: string; output: any }[] = [];
 __actionsTestState.setServiceCtx({
     emitTrigger: (id: string, output: any) => emitted.push({ trigger: id, output }),
+    setIdle: () => {},
     setState: () => {},
 } as any);
 
@@ -52,7 +53,7 @@ describe("bounded flow execution gate", () => {
         // saturate the gate: 8 capped concurrent stored runs
         const runs: Promise<any>[] = [];
         for (let i = 0; i < 8; i++) {
-            runs.push(runStoredFlow({ emitTrigger: () => {}, setState: () => {} } as any, __actionsTestState.project()!, trigger, {}));
+            runs.push(runStoredFlow({ emitTrigger: () => {}, setState: () => {}, setIdle: () => {} } as any, __actionsTestState.project()!, trigger, {}));
         }
         await Bun.sleep(20);
         expect(__actionsTestState.running()).toBe(8);
@@ -63,6 +64,7 @@ describe("bounded flow execution gate", () => {
             await runTestFlow(
                 {
                     emitTrigger: (id: string, output: any) => emitted.push({ trigger: id, output }),
+                    setIdle: () => {},
                     setState: () => {},
                 } as any,
                 __actionsTestState.project()!,
@@ -75,7 +77,7 @@ describe("bounded flow execution gate", () => {
         expect((caught as Error).message).toMatch(/already running \(cap 8\)/);
 
         // stored runs swallow the refusal (console-log path), never crash
-        const refused = await runStoredFlow({ emitTrigger: () => {}, setState: () => {} } as any, __actionsTestState.project()!, trigger, {});
+        const refused = await runStoredFlow({ emitTrigger: () => {}, setState: () => {}, setIdle: () => {} } as any, __actionsTestState.project()!, trigger, {});
         expect(refused).toBe(null);
 
         await Promise.all(runs);
@@ -85,6 +87,7 @@ describe("bounded flow execution gate", () => {
     it("recovers: after the running flows drain, a test run is accepted", async () => {
         const ctx = {
             emitTrigger: (id: string, output: any) => emitted.push({ trigger: id, output }),
+            setIdle: () => {},
             setState: () => {},
         } as any;
         const log = await runTestFlow(ctx, __actionsTestState.project()!, { triggerBlockId: "trig_gate", payload: {} });

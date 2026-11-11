@@ -48,6 +48,7 @@ describe("parameterized event routing", () => {
     const emitted: { trigger: string; output: any }[] = [];
     __actionsTestState.setServiceCtx({
         emitTrigger: (id: string, output: any) => emitted.push({ trigger: id, output }),
+        setIdle: () => {},
         setState: () => {},
     } as any);
 

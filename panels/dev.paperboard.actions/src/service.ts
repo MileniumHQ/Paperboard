@@ -14,6 +14,8 @@ import {
     executeFlow,
     runFunctionCall,
     initVariablesStore,
+    onVariablesSaveChange,
+    variablesUnsaved,
 } from "./lib/runtime";
 import {
     type FunctionDef,
@@ -196,6 +198,28 @@ function publish() {
         projects: [...projects.values()].map(summary),
         projectsError,
     });
+    updateIdle();
+}
+
+// the projects are read and registered: until then the service is starting, not idle
+let started = false;
+/**
+ * Says whether the service has nothing to do until an action calls it: no
+ * trigger listened for, no flow running, no variable waiting to be written,
+ * and nothing only this process knows (a draft project, the run history,
+ * why the projects couldn't be read). Called after every change to any of
+ * those.
+ */
+function updateIdle(): void {
+    serviceCtx?.setIdle(
+        started
+        && triggerUnsubs.length === 0
+        && runningFlows === 0
+        && runHistory.length === 0
+        && projectsError === null
+        && ![...projects.values()].some((project) => project.draft)
+        && !variablesUnsaved(),
+    );
 }
 
 // concurrent stored-flow runs are BOUNDED: a chatty trigger stacking
@@ -241,6 +265,7 @@ async function executeFlowGated(
         throw new FlowRunRefused(message);
     }
     runningFlows++;
+    updateIdle();
     const key = flowKey(project.meta.id, triggerBlock.id);
     const label = runLabel(project, triggerBlock);
     runningByFlow.set(key, (runningByFlow.get(key) ?? 0) + 1);
@@ -265,6 +290,7 @@ async function executeFlowGated(
         runHistory = recordRun(runHistory, { id: `run_${Date.now()}_${++runSeq}`, flowId: key, label, ...outcome, finishedAt: Date.now() });
         ctx.setState({ running: [...runningByFlow.keys()], runs: runHistory });
         ctx.emitTrigger("flow-end", { triggerBlockId: triggerBlock.id, project: project.meta.id });
+        updateIdle();
     }
 }
 
@@ -460,6 +486,7 @@ function resubscribeTriggers(): void {
             triggerUnsubs.push(actionsApi.onTrigger(panelId, triggerName, handleTriggerEvent));
         }
     }
+    updateIdle();
 }
 
 // exported for the actions below AND tests: same bounded gate as test runs
@@ -1121,6 +1148,7 @@ export const actionsService = definePanelService({
     },
     async onInit(ctx: Ctx) {
         serviceCtx = ctx;
+        onVariablesSaveChange(updateIdle);
 
         await initVariablesStore();
 
@@ -1148,6 +1176,7 @@ export const actionsService = definePanelService({
         }
         rev += 1;
         resubscribeTriggers();
+        started = true;
         publish();
         console.log(`[ActionsService] Ready with ${projects.size} project(s).`);
     },
