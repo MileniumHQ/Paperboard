@@ -18,6 +18,7 @@ function blocklyMedia(): Plugin {
 }
 
 export default defineConfig({
+    base: "./",
     plugins: [solidPlugin(), blocklyMedia()],
     resolve: {
         dedupe: ["solid-js", "solid-js/web", "solid-js/store"],
