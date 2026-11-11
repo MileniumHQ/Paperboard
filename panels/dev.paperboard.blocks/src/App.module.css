@@ -318,6 +318,9 @@
     stroke: none !important;
 }
 
+/* Blockly rounds only the tray's edge facing the canvas; clipped, every
+   corner takes the card's inner radius */
 .stage :global(.blocklyMiniWorkspaceBubble) :global(.blocklyFlyoutBackground) {
     fill: var(--paper-surface-sunken);
+    clip-path: inset(0 round var(--paper-border-radius-half));
 }
