@@ -1035,23 +1035,21 @@ export async function syncSlashCommands(
 // server explorer
 // ---------------------------------------------------------------------------
 
-let channelKindByType: Record<number, DiscordChannelKind> | undefined;
+// Discord's channel types by number, as its API defines them (discord.js's
+// ChannelType has the same values). Fixed here, so a trigger is described
+// whether or not a bot has loaded discord.js yet.
+const CHANNEL_KIND_BY_TYPE: Record<number, DiscordChannelKind> = {
+    0: "text",
+    2: "voice",
+    4: "category",
+    5: "announcement",
+    13: "stage",
+    15: "forum",
+    16: "media",
+};
 
-// (a channel's type only ever comes from a client, so discord.js is loaded here)
 export function describeChannelKind(type: number): DiscordChannelKind {
-    if (!channelKindByType) {
-        const { ChannelType } = discord();
-        channelKindByType = {
-            [ChannelType.GuildText]: "text",
-            [ChannelType.GuildVoice]: "voice",
-            [ChannelType.GuildCategory]: "category",
-            [ChannelType.GuildAnnouncement]: "announcement",
-            [ChannelType.GuildStageVoice]: "stage",
-            [ChannelType.GuildForum]: "forum",
-            [ChannelType.GuildMedia]: "media",
-        };
-    }
-    return channelKindByType[type] ?? "other";
+    return CHANNEL_KIND_BY_TYPE[type] ?? "other";
 }
 
 // bounded slices: Discord caps channels and roles per guild, and these caps
