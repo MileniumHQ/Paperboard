@@ -62,7 +62,7 @@ export default function PanelsDoc() {
                 <li>Select <b>Uninstall</b>.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
-                By default, uninstalling stops the panel and removes its program. Its settings, files and saved credentials stay on the computer, and installing the panel again picks them up.
+                By default, uninstalling stops the panel and removes its program, and the packages only it used, such as a Java runtime. Its settings, files and saved credentials stay on the computer, and installing the panel again picks them up.
                 With the checkbox on, Paperboard also deletes the panel's settings, files, saved credentials and routine backups. This cannot be undone.
             </PaperText>
 

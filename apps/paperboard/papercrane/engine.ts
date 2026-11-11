@@ -200,6 +200,129 @@ export class PaperCraneEngine {
     // never sweep the first daemon's in-flight downloads.
     public sweepStartupOrphans(): void {
         this.sweepOrphans();
+        this.claimUnrecordedPackages();
+        void this.removeUnusedPackages();
+    }
+
+    // ─── which panels use which package ─────────────────────────────────
+    //
+    // A package stays while a panel uses it. A panel uses a package once it
+    // asks for it (installs it, or asks whether it's there or where it is);
+    // uninstalling the panel lets go of it, and a package no installed panel
+    // uses is removed. Kept in packages/users.json as { package: [panelId] }.
+
+    private packageUsersFile(): string {
+        return path.join(this.packagesDir, "users.json");
+    }
+
+    private readPackageUsers(): Record<string, string[]> {
+        const file = this.packageUsersFile();
+        if (!fs.existsSync(file)) return {};
+        const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`${file} is not a record of package users`);
+        return parsed as Record<string, string[]>;
+    }
+
+    private writePackageUsers(users: Record<string, string[]>): void {
+        fs.mkdirSync(this.packagesDir, { recursive: true });
+        writeJsonAtomicSync(this.packageUsersFile(), users);
+    }
+
+    /** Records that a panel uses a package, so it stays while the panel does. */
+    public recordPackageUse(packageName: string, panelId: string): void {
+        const name = this.sanitizeIdOrThrow(packageName, "package");
+        const users = this.readPackageUsers();
+        const list = users[name] ?? [];
+        if (list.includes(panelId)) return;
+        users[name] = [...list, panelId];
+        this.writePackageUsers(users);
+    }
+
+    /** The packages installed now, by the directories under packages/. */
+    private installedPackageNames(): string[] {
+        if (!fs.existsSync(this.packagesDir)) return [];
+        return fs
+            .readdirSync(this.packagesDir, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory() && !entry.name.startsWith(".") && !/\.(tmp|staging)-\d+/.test(entry.name))
+            .map((entry) => entry.name);
+    }
+
+    // a package installed before uses were recorded may belong to any panel
+    // installed now, so each of them counts as using it: it goes once all of
+    // them are uninstalled. Only a package panels let go of is removed, so
+    // one no panel ever asked for stays.
+    private claimUnrecordedPackages(): void {
+        try {
+            const users = this.readPackageUsers();
+            const unrecorded = this.installedPackageNames().filter((name) => !(name in users));
+            if (!unrecorded.length) return;
+            const panels = fs.existsSync(this.panelsDir)
+                ? fs.readdirSync(this.panelsDir, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith(".")).map((e) => e.name)
+                : [];
+            if (!panels.length) return;
+            for (const name of unrecorded) users[name] = [...panels];
+            this.writePackageUsers(users);
+        } catch (err) {
+            logger.error("[engine] could not record which panels use the installed packages:", err);
+        }
+    }
+
+    /** Lets go of every package a panel used; the ones nothing uses any more are removed. */
+    private async releasePackagesOf(panelId: string): Promise<void> {
+        const users = this.readPackageUsers();
+        let changed = false;
+        for (const [name, list] of Object.entries(users)) {
+            if (!list.includes(panelId)) continue;
+            users[name] = list.filter((id) => id !== panelId);
+            changed = true;
+        }
+        if (changed) this.writePackageUsers(users);
+        await this.removeUnusedPackages();
+    }
+
+    // a package a workload still runs from waits: its record stays empty, and
+    // the next uninstall or start removes it
+    private async removeUnusedPackages(): Promise<void> {
+        let users: Record<string, string[]>;
+        try {
+            users = this.readPackageUsers();
+        } catch (err) {
+            logger.error("[engine] could not read which panels use the installed packages, so none were removed:", err);
+            return;
+        }
+        for (const [name, list] of Object.entries(users)) {
+            if (list.length > 0) continue;
+            const key = `package:${name}`;
+            if (this.operations.has(key) || this.packageUsers(name).length > 0) {
+                logger.info(`[package:${name}] no panel uses it, but it's busy; it will be removed later`);
+                continue;
+            }
+            this.operations.add(key);
+            try {
+                // a panel may have asked for it since the list was read
+                if (this.readPackageUsers()[name]?.length) continue;
+                await fs.promises.rm(path.join(this.packagesDir, name), { recursive: true, force: true });
+                fs.rmSync(this.stagedRecordFile(name), { force: true });
+                await fs.promises.rm(this.stagedDir(name), { recursive: true, force: true });
+                this.stagedPackages.delete(name);
+                this.swapFailures.delete(name);
+                const index = this.getPackageIndex();
+                if (name in index) {
+                    delete index[name];
+                    writeJsonAtomicSync(path.join(this.packagesDir, "index.json"), index);
+                }
+                const now = this.readPackageUsers();
+                if (now[name]?.length === 0) {
+                    delete now[name];
+                    this.writePackageUsers(now);
+                }
+                logger.info(`[package:${name}] removed: no installed panel uses it`);
+            } catch (err) {
+                logger.error(`[package:${name}] no panel uses it, but it could not be removed:`, err);
+            } finally {
+                this.operations.delete(key);
+            }
+        }
     }
 
     private sweepOrphans(): void {
@@ -1859,6 +1982,11 @@ export class PaperCraneEngine {
         // reinstall. a removed panel stops authenticating immediately: its
         // scoped token is revoked, not left lingering in the vault
         this.services.revokePanel(cleanId);
+        // the packages only this panel used go with it; the panel is gone
+        // either way, so a failure here is logged, not the uninstall's
+        await this.releasePackagesOf(cleanId).catch((err) =>
+            logger.error(`[engine] ${cleanId} is uninstalled, but the packages only it used could not be removed:`, err),
+        );
 
         if (options?.deleteData === true) {
             // explicit opt-in: the panel's config document, workspace files

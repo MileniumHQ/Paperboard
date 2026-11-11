@@ -103,7 +103,8 @@ interface PendingPackageUpdate {
             <PaperTextList>
                 <li>The daemon fetches the package's record from the registry it installs panels from, and refuses a release the Paperboard release key did not sign, or whose sha256 does not match the signed one.</li>
                 <li>A release that unpacks without a <PaperCode>bin</PaperCode> folder is removed and refused.</li>
-                <li>Packages live in <PaperCode>packages/&lt;name&gt;</PaperCode> in the Paperboard data folder. Uninstalling a panel leaves them, since other panels may use them.</li>
+                <li>Packages live in <PaperCode>packages/&lt;name&gt;</PaperCode> in the Paperboard data folder.</li>
+                <li>A panel that calls <PaperCode>download</PaperCode>, <PaperCode>isInstalled</PaperCode> or <PaperCode>getPath</PaperCode> for a package uses it. A package stays while a panel that uses it is installed. Once the last one is uninstalled, the package is removed. If a process still runs from it, it is removed at the next uninstall or daemon start after that process stops.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>

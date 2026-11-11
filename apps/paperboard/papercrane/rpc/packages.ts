@@ -5,9 +5,15 @@ import { resolvePackageSha256 } from "../packageChecksum";
 
 export async function handlePackages(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {
     const { engine, reply, sendEvent } = ctx;
+    // a panel that asks for a package uses it: the package stays while the panel is installed
+    const used = (packageName: string) => {
+        const caller = ctx.callerPanelId();
+        if (caller !== null) engine.recordPackageUse(packageName, caller);
+        return packageName;
+    };
     switch (action) {
         case "package:isInstalled": {
-            reply(id, { installed: engine.isPackageInstalled(assertStr(params?.packageName, "packageName", 128), assertOptStr(params?.version, "version", 64)) });
+            reply(id, { installed: engine.isPackageInstalled(used(assertStr(params?.packageName, "packageName", 128)), assertOptStr(params?.version, "version", 64)) });
             return true;
         }
         case "package:getIndex": {
@@ -15,13 +21,13 @@ export async function handlePackages(action: string, id: unknown, params: any, c
             return true;
         }
         case "package:getPath": {
-            reply(id, { path: engine.getPackagePath(assertStr(params?.packageName, "packageName", 128)) });
+            reply(id, { path: engine.getPackagePath(used(assertStr(params?.packageName, "packageName", 128))) });
             return true;
         }
         case "package:download": {
             if (params?.allowDowngrade === true) requireHost(ctx.callerPanelId(), action);
             const downloadId = assertStr(params?.downloadId, "downloadId", 128);
-            const packageName = assertStr(params?.packageName, "packageName", 128);
+            const packageName = used(assertStr(params?.packageName, "packageName", 128));
             // plan-carrying callers (updater) supply their checksum fact and
             // the engine cross-checks it; ad-hoc callers (Setup wizards)
             // carry none, so the daemon resolves it from registry metadata

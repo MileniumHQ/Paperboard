@@ -244,3 +244,38 @@ describe("runtime updates wait for their workloads", () => {
 		}
 	});
 });
+
+// A package stays while a panel that asked for it is installed.
+describe("packages no installed panel uses are removed", () => {
+	test("uninstalling a panel removes the packages only it used, and a package from before uses were kept goes with the last panel", async () => {
+		const dir = dataDir();
+		const panels = path.join(dir, "panels");
+		const pkg = path.join(dir, "packages");
+		for (const id of ["test.a", "test.b"]) fs.mkdirSync(path.join(panels, id), { recursive: true });
+		const engine = engineFor(dir);
+		await engine.downloadPackage("solo", "d", undefined, publish({ name: "solo", version: "1.0.0", bytes: toolArchive("echo solo") }));
+		await engine.downloadPackage("shared", "d", undefined, publish({ name: "shared", version: "1.0.0", bytes: toolArchive("echo shared") }));
+		engine.recordPackageUse("solo", "test.a");
+		engine.recordPackageUse("shared", "test.a");
+		engine.recordPackageUse("shared", "test.b");
+
+		await engine.uninstallPanel("test.a");
+		expect(fs.existsSync(path.join(pkg, "solo"))).toBe(false);
+		expect(Object.keys(engine.getPackageIndex())).toEqual(["shared"]);
+		expect(engine.isPackageInstalled("shared")).toBe(true);
+		await engine.uninstallPanel("test.b");
+		expect(fs.existsSync(path.join(pkg, "shared"))).toBe(false);
+		expect(engine.getPackageIndex()).toEqual({});
+
+		// installed before uses were kept: every panel installed now counts as using it
+		await engine.downloadPackage("legacy", "d", undefined, publish({ name: "legacy", version: "1.0.0", bytes: toolArchive("echo legacy") }));
+		fs.rmSync(path.join(pkg, "users.json"), { force: true });
+		for (const id of ["test.c", "test.d"]) fs.mkdirSync(path.join(panels, id), { recursive: true });
+		const restarted = engineFor(dir);
+		restarted.sweepStartupOrphans();
+		await restarted.uninstallPanel("test.c");
+		expect(restarted.isPackageInstalled("legacy")).toBe(true);
+		await restarted.uninstallPanel("test.d");
+		expect(fs.existsSync(path.join(pkg, "legacy"))).toBe(false);
+	});
+});
