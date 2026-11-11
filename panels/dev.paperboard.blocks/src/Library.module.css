@@ -1,0 +1,41 @@
+/* The Library: the Actions panel's rail and header, over Blockly's flyout. */
+
+.rail {
+    height: 100%;
+    flex-shrink: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    background: var(--paper-surface-raised);
+    border-right: var(--paper-border-width) solid var(--paper-border);
+    scrollbar-width: none;
+    user-select: none;
+}
+
+.rail::-webkit-scrollbar {
+    display: none;
+}
+
+.railSeparator {
+    height: var(--paper-border-width);
+    width: 60%;
+    margin: var(--paper-uigap-onefourth) auto;
+    background-color: var(--paper-border);
+    opacity: var(--paper-opacity-disabled);
+}
+
+/* over the top of the flyout, which starts where this ends, and as wide as
+   it: the list grows past --library-width for a block that needs it */
+.header {
+    position: absolute;
+    position-anchor: --library-list;
+    top: 0;
+    left: 0;
+    width: anchor-size(width, var(--library-width));
+    box-sizing: border-box;
+    padding: var(--paper-uigap);
+    background: var(--paper-surface-raised);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
+    border-right: var(--paper-border-width) solid var(--paper-border);
+    user-select: none;
+}

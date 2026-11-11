@@ -1,12 +1,77 @@
-/* Blockly draws into a real element that needs a size: it takes the room
-   the run bar and the log leave. */
-.canvas {
+/* The Library and the canvas side by side over the run log. Blockly draws
+   into a real element that needs a size: the stage gives it one. */
+.body {
     flex: 3 1 0;
     min-height: 0;
+    display: flex;
+    flex-direction: row;
+    border-top: var(--paper-border-width) solid var(--paper-border);
+}
+
+.stage {
+    /* the Library's width, as the Actions library's: the header and the list read it */
+    --library-width: 400px;
     position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.canvas {
+    position: absolute;
+    inset: 0;
+}
+
+.expand {
+    position: absolute;
+    top: var(--paper-uigap);
+    left: var(--paper-uigap);
 }
 
 .log {
     flex: 1 1 0;
     min-height: 0;
+}
+
+/* Blockly's flyout as the Library's list */
+.stage :global(.blocklyFlyoutBackground) {
+    fill: var(--paper-surface);
+    fill-opacity: 1;
+}
+
+.stage :global(.blocklyFlyout) {
+    /* the header takes its width from here */
+    anchor-name: --library-list;
+    border-right: var(--paper-border-width) solid var(--paper-border);
+}
+
+/* a section heading in the list, as the Actions library's: Blockly's
+   renderer styles label text under its own three classes, so this
+   names four */
+.stage :global(.blocklyFlyout) .flyoutLabel :global(.blocklyFlyoutLabelText) {
+    fill: var(--paper-text-subtle);
+    font-family: var(--paper-font-family);
+    font-size: var(--paper-text-size-2);
+    font-weight: var(--paper-weight-bold);
+}
+
+/* a button in the list (Variables' "Create variable..."), as PaperUI's
+   primary button; its text keeps Blockly's font, which sized the button */
+.stage :global(.blocklyFlyout) :global(.blocklyFlyoutButton) {
+    cursor: pointer;
+}
+
+.stage :global(.blocklyFlyout) :global(.blocklyFlyoutButtonShadow) {
+    fill: transparent;
+}
+
+.stage :global(.blocklyFlyout) :global(.blocklyFlyoutButton) :global(.blocklyFlyoutButtonBackground) {
+    fill: var(--paper-primary);
+}
+
+.stage :global(.blocklyFlyout) :global(.blocklyFlyoutButton) :global(.blocklyText) {
+    fill: var(--paper-on-color);
+}
+
+.stage :global(.blocklyFlyout) :global(.blocklyFlyoutButton:hover) {
+    opacity: var(--paper-opacity-soft);
 }

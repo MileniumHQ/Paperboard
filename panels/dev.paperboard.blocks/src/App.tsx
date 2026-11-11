@@ -1,27 +1,57 @@
-// The Blocks editor: Blockly's canvas with every panel's blocks in its
-// toolbox, Run and Stop above it, and the run log below. Edits save as you
-// make them; the service runs the flows.
-import { createSignal, onCleanup, onMount, Show } from "solid-js";
+// The Blocks editor: the Library (a rail of categories, and the chosen
+// one's blocks in Blockly's flyout), the canvas, Run and Stop above it, and
+// the run log below. Edits save as you make them; the service runs the flows.
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js";
 import * as Blockly from "blockly";
-import { blocksApi, createPanelBridge, panelsApi, type BlockInfo } from "@mileniumhq/paperapi";
-import { PaperButton, PaperConsole, PaperFlex, PaperText, type PaperConsoleEntry } from "@mileniumhq/paperui";
+import { blocksApi, createPanelBridge, panelAssetUrl, panelsApi, type BlockInfo, type BlockProjectInfo, type PanelItem } from "@mileniumhq/paperapi";
+import { PaperButton, PaperConsole, PaperFlex, PaperIcon, PaperText, type PaperConsoleEntry } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
-import { BUILTIN_BLOCKS, BUILTIN_SECTIONS, choicesSources, registryDefinitions } from "./lib/blockDefs";
+import { BUILTIN_BLOCKS, BUILTIN_SECTIONS, choicesSources, PROPERTIES_CATEGORY, registryDefinitions, type Definitions } from "./lib/blockDefs";
 import { refreshChoices, registerChoicesField } from "./lib/choicesField";
+import { LIBRARY_FLYOUT, setLibraryTop, uiGap } from "./lib/libraryFlyout";
 import { errorMessage } from "./lib/failure";
 import type { SavedWorkspace } from "./lib/interpreter";
 import { DEFAULT_STATE, PANEL_ID, SERVICE_ACTIONS, type PanelState, type SavedFlows } from "./panel";
+import { BlocklyDialogs } from "./BlocklyDialogs";
+import { LibraryHeader, LibraryRail, type LibraryCategory } from "./Library";
 import styles from "./App.module.css";
 
 const SAVE_DELAY_MS = 400;
 
 const bridge = createPanelBridge<PanelState>({ panelId: PANEL_ID, defaultState: DEFAULT_STATE });
 
+type Json = Record<string, unknown>;
+
 /** Replaces block definitions, so a registry change redefines them without a warning per block. */
-function define(blocks: Record<string, unknown>[]): void {
+function define(blocks: Json[]): void {
     for (const block of blocks) delete Blockly.Blocks[block.type as string];
     Blockly.common.defineBlocksWithJsonArray(blocks);
+}
+
+/** What the registry offers, as the Library shows it. */
+interface Registry {
+    panels: PanelItem[];
+    projects: BlockProjectInfo[];
+    sections: Definitions["sections"];
+}
+
+/** A run of the list under one heading. */
+interface Group {
+    label?: string;
+    blocks: Json[];
+}
+
+const builtinId = (name: string) => `builtin:${name}`;
+const panelCategoryId = (id: string) => `panel:${id}`;
+
+/** The list as Blockly's flyout takes it: each group's heading, then its blocks. */
+function flyoutContents(groups: Group[]): Json[] {
+    // a heading after blocks gets more room above it than a block does
+    return groups.flatMap((g, i) => [
+        ...(g.label ? [...(i > 0 ? [{ kind: "sep", gap: uiGap() * 2 }] : []), { kind: "label", text: g.label, "web-class": styles.flyoutLabel }] : []),
+        ...g.blocks,
+    ]);
 }
 
 export default function App() {
@@ -29,6 +59,20 @@ export default function App() {
     let workspace: Blockly.WorkspaceSvg | undefined;
     const [state, setState] = createSignal<PanelState>(bridge.getState());
     const [problem, setProblem] = createSignal<string | null>(null);
+    const [registry, setRegistry] = createSignal<Registry>({ panels: [], projects: [], sections: [] });
+    const [selected, setSelected] = createSignal(builtinId(BUILTIN_SECTIONS[0]!.name));
+    const [chosenProjects, setChosenProjects] = createSignal<Record<string, string>>({});
+    const [search, setSearch] = createSignal("");
+    const [collapsed, setCollapsed] = createSignal(false);
+    const [ready, setReady] = createSignal(false);
+    // bumped each time the blocks are (re)defined, so the list draws them anew
+    const [definitions, setDefinitions] = createSignal(0);
+    // a variable made, renamed or removed changes the Variables list
+    const [variablesVersion, setVariablesVersion] = createSignal(0);
+    // each toolbox block's text as it reads, for search: by the block itself,
+    // since Blockly writes to a toolbox block's JSON once it shows it
+    const blockText = new WeakMap<Json, string>();
+    const scratch = new Blockly.Workspace();
     // the schemas of the blocks on the canvas, as last seen: saved with the flows
     let schemas: SavedFlows["schemas"] = {};
     let live = new Set<string>();
@@ -38,13 +82,94 @@ export default function App() {
 
     const fail = (what: string) => (err: unknown) => setProblem(`${what}: ${errorMessage(err)}`);
 
-    /** Defines every block the registry and the saved flows name, and returns the toolbox. */
-    async function refreshBlocks(saved: SavedFlows["schemas"]): Promise<Blockly.utils.toolbox.ToolboxDefinition> {
-        const [entries, panels, projects] = await Promise.all([blocksApi.list(), panelsApi.list(), blocksApi.projects()]);
+    const panelName = (id: string) => registry().panels.find((p) => p.id === id)?.name ?? id;
+    const panelIcon = (id: string) => {
+        const found = registry().panels.find((p) => p.id === id);
+        return found?.iconUrl ?? panelAssetUrl(id, found?.icon || "branding/icon.png");
+    };
+
+    const builtins = createMemo<LibraryCategory[]>(() => BUILTIN_SECTIONS.map((s) => ({ id: builtinId(s.name), name: s.name, icon: s.icon })));
+    const panels = createMemo<LibraryCategory[]>(() =>
+        [...new Set(registry().sections.map((s) => s.panelId))]
+            .map((id) => ({ id: panelCategoryId(id), name: panelName(id), iconUrl: panelIcon(id) }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+    );
+    const category = createMemo(() => [...builtins(), ...panels()].find((c) => c.id === selected()));
+
+    const shownPanel = () => (selected().startsWith("panel:") ? selected().slice("panel:".length) : null);
+    const projectsOf = (id: string) => registry().projects.filter((p) => p.panelId === id && registry().sections.some((s) => s.panelId === id && s.project === p.id));
+    const shownProject = createMemo(() => {
+        const id = shownPanel();
+        if (!id) return null;
+        const projects = projectsOf(id);
+        return projects.find((p) => p.id === chosenProjects()[id])?.id ?? projects[0]?.id ?? null;
+    });
+
+    /** A panel's blocks under their categories: its own, then the chosen project's, then every property. */
+    const panelGroups = (id: string, project: string | null): Group[] => {
+        const rank = (s: Definitions["sections"][number]) => (s.category === PROPERTIES_CATEGORY ? 2 : s.project ? 1 : 0);
+        const groups: Group[] = [];
+        for (const s of registry()
+            .sections.filter((s) => s.panelId === id && (!s.project || s.project === project))
+            .sort((a, b) => rank(a) - rank(b))) {
+            // the panel's and the project's categories of one name read as one
+            const same = groups.find((g) => g.label === s.category);
+            if (same) same.blocks = [...same.blocks, ...s.contents];
+            else groups.push({ ...(s.category ? { label: s.category } : {}), blocks: s.contents });
+        }
+        return groups;
+    };
+
+    /** What the list shows now: the category's blocks, or every block the search finds. */
+    const groups = createMemo<Group[]>(() => {
+        variablesVersion();
+        const query = search().trim().toLowerCase();
+        if (query) {
+            const projectName = (panel: string, project: string) => registry().projects.find((p) => p.panelId === panel && p.id === project)?.name ?? project;
+            const all: Group[] = [
+                ...BUILTIN_SECTIONS.filter((s) => !s.custom).map((s) => ({ label: s.name, blocks: s.contents })),
+                ...registry().sections.map((s) => ({
+                    // a category named for its panel isn't said twice
+                    label: [panelName(s.panelId), s.project ? projectName(s.panelId, s.project) : null, s.category === panelName(s.panelId) ? null : s.category].filter(Boolean).join(" · "),
+                    blocks: s.contents,
+                })),
+            ];
+            return all.map((g) => ({ ...g, blocks: g.blocks.filter((b) => b.kind === "block" && textOf(b).includes(query)) })).filter((g) => g.blocks.length);
+        }
+        const builtin = BUILTIN_SECTIONS.find((s) => builtinId(s.name) === selected());
+        if (builtin) {
+            if (builtin.custom === "VARIABLE") return ready() && workspace ? [{ blocks: Blockly.Variables.flyoutCategory(workspace) as unknown as Json[] }] : [];
+            return [{ blocks: builtin.contents }];
+        }
+        const id = shownPanel();
+        return id ? panelGroups(id, shownProject()) : [];
+    });
+
+    const count = createMemo(() => groups().reduce((n, g) => n + g.blocks.filter((b) => b.kind === "block").length, 0));
+    const sectionNames = createMemo(() => groups().flatMap((g) => (g.label ? [g.label] : [])));
+
+    /** A toolbox block's text as the canvas would show it, for search: read once per block. */
+    function textOf(block: Json): string {
+        let text = blockText.get(block);
+        if (text === undefined) {
+            const { kind: _kind, ...blockState } = block;
+            const made = Blockly.serialization.blocks.append(blockState as unknown as Blockly.serialization.blocks.State, scratch);
+            text = made.toString().toLowerCase();
+            made.dispose(false);
+            blockText.set(block, text);
+        }
+        return text;
+    }
+
+    /** Defines every block the registry and the saved flows name, and keeps what the Library shows. */
+    async function refreshBlocks(saved: SavedFlows["schemas"]): Promise<void> {
+        const [entries, panelList, projects] = await Promise.all([blocksApi.list(), panelsApi.list(), blocksApi.projects()]);
         // ask for every dropdown's choices now, so a loaded flow shows them; one that fails says so
         await Promise.all(
             choicesSources(entries).map((source) =>
-                refreshChoices(source).catch((err: unknown) => setProblem(`The choices for ${panels.find((p) => p.id === source.panelId)?.name ?? source.panelId} couldn't be loaded: ${errorMessage(err)}`)),
+                refreshChoices(source).catch((err: unknown) =>
+                    setProblem(`The choices for ${panelList.find((p) => p.id === source.panelId)?.name ?? source.panelId} couldn't be loaded: ${errorMessage(err)}`),
+                ),
             ),
         );
         const liveDefs = registryDefinitions(entries, projects);
@@ -56,36 +181,8 @@ export default function App() {
         const awayDefs = registryDefinitions(away);
         define([...BUILTIN_BLOCKS, ...awayDefs.blocks, ...liveDefs.blocks]);
         schemas = { ...awayDefs.schemas, ...liveDefs.schemas };
-
-        const panelName = (id: string) => panels.find((p) => p.id === id)?.name ?? id;
-        const projectName = (panelId: string, id: string) => projects.find((p) => p.panelId === panelId && p.id === id)?.name ?? id;
-        // panel > project > the blocks' own categories; a level with one group shows its blocks directly
-        type Json = Record<string, unknown>;
-        const grouped = (sections: typeof liveDefs.sections): Json[] => {
-            const named = sections.filter((s) => s.category);
-            if (named.length === 0 || (named.length === sections.length && named.length === 1)) return sections.flatMap((s) => s.contents);
-            return [
-                ...sections.filter((s) => !s.category).flatMap((s) => s.contents),
-                ...named.map((s) => ({ kind: "category", name: s.category, contents: s.contents })),
-            ];
-        };
-        const byPanel = new Map<string, Json[]>();
-        for (const panelId of new Set(liveDefs.sections.map((s) => s.panelId))) {
-            const mine = liveDefs.sections.filter((s) => s.panelId === panelId);
-            const projects = [...new Set(mine.filter((s) => s.project).map((s) => s.project!))];
-            byPanel.set(panelId, [
-                ...grouped(mine.filter((s) => !s.project)),
-                ...projects.map((project) => ({ kind: "category", name: projectName(panelId, project), contents: grouped(mine.filter((s) => s.project === project)) })),
-            ]);
-        }
-        return {
-            kind: "categoryToolbox",
-            contents: [
-                ...BUILTIN_SECTIONS.map((s) => ({ kind: "category", name: s.name, ...(s.custom ? { custom: s.custom } : { contents: s.contents }) })),
-                ...(byPanel.size ? [{ kind: "sep" }] : []),
-                ...[...byPanel].map(([panelId, contents]) => ({ kind: "category", name: panelName(panelId), contents })),
-            ],
-        } as Blockly.utils.toolbox.ToolboxDefinition;
+        setRegistry({ panels: panelList, projects, sections: liveDefs.sections });
+        setDefinitions((n) => n + 1);
     }
 
     /** Marks the blocks whose panel isn't offering them right now. */
@@ -114,10 +211,22 @@ export default function App() {
         shownErrors = next.log.length;
     }
 
+    /** Scrolls the list to a section's heading. */
+    function jump(section: string): void {
+        const flyout = workspace?.getFlyout();
+        if (!flyout) return;
+        const heading = flyout.getContents().filter((item) => item.getType() === "label")[sectionNames().indexOf(section)];
+        const list = flyout.getWorkspace();
+        if (!heading || !list.scrollbar) throw new Error(`The Library has no section "${section}"`);
+        list.scrollbar.setY(heading.getElement().getBoundingRectangle().top * list.scale);
+    }
+
     onMount(() => {
         registerChoicesField({ fetch: (s) => blocksApi.choices(s.panelId, s.entry, s.input), report: setProblem });
+        define(BUILTIN_BLOCKS);
         workspace = Blockly.inject(host, {
-            toolbox: { kind: "categoryToolbox", contents: [] },
+            toolbox: { kind: "flyoutToolbox", contents: [] },
+            plugins: { flyoutsVerticalToolbox: LIBRARY_FLYOUT },
             media: "./blockly-media/",
             trashcan: true,
             zoom: { controls: true, wheel: true },
@@ -127,6 +236,9 @@ export default function App() {
         resize.observe(host);
 
         workspace.addChangeListener((event: Blockly.Events.Abstract) => {
+            if (event.type === Blockly.Events.VAR_CREATE || event.type === Blockly.Events.VAR_DELETE || event.type === Blockly.Events.VAR_RENAME) {
+                setVariablesVersion((v) => v + 1);
+            }
             if (loading || event.isUiEvent) return;
             clearTimeout(saveTimer);
             saveTimer = setTimeout(save, SAVE_DELAY_MS);
@@ -137,15 +249,12 @@ export default function App() {
             showErrors(full);
         });
         const offRegistry = blocksApi.onRegistryChange(() => {
-            refreshBlocks(schemas).then((toolbox) => {
-                workspace?.updateToolbox(toolbox);
-                markAway();
-            }, fail("The blocks couldn't be updated"));
+            refreshBlocks(schemas).then(markAway, fail("The blocks couldn't be updated"));
         });
 
         (async () => {
             const flows = await bridge.call<SavedFlows>(SERVICE_ACTIONS.load);
-            workspace!.updateToolbox(await refreshBlocks(flows.schemas));
+            await refreshBlocks(flows.schemas);
             Blockly.serialization.workspaces.load(flows.workspace, workspace!);
             markAway();
         })().then(
@@ -154,6 +263,7 @@ export default function App() {
             },
             fail("Your flows couldn't be loaded"),
         );
+        setReady(true);
 
         onCleanup(() => {
             clearTimeout(saveTimer);
@@ -161,8 +271,35 @@ export default function App() {
             offState();
             offRegistry();
             workspace?.dispose();
+            scratch.dispose();
         });
     });
+
+    // the list follows the chosen category, project and search
+    createEffect(() => {
+        const contents = flyoutContents(groups());
+        definitions();
+        if (!ready() || !workspace) return;
+        workspace.updateToolbox({ kind: "flyoutToolbox", contents } as unknown as Blockly.utils.toolbox.ToolboxDefinition);
+        workspace.getFlyout()?.scrollToStart();
+    });
+
+    createEffect(() => {
+        const hidden = collapsed();
+        if (!ready() || !workspace) return;
+        workspace.getFlyout()?.setVisible(!hidden);
+        Blockly.svgResize(workspace);
+    });
+
+    /** The list starts where the header ends. */
+    const headerRef = (el: HTMLDivElement) => {
+        const observer = new ResizeObserver(() => {
+            setLibraryTop(el.offsetHeight);
+            workspace?.getFlyout()?.position();
+        });
+        observer.observe(el);
+        onCleanup(() => observer.disconnect());
+    };
 
     const entries = (): PaperConsoleEntry[] =>
         state().log.map((entry) => ({ id: entry.id, type: entry.level === "error" ? "error" : "output", content: entry.message, timestamp: entry.at }));
@@ -170,6 +307,11 @@ export default function App() {
     const run = () => {
         for (const block of workspace?.getAllBlocks(false) ?? []) block.setWarningText(null, "run");
         bridge.call<number>(SERVICE_ACTIONS.run).then(() => setProblem(null), fail("Run didn't start"));
+    };
+
+    const choose = (id: string) => {
+        setSelected(id);
+        setSearch("");
     };
 
     return (
@@ -190,7 +332,41 @@ export default function App() {
                     </PaperText>
                 </Show>
             </PaperFlex>
-            <div ref={host} class={styles.canvas} />
+            <div class={styles.body}>
+                <Show when={!collapsed()}>
+                    <LibraryRail builtins={builtins()} panels={panels()} selected={selected()} onSelect={choose} />
+                </Show>
+                <div class={styles.stage}>
+                    <div ref={host} class={styles.canvas} />
+                    <Show
+                        when={!collapsed()}
+                        fallback={
+                            <div class={styles.expand}>
+                                <PaperButton onClick={() => setCollapsed(false)} title="Open the Library">
+                                    <PaperIcon>menu_open</PaperIcon>
+                                    Library
+                                </PaperButton>
+                            </div>
+                        }
+                    >
+                        <LibraryHeader
+                            category={category()}
+                            selected={selected()}
+                            search={search()}
+                            onSearch={setSearch}
+                            count={count()}
+                            projects={shownPanel() ? projectsOf(shownPanel()!) : []}
+                            project={shownProject()}
+                            onProject={(id) => setChosenProjects((chosen) => ({ ...chosen, [shownPanel()!]: id }))}
+                            sections={sectionNames()}
+                            onJump={jump}
+                            onCollapse={() => setCollapsed(true)}
+                            headerRef={headerRef}
+                        />
+                    </Show>
+                </div>
+            </div>
+            <BlocklyDialogs />
             <PaperConsole class={styles.log} title="Run log" showInput={false} entries={entries()} onClear={() => bridge.call(SERVICE_ACTIONS.clearLog).catch(fail("The log wasn't cleared"))} />
         </PaperFlex>
     );
