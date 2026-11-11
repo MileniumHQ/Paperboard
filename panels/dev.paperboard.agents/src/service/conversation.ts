@@ -110,6 +110,8 @@ export interface ConversationDeps {
     /** every toolset's part of the agent's instructions, read at the start of each turn */
     instructions: () => Promise<string[]>;
     emit: (entry: ChatEntry) => void;
+    /** a turn ended without doing what it was for: its error, as the conversation shows it */
+    onTurnFailed?: (error: string) => void;
     onState: (s: ChatState) => void;
     /** Codex's home, where its rollouts say how long a thread is; null leaves Codex's threads unmeasured */
     codexHome: string | null;
@@ -352,6 +354,25 @@ export class Conversation {
         return { deleted: true };
     }
 
+    /** A conversation's texts, the user's and the agent's, oldest first: the current one, or one in the history. */
+    texts(id: string): Said[] {
+        if (id === this.id()) return said(this.entries);
+        const dir = this.pastEntry(id);
+        if (!fs.existsSync(dir)) throw new Error(`the agent has no conversation "${id}"; it may have been deleted`);
+        return said(this.load(path.join(dir, TRANSCRIPT)));
+    }
+
+    /** One text by its id: looked for in the current conversation, then in the history. */
+    text(messageId: string): Said {
+        const here = said(this.entries).find((e) => e.id === messageId);
+        if (here) return here;
+        for (const id of this.pastIds()) {
+            const found = said(this.load(path.join(this.pastDir(), id, TRANSCRIPT))).find((e) => e.id === messageId);
+            if (found) return found;
+        }
+        throw new Error(`the agent has no message "${messageId}"; its conversation may have been cleared or deleted`);
+    }
+
     /**
      * The agent's bubble, from its send_message tool: shown at once, mid-turn.
      * Refused (the model sees why) with no text, or a replyTo that isn't a message in the conversation.
@@ -430,15 +451,15 @@ export class Conversation {
 
     /** The current conversation as the history will list it once it's put away. */
     private summary(id: string): PastConversation {
-        const said = this.entries.filter((e): e is Extract<ChatEntry, { kind: "user" | "agent" }> => e.kind === "user" || e.kind === "agent");
-        const first = said.find((e) => e.kind === "user") ?? said[0];
+        const texts = said(this.entries);
+        const first = texts.find((e) => e.kind === "user") ?? texts[0];
         const text = first?.text.replace(/\s+/g, " ").trim() ?? "";
         return {
             id,
             title: text.length > TITLE_CHARS ? `${text.slice(0, TITLE_CHARS - 1).trimEnd()}…` : text || "A conversation",
             startedAt: this.entries[0]!.at,
             endedAt: this.entries.at(-1)!.at,
-            messages: said.length,
+            messages: texts.length,
         };
     }
 
@@ -505,6 +526,7 @@ export class Conversation {
         this.running = this.turn(message)
             .catch((e: Error) => {
                 this.put({ id: this.newId(), at: Date.now(), kind: "error", title: "Not answered", text: e.message });
+                this.deps.onTurnFailed?.(e.message);
             })
             .then(() => this.compactIfLong())
             .finally(() => {
@@ -750,8 +772,8 @@ export class Conversation {
 
     /** Drop every harness thread; the next turn starts a fresh one from the summary (if any) and the latest messages. */
     private compact(summary: string | null) {
-        const said = this.entries.filter((e) => e.kind === "user" || e.kind === "agent");
-        this.setCarry({ summary, from: said[Math.max(0, said.length - CARRY_MESSAGES)]?.id ?? null });
+        const texts = said(this.entries);
+        this.setCarry({ summary, from: texts[Math.max(0, texts.length - CARRY_MESSAGES)]?.id ?? null });
         this.threads = {};
         atomicWrite(path.join(this.deps.dir, THREADS), "{}");
     }
@@ -855,8 +877,8 @@ export class Conversation {
         this.deps.emit(entry);
     }
 
-    private load(): ChatEntry[] {
-        const file = path.join(this.deps.dir, TRANSCRIPT);
+    /** A transcript's entries: the current conversation's, or one put away in the history. */
+    private load(file = path.join(this.deps.dir, TRANSCRIPT)): ChatEntry[] {
         if (!fs.existsSync(file)) return [];
         const byId = new Map<string, ChatEntry>();
         const lines = fs.readFileSync(file, "utf8").split("\n");
@@ -879,6 +901,13 @@ export class Conversation {
         });
         return [...byId.values()].sort((a, b) => a.at - b.at).slice(-KEEP_IN_MEMORY);
     }
+}
+
+/** A text in a conversation: the user's or the agent's, not an error or a card. */
+export type Said = Extract<ChatEntry, { kind: "user" | "agent" }>;
+
+function said(entries: ChatEntry[]): Said[] {
+    return entries.filter((e): e is Said => e.kind === "user" || e.kind === "agent");
 }
 
 function atomicWrite(file: string, data: string) {

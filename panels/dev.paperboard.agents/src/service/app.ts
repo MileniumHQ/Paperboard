@@ -15,6 +15,7 @@ import {
     type AiState,
     type Compaction,
     type Harness,
+    type MemoryList,
     type Settings,
 } from "../contract";
 import { HomeFolder, moveHomeFolder } from "./homeFolder";
@@ -106,7 +107,9 @@ export class AiApp {
     private publishing: Promise<void> = Promise.resolve();
     /** the blocks are registered, and the conversation values as Blocks was last told they were */
     private blocksRegistered = false;
-    private announced = { current: "", list: "" };
+    private readonly announced = new Map<string, string>();
+    /** the memory revision Blocks was last told about */
+    private memoryRevision = 0;
     private settle!: (failure: Error | null) => void;
     private readonly settled = new Promise<Error | null>((ok) => (this.settle = ok));
 
@@ -127,7 +130,18 @@ export class AiApp {
         }
         try {
             await this.host.blocks.register(this.flowBlocks());
-            this.announced = { current: this.conversation.id(), list: JSON.stringify(this.conversationIds()) };
+            for (const [value, read] of Object.entries(this.watched())) {
+                try {
+                    this.announced.set(value, JSON.stringify(read()));
+                } catch (e) {
+                    // unreadable now (broken routines, say): the first change it reads after is announced
+                    console.error(`[ai] ${value} can't be read for Blocks:`, String(e));
+                }
+            }
+            await this.memory.list().then(
+                (list) => this.seeMemory(list, false),
+                (e) => console.error("[ai] memory can't be read for Blocks:", String(e)),
+            );
             this.blocksRegistered = true;
         } catch (e) {
             this.settle(e instanceof Error ? e : new Error(String(e)));
@@ -143,7 +157,13 @@ export class AiApp {
         const root = await this.host.storageDir();
         this.modelsDir = path.join(root, "models");
         this.ctx.setState({ settings: await this.loadSettings() });
-        this.memory = new Memory({ dir: path.join(root, "memory"), onChange: (memory) => this.ctx.setState({ memory }) });
+        this.memory = new Memory({
+            dir: path.join(root, "memory"),
+            onChange: (memory) => {
+                this.ctx.setState({ memory });
+                if (memory.revision !== this.memoryRevision) this.announceMemory(memory.revision);
+            },
+        });
         const t = this.host.tools;
         this.servers = new McpServers({
             host: { start: this.host.start, write: t.write, kill: this.host.kill, exists: this.host.exists, onStdout: this.host.onStdout, onStderr: this.host.onStderr, onExit: this.host.onExit, findProgram: this.host.findProgram },
@@ -154,14 +174,19 @@ export class AiApp {
         await this.servers.load();
         this.routines = new Routines({
             file: path.join(root, "routines.json"),
-            run: (r, late) =>
+            run: (r, late) => {
                 this.conversation.notice(
                     `Your routine [${r.id}] is due (${describeSchedule(r.schedule)}): ${r.what}` +
                         // r.next is still the time it was due
                         (late && r.next ? ` It was due at ${localStamp(r.next)}; it's late because this computer was asleep or off.` : "") +
                         " Do it now. Text the user with send_message if there's something for them; a check that found nothing needs no text.",
-                ),
-            onChange: (routines) => this.ctx.setState({ routines }),
+                );
+                this.fireBlock("routine-fired", { routine: r.id, task: r.what, late });
+            },
+            onChange: (routines) => {
+                this.ctx.setState({ routines });
+                this.announce("routines");
+            },
         });
         this.signIns = new SignIns({
             prepare: (args) => this.computer.callTool("sign_in_prepare", args),
@@ -237,7 +262,10 @@ export class AiApp {
             home,
             storagePath: "browser",
             apps: (host, port) => apps.serves(host, port),
-            onState: (computer) => this.ctx.setState({ computer }),
+            onState: (computer) => {
+                this.ctx.setState({ computer });
+                this.announce("computer-running");
+            },
         });
         this.conversation = new Conversation({
             host: { ...this.host, write: this.host.tools.write },
@@ -259,15 +287,12 @@ export class AiApp {
                         replyTo: entry.replyTo ?? "",
                     };
                     this.ctx.trigger(TRIGGER_IDS.messageReceived, message);
-                    if (this.blocksRegistered) {
-                        this.host.blocks.fire(TRIGGER_IDS.messageReceived, replyPayload(message)).catch((e) =>
-                            console.error("[ai] When the Agent Replies didn't reach Blocks:", String(e)),
-                        );
-                    }
+                    this.fireBlock(TRIGGER_IDS.messageReceived, replyPayload(message));
                 }
                 // its first message names the current conversation in the dropdown
                 if (entry.kind === "user" || entry.kind === "agent") this.publish();
             },
+            onTurnFailed: (error) => this.fireBlock("turn-failed", { error, conversation: this.conversation.id() }),
             onState: (chat) => this.ctx.setState({ chat }),
             codexHome: this.brains.homes.codex,
         });
@@ -447,6 +472,7 @@ export class AiApp {
     }
 
     deleteConversation(id: unknown) {
+        if (id === this.conversation.id()) throw new Error("The current conversation can't be deleted: clear it, or switch to another one first.");
         const r = this.conversation.deletePast(id);
         this.publish();
         return r;
@@ -466,6 +492,18 @@ export class AiApp {
             currentConversation: () => this.conversation.id(),
             conversations: () => this.conversationIds(),
             conversation: (id) => this.conversationFacts(id),
+            messages: (id) => this.conversation.texts(id).map((e) => e.id),
+            message: (id) => {
+                const e = this.conversation.text(id);
+                return { text: e.text, from: e.kind };
+            },
+            deleteConversation: (id) => this.deleteConversation(id),
+            clearConversation: () => this.startOver(),
+            memory: this.memory,
+            routines: this.routines,
+            computerRunning: () => this.computer.state.phase === "ready",
+            startComputer: () => this.computer.start(),
+            stopComputer: async () => void (await this.stopComputer()),
         });
     }
 
@@ -496,21 +534,54 @@ export class AiApp {
         return { title: past.title, messages: past.messages };
     }
 
-    /** Tell Blocks which conversation values changed since it was last told. */
-    private announceConversations() {
+    /** The values Blocks is told about when they change, read as Blocks compares them. */
+    private watched(): Record<string, () => unknown> {
+        return {
+            "current-conversation": () => this.conversation.id(),
+            conversations: () => this.conversationIds(),
+            routines: () => this.routines.list().map((r) => r.id),
+            "computer-running": () => this.computer.state.phase === "ready",
+        };
+    }
+
+    /** Tell Blocks a value changed, when it has since Blocks was last told. */
+    private announce(value: string) {
         if (!this.blocksRegistered) return;
-        let next: { current: string; list: string };
+        let next: string;
         try {
-            next = { current: this.conversation.id(), list: JSON.stringify(this.conversationIds()) };
+            next = JSON.stringify(this.watched()[value]!());
         } catch (e) {
-            console.error("[ai] the conversations can't be listed for Blocks:", String(e));
+            console.error(`[ai] ${value} can't be read for Blocks:`, String(e));
             return;
         }
-        const changed = [...(next.current === this.announced.current ? [] : ["current-conversation"]), ...(next.list === this.announced.list ? [] : ["conversations"])];
-        this.announced = next;
-        for (const value of changed) {
-            this.host.blocks.changed(value).catch((e) => console.error(`[ai] the change to ${value} didn't reach Blocks:`, String(e)));
-        }
+        this.changedTo(value, next, true);
+    }
+
+    private changedTo(value: string, next: string, tell: boolean) {
+        if (this.announced.get(value) === next) return;
+        this.announced.set(value, next);
+        if (tell) this.host.blocks.changed(value).catch((e) => console.error(`[ai] the change to ${value} didn't reach Blocks:`, String(e)));
+    }
+
+    /** Memory is read on its own queue: what changed is worked out once the read is done. */
+    private announceMemory(revision: number) {
+        if (!this.blocksRegistered) return;
+        this.memoryRevision = revision;
+        this.memory.list().then(
+            (list) => this.seeMemory(list, true),
+            (e) => console.error("[ai] memory can't be read for Blocks:", String(e)),
+        );
+    }
+
+    private seeMemory(list: MemoryList, tell: boolean) {
+        this.changedTo("facts", JSON.stringify(list.facts.map((f) => f.id)), tell);
+        this.changedTo("notes", JSON.stringify(list.notes.map((n) => n.key)), tell);
+    }
+
+    /** An event for the Blocks panel; nothing listens before the blocks are registered. */
+    private fireBlock(event: string, payload: Record<string, unknown>) {
+        if (!this.blocksRegistered) return;
+        this.host.blocks.fire(event, payload).catch((e) => console.error(`[ai] ${event} didn't reach Blocks:`, String(e)));
     }
 
     /** The current conversation (once it has messages), then the history, newest first. */
@@ -527,7 +598,8 @@ export class AiApp {
      * flows with the last list they got, so it's reported and the next change tries again.
      */
     publish(): Promise<void> {
-        this.announceConversations();
+        this.announce("current-conversation");
+        this.announce("conversations");
         this.publishing = this.publishing.then(async () => {
             let choices: string;
             try {
