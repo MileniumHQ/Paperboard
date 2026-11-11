@@ -1,0 +1,73 @@
+/* The run log, as the Actions canvas's console. */
+
+.panel {
+    width: 320px;
+    max-height: 240px;
+    border-radius: var(--paper-border-radius);
+    background: color-mix(in srgb, var(--paper-surface) 72%, transparent);
+    backdrop-filter: var(--paper-blur-heavy);
+    -webkit-backdrop-filter: var(--paper-blur-heavy);
+    border: var(--paper-border-width) solid var(--paper-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    border-bottom: var(--paper-border-width) solid var(--paper-border-subtle);
+    background: color-mix(in srgb, var(--paper-surface-raised) 50%, transparent);
+}
+
+.title {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    color: var(--paper-text-subtle);
+}
+
+.icon {
+    font-size: var(--paper-icon-size-small);
+    width: var(--paper-icon-size-small);
+    height: var(--paper-icon-size-small);
+}
+
+.body {
+    padding: var(--paper-uigap-half);
+    overflow-y: auto;
+    max-height: 180px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+}
+
+.line {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--paper-uigap-half);
+    font-size: var(--paper-text-size-1);
+    line-height: var(--paper-leading-normal);
+    word-break: break-word;
+}
+
+.line.error {
+    background: color-mix(in srgb, var(--paper-danger) 12%, transparent);
+    border-radius: var(--paper-border-radius-half);
+}
+
+.time {
+    color: var(--paper-text-subtle);
+    font-size: var(--paper-text-size-1);
+    flex-shrink: 0;
+    opacity: var(--paper-opacity-disabled);
+}
+
+.text {
+    color: var(--paper-text);
+    flex: 1;
+}

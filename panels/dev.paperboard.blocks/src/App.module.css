@@ -1,11 +1,16 @@
 /* The Library and the canvas side by side over the run log. Blockly draws
    into a real element that needs a size: the stage gives it one. */
+/* Run and Stop, as the Actions editor's bar */
+.topbar {
+    flex: none;
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
+}
+
 .body {
-    flex: 3 1 0;
+    flex: 1 1 0;
     min-height: 0;
     display: flex;
     flex-direction: row;
-    border-top: var(--paper-border-width) solid var(--paper-border);
 }
 
 .stage {
@@ -27,10 +32,6 @@
     left: var(--paper-uigap);
 }
 
-.log {
-    flex: 1 1 0;
-    min-height: 0;
-}
 
 /* Blockly's flyout as the Library's list */
 .stage :global(.blocklyFlyoutBackground) {
@@ -94,4 +95,161 @@
 
 .stage :global(.blocklyFlyout) :global(.blocklyFlyoutButton:hover) {
     opacity: var(--paper-opacity-soft);
+}
+
+/* the console, top right over the canvas, as Actions' */
+.topRight {
+    position: absolute;
+    top: var(--paper-uigap);
+    right: var(--paper-uigap);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--paper-uigap-half);
+}
+
+/* zoom over the trash, bottom right */
+.bottomRight {
+    position: absolute;
+    bottom: var(--paper-uigap-sixfourths);
+    right: var(--paper-uigap-sixfourths);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--paper-uigap);
+}
+
+/* the trash, as the Actions canvas's */
+.trash {
+    width: var(--paper-control-size-large);
+    height: var(--paper-control-size-large);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface);
+    border: var(--paper-border-width) solid var(--paper-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--paper-text-subtle);
+    transition: transform var(--paper-tiny-transition) var(--paper-ease-standard), background-color var(--paper-tiny-transition) var(--paper-ease-standard), color var(--paper-tiny-transition) var(--paper-ease-standard), border-color var(--paper-tiny-transition) var(--paper-ease-standard), opacity var(--paper-short-transition) var(--paper-ease-standard);
+    user-select: none;
+}
+
+.trash [class*="PaperIcon"] {
+    font-size: var(--paper-icon-size-large);
+    width: var(--paper-icon-size-large);
+    height: var(--paper-icon-size-large);
+}
+
+.trash.trashDragging {
+    opacity: var(--paper-opacity-soft);
+    border-color: var(--paper-border-strong);
+}
+
+.trash.trashOver {
+    opacity: 1;
+    background: color-mix(in srgb, var(--paper-danger) 25%, var(--paper-surface));
+    color: var(--paper-danger);
+    border-color: var(--paper-danger);
+    transform: scale(var(--paper-scale-emphasis));
+}
+
+/* Actions' dots: Blockly's grid, each line one round point */
+.stage :global(.blocklyGridPattern) line,
+.stage :global(pattern) line {
+    stroke: color-mix(in srgb, var(--paper-contrast) 22%, transparent);
+    stroke-width: calc(var(--paper-border-width) * 3);
+    stroke-linecap: round;
+}
+
+/* Blockly's menus (a block's right-click menu, a dropdown's choices) as
+   PaperUI's menu: the same panel and items as ../paperui's shared menu */
+:global(.blocklyWidgetDiv) :global(.blocklyMenu),
+:global(.blocklyDropDownDiv) {
+    font-family: var(--paper-font-family);
+    background: var(--paper-surface-raised) !important;
+    border: var(--paper-border-width) solid var(--paper-border) !important;
+    border-radius: var(--paper-border-radius) !important;
+    box-shadow: var(--paper-heavy-element-shadow) !important;
+}
+
+:global(.blocklyWidgetDiv) :global(.blocklyMenu) {
+    padding: var(--paper-uigap-half);
+}
+
+:global(.blocklyDropDownDiv) {
+    padding: 0 !important;
+}
+
+:global(.blocklyDropDownDiv) :global(.blocklyMenu) {
+    padding: var(--paper-uigap-half);
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+:global(.blocklyDropDownArrow) {
+    display: none;
+}
+
+:global(.blocklyMenuItem) {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-threefourths);
+    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths) !important;
+    margin: 0;
+    border: none !important;
+    border-radius: var(--paper-border-radius-half);
+    font-family: var(--paper-font-family) !important;
+    font-size: var(--paper-text-size-3);
+    color: var(--paper-text) !important;
+    cursor: pointer;
+}
+
+:global(.blocklyMenuItem) :global(.blocklyMenuItemContent) {
+    font-family: var(--paper-font-family);
+    color: var(--paper-text) !important;
+}
+
+:global(.blocklyMenuItem.blocklyMenuItemHighlight) {
+    background: color-mix(in srgb, var(--paper-contrast) 6%, var(--paper-surface-raised)) !important;
+}
+
+:global(.blocklyMenuItem.blocklyMenuItemDisabled) {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* the picked choice: PaperUI's check, after the label */
+:global(.blocklyMenuItemCheckbox) {
+    display: none !important;
+}
+
+:global(.blocklyMenuItemSelected) :global(.blocklyMenuItemContent)::after {
+    content: "check";
+    margin-left: var(--paper-uigap);
+    font-family: var(--paper-icon-font-family);
+    font-size: var(--paper-icon-size-small);
+    color: var(--paper-primary);
+    vertical-align: middle;
+}
+
+:global(.blocklyMenuSeparator) {
+    height: var(--paper-border-width);
+    margin: var(--paper-uigap-onefourth) 0;
+    background: var(--paper-border);
+    border: none;
+}
+
+/* a right-click item's symbol and its delete item, as PaperContextMenuItem's */
+:global(.paperMenuIcon) {
+    font-family: var(--paper-icon-font-family);
+    font-size: var(--paper-icon-size-medium);
+    color: var(--paper-primary-ink);
+    margin-right: var(--paper-uigap-threefourths);
+    vertical-align: middle;
+}
+
+:global(.paperMenuDanger),
+:global(.paperMenuDanger) :global(.paperMenuIcon) {
+    color: var(--paper-danger);
 }

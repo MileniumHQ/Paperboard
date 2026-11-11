@@ -18,9 +18,9 @@ const POINTS_PER_PIXEL = 0.75;
 
 
 
-/** Block text: PaperUI's small text, a touch heavier to read on colour. */
+/** Block text: PaperUI's smallest text, a touch heavier to read on colour. */
 function blockFont() {
-    return { family: token("--paper-font-family"), weight: token("--paper-weight-semibold"), pixels: tokenPixels("--paper-text-size-2") };
+    return { family: token("--paper-font-family"), weight: token("--paper-weight-semibold"), pixels: tokenPixels("--paper-text-size-1") };
 }
 
 /** A block's icon: as tall as its text. */
@@ -45,15 +45,15 @@ export function paperTheme(): Blockly.Theme {
     return Blockly.Theme.defineTheme("paper", {
         name: "paper",
         blockStyles: blockStyles(),
-        // the canvas a card is, in either theme
+        // the Actions canvas: the app's surface, dotted (the grid, in App.tsx)
         componentStyles: {
-            workspaceBackgroundColour: token("--paper-surface-raised"),
+            workspaceBackgroundColour: token("--paper-surface-app"),
             scrollbarColour: token("--paper-border-strong"),
             insertionMarkerColour: token("--paper-text"),
         },
         fontStyle: { family: font.family, weight: font.weight, size: font.pixels * POINTS_PER_PIXEL },
-        // a block that starts a flow wears a cap, as Scratch's hats do
-        startHats: true,
+        // a block that starts a flow is flat on top, with nothing to stack under
+        startHats: false,
     });
 }
 
@@ -115,18 +115,27 @@ class PaperConstants extends Blockly.zelos.ConstantProvider {
         // zelos measures in grid units: a sixth of PaperUI's gap, so its
         // padding, notches and heights follow the gap, at half Scratch's size
         super(tokenPixels("--paper-uigap") / 6);
-        // half PaperUI's small radius, as the blocks are half size; it's also
-        // the least a block's top and bottom rows are
-        this.CORNER_RADIUS = tokenPixels("--paper-border-radius-half") / 2;
-        // zelos sizes a hat's cap in pixels, not grid units: halved with the rest
-        this.START_HAT_HEIGHT /= 2;
-        this.START_HAT_WIDTH /= 2;
+        // every corner is PaperUI's small radius, as its inputs and menu items
+        // are; it's also the least a block's top and bottom rows are
+        this.CORNER_RADIUS = tokenPixels("--paper-border-radius-half");
         this.TOP_ROW_MIN_HEIGHT = this.CORNER_RADIUS;
         this.BOTTOM_ROW_MIN_HEIGHT = this.CORNER_RADIUS;
         this.FIELD_BORDER_RECT_RADIUS = this.CORNER_RADIUS;
+        // a dropdown opens as PaperUI's menu, not in its block's colour
+        this.FIELD_DROPDOWN_COLOURED_DIV = false;
+    }
+
+    /** The colours read from the page: again on every theme change, so light and dark follow the app. */
+    override setDynamicProperties_(theme: Blockly.Theme): void {
+        super.setDynamicProperties_(theme);
         this.SELECTED_GLOW_COLOUR = token("--paper-primary");
         // a value typed into a socket: PaperUI's text field
         this.FIELD_BORDER_RECT_COLOUR = token("--paper-field");
+    }
+
+    /** A value is a rounded rectangle, as every other edge is, not Scratch's pill. */
+    override makeRounded(): ReturnType<Blockly.zelos.ConstantProvider["makeRounded"]> {
+        return { ...this.makeSquared(), type: this.SHAPES["ROUND"]! } as ReturnType<Blockly.zelos.ConstantProvider["makeRounded"]>;
     }
 
     // Blockly's renderer CSS, with PaperUI's colours where zelos has Scratch's
@@ -143,6 +152,9 @@ class PaperConstants extends Blockly.zelos.ConstantProvider {
             `${fieldText} { fill: ${getVarCss("text")}; }`,
             // an empty field says what goes in it, as PaperUI's placeholders do
             `${selector} .${PLACEHOLDER_CLASS} { fill: ${getVarCss("text-faint")} !important; font-weight: ${getVarCss("weight-regular")}; }`,
+            // a typed-in value (a shadow that's only its text field) is PaperUI's field. Blockly paints it
+            // with the colour it had when the field was first drawn, so the theme is followed here instead
+            `${selector} .blocklyShadow:has(> .blocklyEditableField > text:not(.blocklyDropdownText)) > .blocklyPath { fill: ${getVarCss("field")}; }`,
             // every block and every field has an edge, so each reads apart from what it sits on
             `${selector} .blocklyPath { stroke-width: ${getVarCss("border-width")}; }`,
             `${selector} .blocklyShadow>.blocklyPath, ${selector} .blocklyNonEditableField>rect:not(.blocklyDropdownRect), ${selector} .blocklyEditableField>rect:not(.blocklyDropdownRect) { stroke: ${getVarCss("border-strong")}; stroke-width: ${getVarCss("border-width")}; }`,

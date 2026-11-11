@@ -4,7 +4,7 @@
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js";
 import * as Blockly from "blockly";
 import { blocksApi, createPanelBridge, panelAssetUrl, panelsApi, type BlockInfo, type BlockProjectInfo, type PanelItem } from "@mileniumhq/paperapi";
-import { PaperButton, PaperConsole, PaperFlex, PaperIcon, PaperText, type PaperConsoleEntry } from "@mileniumhq/paperui";
+import { PaperButton, PaperEffect, PaperFlex, PaperIcon, PaperText } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 import { BUILTIN_BLOCKS, BUILTIN_SECTIONS, builtinPlaceholder, choicesSources, PROPERTIES_CATEGORY, registryDefinitions, type Definitions } from "./lib/blockDefs";
@@ -14,6 +14,10 @@ import { loadBlockFonts, PAPER_RENDERER, paperTheme } from "./lib/paperRenderer"
 import { assignPanelStyles, setPanelIcons } from "./lib/blockStyles";
 import { HEADING_KIND, type HeadingInfo } from "./lib/libraryHeading";
 import { setTextPlaceholders } from "./lib/textField";
+import { addTrash, type TrashState } from "./lib/trashZone";
+import { tokenPixels } from "./lib/tokens";
+import { Console } from "./Console";
+import { paperContextMenus } from "./lib/contextMenu";
 import { errorMessage } from "./lib/failure";
 import type { SavedWorkspace } from "./lib/interpreter";
 import { DEFAULT_STATE, PANEL_ID, SERVICE_ACTIONS, type PanelState, type SavedFlows } from "./panel";
@@ -74,6 +78,8 @@ function flyoutContents(groups: Group[]): Json[] {
 
 export default function App() {
     let host!: HTMLDivElement;
+    let trashTile!: HTMLDivElement;
+    const [trash, setTrash] = createSignal<TrashState>({ dragging: false, over: false });
     let workspace: Blockly.WorkspaceSvg | undefined;
     const [state, setState] = createSignal<PanelState>(bridge.getState());
     const [problem, setProblem] = createSignal<string | null>(null);
@@ -266,17 +272,23 @@ export default function App() {
 
         const start = () => {
             if (closed) return;
+            paperContextMenus();
             workspace = Blockly.inject(host, {
                 renderer: PAPER_RENDERER,
                 theme: paperTheme(),
                 toolbox: { kind: "flyoutToolbox", contents: [] },
                 plugins: { flyoutsVerticalToolbox: LIBRARY_FLYOUT },
                 media: "./blockly-media/",
-                trashcan: true,
-                zoom: { controls: true, wheel: true },
+                // the trash and zoom are PaperUI's, over the canvas (below)
+                trashcan: false,
+                zoom: { controls: false, wheel: true, startScale: 1 },
+                // Actions' dots: one at every double gap, drawn by App.module.css
+                grid: { spacing: tokenPixels("--paper-uigap") * 2, length: 1, colour: "transparent", snap: false },
                 move: { scrollbars: true, drag: true, wheel: false },
             });
             resize.observe(host);
+            addTrash(workspace, trashTile, setTrash);
+            followTheme();
 
             workspace.addChangeListener((event: Blockly.Events.Abstract) => {
                 if (event.type === Blockly.Events.VAR_CREATE || event.type === Blockly.Events.VAR_DELETE || event.type === Blockly.Events.VAR_RENAME) {
@@ -307,8 +319,26 @@ export default function App() {
         // Blockly measures text as it draws, so it waits for the font
         loadBlockFonts().then(start, fail("The blocks couldn't be drawn"));
 
+        /** Light or dark, as the app switches: Blockly takes colours, not variables, so the theme is made again. */
+        const themeChanges = new MutationObserver(() => retheme());
+        const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+        const retheme = () => {
+            if (!workspace) return;
+            try {
+                workspace.setTheme(paperTheme());
+            } catch (err) {
+                fail("The blocks couldn't follow the theme")(err);
+            }
+        };
+        const followTheme = () => {
+            themeChanges.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-paperui-theme", "class"] });
+            darkQuery.addEventListener("change", retheme);
+        };
+
         onCleanup(() => {
             closed = true;
+            themeChanges.disconnect();
+            darkQuery.removeEventListener("change", retheme);
             clearTimeout(saveTimer);
             resize.disconnect();
             offState();
@@ -344,8 +374,12 @@ export default function App() {
         onCleanup(() => observer.disconnect());
     };
 
-    const entries = (): PaperConsoleEntry[] =>
-        state().log.map((entry) => ({ id: entry.id, type: entry.level === "error" ? "error" : "output", content: entry.message, timestamp: entry.at }));
+    const zoom = (by: number) => workspace?.zoomCenter(by);
+    const resetView = () => {
+        if (!workspace) return;
+        workspace.setScale(workspace.options.zoomOptions.startScale);
+        workspace.scrollCenter();
+    };
 
     const run = () => {
         for (const block of workspace?.getAllBlocks(false) ?? []) block.setWarningText(null, "run");
@@ -359,22 +393,39 @@ export default function App() {
 
     return (
         <PaperFlex direction="column" fullWidth fullHeight>
-            <PaperFlex direction="row" gap="full" padding="full" align="center">
-                <PaperButton variant="primary" onClick={run}>
-                    Run
-                </PaperButton>
-                <PaperButton disabled={state().running === 0} onClick={() => bridge.call(SERVICE_ACTIONS.stop).catch(fail("Stop didn't work"))}>
-                    Stop
-                </PaperButton>
-                <Show when={state().running > 0}>
-                    <PaperText preset="body">{state().running === 1 ? "1 flow running" : `${state().running} flows running`}</PaperText>
-                </Show>
-                <Show when={problem()}>
-                    <PaperText preset="body" color="danger">
-                        {problem()}
-                    </PaperText>
-                </Show>
-            </PaperFlex>
+            <div class={styles.topbar}>
+                <PaperFlex direction="row" align="center" justify="space-between" gap="full" padding="half" background="surface" fullWidth>
+                    <PaperFlex direction="row" align="center" gap="full" paddingX="half">
+                        <Show when={state().running > 0}>
+                            <PaperText preset="body">{state().running === 1 ? "1 flow running" : `${state().running} flows running`}</PaperText>
+                        </Show>
+                        <Show when={problem()}>
+                            <PaperText preset="body" color="danger">
+                                {problem()}
+                            </PaperText>
+                        </Show>
+                    </PaperFlex>
+                    <PaperFlex direction="row" align="center" gap="half" paddingX="half">
+                        <PaperEffect variant="danger">
+                            <PaperButton
+                                variant="danger"
+                                icon
+                                disabled={state().running === 0}
+                                onClick={() => bridge.call(SERVICE_ACTIONS.stop).catch(fail("Stop didn't work"))}
+                                title="Stop every flow"
+                                aria-label="Stop every flow"
+                            >
+                                <PaperIcon>stop</PaperIcon>
+                            </PaperButton>
+                        </PaperEffect>
+                        <PaperEffect variant="success">
+                            <PaperButton variant="success" icon onClick={run} title="Run the flows that start when Run is clicked" aria-label="Run">
+                                <PaperIcon>play_arrow</PaperIcon>
+                            </PaperButton>
+                        </PaperEffect>
+                    </PaperFlex>
+                </PaperFlex>
+            </div>
             <div class={styles.body}>
                 <Show when={!collapsed()}>
                     <LibraryRail builtins={builtins()} panels={panels()} selected={selected()} onSelect={choose} />
@@ -407,10 +458,33 @@ export default function App() {
                             headerRef={headerRef}
                         />
                     </Show>
+                    <div class={styles.topRight}>
+                        <Console entries={state().log} onClear={() => bridge.call(SERVICE_ACTIONS.clearLog).catch(fail("The log wasn't cleared"))} />
+                    </div>
+                    <div class={styles.bottomRight}>
+                        <PaperFlex direction="column" gap="half">
+                            <PaperButton variant="outline" icon onClick={() => zoom(1)} title="Zoom in" aria-label="Zoom in">
+                                <PaperIcon>add</PaperIcon>
+                            </PaperButton>
+                            <PaperButton variant="outline" icon onClick={() => zoom(-1)} title="Zoom out" aria-label="Zoom out">
+                                <PaperIcon>remove</PaperIcon>
+                            </PaperButton>
+                            <PaperButton variant="outline" icon onClick={resetView} title="Reset the view" aria-label="Reset the view">
+                                <PaperIcon>center_focus_strong</PaperIcon>
+                            </PaperButton>
+                        </PaperFlex>
+                        <div
+                            ref={trashTile}
+                            class={styles.trash}
+                            classList={{ [styles.trashDragging!]: trash().dragging, [styles.trashOver!]: trash().over }}
+                            title="Drop a block here to delete it"
+                        >
+                            <PaperIcon>{trash().over ? "delete_forever" : "delete"}</PaperIcon>
+                        </div>
+                    </div>
                 </div>
             </div>
             <BlocklyDialogs />
-            <PaperConsole class={styles.log} title="Run log" showInput={false} entries={entries()} onClear={() => bridge.call(SERVICE_ACTIONS.clearLog).catch(fail("The log wasn't cleared"))} />
         </PaperFlex>
     );
 }
