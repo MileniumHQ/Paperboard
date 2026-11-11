@@ -143,7 +143,7 @@ interface BackupSchedule {
             <PaperText preset="subheader" as="h2" id="making-and-restoring">Making and restoring</PaperText>
             <PaperTextList>
                 <li>A backup is one archive of the panel's <PaperLink href="/docs/paperapi/file/">files folder</PaperLink> and its <PaperLink href="/docs/paperapi/config/">config</PaperLink> documents. Secrets are never included.</li>
-                <li>The daemon stops the panel's service while it copies, then starts it again. A service with a <PaperLink href="/docs/paperapi/service/">beforeBackup</PaperLink> hook gets ready first.</li>
+                <li>The daemon stops the panel's service while it copies, then starts it again. A service with a <PaperLink href="/docs/paperapi/service/">beforeBackup</PaperLink> hook gets ready first, and one with <PaperCode>afterBackup</PaperCode> hears how it ended.</li>
                 <li>A backup or restore that a service starts from inside one of its own actions or blocks stops that service before it can answer. Paperboard answers the call with the record, or the error, so return the record as it is: code after the call doesn't run.</li>
                 <li>A restore downloads the archive, checks its size and sha256 against the record, stops the service, replaces the files and config, and starts the service again.</li>
                 <li>A backup made by a newer version of the panel than the one installed is refused, so old code never reads new data.</li>

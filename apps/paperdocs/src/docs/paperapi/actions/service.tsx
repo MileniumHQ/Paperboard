@@ -133,6 +133,18 @@ export default service;`}
                         <td>No default</td>
                         <td>Called before a restore replaces the panel's data. Stop the programs that hold the data open. Throwing refuses the restore with the thrown message.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>afterBackup</PaperCode></td>
+                        <td><PaperCode>(ctx, ended: BackupEnded) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
+                        <td>No default</td>
+                        <td>Called when a backup of the panel's data ends, whoever started it. <PaperCode>ended</PaperCode> is <PaperCode>{"{ ok: true, backup, sourceId? }"}</PaperCode> with the new record, or <PaperCode>{"{ ok: false, error, sourceId? }"}</PaperCode> with why it failed. It runs in the service that started after the backup.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>afterRestore</PaperCode></td>
+                        <td><PaperCode>(ctx, ended: BackupEnded) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
+                        <td>No default</td>
+                        <td>The same, for a restore. <PaperCode>backup</PaperCode> is the record that was restored.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
@@ -236,6 +248,7 @@ export default service;`}
                 <li>When a registration or <PaperCode>onInit</PaperCode> fails, <PaperCode>ready</PaperCode> rejects, the error is logged as <PaperCode>{"[Service:<id>] initialization failed:"}</PaperCode>, and the service never reports ready, so the daemon kills it after 20 seconds.</li>
                 <li>An error thrown by an action's <PaperCode>run</PaperCode> rejects the caller's <PaperCode>actionsApi.call</PaperCode> with the same message. Throw sentences the person using the panel can act on.</li>
                 <li>A <PaperCode>beforeBackup</PaperCode> that throws refuses the backup with <PaperCode>The panel could not get ready for a backup: &lt;message&gt;</PaperCode>. A <PaperCode>beforeRestore</PaperCode> that throws refuses the restore with its own message.</li>
+                <li><PaperCode>afterBackup</PaperCode> and <PaperCode>afterRestore</PaperCode> are told only while the service is ready. A backup that ends while the service is stopped or still starting is not heard. An error they throw is logged as <PaperCode>{"[Service:<id>] afterBackup failed:"}</PaperCode>.</li>
                 <li>The daemon waits at most 5 minutes for either hook, then fails with <PaperCode>Service &lt;id&gt; did not get ready for the backup within 300 s</PaperCode>. The hooks run only while the service is ready; a stopped or failed service is not asked.</li>
                 <li>A state sync that fails is logged as <PaperCode>{"[Service:<id>] Failed to sync state:"}</PaperCode>, and open bridges miss that patch until they call <PaperCode>refreshState</PaperCode>.</li>
             </PaperTextList>

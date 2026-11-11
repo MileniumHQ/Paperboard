@@ -189,6 +189,46 @@ describe("named sources and beforeBackup", () => {
 		await host.close();
 	});
 
+	test("afterBackup and afterRestore hear each one end, in the service that runs after it, made or failed", async () => {
+		const dir = dataDir();
+		const heard = path.join(tempDir(), "after.log");
+		const refuse = path.join(tempDir(), "refuse");
+		const log = (hook: string) => `${hook}: async (_ctx, ended) => { fs.appendFileSync(${JSON.stringify(heard)}, JSON.stringify(["${hook}", ended]) + "\\n"); },`;
+		await installPanelFiles(dir, {
+			id: "test.after",
+			service: serviceSource({
+				actions: PING,
+				extra: 'import * as fs from "node:fs";',
+				options: `${log("afterBackup")} ${log("afterRestore")} beforeBackup: async () => { if (fs.existsSync(${JSON.stringify(refuse)})) throw new Error("not now"); },`,
+			}),
+		});
+		const daemon = await startDaemon({ dataDir: dir });
+		const host = await daemon.rpc();
+		const panel = await daemon.panelRpc("test.after");
+		await readyService(host, "test.after");
+		const heardLines = async (count: number) => waitFor(`${count} hook calls`, async () => {
+			const lines = fs.existsSync(heard) ? fs.readFileSync(heard, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
+			return lines.length >= count ? lines : null;
+		});
+		await panel.ok("file:write", { targetPath: "data.txt", content: "d" });
+		await host.ok("backup:panel-destination-set", { panelId: "test.after", destinationId: "local" });
+
+		const record = await panel.ok("backup:create", { panelId: "test.after", label: "kept" });
+		expect((await heardLines(1))[0]).toEqual(["afterBackup", { ok: true, backup: record }]);
+
+		fs.writeFileSync(refuse, "");
+		expect((await panel.fail("backup:create", { panelId: "test.after" })).error).toContain("not now");
+		expect((await heardLines(2))[1]).toEqual(["afterBackup", { ok: false, error: "The panel could not get ready for a backup: not now" }]);
+
+		expect((await panel.ok("backup:restore", { panelId: "test.after", backupId: record.id })).id).toBe(record.id);
+		expect((await heardLines(3))[2]).toEqual(["afterRestore", { ok: true, backup: record }]);
+		expect((await panel.fail("backup:restore", { panelId: "test.after", backupId: newBackupId() })).code).toBe("NOT_FOUND");
+		const [, , , failed] = await heardLines(4);
+		expect(failed[0]).toBe("afterRestore");
+		expect(failed[1]).toMatchObject({ ok: false, error: expect.stringContaining("is not at this panel's backup location") });
+		await panel.close();
+		await host.close();
+	});
 });
 
 // A service backing up its own panel from an action or a block gets the backup as the answer.

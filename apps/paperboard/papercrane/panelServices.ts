@@ -8,6 +8,7 @@ import { validatePanelManifest } from "./storage";
 import { isPanelId, requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import type { PaperCraneAuth } from "./auth";
 import type { MonitorLifecycle, MonitorServiceRecord } from "../../../packages/paperapi/src/monitorProtocol";
+import type { BackupEnded } from "./backups/types";
 
 type ServiceChange = Omit<MonitorServiceRecord, "type" | "at" | "panel">;
 
@@ -25,6 +26,9 @@ interface RunningService {
     /** the service said, when it became ready, that it gets ready for backups */
     beforeBackup?: boolean;
     beforeRestore?: boolean;
+    /** ... and that it hears backups and restores end */
+    afterBackup?: boolean;
+    afterRestore?: boolean;
     /** the one backup it is getting ready for now */
     backupPrepare?: { requestId: string; settle: (error: Error | null) => void };
 }
@@ -161,6 +165,8 @@ export class PanelServicesManager {
             clearTimeout(entry.readyTimer);
             entry.beforeBackup = message.beforeBackup === true;
             entry.beforeRestore = message.beforeRestore === true;
+            entry.afterBackup = message.afterBackup === true;
+            entry.afterRestore = message.afterRestore === true;
             entry.state = "ready";
             this.announce(id, { state: "ready", ...(child.pid !== undefined ? { pid: child.pid } : {}) });
             resolveReady();
@@ -227,6 +233,18 @@ export class PanelServicesManager {
             if (current?.requestId === requestId) entry.backupPrepare = undefined;
         }
         return true;
+    }
+    /**
+     * Tells a ready service that hears it (its definition has afterBackup or
+     * afterRestore) how a backup or restore of its data ended. A service
+     * that is stopped, not ready yet, or doesn't take part is not told.
+     */
+    public tellBackupEnded(id: string, operation: "backup" | "restore", ended: BackupEnded): void {
+        const entry = this.services.get(requirePanelId(id));
+        if (!entry || entry.stopped || entry.state !== "ready" || !(operation === "backup" ? entry.afterBackup : entry.afterRestore)) return;
+        entry.process.send({ type: `paperboard:after-${operation}`, ended }, (err) => {
+            if (err) logger.error(`[services] ${id} was not told its ${operation} ended`, err);
+        });
     }
     public async waitUntilReady(id: string): Promise<void> {
         const entry = this.services.get(id);

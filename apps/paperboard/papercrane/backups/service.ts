@@ -379,17 +379,26 @@ export class BackupService {
         return this.store(this.destination(destId, config));
     }
 
-    private async job<T>(panelId: string, kind: "create" | "restore", fn: () => Promise<T>): Promise<T> {
+    private async job(panelId: string, kind: "create" | "restore", fn: () => Promise<BackupRecord>): Promise<BackupRecord> {
         const current = this.running.get(panelId);
         if (current) throw conflict(`A backup ${current === "create" ? "is being made" : "is being restored"} for this panel`);
         if (this.running.size >= MAX_RUNNING_BACKUP_JOBS) throw conflict("Paperboard is busy with other backups. Try again when they finish");
         this.running.set(panelId, kind);
+        let ended: { ok: true; backup: BackupRecord } | { ok: false; error: string };
         try {
             fs.mkdirSync(this.workDir, { recursive: true });
-            return await fn();
+            const record = await fn();
+            ended = { ok: true, backup: record };
+            return record;
+        } catch (err) {
+            ended = { ok: false, error: err instanceof Error ? err.message : String(err) };
+            throw err;
         } finally {
             this.running.delete(panelId);
             if (this.progress.delete(panelId)) this.emitProgress(panelId, null);
+            // once the job is over, so the service hearing it can start the next one
+            const sourceId = this.sources.get(panelId)?.id;
+            this.engine.tellServiceBackupEnded(this.sources.owner(panelId), kind === "create" ? "backup" : "restore", { ...(sourceId !== undefined ? { sourceId } : {}), ...ended! });
         }
     }
 

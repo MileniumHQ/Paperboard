@@ -95,6 +95,11 @@ export interface BackupProgressChange {
     progress: BackupProgress | null;
 }
 
+/** how a backup or restore of a panel's data ended, as its service hears it
+ * (afterBackup, afterRestore). sourceId names the source it was of, and is
+ * absent for the panel's own data. */
+export type BackupEnded = { sourceId?: string } & ({ ok: true; backup: BackupRecord } | { ok: false; error: string });
+
 /** the share of the step done, from 0 to 1; null when it cannot be measured */
 export function backupProgressFraction(progress: Pick<BackupProgress, "done" | "total">): number | null {
     if (progress.done === null || progress.total === null) return null;

@@ -2,6 +2,7 @@ import { actionsApi } from "./actions";
 import { getPanelId } from "./ipc";
 import { STATE_GET_ACTION, STATE_SYNC_EVENT, WIDGET_CHOICES_ACTION } from "./channels";
 import { parseWidgetChoices, type WidgetChoice } from "./widgetManifest";
+import type { BackupEnded } from "./backups";
 import {
     type ActionCategory,
     type ActionCategoryDefinition,
@@ -79,6 +80,17 @@ export interface DefinePanelServiceOptions<
     beforeBackup?: (ctx: ServiceContext<TState>, options: { sourceId?: string }) => void | Promise<void>;
     /** Called before replacing data, while the service can still stop its owned processes. */
     beforeRestore?: (ctx: ServiceContext<TState>, options: { sourceId?: string }) => void | Promise<void>;
+    /**
+     * Hears each backup of the panel's data end, whoever started it (the
+     * panel, a routine backup, the shell): with the record when it was
+     * made, or why it failed. It is called once the service runs again, so
+     * a backup that stopped the service is heard by the service that
+     * started after it. A backup that ends while the service is stopped or
+     * not ready is not heard. sourceId is as in beforeBackup.
+     */
+    afterBackup?: (ctx: ServiceContext<TState>, ended: BackupEnded) => void | Promise<void>;
+    /** The same as afterBackup, for a restore; backup is the record restored. */
+    afterRestore?: (ctx: ServiceContext<TState>, ended: BackupEnded) => void | Promise<void>;
 }
 
 export function definePanelService<
@@ -251,7 +263,25 @@ export function definePanelService<
                     );
                 });
             }
-            process.send({ type: "paperboard:service-ready", panelId, beforeBackup: Boolean(options.beforeBackup), beforeRestore: Boolean(options.beforeRestore) });
+            for (const operation of ["backup", "restore"] as const) {
+                const hook = operation === "backup" ? options.afterBackup : options.afterRestore;
+                if (!hook) continue;
+                process.on("message", (message: any) => {
+                    if (message?.type !== `paperboard:after-${operation}`) return;
+                    const ended = message.ended as BackupEnded;
+                    void (async () => hook(ctx, ended))().catch((err) =>
+                        console.error(`[Service:${panelId}] after${operation === "backup" ? "Backup" : "Restore"} failed:`, err),
+                    );
+                });
+            }
+            process.send({
+                type: "paperboard:service-ready",
+                panelId,
+                beforeBackup: Boolean(options.beforeBackup),
+                beforeRestore: Boolean(options.beforeRestore),
+                afterBackup: Boolean(options.afterBackup),
+                afterRestore: Boolean(options.afterRestore),
+            });
         }
     });
     void ready.catch((err) => console.error(`[Service:${panelId}] initialization failed:`, err));

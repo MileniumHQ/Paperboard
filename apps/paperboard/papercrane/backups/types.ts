@@ -30,7 +30,7 @@ export interface BackupUsage {
 export type BytesProgress = (done: number) => void;
 
 // the progress shapes are PaperAPI's: the daemon sends them as they are
-export type { BackupProgress, BackupProgressChange, BackupStep } from "../../../../packages/paperapi/src/backups";
+export type { BackupEnded, BackupProgress, BackupProgressChange, BackupStep } from "../../../../packages/paperapi/src/backups";
 
 export interface BackupStore {
     /** proves the location is reachable with its credentials */

@@ -39,6 +39,7 @@ import { resolveRegistryUrl } from "./util";
 import { requireReleaseOrder } from "./releasePolicy";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import type { MonitorLifecycle } from "../../../packages/paperapi/src/monitorProtocol";
+import type { BackupEnded } from "./backups/types";
 import { fetchRegistryRecord } from "./registryRecord";
 import { RELEASE_PUBLIC_KEY, releaseMessage, requireReleaseSignature } from "./releaseSignature";
 
@@ -1712,6 +1713,12 @@ export class PaperCraneEngine {
 
     public prepareServiceForRestore(panelId: string, sourceId?: string): Promise<boolean> {
         return this.services.prepareForBackup(requirePanelId(panelId), sourceId, 300_000, "restore");
+    }
+
+    /** tells the panel's running service how a backup or restore of its
+     * data ended; see PanelServicesManager.tellBackupEnded */
+    public tellServiceBackupEnded(panelId: string, operation: "backup" | "restore", ended: BackupEnded): void {
+        this.services.tellBackupEnded(requirePanelId(panelId), operation, ended);
     }
 
     /** runs fn (a backup copying the panel's data) with the panel's service
