@@ -1,6 +1,8 @@
-import { createSignal, createEffect } from "solid-js";
+import { createSignal, createEffect, onCleanup } from "solid-js";
 import { config } from "@mileniumhq/paperapi";
-import { logToMain, notifyAppSettingsChanged } from "../lib/shell";
+import { logToMain, notifyAppSettingsChanged, shellApi } from "../lib/shell";
+import { withAppSettingsDefaults } from "../../../shared/appSettingsDefaults";
+import { effectiveLook, type Graphics } from "../../../shared/graphics";
 import {
     APP_SETTINGS_DEFAULTS,
     APP_SETTINGS_ID,
@@ -9,25 +11,35 @@ import {
 
 export interface SettingsFailure {
     /** which way it failed: settings that didn't load leave the defaults
-     * showing; saved settings the system wouldn't apply are "apply" */
-    kind: "load" | "save" | "apply";
+     * showing; saved settings the system wouldn't apply are "apply";
+     * "graphics" is not knowing whether Paperboard is drawn on a GPU */
+    kind: "load" | "save" | "apply" | "graphics";
     message: string;
 }
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-// App-wide settings: load, mirror reduced motion onto the document, persist
+// App-wide settings: load, mirror reduced motion and blur onto the document, persist
 // before notifying main. A load or save that fails stays as a failure for
 // App Settings to show, until it's retried or dismissed.
 export function useAppSettings() {
     const [appSettings, setAppSettings] =
         createSignal<AppSettingsData>(APP_SETTINGS_DEFAULTS);
     const [settingsFailure, setSettingsFailure] = createSignal<SettingsFailure | null>(null);
+    // assumed drawn on a GPU until main says otherwise, a moment after start
+    const [graphics, setGraphics] = createSignal<Graphics>({ gpu: true });
+    const look = () => effectiveLook(appSettings(), graphics());
+
+    onCleanup(shellApi.onGraphicsChanged(setGraphics));
+    shellApi.getGraphics().then(setGraphics, (err) => {
+        logToMain("error", "Couldn't tell whether Paperboard is drawn on a GPU:", err);
+        setSettingsFailure({ kind: "graphics", message: messageOf(err) });
+    });
 
     // Mirrors the motion preference onto the document for PaperUI tokens
     createEffect(() => {
         if (typeof document !== "undefined") {
-            if (appSettings().reducedMotion) {
+            if (look().disableAnimations) {
                 document.documentElement.setAttribute(
                     "data-paperui-motion",
                     "reduced",
@@ -40,6 +52,13 @@ export function useAppSettings() {
         }
     });
 
+    // Mirrors the blur preference the same way
+    createEffect(() => {
+        if (typeof document === "undefined") return;
+        if (look().disableBlur) document.documentElement.setAttribute("data-paperui-blur", "off");
+        else document.documentElement.removeAttribute("data-paperui-blur");
+    });
+
     /** true when the stored settings were read */
     const loadAppSettings = async (): Promise<boolean> => {
         try {
@@ -47,7 +66,7 @@ export function useAppSettings() {
                 APP_SETTINGS_ID,
             );
             if (stored) {
-                const merged = { ...APP_SETTINGS_DEFAULTS, ...stored };
+                const merged = withAppSettingsDefaults(APP_SETTINGS_DEFAULTS, stored);
                 setAppSettings(merged);
             }
             return true;
@@ -96,6 +115,7 @@ export function useAppSettings() {
 
     return {
         appSettings,
+        graphics,
         loadAppSettings,
         handleAppSettingsChange,
         settingsFailure,

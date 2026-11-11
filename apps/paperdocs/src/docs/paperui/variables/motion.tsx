@@ -54,11 +54,11 @@ export default function MotionDoc() {
 
             <PaperText preset="subheader" as="h2" id="reduced-motion">Reduced motion</PaperText>
             <PaperText preset="body" as="p">
-                Motion switches off in two ways, and both set every duration above to <PaperCode>0s</PaperCode> and the blur variables to <PaperCode>blur(0)</PaperCode>.
+                Motion switches off in two ways, and both set every duration above to <PaperCode>0s</PaperCode>. Blur is a switch of its own, below.
             </PaperText>
             <PaperTextList>
                 <li>The operating system's <PaperCode>prefers-reduced-motion: reduce</PaperCode> setting applies on <PaperCode>:root</PaperCode>.</li>
-                <li>An ancestor with <PaperCode>data-paperui-motion="reduced"</PaperCode> applies to its subtree, and also cuts every transition and animation in it to 0.01 milliseconds, runs animations once, and removes backdrop filters. Paperboard writes this attribute on a panel's <PaperCode>html</PaperCode> element: <PaperCode>"reduced"</PaperCode> when the user turns on reduced motion in Paperboard's settings, <PaperCode>"auto"</PaperCode> otherwise.</li>
+                <li>An ancestor with <PaperCode>data-paperui-motion="reduced"</PaperCode> applies to its subtree, and also cuts every transition and animation in it to 0.01 milliseconds and runs animations once. Paperboard writes this attribute on a panel's <PaperCode>html</PaperCode> element: <PaperCode>"reduced"</PaperCode> when Disable animations is on in Paperboard's settings, which it is until the user chooses on a computer with no graphics card, <PaperCode>"auto"</PaperCode> otherwise.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
                 Under reduced motion <PaperLink href="/docs/paperui/papereffect/">PaperEffect</PaperLink> stops moving on hover and press, and <PaperLink href="/docs/paperui/paperpresence/">PaperPresence</PaperLink> removes an element at once instead of waiting for its exit animation.
@@ -93,6 +93,17 @@ export function scrollToEnd(el: HTMLElement) {
                     <tr><td><PaperCode>--paper-blur-heavy</PaperCode></td><td><PaperCode>blur(15px)</PaperCode></td><td>The strongest blur.</td></tr>
                 </tbody>
             </PaperTable>
+            <PaperText preset="body" as="p">
+                Blur switches off in two ways, and both set the blur variables to <PaperCode>none</PaperCode>.
+                Without a graphics card, Chromium blurs on the processor, and anything that moves over a blurred layer, like a modal's list as it scrolls, redraws the blur on every frame.
+            </PaperText>
+            <PaperTextList>
+                <li>The operating system's <PaperCode>prefers-reduced-transparency: reduce</PaperCode> setting applies on <PaperCode>:root</PaperCode>.</li>
+                <li>An ancestor with <PaperCode>data-paperui-blur="off"</PaperCode> applies to its subtree, and also removes every backdrop filter in it, even one written without the variables. Paperboard writes this attribute on a panel's <PaperCode>html</PaperCode> element: <PaperCode>"off"</PaperCode> when Disable blur is on in Paperboard's settings, which it is until the user chooses on a computer with no graphics card, <PaperCode>"auto"</PaperCode> otherwise.</li>
+            </PaperTextList>
+            <PaperText preset="body" as="p">
+                Blur your own elements with these variables so they obey the same switch, and give them a background that stays legible without it.
+            </PaperText>
 
             <PaperText preset="subheader" as="h2" id="opacity">Opacity</PaperText>
             <PaperText preset="body" as="p">

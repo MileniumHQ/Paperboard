@@ -89,7 +89,7 @@ export default function DataDirectoryDoc() {
                     <tr><td><PaperCode>process-owners.json</PaperCode></td><td>Which panel owns which running program.</td></tr>
                     <tr><td><PaperCode>machine-id.json</PaperCode></td><td>A random id the daemon announces on the local network.</td></tr>
                     <tr><td><PaperCode>paired_computers.json</PaperCode></td><td>The desktop app's list of computers it is paired with, with their tokens and certificates.</td></tr>
-                    <tr><td><PaperCode>app-settings.json</PaperCode></td><td>The desktop app's settings: appearance, reduce motion, start page, run on startup.</td></tr>
+                    <tr><td><PaperCode>app-settings.json</PaperCode></td><td>The desktop app's settings: appearance, animations, blur, start page, run on startup.</td></tr>
                     <tr><td><PaperCode>panel-permissions.json</PaperCode></td><td>Your microphone, camera and screen answers for each panel.</td></tr>
                     <tr><td><PaperCode>last_update.json</PaperCode></td><td>When the last update check ran.</td></tr>
                     <tr><td><PaperCode>electron/</PaperCode></td><td>The desktop app's browser profile: caches, cookies and downloaded app updates.</td></tr>

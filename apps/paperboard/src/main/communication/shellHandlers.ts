@@ -13,6 +13,7 @@ import { logger } from "../../../papercrane/logger";
 import { openRemoteFolder } from "../remoteFolder";
 import { servePanelAsset } from "../panelServe";
 import type { LaunchOptions } from "../../shared/launchOptions";
+import type { Graphics } from "../../shared/graphics";
 
 // The panel library reads an installed panel's manifest and listing media,
 // nothing else: never HTML (the serve path injects credentials into it),
@@ -29,6 +30,7 @@ export function isListingFilePath(subpath: string): boolean {
 export interface ShellHandlerDeps {
     appVersion: () => string;
     launchOptions: () => LaunchOptions;
+    graphics: () => Graphics;
     // resolves to an error message, empty on success (Electron shell.openPath)
     openPath: (dir: string) => Promise<string>;
 }
@@ -49,6 +51,7 @@ export const SHARED_SHELL_INVOKE_CHANNELS = [
     "panel-listing-file",
     "app-version",
     "launch-options",
+    "graphics",
 ] as const;
 
 export type SharedShellInvokeChannel = (typeof SHARED_SHELL_INVOKE_CHANNELS)[number];
@@ -170,5 +173,6 @@ export function createShellInvokeHandlers(
 
         // command-line switches the shell honors, e.g. --mobile
         "launch-options": () => deps.launchOptions(),
+        graphics: () => deps.graphics(),
     };
 }

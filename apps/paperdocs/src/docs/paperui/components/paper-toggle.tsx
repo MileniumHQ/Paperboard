@@ -124,7 +124,7 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
                 <li>A click, or Space or Enter while the switch has focus, flips it. Controlled and uncontrolled work as in a form.</li>
-                <li>The switch is one tab stop. A disabled switch has <PaperCode>tabindex="-1"</PaperCode>.</li>
+                <li>The switch is one tab stop. A disabled switch has <PaperCode>tabindex="-1"</PaperCode> and <PaperCode>aria-disabled="true"</PaperCode>.</li>
                 <li><PaperCode>aria-checked</PaperCode> follows the state.</li>
                 <li>On a flip, the hidden checkbox is set and fires bubbling <PaperCode>change</PaperCode> and <PaperCode>input</PaperCode> events, so a parent that listens for them, such as a form handler, sees the change. A haptic tap plays where the device supports it.</li>
                 <li>A switch inside a <PaperCode>label</PaperCode> changes once when you press the switch, and once when you press the label's text. Both call <PaperCode>onChange</PaperCode>.</li>
