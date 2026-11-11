@@ -270,7 +270,9 @@ describe("packages no installed panel uses are removed", () => {
 		// installed before uses were kept: every panel installed now counts as using it
 		await engine.downloadPackage("legacy", "d", undefined, publish({ name: "legacy", version: "1.0.0", bytes: toolArchive("echo legacy") }));
 		fs.rmSync(path.join(pkg, "users.json"), { force: true });
-		for (const id of ["test.c", "test.d"]) fs.mkdirSync(path.join(panels, id), { recursive: true });
+		fs.mkdirSync(path.join(panels, "test.c"), { recursive: true });
+		// a linked panel (one in development) counts as installed too
+		fs.symlinkSync(tempDir(), path.join(panels, "test.d"));
 		const restarted = engineFor(dir);
 		restarted.sweepStartupOrphans();
 		await restarted.uninstallPanel("test.c");

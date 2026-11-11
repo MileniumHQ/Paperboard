@@ -257,7 +257,7 @@ export class PaperCraneEngine {
             const unrecorded = this.installedPackageNames().filter((name) => !(name in users));
             if (!unrecorded.length) return;
             const panels = fs.existsSync(this.panelsDir)
-                ? fs.readdirSync(this.panelsDir, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith(".")).map((e) => e.name)
+                ? fs.readdirSync(this.panelsDir, { withFileTypes: true }).filter((e) => (e.isDirectory() || e.isSymbolicLink()) && !e.name.startsWith(".")).map((e) => e.name)
                 : [];
             if (!panels.length) return;
             for (const name of unrecorded) users[name] = [...panels];
