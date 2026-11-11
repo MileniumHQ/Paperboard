@@ -92,6 +92,33 @@ function iconField(icon: BlockIcon): Blockly.Field {
     return new Blockly.FieldImage(icon.src, size, size, "");
 }
 
+/** the class of the gear a block's parts open from */
+const GEAR_CLASS = "paperBlockGear";
+
+/**
+ * A block's gear, as PaperUI draws a button on the block: a Material Symbol on
+ * a chip in the shade its dropdowns take, in place of Blockly's own drawing
+ * on a hard-coded blue square. Done as it's drawn, for the same reason as the
+ * block's icon.
+ */
+function paperGear(block: Blockly.BlockSvg): void {
+    for (const icon of block.getIcons()) {
+        if (!(icon instanceof Blockly.icons.MutatorIcon)) continue;
+        const root = icon.getFocusableElement() as SVGGElement;
+        const chip = root.querySelector<SVGRectElement>("rect.blocklyIconShape");
+        if (!chip) throw new Error(`Blockly drew ${block.type}'s gear without its shape`);
+        // inline, as Blockly's own stylesheet sets the fill this replaces
+        chip.style.fill = block.getColourTertiary();
+        if (root.querySelector(`.${GEAR_CLASS}`)) continue;
+        for (const drawn of root.querySelectorAll(".blocklyIconSymbol, circle.blocklyIconShape")) drawn.remove();
+        const glyph = Blockly.utils.dom.createSvgElement(Blockly.utils.Svg.TEXT, { class: `blocklyText ${SYMBOL_CLASS} ${GEAR_CLASS}`, "text-anchor": "middle", "dominant-baseline": "central" }, root);
+        glyph.textContent = "settings";
+        const middle = String(Number(chip.getAttribute("width")) / 2);
+        glyph.setAttribute("x", middle);
+        glyph.setAttribute("y", middle);
+    }
+}
+
 function sameIcon(field: Blockly.Field, icon: BlockIcon): boolean {
     return "symbol" in icon ? field instanceof SymbolField && field.getValue() === icon.symbol : field instanceof Blockly.FieldImage && field.getValue() === icon.src;
 }
@@ -167,9 +194,42 @@ class PaperConstants extends Blockly.zelos.ConstantProvider {
             `${selector}.blocklyDropDownDiv .blocklyMenuItemContent { color: ${getVarCss("on-color")}; }`,
             `${selector} .blocklyHighlightedConnectionPathVisible { stroke: ${getVarCss("primary")}; }`,
             `${selector} .blocklyDisabledPattern > .blocklyOutlinePath { fill: var(--blocklyDisabledPattern); }`,
+            // a block's gear: a chip as its dropdowns are, never faded; under the pointer it's ringed as they are
+            `${selector} .blocklyIconGroup.blocklyMutatorIcon { opacity: 1; }`,
+            `${selector} .blocklyMutatorIcon>.blocklyIconShape { stroke: none; rx: ${getVarCss("uigap-third")}; ry: ${getVarCss("uigap-third")}; }`,
+            `${selector} .blocklyMutatorIcon:hover>.blocklyIconShape { stroke: ${getVarCss("primary")}; stroke-width: ${getVarCss("thick-border-width")}; }`,
+            `${selector} .${GEAR_CLASS} { pointer-events: none; }`,
             `${selector} .blocklyInsertionMarker>.blocklyPath { fill-opacity: ${this.INSERTION_MARKER_OPACITY}; stroke: none; }`,
             `${selector} .blocklySelected>.blocklyPath.blocklyPathSelected { fill: none; filter: var(--blocklySelectedGlowFilter); }`,
         ];
+    }
+}
+
+/** A block's top edge: square on its left where it sits under another block, so the two meet flush. */
+class PaperTopRow extends Blockly.zelos.TopRow {
+    override hasLeftSquareCorner(block: Blockly.BlockSvg): boolean {
+        return super.hasLeftSquareCorner(block) || block.getPreviousBlock()?.getNextBlock() === block;
+    }
+}
+
+/** A block's bottom edge: square on its left where another block hangs under it. */
+class PaperBottomRow extends Blockly.zelos.BottomRow {
+    override hasLeftSquareCorner(block: Blockly.BlockSvg): boolean {
+        return super.hasLeftSquareCorner(block) || !!block.getNextBlock();
+    }
+}
+
+/**
+ * zelos rounds every left corner, Scratch's way. At PaperUI's radius, two
+ * stacked blocks then leave a notch between them where the canvas shows
+ * through, so a stack's inner corners are square, as Blockly's other
+ * renderers draw them; its first and last blocks keep theirs.
+ */
+class PaperRenderInfo extends Blockly.zelos.RenderInfo {
+    constructor(renderer: PaperRenderer, block: Blockly.BlockSvg) {
+        super(renderer, block);
+        this.topRow = new PaperTopRow(this.constants_);
+        this.bottomRow = new PaperBottomRow(this.constants_);
     }
 }
 
@@ -178,10 +238,15 @@ class PaperRenderer extends Blockly.zelos.Renderer {
         return new PaperConstants();
     }
 
+    protected override makeRenderInfo_(block: Blockly.BlockSvg): Blockly.zelos.RenderInfo {
+        return new PaperRenderInfo(this, block);
+    }
+
     override render(block: Blockly.BlockSvg): void {
         placeIcon(block);
         for (const input of block.inputList) for (const field of input.fieldRow) if (field instanceof PaperTextField) field.refreshPlaceholder();
         super.render(block);
+        paperGear(block);
     }
 }
 
