@@ -370,11 +370,6 @@ export function BrainButtons(props: { agent: Agent; harness: Harness; actions: B
                     <PaperButton variant="primary" onClick={() => void props.actions.useFound(props.harness)}>
                         <PaperIcon>check</PaperIcon> Use it
                     </PaperButton>
-                    <Show when={b().phase === "none"}>
-                        <PaperButton variant="outline" onClick={() => void props.actions.installOwn(props.harness)}>
-                            <PaperIcon>download</PaperIcon> Install its own copy
-                        </PaperButton>
-                    </Show>
                 </Match>
                 <Match when={b().phase === "none" || (b().phase === "failed" && !b().installed)}>
                     <PaperButton variant="primary" onClick={() => void props.actions.install(props.harness)}>
@@ -405,8 +400,8 @@ export function BrainButtons(props: { agent: Agent; harness: Harness; actions: B
                     </Show>
                 </Match>
             </Switch>
-            {/* the package, with the version Paperboard pins, stays a click away from a brain running the person's own program */}
-            <Show when={b().existing && b().phase !== "installing" && b().phase !== "signing-in"}>
+            {/* the package, with the version Paperboard pins, stays a click away from a program on the computer: one offered, or one the brain runs */}
+            <Show when={(b().existing && b().phase !== "installing" && b().phase !== "signing-in") || (b().phase === "none" && b().found)}>
                 <PaperButton variant="text" onClick={() => void props.actions.installOwn(props.harness)}>
                     Install its own copy
                 </PaperButton>

@@ -25,6 +25,7 @@ import { shellToolset } from "./shell";
 import { Apps } from "./apps";
 import { BrowserComputer, type ComputerHost } from "./browser";
 import { Brains, type BrainPackages } from "./brains";
+import { errorText } from "../lib/failure";
 import { Providers } from "./providers";
 import type { LoginMethod } from "./brainLogin";
 import { startComputerMcp, type ComputerMcp } from "./computerMcp";
@@ -407,8 +408,18 @@ export class AiApp {
         const harness = this.harnessOf(input);
         const from = (input as { from?: unknown }).from;
         if (from !== undefined && from !== "computer" && from !== "package") throw new Error("install a brain from the computer or from its package");
-        // choosing the one on the computer is quick, and a refusal is the asker's to see
-        if (from === "computer") return this.brains.useFound(harness).then(() => ({ accepted: true }));
+        // choosing the one on the computer is quick, and a refusal is the asker's to see. A chosen program
+        // that then fails is the brain's own error, shown in state.brains: it isn't answered a second time.
+        if (from === "computer") {
+            return this.brains.useFound(harness).then(
+                () => ({ accepted: true }),
+                (e) => {
+                    if (this.brains.snapshot()[harness].error !== errorText(e)) throw e;
+                    console.error(`[ai] ${HARNESS_NAMES[harness]} on this computer wasn't used:`, String(e));
+                    return { accepted: true };
+                },
+            );
+        }
         // a download and an unpack: accepted now, followed through state.brains
         void (from === "package" ? this.brains.installOwn(harness) : this.brains.install(harness)).catch((e) => console.error(`[ai] ${HARNESS_NAMES[harness]} didn't install:`, String(e)));
         return { accepted: true };
