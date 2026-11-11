@@ -71,6 +71,17 @@ export default function SecurityDoc() {
                 It does not protect them from programs running as your account, which includes every panel, or from anyone with administrator access or your disk.
             </PaperText>
 
+            <PaperText preset="subheader" as="h2" id="browser">Paperboard in a browser</PaperText>
+            <PaperTextList>
+                <li>Paperboard serves the browser from <PaperCode>127.0.0.1</PaperCode> only, on port <PaperCode>45470</PaperCode> unless you choose another. No other computer can connect to it.</li>
+                <li>Paperboard is the only way to sign in: it opens a sign-in link that works once, for five minutes. The browser gets a cookie that scripts can't read and that lasts 30 days, or until you choose Sign Out.</li>
+                <li>Without that cookie, the browser gets only the signed-out page and the app's own files. It can't reach the daemon, your computers or any panel.</li>
+                <li>Paperboard keeps signed-in browsers in <PaperCode>local/browser-sessions.json</PaperCode>, which only your account can read. It holds only a SHA-256 hash of each cookie, which can't be used to sign in.</li>
+                <li>Paperboard answers only requests addressed to <PaperCode>localhost</PaperCode>, and its app requests only from its own pages. A web page in your browser can't use it, even while you're signed in.</li>
+                <li>Panels run on the same address as the app, as they do on Paperboard web. Panels are trusted completely (see above), so this gives them nothing they couldn't already do.</li>
+                <li>Browsers send cookies for <PaperCode>localhost</PaperCode> to every port on it. A program on your computer that serves web pages could see the cookie if you visit it, which is why only programs you trust should run on your computer, as with panels.</li>
+            </PaperTextList>
+
             <PaperText preset="subheader" as="h2" id="downloads">Downloads and updates</PaperText>
             <PaperTextList>
                 <li>Panels, the packages they use, and server daemon updates are signed with the Paperboard release key. The daemon checks the signature, and the file's SHA-256 checksum, before it installs anything. An unsigned or changed file is refused.</li>

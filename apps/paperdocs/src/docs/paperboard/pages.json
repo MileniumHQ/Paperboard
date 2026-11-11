@@ -19,6 +19,10 @@
                 "blocks": {
                     "name": "Automate with Blocks",
                     "index": 3
+                },
+                "browser": {
+                    "name": "Use Paperboard in a browser",
+                    "index": 4
                 }
             }
         },
