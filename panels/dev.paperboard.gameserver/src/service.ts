@@ -23,7 +23,7 @@ import {
 } from "./servers";
 import * as nodeFs from "node:fs/promises";
 import { inServer, type ServerScope } from "./service/scope";
-import { announceChanges, bindBlocks, fireTrigger, mergeBlocks, serverOperation, sharedBlocks, sharedTypes } from "./service/blocks";
+import { announceChanges, bindBlocks, fireBackupEnded, fireTrigger, mergeBlocks, serverOperation, sharedBlocks, sharedTypes } from "./service/blocks";
 import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from "./service/serversBlocks";
 import { processApi as scopedProcess, LEGACY_DEPRECATION } from "./service/api";
 import { type GameServerState, SERVER_PROC_ID, appendCapped } from "./service/types";
@@ -509,6 +509,11 @@ export const gameServerService = definePanelService({
         for (const entry of selected) await inServer(entry, async () => {
             if (currentGameService().backup.mode === "offline") await currentGameService().backup.before(entry.ctx);
         });
+    },
+    // a server's backup fires its Blocks events; a backup of the whole panel is no one server's
+    afterBackup(_ctx, ended) {
+        const scope = ended.sourceId === undefined ? undefined : entries.get(ended.sourceId);
+        if (scope) fireBackupEnded(scope.blocks, ended, scope.server.name);
     },
     async beforeBackup(_ctx, { sourceId }) {
         const paused: ServerScope[] = [];

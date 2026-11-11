@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { actionsApi, backupApi, backupLocationsApi, blocksApi } from "@mileniumhq/paperapi";
+import { actionsApi, backupApi, backupLocationsApi, blocksApi, type BackupRecord } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installFakeJava } from "./helpers/fakeJava";
 import { installPanel, restartService, servicesState } from "./helpers/installedPanel";
@@ -41,9 +41,9 @@ function nextEvent(event: string, project: string | undefined, timeoutMs = 10_00
 const settle = () => new Promise((resolve) => setTimeout(resolve, 300));
 
 const SHARED = {
-    commands: ["back-up", "delete-backup", "restart-server", "run-command", "save-world", "say", "set-automatic-updates", "set-daily-restart", "set-restart-after-crash", "start-server", "stop-server"],
+    commands: ["back-up", "delete-backup", "restart-server", "restore-backup", "run-command", "save-world", "say", "set-automatic-updates", "set-daily-restart", "set-restart-after-crash", "start-server", "stop-server"],
     values: ["automation", "backups", "console-output", "log", "log-files", "online-players", "player-count", "server-status"],
-    events: ["server-crashed", "server-started", "server-stopped"],
+    events: ["backup-failed", "backup-finished", "server-crashed", "server-started", "server-stopped"],
 };
 const PLAYER_EVENTS = ["chat-message", "player-joined", "player-left"];
 const entriesOf = (project: string, blocks: { commands: string[]; values: string[]; events: string[] }) =>
@@ -294,10 +294,49 @@ describe("the panel's own blocks run its servers, and each server's settings and
     test("Delete Backup deletes one of the server's backups", async () => {
         await backupLocationsApi.setForPanel(PANEL_ID, "local", undefined, "s-t");
         const backup = await backupApi.forSource(PANEL_ID, "s-t").create({ label: "before" });
-        const listed = await read<{ id: string; name: string | null }[]>("backups", undefined, "s-t");
-        expect(listed.map((b) => [b.id, b.name])).toEqual([[backup.id, "before"]]);
+        const listed = await read<BackupRecord[]>("backups", undefined, "s-t");
+        expect(listed).toEqual([backup]);
         expect(await run("delete-backup", { backup: listed[0] }, "s-t")).toBeNull();
         expect(await read("backups", undefined, "s-t")).toEqual([]);
         await expect(run("delete-backup", { backup: listed[0] }, "s-t")).rejects.toThrow();
+    });
+
+    test("Back Up the Server and Restore Backup answer with the backup while the service restarts, and each backup fires Finishes or Fails", async () => {
+        await backupLocationsApi.setForPanel(PANEL_ID, "local", undefined, "s-t");
+        const notes = path.join(folder("s-t"), "notes.txt");
+        fs.writeFileSync(notes, "kept");
+        const finished = nextEvent("backup-finished", "s-t", 60_000);
+        await settle();
+        const made = await run<BackupRecord>("back-up", { name: "from blocks" }, "s-t");
+        expect(made).toMatchObject({ sourceId: "s-t", label: "from blocks" });
+        // the service that answers the event is the one that started after the backup
+        expect(await finished).toEqual({ backup: made });
+        const backupField = <T>(name: string) => blocksApi.property<T>(`${PANEL_ID}:backup`, name, made, { project: "s-t" });
+        expect(await backupField("name")).toBe("from blocks");
+        expect(await backupField("created")).toBe(Date.parse(made.createdAt));
+        expect(await read("backups", undefined, "s-t")).toEqual([made]);
+
+        fs.writeFileSync(notes, "changed");
+        expect(await run("restore-backup", { backup: made }, "s-t")).toEqual(made);
+        expect(fs.readFileSync(notes, "utf8")).toBe("kept");
+        await expect(run("restore-backup", { backup: { id: "nope", size: 0 } }, "s-t")).rejects.toThrow();
+
+        // a backup location that can't be written to: the backup fails, and says why
+        const panelBackups = path.join(dataDir, "backups", "panels");
+        const where = fs.readdirSync(panelBackups).find((dir) => fs.existsSync(path.join(panelBackups, dir, `${made.id}.pbbackup`)))!;
+        fs.renameSync(path.join(panelBackups, where), path.join(panelBackups, `${where}.aside`));
+        fs.writeFileSync(path.join(panelBackups, where), "not a folder");
+        try {
+            const failed = nextEvent("backup-failed", "s-t", 60_000);
+            await settle();
+            const refused = await run("back-up", {}, "s-t").then(() => null, (err: Error) => err.message);
+            const { error } = await failed;
+            expect(typeof error).toBe("string");
+            expect(refused).toContain(error as string);
+        } finally {
+            fs.rmSync(path.join(panelBackups, where));
+            fs.renameSync(path.join(panelBackups, `${where}.aside`), path.join(panelBackups, where));
+        }
+        await run("delete-backup", { backup: made }, "s-t");
     });
 });

@@ -10,7 +10,7 @@ import type {
     BlocksProjectHandle,
     ServiceContext,
 } from "@mileniumhq/paperapi";
-import type { BackupRecord } from "@mileniumhq/paperapi";
+import type { BackupEnded, BackupRecord } from "@mileniumhq/paperapi";
 import { MAX_BUFFERED_ENTRIES, type ChatMessage, type GameServerState } from "./types";
 import type { ServerScope } from "./scope";
 import { currentServer, inServer } from "./scope";
@@ -46,18 +46,23 @@ function playerType(onlinePlayers: (server: string) => readonly string[]): Block
     };
 }
 
-const BACKUP_TYPE: BlockTypeDefinition = {
+// A backup is its record as Paperboard keeps it: a block that backs up or
+// restores is answered with the record by Paperboard itself when the backup
+// stopped the service, so every backup block passes the record as it is.
+const BACKUP_TYPE: BlockTypeDefinition<BackupRecord> = {
     id: "backup",
     name: "Backup",
     icon: "backup",
     base: "object",
     fields: {
         id: { type: "text", name: "ID" },
-        name: { type: "text", name: "Name", description: "A backup nobody named has none", optional: true },
-        created: { type: "timestamp", name: "Created" },
+        name: { type: "text", name: "Name", description: "A backup nobody named has none", optional: true, resolve: (record) => record.label ?? null },
+        created: { type: "timestamp", name: "Created", resolve: (record) => Date.parse(record.createdAt) },
         size: { type: "number", name: "Size", description: "In bytes" },
     },
 };
+
+const BACKUP_EVENTS = { finished: "backup-finished", failed: "backup-failed" } as const;
 
 const LOG_FILE_TYPE: BlockTypeDefinition = {
     id: "log-file",
@@ -129,13 +134,6 @@ function backupId(backup: unknown): string {
     return id;
 }
 
-const backupValue = (record: BackupRecord) => ({
-    id: record.id,
-    name: record.label ?? null,
-    created: Date.parse(record.createdAt),
-    size: record.size,
-});
-
 /** What every server has, whatever its game. */
 export function sharedBlocks(ctx: Context): BlockSet {
     return {
@@ -175,7 +173,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                 icon: "backup",
                 description: "The server's backups, newest first",
                 type: "list<backup>",
-                read: async () => (await serverBackups().list()).map(backupValue),
+                read: () => serverBackups().list(),
             },
             {
                 id: "log-files",
@@ -286,7 +284,18 @@ export function sharedBlocks(ctx: Context): BlockSet {
                 text: "Back up the server as {name}",
                 inputs: { name: { type: "text", name: "Name", optional: true, maxLength: 128 } },
                 output: "backup",
-                run: async ({ name }: { name?: string }) => backupValue(await serverBackups().create(name ? { label: name } : {})),
+                run: ({ name }: { name?: string }) => serverBackups().create(name ? { label: name } : {}),
+            },
+            {
+                id: "restore-backup",
+                name: "Restore Backup",
+                category: "Backups",
+                icon: "settings_backup_restore",
+                description: "Puts the server's files and settings back as they were in one of its backups. A running server is stopped for it",
+                text: "Restore {backup}",
+                inputs: { backup: { type: "backup", name: "Backup" } },
+                output: "backup",
+                run: ({ backup }: { backup: unknown }) => serverBackups().restore(backupId(backup)),
             },
             {
                 id: "delete-backup",
@@ -354,6 +363,22 @@ export function sharedBlocks(ctx: Context): BlockSet {
             { id: TRIGGER_IDS.serverStarted, name: "When the Server Starts", category: "Server", icon: "play_arrow", description: "Runs once the server has finished starting" },
             { id: TRIGGER_IDS.serverStopped, name: "When the Server Stops", category: "Server", icon: "stop", description: "Runs when the server's process ends, however it ended" },
             { id: TRIGGER_IDS.serverCrashed, name: "When the Server Crashes", category: "Server", icon: "error", description: "Runs when the server stops without being asked to" },
+            {
+                id: BACKUP_EVENTS.finished,
+                name: "When a Backup Finishes",
+                category: "Backups",
+                icon: "backup",
+                description: "Runs once a backup of the server is saved where its backups go, whoever started it",
+                values: { backup: { type: "backup", name: "Backup" } },
+            },
+            {
+                id: BACKUP_EVENTS.failed,
+                name: "When a Backup Fails",
+                category: "Backups",
+                icon: "error",
+                description: "Runs when a backup of the server could not be made, whoever started it",
+                values: { error: { type: "text", name: "Error" } },
+            },
         ],
     };
 }
@@ -507,6 +532,14 @@ const EVENT_VALUES: Record<TriggerId, (output: unknown) => Record<string, unknow
     [TRIGGER_IDS.serverStopped]: () => ({}),
     [TRIGGER_IDS.serverCrashed]: () => ({}),
 };
+
+/** Fires When a Backup Finishes or When a Backup Fails for how a backup of the server ended. */
+export function fireBackupEnded(blocks: BlocksProjectHandle | undefined, ended: BackupEnded, serverName: string): void {
+    if (!blocks) return;
+    const event = ended.ok ? BACKUP_EVENTS.finished : BACKUP_EVENTS.failed;
+    blocks.fire(event, ended.ok ? { backup: ended.backup } : { error: ended.error })
+        .catch((err) => console.error(`[gameserver] ${serverName}: ${event} did not reach Blocks:`, err));
+}
 
 /** Fires the Blocks event for a trigger a game emitted. */
 export function fireTrigger(blocks: BlocksProjectHandle | undefined, id: string, output: unknown, serverName: string): void {
