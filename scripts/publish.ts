@@ -37,7 +37,7 @@ import { join, basename, extname } from "path";
 import { tmpdir } from "os";
 import * as tar from "tar";
 import { buildSupervisor } from "./supervisor";
-import { discoverPanels, PANELS_ROOT } from "./publishManifest";
+import { assertRelativePanelBuild, discoverPanels, PANELS_ROOT } from "./publishManifest";
 import {
     ALL_TARGETS,
     archOf,
@@ -980,6 +980,7 @@ async function packPanel(info: PanelInfo): Promise<PackedPanel> {
         (rel) => readFileSync(join(info.dir, rel)),
     );
     await sh([process.execPath, "run", "build"], { cwd: info.dir, quiet: false });
+    assertRelativePanelBuild(info.dir, info.id);
     const outDir = join(tmpdir(), `paperboard-pack-${Date.now()}-${info.id}`);
     mkdirSync(outDir, { recursive: true });
     const archiveName = `${info.id}-${info.version}.tar.gz`;
@@ -1412,6 +1413,7 @@ async function buildUsbFolder(oses: Os[], arches: Arch[]) {
     for (const info of listPanels()) {
         console.log(`\n📦 Building panel ${info.id}…\n`);
         await $`bun run build`.cwd(info.dir);
+        assertRelativePanelBuild(info.dir, info.id);
         const dest = join(panelsDir, info.id);
         mkdirSync(dest, { recursive: true });
         cpSync(join(info.dir, "manifest.json"), join(dest, "manifest.json"));

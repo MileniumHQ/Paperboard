@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { storeUploadParts } from "./publishLib";
-import { discoverPanels, PANELS_ROOT, resolvePublishTarget } from "./publishManifest";
+import { assertRelativePanelBuild, discoverPanels, PANELS_ROOT, resolvePublishTarget, rootAbsoluteRefs } from "./publishManifest";
 
 let work: string;
 
@@ -84,5 +84,39 @@ describe("panel publishing finds every panel and refuses incomplete ones", () =>
             const parts = storeUploadParts(manifest.store, (rel) => readFileSync(join(info.dir, rel)));
             expect(parts.about !== undefined).toBe(manifest.store?.about !== undefined);
         }
+    });
+});
+
+// A panel served from /_panel/<computer>/<panel>/ in a browser only finds its
+// own files by relative address; a root-absolute one never connects.
+describe("a panel's build links its files by relative address", () => {
+    test("finds root-absolute addresses in HTML and CSS, not relative or external ones", () => {
+        expect(rootAbsoluteRefs(`<script type="module" src="/assets/index-a.js"></script><link href=/assets/b.css>`))
+            .toEqual(["/assets/index-a.js", "/assets/b.css"]);
+        expect(rootAbsoluteRefs(`.x{background:url(/assets/bg.png)} .y{background:url( '/font.woff2' )}`))
+            .toEqual(["/assets/bg.png", "/font.woff2"]);
+        expect(rootAbsoluteRefs(`<script src="./assets/a.js"></script><a href="https://x.dev/a">x</a><img src="//cdn/x.png"><link href="assets/c.css">`))
+            .toEqual([]);
+    });
+
+    test("refuses to pack a build with root-absolute addresses and names each one", () => {
+        const dir = panel("dev.me", { id: "dev.me", version: "0.1.0" });
+        mkdirSync(join(dir, "dist", "assets"), { recursive: true });
+        writeFileSync(join(dir, "dist", "index.html"), `<script type="module" src="./assets/a.js"></script>`);
+        writeFileSync(join(dir, "dist", "assets", "a.css"), `.x{background:url(./bg.png)}`);
+        expect(() => assertRelativePanelBuild(dir, "dev.me")).not.toThrow();
+
+        writeFileSync(join(dir, "dist", "widget.html"), `<script type="module" src="/assets/w.js"></script>`);
+        expect(() => assertRelativePanelBuild(dir, "dev.me")).toThrow(/dev\.me[\s\S]*base: "\.\/"[\s\S]*dist\/widget\.html: \/assets\/w\.js/);
+    });
+
+    test("every first-party panel builds with base \"./\"", () => {
+        const missing = discoverPanels(PANELS_ROOT)
+            .filter((x) => {
+                const config = ["vite.config.ts", "vite.config.js", "vite.config.mts"].map((f) => join(x.dir, f)).find((f) => existsSync(f));
+                return config && !/\bbase:\s*["']\.\/["']/.test(readFileSync(config, "utf8"));
+            })
+            .map((x) => x.id);
+        expect(missing).toEqual([]);
     });
 });

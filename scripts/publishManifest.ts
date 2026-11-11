@@ -7,7 +7,7 @@
 // Panel discovery lives here too because every consumer (publish panels, USB
 // bundle) must read the same root. A wrong root silently bundles zero panels.
 import { existsSync, readdirSync, readFileSync } from "fs";
-import { basename, join } from "path";
+import { basename, join, relative } from "path";
 import { requirePanelId } from "../packages/paperapi/src/panelIdentity";
 
 export interface PublishTarget {
@@ -71,4 +71,34 @@ export function discoverPanels(
         }
     }
     return out.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+// A panel's built files must reach each other by relative address. The app
+// serves a panel at panel://<computer>.<panel>/ but a browser serves it from
+// /_panel/<computer>/<panel>/ on the shell's origin, where "/assets/x.js"
+// names the shell's file and 404s: the panel never connects. Vite writes
+// root-absolute addresses unless the panel's config sets base: "./".
+const ROOT_ABSOLUTE_REF = /(?:\b(?:src|href)\s*=\s*["']?|\burl\(\s*["']?)(\/(?!\/)[^"')\s>]*)/gi;
+
+export function rootAbsoluteRefs(text: string): string[] {
+    return [...text.matchAll(ROOT_ABSOLUTE_REF)].map((m) => m[1]);
+}
+
+export function assertRelativePanelBuild(panelDir: string, panelId: string): void {
+    const dist = join(panelDir, "dist");
+    if (!existsSync(dist)) return;
+    const found: string[] = [];
+    for (const entry of readdirSync(dist, { recursive: true, withFileTypes: true })) {
+        if (!entry.isFile() || !/\.(html?|css)$/i.test(entry.name)) continue;
+        const file = join(entry.parentPath, entry.name);
+        for (const ref of rootAbsoluteRefs(readFileSync(file, "utf8"))) {
+            found.push(`${relative(panelDir, file)}: ${ref}`);
+        }
+    }
+    if (found.length) {
+        throw new Error(
+            `Refusing to pack ${panelId}: its build links files by root-absolute address, which breaks the panel in a browser. ` +
+                `Set base: "./" in its vite.config.ts.\n  ${found.join("\n  ")}`,
+        );
+    }
 }
