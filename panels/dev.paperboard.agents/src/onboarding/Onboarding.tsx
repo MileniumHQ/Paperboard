@@ -176,7 +176,8 @@ function Scenes(props: {
         const h = props.harness();
         const b = brain();
         if (!h || !b || wizard.currentStep() !== STEP.signIn) return;
-        if (b.phase === "none" && !started.has(`install:${h}`)) {
+        // one already on the computer is the person's to choose or pass over: its buttons are on this step
+        if (b.phase === "none" && !b.found && !started.has(`install:${h}`)) {
             started.add(`install:${h}`);
             void actions.install(h);
         } else if (b.phase === "installed" && !started.has(`sign-in:${h}`)) {
@@ -362,7 +363,7 @@ function Scenes(props: {
                                 <PaperSectionHeader title={harnessName(h())} role="heading" aria-level={2} />
                                 {/* one card: the header's inset is the card's, so the line, the sign-in and the buttons all start where its title does */}
                                 <PaperCard padding="sixfourths" gap="full">
-                                    <Show when={brainReady() || brain()?.phase === "installed"}>
+                                    <Show when={brainReady() || brain()?.phase === "installed" || (brain()?.phase === "none" && brain()?.found)}>
                                         <PaperText preset="hint">{brainLine(h(), brain()!)}</PaperText>
                                     </Show>
                                     {/* only while there's something to show: an empty one would still take a gap */}

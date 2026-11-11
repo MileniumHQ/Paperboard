@@ -51,8 +51,10 @@ export interface BlocksHost extends FlowHost {
         current(): Harness;
         /** saves the brain the agent thinks with, on its default model; refused for one that isn't ready */
         choose(harness: Harness): Promise<void>;
-        /** resolves once it's installed; throws when it couldn't be */
+        /** downloads its package; resolves once it's installed, throws when it couldn't be */
         install(harness: Harness): Promise<void>;
+        /** has it run the program already on this computer; throws when there's none */
+        useFound(harness: Harness): Promise<void>;
         signOut(harness: Harness): Promise<void>;
     };
     toolServers: {
@@ -632,8 +634,22 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                     ready(() => {
                         const b = brain(id);
                         if (b.phase === "installing") throw new Error(`${HARNESS_NAMES[id]} is installing already`);
-                        if (b.installed && b.phase !== "failed") throw new Error(`${HARNESS_NAMES[id]} is installed already`);
+                        if (b.installed && b.phase !== "failed" && !b.existing) throw new Error(`${HARNESS_NAMES[id]} is installed already`);
                         return host.brains.install(id);
+                    }),
+            },
+            {
+                id: "use-brain-on-computer",
+                name: "Use Brain on This Computer",
+                category: CATEGORY.brain,
+                icon: "computer",
+                description: "Has a brain run the Codex, Claude or OpenCode already on this computer instead of downloading one. Fails when it isn't there, or the brain is installed already.",
+                text: "use the {brain} on this computer",
+                inputs: { brain: brainInput },
+                run: ({ brain: id }: { brain: Harness }) =>
+                    ready(() => {
+                        if (brain(id).existing) throw new Error(`${HARNESS_NAMES[id]} uses the one on this computer already`);
+                        return host.brains.useFound(id);
                     }),
             },
             {

@@ -55,6 +55,7 @@ describe("the agent's blocks", () => {
             ["switch-brain", undefined],
             ["switch-model", undefined],
             ["install-brain", undefined],
+            ["use-brain-on-computer", undefined],
             ["sign-out-brain", undefined],
             ["turn-on-tool-server", undefined],
             ["turn-off-tool-server", undefined],
@@ -282,6 +283,9 @@ describe("the agent's blocks", () => {
         expect(await rig.blocks.property("brain", "status", "claude-code")).toBe("installed");
         expect(await rig.blocks.property("brain", "version", "claude-code")).toBe("1.0.0");
         await expect(rig.blocks.run("install-brain", { brain: "claude-code" })).rejects.toThrow("Claude is installed already");
+        // the test's computer has no brain of its own to use, and an installed one is the package's
+        await expect(rig.blocks.run("use-brain-on-computer", { brain: "opencode" })).rejects.toThrow("OpenCode isn't on this computer");
+        await expect(rig.blocks.run("use-brain-on-computer", { brain: "claude-code" })).rejects.toThrow("Claude has its own copy installed already");
         // the download fails loudly
         await expect(rig.blocks.run("install-brain", { brain: "opencode" })).rejects.toThrow("the test has no download for opencode");
         expect(await rig.blocks.property("brain", "error", "opencode")).toContain("OpenCode didn't install");

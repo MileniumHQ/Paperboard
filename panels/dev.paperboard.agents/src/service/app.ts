@@ -71,8 +71,10 @@ export interface AppHost extends Omit<ComputerHost, "packages">, Omit<TurnHost, 
     readSettings(): Promise<unknown>;
     writeSettings(s: Settings): Promise<void>;
     exec(command: string, args: string[], o?: { timeoutMs?: number; env?: Record<string, string> }): Promise<{ stdout: string; stderr: string; exitCode: number }>;
-    /** a program on PATH: for the user's own tool servers; the brains are packages, never looked for here */
+    /** a program on PATH: for the user's own tool servers */
     findProgram(command: string, args: readonly string[]): Launch | null;
+    /** a brain's program already on this computer; the daemon's own lookup when left out */
+    findBrain?(harness: Harness): string | null;
     /** register an action again, as it is now: the flow actions' conversation dropdown follows the history */
     registerAction(def: ActionDefinition): Promise<void>;
     /** the panel's blocks for the Blocks panel (Actions API v2) */
@@ -199,7 +201,7 @@ export class AiApp {
             notice: (text) => this.conversation.notice(text),
         });
         const brainsHost = { ...this.host, write: this.host.tools.write };
-        this.brains = new Brains({ host: brainsHost, dir: path.join(root, "brains"), onState: (brains) => this.ctx.setState({ brains }) });
+        this.brains = new Brains({ host: brainsHost, dir: path.join(root, "brains"), find: this.host.findBrain, onState: (brains) => this.ctx.setState({ brains }) });
         this.providers = new Providers({
             host: brainsHost,
             program: () => this.brains.resolve("opencode"),
@@ -403,8 +405,12 @@ export class AiApp {
 
     installBrain(input: unknown) {
         const harness = this.harnessOf(input);
+        const from = (input as { from?: unknown }).from;
+        if (from !== undefined && from !== "computer" && from !== "package") throw new Error("install a brain from the computer or from its package");
+        // choosing the one on the computer is quick, and a refusal is the asker's to see
+        if (from === "computer") return this.brains.useFound(harness).then(() => ({ accepted: true }));
         // a download and an unpack: accepted now, followed through state.brains
-        void this.brains.install(harness).catch((e) => console.error(`[ai] ${HARNESS_NAMES[harness]} didn't install:`, String(e)));
+        void (from === "package" ? this.brains.installOwn(harness) : this.brains.install(harness)).catch((e) => console.error(`[ai] ${HARNESS_NAMES[harness]} didn't install:`, String(e)));
         return { accepted: true };
     }
 
@@ -523,7 +529,8 @@ export class AiApp {
                 current: () => this.settings().harness,
                 // a model belongs to its brain: the new one starts on its own default, as the settings do it
                 choose: async (harness) => void (await this.setup({ settings: { ...this.settings(), harness, model: null } })),
-                install: (harness) => this.brains.install(harness),
+                install: (harness) => this.brains.installOwn(harness),
+                useFound: (harness) => this.brains.useFound(harness),
                 signOut: (harness) => this.brains.signOut(harness),
             },
             toolServers: {
