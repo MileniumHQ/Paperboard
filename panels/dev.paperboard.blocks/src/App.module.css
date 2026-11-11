@@ -167,10 +167,23 @@
 :global(.blocklyWidgetDiv) :global(.blocklyMenu),
 :global(.blocklyDropDownDiv) {
     font-family: var(--paper-font-family);
-    background: var(--paper-surface-raised) !important;
+    background: var(--paper-surface) !important;
     border: var(--paper-border-width) solid var(--paper-border) !important;
     border-radius: var(--paper-border-radius) !important;
-    box-shadow: var(--paper-heavy-element-shadow) !important;
+    box-shadow: none !important;
+    transform-origin: top left;
+    animation: compactMenuIn var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+@keyframes compactMenuIn {
+    from {
+        opacity: 0;
+        transform: translateY(calc(var(--paper-uigap-third) * -1)) scale(var(--paper-scale-press));
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 :global(.blocklyWidgetDiv) :global(.blocklyMenu) {
@@ -202,6 +215,7 @@
     border-radius: var(--paper-border-radius-half);
     font-family: var(--paper-font-family) !important;
     font-size: var(--paper-text-size-2);
+    font-weight: var(--paper-weight-medium);
     color: var(--paper-text) !important;
     cursor: pointer;
 }
@@ -212,7 +226,11 @@
 }
 
 :global(.blocklyMenuItem.blocklyMenuItemHighlight) {
-    background: color-mix(in srgb, var(--paper-contrast) 6%, var(--paper-surface-raised)) !important;
+    background: color-mix(in srgb, var(--paper-primary) 14%, transparent) !important;
+}
+
+:global(.blocklyMenuItem.blocklyMenuItemHighlight):has(:global(.paperMenuDanger)) {
+    background: color-mix(in srgb, var(--paper-danger) 12%, transparent) !important;
 }
 
 :global(.blocklyMenuItem.blocklyMenuItemDisabled) {
@@ -244,7 +262,7 @@
 /* a right-click item's symbol and its delete item, as PaperContextMenuItem's */
 :global(.paperMenuIcon) {
     font-family: var(--paper-icon-font-family);
-    font-size: var(--paper-icon-size-small);
+    font-size: var(--paper-icon-size-tiny);
     color: var(--paper-primary-ink);
     margin-right: var(--paper-uigap-half);
     vertical-align: middle;

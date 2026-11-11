@@ -18,6 +18,7 @@ import { addTrash, type TrashState } from "./lib/trashZone";
 import { tokenPixels } from "./lib/tokens";
 import { Console } from "./Console";
 import { paperContextMenus } from "./lib/contextMenu";
+import { paperDropdowns } from "./lib/dropdownPlacement";
 import { errorMessage } from "./lib/failure";
 import type { SavedWorkspace } from "./lib/interpreter";
 import { DEFAULT_STATE, PANEL_ID, SERVICE_ACTIONS, type PanelState, type SavedFlows } from "./panel";
@@ -273,6 +274,7 @@ export default function App() {
         const start = () => {
             if (closed) return;
             paperContextMenus();
+            paperDropdowns();
             workspace = Blockly.inject(host, {
                 renderer: PAPER_RENDERER,
                 theme: paperTheme(),
@@ -463,21 +465,15 @@ export default function App() {
                     </div>
                     <div class={styles.bottomRight}>
                         <PaperFlex direction="column" gap="half">
-                            <PaperEffect variant="primary">
-                                <PaperButton variant="primary" icon onClick={() => zoom(1)} title="Zoom in" aria-label="Zoom in">
-                                    <PaperIcon>add</PaperIcon>
-                                </PaperButton>
-                            </PaperEffect>
-                            <PaperEffect variant="primary">
-                                <PaperButton variant="primary" icon onClick={() => zoom(-1)} title="Zoom out" aria-label="Zoom out">
-                                    <PaperIcon>remove</PaperIcon>
-                                </PaperButton>
-                            </PaperEffect>
-                            <PaperEffect variant="primary">
-                                <PaperButton variant="primary" icon onClick={resetView} title="Reset the view" aria-label="Reset the view">
-                                    <PaperIcon>center_focus_strong</PaperIcon>
-                                </PaperButton>
-                            </PaperEffect>
+                            <PaperButton variant="primary" icon onClick={() => zoom(1)} title="Zoom in" aria-label="Zoom in">
+                                <PaperIcon>add</PaperIcon>
+                            </PaperButton>
+                            <PaperButton variant="primary" icon onClick={() => zoom(-1)} title="Zoom out" aria-label="Zoom out">
+                                <PaperIcon>remove</PaperIcon>
+                            </PaperButton>
+                            <PaperButton variant="primary" icon onClick={resetView} title="Reset the view" aria-label="Reset the view">
+                                <PaperIcon>center_focus_strong</PaperIcon>
+                            </PaperButton>
                         </PaperFlex>
                         <div
                             ref={trashTile}

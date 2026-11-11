@@ -1,5 +1,5 @@
-// Blockly's right-click menus as PaperUI's context menu: each item with its
-// symbol before its text, as PaperContextMenuItem draws one. Blockly's "Help"
+// Blockly's right-click menus as PaperUI's compact context menu: each item
+// with its symbol before its text, as PaperContextMenuItem draws one. Blockly's "Help"
 // opens Blockly's website, which a panel doesn't, so it's gone.
 import * as Blockly from "blockly";
 
