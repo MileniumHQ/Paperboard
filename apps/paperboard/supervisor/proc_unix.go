@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -59,17 +58,27 @@ func sealInheritedFiles() {
 }
 
 func listen(address string) (net.Listener, error) {
-	// the kernel's limit on a socket path, which fails as a bare EINVAL
-	limit := 107
-	if runtime.GOOS == "darwin" {
-		limit = 103
-	}
-	if len(address) > limit {
-		return nil, fmt.Errorf("the Paperboard data folder's path is too long for a socket: %s is %d bytes and the limit is %d", address, len(address), limit)
-	}
-	listener, err := net.Listen("unix", address)
+	// A socket's path has a kernel limit (103 bytes on macOS, 107 on Linux)
+	// that a deep data folder passes, but only bind reads the path as a
+	// whole: it binds by its name from inside its own folder, and connect and
+	// unlink take the full path as usual. The workload has its own folder
+	// already, and nothing else here uses a relative path meanwhile.
+	previous, err := os.Getwd()
 	if err != nil {
-		return nil, fmt.Errorf("could not listen on %s: %w", address, err)
+		return nil, fmt.Errorf("could not read the working folder before listening on %s: %w", address, err)
+	}
+	if err := os.Chdir(filepath.Dir(address)); err != nil {
+		return nil, fmt.Errorf("could not enter the sockets folder to listen on %s: %w", address, err)
+	}
+	listener, listenErr := net.Listen("unix", filepath.Base(address))
+	if err := os.Chdir(previous); err != nil {
+		if listenErr == nil {
+			listener.Close()
+		}
+		return nil, fmt.Errorf("could not return to %s after listening on %s: %w", previous, address, err)
+	}
+	if listenErr != nil {
+		return nil, fmt.Errorf("could not listen on %s: %w", address, listenErr)
 	}
 	// the path is unlinked by hand during teardown, never by a close
 	listener.(*net.UnixListener).SetUnlinkOnClose(false)
