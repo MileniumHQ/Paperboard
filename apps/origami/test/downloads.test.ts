@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import worker from "../src/index";
 import { createRegistry, type Registry } from "./helpers/cloudflare";
 
@@ -139,5 +141,41 @@ describe("update feeds and the crane index are served where updaters ask", () =>
         expect(res.status).toBe(200);
         expect(res.headers.get("cache-control")).toBe("no-cache");
         expect(JSON.parse(await res.text())).toEqual(index);
+    });
+});
+
+// curl -fsSL https://i.paperboard.dev | sh, and irm https://i.paperboard.dev | iex
+describe("the base of the download host installs Paperboard", () => {
+    const sh = readFileSync(join(import.meta.dir, "../../../packages/crane-launcher/install/install.sh"), "utf8");
+    const ps1 = readFileSync(join(import.meta.dir, "../../../packages/crane-launcher/install/install.ps1"), "utf8");
+
+    test("curl gets install.sh and PowerShell gets install.ps1, byte for byte the files npx runs", async () => {
+        const curl = await get("https://i.paperboard.dev/", { headers: { "user-agent": "curl/8.10.1", accept: "*/*" } });
+        expect(curl.status).toBe(200);
+        expect(curl.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+        expect(await curl.text()).toBe(sh);
+        const pwsh = await get("https://i.paperboard.dev/", {
+            headers: { "user-agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.26100.1", accept: "*/*" },
+        });
+        expect(await pwsh.text()).toBe(ps1);
+        expect(await (await get("https://i.paperboard.dev/install.sh")).text()).toBe(sh);
+        expect(await (await get("https://i.paperboard.dev/install.ps1")).text()).toBe(ps1);
+    });
+
+    test("a browser is sent to the downloads page, and the registry host serves no scripts", async () => {
+        const browser = await get("https://i.paperboard.dev/", { headers: { accept: "text/html,application/xhtml+xml" } });
+        expect(browser.status).toBe(302);
+        expect(browser.headers.get("location")).toBe("https://paperboard.dev/downloads/");
+        expect((await get("https://origami.ariapis.com/install.sh")).status).toBe(404);
+    });
+
+    test("the scripts' checksums are served from R2, and their absence is a 404", async () => {
+        expect((await get("https://i.paperboard.dev/pb/SHA256SUMS")).status).toBe(404);
+        const sums = `${"a".repeat(64)}  paperboard-linux-x64.AppImage\n`;
+        await registry.paperdl.put("pb/SHA256SUMS", sums);
+        const res = await get("https://i.paperboard.dev/pb/SHA256SUMS");
+        expect(res.status).toBe(200);
+        expect(res.headers.get("cache-control")).toBe("no-cache");
+        expect(await res.text()).toBe(sums);
     });
 });

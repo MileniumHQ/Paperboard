@@ -39,6 +39,15 @@
             "bucket_name": "paperboard-paperdl"
         }
     ],
+    // the install scripts i.paperboard.dev serves at its base, bundled as
+    // text from packages/crane-launcher/install (src/routes/install.ts)
+    "rules": [
+        {
+            "type": "Text",
+            "globs": ["**/*.sh", "**/*.ps1"],
+            "fallthrough": true
+        }
+    ],
     "observability": {
         "enabled": true
     }

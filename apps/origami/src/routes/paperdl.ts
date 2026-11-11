@@ -1,4 +1,5 @@
 import { jsonResponse, type Env } from "../lib";
+import { handleInstallRoutes } from "./install";
 
 // Versioned binary downloads. Binaries live on GitHub Releases; Origami
 // only 302-redirects to them and serves the small metadata (latest.yml
@@ -147,8 +148,25 @@ async function serveR2Yml(env: Env, name: string): Promise<Response> {
     });
 }
 
-// i.paperboard.dev is downloads-only: feeds, short download routes, and
-// nothing else. Every other path falls through to the host's 404, so the
+// the install scripts' checksums (scripts/publishLib.ts SHA256SUMS_KEY);
+// missing means nothing was published with them yet, which they must say
+async function serveR2Sums(env: Env): Promise<Response> {
+    const dl = env.PAPERDL_BUCKET;
+    if (!dl) {
+        return jsonResponse({ error: "PAPERDL_BUCKET not configured" }, 500);
+    }
+    const obj = await dl.get("pb/SHA256SUMS");
+    if (!obj) return jsonResponse({ error: "Not found" }, 404);
+    return new Response(obj.body, {
+        headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "no-cache",
+        },
+    });
+}
+
+// i.paperboard.dev is downloads-only: the install scripts, feeds, short
+// download routes, and nothing else. Every other path falls through to the host's 404, so the
 // registry, panels, java, and publish routes are unreachable here.
 export async function handleDownloadHostRoutes(
     request: Request,
@@ -156,9 +174,12 @@ export async function handleDownloadHostRoutes(
     pathname: string,
 ): Promise<Response | null> {
     if (request.method !== "GET") return null;
+    const install = handleInstallRoutes(request, pathname);
+    if (install) return install;
     if (pathname.startsWith("/pb/") && PB_FEEDS.has(pathname.slice("/pb/".length))) {
         return serveR2Yml(env, pathname.slice("/pb/".length));
     }
+    if (pathname === "/pb/SHA256SUMS") return serveR2Sums(env);
     const m = pathname.match(/^\/(pb|crane)\/([^/]+)\/([^/]+)$/);
     if (!m) return null;
     const [, app, versionOrLatest, file] = m;
