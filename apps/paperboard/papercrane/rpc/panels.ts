@@ -30,12 +30,61 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
                 // the daemon resolves the release and its bytes from its own
                 // registry; version/sha256 are what the caller expects, and
                 // a disagreement refuses. Any downloadUrl sent is ignored.
-                const manifest = await engine.installPanel(panelId, {
+                const expected = {
                     allowDowngrade: params?.allowDowngrade === true,
                     version: assertOptStr(params?.version, "version", 64),
                     sha256: assertOptStr(params?.sha256, "sha256", 128),
-                });
+                };
+                // ifUnused (the updater): a panel whose processes run is
+                // held, never stopped behind someone's back
+                const downloadId = assertOptStr(params?.downloadId, "downloadId", 128);
+                const progress = downloadId
+                    ? (payload: object) => ctx.sendEvent("progress", { ...payload, downloadId })
+                    : undefined;
+                // ifUnused (the updater): a panel running something people
+                // rely on (important or long running) is held, and the reply
+                // names those processes; anything else it runs is stopped
+                // for the install and started again by the panel
+                if (params?.ifUnused === true) {
+                    const processes = engine.panelWorkloads(panelId);
+                    const holding = processes.filter((processId) => engine.holdsUpdates(processId));
+                    if (holding.length > 0) {
+                        reply(id, { held: { processes: holding } });
+                        return true;
+                    }
+                    if (processes.length > 0) {
+                        const { installed, failures } = await engine.updateInUse({ panels: [{ id: panelId, expected }] }, (_target, payload) => progress?.(payload));
+                        const failure = failures[`panel:${panelId}`];
+                        if (failure) throw new Error(failure);
+                        reply(id, { panel: installed[0] });
+                        return true;
+                    }
+                }
+                const manifest = await engine.installPanel(panelId, expected, progress);
                 reply(id, { panel: manifest });
+                return true;
+            }
+            case "update:inUse": {
+                // Stop and update: stops what the updates wait for, then
+                // installs every panel and swaps in every staged package
+                requireHost(ctx.callerPanelId(), action);
+                if (!Array.isArray(params?.panels ?? []) || !Array.isArray(params?.packages ?? [])) {
+                    throw new Error("panels and packages must be lists");
+                }
+                const panels = ((params?.panels ?? []) as any[]).map((panel) => ({
+                    id: assertPanelId(panel?.id),
+                    expected: {
+                        version: assertOptStr(panel?.version, "version", 64),
+                        sha256: assertOptStr(panel?.sha256, "sha256", 128),
+                    },
+                }));
+                const packages = ((params?.packages ?? []) as unknown[]).map((name) => assertId(name, "packageName"));
+                const downloadId = assertOptStr(params?.downloadId, "downloadId", 128);
+                const { installed, failures } = await engine.updateInUse(
+                    { panels, packages },
+                    downloadId ? (target, payload) => ctx.sendEvent("progress", { ...payload, target, downloadId }) : undefined,
+                );
+                reply(id, { panels: installed, failures });
                 return true;
             }
             case "panel:uninstall": {

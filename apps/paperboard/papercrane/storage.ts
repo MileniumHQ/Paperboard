@@ -640,6 +640,7 @@ export interface DownloadProgressPayload {
     stage:
         | "starting"
         | "checking"
+        | "stopping"
         | "downloading"
         | "verifying"
         | "extracting"

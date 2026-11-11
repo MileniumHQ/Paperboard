@@ -145,6 +145,18 @@ export default service;`}
                         <td>No default</td>
                         <td>The same, for a restore. <PaperCode>backup</PaperCode> is the record that was restored.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>beforeUpdate</PaperCode></td>
+                        <td><PaperCode>(ctx, options: {"{ processes: string[] }"}) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
+                        <td>No default (each process is sent a terminate signal)</td>
+                        <td>Called before an update stops your processes: a new release of your panel, or a runtime package such as Java they run from. Processes that just started are stopped without asking; an <PaperCode>important</PaperCode> one, or one that has run for ten minutes, waits until someone chooses Stop and update. Stop the listed processes your own way, such as a game server saving its world. Any still running when it resolves is sent a terminate signal and given 30 seconds. Throwing refuses the update.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>afterUpdate</PaperCode></td>
+                        <td><PaperCode>(ctx, ended: UpdateEnded) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
+                        <td>No default</td>
+                        <td>Called when that update ends, with <PaperCode>{"{ processes, ok, error? }"}</PaperCode>: start the processes again. After an update of your panel it runs in the new release's service. <PaperCode>ok</PaperCode> is false when the update failed and the previous release is still in place; start them all the same.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
@@ -250,6 +262,8 @@ export default service;`}
                 <li>A <PaperCode>beforeBackup</PaperCode> that throws refuses the backup with <PaperCode>The panel could not get ready for a backup: &lt;message&gt;</PaperCode>. A <PaperCode>beforeRestore</PaperCode> that throws refuses the restore with its own message.</li>
                 <li><PaperCode>afterBackup</PaperCode> and <PaperCode>afterRestore</PaperCode> are told only while the service is ready. A backup that ends while the service is stopped or still starting is not heard. An error they throw is logged as <PaperCode>{"[Service:<id>] afterBackup failed:"}</PaperCode>.</li>
                 <li>The daemon waits at most 5 minutes for either hook, then fails with <PaperCode>Service &lt;id&gt; did not get ready for the backup within 300 s</PaperCode>. The hooks run only while the service is ready; a stopped or failed service is not asked.</li>
+                <li>Paperboard never stops your processes for an update on its own. While they run, the update waits in the top bar's list until someone chooses Stop and update, or they stop.</li>
+                <li>A <PaperCode>beforeUpdate</PaperCode> that throws refuses the update with <PaperCode>&lt;panel id&gt; could not stop its processes for the update: &lt;message&gt;</PaperCode>. The daemon waits at most 2 minutes for it. An error <PaperCode>afterUpdate</PaperCode> throws is logged as <PaperCode>{"[Service:<id>] afterUpdate failed:"}</PaperCode>.</li>
                 <li>A state sync that fails is logged as <PaperCode>{"[Service:<id>] Failed to sync state:"}</PaperCode>, and open bridges miss that patch until they call <PaperCode>refreshState</PaperCode>.</li>
             </PaperTextList>
 

@@ -43,6 +43,11 @@ export interface SupervisorSpawnConfig {
      * changes nothing there.
      */
     consoleInput?: boolean;
+    /**
+     * people rely on it while it runs (a game server): an update of what it
+     * runs from waits for it instead of stopping it (engine holdsUpdates)
+     */
+    important?: boolean;
     /** the AppImage runtime holding the mount this supervisor runs from (supervisorLaunch.ts), stopped as it exits */
     mountHolderPid?: number;
 }

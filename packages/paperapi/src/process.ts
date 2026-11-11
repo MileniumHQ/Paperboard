@@ -29,6 +29,8 @@ export interface ProcessStartOptions {
     inputEncoding?: "utf8" | "utf16le";
     /** Windows: the process reads an empty console instead of a pipe, for a program that fails on a pipe (a Source dedicated server in -console mode); writes to it fail. No effect elsewhere */
     consoleInput?: boolean;
+    /** people rely on it while it runs (a game server): an update of what it runs from waits for it instead of stopping it. Other processes are stopped for an update once they ran under ten minutes, and the panel's afterUpdate starts them again */
+    important?: boolean;
 }
 
 // supervised background processes
@@ -43,6 +45,7 @@ export const processApi = {
             ...(options.stdin === false ? { stdin: false } : {}),
             ...(options.inputEncoding ? { inputEncoding: options.inputEncoding } : {}),
             ...(options.consoleInput ? { consoleInput: true } : {}),
+            ...(options.important ? { important: true } : {}),
         }),
 
     write: (id: string, data: string): Promise<void> =>

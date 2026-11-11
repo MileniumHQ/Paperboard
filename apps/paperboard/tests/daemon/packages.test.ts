@@ -245,6 +245,44 @@ describe("runtime updates wait for their workloads", () => {
 	});
 });
 
+describe("Stop and update for a runtime in use", () => {
+	test("it stops the workloads a staged update waits for and installs it; with nothing staged it refuses", async () => {
+		const dir = dataDir();
+		const previous = process.env.PAPERBOARD_DIR;
+		process.env.PAPERBOARD_DIR = dir;
+		let engine = engineFor(dir);
+		try {
+			await engine.downloadPackage("srt", "d", undefined, publish({ name: "srt", version: "1.0.0", bytes: toolArchive("while :; do sleep 1; done") }));
+			const tool = path.join(dir, "packages", "srt", "bin", "tool");
+			const crane = await startCrane({ dataDir: dir });
+			const rpc = await crane.rpc();
+			await rpc.ok("process:run", { id: "uses-srt", command: tool, important: true });
+			await rpc.ok("process:run", { id: "also-srt", command: tool });
+			await rpc.close();
+			expect((await crane.stop()).code).toBe(0);
+			engine = engineFor(dir);
+			await engine.recoverRunningSupervisors();
+			const staged = await engine.downloadPackage("srt", "d", undefined, publish({ name: "srt", version: "2.0.0", bytes: toolArchive("echo v2") }));
+			// only the important one holds it; the other can stop for it
+			expect(staged.waiting?.blockedBy.map((b) => [b.processId, b.holds]).sort()).toEqual([["also-srt", false], ["uses-srt", true]]);
+
+			const stages: string[] = [];
+			const outcome = await engine.updateInUse({ packages: ["srt"] }, (target, p) => stages.push(`${target} ${p.stage}`));
+			expect(outcome).toEqual({ installed: [], failures: {} });
+			expect(fs.readFileSync(tool, "utf8")).toContain("echo v2");
+			expect(await engine.isProcessRunning("uses-srt")).toBe(false);
+			expect(await engine.isProcessRunning("also-srt")).toBe(false);
+			expect(engine.pendingPackageUpdates()).toEqual([]);
+			expect(stages).toEqual(["package:srt stopping", "package:srt extracting", "package:srt completed"]);
+			await expect(engine.updateInUse({ packages: ["srt"] })).rejects.toThrow("No update of srt is waiting");
+		} finally {
+			engine.releaseAllClients();
+			process.env.PAPERBOARD_DIR = previous;
+			await killWorkloads(dir);
+		}
+	});
+});
+
 // A package stays while a panel that asked for it is installed.
 describe("packages no installed panel uses are removed", () => {
 	test("uninstalling a panel removes the packages only it used, and a package from before uses were kept goes with the last panel", async () => {

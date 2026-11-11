@@ -177,6 +177,8 @@ export async function startServerInstance(
             env: launch.command.env,
             inputEncoding: launch.command.inputEncoding,
             consoleInput: launch.command.consoleInput,
+            // people play on it: an update of its runtime waits for it
+            important: true,
         });
         monitorReadiness(ctx);
     } catch (err: any) {

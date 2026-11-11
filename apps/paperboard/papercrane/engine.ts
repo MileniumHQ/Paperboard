@@ -70,7 +70,9 @@ export interface StagedPackage {
 export interface PackageUpdateWait {
     name: string;
     version: string;
-    blockedBy: Array<{ processId: string; owner: string | null }>;
+    // holds: the workload is important or long running (holdsUpdates);
+    // the others are stopped for the update without asking
+    blockedBy: Array<{ processId: string; owner: string | null; holds: boolean }>;
     error?: string;
 }
 
@@ -81,6 +83,12 @@ export interface PackageInstallOutcome {
 }
 
 const MAX_STAGED_PACKAGES = 64;
+// a process stopped for an update gets this long to exit on its terminate
+// signal (a game server saving its world) before it is killed
+const UPDATE_STOP_GRACE_MS = 30_000;
+// a workload running this long is something people rely on: it holds an
+// update of what it runs from, like one started as important
+const LONG_RUNNING_MS = 10 * 60_000;
 
 // the algorithms a file:download checksum may name
 export const DOWNLOAD_CHECKSUM_ALGORITHMS = ["sha1", "sha256", "sha512"];
@@ -106,6 +114,10 @@ export class PaperCraneEngine {
     private clientCommands = new Map<string, string | null>();
     // workloads started with their input closed; a write to one is refused, not dropped
     private inputless = new Set<string>();
+    // when each live workload started, and the ones started as important:
+    // these hold an update of what they run from (holdsUpdates)
+    private clientStarts = new Map<string, number>();
+    private importantClients = new Set<string>();
     private stagedPackages = new Map<string, StagedPackage>();
     private swapFailures = new Map<string, { version: string; error: string }>();
     private swaps = new Map<string, Promise<void>>();
@@ -580,9 +592,10 @@ export class PaperCraneEngine {
             if (!(await client.connect())) return null;
             this.clients.set(id, client);
             this.wireStreams(id, client);
-            const meta = this.supervisorConfig(id);
-            this.clientCommands.set(id, typeof meta?.command === "string" ? meta.command : null);
-            if (meta?.noStdin === true) this.inputless.add(id);
+            const meta = this.supervisorMeta(id);
+            this.clientCommands.set(id, typeof meta?.config.command === "string" ? meta.config.command : null);
+            if (meta?.config.noStdin === true) this.inputless.add(id);
+            this.rememberWorkload(id, meta?.startedAt, meta?.config.important === true);
         }
         return client;
     }
@@ -690,7 +703,10 @@ export class PaperCraneEngine {
                 attach: (client) => this.wireStreams(id, client),
             },
         );
-        if (!exited) this.clientCommands.set(id, shell);
+        if (!exited) {
+            this.clientCommands.set(id, shell);
+            this.rememberWorkload(id, Date.now(), false);
+        }
         if (!announced) {
             announced = true;
             this.announceWorkload(id, "started");
@@ -754,7 +770,9 @@ export class PaperCraneEngine {
         // subscriber: the socket that receives the streams (see
         // subscribeStreams), onExit its exit listener; without one, the
         // listeners belong to this process alone
-        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; subscriber?: object; onExit?: (exitCode: number) => void } = {},
+        // important: people rely on it while it runs (a game server), so an
+        // update of what it runs from waits for it instead of stopping it
+        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; important?: boolean; subscriber?: object; onExit?: (exitCode: number) => void } = {},
     ): Promise<{ completion: Promise<{ exitCode: number }> }> {
         if (!id || typeof id !== "string") {
             throw new Error("process id is required");
@@ -799,6 +817,7 @@ export class PaperCraneEngine {
                     noStdin: inputless,
                     inputEncoding: options.inputEncoding,
                     consoleInput: options.consoleInput,
+                    ...(options.important ? { important: true } : {}),
                 },
                 this.clients,
                 {
@@ -825,6 +844,7 @@ export class PaperCraneEngine {
             this.clientCommands.set(id, command);
             if (inputless) this.inputless.add(id);
             else this.inputless.delete(id);
+            this.rememberWorkload(id, Date.now(), options.important === true);
         }
         if (!announced) {
             announced = true;
@@ -976,12 +996,16 @@ export class PaperCraneEngine {
             let id: unknown;
             let command: unknown;
             let noStdin: unknown;
+            let startedAt: unknown;
+            let important = false;
             let mountHolderPid: unknown;
             try {
                 const meta = JSON.parse(await fs.promises.readFile(path.join(socketsDir, file), "utf8"));
                 id = meta?.id;
                 command = meta?.config?.command;
                 noStdin = meta?.config?.noStdin;
+                startedAt = meta?.startedAt;
+                important = meta?.config?.important === true;
                 mountHolderPid = meta?.config?.mountHolderPid;
             } catch (err) {
                 logger.warn(`[Paperboard Server] unreadable supervisor metadata ${file}; not adopting it:`, err);
@@ -997,6 +1021,7 @@ export class PaperCraneEngine {
                 this.clients.set(id, client);
                 this.clientCommands.set(id, typeof command === "string" ? command : null);
                 if (noStdin === true) this.inputless.add(id);
+                this.rememberWorkload(id, startedAt, important);
                 client.on("exit", (code: number | null) => {
                     if (this.clients.get(id) !== client) return;
                     this.clients.delete(id);
@@ -1189,12 +1214,12 @@ export class PaperCraneEngine {
     // whose command is unknown counts against every package. A binary a
     // shell runs by hand is not seen: on Linux and macOS it keeps its open
     // files across the swap, on Windows the rename fails and rolls back.
-    private packageUsers(name: string): Array<{ processId: string; owner: string | null }> {
-        const users: Array<{ processId: string; owner: string | null }> = [];
+    private packageUsers(name: string): Array<{ processId: string; owner: string | null; holds: boolean }> {
+        const users: Array<{ processId: string; owner: string | null; holds: boolean }> = [];
         for (const id of this.clients.keys()) {
             const command = this.clientCommands.get(id);
             if (command == null || this.packageOfCommand(command) === name) {
-                users.push({ processId: id, owner: this.clientOwners.get(id) ?? null });
+                users.push({ processId: id, owner: this.clientOwners.get(id) ?? null, holds: this.holdsUpdates(id) });
             }
         }
         return users;
@@ -1312,18 +1337,40 @@ export class PaperCraneEngine {
         this.announceWorkload(id, "exited", code);
         this.clientCommands.delete(id);
         this.inputless.delete(id);
+        this.clientStarts.delete(id);
+        this.importantClients.delete(id);
         this.forgetClientOwner(id);
         if (this.stagedPackages.size > 0) void this.applyReadyStagedPackages();
     }
 
-    private supervisorConfig(id: string): { command?: unknown; noStdin?: unknown } | null {
+    private supervisorMeta(id: string): { config: { command?: unknown; noStdin?: unknown; important?: unknown }; startedAt?: unknown } | null {
         try {
             const meta = JSON.parse(fs.readFileSync(path.join(getSocketsDir(), `${supervisorEndpointName(id)}.json`), "utf8"));
-            return meta?.config && typeof meta.config === "object" ? meta.config : null;
+            return meta?.config && typeof meta.config === "object" ? { config: meta.config, startedAt: meta.startedAt } : null;
         } catch (err) {
             logger.warn(`[engine] supervisor metadata for ${id} is unreadable; its runtime is unknown and blocks package updates:`, err);
             return null;
         }
+    }
+
+    private rememberWorkload(id: string, startedAt: unknown, important: boolean): void {
+        const at = typeof startedAt === "number" ? startedAt : typeof startedAt === "string" ? Date.parse(startedAt) : NaN;
+        // an unknown start counts as long ago: it holds updates, never loses to them
+        this.clientStarts.set(id, Number.isFinite(at) ? at : 0);
+        if (important) this.importantClients.add(id);
+        else this.importantClients.delete(id);
+    }
+
+    /**
+     * Whether a live workload holds back an update of what it runs from:
+     * one started as important (a game server), or one that has run for a
+     * while. Anything else is stopped for the update and started again by
+     * its panel (afterUpdate), without asking anyone.
+     */
+    public holdsUpdates(id: string): boolean {
+        if (this.importantClients.has(id)) return true;
+        const started = this.clientStarts.get(id);
+        return started === undefined || Date.now() - started >= LONG_RUNNING_MS;
     }
 
     public async downloadPackage(
@@ -1582,13 +1629,102 @@ export class PaperCraneEngine {
     public async installPanel(
         panelId: string,
         expected: ExpectedPanelRelease = {},
+        onProgress?: ProgressCallback,
     ): Promise<PanelManifest> {
         const key = `panel:${requirePanelId(panelId)}`;
         if (this.operations.has(key)) throw new Error(`An operation on ${panelId} is already running`);
         if (this.operations.size >= 8) throw new LimitError("Too many concurrent installs");
         this.operations.add(key);
-        try { return await this.installPanelRelease(panelId, expected); }
+        try { return await this.installPanelRelease(panelId, expected, onProgress); }
         finally { this.operations.delete(key); }
+    }
+
+    /** The live workloads a panel started, which an update of the panel stops. */
+    public panelWorkloads(panelId: string): string[] {
+        const cleanId = requirePanelId(panelId);
+        return [...this.clients.keys()].filter((id) => this.clientOwners.get(id) === cleanId);
+    }
+
+    /**
+     * Stop and update: the workloads the given updates wait for stop once
+     * (each owning panel's beforeUpdate first), every staged package swaps
+     * in and every panel release installs, and each owner hears the update
+     * end once (afterUpdate) so it starts them again. A target that fails
+     * does not stop the others: resolves with the panels installed and why
+     * each failed target failed, by target ("panel:<id>", "package:<name>").
+     */
+    public async updateInUse(
+        targets: { panels?: Array<{ id: string; expected?: ExpectedPanelRelease }>; packages?: string[] },
+        onProgress?: (target: string, payload: Parameters<ProgressCallback>[0]) => void,
+    ): Promise<{ installed: PanelManifest[]; failures: Record<string, string> }> {
+        const panels = (targets.panels ?? []).map((p) => ({ id: requirePanelId(p.id), expected: p.expected ?? {} }));
+        const packages = (targets.packages ?? []).map((name) => this.sanitizeIdOrThrow(name, "package"));
+        if (panels.length === 0 && packages.length === 0) throw new Error("Nothing to update");
+        for (const name of packages) {
+            if (!this.stagedPackages.has(name)) throw new Error(`No update of ${name} is waiting`);
+        }
+        const processes = [...new Set([
+            ...panels.flatMap((p) => this.panelWorkloads(p.id)),
+            ...packages.flatMap((name) => this.packageUsers(name).map((u) => u.processId)),
+        ])];
+        const owners = new Map<string, string[]>();
+        for (const id of processes) {
+            const owner = this.clientOwners.get(id);
+            if (owner) owners.set(owner, [...(owners.get(owner) ?? []), id]);
+        }
+        const all = [...panels.map((p) => `panel:${p.id}`), ...packages.map((n) => `package:${n}`)];
+        for (const target of all) onProgress?.(target, { stage: "stopping", percent: 0, message: "Stopping processes" });
+        await this.stopWorkloadsForUpdate(processes);
+        const failures: Record<string, string> = {};
+        const installed: PanelManifest[] = [];
+        for (const name of packages) {
+            const target = `package:${name}`;
+            try {
+                onProgress?.(target, { stage: "extracting", percent: 50, message: "Installing" });
+                await this.applyStagedPackage(name);
+                const left = this.packageUpdateWait(name);
+                if (left?.error) throw new Error(left.error);
+                if (left) throw new Error(`${name} is still in use by ${left.blockedBy.length} process(es) that started during the update`);
+                onProgress?.(target, { stage: "completed", percent: 100, message: "Installed successfully" });
+            } catch (err) {
+                failures[target] = err instanceof Error ? err.message : String(err);
+            }
+        }
+        for (const panel of panels) {
+            const target = `panel:${panel.id}`;
+            try {
+                installed.push(await this.installPanel(panel.id, panel.expected, (payload) => onProgress?.(target, payload)));
+            } catch (err) {
+                failures[target] = err instanceof Error ? err.message : String(err);
+            }
+        }
+        const failed = Object.entries(failures);
+        const error = failed.length ? failed.map(([target, why]) => `${target.slice(target.indexOf(":") + 1)}: ${why}`).join("; ") : undefined;
+        for (const [owner, ids] of owners) {
+            this.services.tellUpdateEnded(owner, { processes: ids, ok: !error, ...(error ? { error } : {}) });
+        }
+        return { installed, failures };
+    }
+
+    // each owning panel's service stops its own first; whatever is still
+    // running then gets a terminate signal and time to exit cleanly
+    private async stopWorkloadsForUpdate(processes: string[]): Promise<void> {
+        const byOwner = new Map<string, string[]>();
+        for (const id of processes) {
+            const owner = this.clientOwners.get(id);
+            if (owner) byOwner.set(owner, [...(byOwner.get(owner) ?? []), id]);
+        }
+        for (const [owner, ids] of byOwner) {
+            try {
+                await this.services.prepareForUpdate(owner, ids);
+            } catch (err) {
+                throw new Error(`${owner} could not stop its processes for the update: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+            }
+        }
+        for (const id of processes) {
+            const client = this.clients.get(id);
+            if (client) await this.stopOwnedClient(id, client, "SIGTERM", UPDATE_STOP_GRACE_MS);
+        }
     }
 
     // the registry record is the authority for the release; any caller
@@ -1620,7 +1756,7 @@ export class PaperCraneEngine {
         return { version: raw.version, sha256 };
     }
 
-    private async installPanelRelease(panelId: string, expected: ExpectedPanelRelease): Promise<PanelManifest> {
+    private async installPanelRelease(panelId: string, expected: ExpectedPanelRelease, onProgress?: ProgressCallback): Promise<PanelManifest> {
         const cleanId = requirePanelId(panelId);
         const release = await this.resolvePanelRelease(cleanId, expected);
         const downloadUrl = `${this.registryUrl}/panel/${encodeURIComponent(cleanId)}/download`;
@@ -1649,13 +1785,15 @@ export class PaperCraneEngine {
         );
 
         try {
+            onProgress?.({ stage: "downloading", percent: 0, message: "Downloading" });
             await streamToFileWithProgress(
                 downloadUrl,
                 tempArchive,
-                undefined,
+                onProgress,
                 undefined,
                 release.sha256,
             );
+            onProgress?.({ stage: "extracting", percent: 100, message: "Installing" });
 
             if (fs.existsSync(stagingDir)) {
                 await fs.promises.rm(stagingDir, {
@@ -2005,7 +2143,7 @@ export class PaperCraneEngine {
         } finally { this.operations.delete(key); }
     }
 
-    private async stopOwnedClient(id: string, client: SupervisedProcessClient, signal = "SIGTERM"): Promise<void> {
+    private async stopOwnedClient(id: string, client: SupervisedProcessClient, signal = "SIGTERM", graceMs = 3000): Promise<void> {
         let exitCode: number | null = null;
         if (client.isConnected()) {
             let exited = false;
@@ -2016,8 +2154,8 @@ export class PaperCraneEngine {
                 const started = Date.now();
                 let escalated = false;
                 while (!exited) {
-                    if (!escalated && Date.now() - started >= 3000) { client.kill("SIGKILL"); escalated = true; }
-                    if (Date.now() - started >= 6000) throw new Error(`Process ${id} did not stop; removal refused`);
+                    if (!escalated && Date.now() - started >= graceMs) { client.kill("SIGKILL"); escalated = true; }
+                    if (Date.now() - started >= graceMs + 3000) throw new Error(`Process ${id} did not stop; removal refused`);
                     await new Promise((resolve) => setTimeout(resolve, 25));
                 }
             } finally { client.off("exit", onExit); }

@@ -35,6 +35,9 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
             if (params?.consoleInput !== undefined && typeof params.consoleInput !== "boolean") {
                 throw new InvalidParamsError("Invalid parameter: consoleInput must be a boolean");
             }
+            if (params?.important !== undefined && typeof params.important !== "boolean") {
+                throw new InvalidParamsError("Invalid parameter: important must be a boolean");
+            }
             checkSpawnEnv(env, ctx, "process:run");
             await claimClient(procId, ctx, "process:run", () => engine.startProcess(
                 procId,
@@ -49,6 +52,7 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
                     stdin: params?.stdin,
                     inputEncoding,
                     consoleInput: params?.consoleInput,
+                    important: params?.important === true,
                     subscriber: ctx.ws,
                     onExit: (exitCode) => sendEvent("process:exit", { id: procId, exitCode }),
                 },

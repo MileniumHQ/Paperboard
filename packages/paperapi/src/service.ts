@@ -91,6 +91,30 @@ export interface DefinePanelServiceOptions<
     afterBackup?: (ctx: ServiceContext<TState>, ended: BackupEnded) => void | Promise<void>;
     /** The same as afterBackup, for a restore; backup is the record restored. */
     afterRestore?: (ctx: ServiceContext<TState>, ended: BackupEnded) => void | Promise<void>;
+    /**
+     * Stops processes the panel runs so Paperboard can update what they run
+     * from: the panel itself, or a runtime package such as Java. It is
+     * called when someone chooses Stop and update; options.processes lists
+     * the process ids that must stop. Stop them your own way (a game server
+     * saves its world and stops); any still running when this resolves is
+     * sent a terminate signal. Throwing refuses the update. Without it each
+     * process is sent a terminate signal.
+     */
+    beforeUpdate?: (ctx: ServiceContext<TState>, options: { processes: string[] }) => void | Promise<void>;
+    /**
+     * Hears an update that beforeUpdate stopped processes for end, with
+     * those processes: start them again. After a panel update it is the new
+     * release's service that hears it. ok is false when the update failed
+     * and the previous release is still in place; start them all the same.
+     */
+    afterUpdate?: (ctx: ServiceContext<TState>, ended: UpdateEnded) => void | Promise<void>;
+}
+
+/** How an update that stopped a panel's processes ended (afterUpdate). */
+export interface UpdateEnded {
+    processes: string[];
+    ok: boolean;
+    error?: string;
 }
 
 export function definePanelService<
@@ -263,6 +287,30 @@ export function definePanelService<
                     );
                 });
             }
+            if (options.beforeUpdate) {
+                const hook = options.beforeUpdate;
+                process.on("message", (message: any) => {
+                    if (message?.type !== "paperboard:before-update" || typeof message.requestId !== "string") return;
+                    const processes = Array.isArray(message.processes) ? message.processes.filter((p: unknown): p is string => typeof p === "string") : [];
+                    void (async () => hook(ctx, { processes }))().then(
+                        () => process.send?.({ type: "paperboard:before-update-done", requestId: message.requestId }),
+                        (err) => process.send?.({
+                            type: "paperboard:before-update-done",
+                            requestId: message.requestId,
+                            error: err instanceof Error ? err.message : String(err),
+                        }),
+                    );
+                });
+            }
+            if (options.afterUpdate) {
+                const hook = options.afterUpdate;
+                process.on("message", (message: any) => {
+                    if (message?.type !== "paperboard:after-update") return;
+                    void (async () => hook(ctx, message.ended as UpdateEnded))().catch((err) =>
+                        console.error(`[Service:${panelId}] afterUpdate failed:`, err),
+                    );
+                });
+            }
             for (const operation of ["backup", "restore"] as const) {
                 const hook = operation === "backup" ? options.afterBackup : options.afterRestore;
                 if (!hook) continue;
@@ -281,6 +329,8 @@ export function definePanelService<
                 beforeRestore: Boolean(options.beforeRestore),
                 afterBackup: Boolean(options.afterBackup),
                 afterRestore: Boolean(options.afterRestore),
+                beforeUpdate: Boolean(options.beforeUpdate),
+                afterUpdate: Boolean(options.afterUpdate),
             });
         }
     });

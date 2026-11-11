@@ -97,9 +97,12 @@ interface ProcessStartOptions {
     inputEncoding?: "utf8" | "utf16le";
     /** Windows: an empty console in place of a pipe, for a program that fails on a pipe; writes fail */
     consoleInput?: boolean;
+    /** people rely on it while it runs (a game server): updates wait for it */
+    important?: boolean;
 }`}
             </PaperCode>
             <PaperTextList>
+                <li>An update of a panel, or of a runtime package a process runs from, stops the processes in its way and the panel's <PaperCode>afterUpdate</PaperCode> starts them again. A process started with <PaperCode>important</PaperCode>, or one that has run for ten minutes or more, holds the update instead: it waits in the top bar's update list until the user picks Stop and update. See <PaperLink href="/docs/paperapi/service/">service</PaperLink>.</li>
                 <li>The id belongs to the panel that started it. Another panel's calls with that id are refused.</li>
                 <li>Starting an id that is running rejects with <PaperCode>Process &lt;id&gt; is already running</PaperCode>. Check <PaperCode>exists</PaperCode> first, as the sample does, so a page reopened later picks up the same process.</li>
                 <li>Subscribe with <PaperCode>onData</PaperCode> and the others before <PaperCode>start</PaperCode> to see the first lines. Each returns the function that unsubscribes.</li>

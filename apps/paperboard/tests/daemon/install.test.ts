@@ -5,7 +5,7 @@ import { PaperCraneEngine } from "../../papercrane/engine";
 import { semverGt, resolveRegistryUrl } from "../../papercrane/util";
 import { fetchRegistryJson } from "../../../../packages/paperapi/src/config";
 import { planUpdateTasks, withInstalledRecords, type ComputerUpdateState } from "../../src/main/updatePlan";
-import { startCrane } from "./support/crane";
+import { killWorkloads, startCrane } from "./support/crane";
 import { dataDir, listTree } from "./support/fs";
 import { type InProcessDaemon, startDaemon, stopDaemon } from "./support/inproc";
 import { release, startOrigami } from "./support/origami";
@@ -149,6 +149,86 @@ describe("pack, publish and install", () => {
 		await engineFor(dir).installPanel("test.identity.panel", { version: "3.1.4", sha256: packed.sha256 });
 		expect(fs.readFileSync(path.join(dir, "panels", "test.identity.panel", "dist", "nested", "deep.txt"), "utf8")).toBe("deep");
 		expect(JSON.parse(fs.readFileSync(path.join(dir, "panels", "test.identity.panel", "manifest.json"), "utf8")).id).toBe("test.identity.panel");
+	});
+});
+
+// The updater never stops a panel's processes behind someone's back: it holds
+// the update, and Stop and update lets the panel stop and start them itself.
+describe("updates held by running processes", () => {
+	const hooked = (log: string, version: string) =>
+		serviceSource({
+			extra: 'import * as fs from "node:fs";',
+			options: `beforeUpdate: async (_ctx, o) => { fs.appendFileSync(${JSON.stringify(log)}, "${version} before " + o.processes.join(",") + "\\n"); },
+	afterUpdate: async (_ctx, e) => { fs.appendFileSync(${JSON.stringify(log)}, "${version} after " + e.processes.join(",") + " " + e.ok + "\\n"); },`,
+		});
+
+	// a panel at 1.0.0 owning a workload the compiled server started (it
+	// stays running once that server stops) and 2.0.0 released
+	async function panelWithWorkload(panelId: string, log: string, run: Record<string, unknown>) {
+		await release(origami, { id: panelId, version: "1.0.0", service: hooked(log, "1.0.0") });
+		const dir = dataDir();
+		const crane = await startCrane({ dataDir: dir });
+		const craneRpc = await crane.rpc();
+		await craneRpc.ok("process:run", { id: `${panelId}-server`, command: process.execPath, args: ["-e", "setInterval(() => {}, 1000)"], ...run });
+		await craneRpc.close();
+		expect((await crane.stop()).code).toBe(0);
+		const daemon = await startDaemon({ dataDir: dir });
+		useFixtureRegistry(daemon);
+		const engine = daemon.instance.engine;
+		await engine.recoverRunningSupervisors();
+		const host = await daemon.rpc();
+		await host.ok("panel:install", { panelId });
+		engine.setClientOwner(`${panelId}-server`, panelId);
+		await release(origami, { id: panelId, version: "2.0.0", service: hooked(log, "2.0.0") });
+		return { dir, daemon, host, manifest: path.join(daemon.dataDir, "panels", panelId, "manifest.json") };
+	}
+
+	test("an important process holds its panel's update, and Stop and update stops it, installs, and tells the new release", async () => {
+		const log = path.join(dataDir(), "update.log");
+		const { dir, host, manifest } = await panelWithWorkload("test.held", log, { important: true });
+		try {
+			const before = downloads("test.held");
+			// important survives the server restart: it is in the workload's metadata
+			const held = await host.ok("panel:install", { panelId: "test.held", ifUnused: true });
+			expect(held).toEqual({ held: { processes: ["test.held-server"] } });
+			// held before any download: the running release is untouched
+			expect(downloads("test.held")).toBe(before);
+			expect((await host.ok("process:exists", { id: "test.held-server" })).running).toBe(true);
+			expect(JSON.parse(fs.readFileSync(manifest, "utf8")).version).toBe("1.0.0");
+
+			const updated = await host.ok("update:inUse", { panels: [{ id: "test.held", version: "2.0.0" }] });
+			expect(updated.failures).toEqual({});
+			expect(updated.panels.map((p: { version: string }) => p.version)).toEqual(["2.0.0"]);
+			expect((await host.ok("process:exists", { id: "test.held-server" })).running).toBe(false);
+			await waitFor("the new release to hear the update end", () => fs.existsSync(log) && fs.readFileSync(log, "utf8").includes("2.0.0 after"));
+			expect(fs.readFileSync(log, "utf8").trim().split("\n")).toEqual(["1.0.0 before test.held-server", "2.0.0 after test.held-server true"]);
+		} finally {
+			await killWorkloads(dir);
+		}
+	});
+
+	test("a process that just started doesn't hold: the update stops it, installs, and the panel starts it again", async () => {
+		const log = path.join(dataDir(), "update.log");
+		const { dir, host, manifest } = await panelWithWorkload("test.unheld", log, {});
+		try {
+			const installed = await host.ok("panel:install", { panelId: "test.unheld", ifUnused: true });
+			expect(installed.panel.version).toBe("2.0.0");
+			expect(JSON.parse(fs.readFileSync(manifest, "utf8")).version).toBe("2.0.0");
+			expect((await host.ok("process:exists", { id: "test.unheld-server" })).running).toBe(false);
+			await waitFor("the new release to hear the update end", () => fs.existsSync(log) && fs.readFileSync(log, "utf8").includes("2.0.0 after"));
+			expect(fs.readFileSync(log, "utf8").trim().split("\n")).toEqual(["1.0.0 before test.unheld-server", "2.0.0 after test.unheld-server true"]);
+		} finally {
+			await killWorkloads(dir);
+		}
+	});
+
+	test("Stop and update is host-only", async () => {
+		await release(origami, { id: "test.heldscope", version: "1.0.0" });
+		const daemon = await startDaemon();
+		useFixtureRegistry(daemon);
+		const panel = await daemon.panelRpc("test.heldscope");
+		expect((await panel.fail("update:inUse", { panels: [{ id: "test.heldscope" }] })).code).toBe("FORBIDDEN");
+		expect((await panel.fail("update:inUse", { packages: ["rt"] })).code).toBe("FORBIDDEN");
 	});
 });
 
