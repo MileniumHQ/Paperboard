@@ -761,7 +761,7 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
                 content: { type: "text", name: "Content", optional: true, maxLength: 2000 },
             },
             output: "message",
-            run: async (i) => ref(await sendFile(bot.client(), { channel: idOf(i.channel, "Channel"), url: i.url, name: i.name, content: i.content })),
+            run: async (i) => ref(await sendFile(() => bot.client(), { channel: idOf(i.channel, "Channel"), url: i.url, name: i.name, content: i.content })),
         },
         {
             id: "show-typing",

@@ -143,9 +143,10 @@ export async function sendPoll(bot: Client, inputs: { channel: string; question:
     return channel.send({ poll });
 }
 
-export async function sendFile(bot: Client, inputs: { channel: string; url: unknown; name?: unknown; content?: string }): Promise<Message> {
+/** `bot` is asked for only once the address is checked: a refused address is refused whether or not the bot is on. */
+export async function sendFile(bot: () => Client, inputs: { channel: string; url: unknown; name?: unknown; content?: string }): Promise<Message> {
     const file = fileFromUrl(inputs.url, inputs.name);
-    const channel = await sendableChannel(bot, inputs.channel);
+    const channel = await sendableChannel(bot(), inputs.channel);
     return channel.send({ ...(inputs.content ? { content: inputs.content } : {}), files: [file] });
 }
 

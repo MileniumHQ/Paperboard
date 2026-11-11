@@ -1846,7 +1846,7 @@ export const laterActions = [
         output: { type: "discord-message", label: "Message" },
         icon: "attach_file",
         run: async (ctx, inputs: { channel: string; url: string; name?: string; content?: string }) =>
-            (await sendFile(clientOf(ctx), inputs)).id,
+            (await sendFile(() => clientOf(ctx), inputs)).id,
     }),
 
     defineAction({
