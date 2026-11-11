@@ -87,6 +87,7 @@ export function PaperToggle(props: PaperToggleProps) {
         <div
             role="switch"
             aria-checked={isChecked()}
+            aria-disabled={local.disabled ? "true" : undefined}
             aria-label={local["aria-label"]}
             aria-labelledby={local["aria-labelledby"]}
             aria-describedby={local["aria-describedby"]}
