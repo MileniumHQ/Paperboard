@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as Blockly from "blockly";
 import { BUILTIN_BLOCKS } from "../src/lib/blockDefs";
-import { runHat, type Host } from "../src/lib/interpreter";
+import { MAX_CALL_DEPTH, runHat, type Host } from "../src/lib/interpreter";
 import { webRefusal } from "../src/lib/library";
 import { BUILTIN } from "../src/lib/names";
 import { block, find, num, saved, steps, text, top, type Json } from "./helpers/workspace";
@@ -192,6 +192,66 @@ describe("this panel's blocks", () => {
         await runHat(top(ws, BUILTIN.onRun), null, ws, h.host);
         expect(reads).toBe(3);
         expect(h.logs).toEqual(["ready"]);
+    });
+});
+
+describe("functions", () => {
+    const n = v("variables_get", { fields: { VAR: { id: "n" } } });
+    const factCall = (arg: Json) => v("procedures_callreturn", { extraState: { name: "fact", params: ["n"] }, inputs: { ARG0: arg } });
+    // fact(n): if n <= 1 return 1; otherwise give back n * fact(n - 1)
+    const fact = {
+        type: "procedures_defreturn",
+        x: 400,
+        fields: { NAME: "fact" },
+        extraState: { params: [{ name: "n", id: "n" }] },
+        inputs: {
+            STACK: steps({
+                type: "procedures_ifreturn",
+                inputs: { CONDITION: v("logic_compare", { fields: { OP: "LTE" }, inputs: { A: n, B: num(1) } }), VALUE: num(1) },
+            }),
+            RETURN: v("math_arithmetic", {
+                fields: { OP: "MULTIPLY" },
+                inputs: { A: n, B: factCall(v("math_arithmetic", { fields: { OP: "MINUS" }, inputs: { A: n, B: num(1) } })) },
+            }),
+        },
+    };
+
+    async function runWith(definitions: Json[], stepsOf: Json[], variables: string[] = []) {
+        const ws = saved([{ type: BUILTIN.onRun, inputs: { DO: steps(...stepsOf) } }, ...definitions], variables.map((id) => ({ name: id, id })));
+        const h = host();
+        const err = await runHat(top(ws, BUILTIN.onRun), null, ws, h.host).then(
+            () => null,
+            (e: unknown) => e as Error & { blockId: string },
+        );
+        return { logs: h.logs, err, ws };
+    }
+
+    test("a function gives back a value, calls itself, and leaves the caller's variables as they were", async () => {
+        const { logs, err } = await runWith([fact], [set("n", num(7)), log(factCall(num(5))), log(n)], ["n"]);
+        expect(err).toBeNull();
+        expect(logs).toEqual(["120", "7"]);
+    });
+
+    test("a function without a value runs its steps where it's called", async () => {
+        const greet = { type: "procedures_defnoreturn", x: 400, fields: { NAME: "greet" }, inputs: { STACK: steps(log(text("hello"))) } };
+        const { logs } = await runWith([greet], [{ type: "procedures_callnoreturn", extraState: { name: "greet" } }, log(text("after"))]);
+        expect(logs).toEqual(["hello", "after"]);
+    });
+
+    test("a function that never stops calling itself fails on the call, not the service", async () => {
+        const forever = {
+            type: "procedures_defnoreturn",
+            x: 400,
+            fields: { NAME: "forever" },
+            inputs: { STACK: steps({ type: "procedures_callnoreturn", extraState: { name: "forever" } }) },
+        };
+        const { err } = await runWith([forever], [{ type: "procedures_callnoreturn", extraState: { name: "forever" } }]);
+        expect(err?.message).toBe(`Functions called each other ${MAX_CALL_DEPTH} deep, so the run stopped`);
+    });
+
+    test("calling a function that was deleted names it", async () => {
+        const { err } = await runWith([], [{ type: "procedures_callnoreturn", extraState: { name: "gone" } }]);
+        expect(err?.message).toBe('There\'s no function called "gone"');
     });
 });
 

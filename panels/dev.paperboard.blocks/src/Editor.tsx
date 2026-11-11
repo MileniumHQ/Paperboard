@@ -130,6 +130,8 @@ export default function Editor(props: {
     const [definitions, setDefinitions] = createSignal(0);
     // a variable made, renamed or removed changes the Variables list
     const [variablesVersion, setVariablesVersion] = createSignal(0);
+    // the workspace's functions, names and parameters: Functions lists a call block for each
+    const [functionsShape, setFunctionsShape] = createSignal("");
     // each toolbox block's text as it reads, for search: by the block itself,
     // since Blockly writes to a toolbox block's JSON once it shows it
     const blockText = new WeakMap<Json, string>();
@@ -195,6 +197,7 @@ export default function Editor(props: {
     /** What the list shows now: the category's blocks, or every block the search finds. */
     const groups = createMemo<Group[]>(() => {
         variablesVersion();
+        functionsShape();
         const query = search().trim().toLowerCase();
         if (query) {
             const projectName = (panel: string, project: string) => registry().projects.find((p) => p.panelId === panel && p.id === project)?.name ?? project;
@@ -216,6 +219,11 @@ export default function Editor(props: {
                 if (!ready() || !workspace) return [];
                 const contents = Blockly.Variables.flyoutCategory(workspace) as unknown as Json[];
                 return [{ blocks: contents.filter((item) => item.kind !== "button") }];
+            }
+            if (builtin.custom === "PROCEDURE") {
+                // a function is made by dragging out "to do something" and naming it
+                if (!ready() || !workspace) return [];
+                return [{ blocks: Blockly.Procedures.flyoutCategory(workspace) as unknown as Json[] }];
             }
             return [{ blocks: builtin.contents }];
         }
@@ -390,6 +398,7 @@ export default function Editor(props: {
                 if (event.type === Blockly.Events.VAR_CREATE || event.type === Blockly.Events.VAR_DELETE || event.type === Blockly.Events.VAR_RENAME) {
                     setVariablesVersion((v) => v + 1);
                 }
+                if (!event.isUiEvent) setFunctionsShape(JSON.stringify(Blockly.Procedures.allProcedures(workspace!)));
                 if (loading || event.isUiEvent) return;
                 clearTimeout(saveTimer);
                 saveTimer = setTimeout(save, SAVE_DELAY_MS);

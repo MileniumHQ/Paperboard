@@ -430,4 +430,5 @@ export const BUILTIN_SECTIONS: { name: string; icon: string; contents: Json[]; c
         ],
     },
     { name: "Variables", icon: "data_object", contents: [], custom: "VARIABLE" },
+    { name: "Functions", icon: "function", contents: [], custom: "PROCEDURE" },
 ];

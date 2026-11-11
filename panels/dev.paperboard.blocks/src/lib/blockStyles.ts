@@ -31,6 +31,7 @@ const STYLES = {
     web_blocks: { role: "primary", deep: true, section: "Web" },
     variable_blocks: { role: "extra-2", section: "Variables" },
     variable_dynamic_blocks: { role: "extra-2", section: "Variables" },
+    procedure_blocks: { role: "extra-1", section: "Functions" },
 } as const satisfies Record<string, Style>;
 
 export type BlockStyleName = keyof typeof STYLES;

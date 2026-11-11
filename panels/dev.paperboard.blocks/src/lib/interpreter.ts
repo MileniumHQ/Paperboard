@@ -50,6 +50,10 @@ class Break {}
 class Continue {}
 /** "Stop this flow": ends the run quietly, past any loop or try */
 class Stop {}
+/** "return" inside a function: ends the call with this value */
+class Return {
+    constructor(readonly value: unknown) {}
+}
 
 /** The hat blocks a flow can start from: the run hat and the registry's. */
 export function isHat(type: string): boolean {
@@ -64,6 +68,8 @@ export const MAX_LOOP_ITERATIONS = 100_000;
 export const MAX_WAIT_SECONDS = 24 * 60 * 60;
 /** How often "Wait until" checks its condition, in milliseconds. */
 export const WAIT_UNTIL_POLL_MS = 500;
+/** How deep functions may call functions (a function calling itself) before the run stops. */
+export const MAX_CALL_DEPTH = 1000;
 
 interface Run {
     host: Host;
@@ -73,19 +79,43 @@ interface Run {
     names: Map<string, string>;
     /** the failures being handled, innermost last ("if it fails" parts) */
     errors: string[];
+    /** the workspace's functions, by name as Blockly compares them (any case) */
+    functions: Map<string, SavedBlock>;
+    /** the function being run, if any: whether it gives back a value */
+    calling: { returns: boolean } | null;
+    depth: number;
 }
 
-/** Runs a hat's steps, with what its event fired. Rejects with a BlockError. */
-export async function runHat(hat: SavedBlock, payload: Record<string, unknown> | null, workspace: SavedWorkspace, host: Host): Promise<void> {
-    if (!isHat(hat.type)) throw new BlockError(`"${hat.type}" is not a block a flow starts from`, hat.id);
-    const run: Run = {
+const FUNCTION_DEFINITIONS = new Set(["procedures_defnoreturn", "procedures_defreturn"]);
+
+/** The functions a workspace defines; one that's turned off isn't there. */
+function functionsOf(workspace: SavedWorkspace): Map<string, SavedBlock> {
+    const out = new Map<string, SavedBlock>();
+    for (const b of workspace.blocks?.blocks ?? []) {
+        const name = b.fields?.NAME;
+        if (FUNCTION_DEFINITIONS.has(b.type) && b.enabled !== false && typeof name === "string") out.set(name.toLowerCase(), b);
+    }
+    return out;
+}
+
+function newRun(hat: SavedBlock, payload: Record<string, unknown> | null, workspace: SavedWorkspace, host: Host): Run {
+    return {
         host,
         hat,
         payload,
         variables: new Map(),
         names: new Map((workspace.variables ?? []).map((v) => [v.id, v.name])),
         errors: [],
+        functions: functionsOf(workspace),
+        calling: null,
+        depth: 0,
     };
+}
+
+/** Runs a hat's steps, with what its event fired. Rejects with a BlockError. */
+export async function runHat(hat: SavedBlock, payload: Record<string, unknown> | null, workspace: SavedWorkspace, host: Host): Promise<void> {
+    if (!isHat(hat.type)) throw new BlockError(`"${hat.type}" is not a block a flow starts from`, hat.id);
+    const run = newRun(hat, payload, workspace, host);
     try {
         await chain(run, hat.inputs?.DO?.block);
     } catch (err) {
@@ -97,7 +127,7 @@ export async function runHat(hat: SavedBlock, payload: Record<string, unknown> |
 
 /** The literal and computed values of a hat's own inputs (an event's filters), outside any run. */
 export async function hatInputs(hat: SavedBlock, workspace: SavedWorkspace, host: Host): Promise<Record<string, unknown>> {
-    const run: Run = { host, hat, payload: null, variables: new Map(), names: new Map((workspace.variables ?? []).map((v) => [v.id, v.name])), errors: [] };
+    const run = newRun(hat, null, workspace, host);
     return gatherInputs(run, hat, ["DO"]);
 }
 
@@ -112,7 +142,7 @@ async function chain(run: Run, first: SavedBlock | undefined): Promise<void> {
 }
 
 function fail(block: SavedBlock, err: unknown): never {
-    if (err instanceof BlockError || err instanceof Break || err instanceof Continue || err instanceof Stop) throw err;
+    if (err instanceof BlockError || err instanceof Break || err instanceof Continue || err instanceof Stop || err instanceof Return) throw err;
     throw new BlockError(err instanceof Error ? err.message : String(err), block.id);
 }
 
@@ -275,6 +305,50 @@ async function body(run: Run, block: SavedBlock): Promise<"break" | "next"> {
     }
 }
 
+/**
+ * Calls a function: its inputs are worked out here, then its parameters
+ * hold them while its steps run, and hold what they held before afterwards.
+ * Gives back what it returns (null when it returns nothing).
+ */
+async function call(run: Run, block: SavedBlock): Promise<unknown> {
+    const name = (block.extraState as { name?: unknown } | undefined)?.name;
+    if (typeof name !== "string" || !name) throw new BlockError("This block calls no function", block.id);
+    const definition = run.functions.get(name.toLowerCase());
+    if (!definition) throw new BlockError(`There's no function called "${name}"`, block.id);
+    if (run.depth >= MAX_CALL_DEPTH) throw new BlockError(`Functions called each other ${MAX_CALL_DEPTH} deep, so the run stopped`, block.id);
+    const params = ((definition.extraState as { params?: { id: string }[] } | undefined)?.params ?? []).map((p) => p.id);
+    const args: unknown[] = [];
+    for (let i = 0; i < params.length; i++) args.push(await value(run, block, `ARG${i}`));
+
+    const before = params.map((id) => ({ id, had: run.variables.has(id), value: run.variables.get(id) }));
+    params.forEach((id, i) => {
+        // an empty input leaves the parameter empty, so reading it says so
+        if (args[i] === undefined) run.variables.delete(id);
+        else run.variables.set(id, args[i]);
+    });
+    const outer = run.calling;
+    const returns = definition.type === "procedures_defreturn";
+    run.calling = { returns };
+    run.depth++;
+    try {
+        try {
+            await chain(run, definition.inputs?.STACK?.block);
+        } catch (err) {
+            if (err instanceof Return) return err.value ?? null;
+            if (err instanceof Break || err instanceof Continue) throw new BlockError("Break and Continue only work inside a loop", definition.id);
+            throw err;
+        }
+        return returns ? ((await value(run, definition, "RETURN")) ?? null) : null;
+    } finally {
+        run.depth--;
+        run.calling = outer;
+        for (const b of before) {
+            if (b.had) run.variables.set(b.id, b.value);
+            else run.variables.delete(b.id);
+        }
+    }
+}
+
 /** Pins any failure, awaited or returned, on this block. */
 async function statement(run: Run, block: SavedBlock): Promise<void> {
     try {
@@ -318,6 +392,14 @@ async function statementOf(run: Run, block: SavedBlock): Promise<void> {
         }
         case "controls_flow_statements":
             throw field(block, "FLOW") === "BREAK" ? new Break() : new Continue();
+        case "procedures_callnoreturn":
+            await call(run, block);
+            return;
+        case "procedures_ifreturn": {
+            if (!run.calling) throw new BlockError("Return only works inside a function", block.id);
+            if (await booleanOf(run, block, "CONDITION", "The condition")) throw new Return(run.calling.returns ? ((await value(run, block, "VALUE")) ?? null) : undefined);
+            return;
+        }
         case "variables_set":
             run.variables.set(variableId(block), await value(run, block, "VALUE"));
             return;
@@ -355,8 +437,8 @@ async function statementOf(run: Run, block: SavedBlock): Promise<void> {
             try {
                 await chain(run, block.inputs?.DO?.block);
             } catch (err) {
-                // stopping, and leaving a loop or the flow, aren't failures to handle
-                if (err instanceof Break || err instanceof Continue || err instanceof Stop || run.host.signal.aborted) throw err;
+                // stopping, and leaving a loop, a function or the flow, aren't failures to handle
+                if (err instanceof Break || err instanceof Continue || err instanceof Stop || err instanceof Return || run.host.signal.aborted) throw err;
                 run.errors.push(err instanceof Error ? err.message : String(err));
                 try {
                     await chain(run, block.inputs?.CATCH?.block);
@@ -709,6 +791,8 @@ async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
             const v = await value(run, block, "VALUE");
             return v !== undefined && v !== null;
         }
+        case "procedures_callreturn":
+            return call(run, block);
         case "variables_get": {
             const id = variableId(block);
             if (!run.variables.has(id)) throw new BlockError(`${run.names.get(id) ?? "This variable"} has no value yet`, block.id);
