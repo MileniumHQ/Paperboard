@@ -15,7 +15,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { startCommunicator, logRendererMessage } from "./communication/communication";
-import { allowDevShellOrigin, keepShellNavigation } from "./communication/shellGuard";
+import { allowDevShellOrigin, keepShellNavigation, opensExternally } from "./communication/shellGuard";
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { startBackgroundUpdates, disposeAppUpdater } from "./updater";
 import { initAppSettingsSync } from "./appSettings";
@@ -251,10 +251,10 @@ function createWindow(): void {
     });
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
-        if (details.url.startsWith("https://")) {
-            shell.openExternal(details.url);
+        if (opensExternally(details.url)) {
+            shell.openExternal(details.url).catch((err) => log.error("[Main] The system could not open", details.url, err));
         } else {
-            log.warn("[Main] Blocked openExternal for non-https url:", details.url);
+            log.warn("[Main] Blocked openExternal for a url that is neither https nor on this computer:", details.url);
         }
         return { action: "deny" };
     });

@@ -68,3 +68,21 @@ export function assertShellFrame(event: unknown, channel: string): void {
         );
     }
 }
+
+// What a page may open in the system browser (window.open, a link with
+// target=_blank): https anywhere, and plain http only on this computer,
+// where development servers run (a terminal's http://localhost:5173).
+// Nothing else: file://, javascript: and custom schemes would hand the
+// system a program to run.
+export function opensExternally(url: string): boolean {
+    let parsed: URL;
+    try {
+        parsed = new URL(url);
+    } catch {
+        return false;
+    }
+    if (parsed.protocol === "https:") return true;
+    if (parsed.protocol !== "http:") return false;
+    const host = parsed.hostname.toLowerCase();
+    return host === "localhost" || host.endsWith(".localhost") || host === "[::1]" || /^127(\.\d{1,3}){3}$/.test(host);
+}
