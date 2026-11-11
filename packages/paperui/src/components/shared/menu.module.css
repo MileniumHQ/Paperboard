@@ -229,30 +229,76 @@
     margin-top: 0;
 }
 
-/* compact: the same menu at a denser size, for canvases and toolbars. The
-   class sits on the panel (and on each portaled submenu panel), so every
-   part inside follows it. */
+/* compact: the Actions variable picker's look, for menus over dense
+   content (a canvas's right-click menu, a toolbar's dropdowns). Flat on the
+   surface, small medium-weight text, tiny ink icons and a tinted hover; it
+   scales in from where it opens. The class sits on the panel (and on each
+   portaled submenu panel), so every part inside follows it. */
 .menu.compact,
 .subMenuPanel.compact {
+    background: var(--paper-surface);
+    box-shadow: none;
     padding: var(--paper-uigap-onefourth);
-    gap: 0;
+    gap: var(--paper-uigap-sixth);
     min-width: calc(var(--paper-size-sidebar) * 0.5);
     max-height: calc(var(--paper-control-size-small) * 9);
+    transform-origin: top left;
+    animation: compactMenuIn var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+.menu.compact.closed {
+    animation: none;
+}
+
+@keyframes compactMenuIn {
+    from {
+        opacity: 0;
+        transform: translateY(calc(var(--paper-uigap-third) * -1)) scale(var(--paper-scale-press));
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .compact .item {
     gap: var(--paper-uigap-half);
     padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
     font-size: var(--paper-text-size-2);
+    font-weight: var(--paper-weight-medium);
+}
+
+.compact .item.highlighted {
+    background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
+}
+@media (hover: hover) {
+    .compact .item:hover {
+        background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
+    }
+}
+@media (hover: none) {
+    .compact .item:active {
+        background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
+    }
+}
+
+.compact .item.danger.highlighted {
+    background: color-mix(in srgb, var(--paper-danger) 12%, transparent);
+}
+@media (hover: hover) {
+    .compact .item.danger:hover {
+        background: color-mix(in srgb, var(--paper-danger) 12%, transparent);
+    }
 }
 
 .compact .itemIcon {
-    font-size: var(--paper-icon-size-small);
+    font-size: var(--paper-icon-size-tiny);
 }
 
 .compact .itemDescription,
 .compact .itemKeybind {
     font-size: var(--paper-text-size-1);
+    font-weight: normal;
 }
 
 .compact .itemCheck,
@@ -260,6 +306,11 @@
     font-size: var(--paper-icon-size-tiny);
 }
 
+/* a group's heading, as the picker's: small caps, subtle */
 .compact .header {
     padding: var(--paper-uigap-onefourth) var(--paper-uigap-half) 0;
+}
+
+.menu.compact::-webkit-scrollbar {
+    width: var(--paper-uigap-third);
 }
