@@ -63,8 +63,17 @@ export function choicesSources(entries: BlockInfo[]): ChoicesSource[] {
     return out;
 }
 
+/** More sockets than this and a block lists them a row each, so it stays narrow enough to read. */
+const MOST_INLINE_SOCKETS = 3;
+
 /** A block's line: its text with each input's socket where its braces were. */
-function message(name: string, text: string | undefined, inputs: Inputs, bases: TypeBases, owner: { panelId: string; entry: string }): { message0: string; args0: Json[] } {
+function message(
+    name: string,
+    text: string | undefined,
+    inputs: Inputs,
+    bases: TypeBases,
+    owner: { panelId: string; entry: string },
+): { message0: string; args0: Json[]; inputsInline?: false } {
     const args: Json[] = [];
     const arg = (key: string): Json => {
         const input = inputs[key]!;
@@ -76,29 +85,32 @@ function message(name: string, text: string | undefined, inputs: Inputs, bases: 
         }
         return { type: "input_value", name: key, check: checksFor(input.type, bases) };
     };
-    if (text) {
-        const message0 = text.replace(/\{([^}]+)\}/g, (_m, key: string) => {
-            args.push(arg(key));
-            return `%${args.length}`;
-        });
-        return { message0, args0: args };
-    }
     const keys = Object.keys(inputs);
-    for (const key of keys) args.push(arg(key));
-    return { message0: [name, ...keys.map((_k, i) => `%${i + 1}`)].join(" "), args0: args };
+    const message0 = text
+        ? text.replace(/\{([^}]+)\}/g, (_m, key: string) => {
+              args.push(arg(key));
+              return `%${args.length}`;
+          })
+        : [name, ...keys.map((key) => (args.push(arg(key)), `%${args.length}`))].join(" ");
+    const sockets = args.filter((a) => a.type === "input_value").length;
+    return { message0, args0: args, ...(sockets > MOST_INLINE_SOCKETS ? { inputsInline: false as const } : {}) };
 }
 
-function hat(type: string, title: { message0: string; args0: Json[] }, tooltip: string): Json {
+function hat(type: string, title: ReturnType<typeof message>, tooltip: string): Json {
     return {
         type,
         message0: title.message0,
         args0: title.args0,
+        ...(title.inputsInline === false ? { inputsInline: false } : {}),
         message1: "%1",
         args1: [{ type: "input_statement", name: "DO" }],
         colour: HUE.event,
         tooltip,
     };
 }
+
+/** The heading over a panel's property blocks. */
+export const PROPERTIES_CATEGORY = "Properties";
 
 export interface Definitions {
     blocks: Json[];
@@ -148,7 +160,8 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
 
     for (const { panelId, entry, schema } of entries) {
         const { project } = parseEntry(entry);
-        const contents = section(panelId, project, "category" in schema ? schema.category : undefined);
+        // a type's property block sits under Properties, after the panel's own categories
+        const contents = section(panelId, project, schema.kind === "type" ? PROPERTIES_CATEGORY : "category" in schema ? schema.category : undefined);
         const record = (type: string) => {
             out.schemas[type] = { panelId, entry, schema };
         };
@@ -306,9 +319,10 @@ const txt = (t: string) => ({ shadow: { type: "text", fields: { TEXT: t } } });
 const b = (type: string, inputs?: Json, extra: Json = {}): Json => ({ kind: "block", type, ...(inputs ? { inputs } : {}), ...extra });
 
 /** The built-in blocks the interpreter runs, by section. */
-export const BUILTIN_SECTIONS: { name: string; contents: Json[]; custom?: string }[] = [
+export const BUILTIN_SECTIONS: { name: string; icon: string; contents: Json[]; custom?: string }[] = [
     {
         name: "Flow",
+        icon: "alt_route",
         contents: [
             b(BUILTIN.onRun),
             b(BUILTIN.wait, { SECONDS: num(1) }),
@@ -327,10 +341,12 @@ export const BUILTIN_SECTIONS: { name: string; contents: Json[]; custom?: string
     },
     {
         name: "Logic",
+        icon: "rule",
         contents: [...["logic_compare", "logic_operation", "logic_negate", "logic_boolean", "logic_ternary"].map((type) => b(type)), b(BUILTIN.hasValue)],
     },
     {
         name: "Math",
+        icon: "calculate",
         contents: [
             b("math_number", undefined, { fields: { NUM: 0 } }),
             b("math_arithmetic", { A: num(1), B: num(1) }),
@@ -347,6 +363,7 @@ export const BUILTIN_SECTIONS: { name: string; contents: Json[]; custom?: string
     },
     {
         name: "Text",
+        icon: "format_quote",
         contents: [
             b("text"),
             b("text_join"),
@@ -369,6 +386,7 @@ export const BUILTIN_SECTIONS: { name: string; contents: Json[]; custom?: string
     },
     {
         name: "Lists",
+        icon: "format_list_bulleted",
         contents: [
             b("lists_create_empty"),
             b("lists_create_with"),
@@ -386,6 +404,7 @@ export const BUILTIN_SECTIONS: { name: string; contents: Json[]; custom?: string
     },
     {
         name: "Time",
+        icon: "schedule",
         contents: [
             b(BUILTIN.now),
             b(BUILTIN.timeFormat, { TIME: { block: { type: BUILTIN.now } } }),
@@ -395,6 +414,7 @@ export const BUILTIN_SECTIONS: { name: string; contents: Json[]; custom?: string
     },
     {
         name: "Web",
+        icon: "language",
         contents: [
             b(BUILTIN.webGet, { URL: txt("") }),
             b(BUILTIN.webPost, { URL: txt("") }),
@@ -403,5 +423,5 @@ export const BUILTIN_SECTIONS: { name: string; contents: Json[]; custom?: string
             b(BUILTIN.getKey, { KEY: txt("") }),
         ],
     },
-    { name: "Variables", contents: [], custom: "VARIABLE" },
+    { name: "Variables", icon: "data_object", contents: [], custom: "VARIABLE" },
 ];

@@ -5,7 +5,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import * as Blockly from "blockly";
 import type { BlockInfo } from "@mileniumhq/paperapi";
-import { BUILTIN_BLOCKS, choicesSources, registryDefinitions } from "../src/lib/blockDefs";
+import { BUILTIN_BLOCKS, choicesSources, PROPERTIES_CATEGORY, registryDefinitions } from "../src/lib/blockDefs";
 import { refreshChoices, registerChoicesField } from "../src/lib/choicesField";
 import { runHat, type Host } from "../src/lib/interpreter";
 import { BUILTIN, propertyBlockType, registryBlockType } from "../src/lib/names";
@@ -131,7 +131,7 @@ describe("fields read in a project", () => {
         for (const project of ["s1", "s2"]) {
             const projectBlock = defs.blocks.find((b) => b.type === propertyBlockType(PLAYER, project))!;
             expect((projectBlock.args0 as { options?: unknown }[])[0]!.options).toEqual([["Online", "online"]]);
-            expect(defs.sections.find((s) => s.project === project)!.contents).toContainEqual({ kind: "block", type: propertyBlockType(PLAYER, project) });
+            expect(defs.sections.find((s) => s.project === project && s.category === PROPERTIES_CATEGORY)!.contents).toContainEqual({ kind: "block", type: propertyBlockType(PLAYER, project) });
         }
         // a type with no per-project field gets no project blocks
         expect(defs.blocks.some((b) => String(b.type).startsWith(`${propertyBlockType(`${GAME}:world`)}|`))).toBe(false);
