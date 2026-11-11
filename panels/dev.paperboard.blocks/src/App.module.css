@@ -44,13 +44,33 @@
     border-right: var(--paper-border-width) solid var(--paper-border);
 }
 
-/* a section heading in the list, as the Actions library's: Blockly's
-   renderer styles label text under its own three classes, so this
-   names four */
-.stage :global(.blocklyFlyout) .flyoutLabel :global(.blocklyFlyoutLabelText) {
+/* a section heading in the list, as the Actions library's: a symbol, the
+   PaperText heading, and a monochrome PaperBadge with the count. Blockly's
+   renderer styles label text under its own three classes, so these name four */
+.stage :global(.blocklyFlyout) .heading :global(.blocklyFlyoutLabelText) {
     fill: var(--paper-text-subtle);
     font-family: var(--paper-font-family);
     font-size: var(--paper-text-size-2);
+    font-weight: var(--paper-weight-bold);
+}
+
+.stage :global(.blocklyFlyout) .heading .headingIcon {
+    fill: var(--paper-text-subtle);
+    font-family: var(--paper-icon-font-family);
+    font-size: var(--paper-icon-size-medium);
+    font-variation-settings: "FILL" 1;
+}
+
+.stage :global(.blocklyFlyout) .heading .headingBadge {
+    fill: var(--paper-surface-sunken);
+    stroke: var(--paper-border);
+    stroke-width: var(--paper-border-width);
+}
+
+.stage :global(.blocklyFlyout) .heading .headingBadgeText {
+    fill: var(--paper-text-subtle);
+    font-family: var(--paper-font-family);
+    font-size: calc(var(--paper-text-size-2) * 0.88);
     font-weight: var(--paper-weight-bold);
 }
 

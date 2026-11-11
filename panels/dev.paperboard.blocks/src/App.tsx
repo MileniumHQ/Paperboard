@@ -7,11 +7,13 @@ import { blocksApi, createPanelBridge, panelAssetUrl, panelsApi, type BlockInfo,
 import { PaperButton, PaperConsole, PaperFlex, PaperIcon, PaperText, type PaperConsoleEntry } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
-import { BUILTIN_BLOCKS, BUILTIN_SECTIONS, choicesSources, PROPERTIES_CATEGORY, registryDefinitions, type Definitions } from "./lib/blockDefs";
+import { BUILTIN_BLOCKS, BUILTIN_SECTIONS, builtinPlaceholder, choicesSources, PROPERTIES_CATEGORY, registryDefinitions, type Definitions } from "./lib/blockDefs";
 import { refreshChoices, registerChoicesField } from "./lib/choicesField";
 import { LIBRARY_FLYOUT, setLibraryTop, uiGap } from "./lib/libraryFlyout";
 import { loadBlockFonts, PAPER_RENDERER, paperTheme } from "./lib/paperRenderer";
-import { setPanelIcons } from "./lib/blockStyles";
+import { assignPanelStyles, setPanelIcons } from "./lib/blockStyles";
+import { HEADING_KIND, type HeadingInfo } from "./lib/libraryHeading";
+import { setTextPlaceholders } from "./lib/textField";
 import { errorMessage } from "./lib/failure";
 import type { SavedWorkspace } from "./lib/interpreter";
 import { DEFAULT_STATE, PANEL_ID, SERVICE_ACTIONS, type PanelState, type SavedFlows } from "./panel";
@@ -41,19 +43,33 @@ interface Registry {
 /** A run of the list under one heading. */
 interface Group {
     label?: string;
+    icon?: HeadingInfo["icon"];
     blocks: Json[];
 }
+
+/** A panel's category has no symbol of its own, as in the Actions library. */
+const CATEGORY_SYMBOL = "category";
+const PROPERTIES_SYMBOL = "tune";
 
 const builtinId = (name: string) => `builtin:${name}`;
 const panelCategoryId = (id: string) => `panel:${id}`;
 
+const HEADING_CLASSES: HeadingInfo["classes"] = { heading: styles.heading!, icon: styles.headingIcon!, badge: styles.headingBadge!, badgeText: styles.headingBadgeText! };
+
 /** The list as Blockly's flyout takes it: each group's heading, then its blocks. */
 function flyoutContents(groups: Group[]): Json[] {
     // a heading after blocks gets more room above it than a block does
-    return groups.flatMap((g, i) => [
-        ...(g.label ? [...(i > 0 ? [{ kind: "sep", gap: uiGap() * 2 }] : []), { kind: "label", text: g.label, "web-class": styles.flyoutLabel }] : []),
-        ...g.blocks,
-    ]);
+    return groups.flatMap((g, i) => {
+        if (!g.label) return g.blocks;
+        const heading: HeadingInfo = {
+            kind: HEADING_KIND,
+            text: g.label,
+            icon: g.icon ?? { symbol: CATEGORY_SYMBOL },
+            count: g.blocks.filter((b) => b.kind === "block").length,
+            classes: HEADING_CLASSES,
+        };
+        return [...(i > 0 ? [{ kind: "sep", gap: uiGap() * 2 }] : []), heading as unknown as Json, ...g.blocks];
+    });
 }
 
 export default function App() {
@@ -117,7 +133,7 @@ export default function App() {
             // the panel's and the project's categories of one name read as one
             const same = groups.find((g) => g.label === s.category);
             if (same) same.blocks = [...same.blocks, ...s.contents];
-            else groups.push({ ...(s.category ? { label: s.category } : {}), blocks: s.contents });
+            else groups.push({ ...(s.category ? { label: s.category, icon: { symbol: s.category === PROPERTIES_CATEGORY ? PROPERTIES_SYMBOL : CATEGORY_SYMBOL } } : {}), blocks: s.contents });
         }
         return groups;
     };
@@ -129,8 +145,9 @@ export default function App() {
         if (query) {
             const projectName = (panel: string, project: string) => registry().projects.find((p) => p.panelId === panel && p.id === project)?.name ?? project;
             const all: Group[] = [
-                ...BUILTIN_SECTIONS.filter((s) => !s.custom).map((s) => ({ label: s.name, blocks: s.contents })),
+                ...BUILTIN_SECTIONS.filter((s) => !s.custom).map((s) => ({ label: s.name, icon: { symbol: s.icon }, blocks: s.contents })),
                 ...registry().sections.map((s) => ({
+                    icon: { src: panelIcon(s.panelId) },
                     // a category named for its panel isn't said twice
                     label: [panelName(s.panelId), s.project ? projectName(s.panelId, s.project) : null, s.category === panelName(s.panelId) ? null : s.category].filter(Boolean).join(" · "),
                     blocks: s.contents,
@@ -174,6 +191,8 @@ export default function App() {
                 ),
             ),
         );
+        // each panel's colour, worked out over every panel at once so two never share one
+        assignPanelStyles([...entries.map((e) => e.panelId), ...Object.values(saved).map((s) => s.panelId)]);
         const liveDefs = registryDefinitions(entries, projects);
         live = new Set(Object.keys(liveDefs.schemas));
         // a block whose panel is away keeps the shape it was saved with
@@ -217,7 +236,7 @@ export default function App() {
     function jump(section: string): void {
         const flyout = workspace?.getFlyout();
         if (!flyout) return;
-        const heading = flyout.getContents().filter((item) => item.getType() === "label")[sectionNames().indexOf(section)];
+        const heading = flyout.getContents().filter((item) => item.getType() === HEADING_KIND)[sectionNames().indexOf(section)];
         const list = flyout.getWorkspace();
         if (!heading || !list.scrollbar) throw new Error(`The Library has no section "${section}"`);
         list.scrollbar.setY(heading.getElement().getBoundingRectangle().top * list.scale);
@@ -227,6 +246,16 @@ export default function App() {
         registerChoicesField({ fetch: (s) => blocksApi.choices(s.panelId, s.entry, s.input), report: setProblem });
         define(BUILTIN_BLOCKS);
         setPanelIcons(panelIcon);
+        // an empty socket says what goes in it: the panel's name for the input, or a built-in's
+        setTextPlaceholders((parent, input) => {
+            if (!parent || !input) return builtinPlaceholder(null);
+            const saved = schemas[parent.type];
+            if (!saved) return builtinPlaceholder(input);
+            if (saved.schema.kind === "type") return saved.schema.name;
+            const named = "inputs" in saved.schema ? saved.schema.inputs?.[input]?.name : undefined;
+            if (!named) throw new Error(`${saved.schema.name} has no input ${input}`);
+            return named;
+        });
         let closed = false;
         let offRegistry: (() => void) | undefined;
         const resize = new ResizeObserver(() => workspace && Blockly.svgResize(workspace));

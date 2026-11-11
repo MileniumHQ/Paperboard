@@ -4,8 +4,10 @@
 // PaperUI's tokens, coloured by blockStyles.ts, and every block shows its
 // icon before its text.
 import * as Blockly from "blockly";
+import { token, tokenPixels } from "./tokens";
 import { getVarCss } from "@mileniumhq/paperui";
 import { blockIcon, blockStyles, type BlockIcon } from "./blockStyles";
+import { PaperTextField, PLACEHOLDER_CLASS } from "./textField";
 
 export const PAPER_RENDERER = "paper";
 const ICON_FIELD = "PAPER_ICON";
@@ -14,22 +16,15 @@ const SYMBOL_CLASS = "paperBlockSymbol";
 /** Blockly sizes block text in points */
 const POINTS_PER_PIXEL = 0.75;
 
-function token(name: string): string {
-    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    if (!value) throw new Error(`${name} isn't set, so blocks can't be drawn`);
-    return value;
-}
 
-function tokenPixels(name: string): number {
-    const value = parseFloat(token(name));
-    if (!Number.isFinite(value)) throw new Error(`${name} isn't a length, so blocks can't be drawn`);
-    return value;
-}
 
-/** Block text: Actions' block titles, a touch heavier to read on colour. */
+/** Block text: PaperUI's small text, a touch heavier to read on colour. */
 function blockFont() {
-    return { family: token("--paper-font-family"), weight: token("--paper-weight-semibold"), pixels: tokenPixels("--paper-text-size-3") };
+    return { family: token("--paper-font-family"), weight: token("--paper-weight-semibold"), pixels: tokenPixels("--paper-text-size-2") };
 }
+
+/** A block's icon: as tall as its text. */
+const ICON_SIZE = "--paper-icon-size-tiny";
 
 /**
  * Waits for the fonts blocks are drawn in: Blockly measures text once, so a
@@ -39,7 +34,7 @@ export async function loadBlockFonts(): Promise<void> {
     const font = blockFont();
     const loads = [
         document.fonts.load(`${font.weight} ${font.pixels}px ${font.family}`),
-        document.fonts.load(`${tokenPixels("--paper-icon-size-medium")}px ${token("--paper-icon-font-family")}`, "extension"),
+        document.fonts.load(`${tokenPixels(ICON_SIZE)}px ${token("--paper-icon-font-family")}`, "extension"),
     ];
     for (const faces of await Promise.all(loads)) if (faces.length === 0) throw new Error("PaperUI's fonts aren't on this page");
 }
@@ -50,6 +45,12 @@ export function paperTheme(): Blockly.Theme {
     return Blockly.Theme.defineTheme("paper", {
         name: "paper",
         blockStyles: blockStyles(),
+        // the canvas a card is, in either theme
+        componentStyles: {
+            workspaceBackgroundColour: token("--paper-surface-raised"),
+            scrollbarColour: token("--paper-border-strong"),
+            insertionMarkerColour: token("--paper-text"),
+        },
         fontStyle: { family: font.family, weight: font.weight, size: font.pixels * POINTS_PER_PIXEL },
         // a block that starts a flow wears a cap, as Scratch's hats do
         startHats: true,
@@ -77,7 +78,7 @@ class SymbolField extends Blockly.FieldLabel {
 
     protected override updateSize_(): void {
         // a symbol is as wide as it is tall
-        const size = tokenPixels("--paper-icon-size-medium");
+        const size = tokenPixels(ICON_SIZE);
         this.size_ = new Blockly.utils.Size(size, size);
         this.textElement_!.setAttribute("x", "0");
         this.textElement_!.setAttribute("y", String(size / 2));
@@ -87,7 +88,7 @@ class SymbolField extends Blockly.FieldLabel {
 
 function iconField(icon: BlockIcon): Blockly.Field {
     if ("symbol" in icon) return new SymbolField(icon.symbol);
-    const size = tokenPixels("--paper-icon-size-medium");
+    const size = tokenPixels(ICON_SIZE);
     return new Blockly.FieldImage(icon.src, size, size, "");
 }
 
@@ -111,14 +112,21 @@ function placeIcon(block: Blockly.BlockSvg): void {
 
 class PaperConstants extends Blockly.zelos.ConstantProvider {
     constructor() {
-        // zelos measures in grid units: a third of PaperUI's gap, so its
-        // padding, notches and heights follow the gap
-        super(tokenPixels("--paper-uigap") / 3);
-        this.CORNER_RADIUS = tokenPixels("--paper-border-radius-half");
+        // zelos measures in grid units: a sixth of PaperUI's gap, so its
+        // padding, notches and heights follow the gap, at half Scratch's size
+        super(tokenPixels("--paper-uigap") / 6);
+        // half PaperUI's small radius, as the blocks are half size; it's also
+        // the least a block's top and bottom rows are
+        this.CORNER_RADIUS = tokenPixels("--paper-border-radius-half") / 2;
+        // zelos sizes a hat's cap in pixels, not grid units: halved with the rest
+        this.START_HAT_HEIGHT /= 2;
+        this.START_HAT_WIDTH /= 2;
         this.TOP_ROW_MIN_HEIGHT = this.CORNER_RADIUS;
         this.BOTTOM_ROW_MIN_HEIGHT = this.CORNER_RADIUS;
         this.FIELD_BORDER_RECT_RADIUS = this.CORNER_RADIUS;
         this.SELECTED_GLOW_COLOUR = token("--paper-primary");
+        // a value typed into a socket: PaperUI's text field
+        this.FIELD_BORDER_RECT_COLOUR = token("--paper-field");
     }
 
     // Blockly's renderer CSS, with PaperUI's colours where zelos has Scratch's
@@ -129,14 +137,19 @@ class PaperConstants extends Blockly.zelos.ConstantProvider {
             `${selector} .blocklyText, ${selector} .blocklyFlyoutLabelText { font: ${font}; }`,
             `${selector} .blocklyTextInputBubble textarea { font-weight: ${getVarCss("weight-regular")}; }`,
             `${selector} .blocklyText { fill: ${getVarCss("on-color")}; }`,
-            `${selector} .${SYMBOL_CLASS} { font-family: ${getVarCss("icon-font-family")}; font-size: ${getVarCss("icon-size-medium")}; font-weight: ${getVarCss("weight-regular")}; font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 14; }`,
+            `${selector} .${SYMBOL_CLASS} { font-family: ${getVarCss("icon-font-family")}; font-size: ${getVarCss("icon-size-tiny")}; font-weight: ${getVarCss("weight-regular")}; font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 14; }`,
             // a field you type into, as PaperUI's input
-            `${selector} .blocklyNonEditableField>rect:not(.blocklyDropdownRect), ${selector} .blocklyEditableField>rect:not(.blocklyDropdownRect) { fill: ${getVarCss("surface")}; }`,
+            `${selector} .blocklyNonEditableField>rect:not(.blocklyDropdownRect), ${selector} .blocklyEditableField>rect:not(.blocklyDropdownRect) { fill: ${getVarCss("field")}; }`,
             `${fieldText} { fill: ${getVarCss("text")}; }`,
+            // an empty field says what goes in it, as PaperUI's placeholders do
+            `${selector} .${PLACEHOLDER_CLASS} { fill: ${getVarCss("text-faint")} !important; font-weight: ${getVarCss("weight-regular")}; }`,
+            // every block and every field has an edge, so each reads apart from what it sits on
+            `${selector} .blocklyPath { stroke-width: ${getVarCss("border-width")}; }`,
+            `${selector} .blocklyShadow>.blocklyPath, ${selector} .blocklyNonEditableField>rect:not(.blocklyDropdownRect), ${selector} .blocklyEditableField>rect:not(.blocklyDropdownRect) { stroke: ${getVarCss("border-strong")}; stroke-width: ${getVarCss("border-width")}; }`,
             `${selector} .blocklyFlyoutLabelText { fill: ${getVarCss("text-subtle")}; }`,
             `${selector} .blocklyText.blocklyBubbleText { fill: ${getVarCss("text")}; }`,
             `${selector} .blocklyDraggable:not(.blocklyDisabled) .blocklyEditableField:not(.blocklyEditing):hover>rect, ${selector} .blocklyDraggable:not(.blocklyDisabled) .blocklyEditableField:not(.blocklyEditing):hover>.blocklyPath { stroke: ${getVarCss("primary")}; stroke-width: ${getVarCss("thick-border-width")}; }`,
-            `${selector} .blocklyHtmlInput { font-family: ${this.FIELD_TEXT_FONTFAMILY}; font-weight: ${this.FIELD_TEXT_FONTWEIGHT}; color: ${getVarCss("text")}; background: ${getVarCss("surface")}; }`,
+            `${selector} .blocklyHtmlInput { font-family: ${this.FIELD_TEXT_FONTFAMILY}; font-weight: ${this.FIELD_TEXT_FONTWEIGHT}; color: ${getVarCss("text")}; background: ${getVarCss("field")}; }`,
             `${selector} .blocklyDropdownText { fill: ${getVarCss("on-color")} !important; }`,
             `${selector}.blocklyWidgetDiv .blocklyMenuItem, ${selector}.blocklyDropDownDiv .blocklyMenuItem { font-family: ${this.FIELD_TEXT_FONTFAMILY}; }`,
             `${selector}.blocklyDropDownDiv .blocklyMenuItemContent { color: ${getVarCss("on-color")}; }`,
@@ -155,6 +168,7 @@ class PaperRenderer extends Blockly.zelos.Renderer {
 
     override render(block: Blockly.BlockSvg): void {
         placeIcon(block);
+        for (const input of block.inputList) for (const field of input.fieldRow) if (field instanceof PaperTextField) field.refreshPlaceholder();
         super.render(block);
     }
 }

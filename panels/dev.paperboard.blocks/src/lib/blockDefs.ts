@@ -4,7 +4,8 @@
 import type { BlockInfo, BlockInputSchema, BlockProjectInfo, BlockSchema } from "@mileniumhq/paperapi";
 import { blockEntry, parseTypeRef } from "@mileniumhq/paperapi";
 import { CHOICES_FIELD, choiceValue, type ChoicesSource } from "./choicesField";
-import type { BlockStyleName } from "./blockStyles";
+import { panelStyle, type BlockStyleName } from "./blockStyles";
+import { TEXT_BLOCK } from "./textField";
 import { BUILTIN, parseEntry, propertyBlockType, registryBlockType } from "./names";
 
 type Json = Record<string, unknown>;
@@ -13,9 +14,6 @@ type Inputs = Record<string, BlockInputSchema>;
 
 /** A custom type's base, by "panel:type". */
 export type TypeBases = Map<string, "text" | "number" | "boolean" | "object">;
-
-/** A panel's blocks share one style; its icon tells them apart. */
-const PANEL_STYLE: BlockStyleName = "panel_blocks";
 
 /**
  * The Blockly checks a type allows: core types use Blockly's own names, so
@@ -98,7 +96,7 @@ function message(
     return { message0, args0: args, ...(sockets > MOST_INLINE_SOCKETS ? { inputsInline: false as const } : {}) };
 }
 
-function hat(type: string, title: ReturnType<typeof message>, tooltip: string, style: BlockStyleName = PANEL_STYLE): Json {
+function hat(type: string, title: ReturnType<typeof message>, tooltip: string, style: string): Json {
     return {
         type,
         message0: title.message0,
@@ -184,7 +182,7 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                         { type: "input_value", name: "VALUE", check: checksFor(typeRef, bases) },
                     ],
                     output: null,
-                    style: PANEL_STYLE,
+                    style: panelStyle(panelId),
                     tooltip: `A field of a ${schema.name}`,
                 });
                 contents.push({ kind: "block", type });
@@ -198,7 +196,7 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                     type,
                     ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases, { panelId, entry }),
                     ...(s.output ? { output: checksFor(s.output, bases) } : { previousStatement: null, nextStatement: null }),
-                    style: PANEL_STYLE,
+                    style: panelStyle(panelId),
                     tooltip: s.description ?? s.name,
                 });
                 contents.push(toolboxBlock(type, s.inputs as Inputs));
@@ -212,14 +210,14 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                     type,
                     ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases, { panelId, entry }),
                     output: checksFor(s.type, bases),
-                    style: PANEL_STYLE,
+                    style: panelStyle(panelId),
                     tooltip: s.description ?? s.name,
                 });
                 contents.push(toolboxBlock(type, s.inputs as Inputs));
                 if (s.changes) {
                     const changes = registryBlockType({ kind: "changes", panelId, entry });
                     record(changes);
-                    out.blocks.push(hat(changes, { message0: `When ${s.name} changes`, args0: [] }, `Runs each time ${s.name} changes`));
+                    out.blocks.push(hat(changes, { message0: `When ${s.name} changes`, args0: [] }, `Runs each time ${s.name} changes`, panelStyle(panelId)));
                     contents.unshift({ kind: "block", type: changes });
                 }
                 break;
@@ -228,7 +226,7 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                 const s = schema as Schema<"event">;
                 const type = registryBlockType({ kind: "event", panelId, entry });
                 record(type);
-                out.blocks.push(hat(type, message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases, { panelId, entry }), s.description ?? s.name));
+                out.blocks.push(hat(type, message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases, { panelId, entry }), s.description ?? s.name, panelStyle(panelId)));
                 const valueBlocks: Json[] = [];
                 for (const [key, v] of Object.entries(s.values ?? {})) {
                     const valueType = registryBlockType({ kind: "event-value", panelId, entry, key });
@@ -237,7 +235,7 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                         type: valueType,
                         message0: v.name,
                         output: checksFor(v.type, bases),
-                        style: PANEL_STYLE,
+                        style: panelStyle(panelId),
                         tooltip: v.optional ? `${v.name}, inside "${s.name}"; it may have none (check with "has a value")` : `${v.name}, inside "${s.name}"`,
                     });
                     valueBlocks.push({ kind: "block", type: valueType });
@@ -274,6 +272,7 @@ const dropdown = (name: string, options: [string, string][]): Json => ({ type: "
 
 /** This panel's own blocks, beside Blockly's. */
 export const BUILTIN_BLOCKS: Json[] = [
+    TEXT_BLOCK,
     hat(BUILTIN.onRun, { message0: "When Run is clicked", args0: [] }, "Runs when you click Run", "event_blocks"),
     statement(BUILTIN.wait, "Wait %1 seconds", [socket("SECONDS", "Number")], "Waits before the next step"),
     statement(BUILTIN.waitUntil, "Wait until %1", [socket("BOOL", "Boolean")], "Waits until the condition is true, checking twice a second"),
@@ -313,6 +312,13 @@ export const BUILTIN_BLOCKS: Json[] = [
     reporter(BUILTIN.webGet, "get %1 as %2", [socket("URL", "String"), dropdown("AS", [["text", "TEXT"], ["JSON", "JSON"]])], null, "Fetches a web address (https, or http on this computer)", "web_blocks"),
     reporter(BUILTIN.webPost, "post %1 to %2 and read %3", [socket("BODY"), socket("URL", "String"), dropdown("AS", [["JSON", "JSON"], ["text", "TEXT"]])], null, "Sends a value as JSON to a web address (https, or http on this computer)", "web_blocks"),
 ];
+
+/** What an empty text socket of a built-in block says goes in it: its type. */
+const BUILTIN_PLACEHOLDERS: Record<string, string> = { URL: "URL", PATTERN: "Pattern", KEY: "Key", DELIM: "Separator" };
+
+export function builtinPlaceholder(input: string | null): string {
+    return (input && BUILTIN_PLACEHOLDERS[input]) || "Text";
+}
 
 const num = (n: number) => ({ shadow: { type: "math_number", fields: { NUM: n } } });
 const txt = (t: string) => ({ shadow: { type: "text", fields: { TEXT: t } } });
