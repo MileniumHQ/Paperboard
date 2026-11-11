@@ -44,6 +44,7 @@ import icon from "../../resources/icon.png?asset";
 import { installScreenshotTool } from "./screenshotTool";
 import { installTextEditContextMenu } from "./contextMenu";
 import { relocateElectronData } from "./electronData";
+import { relaunchOnX11IfNeeded } from "./displayBackend";
 import { setDesktopSupervisorEntry } from "../../papercrane/engineSupervisor";
 
 const log = logger;
@@ -88,6 +89,9 @@ function ensureDesktopTray(): void {
         onError: (err) => log.debug("[Tray] service count refresh failed:", err),
     });
 }
+
+// the relaunch replaces this process, so nothing below may run first
+if (relaunchOnX11IfNeeded(app, process.argv, process.env, process.platform)) process.exit(0);
 
 // before the single-instance lock: it lives in userData
 const electronDataError = relocateElectronData(app);
