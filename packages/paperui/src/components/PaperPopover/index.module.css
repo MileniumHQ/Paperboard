@@ -1,0 +1,99 @@
+.PaperPopover {
+    --popover-gap: var(--paper-uigap-threefourths);
+    position: fixed;
+    /* above the window's chrome: a popover often points at the top bar */
+    z-index: calc(var(--paper-z-chrome) + var(--paper-z-raised));
+    box-sizing: border-box;
+    /* one width whatever it holds, so it doesn't jump as its content changes */
+    width: min(var(--paper-size-menu-max), calc(100vw - var(--paper-uigap-double)));
+    max-height: calc(100vh - var(--paper-size-bar) - var(--paper-uigap-double));
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-threefourths);
+    font-family: var(--paper-font-family);
+    color: var(--paper-text);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    box-shadow: var(--paper-heavy-element-shadow);
+    /* hidden until measured, so it never flashes at the corner */
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(calc(var(--paper-uigap-onefourth) * -1)) scale(0.97);
+    transform-origin: var(--popover-tail) 0;
+}
+
+.PaperPopover.placed {
+    visibility: visible;
+    opacity: 1;
+    transform: none;
+    transition:
+        opacity var(--paper-short-transition) ease-out,
+        transform var(--paper-short-transition) var(--paper-ease-emphasized);
+}
+
+.PaperPopover.above {
+    transform-origin: var(--popover-tail) 100%;
+}
+
+/* the speech bubble's tail: a square turned on its corner, half of it
+   hidden under the box, carrying the box's border on its two outer sides */
+.tail {
+    position: absolute;
+    top: 0;
+    left: var(--popover-tail);
+    width: var(--paper-uigap-threefourths);
+    height: var(--paper-uigap-threefourths);
+    background: var(--paper-surface-raised);
+    border-top: var(--paper-border-width) solid var(--paper-border);
+    border-left: var(--paper-border-width) solid var(--paper-border);
+    transform: translate(-50%, -50%) translateY(calc(var(--paper-border-width) * -1)) rotate(45deg);
+    border-top-left-radius: var(--paper-border-radius-half);
+    pointer-events: none;
+}
+
+.above .tail {
+    top: 100%;
+    transform: translate(-50%, -50%) translateY(var(--paper-border-width)) rotate(225deg);
+}
+
+.title {
+    padding: 0 var(--paper-uigap-onefourth);
+}
+
+/* flush: a list fills it edge to edge, on the list's inset surface, with
+   the title over it like a list's group label */
+.PaperPopover.flush {
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+    background: var(--paper-surface-inset);
+}
+
+.flush .tail {
+    background: var(--paper-surface-inset);
+}
+
+.flush .title {
+    padding: var(--paper-uigap-threefourths);
+}
+
+.flush .body {
+    gap: 0;
+}
+
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .PaperPopover.placed {
+        transition-duration: 0.01ms !important;
+    }
+}

@@ -31,6 +31,7 @@ export * from "./components/PaperModal";
 export * from "./components/PaperPresence";
 export * from "./components/PaperPageHeader";
 export * from "./components/PaperPagination";
+export * from "./components/PaperPopover";
 export * from "./components/PaperProgress";
 export * from "./components/PaperProse";
 export * from "./components/PaperProvider";
@@ -48,6 +49,7 @@ export * from "./components/PaperSwatch";
 export * from "./components/PaperTable";
 export * from "./components/PaperText";
 export * from "./components/PaperTextList";
+export * from "./components/PaperToast";
 export * from "./components/PaperToggle";
 
 export * from "./templates/PaperCenteredInterface";

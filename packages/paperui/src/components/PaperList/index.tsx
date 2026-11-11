@@ -8,8 +8,10 @@ import {
     type ParentProps,
     type JSX,
 } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
+import { PaperLoader } from "../PaperLoader";
 import { PaperText, type PaperTextProps } from "../PaperText";
 import {
     SelectionProvider,
@@ -17,7 +19,7 @@ import {
     useSelectionItem,
     type SelectionProviderProps,
 } from "../contexts/selection";
-import type { PaperBackgroundSurface } from "../../types";
+import type { LoaderStatus, PaperBackgroundSurface } from "../../types";
 import { resolveBackground } from "../../utils/theme";
 
 export interface PaperListItemCloseEvent {
@@ -27,7 +29,11 @@ export interface PaperListItemCloseEvent {
     defaultPrevented: boolean;
 }
 
-export type PaperListProps = SelectionProviderProps &
+// a list that only shows things has nothing to choose, so it needs no name
+export type PaperListProps = (
+    | (SelectionProviderProps & { selectable?: true })
+    | (Partial<SelectionProviderProps> & { selectable: false })
+) &
     JSX.HTMLAttributes<HTMLDivElement> & {
         direction?: "horizontal" | "vertical";
         horizontal?: boolean;
@@ -46,6 +52,12 @@ export type PaperListProps = SelectionProviderProps &
         /** the list's surface; inset by default, transparent inside a card
          *  that already provides one */
         background?: PaperBackgroundSurface | "transparent";
+        /**
+         * false: the list only shows things (what is updating, what
+         * happened). Its items can't be chosen, so they don't highlight or
+         * take a selection bar; their actions still work. Default true.
+         */
+        selectable?: boolean;
     };
 
 interface DragState {
@@ -60,6 +72,7 @@ interface DragState {
 }
 
 interface PaperListContextType {
+    isSelectable: () => boolean;
     isReorderable: () => boolean;
     hasActiveDrag: () => boolean;
     isDropping: () => boolean;
@@ -102,12 +115,14 @@ export function PaperList(props: ParentProps<PaperListProps>) {
         "flex",
         "scrollable",
         "background",
+        "selectable",
         "class",
         "classList",
         "style",
         "children",
     ]);
 
+    const isSelectable = () => local.selectable ?? true;
     const isHorizontal = () =>
         local.direction === "horizontal" || Boolean(local.horizontal);
     const isReorderable = () => local.reorderable ?? false;
@@ -125,7 +140,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
         const valStr = String(value);
         const itemEls = Array.from(
             containerRef.querySelectorAll<HTMLLabelElement>(
-                ":scope > label[data-value]",
+                ":scope > [data-value]",
             ),
         );
         const currentValues = itemEls.map(
@@ -291,6 +306,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
     };
 
     const contextValue: PaperListContextType = {
+        isSelectable,
         isReorderable,
         hasActiveDrag,
         isDropping,
@@ -308,6 +324,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
             styles.PaperList,
             isHorizontal() ? styles.horizontal : "",
             isReorderable() ? styles.reorderable : "",
+            isSelectable() ? "" : styles.static,
             local.borderless ? styles.borderless : "",
             local.fullWidth ? styles.fullWidth : "",
             local.fullHeight ? styles.fullHeight : "",
@@ -351,7 +368,8 @@ export function PaperList(props: ParentProps<PaperListProps>) {
 
     return (
         <SelectionProvider
-            name={local.name}
+            // a list that isn't selectable renders no inputs to name
+            name={local.name ?? ""}
             value={local.value}
             defaultValue={local.defaultValue}
             onValueChange={local.onValueChange}
@@ -398,6 +416,13 @@ export interface PaperListItemProps extends Omit<
     description?: JSX.Element | string;
     icon?: JSX.Element | string;
     /**
+     * A small loader in the icon's place, for an item that is doing
+     * something (downloading, installing). It takes the place of icon.
+     */
+    loaderStatus?: LoaderStatus;
+    /** how far the loader has come, 0 to 100 */
+    percent?: number;
+    /**
      * Trailing controls (for example a menu button). They render after the
      * item text and are responsible for stopping their own events.
      */
@@ -416,6 +441,8 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
         "value",
         "description",
         "icon",
+        "loaderStatus",
+        "percent",
         "actions",
         "disabled",
         "closeable",
@@ -430,6 +457,7 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
 
     const { isSelected } = useSelectionItem(local.value, local.disabled);
     const listCtx = usePaperListContext();
+    const selectable = () => listCtx?.isSelectable() ?? true;
     const isDragging = () => listCtx?.isItemDragging(local.value) ?? false;
 
     const isCloseable = () =>
@@ -446,7 +474,7 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
     const className = () =>
         [
             styles.PaperListItem,
-            isSelected() ? styles.selected : "",
+            isSelected() && selectable() ? styles.selected : "",
             isDragging() ? styles.dragging : "",
             listCtx?.isDropping() ? styles.dropping : "",
             listCtx?.hasActiveDrag() && !isDragging() ? styles.isSibling : "",
@@ -502,7 +530,8 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
     };
 
     return (
-        <label
+        <Dynamic
+            component={selectable() ? "label" : "div"}
             data-value={String(local.value)}
             {...rest}
             class={className()}
@@ -513,18 +542,31 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
             }}
             onPointerDown={handlePointerDown}
         >
-            <SelectionRadioInput
-                value={local.value}
-                disabled={local.disabled}
-            />
+            <Show when={selectable()}>
+                <SelectionRadioInput
+                    value={local.value}
+                    disabled={local.disabled}
+                />
+            </Show>
 
-            <Show when={local.icon}>
-                {typeof local.icon === "string" ? (
-                    <PaperIcon class={styles.listIcon} zeroHeight>
-                        {local.icon}
-                    </PaperIcon>
-                ) : (
-                    <span class={styles.listIcon}>{local.icon}</span>
+            <Show
+                when={local.loaderStatus}
+                fallback={
+                    <Show when={local.icon}>
+                        {typeof local.icon === "string" ? (
+                            <PaperIcon class={styles.listIcon} zeroHeight>
+                                {local.icon}
+                            </PaperIcon>
+                        ) : (
+                            <span class={styles.listIcon}>{local.icon}</span>
+                        )}
+                    </Show>
+                }
+            >
+                {(status) => (
+                    <span class={styles.listIcon}>
+                        <PaperLoader size="small" loaderStatus={status()} percent={local.percent ?? 0} />
+                    </span>
                 )}
             </Show>
 
@@ -558,6 +600,6 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
             <Show when={local.actions}>
                 <span class={styles.itemActions}>{local.actions}</span>
             </Show>
-        </label>
+        </Dynamic>
     );
 }

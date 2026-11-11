@@ -177,6 +177,10 @@
                     "name": "PaperPagination",
                     "file": "paper-pagination"
                 },
+                "paperpopover": {
+                    "name": "PaperPopover",
+                    "file": "paper-popover"
+                },
                 "paperpresence": {
                     "name": "PaperPresence",
                     "file": "paper-presence"
@@ -244,6 +248,10 @@
                 "papertextlist": {
                     "name": "PaperTextList",
                     "file": "paper-text-list"
+                },
+                "papertoast": {
+                    "name": "PaperToast",
+                    "file": "paper-toast"
                 },
                 "papertoggle": {
                     "name": "PaperToggle",

@@ -6,9 +6,11 @@ import {
     createContext,
     useContext,
     splitProps,
+    Show,
     type ParentProps,
     type JSX,
 } from "solid-js";
+import { PaperToastRegion } from "../PaperToast";
 import { installSwipeBack } from "../../utils/swipeBack";
 import { installTouchHold } from "../../utils/touchHold";
 
@@ -50,6 +52,7 @@ function iconFontReady(): boolean {
 }
 
 export function PaperProvider(props: ParentProps<PaperProviderProps>) {
+    const outermost = useContext(PaperContext) === undefined;
     const [local, rest] = splitProps(props, [
         "theme",
         "styleBody",
@@ -183,6 +186,10 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
                 data-paperui-theme={resolvedTheme()}
             >
                 {local.children}
+                {/* one corner of toasts per document: a provider inside another shares its parent's */}
+                <Show when={outermost}>
+                    <PaperToastRegion data-paperui-theme={resolvedTheme()} />
+                </Show>
             </div>
         </PaperContext.Provider>
     );

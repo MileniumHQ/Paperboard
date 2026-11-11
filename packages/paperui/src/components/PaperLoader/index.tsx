@@ -16,6 +16,11 @@ export interface PaperLoaderProps extends JSX.HTMLAttributes<HTMLDivElement> {
      * flashes a loader on screen.
      */
     delay?: number;
+    /**
+     * Something short inside the ring, such as how many steps are left. It
+     * makes way for the check or cross when the loader finishes.
+     */
+    children?: JSX.Element;
 }
 
 export interface PaperLoaderGroupProps extends JSX.HTMLAttributes<HTMLDivElement> {}
@@ -32,6 +37,7 @@ export function PaperLoader(props: PaperLoaderProps) {
         "classList",
         "style",
         "delay",
+        "children",
     ]);
 
     const [due, setDue] = createSignal(!local.delay);
@@ -105,6 +111,9 @@ export function PaperLoader(props: PaperLoaderProps) {
                         stroke-width="7"
                     />
                 </svg>
+                <Show when={local.children !== undefined && local.children !== null && !isFull()}>
+                    <span class={styles.center}>{local.children}</span>
+                </Show>
                 <span
                     class={styles.statusFinisher}
                     classList={{

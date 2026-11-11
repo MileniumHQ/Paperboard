@@ -156,13 +156,18 @@
     margin-left: auto;
 }
 
+/* a list that only shows things: its items can't be chosen */
+.PaperList.static .PaperListItem {
+    cursor: default;
+}
+
 @media (hover: hover) {
-    .PaperListItem:hover {
+    .PaperList:not(.static) .PaperListItem:hover {
         background: color-mix(in srgb, var(--paper-contrast) 3%, var(--paper-surface-raised));
     }
 }
 @media (hover: none) {
-    .PaperListItem:active {
+    .PaperList:not(.static) .PaperListItem:active {
         background: color-mix(in srgb, var(--paper-contrast) 3%, var(--paper-surface-raised));
     }
 }

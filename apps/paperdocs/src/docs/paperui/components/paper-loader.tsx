@@ -85,6 +85,12 @@ export function Example() {
                         <td>Text beside the ring. Without it only the ring shows.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>children</PaperCode></td>
+                        <td><PaperCode>JSX.Element</PaperCode></td>
+                        <td>No default</td>
+                        <td>Something short inside the ring, such as how many steps are left. It is sized from the ring, and makes way for the check or close mark when the loader finishes.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>delay</PaperCode></td>
                         <td><PaperCode>number</PaperCode></td>
                         <td>No default (shows at once)</td>
@@ -198,6 +204,23 @@ type PaperLoaderSize = "small" | "medium" | "large";`}
     <PaperLoader size="medium" loaderStatus="indeterminate" label="Medium" />
     <PaperLoader size="large" loaderStatus="indeterminate" label="Large" />
 </PaperFlex>`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="count">A count inside the ring</PaperText>
+            <PaperText preset="body" as="p">
+                Children sit in the middle of the ring. Paperboard's update button shows how many updates are left this way, and the count gives way to the check when they finish.
+            </PaperText>
+            <PaperCard data-docs-demo padding="double" surface="front">
+                <PaperFlex direction="row" gap="full" align="center">
+                    <PaperLoader size="small" loaderStatus="loading" percent={40}>3</PaperLoader>
+                    <PaperLoader loaderStatus="loading" percent={70}>2</PaperLoader>
+                    <PaperLoader loaderStatus="success">2</PaperLoader>
+                </PaperFlex>
+            </PaperCard>
+            <PaperCode block language="tsx">
+{`<PaperLoader size="small" loaderStatus="loading" percent={40}>
+    {left()}
+</PaperLoader>`}
             </PaperCode>
 
             <PaperText preset="subheader" as="h3" id="first-load">First load with a delay</PaperText>

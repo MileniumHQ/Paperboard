@@ -22,6 +22,7 @@ export default function PaperListDoc() {
                 PaperList is a selectable list of rows, vertical like a sidebar or horizontal like a tab strip.
                 Use it when the user picks an item to open, switches between tabs, or reorders and closes entries.
                 Use <PaperLink href="/docs/paperui/paperkeyvaluelist/">PaperKeyValueList</PaperLink> for read-only label and value rows.
+                With <PaperCode>selectable={"{false}"}</PaperCode> it only shows rows, such as what is updating, with a loader on each.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
@@ -206,6 +207,12 @@ export function Example() {
                         <td>The list's surface: a background surface name or <PaperCode>"transparent"</PaperCode>. Without it the list uses <PaperCode>surface-inset</PaperCode>. Use <PaperCode>"surface-raised"</PaperCode> or <PaperCode>"transparent"</PaperCode> inside a card that already has a surface.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>selectable</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>true</PaperCode></td>
+                        <td><PaperCode>false</PaperCode>: the list only shows rows. Items can't be chosen, so they render no input, don't highlight on hover and never take the selection bar. <PaperCode>name</PaperCode> is then optional. Items' <PaperCode>actions</PaperCode> still work.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode>, <PaperCode>style</PaperCode></td>
                         <td>Solid props</td>
                         <td>No default</td>
@@ -252,6 +259,18 @@ export function Example() {
                         <td><PaperCode>JSX.Element | string</PaperCode></td>
                         <td>No default</td>
                         <td>A leading icon: a string is a Material icon name, an element such as a <PaperLink href="/docs/paperui/paperavatar/">PaperAvatar</PaperLink> is rendered as is.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>loaderStatus</PaperCode></td>
+                        <td><PaperCode>LoaderStatus</PaperCode></td>
+                        <td>No default</td>
+                        <td>A small <PaperLink href="/docs/paperui/paperloader/">PaperLoader</PaperLink> in the icon's place, for an item that is doing something. It replaces <PaperCode>icon</PaperCode> while set.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>percent</PaperCode></td>
+                        <td><PaperCode>number</PaperCode></td>
+                        <td><PaperCode>0</PaperCode></td>
+                        <td>How far the loader has come, 0 to 100, for <PaperCode>loaderStatus="loading"</PaperCode>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>actions</PaperCode></td>
@@ -363,6 +382,27 @@ onClosed(value: string | number): void;`}
     <PaperListItem value="b">Second</PaperListItem>
     <PaperListLabel>Another group</PaperListLabel>
     <PaperListItem value="c">Third</PaperListItem>
+</PaperList>`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="static">A list that only shows things</PaperText>
+            <PaperText preset="body" as="p">
+                The top bar's update list is a list that can't be selected, with a loader on each row and a button on the row that needs one.
+            </PaperText>
+            <PaperCard data-docs-demo surface="front">
+                <PaperList selectable={false} fullWidth borderless scrollable={false}>
+                    <PaperListItem value="gameserver" loaderStatus="loading" percent={40} description="Downloading 4.0 MB of 10.0 MB">Game Server</PaperListItem>
+                    <PaperListItem value="java" loaderStatus="waiting" description="Waiting">Java 21</PaperListItem>
+                    <PaperListItem value="paperboard" loaderStatus="success" description="Updated to 1.4.0">Paperboard</PaperListItem>
+                </PaperList>
+            </PaperCard>
+            <PaperCode block language="tsx">
+{`<PaperList selectable={false} fullWidth borderless scrollable={false}>
+    <PaperListItem value="gameserver" loaderStatus="loading" percent={40} description="Downloading 4.0 MB of 10.0 MB">
+        Game Server
+    </PaperListItem>
+    <PaperListItem value="java" loaderStatus="waiting" description="Waiting">Java 21</PaperListItem>
+    <PaperListItem value="paperboard" loaderStatus="success" description="Updated to 1.4.0">Paperboard</PaperListItem>
 </PaperList>`}
             </PaperCode>
 

@@ -1,0 +1,80 @@
+.region {
+    position: fixed;
+    right: calc(var(--paper-uigap) + var(--paper-safe-area-right));
+    bottom: calc(var(--paper-uigap) + var(--paper-safe-area-bottom));
+    z-index: var(--paper-z-chrome);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--paper-uigap-half);
+    max-width: calc(100vw - var(--paper-uigap-double));
+    pointer-events: none;
+    font-family: var(--paper-font-family);
+}
+
+.toast {
+    pointer-events: auto;
+    box-sizing: border-box;
+    width: min(var(--paper-size-menu-max), calc(100vw - var(--paper-uigap-double)));
+    display: flex;
+    align-items: flex-start;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-half) var(--paper-uigap-onefourth) var(--paper-uigap-half) var(--paper-uigap-threefourths);
+    color: var(--paper-text);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    box-shadow: var(--paper-heavy-element-shadow);
+    animation: toastEnter var(--paper-mid-transition) var(--paper-ease-emphasized);
+}
+
+.icon {
+    flex-shrink: 0;
+    font-size: var(--paper-icon-size-small);
+    /* lines the glyph up with the title's first line */
+    padding-top: var(--paper-uigap-onefourth);
+}
+
+.danger .icon {
+    color: var(--paper-danger);
+}
+
+.warning .icon {
+    color: var(--paper-warning);
+}
+
+.success .icon {
+    color: var(--paper-success);
+}
+
+.info .icon {
+    color: var(--paper-primary);
+}
+
+.text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+    padding-top: var(--paper-uigap-onefourth);
+}
+
+.actions {
+    display: flex;
+    gap: var(--paper-uigap-half);
+    padding-top: var(--paper-uigap-onefourth);
+}
+
+@keyframes toastEnter {
+    from {
+        opacity: 0;
+        transform: translateY(var(--paper-uigap)) scale(0.97);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toast {
+        animation-duration: 0.01ms !important;
+    }
+}

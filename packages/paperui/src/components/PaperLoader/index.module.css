@@ -97,6 +97,23 @@
     animation: fullentererror var(--paper-mid-transition) var(--paper-ease-emphasized);
 }
 
+/* what the ring holds, such as a count: sized from the ring, so it fits
+   any loader size */
+.center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--paper-font-family);
+    font-size: calc(var(--size) * 0.5);
+    font-weight: var(--paper-weight-black);
+    line-height: 1;
+    color: var(--paper-text);
+    font-variant-numeric: tabular-nums;
+    animation: loaderEnter var(--paper-short-transition) var(--paper-ease-standard) backwards;
+}
+
 /* The finisher glyph itself: a real PaperIcon element layered over the
    :after circle. */
 .finisherIcon {
