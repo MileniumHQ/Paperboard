@@ -16,6 +16,7 @@ import {
     PaperInterfaceItem,
     PaperList,
     PaperListItem,
+    PaperMarkdown,
     PaperMenu,
     PaperMenuItem,
     PaperModal,
@@ -152,6 +153,35 @@ const scenarios: Record<string, () => JSX.Element> = {
                     </PaperContextMenuSub>
                     <PaperContextMenuItem onClick={() => t.runs.push("Delete")}>Delete</PaperContextMenuItem>
                 </PaperContextMenu>
+            </>,
+        );
+    },
+
+    markdownAnchors() {
+        window.t = {};
+        const filler = lines(1, 40).join("\n\n");
+        const first = [
+            "[Details](#details) [Second details](#details-1) [Café](#caf%C3%A9)",
+            filler,
+            "## Details",
+            filler,
+            "## Details",
+            filler,
+            "## Café",
+            filler,
+        ].join("\n\n");
+        const second = ["[Details](#details)", filler, "## Details", filler].join("\n\n");
+        return shell(
+            <>
+                <p id="details">the page's own element, which a link must not reach</p>
+                <div id="scroller" style={{ height: "300px", overflow: "auto" }}>
+                    <div id="first">
+                        <PaperMarkdown text={first} />
+                    </div>
+                    <div id="second">
+                        <PaperMarkdown text={second} />
+                    </div>
+                </div>
             </>,
         );
     },

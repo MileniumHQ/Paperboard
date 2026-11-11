@@ -9,6 +9,7 @@ import {
     PaperFlex,
     PaperButton,
     PaperIcon,
+    PaperMarkdown,
     PaperModal,
     PaperPage,
     PaperPageHeader,
@@ -146,9 +147,7 @@ export default function AppSettings(props: {
             title={LICENSE_TITLES[license()]}
             size="large"
         >
-            <PaperText as="pre" family="code" size={2} class={styles.licenseText}>
-                {LICENSE_TEXTS[license()]}
-            </PaperText>
+            <PaperMarkdown text={LICENSE_TEXTS[license()]} />
         </PaperModal>
     );
 

@@ -43,6 +43,11 @@
     margin-top: var(--paper-uigap-half);
 }
 
+/* a #link scrolls its heading to the top: keep it off the scroller's edge */
+.PaperMarkdown [data-anchor] {
+    scroll-margin-top: var(--paper-uigap);
+}
+
 /* an image a renderImage hook drew alone in its paragraph: a block of its own */
 .media {
     display: block;
