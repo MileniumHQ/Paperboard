@@ -1,9 +1,5 @@
 # AI
 
-> **Deprecated and unlisted.** The AI panel has been replaced by [Agent](../dev.paperboard.agents) and no longer appears in the panel library. It's kept here only to ship small fixes to people who still have it installed.
-
-Chat with AI models locally without sacrifice. Rather than relying on models in data centers, the Paperboard AI panel lets you easily pick and install open-source models to run on your machine, without sending any of your data to the cloud.
-
-- **No setup required** - Simply install the panel and pick a model to use. The panel downloads and initiates setup of the model for you, without changing any settings on your computer.
-- **Search the web** - Enable Web search in settings to give the model the ability to research up to date news and topics and provide more accurate answers to your queries.
-- **Upload files** - On supported models, read & analyze images, text, and code all by simply dragging and dropping the files. Nothing is sent to the cloud.
+> **Deprecated.** AI has been replaced by [Agents](../dev.paperboard.agents) and is unlisted from the panel library. Don't add features to it.
+>
+> The one exception: it should routinely get updates for new Ollama models, so people who still use it can run them. The shipped model list is `src/data/models.json`.
