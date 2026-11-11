@@ -18,11 +18,9 @@ import (
 // failed start's reason, or the result of a workload that already exited
 const startFailureLinger = 10 * time.Second
 
-// how long the exit frame has to reach the clients before the process ends
-const (
-	exitFlushMin = 40 * time.Millisecond
-	exitFlushMax = time.Second
-)
+// how long the clients have to take the exit frame and hang up before the
+// process ends anyway
+const exitFlushMax = time.Second
 
 // A running workload, whichever way it was started.
 type workload interface {
@@ -52,6 +50,7 @@ type supervisor struct {
 	attached bool          // a client has attached at least once
 	clients  map[*client]struct{}
 	exited   bool
+	readers  sync.WaitGroup // connections still being read
 	work     workload
 	workDone bool // the workload has exited; there is nothing left to stop
 	startErr string
@@ -267,9 +266,27 @@ func (s *supervisor) send(c *client, frame []byte) {
 	}
 }
 
+// Ends a connection's output without closing the connection: what was queued
+// is sent, and the client is told there is no more. Closing outright while
+// the client's own frames sit unread would reset the connection, and the
+// client would lose frames it had not read yet (the status of a failed start,
+// the exit code).
+type outputEnd struct{ conn net.Conn }
+
+func (o outputEnd) Write(data []byte) (int, error) { return o.conn.Write(data) }
+
+func (o outputEnd) Close() error {
+	if half, ok := o.conn.(interface{ CloseWrite() error }); ok {
+		return half.CloseWrite()
+	}
+	// a Windows named pipe has no half-close; what was sent stays readable
+	// by the client after the pipe is closed
+	return o.conn.Close()
+}
+
 func (s *supervisor) serve(conn net.Conn) {
 	c := &client{conn: conn}
-	c.out = newAsyncWriter(conn, nil)
+	c.out = newAsyncWriter(outputEnd{conn}, nil)
 
 	s.mu.Lock()
 	if s.exited {
@@ -277,6 +294,8 @@ func (s *supervisor) serve(conn net.Conn) {
 		conn.Close()
 		return
 	}
+	s.readers.Add(1)
+	defer s.readers.Done()
 	s.clients[c] = struct{}{}
 	status := map[string]any{
 		"type":     "status",
@@ -292,10 +311,10 @@ func (s *supervisor) serve(conn net.Conn) {
 	s.send(c, encodeFrame(status))
 	s.mu.Unlock()
 	// the status frame carried the failure; this client was the one waiting
-	// for it, so the supervisor's job is done
+	// for it, so the supervisor's job is done. The connection is still read
+	// until the client hangs up.
 	if failed {
-		s.cleanupAndExit(1)
-		return
+		go s.cleanupAndExit(1)
 	}
 
 	reader := bufio.NewReader(conn)
@@ -357,7 +376,8 @@ func (s *supervisor) handle(c *client, line []byte) {
 		pending := s.pending
 		s.mu.Unlock()
 		if pending != nil {
-			s.cleanupAndExit(*pending)
+			// on its own goroutine: this one keeps reading the connection
+			go s.cleanupAndExit(*pending)
 		}
 	case "stdin":
 		work := s.workload()
@@ -451,18 +471,19 @@ func (s *supervisor) cleanupAndExit(code int) {
 	// on SIGTERM with its child still running orphans the child
 	s.stopWorkload()
 
-	flushed := make(chan struct{})
+	// every client is sent the exit and then hangs up, having read it; one
+	// that does neither is not waited for
+	finished := make(chan struct{})
 	go func() {
 		for _, w := range writers {
 			<-w.done
 		}
-		close(flushed)
+		s.readers.Wait()
+		close(finished)
 	}()
-	deadline := time.After(exitFlushMax)
-	time.Sleep(exitFlushMin)
 	select {
-	case <-flushed:
-	case <-deadline:
+	case <-finished:
+	case <-time.After(exitFlushMax):
 	}
 	os.Exit(code)
 }

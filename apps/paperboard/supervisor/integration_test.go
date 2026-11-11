@@ -157,6 +157,8 @@ func supervise(t *testing.T, id string, config map[string]any) *session {
 				s.mu.Lock()
 				s.closed = true
 				s.mu.Unlock()
+				// the supervisor has said everything: hang up, as its clients do
+				s.conn.Close()
 				return
 			}
 		}
