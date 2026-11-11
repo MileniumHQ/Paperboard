@@ -28,11 +28,13 @@ export interface PanelState {
     projects: ProjectSummary[];
     /** why the projects couldn't be read; nothing runs until they can be */
     projectsError: string | null;
+    /** why this panel's own blocks (the Projects ones) couldn't be added */
+    blocksError: string | null;
     /** the projects have been read (or failed to be): until then the list is not the real one */
     loaded: boolean;
 }
 
-export const DEFAULT_STATE: PanelState = { log: [], running: {}, projects: [], projectsError: null, loaded: false };
+export const DEFAULT_STATE: PanelState = { log: [], running: {}, projects: [], projectsError: null, blocksError: null, loaded: false };
 
 /** The most log lines kept; older ones drop off. */
 export const MAX_LOG = 200;

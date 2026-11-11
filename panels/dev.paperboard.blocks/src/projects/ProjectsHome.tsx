@@ -94,6 +94,11 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                         <PaperQuote variant="danger" icon="warning" title="Projects could not be read" role="alert">{text()}</PaperQuote>
                     )}
                 </Show>
+                <Show when={projects.state().blocksError}>
+                    {(text) => (
+                        <PaperQuote variant="danger" icon="warning" title="Flows can't drive projects" role="alert">{text()}</PaperQuote>
+                    )}
+                </Show>
                 <Show
                     when={projects.ready()}
                     fallback={

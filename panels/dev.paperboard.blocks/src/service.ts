@@ -2,9 +2,10 @@
 // for the events the switched-on projects start from, and runs them, whether
 // or not a window is open. The page edits one project's flows at a time and
 // shows the run log this service keeps.
-import { blocksApi, config, definePanelService, defineAction, type ServiceContext } from "@mileniumhq/paperapi";
+import { blockEntry, blocksApi, config, definePanelService, defineAction, type ServiceContext } from "@mileniumhq/paperapi";
 import { BlockError, hatInputs, isHat, runHat, type Host, type SavedBlock } from "./lib/interpreter";
-import { BUILTIN, parseEntry, parseRegistryBlockType } from "./lib/names";
+import { BUILTIN, parseEntry, parseRegistryBlockType, registryBlockType } from "./lib/names";
+import { BlocksAnnouncer, FLOW_FAILED_EVENT, blocksPanelBlocks } from "./blocks";
 import { readFlows } from "./lib/flows";
 import { ProjectStore, readPreview } from "./lib/projects";
 import { DEFAULT_STATE, MAX_LOG, PANEL_ID, SERVICE_ACTIONS, type LogEntry, type PanelState, type SavedFlows } from "./panel";
@@ -23,6 +24,11 @@ let nextLogId = 1;
 const runs = new Map<AbortController, string>();
 // one subscription per event or value the flows start from
 const listening = new Map<string, () => void>();
+const announcer = new BlocksAnnouncer(blocksApi.panel(PANEL_ID));
+// the hat of this panel's own "When a Flow Fails": a flow it starts that fails doesn't fire it again
+const FLOW_FAILED_HAT = registryBlockType({ kind: "event", panelId: PANEL_ID, entry: blockEntry("event", FLOW_FAILED_EVENT) });
+/** The most runs one project has at once, so a flow that starts its own project can't run away. */
+export const MAX_RUNS_PER_PROJECT = 50;
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -40,8 +46,14 @@ function publishRunning(): void {
 /** The project list changed: every window hears it, and the listening follows. */
 function publishProjects(): void {
     ctx.setState({ projects: store.list() });
+    announcer.projects(keptProjects());
     listen();
 }
+
+/** The projects a flow can name: a draft isn't kept until it has a block. */
+const keptProjects = () => store.list().filter((p) => !p.draft).map((p) => p.id);
+
+const runningCount = (project: string) => [...runs.values()].filter((owner) => owner === project).length;
 
 /**
  * A call to another panel, as long as it takes (a backup or an install can
@@ -74,6 +86,10 @@ function host(project: string, signal: AbortSignal): Host {
 }
 
 async function start(project: string, flows: SavedFlows, hat: SavedBlock, payload: Record<string, unknown> | null): Promise<void> {
+    if (runningCount(project) >= MAX_RUNS_PER_PROJECT) {
+        log(project, "error", `A flow didn't start: ${MAX_RUNS_PER_PROJECT} of this project's flows are already running. Stop them, or check for a flow that starts itself.`, hat.id);
+        return;
+    }
     const controller = new AbortController();
     runs.set(controller, project);
     publishRunning();
@@ -81,6 +97,8 @@ async function start(project: string, flows: SavedFlows, hat: SavedBlock, payloa
         await runHat(hat, payload, flows.workspace, host(project, controller.signal));
     } catch (err) {
         log(project, "error", message(err), err instanceof BlockError ? err.blockId : hat.id);
+        // a run that was stopped didn't fail
+        if (!controller.signal.aborted && hat.type !== FLOW_FAILED_HAT) announcer.failed(project, message(err));
     } finally {
         runs.delete(controller);
         publishRunning();
@@ -156,6 +174,15 @@ function stop(project: string): number {
     return count;
 }
 
+/** Starts a project's "When Run is clicked" flows; how many started. */
+function runProject(project: unknown): number {
+    const flows = store.flows(project);
+    const hats = topBlocks(flows).filter((b) => b.type === BUILTIN.onRun);
+    if (!hats.length) throw new Error('Add a "When Run is clicked" block for Run to start');
+    for (const hat of hats) void start(String(project), flows, hat, null);
+    return hats.length;
+}
+
 const isRecord = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
 const inputsOf = (inputs: unknown): Record<string, unknown> => (isRecord(inputs) ? inputs : {});
 
@@ -194,13 +221,7 @@ export default definePanelService({
     actions: [
         internal(SERVICE_ACTIONS.load, ({ project }) => store.flows(project)),
         internal(SERVICE_ACTIONS.save, ({ project, flows, preview }) => changing(store.save(project, readFlows(flows), readPreview(preview)))),
-        internal(SERVICE_ACTIONS.run, ({ project }) => {
-            const flows = store.flows(project);
-            const hats = topBlocks(flows).filter((b) => b.type === BUILTIN.onRun);
-            if (!hats.length) throw new Error('Add a "When Run is clicked" block for Run to start');
-            for (const hat of hats) void start(String(project), flows, hat, null);
-            return hats.length;
-        }),
+        internal(SERVICE_ACTIONS.run, ({ project }) => runProject(project)),
         internal(SERVICE_ACTIONS.stop, ({ project }) => stop(String(project))),
         internal(SERVICE_ACTIONS.clearLog, ({ project }) => {
             ctx.setState((prev) => ({ log: prev.log.filter((entry) => entry.project !== project) }));
@@ -230,6 +251,23 @@ export default definePanelService({
         publishProjects();
         ctx.setState({ loaded: true });
         settle(null);
+        try {
+            await announcer.register(
+                blocksPanelBlocks({
+                    projects: keptProjects,
+                    project: (id) => store.summaryOf(id),
+                    runningCount,
+                    setEnabled: async (id, enabled) => void (await changing(store.update(id, { enabled }))),
+                    run: runProject,
+                    stop: (id) => stop(store.summaryOf(id).id),
+                }),
+                keptProjects(),
+            );
+        } catch (err) {
+            // the projects still run; only flows that drive them are missing their blocks
+            ctx.setState({ blocksError: `The Projects blocks couldn't be added: ${message(err)}` });
+            console.error(`[${PANEL_ID}] the Projects blocks couldn't be registered:`, err);
+        }
         const flows = store.running().reduce((n, p) => n + topBlocks(p.flows).filter((b) => isHat(b.type)).length, 0);
         console.log(`[${PANEL_ID}] ${store.list().length} project(s), ${flows} flow(s) switched on.`);
     },
