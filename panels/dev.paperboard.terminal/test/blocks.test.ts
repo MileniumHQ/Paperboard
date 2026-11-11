@@ -113,7 +113,7 @@ describe("the Terminal's blocks", () => {
         try {
             await settle();
             await run("run-in-tab", { command: "exit 3", tab: "tab2" });
-            expect(await ended.fired).toEqual({ tab: "tab2", succeeded: false, result: "Exit 3" });
+            expect(await ended.fired).toEqual({ tab: "tab2", succeeded: false, "exit-code": 3, result: "Exit 3" });
         } finally {
             ended.off();
         }
@@ -132,7 +132,7 @@ describe("the Terminal's blocks", () => {
         try {
             await settle();
             expect(await run("run-saved-command", { command })).toBeNull();
-            expect(await finished.fired).toEqual({ command, succeeded: true, result: "Exit 0" });
+            expect(await finished.fired).toEqual({ command, succeeded: true, "exit-code": 0, result: "Exit 0" });
         } finally {
             finished.off();
         }

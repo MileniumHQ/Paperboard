@@ -209,6 +209,7 @@ export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
                 values: {
                     tab: { type: "tab", name: "Tab" },
                     succeeded: { type: "boolean", name: "Succeeded", description: "It exited with code 0" },
+                    "exit-code": { type: "number", name: "Exit Code", description: "None when the shell ended without one, as when it crashed", optional: true },
                     result: { type: "text", name: "Result", description: "How it ended, such as Exit 1" },
                 },
             },
@@ -224,6 +225,7 @@ export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
                 values: {
                     command: { type: "saved-command", name: "Saved Command" },
                     succeeded: { type: "boolean", name: "Succeeded", description: "It exited with code 0" },
+                    "exit-code": { type: "number", name: "Exit Code", description: "None when it timed out or failed to start", optional: true },
                     result: { type: "text", name: "Result", description: "How it ended: Exit 0, Timed out, or why it failed" },
                 },
             },
@@ -236,6 +238,7 @@ export function exitPayload(tab: string, exitCode: number | undefined) {
     return {
         tab,
         succeeded: exitCode === 0,
+        "exit-code": typeof exitCode === "number" ? exitCode : null,
         result: typeof exitCode === "number" ? `Exit ${exitCode}` : "Ended without an exit code",
     };
 }
@@ -245,6 +248,7 @@ export function finishedPayload(command: SavedCommand, outcome: Exclude<CommandR
     return {
         command: command.id,
         succeeded: outcome.state === "exited" && outcome.exitCode === 0,
+        "exit-code": outcome.state === "exited" ? outcome.exitCode : null,
         result: outcome.state === "exited" ? `Exit ${outcome.exitCode}` : outcome.state === "timed-out" ? "Timed out" : outcome.error,
     };
 }
