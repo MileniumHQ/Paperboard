@@ -1,7 +1,8 @@
-import { createSignal, createEffect } from "solid-js";
+import { createSignal, createEffect, onCleanup } from "solid-js";
 import { config } from "@mileniumhq/paperapi";
-import { logToMain, notifyAppSettingsChanged } from "../lib/shell";
+import { logToMain, notifyAppSettingsChanged, shellApi } from "../lib/shell";
 import { withAppSettingsDefaults } from "../../../shared/appSettingsDefaults";
+import { effectiveLook, type Graphics } from "../../../shared/graphics";
 import {
     APP_SETTINGS_DEFAULTS,
     APP_SETTINGS_ID,
@@ -10,8 +11,9 @@ import {
 
 export interface SettingsFailure {
     /** which way it failed: settings that didn't load leave the defaults
-     * showing; saved settings the system wouldn't apply are "apply" */
-    kind: "load" | "save" | "apply";
+     * showing; saved settings the system wouldn't apply are "apply";
+     * "graphics" is not knowing whether Paperboard is drawn on a GPU */
+    kind: "load" | "save" | "apply" | "graphics";
     message: string;
 }
 
@@ -24,11 +26,20 @@ export function useAppSettings() {
     const [appSettings, setAppSettings] =
         createSignal<AppSettingsData>(APP_SETTINGS_DEFAULTS);
     const [settingsFailure, setSettingsFailure] = createSignal<SettingsFailure | null>(null);
+    // assumed drawn on a GPU until main says otherwise, a moment after start
+    const [graphics, setGraphics] = createSignal<Graphics>({ gpu: true });
+    const look = () => effectiveLook(appSettings(), graphics());
+
+    onCleanup(shellApi.onGraphicsChanged(setGraphics));
+    shellApi.getGraphics().then(setGraphics, (err) => {
+        logToMain("error", "Couldn't tell whether Paperboard is drawn on a GPU:", err);
+        setSettingsFailure({ kind: "graphics", message: messageOf(err) });
+    });
 
     // Mirrors the motion preference onto the document for PaperUI tokens
     createEffect(() => {
         if (typeof document !== "undefined") {
-            if (appSettings().reducedMotion) {
+            if (look().reducedMotion) {
                 document.documentElement.setAttribute(
                     "data-paperui-motion",
                     "reduced",
@@ -44,7 +55,7 @@ export function useAppSettings() {
     // Mirrors the blur preference the same way
     createEffect(() => {
         if (typeof document === "undefined") return;
-        if (appSettings().disableBlur) document.documentElement.setAttribute("data-paperui-blur", "off");
+        if (look().disableBlur) document.documentElement.setAttribute("data-paperui-blur", "off");
         else document.documentElement.removeAttribute("data-paperui-blur");
     });
 
@@ -104,6 +115,7 @@ export function useAppSettings() {
 
     return {
         appSettings,
+        graphics,
         loadAppSettings,
         handleAppSettingsChange,
         settingsFailure,
