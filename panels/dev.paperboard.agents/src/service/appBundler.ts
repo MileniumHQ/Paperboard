@@ -10,7 +10,9 @@
 import fs from "node:fs";
 import { builtinModules } from "node:module";
 import path from "node:path";
-import * as esbuild from "esbuild-wasm/esm/browser.js";
+// esbuild itself is loaded with the first build, so a service whose apps
+// are never opened carries neither its script nor its WebAssembly
+import type * as esbuild from "esbuild-wasm/esm/browser.js";
 import wasmFile from "esbuild-wasm/esbuild.wasm" with { type: "file" };
 
 /** what a page loads that is bundled rather than sent as it is */
@@ -44,15 +46,19 @@ const LOADERS: Record<string, esbuild.Loader> = {
 const EXTENSIONS = [".tsx", ".ts", ".jsx", ".js", ".mjs", ".cjs", ".json", ".css"];
 const NODE = new Set(builtinModules);
 
-let started: Promise<void> | null = null;
-function start(): Promise<void> {
+type Esbuild = typeof esbuild;
+
+let started: Promise<Esbuild> | null = null;
+function start(): Promise<Esbuild> {
     started ??= (async () => {
+        const esbuild = await import("esbuild-wasm/esm/browser.js");
         // esbuild's browser build reads its globals through `self`, which Bun
         // defines and Node doesn't: under Node it's the same global object
         const g = globalThis as { self?: unknown };
         if (g.self === undefined) g.self = globalThis;
         const wasm = await WebAssembly.compile(fs.readFileSync(new URL(wasmFile, import.meta.url)));
         await esbuild.initialize({ wasmModule: wasm, worker: false });
+        return esbuild;
     })();
     return started;
 }
@@ -186,7 +192,7 @@ export function forgetBuilds(root: string) {
 
 /** Bundles one of the app's scripts: its JavaScript, and the CSS it imports when it imports any. */
 export async function bundle(root: string, entry: string): Promise<{ js: string; css: string }> {
-    await start();
+    const esbuild = await start();
     const files = new AppFiles(root);
     const key = `${files.real}\0${entry}`;
     const kept = builds.get(key);

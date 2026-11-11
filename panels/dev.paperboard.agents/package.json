@@ -5,7 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "tsc && vite build && bun build ./src/service.ts --outdir ./dist --entry-naming [name].[ext] --target=node --external @mileniumhq/paperui",
+        "build": "tsc && vite build && bun build ./src/service.ts --outdir ./dist --entry-naming [name].[ext] --chunk-naming service/[name]-[hash].[ext] --splitting --target=node --external @mileniumhq/paperui",
         "pack": "bunx paperapi pack",
         "preview": "vite preview",
         "test": "bun test"

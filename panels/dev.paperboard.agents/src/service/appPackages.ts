@@ -10,7 +10,7 @@ import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
-import semver from "semver";
+import type Semver from "semver";
 
 export const REGISTRY = "https://registry.npmjs.org";
 const MAX_PACKAGES = 500;
@@ -46,7 +46,7 @@ export function parseSpec(spec: unknown): { name: string; range: string | null }
     return { name, range };
 }
 
-function versionOf(name: string, range: string, p: Packument): Version {
+function versionOf(semver: typeof Semver, name: string, range: string, p: Packument): Version {
     const tagged = p["dist-tags"][range];
     if (tagged && p.versions[tagged]) return p.versions[tagged];
     if (!semver.validRange(range)) throw new Error(`${name}@${range} isn't from the npm registry (only versions, ranges and tags are)`);
@@ -134,6 +134,8 @@ export interface Installed {
  * then lists too. `appDir` must be a folder already checked to be the app's.
  */
 export async function installPackages(appDir: string, add: string[], registry = REGISTRY): Promise<Installed> {
+    // only an install reads version ranges, so semver is loaded with one
+    const { default: semver } = await import("semver");
     const pjPath = path.join(appDir, "package.json");
     let pj: Record<string, unknown>;
     try {
@@ -178,7 +180,7 @@ export async function installPackages(appDir: string, add: string[], registry = 
                 found = placed.get(path.posix.join(dir, "node_modules", d.name));
                 if (found || !dir) break;
             }
-            const v = versionOf(d.name, d.range, await packument(d.name));
+            const v = versionOf(semver, d.name, d.range, await packument(d.name));
             if (found && (found.version === v.version || (semver.validRange(d.range) && semver.satisfies(found.version, d.range)))) continue;
             // a second copy of a peer (two Reacts) breaks the app in ways nothing reports
             if (found && d.peer) {

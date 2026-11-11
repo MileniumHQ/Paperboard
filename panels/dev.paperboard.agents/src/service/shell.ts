@@ -9,7 +9,7 @@
 // rest of its file system (/tmp) is scratch in memory, gone when the
 // command ends.
 
-import { Bash, type CommandName, type DefenseInDepthConfig, getCommandNames, InMemoryFs, MountableFs, type NetworkConfig, ReadWriteFs } from "just-bash";
+import type { CommandName, DefenseInDepthConfig, NetworkConfig } from "just-bash";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import { type HomeFolder, SHELL_HOME } from "./homeFolder";
@@ -20,9 +20,27 @@ export const OUTPUT_CHARS = 30_000;
 /** how long one command may run */
 export const COMMAND_MS = 60_000;
 
-// sqlite3 runs in a worker over sql.js's WebAssembly, which the panel's
-// one-file service doesn't carry: it's left out rather than failing
-const COMMANDS = getCommandNames().filter((c) => c !== "sqlite3") as CommandName[];
+type JustBash = typeof import("just-bash");
+
+// just-bash and its commands are most of what this service would hold in
+// memory, and only a bash call needs them: they're loaded with the first one.
+// A load that fails is that call's error, and the next call tries again.
+let loading: Promise<{ lib: JustBash; commands: CommandName[] }> | undefined;
+function loadShell(): Promise<{ lib: JustBash; commands: CommandName[] }> {
+    loading ??= import("just-bash").then(
+        (lib) => ({
+            lib,
+            // sqlite3 runs in a worker over sql.js's WebAssembly, which the panel's
+            // built service doesn't carry: it's left out rather than failing
+            commands: lib.getCommandNames().filter((c) => c !== "sqlite3") as CommandName[],
+        }),
+        (e) => {
+            loading = undefined;
+            throw e;
+        },
+    );
+    return loading;
+}
 
 // just-bash guards the process while a command runs, in one guard every
 // shell shares: its settings are this one object
@@ -81,6 +99,8 @@ export function shellToolset(home: HomeFolder): Toolset {
             if (typeof args.command !== "string" || !args.command.trim()) return { text: "give the command to run", isError: true };
             // erasing the computer empties the folder; it's there again for the next command
             home.ensure();
+            const { lib, commands } = await loadShell();
+            const { Bash, InMemoryFs, MountableFs, ReadWriteFs } = lib;
             const scratch = new InMemoryFs();
             scratch.mkdirSync("/tmp");
             const fs = new MountableFs({
@@ -91,7 +111,7 @@ export function shellToolset(home: HomeFolder): Toolset {
                 fs,
                 cwd: SHELL_HOME,
                 env: { HOME: SHELL_HOME, TZ: timeZone },
-                commands: COMMANDS,
+                commands,
                 executionLimitProfile: "hardened",
                 executionLimits: { maxExecutionTimeMs: COMMAND_MS },
                 defenseInDepth: DEFENSE,
