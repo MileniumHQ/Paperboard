@@ -2146,6 +2146,41 @@ function summary(entry: BotEntry): BotSummary {
 
 function publish(): void {
     serviceCtx?.setState({ bots: [...bots.values()].map(summary), botsError });
+    updateIdle();
+}
+
+// the saved bots are read and registered, and each one's start is under way: until then the service is starting, not idle
+let started = false;
+// tokens being read and logins being made: a bot that is about to run
+let connecting = 0;
+
+/** A bot that runs or should (it is on and has a token), or whose session holds what only this process knows. */
+function keepsAwake(entry: BotEntry): boolean {
+    if (!entry.session.quiet()) return true;
+    // a bot that is off and has a token keeps why it last failed to log in
+    return entry.hasToken && (entry.stored.enabled || entry.session.status().error !== undefined);
+}
+
+/**
+ * Says whether the service has nothing to do until an action calls it: no
+ * bot running, logging in, or due to run, and nothing shown that only this
+ * process knows. Called after every change to any of those (publish, and a
+ * login starting or ending).
+ */
+function updateIdle(): void {
+    serviceCtx?.setIdle(started && connecting === 0 && !botsError && !panelBlocksError && ![...bots.values()].some(keepsAwake));
+}
+
+/** Counts a token read or a login as under way until it ends. */
+async function whileConnecting<T>(work: () => Promise<T>): Promise<T> {
+    connecting++;
+    updateIdle();
+    try {
+        return await work();
+    } finally {
+        connecting--;
+        updateIdle();
+    }
 }
 
 function requireReadable(): void {
@@ -2335,15 +2370,17 @@ async function readToken(id: string): Promise<string | null> {
 }
 
 /** Connects a saved bot with its vault token; the reason it can't is the bot's error. */
-async function connect(entry: BotEntry): Promise<void> {
-    const token = await readToken(entry.stored.id);
-    entry.hasToken = Boolean(token);
-    if (!token) {
-        const message = "No token is saved for this bot. Replace its token in Configuration.";
-        entry.session.fail(message);
-        throw new Error(message);
-    }
-    await entry.session.start(token);
+function connect(entry: BotEntry): Promise<void> {
+    return whileConnecting(async () => {
+        const token = await readToken(entry.stored.id);
+        entry.hasToken = Boolean(token);
+        if (!token) {
+            const message = "No token is saved for this bot. Replace its token in Configuration.";
+            entry.session.fail(message);
+            throw new Error(message);
+        }
+        await entry.session.start(token);
+    });
 }
 
 async function setEnabled(entry: BotEntry, enabled: boolean): Promise<void> {
@@ -2409,14 +2446,16 @@ async function registerEntry(entry: BotEntry): Promise<void> {
 
 /** Logs a saved bot in to Discord, which can stall on a rate limit, so it runs after the service is ready. */
 async function connectEntry(entry: BotEntry): Promise<void> {
-    try {
-        entry.hasToken = Boolean(await readToken(entry.stored.id));
-        if (!entry.hasToken) entry.session.fail("No token is saved for this bot. Replace its token in Configuration.");
-        else if (entry.stored.enabled) await connect(entry);
-    } catch (err) {
-        // the reason is the bot's error, on its card and in its Overview
-        console.error(`[DiscordService] ${entry.stored.name} didn't connect:`, errorToMessage(err));
-    }
+    await whileConnecting(async () => {
+        try {
+            entry.hasToken = Boolean(await readToken(entry.stored.id));
+            if (!entry.hasToken) entry.session.fail("No token is saved for this bot. Replace its token in Configuration.");
+            else if (entry.stored.enabled) await connect(entry);
+        } catch (err) {
+            // the reason is the bot's error, on its card and in its Overview
+            console.error(`[DiscordService] ${entry.stored.name} didn't connect:`, errorToMessage(err));
+        }
+    });
     publish();
 }
 
@@ -3014,7 +3053,10 @@ export const botService = definePanelService({
         }
         for (const entry of bots.values()) await registerEntry(entry);
         publish();
+        // each start counts itself as under way before this returns
+        started = true;
         startBots(bots.values(), connectEntry);
+        updateIdle();
         console.log(`[DiscordService] Ready with ${bots.size} bot(s); connecting them to Discord.`);
     },
 });

@@ -39,6 +39,11 @@ export class CommandActivityRecorder {
         this.counts[slot]++;
     }
 
+    /** No command has been recorded since recording began. */
+    empty(): boolean {
+        return this.hours.every((hour) => hour === -1);
+    }
+
     snapshot(now: number = Date.now()): CommandActivity {
         const current = Math.floor(now / ACTIVITY_BUCKET_MS);
         const counts: number[] = [];
@@ -80,6 +85,11 @@ export class CommandUseCounter {
         const key = `${command.scope}:${command.name}`;
         const known = this.uses.get(key);
         this.uses.set(key, { count: (known?.count ?? 0) + 1, last: now });
+    }
+
+    /** No command has been used since counting began. */
+    empty(): boolean {
+        return this.uses.size === 0;
     }
 
     get(command: { scope: string; name: string }): CommandUses | undefined {
