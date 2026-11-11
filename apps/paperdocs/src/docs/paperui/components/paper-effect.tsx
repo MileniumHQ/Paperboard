@@ -120,7 +120,7 @@ export function Example() {
                 <li>On hover the control lifts up and left and the shadow grows. On press it moves down to meet the shadow. The effect runs only on devices with hover, apart from the press.</li>
                 <li>It switches itself to the neutral shadow when the wrapped control is disabled, or when it is a <PaperCode>variant="text"</PaperCode> button. A text button gets a shadow only on hover and none at rest.</li>
                 <li>On touch, lifting a finger where it pressed plays a haptic. A press that became a scroll plays nothing, and neither does a disabled control.</li>
-                <li>With reduced motion on, by the system setting or Paperboard's motion setting, the effect stops moving the control and leaves the shadow in place.</li>
+                <li>With reduced motion on, by the system setting or Paperboard's Disable animations setting, the effect stops moving the control and leaves the shadow in place.</li>
                 <li>PaperEffect is not interactive. Focus, keyboard, and click all belong to the wrapped control.</li>
             </PaperTextList>
 
