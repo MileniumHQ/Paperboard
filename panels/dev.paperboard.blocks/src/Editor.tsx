@@ -18,13 +18,15 @@ import {
     PaperToggle,
 } from "@mileniumhq/paperui";
 import { BUILTIN_BLOCKS, BUILTIN_SECTIONS, builtinPlaceholder, choicesSources, PROPERTIES_CATEGORY, registryDefinitions, type Definitions } from "./lib/blockDefs";
-import { refreshChoices, registerChoicesField } from "./lib/choicesField";
+import { refreshChoices, registerChoicesField, setChoicesProject } from "./lib/choicesField";
 import { LIBRARY_FLYOUT, setLibraryTop, uiGap } from "./lib/libraryFlyout";
 import { loadBlockFonts, PAPER_RENDERER, paperTheme } from "./lib/paperRenderer";
 import { NO_PANEL_ICON, NO_PROJECT_ICON, assignPanelStyles, setPanelIcons, type BlockIcon } from "./lib/blockStyles";
 import { HEADING_KIND, type HeadingInfo } from "./lib/libraryHeading";
 import { setTextPlaceholders } from "./lib/textField";
 import { addTrash, type TrashState } from "./lib/trashZone";
+import { addResultsTray, setResultBlocks, sourceOf } from "./lib/results";
+import { parseEntry, parseRegistryBlockType } from "./lib/names";
 import { tokenPixels } from "./lib/tokens";
 import { Console } from "./Console";
 import { paperContextMenus } from "./lib/contextMenu";
@@ -138,6 +140,8 @@ export default function Editor(props: {
     const scratch = new Blockly.Workspace();
     // the schemas of the blocks on the canvas, as last seen: saved with the flows
     let schemas: SavedFlows["schemas"] = {};
+    // the other schemas each block needs saved beside its own
+    let uses: Definitions["uses"] = {};
     let live = new Set<string>();
     let loading = true;
     let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -272,12 +276,14 @@ export default function Editor(props: {
         // ask for every dropdown's choices now, so the canvas and the Library show them. One on the canvas that
         // fails says so here; one only in the Library says so when its dropdown is opened, which asks again,
         // so a panel that isn't set up yet doesn't warn in every project
-        const onCanvas = new Set(Object.values(saved).map((s) => `${s.panelId}\u0000${s.entry}`));
+        // (a type's values, when its panel has a block on the canvas)
+        const onCanvas = new Set(Object.values(saved).flatMap((s) => [`${s.panelId}\u0000${s.entry}`, s.panelId]));
         await Promise.all(
-            choicesSources(entries).map((source) =>
+            choicesSources(entries, projects).map((source) =>
                 refreshChoices(source).catch((err: unknown) => {
-                    if (!onCanvas.has(`${source.panelId}\u0000${source.entry}`)) return;
-                    setNotice({ kind: "failed", title: `${panelList.find((p) => p.id === source.panelId)?.name ?? source.panelId}'s choices didn't load`, text: errorMessage(err) });
+                    const panelId = "typeRef" in source ? source.typeRef.slice(0, source.typeRef.indexOf(":")) : source.panelId;
+                    if (!onCanvas.has("typeRef" in source ? panelId : `${source.panelId}\u0000${source.entry}`)) return;
+                    setNotice({ kind: "failed", title: `${panelList.find((p) => p.id === panelId)?.name ?? panelId}'s choices didn't load`, text: errorMessage(err) });
                 }),
             ),
         );
@@ -292,6 +298,8 @@ export default function Editor(props: {
         const awayDefs = registryDefinitions(away);
         define([...BUILTIN_BLOCKS, ...awayDefs.blocks, ...liveDefs.blocks]);
         schemas = { ...awayDefs.schemas, ...liveDefs.schemas };
+        uses = { ...awayDefs.uses, ...liveDefs.uses };
+        setResultBlocks({ ...awayDefs.results, ...liveDefs.results });
         setRegistry({ panels: panelList, projects, sections: liveDefs.sections });
         setDefinitions((n) => n + 1);
     }
@@ -304,12 +312,21 @@ export default function Editor(props: {
             if (!saved) continue;
             block.setWarningText(live.has(block.type) ? null : `${saved.schema.name} isn't available: its panel isn't running`, "away");
         }
+        markResults();
+    }
+
+    /** Marks the result blocks whose block is gone, so they'd have nothing to read. */
+    function markResults(): void {
+        for (const block of workspace?.getAllBlocks(false) ?? []) {
+            if (parseRegistryBlockType(block.type)?.kind !== "result" || block.isInFlyout) continue;
+            block.setWarningText(sourceOf(block) ? null : "The block this reads is gone. Drag a new one out of its gear", "result");
+        }
     }
 
     /** The canvas as it is now, with the schemas of the blocks on it. */
     function snapshot(): SavedFlows {
         const saved = Blockly.serialization.workspaces.save(workspace!) as SavedWorkspace;
-        const used = new Set(workspace!.getAllBlocks(false).map((b) => b.type));
+        const used = new Set(workspace!.getAllBlocks(false).flatMap((b) => [b.type, ...(uses[b.type] ?? [])]));
         return { workspace: saved, schemas: Object.fromEntries(Object.entries(schemas).filter(([type]) => used.has(type))) };
     }
 
@@ -371,7 +388,16 @@ export default function Editor(props: {
     }
 
     onMount(() => {
-        registerChoicesField({ fetch: (s) => blocksApi.choices(s.panelId, s.entry, s.input), report: (text) => setNotice({ kind: "failed", title: "Choices didn't load", text }) });
+        registerChoicesField({
+            fetch: (s) => ("typeRef" in s ? blocksApi.typeChoices(s.typeRef, s.project ? { project: s.project } : {}) : blocksApi.choices(s.panelId, s.entry, s.input)),
+            report: (text) => setNotice({ kind: "failed", title: "Choices didn't load", text }),
+        });
+        // a type's values are listed in the project of the block they're in, when it's one of the type's own panel's
+        setChoicesProject((holder, typeRef) => {
+            const name = holder ? parseRegistryBlockType(holder.type) : null;
+            if (!name || name.panelId !== typeRef.slice(0, typeRef.indexOf(":"))) return undefined;
+            return parseEntry(name.entry).project;
+        });
         define(BUILTIN_BLOCKS);
         setPanelIcons(panelIcon);
         // an empty socket says what goes in it: the panel's name for the input, or a built-in's
@@ -411,6 +437,7 @@ export default function Editor(props: {
             });
             resize.observe(host);
             addTrash(workspace, trashTile, setTrash);
+            addResultsTray(workspace, styles.resultsTray!, uiGap());
             followTheme();
 
             workspace.addChangeListener((event: Blockly.Events.Abstract) => {
@@ -418,6 +445,7 @@ export default function Editor(props: {
                     setVariablesVersion((v) => v + 1);
                 }
                 if (!event.isUiEvent) setFunctionsShape(JSON.stringify(Blockly.Procedures.allProcedures(workspace!)));
+                if (!loading && (event.type === Blockly.Events.BLOCK_CREATE || event.type === Blockly.Events.BLOCK_DELETE)) markResults();
                 if (loading || event.isUiEvent) return;
                 clearTimeout(saveTimer);
                 saveTimer = setTimeout(save, SAVE_DELAY_MS);

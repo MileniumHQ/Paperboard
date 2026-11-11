@@ -57,6 +57,7 @@ describe("a panel's blocks reach the registry as data", () => {
                 reason: { type: "text", name: "Reason", optional: true, maxLength: 20 },
             },
             output: "number",
+            outputName: "Kicks",
         });
         expect(byEntry["s1/value.online"]!.schema).toEqual({ kind: "value", id: "online", name: "Online Players", type: `list<${PANEL}:player>`, changes: true });
         expect(byEntry["type.player"]!.schema).toEqual({
@@ -208,6 +209,13 @@ describe("a broken definition is refused before it reaches the registry", () => 
         expect(refuse({ commands: [{ id: "a", name: "A", text: "Do", inputs: { it: { type: "text", name: "It" } }, run }] })).toThrow("text must show {it} once, not 0 times");
     });
 
+    test("what a command gives back is named where its type doesn't name it", () => {
+        expect(refuse({ commands: [{ id: "a", name: "A", output: "text", run }] })).toThrow('Command "a" gives back text, so it needs an outputName that says what that is');
+        expect(refuse({ commands: [{ id: "a", name: "A", outputName: "Answer", run }] })).toThrow('Command "a" has an outputName but no output');
+        expect(() => validateBlockDefinitions({ commands: [{ id: "a", name: "A", output: "text", outputName: "Answer", run }] }, PANEL)).not.toThrow();
+        expect(() => validateBlockDefinitions({ commands: [{ id: "a", name: "A", output: "dev.other:ghost", run }] }, PANEL)).not.toThrow();
+    });
+
     test("every custom type named must be defined by the panel, or be another panel's", () => {
         expect(refuse({ values: [{ id: "a", name: "A", type: "list<ghost>", read: run }] })).toThrow('Value "a" type: the type "ghost" is not defined by this panel');
         expect(() => validateBlockDefinitions({ values: [{ id: "a", name: "A", type: "dev.other:ghost", read: run }] }, PANEL)).not.toThrow();
@@ -293,8 +301,8 @@ describe("a registry in memory checks what the daemon's does, for a panel's test
         const server = await memory.defineProject({ id: "s1", name: "Survival" });
         await server.register({
             commands: [
-                { id: "greet", name: "Greet", inputs: { who: { type: "player", name: "Who" }, times: { type: "number", name: "Times", default: 2 } }, output: "text", run: ({ who, times }) => `${who} x${times}` },
-                { id: "when", name: "When", output: "any", run: () => ({ at: new Date(0) }) },
+                { id: "greet", name: "Greet", inputs: { who: { type: "player", name: "Who" }, times: { type: "number", name: "Times", default: 2 } }, output: "text", outputName: "Greeting", run: ({ who, times }) => `${who} x${times}` },
+                { id: "when", name: "When", output: "any", outputName: "Time", run: () => ({ at: new Date(0) }) },
             ],
             values: [{ id: "count", name: "Count", type: "number", changes: true, read: () => 1 }],
             events: [{ id: "left", name: "Left", values: { who: { type: "player", name: "Who" }, reason: { type: "text", name: "Reason", optional: true } } }],
@@ -311,5 +319,23 @@ describe("a registry in memory checks what the daemon's does, for a panel's test
         await server.changed("count");
         expect(fired).toEqual([["left", { who: "alex" }, "s1"]]);
         expect(changed).toEqual(["count"]);
+    });
+    test("a type lists its values, in a project when asked in one, so an input of it starts as a dropdown", async () => {
+        const memory = memoryBlocks("dev.test.choices");
+        const online: Record<string, string[]> = { s1: ["alex", "sam"] };
+        await memory.panel.register({
+            types: [
+                { id: "player", name: "Player", base: "text", choices: (ctx) => (online[ctx.project ?? ""] ?? Object.values(online).flat()).map((p) => ({ label: p, value: p })) },
+                { id: "kit", name: "Kit", base: "text" },
+            ],
+        });
+        await memory.defineProject({ id: "s1", name: "Survival" });
+        expect(memory.list().find((b) => b.entry === "type.player")!.schema).toMatchObject({ dynamicChoices: true });
+        expect(memory.list().find((b) => b.entry === "type.kit")!.schema).not.toHaveProperty("dynamicChoices");
+        expect(await memory.typeChoices("player", { project: "s1" })).toEqual([{ label: "alex", value: "alex" }, { label: "sam", value: "sam" }]);
+        expect(await memory.typeChoices("player")).toHaveLength(2);
+        await expect(memory.typeChoices("player", { project: "s9" })).rejects.toThrow('Player: there is no project "s9"');
+        await expect(memory.typeChoices("kit")).rejects.toThrow("Kit doesn't list its values");
+        expect(() => validateBlockDefinitions({ types: [{ id: "a", name: "A", base: "text", choices: [] as never }] }, "dev.test.choices")).toThrow("choices must be a function");
     });
 });

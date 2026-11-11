@@ -184,6 +184,20 @@ async function choicesOf(defs: BlockDefinitionBaseInputs | undefined, key: unkno
     return choices;
 }
 
+/** A type's values as its panel lists them now, in a project of the panel when one is named. */
+async function typeChoicesOf(type: BlockTypeDefinition, project: unknown, panelId: string, registered: Registered): Promise<BlockChoice[]> {
+    if (!type.choices) throw new Error(`${type.name} doesn't list its values`);
+    if (project !== undefined && (typeof project !== "string" || !registered.projects.has(`${panelId}:${project}`))) throw new Error(`${type.name}: there is no project "${String(project)}"`);
+    const choices = await type.choices(project ? { panelId, project } : { panelId });
+    if (!Array.isArray(choices)) throw new Error(`${type.name} choices must be a list`);
+    for (const choice of choices) {
+        if (typeof choice?.label !== "string" || !choice.label.trim() || !["string", "number", "boolean"].includes(typeof choice.value)) {
+            throw new Error(`${type.name} offers a choice that isn't a label and a text, number or true/false value`);
+        }
+    }
+    return choices;
+}
+
 /**
  * Fills defaults and checks the inputs, asking for any choices worked out
  * on demand so a value that's gone (a deleted world) is refused by name.
@@ -225,7 +239,8 @@ function handleFor(panelId: string, project: string | undefined, registered: Reg
         for (const type of set.types ?? []) {
             const schema = blockSchema("type", type, panelId);
             registered.types.set(`${panelId}:${type.id}`, type);
-            await backend.register(panelId, blockEntry("type", type.id), async (request: { field?: unknown; value?: unknown; project?: unknown }) => {
+            await backend.register(panelId, blockEntry("type", type.id), async (request: { field?: unknown; value?: unknown; project?: unknown; choices?: unknown }) => {
+                if (request?.choices !== undefined) return typeChoicesOf(type, request.project, panelId, registered);
                 const field = typeof request?.field === "string" ? type.fields?.[request.field] : undefined;
                 if (!field) throw new Error(`${type.name} has no field "${String(request?.field)}"`);
                 check(valueProblem(`${panelId}:${type.id}`, request.value, lookup), `${type.name}`);
@@ -402,6 +417,16 @@ export const blocksApi = {
     choices: (panelId: string, entry: string, input: string, options?: BlockCallOptions): Promise<BlockChoice[]> =>
         callEntry<BlockChoice[]>(panelId, entry, { choices: input }, options),
 
+    /**
+     * The values of a type there are now ("panel.id:type"), for a type that
+     * lists them: in one of its panel's projects, when given.
+     */
+    typeChoices: (typeRef: string, options?: BlockCallOptions & { project?: string }): Promise<BlockChoice[]> => {
+        const colon = typeRef.indexOf(":");
+        if (colon === -1) throw new Error(`typeChoices needs the type as "panel.id:type", got "${typeRef}"`);
+        return callEntry<BlockChoice[]>(typeRef.slice(0, colon), blockEntry("type", typeRef.slice(colon + 1)), { choices: true, ...(options?.project ? { project: options.project } : {}) }, options);
+    },
+
     /** Calls back each time a panel's event fires, with its payload. */
     onEvent: (panelId: string, event: string, callback: (payload: Record<string, unknown>) => void, project?: string): (() => void) =>
         subscribe(`blocks:${panelId}:${blockEntry("event", event, project)}`, callback),
@@ -438,6 +463,8 @@ export interface MemoryBlocks {
     /** `type` is the type's id in this panel */
     property<T = unknown>(type: string, field: string, value: unknown, options?: { project?: string }): Promise<T>;
     choices(entry: string, input: string): Promise<BlockChoice[]>;
+    /** `type` is the type's id in this panel */
+    typeChoices(type: string, options?: { project?: string }): Promise<BlockChoice[]>;
 }
 
 /** What crosses the wire: JSON, so a value the daemon couldn't carry fails here too. */
@@ -485,5 +512,6 @@ export function memoryBlocks(panelId: string, listeners: MemoryBlocksListeners =
         read: (value, inputs, options) => call(blockEntry("value", value, options?.project), { inputs: inputs ?? {} }),
         property: (type, field, value, options) => call(blockEntry("type", type), { field, value, ...(options?.project ? { project: options.project } : {}) }),
         choices: (entry, input) => call(entry, { choices: input }),
+        typeChoices: (type, options) => call(blockEntry("type", type), { choices: true, ...(options?.project ? { project: options.project } : {}) }),
     };
 }

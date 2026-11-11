@@ -515,7 +515,7 @@ export const gameServerService = definePanelService({
                 return scope.ctx.state.onlinePlayers;
             };
             const handle = blocksApi.panel(PANEL_ID);
-            await handle.register({ categories: BLOCK_CATEGORIES, types: [...sharedTypes(onlinePlayers), ...gameTypes.flat(), serverType(serversHost)], ...serversBlocks(serversHost) });
+            await handle.register({ categories: BLOCK_CATEGORIES, types: [...sharedTypes(onlinePlayers, () => serversHost.ids()), ...gameTypes.flat(), serverType(serversHost)], ...serversBlocks(serversHost) });
             const original = await config.get(PANEL_ID);
             saved = readServersConfig(original);
             // No file operations or data moves: installed records and all config

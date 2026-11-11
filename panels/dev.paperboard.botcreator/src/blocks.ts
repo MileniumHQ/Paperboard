@@ -122,7 +122,17 @@ const ref = (message: { id: string; channelId: string }): MessageRef => ({ id: m
 // ─── finding things for a type's fields ─────────────────────────────────────
 
 /** The bots that are connected now: a type's fields are the panel's, so they ask whichever bot can see the value. */
-export type ConnectedClients = () => Client[];
+/** The connected bots' clients: every bot's, or one bot's (none while it's offline). */
+export type ConnectedClients = (bot?: string) => Client[];
+
+/** The servers the clients are in, once each, and whether there's more than one (so a choice names its server). */
+function guildsOf(clients: Client[]) {
+    const guilds = [...new Map(clients.flatMap((c) => [...c.guilds.cache.values()].map((g) => [g.id, g] as const))).values()];
+    return { guilds, named: (label: string, guild: { name: string }) => (guilds.length > 1 ? `${label} (${guild.name})` : label) };
+}
+
+/** A Discord channel category: it holds channels, nothing is sent to it. */
+const CATEGORY_CHANNEL = 4;
 
 async function locate<T>(
     clients: ConnectedClients,
@@ -200,6 +210,8 @@ export function blockTypes(clients: ConnectedClients): BlockTypeDefinition[] {
             icon: "dns",
             description: "A Discord server, by its ID",
             base: "text",
+            // the servers the block's bot is in, or any bot's
+            choices: ({ project }) => guildsOf(clients(project)).guilds.map((g) => ({ label: g.name, value: g.id })),
             fields: {
                 name: { type: "text", name: "Name", resolve: async (v: string) => (await find.server(v)).found.name },
                 "member-count": { type: "number", name: "Member Count", resolve: async (v: string) => (await find.server(v)).found.memberCount },
@@ -226,6 +238,15 @@ export function blockTypes(clients: ConnectedClients): BlockTypeDefinition[] {
             icon: "tag",
             description: "A Discord channel or thread, by its ID",
             base: "text",
+            choices: ({ project }) => {
+                const { guilds, named } = guildsOf(clients(project));
+                return guilds.flatMap((g) =>
+                    [...g.channels.cache.values()]
+                        .filter((c) => c.type !== CATEGORY_CHANNEL)
+                        .sort((a, b) => ("position" in a ? a.position : 0) - ("position" in b ? b.position : 0))
+                        .map((c) => ({ label: named(`#${c.name}`, g), value: c.id })),
+                );
+            },
             fields: {
                 name: {
                     type: "text",
@@ -343,6 +364,16 @@ export function blockTypes(clients: ConnectedClients): BlockTypeDefinition[] {
             icon: "workspace_premium",
             description: "A role in a Discord server, by its ID",
             base: "text",
+            // highest first, without the everyone role, as a server's Roles reads
+            choices: ({ project }) => {
+                const { guilds, named } = guildsOf(clients(project));
+                return guilds.flatMap((g) =>
+                    [...g.roles.cache.values()]
+                        .filter((r) => r.id !== g.id)
+                        .sort((a, b) => b.position - a.position)
+                        .map((r) => ({ label: named(`@${r.name}`, g), value: r.id })),
+                );
+            },
             fields: {
                 name: { type: "text", name: "Name", resolve: async (v: string) => (await find.role(v)).found.name },
                 color: { type: "color", name: "Color", resolve: async (v: string) => (await find.role(v)).found.hexColor },
@@ -457,8 +488,8 @@ const contentInputs = {
 /** A length or count where 0 means "none": a number socket starts at 0. */
 const unlessZero = (n: number | undefined) => (n ? n : undefined);
 
-/** Commands that build a value and never reach Discord: the panel's own. */
-export const builderCommands: BlockCommandDefinition[] = [
+/** Values built from their inputs and never reach Discord: the panel's own. */
+export const builderValues: BlockValueDefinition[] = [
     {
         id: "create-embed",
         name: "Embed",
@@ -474,8 +505,8 @@ export const builderCommands: BlockCommandDefinition[] = [
             footer: { type: "text", name: "Footer", optional: true, maxLength: 2048 },
             image: { type: "url", name: "Image", optional: true },
         },
-        output: "embed",
-        run: async (inputs: { title: string; description?: string; color?: string; url?: string; footer?: string; image?: string }) =>
+        type: "embed",
+        read: async (inputs: { title: string; description?: string; color?: string; url?: string; footer?: string; image?: string }) =>
             (await buildDiscordEmbed(inputs)).toJSON(),
     },
     {
@@ -497,8 +528,8 @@ export const builderCommands: BlockCommandDefinition[] = [
             emoji: { type: "text", name: "Emoji", optional: true },
             disabled: { type: "boolean", name: "Disabled", choices: [choice("enabled", false), choice("disabled", true)] },
         },
-        output: "component",
-        run: (inputs: { style: string; label: string; "component-id"?: string; url?: string; emoji?: string; disabled: boolean }) => {
+        type: "component",
+        read: (inputs: { style: string; label: string; "component-id"?: string; url?: string; emoji?: string; disabled: boolean }) => {
             // the builder's own message names Actions' "Interaction ID"
             if (inputs.style !== "link" && !inputs["component-id"]?.trim()) {
                 throw new Error(`The ${inputs.style} button "${inputs.label}" needs a Component ID, so a flow can react to it`);
@@ -528,8 +559,8 @@ export const builderCommands: BlockCommandDefinition[] = [
             "max-picks": { type: "number", name: "Most Picks", choices: count(1, MAX_SELECT_OPTIONS) },
             placeholder: { type: "text", name: "Hint", optional: true, maxLength: 150 },
         },
-        output: "component",
-        run: (inputs: { menu: string; "component-id": string; options?: string[]; "min-picks": number; "max-picks": number; placeholder?: string }) =>
+        type: "component",
+        read: (inputs: { menu: string; "component-id": string; options?: string[]; "min-picks": number; "max-picks": number; placeholder?: string }) =>
             buildSelectMenuComponent({
                 menu: inputs.menu,
                 customId: inputs["component-id"],
@@ -547,8 +578,8 @@ export const builderCommands: BlockCommandDefinition[] = [
         description: "Up to five buttons, or one select menu, on one row. Components before or after it go on their own rows",
         text: "Row of {components}",
         inputs: { components: { type: "list<component>", name: "Components" } },
-        output: "component",
-        run: (inputs: { components: unknown[] }) => buildComponentRow(inputs.components),
+        type: "component",
+        read: (inputs: { components: unknown[] }) => buildComponentRow(inputs.components),
     },
     {
         id: "create-text-field",
@@ -566,8 +597,8 @@ export const builderCommands: BlockCommandDefinition[] = [
             "min-length": { type: "number", name: "Shortest", optional: true, integer: true, min: 0, max: 4000 },
             "max-length": { type: "number", name: "Longest", optional: true, integer: true, min: 0, max: 4000 },
         },
-        output: "text-field",
-        run: (inputs: { style: string; label: string; placeholder?: string; value?: string; required: boolean; "min-length"?: number; "max-length"?: number }) =>
+        type: "text-field",
+        read: (inputs: { style: string; label: string; placeholder?: string; value?: string; required: boolean; "min-length"?: number; "max-length"?: number }) =>
             buildModalField({
                 style: inputs.style,
                 label: inputs.label,
@@ -705,6 +736,7 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
             text: "Delete the last {count} messages in {channel}",
             inputs: { count: { type: "number", name: "Count", integer: true, min: 1, max: 100 }, channel },
             output: "number",
+            outputName: "Messages Deleted",
             run: (i) => ops().bulkDelete(idOf(i.channel, "Channel"), i.count),
         },
         {
@@ -960,6 +992,7 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
             text: "Create an invite to {channel} for {uses} uses",
             inputs: { channel, uses: { type: "number", name: "Uses", integer: true, min: 0, max: 100 } },
             output: "url",
+            outputName: "Invite Link",
             run: (i) => createInvite(bot.client(), idOf(i.channel, "Channel"), i.uses),
         },
         {
@@ -1175,6 +1208,7 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
                 description: { type: "text", name: "Description", optional: true, maxLength: 1000 },
             },
             output: "url",
+            outputName: "Event Link",
             run: (i) =>
                 createScheduledEvent(bot.client(), {
                     name: i.name,
@@ -1927,6 +1961,7 @@ export function botTypes(host: BotsBlocksHost): BlockTypeDefinition[] {
             icon: "smart_toy",
             description: "One of Bot Creator's bots",
             base: "text",
+            choices: () => host.ids().map((id) => choice(host.bot(id).summary.name, id)),
             fields: {
                 name: { type: "text", name: "Name", description: "Its Discord username, as of its last login", resolve: (v: string) => of(v).summary.name },
                 online: { type: "boolean", name: "Online", description: "Connected to Discord right now", resolve: (v: string) => of(v).summary.connected },
@@ -2011,7 +2046,6 @@ function committed(result: CommandMutationResult, what: string): CommandMutation
 /** The blocks that run Bot Creator itself: its bots and their slash commands. */
 export function botsBlocks(host: BotsBlocksHost): BlockSet {
     const idOfBot = (value: unknown) => host.bot(value).summary.id;
-    const choices = (): BlockChoice[] => host.ids().map((id) => choice(host.bot(id).summary.name, id));
     const commands: BlockCommandDefinition<Inputs>[] = [
         {
             id: "turn-on-bot",
@@ -2092,22 +2126,6 @@ export function botsBlocks(host: BotsBlocksHost): BlockSet {
             },
         },
         {
-            id: "create-command-option",
-            name: "Command Option",
-            category: "Slash Commands",
-            icon: "tune",
-            description: "Something Add Slash Command asks for. Its name is lowercase",
-            text: "{type} option {name} saying {description}, {required}",
-            inputs: {
-                type: { type: "text", name: "Type", choices: COMMAND_OPTION_TYPES.map((t) => choice(COMMAND_OPTION_TYPE_LABELS[t], t)) },
-                name: { type: "text", name: "Name", maxLength: 32 },
-                description: { type: "text", name: "Description", maxLength: 100 },
-                required: { type: "boolean", name: "Required", choices: [choice("required", true), choice("optional", false)] },
-            },
-            output: "command-option",
-            run: (i) => ({ name: i.name, description: i.description, type: i.type, required: i.required }),
-        },
-        {
             id: "delete-slash-command",
             name: "Delete Slash Command",
             category: "Slash Commands",
@@ -2122,6 +2140,22 @@ export function botsBlocks(host: BotsBlocksHost): BlockSet {
         },
     ];
     const values: BlockValueDefinition<Inputs>[] = [
+        {
+            id: "create-command-option",
+            name: "Command Option",
+            category: "Slash Commands",
+            icon: "tune",
+            description: "Something Add Slash Command asks for. Its name is lowercase",
+            text: "{type} option {name} saying {description}, {required}",
+            inputs: {
+                type: { type: "text", name: "Type", choices: COMMAND_OPTION_TYPES.map((t) => choice(COMMAND_OPTION_TYPE_LABELS[t], t)) },
+                name: { type: "text", name: "Name", maxLength: 32 },
+                description: { type: "text", name: "Description", maxLength: 100 },
+                required: { type: "boolean", name: "Required", choices: [choice("required", true), choice("optional", false)] },
+            },
+            type: "command-option",
+            read: (i) => ({ name: i.name, description: i.description, type: i.type, required: i.required }),
+        },
         {
             id: "bots",
             name: "Bots",
@@ -2138,7 +2172,7 @@ export function botsBlocks(host: BotsBlocksHost): BlockSet {
             category: "Bots",
             icon: "smart_toy",
             text: "Bot {bot}",
-            inputs: { bot: { type: "bot", name: "Bot", choices: choices } },
+            inputs: { bot: { type: "bot", name: "Bot" } },
             type: "bot",
             read: (i) => idOfBot(i.bot),
         },
@@ -2205,6 +2239,6 @@ const BLOCK_CATEGORIES = [
 
 export function panelBlocks(clients: ConnectedClients, bots: BotsBlocksHost): BlockSet {
     const own = botsBlocks(bots);
-    return { categories: BLOCK_CATEGORIES, types: [...blockTypes(clients), ...botTypes(bots)], commands: [...builderCommands, ...own.commands!], values: own.values, events: own.events };
+    return { categories: BLOCK_CATEGORIES, types: [...blockTypes(clients), ...botTypes(bots)], commands: own.commands, values: [...builderValues, ...own.values!], events: own.events };
 }
 

@@ -174,6 +174,10 @@ describe("each server is a Blocks project with its game's blocks", () => {
             // whether a player is online is read on the server that asks
             expect(await blocksApi.property(`${PANEL_ID}:player`, "online", "alice", { project: "s-a" })).toBe(true);
             expect(await blocksApi.property(`${PANEL_ID}:player`, "online", "alice", { project: "s-t" })).toBe(false);
+            // a Player input starts as a dropdown of who's online on its server, or on any
+            expect(await blocksApi.typeChoices(`${PANEL_ID}:player`, { project: "s-a" })).toEqual([{ label: "alice", value: "alice" }, { label: "bob", value: "bob" }]);
+            expect(await blocksApi.typeChoices(`${PANEL_ID}:player`, { project: "s-t" })).toEqual([]);
+            expect((await blocksApi.typeChoices(`${PANEL_ID}:player`)).map((c) => c.value)).toEqual(["alice", "bob"]);
 
             changed.clear();
             expect(await run("kick-player", { player: "alice", reason: "testing" })).toBeNull();
@@ -268,7 +272,8 @@ describe("the panel's own blocks run its servers, and each server's settings and
 
     test("Servers and Server read the panel's servers, and a server's fields read its name, game and status", async () => {
         expect(await panelRead("servers")).toEqual(["s-a", "s-t"]);
-        expect(await blocksApi.choices(PANEL_ID, "value.server", "server")).toEqual([{ label: "Survival", value: "s-a" }, { label: "Island", value: "s-t" }]);
+        // any Server input starts as a dropdown of them
+        expect(await blocksApi.typeChoices(`${PANEL_ID}:server`)).toEqual([{ label: "Survival", value: "s-a" }, { label: "Island", value: "s-t" }]);
         expect(await panelRead("server", { server: "s-t" })).toBe("s-t");
         await expect(panelRead("server", { server: "s-gone" })).rejects.toThrow();
         expect(await field("s-t", "name")).toBe("Island");

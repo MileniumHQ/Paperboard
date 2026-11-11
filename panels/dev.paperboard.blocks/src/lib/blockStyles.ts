@@ -6,7 +6,7 @@
 import * as Blockly from "blockly";
 import { token } from "./tokens";
 import { BUILTIN_SECTIONS } from "./blockDefs";
-import { BUILTIN, parsePropertyBlockType, parseRegistryBlockType } from "./names";
+import { BUILTIN, parseChoiceBlockType, parsePropertyBlockType, parseRegistryBlockType } from "./names";
 
 /** A PaperUI role: --paper-<role> and --paper-<role>-deep. */
 type Role = "primary" | "success" | "danger" | "warning" | "attention" | "extra-1" | "extra-2" | "extra-3";
@@ -115,8 +115,8 @@ export function setPanelIcons(resolve: (panelId: string) => BlockIcon): void {
 function panelOf(type: string): string {
     const registry = parseRegistryBlockType(type);
     if (registry) return registry.panelId;
-    const property = parsePropertyBlockType(type);
-    if (property) return property.typeRef.slice(0, property.typeRef.indexOf(":"));
+    const typed = parsePropertyBlockType(type) ?? parseChoiceBlockType(type);
+    if (typed) return typed.typeRef.slice(0, typed.typeRef.indexOf(":"));
     throw new Error(`${type} is styled as a panel's block but names no panel`);
 }
 

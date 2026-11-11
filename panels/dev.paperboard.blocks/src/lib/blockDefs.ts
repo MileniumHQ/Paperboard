@@ -3,10 +3,11 @@
 // Each block names its style (blockStyles.ts): a colour, and an icon.
 import type { BlockInfo, BlockInputSchema, BlockProjectInfo, BlockSchema } from "@mileniumhq/paperapi";
 import { blockEntry, parseTypeRef } from "@mileniumhq/paperapi";
-import { CHOICES_FIELD, choiceValue, type ChoicesSource } from "./choicesField";
+import { CHOICES_FIELD, choiceValue, type ChoicesSource, type EmptyChoice } from "./choicesField";
 import { panelStyle, type BlockStyleName } from "./blockStyles";
 import { TEXT_BLOCK } from "./textField";
-import { BUILTIN, parseEntry, propertyBlockType, registryBlockType } from "./names";
+import { RESULT_SOURCE, RESULTS_GEAR } from "./results";
+import { BUILTIN, choiceBlockType, parseEntry, propertyBlockType, registryBlockType } from "./names";
 
 type Json = Record<string, unknown>;
 type Schema<K extends BlockSchema["kind"]> = Extract<BlockSchema, { kind: K }>;
@@ -36,8 +37,12 @@ export function checksFor(typeRef: string, bases: TypeBases): string[] | null {
     return [typeRef];
 }
 
-/** The editable block an empty socket of this type holds, if any: the input's default, or an empty one. */
-function shadowFor(input: BlockInputSchema, bases: TypeBases): Json | undefined {
+/**
+ * The editable block an empty socket of this type holds, if any: a dropdown
+ * of the values its type lists, or the input's default, or an empty one.
+ */
+function shadowFor(input: BlockInputSchema, bases: TypeBases, listed: Set<string>, empty: EmptyChoice): Json | undefined {
+    if (listed.has(input.type)) return { shadow: { type: choiceBlockType(input.type, input.optional ? empty : undefined) } };
     const checks = checksFor(input.type, bases);
     const given = input.default;
     if (!checks) {
@@ -53,10 +58,16 @@ function shadowFor(input: BlockInputSchema, bases: TypeBases): Json | undefined 
     return undefined;
 }
 
-/** Every dropdown whose choices its panel works out, to ask for them up front. */
-export function choicesSources(entries: BlockInfo[]): ChoicesSource[] {
+/** Every dropdown whose choices its panel works out, to ask for them up front: a type's in each of its panel's projects too. */
+export function choicesSources(entries: BlockInfo[], projects: BlockProjectInfo[] = []): ChoicesSource[] {
     const out: ChoicesSource[] = [];
     for (const { panelId, entry, schema } of entries) {
+        if (schema.kind === "type") {
+            if (!schema.dynamicChoices || parseEntry(entry).project) continue;
+            const typeRef = `${panelId}:${schema.id}`;
+            out.push({ typeRef }, ...projects.filter((p) => p.panelId === panelId).map((p) => ({ typeRef, project: p.id })));
+            continue;
+        }
         if (!("inputs" in schema)) continue;
         for (const [input, def] of Object.entries(schema.inputs ?? {})) if (def.dynamicChoices) out.push({ panelId, entry, input });
     }
@@ -112,12 +123,35 @@ function hat(type: string, title: ReturnType<typeof message>, tooltip: string, s
 /** The heading over a panel's property blocks. */
 export const PROPERTIES_CATEGORY = "Properties";
 
+/** Where a type's schema is kept with the flows, so a result block's fields outlive its panel being away. */
+export function typeSchemaKey(typeRef: string): string {
+    return `pb.type|${typeRef}`;
+}
+
+/** A name as it reads inside a block's text: lowercase, but "ID" and "URL" stay as they are. */
+export function inText(name: string): string {
+    return name
+        .split(" ")
+        .map((word) => (word.length > 1 && word === word.toUpperCase() ? word : word.toLowerCase()))
+        .join(" ");
+}
+
+/** A type a panel didn't send, called by its id: "dev.x:poll-answer" is "Poll Answer". */
+function nameFromRef(typeRef: string): string {
+    const id = typeRef.slice(typeRef.indexOf(":") + 1);
+    return id.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
 export interface Definitions {
     blocks: Json[];
     /** each block's schema, saved with the flows */
     schemas: Record<string, { panelId: string; entry: string; schema: BlockSchema }>;
     /** toolbox entries per section: a panel or project, and a block's category in it */
     sections: { key: string; panelId: string; project?: string; category?: string; categoryIcon?: string; contents: Json[] }[];
+    /** each command's gear: the result blocks it holds, the whole value first */
+    results: Record<string, string[]>;
+    /** the other schemas a block needs saved with it, so it can be drawn while its panel is away */
+    uses: Record<string, string[]>;
 }
 
 /**
@@ -127,14 +161,19 @@ export interface Definitions {
  */
 export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectInfo[] = []): Definitions {
     const bases: TypeBases = new Map();
+    const types = new Map<string, BlockInfo>();
+    // the types whose values their panel lists: an input of one starts as a dropdown of them
+    const listing = new Set<string>();
     const entries = [...listed];
     for (const e of listed) {
         if (e.schema.kind !== "type") continue;
         bases.set(`${e.panelId}:${e.schema.id}`, e.schema.base);
+        if (!parseEntry(e.entry).project) types.set(`${e.panelId}:${e.schema.id}`, e);
+        if (e.schema.dynamicChoices) listing.add(`${e.panelId}:${e.schema.id}`);
         if (parseEntry(e.entry).project || !Object.values(e.schema.fields ?? {}).some((f) => f.perProject)) continue;
         for (const p of projects.filter((p) => p.panelId === e.panelId)) entries.push({ ...e, entry: blockEntry("type", e.schema.id, p.id), project: p.id });
     }
-    const out: Definitions = { blocks: [], schemas: {}, sections: [] };
+    const out: Definitions = { blocks: [], schemas: {}, sections: [], results: {}, uses: {} };
     const section = (panelId: string, project?: string, category?: string, categoryIcon?: string) => {
         const key = [panelId, project ?? "", category ?? ""].join("\u0000");
         let found = out.sections.find((s) => s.key === key);
@@ -146,7 +185,7 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
         if (categoryIcon && !found.categoryIcon) found.categoryIcon = categoryIcon;
         return found.contents;
     };
-    const toolboxBlock = (type: string, inputs: Inputs | undefined): Json => {
+    const toolboxBlock = (type: string, inputs: Inputs | undefined, empty: EmptyChoice = "none"): Json => {
         const shadows: Json = {};
         const fields: Json = {};
         for (const [key, input] of Object.entries(inputs ?? {})) {
@@ -154,7 +193,7 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                 if (input.default !== undefined) fields[key] = choiceValue(input.default);
                 continue;
             }
-            const shadow = shadowFor(input, bases);
+            const shadow = shadowFor(input, bases, listing, empty);
             if (shadow) shadows[key] = shadow;
         }
         return { kind: "block", type, ...(Object.keys(shadows).length ? { inputs: shadows } : {}), ...(Object.keys(fields).length ? { fields } : {}) };
@@ -170,6 +209,23 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
         };
         switch (schema.kind) {
             case "type": {
+                if (!project) out.schemas[typeSchemaKey(`${panelId}:${schema.id}`)] = { panelId, entry, schema };
+                if (!project && schema.dynamicChoices) {
+                    // the dropdown an input of the type starts as; an optional one's first choice leaves it out
+                    const typeRef = `${panelId}:${schema.id}`;
+                    for (const empty of [undefined, "none", "any"] as const) {
+                        const choice = choiceBlockType(typeRef, empty);
+                        record(choice);
+                        out.blocks.push({
+                            type: choice,
+                            message0: "%1",
+                            args0: [{ type: CHOICES_FIELD, name: "VALUE", typeRef, ...(empty ? { empty } : {}) }],
+                            output: checksFor(typeRef, bases),
+                            style: panelStyle(panelId),
+                            tooltip: `A ${schema.name}; a block can take its place`,
+                        });
+                    }
+                }
                 // the panel's block reads what needs no project; each project's, what does
                 const fields = Object.entries(schema.fields ?? {}).filter(([, f]) => Boolean(f.perProject) === Boolean(project));
                 if (!fields.length) break;
@@ -195,14 +251,53 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                 const s = schema as Schema<"command">;
                 const type = registryBlockType({ kind: "command", panelId, entry });
                 record(type);
+                // a command does something, so it's a step; what it gives back is in its gear
                 out.blocks.push({
                     type,
                     ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases, { panelId, entry }),
-                    ...(s.output ? { output: checksFor(s.output, bases) } : { previousStatement: null, nextStatement: null }),
+                    previousStatement: null,
+                    nextStatement: null,
+                    ...(s.output ? { extensions: [RESULTS_GEAR] } : {}),
                     style: panelStyle(panelId),
                     tooltip: s.description ?? s.name,
                 });
                 contents.push(toolboxBlock(type, s.inputs as Inputs));
+                if (s.output) {
+                    const typeInfo = types.get(s.output);
+                    const typeSchema = typeInfo?.schema as Schema<"type"> | undefined;
+                    const called = inText(s.outputName ?? typeSchema?.name ?? nameFromRef(s.output));
+                    const needs = typeInfo ? [typeSchemaKey(s.output)] : [];
+                    const whole = registryBlockType({ kind: "result", panelId, entry });
+                    record(whole);
+                    out.uses[type] = needs;
+                    out.uses[whole] = [type, ...needs];
+                    out.blocks.push({
+                        type: whole,
+                        message0: called,
+                        output: checksFor(s.output, bases),
+                        mutator: RESULT_SOURCE,
+                        style: panelStyle(panelId),
+                        tooltip: `What "${s.name}" gave back, the last time it ran`,
+                    });
+                    const tray = [whole];
+                    // a field read per project is offered when the command is in one of its type's panel's projects, and read in it
+                    for (const [key, f] of Object.entries(typeSchema?.fields ?? {})) {
+                        if (f.perProject && (!project || typeInfo!.panelId !== panelId)) continue;
+                        const one = registryBlockType({ kind: "result", panelId, entry, key, typeRef: s.output });
+                        record(one);
+                        out.uses[one] = [type, ...needs];
+                        out.blocks.push({
+                            type: one,
+                            message0: `${called} ${inText(f.name)}`,
+                            output: checksFor(f.type, bases),
+                            mutator: RESULT_SOURCE,
+                            style: panelStyle(panelId),
+                            tooltip: `${f.name} of what "${s.name}" gave back, the last time it ran`,
+                        });
+                        tray.push(one);
+                    }
+                    out.results[type] = tray;
+                }
                 break;
             }
             case "value": {
@@ -243,7 +338,7 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                     });
                     valueBlocks.push({ kind: "block", type: valueType });
                 }
-                contents.unshift(toolboxBlock(type, s.inputs as Inputs), ...valueBlocks);
+                contents.unshift(toolboxBlock(type, s.inputs as Inputs, "any"), ...valueBlocks);
                 break;
             }
         }

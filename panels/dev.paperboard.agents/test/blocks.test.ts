@@ -259,7 +259,7 @@ describe("the agent's blocks", () => {
         expect(await rig.blocks.read("current-model")).toBe("gpt-9");
         await rig.blocks.changes.until((c) => c.includes("current-model"), "Current Model to announce the change");
         expect(rig.blocks.changes.items).not.toContain("current-brain");
-        await expect(rig.blocks.run("switch-model", { model: "reviewer" })).rejects.toThrow('"Model" must be one of Default, GPT-9, GPT-9 mini');
+        await expect(rig.blocks.run("switch-model", { model: "reviewer" })).rejects.toThrow('has no model "reviewer"');
         await rig.blocks.run("switch-model", { model: "default" });
         expect(rig.ctx.state.settings!.model).toBe(null);
 
@@ -325,7 +325,7 @@ describe("the agent's blocks", () => {
         await expect(rig.blocks.run("restart-tool-server", { server: "whoami" })).rejects.toThrow("whoami is switched off: turn it on first");
         await rig.blocks.run("turn-on-tool-server", { server: "whoami" });
         expect(await rig.blocks.property("tool-server", "enabled", "whoami")).toBe(true);
-        await expect(rig.blocks.run("turn-on-tool-server", { server: "nope" })).rejects.toThrow('"Tool Server" must be one of whoami');
+        await expect(rig.blocks.run("turn-on-tool-server", { server: "nope" })).rejects.toThrow('the agent has no tool server "nope"');
         await expect(rig.blocks.property("tool-server", "status", "nope")).rejects.toThrow('the agent has no tool server "nope"');
 
         // one that can't start says why

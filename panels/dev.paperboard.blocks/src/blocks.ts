@@ -32,6 +32,7 @@ export function blocksPanelBlocks(host: BlocksPanelHost): BlockSet {
                 icon: "extension",
                 description: "A Blocks project, and the flows in it",
                 base: "text",
+                choices: () => host.projects().map((id) => ({ label: host.project(id).name, value: id })),
                 fields: {
                     name: { type: "text", name: "Name", resolve: (id: string) => host.project(id).name },
                     on: { type: "boolean", name: "Flows On", description: "Its flows start when their events happen", resolve: (id: string) => host.project(id).enabled },
@@ -82,6 +83,7 @@ export function blocksPanelBlocks(host: BlocksPanelHost): BlockSet {
                 text: "run {project}",
                 inputs: { project: { type: "project", name: "Project" } },
                 output: "number",
+                outputName: "Flows Started",
                 run: ({ project }: { project: string }) => host.run(project),
             },
             {
@@ -93,6 +95,7 @@ export function blocksPanelBlocks(host: BlocksPanelHost): BlockSet {
                 text: "stop {project}",
                 inputs: { project: { type: "project", name: "Project" } },
                 output: "number",
+                outputName: "Runs Stopped",
                 run: ({ project }: { project: string }) => host.stop(project),
             },
         ],

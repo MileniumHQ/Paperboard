@@ -28,12 +28,14 @@ type Context = ServiceContext<GameServerState>;
  * A player, by the name the server knows them by. The panel's own type.
  * Whether they're online depends on the server asking, so it's per project.
  */
-function playerType(onlinePlayers: (server: string) => readonly string[]): BlockTypeDefinition<string> {
+function playerType(onlinePlayers: (server: string) => readonly string[], servers: () => readonly string[]): BlockTypeDefinition<string> {
     return {
         id: "player",
         name: "Player",
         icon: "person",
         base: "text",
+        // who's online: on the block's server, or on any; someone offline is typed in a text block
+        choices: ({ project }) => [...new Set(project ? onlinePlayers(project) : servers().flatMap((s) => onlinePlayers(s)))].map((name) => ({ label: name, value: name })),
         fields: {
             online: {
                 type: "boolean",
@@ -91,8 +93,8 @@ const AUTOMATION_TYPE: BlockTypeDefinition = {
 };
 
 /** The types every game's blocks use, reading who's online on each server. A game adds its own through blockTypes(). */
-export function sharedTypes(onlinePlayers: (server: string) => readonly string[]): BlockTypeDefinition[] {
-    return [playerType(onlinePlayers), BACKUP_TYPE, LOG_FILE_TYPE, AUTOMATION_TYPE];
+export function sharedTypes(onlinePlayers: (server: string) => readonly string[], servers: () => readonly string[]): BlockTypeDefinition[] {
+    return [playerType(onlinePlayers, servers), BACKUP_TYPE, LOG_FILE_TYPE, AUTOMATION_TYPE];
 }
 
 /** The server's automation as its value reads. */

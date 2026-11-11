@@ -8,6 +8,7 @@ import { token, tokenPixels } from "./tokens";
 import { getVarCss } from "@mileniumhq/paperui";
 import { blockIcon, blockStyles, type BlockIcon } from "./blockStyles";
 import { PaperTextField, PLACEHOLDER_CLASS } from "./textField";
+import { RESULTS_ICON } from "./results";
 
 export const PAPER_RENDERER = "paper";
 const ICON_FIELD = "PAPER_ICON";
@@ -103,7 +104,9 @@ const GEAR_CLASS = "paperBlockGear";
  */
 function paperGear(block: Blockly.BlockSvg): void {
     for (const icon of block.getIcons()) {
-        if (!(icon instanceof Blockly.icons.MutatorIcon)) continue;
+        // Blockly's gear for a block's parts, or ours for what a command gives back
+        const type = icon.getType();
+        if (!type.equals(Blockly.icons.IconType.MUTATOR) && !type.equals(RESULTS_ICON)) continue;
         const root = icon.getFocusableElement() as SVGGElement;
         const chip = root.querySelector<SVGRectElement>("rect.blocklyIconShape");
         if (!chip) throw new Error(`Blockly drew ${block.type}'s gear without its shape`);

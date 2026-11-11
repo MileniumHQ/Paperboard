@@ -26,7 +26,7 @@ export default function BlocksApiDoc() {
                 </thead>
                 <tbody>
                     <tr><td>Event</td><td>A block a flow starts from, such as a player joining. Each value it fires with is a typed value inside the flow.</td></tr>
-                    <tr><td>Command</td><td>A step that does something, such as kicking a player, and may give back a typed value.</td></tr>
+                    <tr><td>Command</td><td>A step that does something, such as kicking a player. What it gives back is in its gear: the value, and each of its type's fields.</td></tr>
                     <tr><td>Value</td><td>A value block for state the panel keeps, such as the player count. It only reads.</td></tr>
                     <tr><td>Type</td><td>What a value is, such as a Player. Its fields become properties: one "[field] of [value]" block.</td></tr>
                 </tbody>
@@ -161,6 +161,8 @@ interface BlockSet {
         /** looks the field up; without it the field is the object value's own key */
         resolve?: (value: V, ctx: BlockContext) => unknown | Promise<unknown>;
     }>;
+    /** the values there are now; an input of the type starts as a dropdown of them */
+    choices?: (ctx: BlockContext) => BlockChoice[] | Promise<BlockChoice[]>;
 }`}
             </PaperCode>
             <PaperText preset="body" as="p">
@@ -170,6 +172,7 @@ interface BlockSet {
             </PaperText>
             <PaperTextList>
                 <li>An <PaperCode>optional</PaperCode> field may be missing from the value, or <PaperCode>resolve</PaperCode> may give back <PaperCode>null</PaperCode>: a member with no nickname. It reads as nothing, and the "has a value" block tells it apart.</li>
+                <li>A type with <PaperCode>choices</PaperCode> lists its values: the servers there are, a server's online players. Every input of the type, in any panel, starts as a dropdown of them, and a block can be dropped in its place, a text block too. Give it to any type whose values can be listed, so nobody has to type an ID. <PaperCode>ctx.project</PaperCode> is set when the input's block is in one of this panel's projects. An optional input's dropdown starts on <b>none</b>, or <b>any</b> on an event.</li>
                 <li>A <PaperCode>perProject</PaperCode> field depends on the project that asks: whether a player is online on this server. Each project's section in the toolbox gets its own "[field] of [value]" block for these fields, and <PaperCode>resolve</PaperCode> gets that project in <PaperCode>ctx.project</PaperCode>. It needs <PaperCode>resolve</PaperCode>.</li>
             </PaperTextList>
 
@@ -187,6 +190,8 @@ interface BlockSet {
     inputs?: Record<string, BlockInputDefinition>;
     /** the type it gives back; leave it off when it gives nothing */
     output?: TypeRef;
+    /** what it gives back is called, such as "Answer"; needed for a core type or a list */
+    outputName?: string;
     run: (inputs, ctx: BlockContext) => unknown;
 }
 
@@ -220,6 +225,8 @@ interface BlockContext {
                 <li>Ids are lowercase letters, digits and dashes. Each id is unique within its kind.</li>
                 <li><PaperCode>text</PaperCode> shows each input once, in braces. Without it the block shows its name, with the inputs after it.</li>
                 <li>The panel that owns a block checks every call: inputs before <PaperCode>run</PaperCode> or <PaperCode>read</PaperCode>, and the result against the declared type after. A result that isn't its type fails the block, so nothing wrong reaches the next one: <PaperCode>Lie returned: expected a number, got the text "not a number"</PaperCode>.</li>
+                <li>A command is always a step. When it has an <PaperCode>output</PaperCode>, its gear opens a tray of what it gave back: the value, named by <PaperCode>outputName</PaperCode> or its type ("message"), and one block per field of its type ("message ID"). Each reads that one block's result in the run.</li>
+                <li>A block that only reads, with no effect, is a value, not a command, even when it takes inputs: an Embed built from its title and text.</li>
                 <li>A filter's input and the value it compares have one type.</li>
                 <li>An <PaperCode>optional</PaperCode> event value may be left out of a firing, or be <PaperCode>null</PaperCode>: the channel someone left, when they only joined. Inside the flow it reads as nothing. Don't fire empty text in its place.</li>
             </PaperTextList>
@@ -259,6 +266,8 @@ blocksApi.read<T>(panelId, value, inputs?, options?: { project?: string; timeout
 blocksApi.property<T>(typeRef, field, value, options?: { project?: string; timeoutMs?: number | null }): Promise<T>;
 /** a dropdown's choices now, for an input whose choices are a function */
 blocksApi.choices(panelId, entry, input): Promise<BlockChoice[]>;
+/** a type's values now, for a type with choices; in one of its panel's projects when given */
+blocksApi.typeChoices(typeRef, options?: { project?: string }): Promise<BlockChoice[]>;
 
 blocksApi.onEvent(panelId, event, callback: (payload) => void, project?): () => void;
 blocksApi.onChange(panelId, value, callback: () => void, project?): () => void;
@@ -276,7 +285,7 @@ interface BlockInfo {
                 <li>A listed schema is the definition without its code, with every custom type named by its panel: <PaperCode>dev.paperboard.gameserver:player</PaperCode>. A field the panel looks up is marked <PaperCode>resolved: true</PaperCode>.</li>
                 <li>A call waits 30 seconds by default and 60 at most. <PaperCode>timeoutMs: null</PaperCode> waits it out.</li>
                 <li>A change says only that the value changed. Read it again for the new one.</li>
-                <li>An input whose choices are a function is listed with <PaperCode>dynamicChoices: true</PaperCode> and no choices.</li>
+                <li>An input whose choices are a function, and a type with choices, are listed with <PaperCode>dynamicChoices: true</PaperCode> and no choices.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="testing">Testing</PaperText>

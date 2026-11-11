@@ -72,7 +72,7 @@ describe("Bot Creator is run from Blocks by the panel's own blocks", () => {
             expect(await added.next()).toEqual({ bot });
             expect(await online.next()).toEqual({ bot });
             expect(await read("bots")).toEqual([bot]);
-            expect(await blocksApi.choices(PANEL_ID, "value.bot", "bot")).toEqual([{ label: "Blocky", value: bot }]);
+            expect(await blocksApi.typeChoices(`${PANEL_ID}:bot`)).toEqual([{ label: "Blocky", value: bot }]);
             expect(await read("bot", { bot })).toBe(bot);
 
             // the token is in the vault, never in the saved bot list
@@ -90,7 +90,7 @@ describe("Bot Creator is run from Blocks by the panel's own blocks", () => {
             expect(await read<string>("invite-link", { bot })).toContain(`client_id=${fake.appId}`);
 
             // a slash command made by a block is the bot's, on Discord, and gone once deleted by another
-            const option = await run("create-command-option", { type: "integer", name: "sides", description: "How many sides", required: true });
+            const option = await read("create-command-option", { type: "integer", name: "sides", description: "How many sides", required: true });
             const command = await run("create-slash-command", { name: "roll", bot, description: "Roll a die", options: [option], dms: false });
             expect(command).toMatchObject({ bot, name: "roll", description: "Roll a die", server: null, "usable-in-dms": false });
             expect(await field(bot, "slash-commands")).toEqual([command]);

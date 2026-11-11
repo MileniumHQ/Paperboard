@@ -23,6 +23,7 @@ export function aiBlocks(app: AiApp): BlockSet {
                 icon: "neurology",
                 description: "A model a provider in the AI panel serves, named as <provider>|<model>; a plain model name is served by the first provider that lists it",
                 base: "text",
+                choices: () => ready(() => app.blockModels().map((value) => ({ label: app.blockModel(value).name, value }))),
                 fields: {
                     name: { type: "text", name: "Name", resolve: (value: string) => ready(() => app.blockModel(value).name) },
                     provider: { type: "text", name: "Provider", resolve: (value: string) => ready(() => app.blockModel(value).provider) },
@@ -96,6 +97,7 @@ export function aiBlocks(app: AiApp): BlockSet {
                     },
                 },
                 output: "text",
+                outputName: "Answer",
                 run: (inputs: { prompt: string; model?: string; personality?: string; instructions?: string; memory?: string }) => askFromFlow(app, inputs),
             },
             {
@@ -107,6 +109,7 @@ export function aiBlocks(app: AiApp): BlockSet {
                 text: "forget what AI remembers for {memory}",
                 inputs: { memory: { type: "text", name: "Memory Key", maxLength: MAX_MEMORY_KEY_CHARS } },
                 output: "boolean",
+                outputName: "Had Memories",
                 run: ({ memory }: { memory: string }) => forgetFromFlow(app, memory),
             },
         ],

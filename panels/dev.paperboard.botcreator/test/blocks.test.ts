@@ -21,12 +21,13 @@ const TYPES = [
     "bot", "channel", "command-option", "component", "embed", "interaction", "member", "message", "poll", "poll-answer", "reaction", "role",
     "server", "slash-command", "text-field", "user",
 ];
-// the panel's own: the builders, and the blocks that run Bot Creator itself (botsBlocks.test.ts)
-const PANEL_COMMANDS = [
-    "create-button", "create-command-option", "create-embed", "create-interaction-row", "create-select-menu", "create-slash-command",
-    "create-text-field", "delete-bot", "delete-slash-command", "restart-bot", "turn-off-bot", "turn-on-bot",
+// the panel's own: the blocks that run Bot Creator itself (botsBlocks.test.ts), and the builders, which
+// change nothing, so they're values
+const PANEL_COMMANDS = ["create-slash-command", "delete-bot", "delete-slash-command", "restart-bot", "turn-off-bot", "turn-on-bot"];
+const PANEL_VALUES = [
+    "bot", "bots", "create-button", "create-command-option", "create-embed", "create-interaction-row", "create-select-menu",
+    "create-text-field", "invite-link",
 ];
-const PANEL_VALUES = ["bot", "bots", "invite-link"];
 const PANEL_EVENTS = ["bot-added", "bot-connection-failed", "bot-deleted", "bot-offline", "bot-online"];
 const COMMANDS = [
     "add-reaction", "add-role", "ban-user", "create-channel", "create-event", "create-invite", "create-role", "create-thread",
@@ -176,6 +177,14 @@ describe("a bot is a Blocks project, used through the daemon", () => {
         expect(await read("message", { id: sent.id, channel })).toEqual(sent);
     });
 
+    test("a Server, Channel or Role input starts as a dropdown of what the bot can see", async () => {
+        expect(await blocksApi.typeChoices(type("server"), { project: BOT })).toEqual([{ label: "Home", value: home.id }]);
+        expect(await blocksApi.typeChoices(type("channel"), { project: BOT })).toEqual([{ label: "#general", value: home.channels[0].id }]);
+        // the everyone role is left out, as a server's Roles leaves it out
+        expect((await blocksApi.typeChoices(type("role"), { project: BOT })).map((c) => c.value)).not.toContain(home.id);
+        expect(await blocksApi.typeChoices(type("server"))).toEqual([{ label: "Home", value: home.id }]);
+    });
+
     test("what a block can't do fails, saying why, and never reaches Discord", async () => {
         const before = discord.requests.length;
         await expect(run("send-message", { content: "hello", channel: "general" })).rejects.toThrow('"general" isn\'t a Channel ID');
@@ -183,8 +192,8 @@ describe("a bot is a Blocks project, used through the daemon", () => {
         await expect(run("create-invite", { channel: home.channels[0].id, uses: 500 })).rejects.toThrow('"Uses" must be at most 100');
         await expect(blocksApi.property(type("server"), "name", "999999999999999999")).rejects.toThrow("None of the connected bots can see server 999999999999999999");
         expect(discord.requests.length).toBe(before);
-        await expect(blocksApi.run(PANEL_ID, "create-button", { style: "primary", label: "Go", disabled: false })).rejects.toThrow('The primary button "Go" needs a Component ID');
-        expect(await blocksApi.run(PANEL_ID, "create-button", { style: "primary", label: "Go", "component-id": "go", disabled: false })).toMatchObject({ kind: "button", customId: "go" });
+        await expect(blocksApi.read(PANEL_ID, "create-button", { style: "primary", label: "Go", disabled: false })).rejects.toThrow('The primary button "Go" needs a Component ID');
+        expect(await blocksApi.read(PANEL_ID, "create-button", { style: "primary", label: "Go", "component-id": "go", disabled: false })).toMatchObject({ kind: "button", customId: "go" });
     });
 
     test("the bot's values read its live state", async () => {

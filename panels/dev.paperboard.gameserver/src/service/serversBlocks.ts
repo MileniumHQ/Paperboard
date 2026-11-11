@@ -47,6 +47,7 @@ export function serverType(host: ServersBlocksHost): BlockTypeDefinition<string>
         icon: "dns",
         description: "One of the panel's game servers",
         base: "text",
+        choices: () => host.ids().map((id) => ({ label: host.server(id).name, value: id })),
         fields: {
             name: { type: "text", name: "Name", resolve: (id) => host.server(id).name },
             game: { type: "text", name: "Game", description: "The game it runs, as Minecraft", resolve: (id) => host.server(id).game },
@@ -90,7 +91,7 @@ export function serversBlocks(host: ServersBlocksHost): BlockSet {
                 icon: "dns",
                 text: "Server {server}",
                 inputs: {
-                    server: { ...server, choices: () => host.ids().map((id) => ({ label: host.server(id).name, value: id })) },
+                    server,
                 },
                 type: "server",
                 read: ({ server }: { server: string }) => idOf(server),

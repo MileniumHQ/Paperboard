@@ -43,6 +43,13 @@ export default function BlocksDoc() {
                 <li>Drop values into the rounded and pointed holes in a block. A rounded hole takes a value, and a pointed one takes true or false.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
+                A hole for a thing a panel has, such as a server, a bot or a conversation, starts as a menu of the ones there are. Pick one, or drop a block over the menu to use a value from the flow instead.
+            </PaperText>
+            <PaperText preset="body" as="p">
+                A step that gives something back, such as <b>Send Message</b>, has a gear. Select it to see what the step gave back, such as the message and its ID, and drag those blocks into later steps.
+                Each one reads what its own step gave the last time it ran.
+            </PaperText>
+            <PaperText preset="body" as="p">
                 To delete a block, drag it onto the trash in the corner of the canvas.
                 The buttons above the trash zoom in, zoom out and reset the view.
             </PaperText>

@@ -4,8 +4,9 @@
 // Four kinds of block, all drawn from definitions:
 //   - event: a hat block. Fires with a payload; each payload value is a
 //     typed reporter inside the flow it starts.
-//   - command: a statement block that does something, and may return a
-//     typed value.
+//   - command: a statement block that does something, and may give back a
+//     typed value. What it gives back is in the block's gear: reporters for
+//     the value and each of its type's fields, bound to that one block.
 //   - value: a reporter for live state the panel keeps (player count). It
 //     only reads. One that says when it changes also offers "when it changes".
 //   - type: what a value is. A type's fields become properties: one
@@ -137,6 +138,13 @@ export interface BlockTypeDefinition<V = any> {
     icon?: string;
     base: TypeBase;
     fields?: Record<string, BlockFieldDefinition<V>>;
+    /**
+     * The values of the type there are now (the servers, a server's online
+     * players), so an input of the type starts as a dropdown of them; a
+     * block can still be put in its place. Asked in a project when the
+     * input's block is in one of this panel's projects.
+     */
+    choices?: BlockChoicesFunction;
 }
 
 /** A toolbox section a panel's blocks name in `category`, with the symbol its heading shows. */
@@ -169,6 +177,11 @@ interface BlockDefinitionBase {
 export interface BlockCommandDefinition<I = any, O = any> extends BlockDefinitionBase {
     /** the type of what it returns; absent when it returns nothing */
     output?: TypeRef;
+    /**
+     * What it gives back is called, as its gear shows it ("Answer"). Needed
+     * for a core type or a list; a custom type is called by its own name.
+     */
+    outputName?: string;
     run: (inputs: I, ctx: BlockContext) => O | Promise<O>;
 }
 
@@ -216,7 +229,11 @@ type WithInputSchemas<T> = Omit<T, "inputs"> & {
 
 /** A definition as the registry lists it: code removed, every type qualified. */
 export type BlockSchema =
-    | ({ kind: "type" } & Omit<BlockTypeDefinition, "fields"> & { fields?: Record<string, Omit<BlockFieldDefinition, "resolve"> & { resolved?: true }> })
+    | ({ kind: "type" } & Omit<BlockTypeDefinition, "fields" | "choices"> & {
+          fields?: Record<string, Omit<BlockFieldDefinition, "resolve"> & { resolved?: true }>;
+          /** the panel lists the type's values (blocksApi.typeChoices) */
+          dynamicChoices?: true;
+      })
     | ({ kind: "command" } & WithInputSchemas<Omit<BlockCommandDefinition, "run">>)
     | ({ kind: "value" } & WithInputSchemas<Omit<BlockValueDefinition, "read">>)
     | ({ kind: "event" } & WithInputSchemas<BlockEventDefinition>);
@@ -363,6 +380,7 @@ export function validateBlockDefinitions(set: {
     for (const type of set.types ?? []) {
         const label = assertBase(type as unknown as BlockDefinitionBase, "type");
         if (!["text", "number", "boolean", "object"].includes(type.base)) throw new Error(`${label} needs a base of text, number, boolean or object`);
+        if (type.choices !== undefined && typeof type.choices !== "function") throw new Error(`${label} choices must be a function that lists the values there are now`);
         const fields = Object.entries(type.fields ?? {});
         if (fields.length > MAX_FIELDS) throw new Error(`${label} has more than ${MAX_FIELDS} fields`);
         for (const [key, field] of fields) {
@@ -379,7 +397,11 @@ export function validateBlockDefinitions(set: {
     for (const command of set.commands ?? []) {
         const label = assertBase(command, "command");
         assertInputsOf(command, label);
-        if (command.output !== undefined) assertType(command.output, `${label} output`, known);
+        if (command.output !== undefined) {
+            assertType(command.output, `${label} output`, known);
+            if (command.outputName !== undefined) assertLabel(command.outputName, `${label} output`);
+            else if (parseTypeRef(command.output).kind !== "custom") throw new Error(`${label} gives back ${command.output}, so it needs an outputName that says what that is`);
+        } else if (command.outputName !== undefined) throw new Error(`${label} has an outputName but no output`);
         if (typeof command.run !== "function") throw new Error(`${label} needs run`);
     }
     for (const value of set.values ?? []) {
@@ -445,7 +467,8 @@ export function blockSchema(kind: BlockKind, def: any, panelId: string): BlockSc
         case "type":
             return {
                 kind,
-                ...strip(def, ["fields"]),
+                ...strip(def, ["fields", "choices"]),
+                ...(def.choices ? { dynamicChoices: true as const } : {}),
                 ...(def.fields
                     ? {
                           fields: Object.fromEntries(

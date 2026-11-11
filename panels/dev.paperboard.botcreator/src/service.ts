@@ -2289,8 +2289,9 @@ function blocksHost(entry: BotEntry): BotBlocksHost {
 }
 
 /** The bots connected now, whose clients a Blocks type's fields look things up with. */
-function connectedClients(): Client[] {
-    return [...bots.values()].flatMap((entry) => (entry.session.connected() && entry.session.client ? [entry.session.client] : []));
+function connectedClients(bot?: string): Client[] {
+    const entries = bot === undefined ? [...bots.values()] : [bots.get(bot)].filter((e): e is BotEntry => e !== undefined);
+    return entries.flatMap((entry) => (entry.session.connected() && entry.session.client ? [entry.session.client] : []));
 }
 
 /** Defines the bot's Blocks project and registers its commands, values and events into it. */

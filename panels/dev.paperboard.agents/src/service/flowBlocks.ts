@@ -105,7 +105,7 @@ const instructions = {
 
 const brainChoices = (only: (h: Harness) => boolean = () => true) => HARNESSES.filter(only).map((h) => ({ label: HARNESS_NAMES[h], value: h }));
 
-const brainInput = { type: "brain", name: "Brain", choices: brainChoices() } as const;
+const brainInput = { type: "brain", name: "Brain" } as const;
 
 export function flowBlocks(host: BlocksHost): BlockSet {
     const ready = async <T>(fn: () => Promise<T> | T) => {
@@ -151,7 +151,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
         if (!found) throw new Error(`the agent has no app "${name}"; it may have been deleted`);
         return found;
     };
-    const serverInput = { type: "tool-server", name: "Tool Server", choices: () => host.toolServers.list().map((s) => ({ label: s.name, value: s.name })) } as const;
+    const serverInput = { type: "tool-server", name: "Tool Server" } as const;
     const addRoutine = (what: string, schedule: Record<string, unknown>) =>
         ready(async () => (await host.routines.add(what, parseSchedule(schedule, Date.now()))).id);
     return {
@@ -171,6 +171,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 icon: "forum",
                 description: "One of the agent's conversations: the current one, or one in its history",
                 base: "text",
+                choices: () => ready(() => host.conversations().map((id) => ({ label: host.conversation(id).title, value: id }))),
                 fields: {
                     title: { type: "text", name: "Title", description: "Its first message, cut short", resolve: (id: string) => ready(() => host.conversation(id).title) },
                     messages: { type: "number", name: "Messages", description: "How many texts it has, both sides", resolve: (id: string) => ready(() => host.conversation(id).messages) },
@@ -193,6 +194,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 icon: "lightbulb",
                 description: "A short thing the agent remembers, always in its mind",
                 base: "text",
+                choices: () => ready(async () => (await host.memory.list()).facts.map((f) => ({ label: f.text, value: f.id }))),
                 fields: {
                     text: { type: "text", name: "Text", resolve: (id: string) => ready(async () => (await fact(id)).text) },
                 },
@@ -203,6 +205,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 icon: "sticky_note_2",
                 description: "A longer thing the agent remembers, by its key, read when it's needed",
                 base: "text",
+                choices: () => ready(async () => (await host.memory.list()).notes.map((n) => ({ label: n.key, value: n.key }))),
                 fields: {
                     when: { type: "text", name: "When It's Needed", resolve: (key: string) => ready(async () => (await host.memory.readNote(key)).when) },
                     body: { type: "text", name: "Body", resolve: (key: string) => ready(async () => (await host.memory.readNote(key)).body) },
@@ -214,6 +217,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 icon: "event_repeat",
                 description: "Something the agent does on a schedule",
                 base: "text",
+                choices: () => ready(() => host.routines.list().map((r) => ({ label: r.what, value: r.id }))),
                 fields: {
                     task: { type: "text", name: "Task", resolve: (id: string) => ready(() => routine(id).what) },
                     schedule: { type: "text", name: "Schedule", description: "Such as weekdays at 09:00", resolve: (id: string) => ready(() => describeSchedule(routine(id).schedule)) },
@@ -234,6 +238,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 icon: "neurology",
                 description: "A model the agent's brain can think with, by its id; default is whatever the brain is set to use",
                 base: "text",
+                choices: () => ready(async () => (await models()).map((m) => ({ label: m.name, value: m.id }))),
                 fields: {
                     name: { type: "text", name: "Name", resolve: (id: string) => ready(async () => (await model(id)).name) },
                     description: { type: "text", name: "Description", optional: true, resolve: (id: string) => ready(async () => (await model(id)).description) },
@@ -246,6 +251,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 icon: "psychology",
                 description: "An agent harness the agent can think with: codex, claude-code or opencode",
                 base: "text",
+                choices: () => brainChoices(),
                 fields: {
                     name: { type: "text", name: "Name", resolve: (id: string) => ready(() => brainName(id)) },
                     status: {
@@ -267,6 +273,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 icon: "dns",
                 description: "A tool server (MCP) the agent can use, by its name",
                 base: "text",
+                choices: () => ready(() => host.toolServers.list().map((s) => ({ label: s.name, value: s.name }))),
                 fields: {
                     name: { type: "text", name: "Name", resolve: (name: string) => ready(() => toolServer(name).name) },
                     enabled: { type: "boolean", name: "On", description: "It's switched on for the agent", resolve: (name: string) => ready(() => toolServer(name).enabled) },
@@ -281,6 +288,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 icon: "web",
                 description: "A web page the agent made for the user, by its name",
                 base: "text",
+                choices: () => ready(() => host.apps.list().map((a) => ({ label: a.title, value: a.name }))),
                 fields: {
                     title: { type: "text", name: "Title", resolve: (name: string) => ready(() => app(name).title) },
                     description: { type: "text", name: "Description", optional: true, resolve: (name: string) => ready(() => app(name).description || null) },
@@ -496,12 +504,13 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 icon: "question_answer",
                 description:
                     "Asks the agent one question and gives back its answer. It's answered on its own: no conversation, no memory and no computer, only web search. Fails if the answer takes longer than 28 seconds.",
-                text: "the agent's answer to {question} following {instructions}",
+                text: "ask the agent {question} following {instructions}",
                 inputs: {
                     question: { type: "text", name: "Question", maxLength: LIMITS.message },
                     instructions,
                 },
                 output: "text",
+                outputName: "Answer",
                 run: ({ question, instructions }: { question: string; instructions?: string }) =>
                     ready(() => host.ask(question, instructions?.trim() || undefined)),
             },
@@ -619,7 +628,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 description: "Has the agent think with another brain, on its default model. Fails when that brain isn't installed and signed in.",
                 text: "have the agent think with {brain}",
                 inputs: { brain: brainInput },
-                run: ({ brain }: { brain: Harness }) => ready(() => host.brains.choose(brain)),
+                run: ({ brain: id }: { brain: Harness }) => ready(() => (brain(id), host.brains.choose(id))),
             },
             {
                 id: "switch-model",
@@ -628,8 +637,8 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 icon: "tune",
                 description: "Has the agent's brain think with one of its models, or its default",
                 text: "have the agent think with {model}",
-                inputs: { model: { type: "model", name: "Model", choices: async () => (await models()).map((m) => ({ label: m.name, value: m.id })) } },
-                run: ({ model }: { model: string }) => ready(() => host.models.choose(model)),
+                inputs: { model: { type: "model", name: "Model" } },
+                run: ({ model: id }: { model: string }) => ready(async () => host.models.choose((await model(id)).id)),
             },
             {
                 id: "install-brain",
@@ -718,7 +727,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 icon: "delete",
                 description: "Deletes one of the agent's apps for good: its folder and its picture. Cards that showed it can't open it anymore.",
                 text: "delete {app}",
-                inputs: { app: { type: "app", name: "App", choices: () => host.apps.list().map((a) => ({ label: a.title, value: a.name })) } },
+                inputs: { app: { type: "app", name: "App" } },
                 run: ({ app: name }: { app: string }) => ready(() => void host.apps.remove(app(name).name)),
             },
             {

@@ -53,6 +53,7 @@ export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
                 icon: "terminal",
                 description: "A terminal tab, and the shell running in it",
                 base: "text",
+                choices: () => host.tabs().map((id) => ({ label: host.tabLabel(id), value: id })),
                 fields: {
                     name: { type: "text", name: "Name", resolve: (id: string) => host.tabLabel(id) },
                 },
@@ -63,6 +64,7 @@ export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
                 icon: "bookmark",
                 description: "A command saved in the Terminal panel",
                 base: "text",
+                choices: () => host.savedCommands().map((id) => ({ label: host.savedCommand(id).label, value: id })),
                 fields: {
                     name: { type: "text", name: "Name", resolve: (id: string) => host.savedCommand(id).label },
                     command: { type: "text", name: "Command", resolve: (id: string) => host.savedCommand(id).command },
@@ -221,9 +223,10 @@ export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
                 category: CATEGORY.shell,
                 icon: "terminal",
                 description: "Runs a command in a shell of its own, waits for it, and gives back its standard output; fails if it exits with an error",
-                text: "output of running {command}",
+                text: "run {command} in a shell",
                 inputs: { command: { type: "text", name: "Command" } },
                 output: "text",
+                outputName: "Output",
                 run: ({ command }: { command: string }) => host.runShellCommand(command),
             },
             {

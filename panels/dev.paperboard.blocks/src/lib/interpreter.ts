@@ -3,7 +3,7 @@
 // them, through `host`; built-in blocks run here. Nothing is generated or
 // evaluated as code. Every failure names the block it happened on.
 import { base64, formatTime, isPrime, median, modes, position, regex, standardDeviation, timePart, unitMs, web, type WebAnswer } from "./library";
-import { BUILTIN, parseEntry, parsePropertyBlockType, parseRegistryBlockType } from "./names";
+import { BUILTIN, parseChoiceBlockType, parseEntry, parsePropertyBlockType, parseRegistryBlockType } from "./names";
 
 export interface SavedInput {
     block?: SavedBlock;
@@ -84,6 +84,8 @@ interface Run {
     /** the function being run, if any: whether it gives back a value */
     calling: { returns: boolean } | null;
     depth: number;
+    /** what each command block gave back, the last time it ran in this run */
+    results: Map<string, unknown>;
 }
 
 const FUNCTION_DEFINITIONS = new Set(["procedures_defnoreturn", "procedures_defreturn"]);
@@ -109,6 +111,7 @@ function newRun(hat: SavedBlock, payload: Record<string, unknown> | null, worksp
         functions: functionsOf(workspace),
         calling: null,
         depth: 0,
+        results: new Map(),
     };
 }
 
@@ -471,7 +474,8 @@ async function statementOf(run: Run, block: SavedBlock): Promise<void> {
     }
     const name = parseRegistryBlockType(block.type);
     if (name?.kind === "command") {
-        await run.host.run(name.panelId, name.entry, await gatherInputs(run, block));
+        const result = await run.host.run(name.panelId, name.entry, await gatherInputs(run, block));
+        run.results.set(block.id, result ?? null);
         return;
     }
     throw new BlockError(`"${block.type}" can't be a step`, block.id);
@@ -799,6 +803,15 @@ async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
             return run.variables.get(id);
         }
     }
+    if (parseChoiceBlockType(block.type)) {
+        // a dropdown of a type's values keeps its choice as JSON; "none" is nothing, a missing input
+        const choice = field(block, "VALUE");
+        try {
+            return JSON.parse(String(choice));
+        } catch (err) {
+            throw new BlockError(`The choice can't be read (${err instanceof Error ? err.message : String(err)}): ${String(choice)}`, block.id);
+        }
+    }
     const property = parsePropertyBlockType(block.type);
     if (property) {
         const fieldName = field(block, "FIELD");
@@ -807,7 +820,16 @@ async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
     }
     const name = parseRegistryBlockType(block.type);
     if (name?.kind === "value") return run.host.read(name.panelId, name.entry, await gatherInputs(run, block));
-    if (name?.kind === "command") return run.host.run(name.panelId, name.entry, await gatherInputs(run, block));
+    if (name?.kind === "result") {
+        const from = (block.extraState as { from?: unknown } | undefined)?.from;
+        if (typeof from !== "string" || !from) throw new BlockError("This value names no block to read", block.id);
+        const what = `"${parseEntry(name.entry).id}"`;
+        if (!run.results.has(from)) throw new BlockError(`This value is empty until its ${what} block runs`, block.id);
+        const result = run.results.get(from);
+        if (name.key === undefined) return result;
+        if (result === null || result === undefined) throw new BlockError(`Its ${what} block gave back nothing`, block.id);
+        return (await run.host.property(name.typeRef!, name.key, result, parseEntry(name.entry).project)) ?? null;
+    }
     if (name?.kind === "event-value") {
         const running = parseRegistryBlockType(run.hat.type);
         if (running?.kind !== "event" || running.panelId !== name.panelId || running.entry !== name.entry) {

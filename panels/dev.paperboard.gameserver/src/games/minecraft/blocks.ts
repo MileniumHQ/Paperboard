@@ -285,6 +285,7 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                 icon: "delete_sweep",
                 description: "Moves every plugin and mod to the trash, and gives how many went",
                 output: "number",
+                outputName: "Plugins Removed",
                 run: () => uninstallAllPlugins(ctx),
             }),
             needsAction(ctx, ACTION_IDS.installDatapack, {

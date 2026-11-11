@@ -39,7 +39,7 @@
     fill-opacity: 1;
 }
 
-.stage :global(.blocklyFlyout) {
+.stage :global(.blocklyFlyout):not(.resultsTray) {
     /* the header takes its width from here */
     anchor-name: --library-list;
     border-right: var(--paper-border-width) solid var(--paper-border);
@@ -323,4 +323,19 @@
 .stage :global(.blocklyMiniWorkspaceBubble) :global(.blocklyFlyoutBackground) {
     fill: var(--paper-surface-sunken);
     clip-path: inset(0 round var(--paper-border-radius-half));
+}
+
+/* A command's gear opens the tray of what it gives back: the gear card's
+   look (fill, border, radius, the way in), held under the gear. Its outline
+   is drawn by results.ts with the card's radius; its blocks drag out onto
+   the canvas. */
+.stage .resultsTray {
+    overflow: visible;
+    animation: cardIn var(--paper-short-transition) var(--paper-ease-standard);
+}
+
+.stage .resultsTray > :global(.blocklyFlyoutBackground) {
+    fill: var(--paper-surface);
+    stroke: var(--paper-border);
+    stroke-width: var(--paper-border-width);
 }

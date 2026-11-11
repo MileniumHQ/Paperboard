@@ -108,9 +108,10 @@ async function blocks(): Promise<void> {
                     reason: { type: "text", name: "Reason", optional: true, maxLength: 20 },
                 },
                 output: "number",
+                outputName: "Kicks",
                 run: () => ++kicks,
             },
-            { id: "lie", name: "Lie", output: "number", run: () => "not a number" },
+            { id: "lie", name: "Lie", output: "number", outputName: "Lie", run: () => "not a number" },
             {
                 id: "warp",
                 name: "Warp",
@@ -120,6 +121,7 @@ async function blocks(): Promise<void> {
                     times: { type: "number", name: "Times", default: 1, min: 1 },
                 },
                 output: "text",
+                outputName: "Destination",
                 run: ({ world, times }: { world: string; times: number }) => `${world} x${times}`,
             },
             {
@@ -154,6 +156,7 @@ async function blocks(): Promise<void> {
                 id: "misfire",
                 name: "Misfire",
                 output: "list<text>",
+                outputName: "Refusals",
                 run: async () => {
                     const refused: string[] = [];
                     for (const payload of [{ player: { name: 7 } }, { player: { name: "a" }, extra: 1 }, {}]) {

@@ -1,6 +1,8 @@
 // A dropdown whose choices its panel works out when they're asked for (the
-// worlds a server has now). It asks each time it opens; until the answer
-// comes it shows what it was last told. A value no longer offered stays as
+// worlds a server has now), or the values a type lists (the servers there
+// are): the latter in a block of its own, so a block can take its place.
+// It asks each time it opens; until the answer comes it shows what it was
+// last told. A value no longer offered stays as
 // it was saved, so a flow never changes under you: running it says the
 // choice is gone.
 import * as Blockly from "blockly";
@@ -8,12 +10,11 @@ import type { BlockChoice } from "@mileniumhq/paperapi";
 
 export const CHOICES_FIELD = "pb_field_choices";
 
-/** Which input of which block a dropdown's choices belong to. */
-export interface ChoicesSource {
-    panelId: string;
-    entry: string;
-    input: string;
-}
+/** Which input of which block a dropdown's choices belong to, or which type's values it lists (in a project, or not). */
+export type ChoicesSource = { panelId: string; entry: string; input: string } | { typeRef: string; project?: string };
+
+/** What an optional dropdown of a type's values says for leaving it out: "none", or "any" for an event's filter. */
+export type EmptyChoice = "none" | "any";
 
 export interface ChoicesBackend {
     fetch(source: ChoicesSource): Promise<BlockChoice[]>;
@@ -24,10 +25,13 @@ export interface ChoicesBackend {
 let backend: ChoicesBackend | null = null;
 const known = new Map<string, Blockly.MenuOption[]>();
 
-const keyOf = (s: ChoicesSource) => `${s.panelId}\u0000${s.entry}\u0000${s.input}`;
+const keyOf = (s: ChoicesSource) => ("typeRef" in s ? `type\u0000${s.typeRef}\u0000${s.project ?? ""}` : `${s.panelId}\u0000${s.entry}\u0000${s.input}`);
 
 /** A choice's value as the field keeps it: JSON, as the static dropdowns do. */
 export const choiceValue = (value: BlockChoice["value"]) => JSON.stringify(value);
+
+/** An optional dropdown left out: nothing, which runs as a missing input. */
+export const NO_CHOICE = JSON.stringify(null);
 
 /** A saved choice's label: its value as text. A value that isn't JSON was never one of ours, so it fails. */
 function labelOf(value: string): string {
@@ -50,29 +54,62 @@ export async function refreshChoices(source: ChoicesSource): Promise<void> {
     );
 }
 
+/**
+ * The project a type's values are listed in for a dropdown: the project of
+ * the block it's in, when that block is one of the type's own panel's.
+ * Set by the editor, which knows how blocks are named.
+ */
+let projectOf: (holder: Blockly.Block | null, typeRef: string) => string | undefined = () => undefined;
+
+export function setChoicesProject(find: typeof projectOf): void {
+    projectOf = find;
+}
+
+interface FieldConfig {
+    panelId?: string;
+    entry?: string;
+    input?: string;
+    typeRef?: string;
+    empty?: EmptyChoice;
+}
+
 class ChoicesField extends Blockly.FieldDropdown {
     // set after super(): the generator below runs inside it, before fields exist
-    declare private source: ChoicesSource;
+    declare private config: FieldConfig;
     declare private incoming: string | undefined;
 
-    static override fromJson(options: Blockly.FieldDropdownFromJsonConfig & Partial<ChoicesSource>): ChoicesField {
-        const { panelId, entry, input } = options;
-        if (!panelId || !entry || !input) throw new Error(`${CHOICES_FIELD} needs panelId, entry and input`);
-        return new ChoicesField({ panelId, entry, input });
+    static override fromJson(options: Blockly.FieldDropdownFromJsonConfig & FieldConfig): ChoicesField {
+        const { panelId, entry, input, typeRef, empty } = options;
+        if (!typeRef && (!panelId || !entry || !input)) throw new Error(`${CHOICES_FIELD} needs panelId, entry and input, or a typeRef`);
+        return new ChoicesField(typeRef ? { typeRef, ...(empty ? { empty } : {}) } : { panelId, entry, input });
     }
 
-    constructor(source: ChoicesSource) {
+    constructor(config: FieldConfig) {
         super(function (this: Blockly.FieldDropdown) {
             return (this as ChoicesField).menu();
         });
-        this.source = source;
+        this.config = config;
         // super() asked before the field knew its input: ask again, and start on the first choice as a dropdown does
         this.setValue(this.getOptions(false)[0]![1]);
     }
 
+    /** Where the choices come from now: a type's are listed in the project of the block holding this one. */
+    private source(): ChoicesSource | null {
+        const c = this.config;
+        if (!c) return null;
+        if (c.typeRef) {
+            const holder = this.getSourceBlock()?.getParent() ?? null;
+            const project = projectOf(holder, c.typeRef);
+            return { typeRef: c.typeRef, ...(project ? { project } : {}) };
+        }
+        return { panelId: c.panelId!, entry: c.entry!, input: c.input! };
+    }
+
     private menu(): Blockly.MenuOption[] {
-        const offered = this.source ? (known.get(keyOf(this.source)) ?? []) : [];
-        const options = [...offered];
+        const source = this.source();
+        const offered = source ? (known.get(keyOf(source)) ?? []) : [];
+        // leaving an optional input out is a choice of its own, first
+        const options: Blockly.MenuOption[] = this.config?.empty ? [[this.config.empty, NO_CHOICE], ...offered] : [...offered];
         for (const value of [this.incoming, this.getValue()]) {
             if (value && !options.some((o) => o[1] === value)) options.push([labelOf(value), value]);
         }
@@ -89,7 +126,9 @@ class ChoicesField extends Blockly.FieldDropdown {
     }
 
     protected override showEditor_(e?: MouseEvent): void {
-        refreshChoices(this.source).then(
+        const source = this.source();
+        if (!source) throw new Error("This dropdown was opened before it knew where its choices come from");
+        refreshChoices(source).then(
             () => {
                 this.getOptions(false);
                 super.showEditor_(e);
