@@ -214,12 +214,19 @@ export function Example() {
                 A heading level is the real element level, so a <PaperCode>#</PaperCode> line renders an <PaperCode>h1</PaperCode>.
                 On a page that already has its own <PaperCode>h1</PaperCode>, start the Markdown at <PaperCode>##</PaperCode> to keep one top-level heading.
             </PaperText>
+            <PaperText preset="body" as="p">
+                Each Markdown heading gets the slug GitHub would give it, in a <PaperCode>data-anchor</PaperCode> attribute.
+                The text is lowercased, punctuation is dropped, spaces become hyphens, and a repeated heading gets <PaperCode>-1</PaperCode>, <PaperCode>-2</PaperCode>, and so on.
+                So <PaperCode>## What's new?</PaperCode> is <PaperCode>whats-new</PaperCode>. Headings drawn from HTML with <PaperCode>allowHtml</PaperCode> get no slug.
+            </PaperText>
 
             <PaperText preset="subheader" as="h3" id="links">Links</PaperText>
             <PaperTextList>
                 <li>A link with an <PaperCode>http:</PaperCode>, <PaperCode>https:</PaperCode>, or <PaperCode>mailto:</PaperCode> address, or a relative address with no scheme, becomes a link.</li>
                 <li>Any other scheme, such as <PaperCode>javascript:</PaperCode> or <PaperCode>data:</PaperCode>, drops the link and keeps its text. The scheme is read the way a browser reads it, so tabs, line breaks, and leading control characters do not hide it.</li>
                 <li>A link title becomes the link's tooltip.</li>
+                <li>A link to <PaperCode>#slug</PaperCode> scrolls to the heading with that slug in the same PaperMarkdown and moves focus to it, so a README's table of contents works. The slug can be written as is or percent-encoded. The page's address does not change.</li>
+                <li>Headings get no <PaperCode>id</PaperCode>, so a heading in the text can never clash with an element of your page or with a heading in another PaperMarkdown. A <PaperCode>#link</PaperCode> with no matching heading does what the browser does by default.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="images">Images</PaperText>
