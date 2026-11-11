@@ -95,7 +95,7 @@ export default function TroubleshootingDoc() {
 
             <PaperText preset="subheader" as="h2" id="connecting">Connecting a computer</PaperText>
 
-            <PaperText preset="title" as="h3" id="cant-reach">Can't reach, then Check the address</PaperText>
+            <PaperText preset="title" as="h3" id="cant-reach">Can't reach</PaperText>
             <PaperText preset="body" as="p">
                 Paperboard could not reach the address you typed in <b>Computer Details</b>. The line below gives the reason:
             </PaperText>
@@ -104,6 +104,7 @@ export default function TroubleshootingDoc() {
                 <li><PaperCode>Timed out with no response.</PaperCode> The computer is off, on another network, or a firewall blocks the port. Allow TCP port 45464 in the computer's firewall. On Windows, allow the daemon when Windows Firewall asks.</li>
                 <li><PaperCode>Host not found.</PaperCode> The name does not resolve. Type the computer's IP address instead.</li>
                 <li><PaperCode>Network unreachable.</PaperCode> This computer has no route to that address. Check that both are on the same network, or connected through your VPN.</li>
+                <li><PaperCode>That isn't a valid address.</PaperCode> What you typed is not an IP address or a computer name. Check it for spaces and stray characters.</li>
             </PaperTextList>
 
             <PaperText preset="title" as="h3" id="not-listed">The computer is not in the list</PaperText>

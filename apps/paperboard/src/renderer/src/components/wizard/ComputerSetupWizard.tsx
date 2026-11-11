@@ -95,6 +95,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
             } else {
                 setIsReachable(false);
                 setProbeUnreachable(true);
+                setProbeDetail(res?.error ?? "");
             }
         } catch (err: any) {
             setIsReachable(false);
@@ -327,8 +328,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             <Show when={probeUnreachable()}>
                                 <PaperText preset="error">
                                     Can't reach {host().trim()}:
-                                    {port().trim() || "45464"}. Check the
-                                    address
+                                    {port().trim() || "45464"}.
                                     <Show when={probeDetail()}>
                                         <br />
                                         {probeDetail()}

@@ -37,6 +37,10 @@ function bracketHost(host: string): string {
 // timeout = lost in transit, refusal = nothing listening there
 export function classifyProbeError(err: any): string {
     const msg = String(err?.message || "");
+    // a typed address that is no host at all never reached the network
+    if (err?.code === "ERR_INVALID_URL" || /invalid url|failed to parse url/i.test(msg)) {
+        return "That isn't a valid address. Type an IP address or a computer name";
+    }
     if (err?.name === "TimeoutError" || /aborted|timeout/i.test(msg)) {
         return "Timed out with no response. The computer may be offline, on a different network, or its firewall is blocking the Paperboard server daemon";
     }
