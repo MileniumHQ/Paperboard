@@ -4,23 +4,26 @@ import * as fs from "fs";
 import type { WebFrameMain } from "electron";
 import { logger } from "../../papercrane/logger";
 import { setRunOnStartup } from "./loginItem";
+import { withAppSettingsDefaults } from "../shared/appSettingsDefaults";
 import {
     TITLEBAR_OVERLAY_COLORS,
     TITLEBAR_SYMBOL_COLORS,
 } from "../../papercrane/themeConstants";
 
-// theme via nativeTheme; reduced motion AND the resolved theme are injected
+// theme via nativeTheme; reduced motion, blur AND the resolved theme are injected
 // into panel frames. <html data-paperui-theme> is what PaperProvider reads
 // when it has no explicit theme, and it also applies CSS tokens immediately.
 export interface AppSettings {
     darkMode: "system" | "light" | "dark";
     reducedMotion: boolean;
+    disableBlur: boolean;
     runOnStartup: boolean;
 }
 
 const DEFAULTS: AppSettings = {
     darkMode: "system",
     reducedMotion: false,
+    disableBlur: false,
     runOnStartup: false,
 };
 
@@ -35,7 +38,7 @@ export function appSettingsPath(): string {
 export function readAppSettings(): AppSettings {
     try {
         const raw = JSON.parse(fs.readFileSync(appSettingsPath(), "utf8"));
-        return { ...DEFAULTS, ...raw };
+        return withAppSettingsDefaults(DEFAULTS, raw);
     } catch (err: any) {
         // missing is a fresh install; unreadable is reported, not hidden
         if (err?.code !== "ENOENT") {
@@ -89,6 +92,9 @@ async function applyToFrame(frame: WebFrameMain): Promise<void> {
                 )});
                 document.documentElement.setAttribute('data-paperui-theme', ${JSON.stringify(
                     resolvedTheme,
+                )});
+                document.documentElement.setAttribute('data-paperui-blur', ${JSON.stringify(
+                    settings.disableBlur ? "off" : "auto",
                 )});
             })();
         `;

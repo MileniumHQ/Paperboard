@@ -30,6 +30,7 @@ import mitLicenseText from "../../../../../../../packages/paperui/LICENSE?raw";
 export interface AppSettingsData {
     darkMode: "system" | "light" | "dark";
     reducedMotion: boolean;
+    disableBlur: boolean;
     runOnStartup: boolean;
     /** where Paperboard opens: Home, or a computer's id */
     startOn: string;
@@ -38,6 +39,7 @@ export interface AppSettingsData {
 export const APP_SETTINGS_DEFAULTS: AppSettingsData = {
     darkMode: "system",
     reducedMotion: false,
+    disableBlur: false,
     runOnStartup: false,
     startOn: START_ON_HOME,
 };
@@ -211,12 +213,22 @@ export default function AppSettings(props: {
                 </PaperSettingItem>
 
                 <PaperSettingItem
-                    title="Reduce motion"
-                    description="Disables animations, transitions, and blur effects for better performance and accessibility."
+                    title="Disable animations"
+                    description="Turns off animations and transitions."
                 >
                     <PaperToggle
                         name="reducedMotion"
                         checked={props.settings.reducedMotion}
+                    />
+                </PaperSettingItem>
+
+                <PaperSettingItem
+                    title="Disable blur"
+                    description="Turns off the blur behind dialogs and overlays. Scrolling gets smoother on computers without a graphics card, like a Chromebook's Linux."
+                >
+                    <PaperToggle
+                        name="disableBlur"
+                        checked={props.settings.disableBlur}
                     />
                 </PaperSettingItem>
 
@@ -358,8 +370,12 @@ function CompactSettings(props: {
                             </PaperSelectMenu>
                         </div>
                         <label class={styles.row}>
-                            <PaperText preset="label" class={styles.label}>Reduce motion</PaperText>
+                            <PaperText preset="label" class={styles.label}>Disable animations</PaperText>
                             <PaperToggle name="reducedMotion" checked={props.settings.reducedMotion} />
+                        </label>
+                        <label class={styles.row}>
+                            <PaperText preset="label" class={styles.label}>Disable blur</PaperText>
+                            <PaperToggle name="disableBlur" checked={props.settings.disableBlur} />
                         </label>
                     </div>
                 </section>

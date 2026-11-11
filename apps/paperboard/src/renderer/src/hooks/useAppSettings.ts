@@ -1,6 +1,7 @@
 import { createSignal, createEffect } from "solid-js";
 import { config } from "@mileniumhq/paperapi";
 import { logToMain, notifyAppSettingsChanged } from "../lib/shell";
+import { withAppSettingsDefaults } from "../../../shared/appSettingsDefaults";
 import {
     APP_SETTINGS_DEFAULTS,
     APP_SETTINGS_ID,
@@ -16,7 +17,7 @@ export interface SettingsFailure {
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-// App-wide settings: load, mirror reduced motion onto the document, persist
+// App-wide settings: load, mirror reduced motion and blur onto the document, persist
 // before notifying main. A load or save that fails stays as a failure for
 // App Settings to show, until it's retried or dismissed.
 export function useAppSettings() {
@@ -40,6 +41,13 @@ export function useAppSettings() {
         }
     });
 
+    // Mirrors the blur preference the same way
+    createEffect(() => {
+        if (typeof document === "undefined") return;
+        if (appSettings().disableBlur) document.documentElement.setAttribute("data-paperui-blur", "off");
+        else document.documentElement.removeAttribute("data-paperui-blur");
+    });
+
     /** true when the stored settings were read */
     const loadAppSettings = async (): Promise<boolean> => {
         try {
@@ -47,7 +55,7 @@ export function useAppSettings() {
                 APP_SETTINGS_ID,
             );
             if (stored) {
-                const merged = { ...APP_SETTINGS_DEFAULTS, ...stored };
+                const merged = withAppSettingsDefaults(APP_SETTINGS_DEFAULTS, stored);
                 setAppSettings(merged);
             }
             return true;
