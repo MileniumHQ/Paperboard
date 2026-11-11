@@ -15,6 +15,7 @@ import {
 
 export default function PaperContextMenuDoc() {
     const menu = useContextMenuState();
+    const compactMenu = useContextMenuState();
 
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
@@ -73,6 +74,39 @@ export function Example() {
         </>
     );
 }`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h2" id="compact">Compact</PaperText>
+            <PaperText preset="body" as="p">
+                Set <PaperCode>compact</PaperCode> for a denser menu: tighter padding, small text and small icons.
+                Use it where the menu sits over dense content, like a canvas's right-click menu or a toolbar's dropdowns. Its submenus open compact too.
+            </PaperText>
+            <PaperCard data-docs-demo padding="double" surface="front">
+                <PaperButton onClick={(e) => compactMenu.openBelow(e)}>Block</PaperButton>
+                <PaperContextMenu
+                    compact
+                    open={compactMenu.isOpen()}
+                    target={compactMenu.target()}
+                    placement={compactMenu.placement()}
+                    onClose={compactMenu.close}
+                >
+                    <PaperContextMenuItem icon="content_copy" keybind="D">Duplicate</PaperContextMenuItem>
+                    <PaperContextMenuItem icon="comment">Add comment</PaperContextMenuItem>
+                    <PaperContextMenuItem icon="delete" danger>Delete</PaperContextMenuItem>
+                </PaperContextMenu>
+            </PaperCard>
+            <PaperCode block language="tsx">
+{`<PaperContextMenu
+    compact
+    open={menu.isOpen()}
+    target={menu.target()}
+    placement={menu.placement()}
+    onClose={menu.close}
+>
+    <PaperContextMenuItem icon="content_copy" keybind="D">Duplicate</PaperContextMenuItem>
+    <PaperContextMenuItem icon="comment">Add comment</PaperContextMenuItem>
+    <PaperContextMenuItem icon="delete" danger>Delete</PaperContextMenuItem>
+</PaperContextMenu>`}
             </PaperCode>
 
             <PaperText preset="subheader" as="h2" id="props">Props</PaperText>
@@ -138,6 +172,12 @@ export function Example() {
                         <td><PaperCode>boolean</PaperCode></td>
                         <td><PaperCode>true</PaperCode></td>
                         <td>Covers the page with a transparent click catcher while open. Outside presses dismiss either way; turn it off only where other controls must stay reachable.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>compact</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>No default (off)</td>
+                        <td>Smaller items: tighter padding, small text and icons. Submenus follow it. See <PaperLink href="#compact">Compact</PaperLink>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>keepMounted</PaperCode></td>

@@ -109,6 +109,12 @@ export function Example(props: { onNew: () => void; onOpen: () => void; onDelete
                         <td>The label's button size. Use <PaperCode>"tiny"</PaperCode> for a bar under a title.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>compact</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>No default (off)</td>
+                        <td>The dropdown opens as a compact PaperContextMenu: smaller items for a dense toolbar.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>disabled</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td>No default (off)</td>

@@ -159,6 +159,8 @@ export interface PaperMenuBarMenuProps
     disabled?: boolean;
     /** The label's size: small by default, tiny for a bar under a title. */
     size?: PaperButtonSize;
+    /** The dropdown opens as a compact menu: smaller items for a dense toolbar. */
+    compact?: boolean;
     /** The dropdown: PaperContextMenuItem, PaperContextMenuSub, PaperSeparator. */
     children?: JSX.Element;
 }
@@ -170,6 +172,7 @@ export function PaperMenuBarMenu(props: PaperMenuBarMenuProps) {
         "label",
         "disabled",
         "size",
+        "compact",
         "class",
         "classList",
         "children",
@@ -233,6 +236,7 @@ export function PaperMenuBarMenu(props: PaperMenuBarMenuProps) {
                 target={trigger() ?? null}
                 placement="below-left"
                 overlay={false}
+                compact={local.compact}
                 onClose={handleClose}
                 class={styles.dropdown}
                 data-menubar-menu={id}

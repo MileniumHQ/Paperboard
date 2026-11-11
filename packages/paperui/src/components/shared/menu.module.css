@@ -228,3 +228,38 @@
 .subMenuPanel.flipY {
     margin-top: 0;
 }
+
+/* compact: the same menu at a denser size, for canvases and toolbars. The
+   class sits on the panel (and on each portaled submenu panel), so every
+   part inside follows it. */
+.menu.compact,
+.subMenuPanel.compact {
+    padding: var(--paper-uigap-onefourth);
+    gap: 0;
+    min-width: calc(var(--paper-size-sidebar) * 0.5);
+    max-height: calc(var(--paper-control-size-small) * 9);
+}
+
+.compact .item {
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    font-size: var(--paper-text-size-2);
+}
+
+.compact .itemIcon {
+    font-size: var(--paper-icon-size-small);
+}
+
+.compact .itemDescription,
+.compact .itemKeybind {
+    font-size: var(--paper-text-size-1);
+}
+
+.compact .itemCheck,
+.compact .subMenuIndicator {
+    font-size: var(--paper-icon-size-tiny);
+}
+
+.compact .header {
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half) 0;
+}

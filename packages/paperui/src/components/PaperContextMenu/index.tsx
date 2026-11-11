@@ -64,6 +64,12 @@ export interface PaperContextMenuProps extends JSX.HTMLAttributes<HTMLDivElement
      * hovering one can switch menus. Outside presses still dismiss.
      */
     overlay?: boolean;
+    /**
+     * Smaller items: tighter padding, small text and icons. For dense
+     * surfaces like a canvas's right-click menu or a toolbar's dropdowns;
+     * its submenus open compact too.
+     */
+    compact?: boolean;
 }
 
 export function positionFromTarget(
@@ -240,6 +246,8 @@ interface ContextMenuContextType {
     registerSub: (id: string, handle: SubMenuHandle) => () => void;
     highlightedItem: () => string | number | null;
     setHighlightedItem: (val: string | number | null) => void;
+    /** the menu is compact, so its portaled submenus are too */
+    compact: () => boolean;
 }
 
 const ContextMenuContext = createContext<ContextMenuContextType>();
@@ -278,6 +286,7 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
         "matchTargetWidth",
         "initialHighlight",
         "overlay",
+        "compact",
         "class",
         "classList",
         "children",
@@ -582,6 +591,7 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
 
     const contextValue: ContextMenuContextType = {
         rootId,
+        compact: () => Boolean(local.compact),
         registerSub: (id, handle) => {
             subHandles.set(id, handle);
             return () => {
@@ -635,7 +645,7 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
                             aria-activedescendant={activeDescendantId()}
                             aria-hidden={!local.open}
                             {...rest}
-                            class={[menuStyles.menu, local.open ? "" : menuStyles.closed, local.class]
+                            class={[menuStyles.menu, local.compact ? menuStyles.compact : "", local.open ? "" : menuStyles.closed, local.class]
                                 .filter(Boolean)
                                 .join(" ")}
                             classList={local.classList}
@@ -845,6 +855,7 @@ export function PaperContextMenuSub(
     const subClassName = () =>
         [
             menuStyles.subMenuPanel,
+            ctx?.compact() ? menuStyles.compact : "",
             flipX() ? menuStyles.flipX : "",
             flipY() ? menuStyles.flipY : "",
         ]

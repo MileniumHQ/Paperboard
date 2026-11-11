@@ -55,6 +55,8 @@ export type PaperSelectMenuProps = SelectionProviderProps &
         /** a search field above the options, for long lists; it filters by label, description, value and keywords */
         searchable?: boolean;
         searchPlaceholder?: string;
+        /** The list opens as a compact menu: smaller options for a dense surface. */
+        compact?: boolean;
     };
 
 export function PaperSelectMenu(props: ParentProps<PaperSelectMenuProps>) {
@@ -68,6 +70,7 @@ export function PaperSelectMenu(props: ParentProps<PaperSelectMenuProps>) {
         "fullWidth",
         "searchable",
         "searchPlaceholder",
+        "compact",
         "class",
         "classList",
         "children",
@@ -90,6 +93,7 @@ export function PaperSelectMenu(props: ParentProps<PaperSelectMenuProps>) {
                 fullWidth={local.fullWidth}
                 searchable={local.searchable}
                 searchPlaceholder={local.searchPlaceholder}
+                compact={local.compact}
                 name={local.name}
                 class={local.class}
                 classList={local.classList}
@@ -108,6 +112,7 @@ function SelectMenuInner(
             fullWidth?: boolean;
             searchable?: boolean;
             searchPlaceholder?: string;
+            compact?: boolean;
             name?: string;
         }
     >,
@@ -118,6 +123,7 @@ function SelectMenuInner(
         "fullWidth",
         "searchable",
         "searchPlaceholder",
+        "compact",
         "name",
         "class",
         "classList",
@@ -296,6 +302,7 @@ function SelectMenuInner(
                     placement="below"
                     role="listbox"
                     keepMounted
+                    compact={local.compact}
                     matchTargetWidth
                     initialHighlight={currentValue() ?? null}
                     onClose={() => setOpen(false)}

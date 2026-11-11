@@ -112,6 +112,12 @@ export function Example() {
                         <td>The search field's placeholder, which is also its accessible name.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>compact</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>No default (off)</td>
+                        <td>The list opens as a compact PaperContextMenu: smaller options for a dense surface.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>fullWidth</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td>No default (off)</td>
