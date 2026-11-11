@@ -58,15 +58,40 @@ export interface ServersState extends Record<string, unknown> {
 const entries = new Map<string, ServerScope>();
 let saved: ServersConfig = readServersConfig(null);
 let rootContext: ServiceContext<ServersState>;
+// the servers are read and registered: until then the service is starting, not idle
+let started = false;
+// server changes and config writes asked for and not finished yet
+let inFlight = 0;
+/**
+ * Says whether the service has nothing to do until an action calls it.
+ * Every server, once configured, has duties of its own (its console, crash
+ * restarts, daily restarts, update checks, installs), so only a service
+ * with no server at all, nothing being changed or written, and no error to
+ * show is idle. Called after every change to any of those.
+ */
+function updateIdle(): void {
+    rootContext?.setIdle(started && entries.size === 0 && saved.servers.length === 0 && inFlight === 0 && !rootContext.state.serversError);
+}
+/** Keeps the service awake while `work` runs. */
+function busy<T>(work: Promise<T>): Promise<T> {
+    inFlight++;
+    updateIdle();
+    const done = () => {
+        inFlight--;
+        updateIdle();
+    };
+    work.then(done, done);
+    return work;
+}
 let mutation: Promise<unknown> = Promise.resolve();
 function serial<T>(work: () => Promise<T>): Promise<T> {
-    const next = mutation.then(work, work);
+    const next = busy(mutation.then(work, work));
     mutation = next.catch((err) => console.error("[gameserver] server change failed:", err));
     return next;
 }
 let configWrites: Promise<unknown> = Promise.resolve();
 function updateSaved(change: (current: ServersConfig) => ServersConfig): Promise<void> {
-    const work = configWrites.then(async () => {
+    const work = busy(configWrites.then(async () => {
         const next = change(saved);
         await config.set(next, PANEL_ID);
         saved = next;
@@ -74,7 +99,7 @@ function updateSaved(change: (current: ServersConfig) => ServersConfig): Promise
             const entry = entries.get(server.id);
             if (entry) entry.server = server;
         }
-    });
+    }));
     configWrites = work.catch((err) =>
         console.error("[gameserver] server config write failed:", err),
     );
@@ -538,6 +563,8 @@ export const gameServerService = definePanelService({
             ctx.setState({ serversError: err instanceof Error ? err.message : String(err) });
             console.error("[gameserver] servers could not be loaded:", err);
         }
+        started = true;
+        updateIdle();
     },
     // an update of Game Server, or of a runtime its servers run on (Java),
     // stops each server in its way the way Stop does, saving the world,
