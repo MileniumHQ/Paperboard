@@ -24,6 +24,7 @@ export default defineConfig({
                 input: {
                     index: resolve(__dirname, "src/renderer/index.html"),
                     screenshot: resolve(__dirname, "src/renderer/screenshot.html"),
+                    "signed-out": resolve(__dirname, "src/renderer/signed-out.html"),
                 },
             },
         },

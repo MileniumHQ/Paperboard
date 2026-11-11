@@ -19,6 +19,11 @@ async function post(kind: "invoke" | "send", channel: string, args: unknown[]): 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ args }),
     });
+    if (res.status === 401) {
+        // the session ended (expired, or signed out in another tab): the
+        // signed-out page says how to get back in
+        location.assign("/signed-out.html?reason=ended");
+    }
     if (!res.ok) {
         throw new Error(`[shell] ${channel} failed: HTTP ${res.status} ${await res.text()}`);
     }

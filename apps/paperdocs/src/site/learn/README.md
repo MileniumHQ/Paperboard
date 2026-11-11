@@ -34,7 +34,7 @@ serves built static artifacts on an ephemeral loopback port and tears everything
 Every learn page gives one feature to an Actions workflow. Where no store
 screenshot shows one, `scripts/capture-integrations.ts` captures it from the
 real Actions editor (`*-flow.png`, 1600 × 1200 at 200% page zoom). It needs a
-temporary browser-mode install on port 4319 with Actions, Game Server and
+temporary browser-mode install (`--browser --web-port=4319`) with Actions, Game Server and
 Agent linked (`bun run link:panels` from the repo root, with that
 `PAPERBOARD_DIR`) and one
 Minecraft server added in Game Server. The server is never set up or started.
@@ -42,12 +42,12 @@ Use a temporary `PAPERBOARD_DIR` and `XDG_CONFIG_HOME`; never capture private
 user data.
 
 ```sh
-TMPDIR=/tmp PAPERBOARD_DIR=/tmp/paperboard-marketing-... bun run screenshots:actions
+TMPDIR=/tmp PAPERBOARD_DIR=/tmp/paperboard-marketing-... PAPERBOARD_BROWSER_SIGN_IN=<the link browser mode printed> bun run screenshots:actions
 ```
 
 The script builds each flow from the schemas the install registered, checks its
 inputs, runs it through the real Actions runtime against simulated answers,
 saves it as a project, captures it in the editor after checking bounds, icons
-and typed chips, and deletes the project. Set `PAPERBOARD_BROWSER_ORIGIN` and
-`CHROME_PATH` when needed. Every published picture has its own filename and
+and typed chips, and deletes the project. The sign-in link works once, so
+start browser mode again for each run. Set `CHROME_PATH` when needed. Every published picture has its own filename and
 contents; the content test rejects reused files and identical image bytes.

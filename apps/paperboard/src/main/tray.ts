@@ -11,6 +11,8 @@ export interface DesktopTrayDeps {
     icon: string;
     /** show + focus the main window, recreating it if it was destroyed */
     openWindow: () => void;
+    /** open Paperboard in the default browser, signed in */
+    openInBrowser: () => void;
     /** running panel-service count; a number, or null when unknown */
     runningCount: () => number | null;
 }
@@ -23,7 +25,7 @@ export function createDesktopTray(deps: DesktopTrayDeps): Tray {
         if (!tray) return;
         const count = deps.runningCount();
         tray.setToolTip(traySummary(count));
-        tray.setContextMenu(Menu.buildFromTemplate(trayMenu(count, deps.openWindow, () => app.quit())));
+        tray.setContextMenu(Menu.buildFromTemplate(trayMenu(count, { openWindow: deps.openWindow, openInBrowser: deps.openInBrowser, quit: () => app.quit() })));
     };
 
     refresh();

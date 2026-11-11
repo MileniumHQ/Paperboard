@@ -1,33 +1,57 @@
-// Browser mode (`--browser`): the shell runs in the user's own browser
-// instead of an Electron window. This module is the HTTP host for it and
-// imports nothing from Electron; the caller supplies the handlers.
+// Paperboard in the browser: the shell served to the person's own browser
+// instead of an Electron window. "Open in Browser" in the tray and `--web`
+// open it; `--browser` serves it for development without opening a tab.
+// This module is the HTTP host for it and imports nothing from Electron;
+// the caller supplies the handlers.
 //
-// THIS IS A DEV TOOL. There is no sign-in: the loopback port is served to
-// any local client, and a panel document carries a freshly issued panel
-// token, so anything that can reach the port can reach the daemon. It binds
-// to 127.0.0.1 only and must never be exposed on a network interface. Two
-// checks remain even in this mode: the Host header must be ours
-// (DNS-rebinding defense) and the shell bridge must carry the exact shell
-// Origin (a panel frame, same-site but a different origin, cannot call
-// shell-only channels).
+// Sign-in (browserSessions.ts): Paperboard opens a link that works once,
+// for a few minutes, and that gives the browser a session cookie. Without
+// that cookie nothing but the signed-out page and the shell's own static
+// files is served: no bridge, no events, no panels, no crane credentials.
 //
-// Origins mirror the Electron layout so panels keep their isolation:
-//   shell   http://paperboard.localhost:<port>/
-//   panels  http://<computerId>.<panelId>.paperboard.localhost:<port>/
-// Browsers resolve *.localhost to loopback and treat it as a secure context.
+// Everything is on one origin, as on Paperboard web; panels are trusted
+// and share it:
+//   shell   http://localhost:<port>/
+//   panels  http://localhost:<port>/_panel/<computerId>/<panelId>/
+//
+// It binds to 127.0.0.1 only. The Host header must be ours (DNS-rebinding
+// defense), and the shell bridge must carry the exact shell Origin, so
+// another site's page cannot drive it even with the cookie attached.
 import * as http from "http";
 import type { Readable } from "stream";
 import { pipeline } from "stream/promises";
+import { PANEL_PATH_ROOT, parsePanelPath } from "../../../../packages/paperapi/src/panelPath";
 import { logger } from "../../papercrane/logger";
-import { parsePanelHost } from "./panelAssets";
+import type { BrowserSessions } from "./browserSessions";
 import { readShellFile } from "./shellAssets";
 
-export const BROWSER_HOST_SUFFIX = "paperboard.localhost";
+// Every browser resolves localhost to this machine, Safari included, and
+// treats it as a secure context.
+export const BROWSER_HOST_NAME = "localhost";
+// the page a browser without a session lands on
+export const SIGNED_OUT_PAGE = "/signed-out.html";
+export const SIGN_IN_PATH = "/_shell/sign-in";
 
-// a Host header that is a plain loopback alias rather than our canonical name
+// a Host header that names this machine some other way than our canonical
+// name; the request is sent to the canonical origin, the one the bridge's
+// Origin check and the session cookie expect
 function isLoopbackAlias(host: string): boolean {
     const bare = host.replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
-    return bare === "localhost" || bare === "127.0.0.1" || bare === "::1";
+    return bare === "127.0.0.1" || bare === "::1" || bare === "paperboard.localhost";
+}
+
+// Cookies ignore ports, so each port gets its own name: the installed app
+// and a development build on another port keep separate sessions.
+export const sessionCookieName = (port: number) => `pb_session_${port}`;
+
+function readCookie(req: http.IncomingMessage, name: string): string | undefined {
+    const header = req.headers.cookie;
+    if (!header) return undefined;
+    for (const part of header.split(";")) {
+        const eq = part.indexOf("=");
+        if (eq > 0 && part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim();
+    }
+    return undefined;
 }
 
 // bounds: tabs listening for pushes, bridge bodies
@@ -40,6 +64,7 @@ const EVENT_HEARTBEAT_MS = 25_000;
 export interface BrowserHostOptions {
     // 0 picks a free port
     port: number;
+    sessions: BrowserSessions;
     // built renderer (out/renderer); ignored when rendererDevUrl is set
     rendererDir?: string;
     // dev: proxy shell documents to the renderer dev server
@@ -59,9 +84,14 @@ export interface BrowserHostOptions {
 export interface BrowserHost {
     readonly port: number;
     readonly origin: string;
+    /** a link that signs one browser in, once, for the next few minutes */
+    signInUrl(): string;
     push(channel: string, payload: unknown): void;
     close(): Promise<void>;
 }
+
+// types a browser renders as a page with scripts when opened directly
+const DOCUMENT_TYPE = /^\s*(text\/html|application\/xhtml\+xml|image\/svg\+xml|text\/xml|application\/xml|[^;]*\+xml)\s*(;|$)/i;
 
 class HttpError extends Error {
     constructor(
@@ -124,8 +154,46 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
     let origin = "";
     let closed = false;
 
-    // bridge calls must come from the shell document itself: a panel frame
-    // is same-site but a different Origin, so it cannot call shell channels
+    const sessionToken = (req: http.IncomingMessage) => readCookie(req, sessionCookieName(port));
+    const signedIn = (req: http.IncomingMessage) => opts.sessions.isSignedIn(sessionToken(req));
+    const assertSignedIn = (req: http.IncomingMessage) => {
+        if (!signedIn(req)) {
+            throw new HttpError(401, "Sign in to Paperboard in the browser: open it from Paperboard (Open in Browser in its tray menu, or paperboard --web).");
+        }
+    };
+    const redirect = (res: http.ServerResponse, status: 302 | 303, location: string, extra: Record<string, string> = {}) => {
+        res.writeHead(status, { location, "cache-control": "no-store", ...extra });
+        res.end();
+    };
+
+    // GET /_shell/sign-in?link=<token>: the link Paperboard opened. It works
+    // once; the browser keeps a session cookie and lands on the shell with
+    // the link gone from its address bar.
+    const handleSignIn = (req: http.IncomingMessage, res: http.ServerResponse, url: URL) => {
+        if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
+        const signed = opts.sessions.redeemSignInLink(url.searchParams.get("link"));
+        if (!signed) {
+            logger.warn("[BrowserHost] a sign-in link was refused: unknown, used, or expired");
+            return redirect(res, 303, `${SIGNED_OUT_PAGE}?reason=link`);
+        }
+        const maxAge = Math.floor((signed.expiresAt - Date.now()) / 1000);
+        redirect(res, 303, "/", {
+            "set-cookie": `${sessionCookieName(port)}=${signed.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`,
+            "referrer-policy": "no-referrer",
+        });
+    };
+
+    const handleSignOut = (req: http.IncomingMessage, res: http.ServerResponse) => {
+        assertShellCaller(req);
+        opts.sessions.signOut(sessionToken(req));
+        res.writeHead(204, {
+            "cache-control": "no-store",
+            "set-cookie": `${sessionCookieName(port)}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+        });
+        res.end();
+    };
+
+    // bridge calls must come from this host's own pages, never another site
     const assertShellCaller = (req: http.IncomingMessage) => {
         if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
         if (req.headers.origin !== origin) throw new HttpError(403, "Shell bridge is shell-origin only");
@@ -226,7 +294,7 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
     };
 
     const handleEvents = (req: http.IncomingMessage, res: http.ServerResponse) => {
-        // EventSource from the shell is same-origin; a panel frame's is not
+        // EventSource from this host's own pages is same-origin
         const site = req.headers["sec-fetch-site"];
         if (site !== undefined && site !== "same-origin") {
             throw new HttpError(403, "Shell events are shell-origin only");
@@ -297,6 +365,11 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
         });
 
     const handleShell = async (req: http.IncomingMessage, res: http.ServerResponse, url: URL) => {
+        if (url.pathname === SIGN_IN_PATH) return handleSignIn(req, res, url);
+        // the shell's files are public; what they reach is not
+        if (url.pathname.startsWith("/_shell/") || url.pathname.startsWith(PANEL_PATH_ROOT)) assertSignedIn(req);
+        if (url.pathname.startsWith(PANEL_PATH_ROOT)) return handlePanel(req, res, url);
+        if (url.pathname === "/_shell/sign-out") return handleSignOut(req, res);
         if (url.pathname.startsWith("/_shell/invoke/")) {
             return handleInvoke(url.pathname.slice("/_shell/invoke/".length), req, res);
         }
@@ -307,25 +380,40 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
         if (url.pathname === "/_shell/panel-file/stat") return handlePanelFileStat(req, res);
         if (url.pathname === "/_shell/panel-file/read") return handlePanelFileRead(req, res);
         if (url.pathname === "/_shell/panel-file/write") return handlePanelFileWrite(req, res, url);
+        if (url.pathname.startsWith("/_shell/")) throw new HttpError(404, "Not found");
         if (req.method !== "GET" && req.method !== "HEAD") throw new HttpError(405, "Method not allowed");
+        // the shell document needs a session; the signed-out page needs none
+        if (url.pathname === "/" || url.pathname === "/index.html") {
+            if (!signedIn(req)) return redirect(res, 302, SIGNED_OUT_PAGE);
+        } else if (url.pathname === SIGNED_OUT_PAGE && !url.search && signedIn(req)) {
+            return redirect(res, 302, "/");
+        }
         if (opts.rendererDevUrl) return proxyRenderer(req, res, opts.rendererDevUrl);
         return serveRendererFile(url.pathname, res);
     };
 
-    const handlePanel = async (req: http.IncomingMessage, res: http.ServerResponse, url: URL, prefix: string) => {
+    const handlePanel = async (req: http.IncomingMessage, res: http.ServerResponse, url: URL) => {
         if (req.method !== "GET" && req.method !== "HEAD") throw new HttpError(405, "Method not allowed");
-        const scope = parsePanelHost(prefix);
-        if (!scope) throw new HttpError(400, "Malformed panel URL: missing computer scope prefix");
-        const answer = await opts.servePanel(scope.comp, scope.panelId, url.pathname);
+        // a service worker would keep answering for the panel's folder
+        // after the browser signs out. No panel uses one.
+        if (req.headers["service-worker"] === "script") throw new HttpError(403, "Panels can't register service workers in the browser");
+        const scope = parsePanelPath(url.pathname);
+        if (!scope) throw new HttpError(404, "Not a panel's address: /_panel/<computerId>/<panelId>/");
+        const answer = await opts.servePanel(scope.computerId, scope.panelId, scope.subpath);
         const headers: Record<string, string | string[]> = {};
         answer.headers.forEach((value, key) => {
             headers[key] = value;
         });
         // panel documents live inside the shell only; a second CSP header
         // adds the restriction without touching the served policy
-        const csp = headers["content-security-policy"];
-        const frameAncestors = `frame-ancestors ${origin}`;
-        headers["content-security-policy"] = csp ? [csp as string, frameAncestors] : frameAncestors;
+        const policies = [headers["content-security-policy"] as string | undefined, "frame-ancestors 'self'"];
+        // anything but the panel's HTML that a browser would open as a page
+        // (SVG, XML, HTML under another name) would otherwise run on the
+        // shell's origin unchecked; the sandbox gives it an origin of its own
+        if (!/\.html?$/i.test(scope.subpath || "index.html") && DOCUMENT_TYPE.test(String(headers["content-type"] ?? ""))) {
+            policies.push("sandbox");
+        }
+        headers["content-security-policy"] = policies.filter((p): p is string => Boolean(p));
         headers["referrer-policy"] = "no-referrer";
         const body = Buffer.from(await answer.arrayBuffer());
         res.writeHead(answer.status, headers);
@@ -348,16 +436,12 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
         let work: Promise<void> | void;
         if (host === shellHost) {
             work = handleShell(req, res, url);
-        } else if (host.endsWith(`.${shellHost}`)) {
-            work = handlePanel(req, res, url, host.slice(0, -(shellHost.length + 1)));
-        } else if (isLoopbackAlias(host)) {
-            // A loopback alias (localhost / 127.0.0.1 / ::1) is how someone
-            // reaches the port when they were only told the number. Redirect
-            // to the canonical origin so the session cookie (Domain=
-            // paperboard.localhost) and the panel origins line up; never
-            // serve content under a foreign Host.
-            res.writeHead(302, { location: `http://${shellHost}${req.url || "/"}` });
-            res.end();
+        } else if (isLoopbackAlias(host) && host.endsWith(`:${port}`)) {
+            // 127.0.0.1 / [::1] is how someone reaches the port when they
+            // were only told the number. Redirect to the canonical origin,
+            // the one the session cookie and the bridge's Origin check
+            // expect; never serve content under a foreign Host.
+            redirect(res, 302, `http://${shellHost}${url.pathname}${url.search}`);
             work = Promise.resolve();
         } else {
             // not our name: a rebinding page or a stray client
@@ -387,15 +471,12 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
         server.listen(opts.port, "127.0.0.1", () => {
             const address = server.address();
             port = typeof address === "object" && address ? address.port : opts.port;
-            shellHost = `${BROWSER_HOST_SUFFIX}:${port}`;
+            shellHost = `${BROWSER_HOST_NAME}:${port}`;
             origin = `http://${shellHost}`;
-            logger.warn(
-                `[Browser] DEV TOOL: Paperboard browser mode is serving ${origin} with no sign-in. ` +
-                    "THIS IS A DEV TOOL AND SHOULD NOT BE USED for anything but development on a trusted machine.",
-            );
             resolve({
                 port,
                 origin,
+                signInUrl: () => `${origin}${SIGN_IN_PATH}?link=${opts.sessions.issueSignInLink()}`,
                 push(channel, payload) {
                     const frame = `event: ${channel}\ndata: ${JSON.stringify(payload ?? null)}\n\n`;
                     for (const client of eventClients) writeEvent(client, frame);

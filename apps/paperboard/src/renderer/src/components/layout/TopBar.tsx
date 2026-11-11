@@ -34,15 +34,6 @@ const TopBar: Component<{
     };
 
     onMount(() => {
-        // browser mode has no updater: the app updates when it next runs
-        // as a window, so there is nothing to listen for
-        if (isBrowserShell()) {
-            console.warn(
-                "Paperboard browser mode has no sign-in. THIS IS A DEV TOOL AND SHOULD NOT BE USED " +
-                    "outside development on a trusted machine, and never exposed on a network.",
-            );
-        }
-
         // Window Controls Overlay: exact caption-button geometry so the
         // buttons sit left of minimize/maximize/close instead of under them;
         // macOS traffic lights push the version label right instead.

@@ -31,7 +31,10 @@ const made: string[] = [];
 const call = <T>(action: string, inputs: Record<string, unknown> = {}) => actions.call<T>(panelId, action, inputs);
 try {
     const page = await capture.context.newPage();
-    await page.goto(process.env.PAPERBOARD_BROWSER_ORIGIN || "http://paperboard.localhost:4319");
+    // browser mode prints a sign-in link that works once
+    const signIn = process.env.PAPERBOARD_BROWSER_SIGN_IN;
+    if (!signIn) throw new Error("Set PAPERBOARD_BROWSER_SIGN_IN to the sign-in link browser mode printed.");
+    await page.goto(signIn);
     // The Panels widget re-renders with live stats, so click the row in the page
     // instead of waiting for it to hold still.
     await page.getByRole("button", { name: /^Actions(, running)?\. Open$/ }).evaluate((button: HTMLElement) => button.click());

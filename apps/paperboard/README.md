@@ -24,18 +24,18 @@ bun run dev
 This opens a local dev process.
 
 ### Browser mode
-Browser mode is a dev tool for agents (screenshots, testing, browser use), not something shipped to users. It serves the app to a browser instead of an Electron window:
+People open Paperboard in their browser with **Open in Browser** in the tray menu or `paperboard --web` (see the docs' "Use Paperboard in a browser"). For development, `--browser` serves the same thing without opening a tab and prints a sign-in link, for an agent's own browser (screenshots, testing, browser use):
 ```zsh
 bun run dev:browser                        # from source
 Paperboard --browser                       # an installed build
-Paperboard --browser --browser-port=4700   # pin the port (default: any free port)
+Paperboard --browser --web-port=4700       # pin the port (default for --browser and dev builds: any free port)
 ```
-No window or browser tab opens. Paperboard serves the app at `http://paperboard.localhost:<port>` and prints that address to the terminal; point your agent's browser at it.
+Paperboard serves the app at `http://localhost:<port>` and prints a sign-in link. It works once, for five minutes; run `--browser` again (the running app prints a new one) when you need another.
 
-- Each panel gets its own origin (`http://<computer>.<panel>.paperboard.localhost:<port>`), the same isolation panels have in the desktop app.
-- There is no sign-in. The server only listens on `127.0.0.1`; never expose the port on a network.
-- Works in Chromium-based browsers and Firefox, which resolve `*.localhost` to your own machine. Safari may not.
-- The desktop-only parts don't exist here: no auto-update pass (updates apply on the next windowed launch) and no title-bar integration.
+- The installed app serves on port 45470 for `--web` and Open in Browser, so bookmarks keep working.
+- Panels are served from `/_panel/<computer>/<panel>/` on the same origin, as on Paperboard web.
+- Browsers stay signed in for 30 days (`local/browser-sessions.json` keeps hashes only). Sign Out is in App Settings.
+- It only listens on `127.0.0.1`. The desktop-only parts don't exist here: no auto-update pass (updates apply on the next windowed launch) and no title-bar integration.
 
 ### Compiling
 Compiling for all platforms for GitHub Releases is done on Linux x64. However, you can still compile it yourself.

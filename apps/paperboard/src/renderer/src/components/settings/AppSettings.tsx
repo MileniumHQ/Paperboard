@@ -17,7 +17,7 @@ import {
     PaperText,
     showToast,
 } from "@mileniumhq/paperui";
-import { isBrowserShell, shellIpc } from "../../lib/shell";
+import { isBrowserShell, shellIpc, signOutOfBrowser } from "../../lib/shell";
 import type { SettingsFailure } from "../../hooks/useAppSettings";
 import { START_ON_HOME, startTarget } from "../../lib/startOn";
 import { computerIcon } from "../computer/computerIcon";
@@ -100,6 +100,9 @@ const updateEverything = () =>
         .invoke<void>("update-check")
         .catch((err) => showToast({ variant: "danger", title: "Couldn't check for updates", message: String(err) }));
 const quitApp = () => shellIpc().send("quit-app");
+const SIGN_OUT_NOTE = "Signs this browser out. Open Paperboard in the browser from Paperboard to come back.";
+const signOut = () =>
+    signOutOfBrowser().catch((err) => showToast({ variant: "danger", title: "Couldn't sign out", message: String(err) }));
 
 export default function AppSettings(props: {
     settings: AppSettingsData;
@@ -292,6 +295,15 @@ export default function AppSettings(props: {
                         </PaperButton>
                     </PaperSettingItem>
                 </Show>
+
+                <Show when={isBrowserShell()}>
+                    <PaperSettingItem title="Sign out" description={SIGN_OUT_NOTE}>
+                        <PaperButton onClick={signOut}>
+                            <PaperIcon>logout</PaperIcon>
+                            Sign Out
+                        </PaperButton>
+                    </PaperSettingItem>
+                </Show>
             </PaperSettingList>
 
             {/* browser mode: the browser keeps its own permissions */}
@@ -406,6 +418,15 @@ function CompactSettings(props: {
                     <ActionRow label={`${LICENSE_TITLES.mit} (SDKs)`} onClick={() => props.onViewLicense("mit")} chevron />
                 </div>
             </section>
+
+            <Show when={isBrowserShell()}>
+                <section class={styles.group} aria-labelledby="settings-browser">
+                    <h2 id="settings-browser" class={styles.heading}><PaperText preset="section" inset>This browser</PaperText></h2>
+                    <div class={styles.card}>
+                        <ActionRow label="Sign Out" onClick={signOut} />
+                    </div>
+                </section>
+            </Show>
 
             {props.licenseModal}
         </div>

@@ -166,6 +166,14 @@ export const shellApi = {
         return () => requireIpc().removeListener?.("graphics-changed", handler);
     },
 };
+/** Ends this browser's session (Paperboard in the browser only) and shows
+ * the signed-out page. Rejects with why when the host refused. */
+export async function signOutOfBrowser(): Promise<void> {
+    const res = await fetch("/_shell/sign-out", { method: "POST", headers: { "Content-Type": "application/json" } });
+    if (!res.ok && res.status !== 401) throw new Error(`Paperboard couldn't sign this browser out: HTTP ${res.status} ${await res.text()}`);
+    location.assign("/signed-out.html");
+}
+
 // Main applies side effects of freshly persisted settings (theme, title bars,
 // login item); resolves to why Run on startup couldn't be applied, or null
 export function notifyAppSettingsChanged(): Promise<string | null> {

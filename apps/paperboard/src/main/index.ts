@@ -32,6 +32,9 @@ import { readShellFile, SHELL_HOST, SHELL_ORIGIN, SHELL_SCHEME } from "./shellAs
 import { readPanelFileForBrowser, statPanelFileForBrowser, writePanelFileFromBrowser } from "./panelFileTransfer";
 import { poolEndpoint } from "./panelFileEndpoint";
 import { startBrowserHost, type BrowserHost } from "./browserHost";
+import { BrowserSessions } from "./browserSessions";
+import { getLocalDir } from "../../papercrane/paths";
+import { portRefusal } from "../../papercrane/ports";
 import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./communication/shellHandlers";
 import { launchOptionsFromArgv } from "../shared/launchOptions";
 import { emulatePhone, mobileWindowOptions } from "./mobileMock";
@@ -78,6 +81,7 @@ function ensureDesktopTray(): void {
     createDesktopTray({
         icon,
         openWindow: showMainWindow,
+        openInBrowser: () => void openInBrowser(),
         runningCount: () => desktopTrayCount,
     });
     stopTrayPoll ??= pollTrayCount({
@@ -96,9 +100,12 @@ if (relaunchOnX11IfNeeded(app, process.argv, process.env, process.platform)) pro
 // before the single-instance lock: it lives in userData
 const electronDataError = relocateElectronData(app);
 
-// `--browser`: no windows; the shell is served to a browser by
-// browserHost.ts and its origin printed. `--browser-port=<n>` pins the port (default: any free one).
-const browserMode = app.commandLine.hasSwitch("browser");
+// `--web`: no window; Paperboard opens in the default browser instead
+// (browserHost.ts), signed in. `--browser` is the same for development: it
+// prints the sign-in link and opens no tab, for an agent's own browser.
+// `--web-port=<n>` picks the port.
+const webLaunch = app.commandLine.hasSwitch("web");
+const browserMode = webLaunch || app.commandLine.hasSwitch("browser");
 // `--mobile`: the phone layout in an iPhone-sized window (mobileMock.ts)
 const mobileMode = launchOptionsFromArgv(process.argv).mobile;
 
@@ -114,6 +121,9 @@ app.on("second-instance", (_event, argv) => {
     // app, even when this process is in browser mode. Otherwise a stale
     // browser session would silently swallow every later launch.
     switch (secondLaunchAction(argv, Boolean(mainWindowRef && !mainWindowRef.isDestroyed()))) {
+        case "web":
+            void openInBrowser();
+            return;
         case "browser":
             void serveBrowserShell();
             return;
@@ -275,15 +285,22 @@ let browserHost: BrowserHost | null = null;
 let browserHostStarting: Promise<BrowserHost> | null = null;
 let removeBrowserPushSink: (() => void) | null = null;
 
-function browserPortSwitch(): number {
-    const raw = app.commandLine.getSwitchValue("browser-port");
-    if (!raw) return 0;
+// The installed app keeps one port, so a bookmarked tab finds it again.
+// Development builds take any free one and never collide with it; so does
+// `--browser`, which is for development too.
+const WEB_PORT = 45470;
+
+function browserPort(): number {
+    const raw = app.commandLine.getSwitchValue("web-port");
+    if (!raw) return is.dev || (app.commandLine.hasSwitch("browser") && !webLaunch) ? 0 : WEB_PORT;
     const port = Number(raw);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
-        throw new Error(`--browser-port must be a port number (1-65535), got "${raw}"`);
+        throw new Error(`--web-port must be a port number (1-65535), got "${raw}"`);
     }
     return port;
 }
+
+let browserSessions: BrowserSessions | null = null;
 
 function ensureBrowserHost(): Promise<BrowserHost> {
     if (browserHost) return Promise.resolve(browserHost);
@@ -298,8 +315,11 @@ function ensureBrowserHost(): Promise<BrowserHost> {
         const invoke: Record<string, (args: unknown) => unknown> = {};
         for (const channel of SHARED_SHELL_INVOKE_CHANNELS) invoke[channel] = shared[channel];
         invoke["app-settings-changed"] = () => applySavedAppSettings();
+        browserSessions ??= new BrowserSessions(path.join(getLocalDir(), "browser-sessions.json"));
+        const port = browserPort();
         const host = await startBrowserHost({
-            port: browserPortSwitch(),
+            port,
+            sessions: browserSessions,
             rendererDir: path.join(__dirname, "../renderer"),
             rendererDevUrl: is.dev ? process.env["ELECTRON_RENDERER_URL"] : undefined,
             invoke,
@@ -312,6 +332,12 @@ function ensureBrowserHost(): Promise<BrowserHost> {
                 read: (args) => readPanelFileForBrowser(args, poolEndpoint),
                 write: (args, body, size) => writePanelFileFromBrowser(args, body, size, poolEndpoint),
             },
+        }).catch((err: NodeJS.ErrnoException) => {
+            if (!err?.code) throw err;
+            throw new Error(
+                `Paperboard can't open in the browser on port ${port}: ${portRefusal(err, port)}. ` +
+                    "Start it with --web-port=<port> to use another.",
+            );
         });
         removeBrowserPushSink = addShellPushSink((channel, payload) => host.push(channel, payload));
         ensureDesktopTray();
@@ -324,25 +350,41 @@ function ensureBrowserHost(): Promise<BrowserHost> {
     return browserHostStarting;
 }
 
-// Browser mode is a development tool for agents: it serves the shell and
-// prints the origin, and never opens a tab itself (the agent's own browser
-// navigates there). There is no sign-in; never expose the port beyond loopback.
+// A windowless launch that couldn't serve has nothing to show: it exits
+// visibly, through quit, so before-quit can stop children and sockets.
+function failWindowlessLaunch(err: any): void {
+    if (!browserMode || browserHost) return;
+    console.error(`Paperboard could not open in the browser: ${err?.message || err}`);
+    process.exitCode = 1;
+    app.quit();
+}
+
+// "Open in Browser" and `--web`: the default browser opens Paperboard,
+// signed in with a link that works once
+async function openInBrowser(): Promise<void> {
+    try {
+        const host = await ensureBrowserHost();
+        await shell.openExternal(host.signInUrl());
+        log.info(`[Browser] opened ${host.origin} in the default browser`);
+    } catch (err: any) {
+        log.error("[Browser] could not open Paperboard in the browser:", err?.message || err);
+        dialog.showErrorBox("Paperboard couldn't open in the browser", err?.message || String(err));
+        failWindowlessLaunch(err);
+    }
+}
+
+// `--browser`, for development: serves the shell and prints a sign-in link
+// instead of opening a tab (an agent's own browser goes there)
 async function serveBrowserShell(): Promise<void> {
     try {
         const host = await ensureBrowserHost();
         console.log(
-            `\nPaperboard (browser, DEV TOOL) is running at ${host.origin}\n` +
-                "No sign-in is required; do not expose this port on a network.\n",
+            `\nPaperboard is running at ${host.origin}\n` +
+                `Sign in (works once, for 5 minutes): ${host.signInUrl()}\n`,
         );
     } catch (err: any) {
         log.error("[Browser] could not serve Paperboard in the browser:", err?.message || err);
-        if (browserMode && !browserHost) {
-            // nothing is serving and there are no windows: exit visibly but
-            // through quit, so before-quit can stop children and sockets
-            console.error(`Paperboard could not start browser mode: ${err?.message || err}`);
-            process.exitCode = 1;
-            app.quit();
-        }
+        failWindowlessLaunch(err);
     }
 }
 
@@ -371,6 +413,21 @@ app.whenReady().then(async () => {
         });
     }
     electronApp.setAppUserModelId("dev.paperboard.paperboard");
+    // right-clicking Paperboard on the Windows taskbar offers the browser
+    // too; the task relaunches with --web, which the running app answers
+    if (process.platform === "win32" && app.isPackaged) {
+        const added = app.setUserTasks([
+            {
+                program: process.execPath,
+                arguments: "--web",
+                iconPath: process.execPath,
+                iconIndex: 0,
+                title: "Open in Browser",
+                description: "Open Paperboard in your default browser",
+            },
+        ]);
+        if (!added) log.warn("[Main] Windows didn't take the taskbar's Open in Browser task");
+    }
 
     if (process.platform === "darwin") {
         const template: Electron.MenuItemConstructorOptions[] = [
@@ -465,7 +522,8 @@ app.whenReady().then(async () => {
         for (const signal of ["SIGINT", "SIGTERM"] as const) {
             process.on(signal, () => app.quit());
         }
-        await serveBrowserShell();
+        if (webLaunch) await openInBrowser();
+        else await serveBrowserShell();
     } else {
         createWindow();
         // updates run in the background; the top bar lists them
@@ -474,7 +532,7 @@ app.whenReady().then(async () => {
 
     app.on("activate", function () {
         if (browserMode) {
-            void serveBrowserShell();
+            void (webLaunch ? openInBrowser() : serveBrowserShell());
             return;
         }
         // click on the dock/Taskbar icon: bring back the (hidden) window
