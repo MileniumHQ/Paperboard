@@ -100,8 +100,10 @@ describe("stopping the daemon never stops its workloads", () => {
 		process.env.PAPERBOARD_DIR = dir;
 		try {
 			await waitFor("the supervisor to listen", () => supervisorPresent("leak-probe"));
+			// the socket file is there from bind, a moment before listen: the
+			// daemon retries a refused connect the same way
 			const client = new SupervisedProcessClient("leak-probe");
-			expect(await client.connect()).toBe(true);
+			await waitFor("the supervisor to accept a connection", () => client.connect());
 			await waitFor("the workload to report its env", () => fs.existsSync(probe) && fs.readFileSync(probe, "utf8"));
 			client.destroy();
 		} finally {
