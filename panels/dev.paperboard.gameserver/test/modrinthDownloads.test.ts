@@ -8,6 +8,27 @@ import { pickDatapackBuild } from "../src/core/datapacks";
 import { installDatapack, type DatapackDeps } from "../src/service/datapacks";
 import { setServerSoftware, setServerVersion } from "../src/lib/server";
 import { installProject, PluginVersionMismatchError } from "../src/lib/plugins";
+import { installPlugin, type PluginInstallDeps } from "../src/service/plugins";
+import type { InstalledRecord } from "../src/core/plugins";
+
+/** the plugin install against a loopback Modrinth; downloads are recorded, not made */
+function pluginDeps(versions: unknown[], options: { present?: string[]; records?: () => Record<string, InstalledRecord> } = {}) {
+    const modrinth = loopbackServer((_req, url) => {
+        if (url.pathname === "/v2/project/essentialsx") return Response.json({ id: "PROJ1234", slug: "essentialsx", title: "EssentialsX", icon_url: "https://cdn.modrinth.com/i.png", project_type: "plugin" });
+        if (url.pathname === "/v2/project/PROJ1234/version") return Response.json(versions);
+        return new Response("not found", { status: 404 });
+    });
+    const downloads: Record<string, unknown>[] = [];
+    let records: Record<string, InstalledRecord> = { "Other.jar": { projectId: "OTHER123", slug: "other", version: "1" } };
+    const deps: PluginInstallDeps = {
+        fetchJson: async <T>(url: string) => (await (await fetch(url.replace(MODRINTH_API, `${modrinth.url}/v2`))).json()) as T,
+        download: async (opts) => void downloads.push(opts),
+        exists: async (path) => (options.present ?? []).includes(path),
+        readRecords: async () => (options.records ?? (() => records))(),
+        writeRecords: async (next) => void (records = next),
+    };
+    return { deps, downloads, records: () => records, modrinth };
+}
 
 const hash = (algorithm: string, data: string) => createHash(algorithm).update(data).digest("hex");
 const file = (name: string, content: string, extra: Record<string, unknown> = {}) => ({
@@ -103,6 +124,33 @@ describe("Modrinth downloads", () => {
         await expect(installDatapack({ projectId: "../../etc" }, "1.21.1", deps)).rejects.toThrow("is not a Modrinth id");
         await expect(installDatapack({ projectId: "PROJ1234", versionId: "v1/../x" }, "1.21.1", deps)).rejects.toThrow("is not a Modrinth id");
         expect(downloads).toEqual([]);
+    });
+
+    test("a plugin install from Blocks takes the exact build by its slug, checks both hashes, and keeps the other records", async () => {
+        const { deps, downloads, records } = pluginDeps([
+            version("v121", ["1.21.1"], [file("EssentialsX-2.21.jar", "e")], ["paper"]),
+            version("v120", ["1.20.1"], [file("EssentialsX-2.20.jar", "old")], ["paper"]),
+        ]);
+        expect(await installPlugin("essentialsx", "paper", "1.21.1", deps)).toEqual({ file: "EssentialsX-2.21.jar", name: "EssentialsX", version: "v121" });
+        expect(downloads).toEqual([{ url: "https://cdn.modrinth.com/data/x/EssentialsX-2.21.jar", targetPath: "plugins/EssentialsX-2.21.jar", sha1: hash("sha1", "e"), sha512: hash("sha512", "e") }]);
+        expect(records()).toEqual({
+            "Other.jar": { projectId: "OTHER123", slug: "other", version: "1" },
+            "EssentialsX-2.21.jar": { projectId: "PROJ1234", slug: "essentialsx", version: "v121", title: "EssentialsX", iconUrl: "https://cdn.modrinth.com/i.png" },
+        });
+    });
+
+    test("a plugin install from Blocks refuses another version's build, an installed file, an unreadable record list and a bad id, and downloads nothing", async () => {
+        const other = pluginDeps([version("v120", ["1.20.1"], [file("EssentialsX-2.20.jar", "old")], ["paper"])]);
+        await expect(installPlugin("essentialsx", "paper", "1.21.1", other.deps)).rejects.toThrow("EssentialsX has no build for Minecraft 1.21.1 on Paper");
+        const builds = [version("v121", ["1.21.1"], [file("EssentialsX-2.21.jar", "e")], ["paper"])];
+        const present = pluginDeps(builds, { present: ["plugins/EssentialsX-2.21.jar"] });
+        await expect(installPlugin("essentialsx", "paper", "1.21.1", present.deps)).rejects.toThrow("EssentialsX-2.21.jar is already installed");
+        const unreadable = pluginDeps(builds, { records: () => { throw new Error("config unreadable"); } });
+        await expect(installPlugin("essentialsx", "paper", "1.21.1", unreadable.deps)).rejects.toThrow("config unreadable");
+        const bad = pluginDeps(builds);
+        await expect(installPlugin("../../etc", "paper", "1.21.1", bad.deps)).rejects.toThrow("is not a Modrinth id");
+        await expect(installPlugin("essentialsx", "vanilla", "1.21.1", bad.deps)).rejects.toThrow("has no plugin or mod system");
+        expect([...other.downloads, ...present.downloads, ...unreadable.downloads, ...bad.downloads]).toEqual([]);
     });
 
     test("a plugin whose newest build is for another Minecraft version is not installed unless allowed", async () => {

@@ -84,10 +84,10 @@ describe("each server is a Blocks project with its game's blocks", () => {
         expect((await blocksApi.projects(PANEL_ID)).map((p) => [p.id, p.name]).sort()).toEqual([["s-a", "Survival"], ["s-t", "Island"]]);
         const all = await blocksApi.list(PANEL_ID);
         const of = (prefix: string) => all.map((b) => b.entry).filter((e) => e.startsWith(prefix)).sort();
-        expect(of("type.")).toEqual(["automation", "backup", "log-file", "player", "player-statistics", "plugin", "server", "world"].map((t) => `type.${t}`));
+        expect(of("type.")).toEqual(["automation", "backup", "datapack", "log-file", "modpack", "player", "player-statistics", "plugin", "server", "world"].map((t) => `type.${t}`));
         expect(of("s-a/")).toEqual(entriesOf("s-a", {
-            commands: [...SHARED.commands, "ban-player", "create-world", "delete-player-data", "delete-plugin", "delete-world", "deop-player", "install-software", "kick-player", "kill-player", "op-player", "pardon-player", "reset-world", "set-game-rule", "switch-world", "uninstall-plugins", "unwhitelist-player", "whitelist-player"],
-            values: [...SHARED.values, "active-world", "banned-players", "game-rule", "operators", "player-by-uuid", "player-statistics", "plugins", "statistics-of", "whitelisted-players", "worlds"],
+            commands: [...SHARED.commands, "ban-player", "create-world", "delete-player-data", "delete-plugin", "delete-world", "deop-player", "install-datapack", "install-modpack", "install-plugin", "install-software", "kick-player", "kill-player", "op-player", "pardon-player", "remove-datapack", "remove-modpack", "reset-world", "set-game-rule", "switch-world", "uninstall-plugins", "unwhitelist-player", "whitelist-player"],
+            values: [...SHARED.values, "active-world", "banned-players", "datapacks", "game-rule", "modpack", "operators", "player-by-uuid", "player-statistics", "plugins", "statistics-of", "whitelisted-players", "worlds"],
             events: [...SHARED.events, ...PLAYER_EVENTS],
         }).sort());
         expect(of("s-t/")).toEqual(entriesOf("s-t", {
@@ -116,6 +116,11 @@ describe("each server is a Blocks project with its game's blocks", () => {
         await expect(run("switch-world", { world: "Elsewhere" })).rejects.toThrow('This server has no world named "Elsewhere"');
         await expect(run("restart-server")).rejects.toThrow("The server is not online, so it can't restart");
         expect(await read("active-world")).toBe("Second");
+        // add-ons: the active world's datapacks, and no modpack on Paper
+        expect(await read("datapacks")).toEqual([]);
+        await expect(run("remove-datapack", { datapack: "missing.zip" })).rejects.toThrow("The active world has no datapack named missing.zip");
+        await expect(run("install-modpack", { modpack: "fabulously-optimized" })).rejects.toThrow('does not support action "install-modpack"');
+        await expect(read("modpack")).rejects.toThrow("This server has no modpack");
     });
 
     test("the option blocks read and change what the Options tab does, and refuse what it would", async () => {

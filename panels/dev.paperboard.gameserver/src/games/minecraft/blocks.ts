@@ -3,11 +3,15 @@
 import type { BlockCommandDefinition, BlockSet, BlockTypeDefinition, BlockValueDefinition, ServiceContext } from "../../service/api";
 import type { GameServerState } from "../../service/types";
 import { ACTION_IDS } from "../../service/contract";
-import { needsAction, playerEvents } from "../../service/blocks";
+import { needsAction, playerEvents, runGameAction } from "../../service/blocks";
 import { listRoster } from "../../service/playerLists";
 import { listPlayerStats } from "../../service/playerStats";
 import { listWorlds, resolveLevelName } from "../../service/worlds";
-import { listInstalledPlugins, uninstallAllPlugins } from "../../service/plugins";
+import { installPlugin, listInstalledPlugins, livePluginInstallDeps, uninstallAllPlugins } from "../../service/plugins";
+import type { DatapackListing } from "../../service/datapacks";
+import type { ModpackRecord } from "../../core/modpack";
+import type { ModrinthVersion } from "../../core/modrinth";
+import { minecraftSoftware } from "./index";
 import { deletePlayerData } from "../../service/players";
 import { setGamerule } from "../../service/gamerules";
 import type { PlayerStatSummary } from "../../core/playerStats";
@@ -52,6 +56,28 @@ export const minecraftBlockTypes: BlockTypeDefinition[] = [
             file: { type: "text", name: "File" },
             name: { type: "text", name: "Name" },
             version: { type: "text", name: "Version", description: "Empty for a plugin Paperboard did not install" },
+        },
+    },
+    {
+        id: "datapack",
+        name: "Datapack",
+        icon: "deployed_code",
+        base: "object",
+        fields: {
+            name: { type: "text", name: "Name", description: "Its file or folder in the world's datapacks folder" },
+            title: { type: "text", name: "Title", description: "Empty for a datapack Paperboard did not install" },
+            version: { type: "text", name: "Version", description: "Empty for a datapack Paperboard did not install" },
+        },
+    },
+    {
+        id: "modpack",
+        name: "Modpack",
+        icon: "package_2",
+        base: "object",
+        fields: {
+            title: { type: "text", name: "Title" },
+            version: { type: "text", name: "Version" },
+            minecraft: { type: "text", name: "Minecraft Version" },
         },
     },
     {
@@ -229,6 +255,20 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                 },
             },
             needsAction(ctx, ACTION_IDS.deletePlugin, {
+                id: "install-plugin",
+                name: "Install Plugin",
+                category: "Plugins",
+                icon: "download",
+                description: "Installs a Modrinth plugin or mod's newest build for this server's software and Minecraft version; it loads when the server next starts",
+                text: "Install plugin {plugin}",
+                inputs: { plugin: { type: "text", name: "Modrinth Project", description: "Its id or the name in its Modrinth address, such as essentialsx" } },
+                output: "plugin",
+                run: async ({ plugin }: { plugin: string }) => {
+                    const installed = await installPlugin(plugin, minecraftSoftware(ctx.state.serverSoftware), ctx.state.serverVersion, livePluginInstallDeps);
+                    return { file: installed.file, name: installed.name, version: installed.version };
+                },
+            }),
+            needsAction(ctx, ACTION_IDS.deletePlugin, {
                 id: "delete-plugin",
                 name: "Delete Plugin",
                 category: "Plugins",
@@ -247,9 +287,94 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                 output: "number",
                 run: () => uninstallAllPlugins(ctx),
             }),
+            needsAction(ctx, ACTION_IDS.installDatapack, {
+                id: "install-datapack",
+                name: "Install Datapack",
+                category: "Datapacks",
+                icon: "download",
+                description: "Installs a Modrinth datapack's build for this server's Minecraft version into the active world",
+                text: "Install datapack {datapack}",
+                inputs: { datapack: { type: "text", name: "Modrinth Project", description: "Its id or the name in its Modrinth address, such as terralith" } },
+                output: "datapack",
+                run: async ({ datapack }: { datapack: string }) => {
+                    const installed = await runGameAction<{ name: string }>(ctx, ACTION_IDS.installDatapack, { projectId: datapack });
+                    const listing = await runGameAction<DatapackListing>(ctx, ACTION_IDS.listDatapacks, {});
+                    const pack = listing.packs.find((p) => p.name === installed.name);
+                    if (!pack) throw new Error(`${installed.name} was installed, but the active world doesn't list it`);
+                    return { name: pack.name, title: pack.record?.title ?? "", version: pack.record?.version ?? "" };
+                },
+            }),
+            needsAction(ctx, ACTION_IDS.removeDatapack, {
+                id: "remove-datapack",
+                name: "Remove Datapack",
+                category: "Datapacks",
+                icon: "delete",
+                description: "Moves a datapack out of the active world into the trash",
+                text: "Remove datapack {datapack}",
+                inputs: { datapack: { type: "text", name: "Datapack", description: "Its name, as Datapacks lists it" } },
+                run: async ({ datapack }: { datapack: string }) => {
+                    // the tab removes what it listed; a block can name anything, so it is checked first
+                    const listing = await runGameAction<DatapackListing>(ctx, ACTION_IDS.listDatapacks, {});
+                    if (!listing.packs.some((p) => p.name === datapack)) throw new Error(`The active world has no datapack named ${datapack}`);
+                    await runGameAction(ctx, ACTION_IDS.removeDatapack, { name: datapack });
+                },
+            }),
+            needsAction(ctx, ACTION_IDS.installModpack, {
+                id: "install-modpack",
+                name: "Install Modpack",
+                category: "Modpack",
+                icon: "package_2",
+                description: "Installs a Modrinth modpack in place of the server's mods, while the server is stopped; with no version, its newest",
+                text: "Install modpack {modpack} version {version}",
+                inputs: {
+                    modpack: { type: "text", name: "Modrinth Project", description: "Its id or the name in its Modrinth address" },
+                    version: { type: "text", name: "Version", optional: true, description: "A version number Modrinth lists for it" },
+                },
+                run: async ({ modpack, version }: { modpack: string; version?: string }) => {
+                    const versions = await runGameAction<ModrinthVersion[]>(ctx, ACTION_IDS.listModpackVersions, { projectId: modpack });
+                    const chosen = version ? versions.find((v) => v.versionNumber === version || v.id === version) : versions[0];
+                    if (!chosen) throw new Error(version ? `${modpack} has no version ${version} for this server's software` : `${modpack} has no version for this server's software`);
+                    await runGameAction(ctx, ACTION_IDS.installModpack, { projectId: modpack, versionId: chosen.id });
+                },
+            }),
+            needsAction(ctx, ACTION_IDS.removeModpack, {
+                id: "remove-modpack",
+                name: "Remove Modpack",
+                category: "Modpack",
+                icon: "delete",
+                description: "Moves the modpack's files to the trash, keeping the server software, while the server is stopped",
+                run: async () => {
+                    await runGameAction(ctx, ACTION_IDS.removeModpack, {});
+                },
+            }),
         ],
         values: [
             rules.value,
+            needsAction(ctx, ACTION_IDS.listDatapacks, {
+                id: "datapacks",
+                name: "Datapacks",
+                category: "Datapacks",
+                icon: "deployed_code",
+                description: "The datapacks in the active world",
+                type: "list<datapack>",
+                read: async () => {
+                    const listing = await runGameAction<DatapackListing>(ctx, ACTION_IDS.listDatapacks, {});
+                    return listing.packs.map((pack) => ({ name: pack.name, title: pack.record?.title ?? "", version: pack.record?.version ?? "" }));
+                },
+            }),
+            needsAction(ctx, ACTION_IDS.readModpack, {
+                id: "modpack",
+                name: "Modpack",
+                category: "Modpack",
+                icon: "package_2",
+                description: "The modpack the server runs; a server without one fails",
+                type: "modpack",
+                read: async () => {
+                    const { modpack } = await runGameAction<{ modpack: ModpackRecord | null }>(ctx, ACTION_IDS.readModpack, {});
+                    if (!modpack) throw new Error("This server has no modpack");
+                    return { title: modpack.title, version: modpack.versionNumber, minecraft: modpack.mcVersion };
+                },
+            }),
             roster("whitelisted-players", "Whitelisted Players", "verified_user", "whitelisted"),
             roster("operators", "Operators", "shield", "op"),
             roster("banned-players", "Banned Players", "gavel", "banned"),
