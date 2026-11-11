@@ -91,10 +91,10 @@ describe("desktop app update checks", () => {
         ] as const) {
             const resources = tempDir("resources");
             fs.writeFileSync(path.join(resources, "package-type"), `${type}\n`);
-            expect(linuxPackageInstall(resources, arch)).toEqual({ feedUrl: `https://i.paperboard.dev/pb/${feedFile}`, download });
+            expect(linuxPackageInstall(resources, arch)).toEqual({ feedUrl: `https://i.paperboard.dev/pb/${feedFile}`, download, packageType: type });
         }
-        // a package Paperboard didn't publish has nothing of ours to download
-        expect(linuxPackageInstall(tempDir("resources"), "x64").download).toBeNull();
+        // a package Paperboard didn't publish has nothing of ours to download or install
+        expect(linuxPackageInstall(tempDir("resources"), "x64")).toMatchObject({ download: null, packageType: null });
 
         feed = new Feed();
         feed.offer(NEWER, payload);

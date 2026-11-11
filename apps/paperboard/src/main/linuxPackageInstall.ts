@@ -11,7 +11,11 @@ const DOWNLOAD_BASE = "https://i.paperboard.dev/pb";
 export interface LinuxPackageInstall {
     feedUrl: string;
     download: string | null;
+    /** the package Paperboard published that this install came from */
+    packageType: "deb" | "rpm" | null;
 }
+
+export { DOWNLOAD_BASE };
 
 export function linuxPackageInstall(resourcesPath: string, arch: string): LinuxPackageInstall {
     if (arch !== "x64" && arch !== "arm64") throw new Error(`Paperboard is not built for Linux ${arch}`);
@@ -20,11 +24,10 @@ export function linuxPackageInstall(resourcesPath: string, arch: string): LinuxP
     try {
         packageType = fs.readFileSync(path.join(resourcesPath, "package-type"), "utf8").trim();
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") return { feedUrl, download: null };
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") return { feedUrl, download: null, packageType: null };
         throw err;
     }
-    const download = packageType === "deb" || packageType === "rpm"
-        ? `${DOWNLOAD_BASE}/latest/paperboard-linux-${arch}.${packageType}`
-        : null;
-    return { feedUrl, download };
+    const ours = packageType === "deb" || packageType === "rpm" ? packageType : null;
+    const download = ours ? `${DOWNLOAD_BASE}/latest/paperboard-linux-${arch}.${ours}` : null;
+    return { feedUrl, download, packageType: ours };
 }

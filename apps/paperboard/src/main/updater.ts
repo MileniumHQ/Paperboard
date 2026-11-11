@@ -2,7 +2,8 @@ import * as path from "path";
 import { app, BrowserWindow } from "electron";
 import { AppUpdateSession, getAppUpdateState, retainAppUpdateState } from "./appUpdateSession";
 import { ManualAppUpdater } from "./manualAppUpdater";
-import { linuxPackageInstall } from "./linuxPackageInstall";
+import { DOWNLOAD_BASE, linuxPackageInstall } from "./linuxPackageInstall";
+import { LinuxPackageUpdater, onPath } from "./linuxPackageUpdater";
 import { isShellUrl } from "./communication/shellGuard";
 import type { AppUpdater } from "electron-updater";
 import { createPlatformUpdater } from "./platformUpdater";
@@ -398,8 +399,24 @@ function platformUpdater(): AppUpdater {
     return updater;
 }
 
+// a deb or rpm Paperboard published, on a machine that can install it itself
+let packageUpdater: LinuxPackageUpdater | null = null;
+
 /** Restarts into the downloaded update; throws when there is none to install. */
 export function quitAndInstallAppUpdate(): void {
+    if (packageUpdater) {
+        const updater = packageUpdater;
+        // a refused or failed install shows in the update dialog, and this
+        // version keeps running
+        void updater.install().then(
+            () => {
+                app.relaunch();
+                app.quit();
+            },
+            (err) => updater.emit("error", err),
+        );
+        return;
+    }
     if (!autoUpdater) throw new Error("no app update has been downloaded");
     autoUpdater.quitAndInstall(false, true);
 }
@@ -419,7 +436,21 @@ function appUpdater(): AppUpdateSession {
         ? linuxPackageInstall(process.resourcesPath, process.arch)
         : null;
     packageDownload = install?.download ?? null;
-    const updater = install ? new ManualAppUpdater(app.getVersion(), install.feedUrl) : platformUpdater();
+    if (install?.packageType) {
+        const candidate = new LinuxPackageUpdater({
+            currentVersion: app.getVersion(),
+            feedUrl: install.feedUrl,
+            downloadBase: DOWNLOAD_BASE,
+            file: path.basename(new URL(install.download!).pathname),
+            type: install.packageType,
+            downloadDir: path.join(electronDataDir(), "paperboard-package-updater"),
+            which: (cmd) => onPath(cmd),
+        });
+        // without pkexec or the package tool, the person installs it themselves
+        if (candidate.canInstall) packageUpdater = candidate;
+        else logger.info(`[Updater] this computer can't install a .${install.packageType} itself; updates are offered as a download`);
+    }
+    const updater = packageUpdater ?? (install ? new ManualAppUpdater(app.getVersion(), install.feedUrl) : platformUpdater());
     appUpdateSession = new AppUpdateSession(updater, (state) => {
         retainAppUpdateState(state);
         updateQueue.upsertItem(appUpdateItem(state));
@@ -428,7 +459,7 @@ function appUpdater(): AppUpdateSession {
                 window.webContents.send("app-update-state", state);
             }
         }
-    }, TASK_TIMEOUT_MS, !install ? "automatic" : packageDownload ? "package-download" : "package-manager");
+    }, TASK_TIMEOUT_MS, !install || packageUpdater ? "automatic" : packageDownload ? "package-download" : "package-manager");
     return appUpdateSession;
 }
 
