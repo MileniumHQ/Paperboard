@@ -6,6 +6,7 @@ import path from "node:path";
 import type { BrainState, Harness } from "../src/contract";
 import { AiApp, type AppHost } from "../src/service/app";
 import { Brains, loginProcessId } from "../src/service/brains";
+import { findExistingBrain, versionFrom } from "../src/service/existingBrains";
 import { CLAUDE_MEMORY_OFF } from "../src/service/harness";
 import { askClaudeModels, listModels } from "../src/service/models";
 import { conversationRig, settled, turnId, type Rig } from "./support/rig";
@@ -19,12 +20,12 @@ afterEach(async () => {
 type States = Record<Harness, BrainState>;
 
 /** The brains, each installed from a package of fake brains, signed out. */
-async function brains(o: { installed?: Harness[] } = {}) {
-    const root = tempDir("brains");
+async function brains(o: { installed?: Harness[]; root?: string; find?: (harness: Harness) => string | null } = {}) {
+    const root = o.root ?? tempDir("brains");
     const host = new TestHost(fakeEnv(root));
     const installed = Object.fromEntries((o.installed ?? ["codex", "claude-code", "opencode"]).map((h) => [h, brainPackage(root, h)]));
     const states = new Recorder<States>();
-    const b = new Brains({ host: { ...host, packages: packageHost(installed) } as never, dir: path.join(root, "storage", "brains"), onState: states.push });
+    const b = new Brains({ host: { ...host, packages: packageHost(installed) } as never, dir: path.join(root, "storage", "brains"), find: o.find ?? (() => null), onState: states.push });
     cleanups.push(async () => {
         await b.shutdown();
         await host.close();
@@ -38,7 +39,7 @@ async function brains(o: { installed?: Harness[] } = {}) {
 describe("harness launch", () => {
     test("each brain runs from its package, with its own home in the panel's storage and auto-update off", async () => {
         const { root, b, installed } = await brains();
-        // a codex on PATH is never the one used
+        // an installed package is the brain even when the same program is on PATH
         const elsewhere = path.join(root, "on-path");
         fs.mkdirSync(elsewhere);
         fs.copyFileSync(path.join(installed.codex!, "bin", "codex"), path.join(elsewhere, "codex"));
@@ -94,6 +95,106 @@ describe("harness launch", () => {
         expect(mcp.mcpServers.paperboard.url).toBe(rig.mcp.url);
         expect(start.env).toMatchObject({ ...CLAUDE_MEMORY_OFF, DISABLE_AUTO_COMPACT: "1" });
     }, SLOW);
+});
+
+// A brain the user already has is used as it is.
+describe("brains already on the computer", () => {
+    const programName = (harness: Harness) => (harness === "claude-code" ? "claude" : harness);
+    /** a brain's program outside any daemon package, as a user's own install would be */
+    const ownProgram = (root: string, harness: Harness) => path.join(brainPackage(path.join(root, "own"), harness), "bin", programName(harness));
+
+    test("one that's there is run as it is, with the panel's own home, and nothing is downloaded for it", async () => {
+        const root = tempDir("own-brains");
+        const own = ownProgram(root, "codex");
+        const { b, host } = await brains({ installed: [], root, find: (h) => (h === "codex" ? own : null) });
+        const storage = path.join(root, "storage", "brains");
+        expect(b.snapshot().codex).toMatchObject({ phase: "installed", installed: true, version: "9.8.7", existing: own });
+        expect(b.resolve("codex")).toBe(own);
+        // the others have nothing yet
+        expect(b.snapshot()["claude-code"]).toMatchObject({ phase: "none", existing: null });
+        // its version and sign-in were asked with the panel's home, never the user's
+        const runs = fakeLog(root).filter((e) => e.name === "codex" && e.event === "run");
+        expect(runs.map((e) => e.argv.join(" "))).toEqual(["--version", "login status"]);
+        for (const run of runs) expect(run.env.CODEX_HOME).toBe(path.join(storage, "codex"));
+        // installing it is looking again: the test's package host refuses every download
+        await b.install("codex");
+        expect(b.snapshot().codex.phase).toBe("installed");
+        expect(host).toBeDefined();
+    }, SLOW);
+
+    test("an installed package stays the brain when the program turns up on the computer later", async () => {
+        const root = tempDir("own-brains");
+        const own = ownProgram(root, "codex");
+        const { b, installed } = await brains({ installed: ["codex"], root, find: () => own });
+        expect(b.resolve("codex")).toBe(path.join(installed.codex!, "bin", "codex"));
+        expect(b.snapshot().codex.existing).toBeNull();
+    }, SLOW);
+
+    test("one that won't say its version is a failure that names it, not a reason to download another", async () => {
+        const root = tempDir("own-brains");
+        const own = ownProgram(root, "codex");
+        fs.writeFileSync(path.join(root, "plan.json"), JSON.stringify({ versionFails: true }));
+        const { b } = await brains({ installed: [], root, find: (h) => (h === "codex" ? own : null) });
+        const codex = b.snapshot().codex;
+        expect(codex.phase).toBe("failed");
+        expect(codex.error).toContain(own);
+        expect(codex.error).toContain("cannot start");
+        expect(codex.existing).toBe(own);
+        // installing it again is the person asking for the package: it goes to the download, which the test's host refuses
+        await expect(b.install("codex")).rejects.toThrow("no download");
+        expect(b.snapshot().codex.error).toContain("didn't install");
+    }, SLOW);
+});
+
+describe("looking for a brain on the computer", () => {
+    const env = (platform: NodeJS.Platform, dirs: string[], home: string) => ({ platform, pathEnv: dirs.join(platform === "win32" ? ";" : ":"), home });
+    const program = (dir: string, name: string, mode = 0o755) => {
+        fs.mkdirSync(dir, { recursive: true });
+        const file = path.join(dir, name);
+        fs.writeFileSync(file, "x", { mode });
+        return file;
+    };
+
+    test("PATH comes first, then the folders each harness's own installer uses", () => {
+        const root = tempDir("find");
+        cleanups.push(() => fs.rmSync(root, { recursive: true, force: true }));
+        const home = path.join(root, "home");
+        const onPath = program(path.join(root, "bin"), "codex");
+        expect(findExistingBrain("codex", env("linux", [path.join(root, "bin")], home))).toBe(onPath);
+        const installer = program(path.join(home, ".claude", "local"), "claude");
+        expect(findExistingBrain("claude-code", env("linux", [], home))).toBe(installer);
+        const opencode = program(path.join(home, ".opencode", "bin"), "opencode");
+        expect(findExistingBrain("opencode", env("linux", [], home))).toBe(opencode);
+        // another harness's folder isn't searched
+        expect(findExistingBrain("codex", env("linux", [], home))).toBeNull();
+    });
+
+    test("a file that can't be run, or a folder, isn't a program", () => {
+        if (process.platform === "win32") return;
+        const root = tempDir("find");
+        cleanups.push(() => fs.rmSync(root, { recursive: true, force: true }));
+        program(path.join(root, "bin"), "codex", 0o644);
+        fs.mkdirSync(path.join(root, "dirs", "claude"), { recursive: true });
+        expect(findExistingBrain("codex", env("linux", [path.join(root, "bin")], root))).toBeNull();
+        expect(findExistingBrain("claude-code", env("linux", [path.join(root, "dirs")], root))).toBeNull();
+    });
+
+    test("on Windows only an .exe counts: an npm shim needs arguments of its own", () => {
+        const root = tempDir("find");
+        cleanups.push(() => fs.rmSync(root, { recursive: true, force: true }));
+        const dir = path.join(root, "bin");
+        program(dir, "codex.cmd");
+        expect(findExistingBrain("codex", env("win32", [dir], root))).toBeNull();
+        const exe = program(dir, "codex.exe");
+        expect(findExistingBrain("codex", env("win32", [dir], root))).toBe(exe);
+    });
+
+    test("a version is the first thing in the output that looks like one", () => {
+        expect(versionFrom("codex-cli 0.46.0\n")).toBe("0.46.0");
+        expect(versionFrom("2.0.14 (Claude Code)")).toBe("2.0.14");
+        expect(versionFrom("1.2.3-beta.1")).toBe("1.2.3-beta.1");
+        expect(versionFrom("no version here")).toBeNull();
+    });
 });
 
 // Brain sign-in input is checked.
@@ -171,7 +272,7 @@ describe("brain failures", () => {
         plan(root, { status: { exit: 2, stderr: "panic: config.toml is corrupt\n" } });
         const host = new TestHost(fakeEnv(root));
         cleanups.push(() => host.close());
-        const b = new Brains({ host: { ...host, packages: packageHost({ codex: brainPackage(root, "codex") }) } as never, dir: path.join(root, "brains"), onState: () => {} });
+        const b = new Brains({ host: { ...host, packages: packageHost({ codex: brainPackage(root, "codex") }) } as never, dir: path.join(root, "brains"), find: () => null, onState: () => {} });
         await b.init();
         expect(b.snapshot().codex).toMatchObject({ phase: "failed", installed: true, signedIn: false });
         expect(b.snapshot().codex.error).toContain("panic: config.toml is corrupt");

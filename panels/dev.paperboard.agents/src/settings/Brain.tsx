@@ -29,11 +29,12 @@ export function brainLine(harness: Harness, b: BrainState): string {
         case "failed":
             return "Stopped with a problem.";
         case "installed":
-            return `Installed${b.version ? ` (${b.version})` : ""}. Sign in to use it.`;
+            return `${b.existing ? "Found on this computer" : "Installed"}${b.version ? ` (${b.version})` : ""}. Sign in to use it.`;
         case "ready":
             return [
                 b.signedIn ? signedInLine(b) : SIGN_IN_REQUIRED[harness] ? "Ready." : "Ready, with its free models.",
                 b.version ? `Version ${b.version}.` : "",
+                b.existing ? "Using the one already on this computer." : "",
                 b.updateWaiting ? "An update installs when the agent next stops." : "",
             ]
                 .filter(Boolean)
@@ -363,6 +364,11 @@ export function BrainButtons(props: { agent: Agent; harness: Harness; actions: B
     return (
         <PaperFlex direction="row" gap="half" align="center">
             <Switch>
+                <Match when={b().phase === "failed" && b().existing}>
+                    <PaperButton onClick={() => void props.actions.install(props.harness)}>
+                        <PaperIcon>download</PaperIcon> Install its own copy
+                    </PaperButton>
+                </Match>
                 <Match when={b().phase === "none" || (b().phase === "failed" && !b().installed)}>
                     <PaperButton variant="primary" onClick={() => void props.actions.install(props.harness)}>
                         <PaperIcon>download</PaperIcon> {b().phase === "failed" ? "Try again" : "Install"}

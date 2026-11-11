@@ -46,6 +46,8 @@ export async function appRig(o: { settings?: Settings; actions?: ActionEntry[] }
         readSettings: async () => o.settings ?? { name: "Ada", harness: "codex", model: null, compaction: "summarize" },
         writeSettings: async () => {},
         findProgram,
+        // a brain on the machine running the tests is never the one under test
+        findBrain: () => null,
         tools: {
             write: host.write,
             readTools: async () => tools,

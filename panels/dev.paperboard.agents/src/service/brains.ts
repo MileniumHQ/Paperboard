@@ -1,15 +1,19 @@
-// The agent's brains: Codex, Claude Code and OpenCode, each a package the
-// daemon installs from its vendor's own release (Origami pins the version and
-// checksum; the daemon verifies and unpacks it). The panel doesn't look for
-// them on the computer: it installs them, runs them from the package, and
-// signs them in with their own login commands.
+// The agent's brains: Codex, Claude Code and OpenCode. One the user already
+// has on this computer is used as it is (existingBrains.ts). Otherwise it's a
+// package the daemon installs from its vendor's own release (Origami pins the
+// version and checksum; the daemon verifies and unpacks it). Either way the
+// panel runs it, and signs it in with its own login commands.
+//
+// A package that's already installed stays the brain, so a program that
+// turns up on the computer later never replaces it underneath a conversation.
 //
 // Each harness runs with its home inside this panel's storage (CODEX_HOME,
-// CLAUDE_CONFIG_DIR, XDG_* for OpenCode), so the agent never touches, or is
-// changed by, the user's own installs and settings. Credentials stay in those
-// folders, written by the harnesses themselves; this panel never reads them.
-// Auto-update is off for every harness: the package is the only way a new
-// build arrives.
+// CLAUDE_CONFIG_DIR, XDG_* for OpenCode), even a program the user installed,
+// so the agent never touches, or is changed by, the user's own settings and
+// sign-ins. Credentials stay in those folders, written by the harnesses
+// themselves; this panel never reads them. Auto-update is off for every
+// harness: a package is the only way a new build arrives, and a program the
+// user installed is theirs to update.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -17,9 +21,9 @@ import { SIGN_IN_REQUIRED, type BrainState, type Harness, type LoginPrompt } fro
 import { errorText } from "../lib/failure";
 import { LOGOUT_COMMAND, STATUS_COMMAND, callbackAddress, loginCommand, outputTail, readLoginOutput, readStatus, type LoginMethod } from "./brainLogin";
 import type { PackageHost, StartOptions } from "./browser";
+import { findExistingBrain, PROGRAMS, versionFrom } from "./existingBrains";
 
 export const BRAIN_PACKAGES: Record<Harness, string> = { codex: "codex", "claude-code": "claude-code", opencode: "opencode" };
-const PROGRAMS: Record<Harness, string> = { codex: "codex", "claude-code": "claude", opencode: "opencode" };
 const NAMES: Record<Harness, string> = { codex: "Codex", "claude-code": "Claude", opencode: "OpenCode" };
 
 /** the daemon's packages, plus what the brains need to know about them */
@@ -49,6 +53,8 @@ export interface BrainsDeps {
     onState: (brains: Record<Harness, BrainState>) => void;
     platform?: NodeJS.Platform;
     arch?: string;
+    /** the harness's program already on this computer, or null; looks on PATH and where its installer puts it */
+    find?: (harness: Harness) => string | null;
     /** how long a sign-in may take to show its page / to be finished */
     pageMs?: number;
     loginMs?: number;
@@ -64,7 +70,7 @@ const CODE_MAX = 2_000;
 
 export const loginProcessId = (harness: Harness) => `brain-login-${harness}`;
 
-const none = (): BrainState => ({ phase: "none", installed: false, version: null, signedIn: false, account: null, percent: null, login: null, error: null, updateWaiting: false });
+const none = (): BrainState => ({ phase: "none", installed: false, version: null, signedIn: false, account: null, percent: null, login: null, error: null, updateWaiting: false, existing: null });
 
 interface Login {
     /** where the brain stood when the sign-in started: a stopped sign-in goes back there */
@@ -77,6 +83,8 @@ interface Login {
 export class Brains {
     private state: Record<Harness, BrainState> = { codex: none(), "claude-code": none(), opencode: none() };
     private dirs: Partial<Record<Harness, string>> = {};
+    /** the program already on the computer that a brain runs, when it isn't a package */
+    private existing: Partial<Record<Harness, string>> = {};
     private busy: Record<Harness, Promise<unknown>> = { codex: Promise.resolve(), "claude-code": Promise.resolve(), opencode: Promise.resolve() };
     private logins = new Map<Harness, Login>();
 
@@ -119,8 +127,10 @@ export class Brains {
         return structuredClone(this.state);
     }
 
-    /** The harness's program, or null while its package isn't installed. */
+    /** The harness's program, or null while there's neither one on the computer nor an installed package. */
     resolve(harness: Harness): string | null {
+        const found = this.existing[harness];
+        if (found) return found;
         const dir = this.dirs[harness];
         if (!dir) return null;
         const exe = path.join(dir, "bin", PROGRAMS[harness] + (this.platform === "win32" ? ".exe" : ""));
@@ -140,6 +150,9 @@ export class Brains {
 
     install(harness: Harness): Promise<void> {
         return this.exclusive(harness, async () => {
+            // one the user has is used as it is; nothing is downloaded for it. One that has failed is
+            // the exception: asking to install it again is asking for the package instead.
+            if (this.state[harness].phase !== "failed" && this.found(harness) && !(await this.packageInstalled(harness))) return this.look(harness);
             if (!this.supported) throw this.fail(harness, `${NAMES[harness]} has no build for this computer (${this.platform}, ${this.deps.arch ?? process.arch}).`, "unsupported");
             this.set(harness, { phase: "installing", percent: 0, error: null });
             try {
@@ -290,8 +303,16 @@ export class Brains {
 
     /** A failure the person is shown: it's the brain's error, and the same Error goes to whoever asked. */
     private fail(harness: Harness, message: string, phase: BrainState["phase"] = "failed"): Error {
-        this.set(harness, { phase, error: message, percent: null, login: null, installed: this.resolve(harness) !== null });
+        this.set(harness, { phase, error: message, percent: null, login: null, installed: this.resolve(harness) !== null, existing: this.existing[harness] ?? null });
         return new Error(message);
+    }
+
+    private found(harness: Harness): string | null {
+        return (this.deps.find ?? findExistingBrain)(harness);
+    }
+
+    private async packageInstalled(harness: Harness): Promise<boolean> {
+        return this.supported && (await this.deps.host.packages.isInstalled(BRAIN_PACKAGES[harness]));
     }
 
     /** What is installed and whether it's signed in. `error` is why a look follows a failure, shown with what was found. */
@@ -299,6 +320,17 @@ export class Brains {
         const name = BRAIN_PACKAGES[harness];
         const { host } = this.deps;
         try {
+            const found = (await this.packageInstalled(harness)) ? null : this.found(harness);
+            if (found) {
+                delete this.dirs[harness];
+                this.existing[harness] = found;
+                const version = await this.versionOf(harness, found);
+                const { signedIn, account } = await this.status(harness);
+                const ready = signedIn || !SIGN_IN_REQUIRED[harness];
+                this.set(harness, { phase: error ? "failed" : ready ? "ready" : "installed", installed: true, version, signedIn, account, percent: null, login: null, error, updateWaiting: false, existing: found });
+                return;
+            }
+            delete this.existing[harness];
             if (!this.supported) {
                 this.set(harness, { ...none(), phase: "unsupported", error: error ?? `${NAMES[harness]} has no build for this computer.` });
                 return;
@@ -313,11 +345,18 @@ export class Brains {
             const [version, updateWaiting] = await Promise.all([host.packages.version(name), host.packages.updateWaiting(name)]);
             const { signedIn, account } = await this.status(harness);
             const ready = signedIn || !SIGN_IN_REQUIRED[harness];
-            this.set(harness, { phase: error ? "failed" : ready ? "ready" : "installed", installed: true, version, signedIn, account, percent: null, login: null, error, updateWaiting });
+            this.set(harness, { phase: error ? "failed" : ready ? "ready" : "installed", installed: true, version, signedIn, account, percent: null, login: null, error, updateWaiting, existing: null });
         } catch (e) {
-            this.set(harness, { phase: "failed", installed: this.resolve(harness) !== null, percent: null, login: null, error: error ?? errorText(e) });
+            this.set(harness, { phase: "failed", installed: this.resolve(harness) !== null, existing: this.existing[harness] ?? null, percent: null, login: null, error: error ?? errorText(e) });
             if (!error) throw e;
         }
+    }
+
+    /** The version a program on the computer reports. One that won't run is a failure naming it, never skipped for the package. */
+    private async versionOf(harness: Harness, exe: string): Promise<string | null> {
+        const out = await this.deps.host.exec(exe, ["--version"], { timeoutMs: this.deps.statusMs ?? STATUS_MS, env: this.env(harness) });
+        if (out.exitCode !== 0) throw new Error(`${NAMES[harness]} on this computer (${exe}) didn't say its version: ${outputTail(out.stderr || out.stdout) || `exit ${out.exitCode}`}`);
+        return versionFrom(out.stdout || out.stderr);
     }
 
     private async status(harness: Harness): Promise<{ signedIn: boolean; account: string | null }> {

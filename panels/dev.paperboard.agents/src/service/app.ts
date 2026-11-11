@@ -68,8 +68,10 @@ export interface AppHost extends Omit<ComputerHost, "packages">, Omit<TurnHost, 
     readSettings(): Promise<unknown>;
     writeSettings(s: Settings): Promise<void>;
     exec(command: string, args: string[], o?: { timeoutMs?: number; env?: Record<string, string> }): Promise<{ stdout: string; stderr: string; exitCode: number }>;
-    /** a program on PATH: for the user's own tool servers; the brains are packages, never looked for here */
+    /** a program on PATH: for the user's own tool servers */
     findProgram(command: string, args: readonly string[]): Launch | null;
+    /** a brain's program already on this computer; the daemon's own lookup when left out */
+    findBrain?(harness: Harness): string | null;
     /** register an action again, as it is now: the flow actions' conversation dropdown follows the history */
     registerAction(def: ActionDefinition): Promise<void>;
 }
@@ -156,7 +158,7 @@ export class AiApp {
             notice: (text) => this.conversation.notice(text),
         });
         const brainsHost = { ...this.host, write: this.host.tools.write };
-        this.brains = new Brains({ host: brainsHost, dir: path.join(root, "brains"), onState: (brains) => this.ctx.setState({ brains }) });
+        this.brains = new Brains({ host: brainsHost, dir: path.join(root, "brains"), find: this.host.findBrain, onState: (brains) => this.ctx.setState({ brains }) });
         this.providers = new Providers({
             host: brainsHost,
             program: () => this.brains.resolve("opencode"),

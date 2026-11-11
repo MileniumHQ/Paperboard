@@ -294,6 +294,8 @@ export interface BrainState {
     error: string | null;
     /** a newer build is downloaded and waits for the running agent to stop */
     updateWaiting: boolean;
+    /** the program already on this computer that the brain runs, instead of a downloaded package */
+    existing: string | null;
 }
 
 /** OpenCode works with its free models before anything is connected; the others need their sign-in. */
@@ -502,7 +504,7 @@ export interface SignInEntry {
 
 export const SETUP_STEPS: SetupStepId[] = ["download", "unpack"];
 
-const NO_BRAIN: BrainState = { phase: "none", installed: false, version: null, signedIn: false, account: null, percent: null, login: null, error: null, updateWaiting: false };
+const NO_BRAIN: BrainState = { phase: "none", installed: false, version: null, signedIn: false, account: null, percent: null, login: null, error: null, updateWaiting: false, existing: null };
 
 export const DEFAULT_STATE: AiState = {
     settings: null,

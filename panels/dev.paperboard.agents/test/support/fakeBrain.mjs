@@ -40,6 +40,16 @@ log({ event: "run", argv, env, cwd: process.cwd() });
 
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 
+if (argv[0] === "--version") {
+    // plan.versionFails: a program that is on the computer but won't run
+    if (plan.versionFails) {
+        process.stderr.write("fake brain: cannot start\n");
+        process.exit(3);
+    }
+    process.stdout.write(`${name} 9.8.7\n`);
+    process.exit(0);
+}
+
 /** stdin to its end, the way `codex exec` reads a piped input before it starts */
 function readAll() {
     return new Promise((ok) => {
