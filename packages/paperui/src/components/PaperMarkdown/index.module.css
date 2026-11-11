@@ -48,6 +48,15 @@
     scroll-margin-top: var(--paper-uigap);
 }
 
+/* a #link followed from the keyboard focuses its heading: PaperUI's ring,
+   not the browser's own */
+@media (hover: hover) {
+    .PaperMarkdown [data-anchor]:focus-visible {
+        outline: var(--paper-focus-ring);
+        outline-offset: var(--paper-focus-offset);
+    }
+}
+
 /* an image a renderImage hook drew alone in its paragraph: a block of its own */
 .media {
     display: block;
