@@ -373,7 +373,8 @@ export class BotSession {
         return {
             connected: this.connected(),
             lastError: this.connectionStatus.error ?? null,
-            uptimeMs: bot && this.sessionStartedAt ? Math.max(0, Date.now() - this.sessionStartedAt) : 0,
+            // a dropped gateway is not online, however long ago the session began
+            uptimeMs: this.connected() && this.sessionStartedAt ? Math.max(0, Date.now() - this.sessionStartedAt) : 0,
             wsPing: bot?.ws?.ping ?? -1,
             wsStatus: bot?.ws?.status ?? -1,
             guildCount: bot?.guilds?.cache?.size ?? 0,
@@ -466,6 +467,10 @@ export class BotSession {
                     GatewayIntentBits.MessageContent,
                     GatewayIntentBits.GuildMembers,
                     GatewayIntentBits.GuildMessageReactions,
+                    // bans and unbans, and who is in voice: without them
+                    // Discord never sends those events
+                    GatewayIntentBits.GuildModeration,
+                    GatewayIntentBits.GuildVoiceStates,
                     GatewayIntentBits.DirectMessages,
                 ],
             });
