@@ -9,7 +9,7 @@ import { BUILTIN_BLOCKS, choicesSources, PROPERTIES_CATEGORY, registryDefinition
 import { refreshChoices, registerChoicesField } from "../src/lib/choicesField";
 import { runHat, type Host } from "../src/lib/interpreter";
 import { BUILTIN, propertyBlockType, registryBlockType } from "../src/lib/names";
-import { block, saved, steps, top } from "./helpers/workspace";
+import { block, saved, steps, text, top } from "./helpers/workspace";
 
 const GAME = "dev.test.extras";
 const PLAYER = `${GAME}:player`;
@@ -56,6 +56,9 @@ const PROJECTS = [
 ];
 
 const WARP = registryBlockType({ kind: "command", panelId: GAME, entry: "s1/command.warp" });
+const WARP_WORLD = registryBlockType({ kind: "choices", panelId: GAME, entry: "s1/command.warp", key: "world" });
+const WARP_MODE = registryBlockType({ kind: "choices", panelId: GAME, entry: "s1/command.warp", key: "mode" });
+const pick = (type: string, value: string) => ({ shadow: { type, fields: { VALUE: value } } });
 const LEFT = registryBlockType({ kind: "event", panelId: GAME, entry: "s1/event.left" });
 const LEFT_REASON = registryBlockType({ kind: "event-value", panelId: GAME, entry: "s1/event.left", key: "reason" });
 
@@ -84,11 +87,16 @@ function host(calls: unknown[][], logs: string[]): Host {
 describe("defaults", () => {
     test("a new block starts on each input's default: its socket's block, or its dropdown's choice", () => {
         const warp = defs.sections.flatMap((s) => s.contents).find((b) => b.type === WARP)!;
-        expect(warp).toEqual({ kind: "block", type: WARP, inputs: { times: { shadow: { type: "math_number", fields: { NUM: 3 } } } }, fields: { mode: '"fast"' } });
+        expect(warp).toEqual({
+            kind: "block",
+            type: WARP,
+            inputs: { times: { shadow: { type: "math_number", fields: { NUM: 3 } } }, world: { shadow: { type: WARP_WORLD } }, mode: pick(WARP_MODE, '"fast"') },
+        });
         const ws = new Blockly.Workspace();
         try {
-            const created = Blockly.serialization.blocks.append({ type: WARP }, ws);
-            expect(created.getFieldValue("mode")).toBe('"fast"');
+            const { kind: _kind, ...state } = warp;
+            const created = Blockly.serialization.blocks.append(state as Blockly.serialization.blocks.State, ws);
+            expect(created.getInputTargetBlock("mode")!.getFieldValue("VALUE")).toBe('"fast"');
         } finally {
             ws.dispose();
         }
@@ -101,25 +109,45 @@ describe("choices worked out on demand", () => {
         await refreshChoices(choicesSources(ENTRIES)[0]!);
         const ws = new Blockly.Workspace();
         try {
-            const warp = Blockly.serialization.blocks.append({ type: WARP, fields: { world: '"world"' } }, ws);
-            const field = warp.getField("world") as Blockly.FieldDropdown;
+            const world = Blockly.serialization.blocks.append({ type: WARP_WORLD, fields: { VALUE: '"world"' } }, ws);
+            const field = world.getField("VALUE") as Blockly.FieldDropdown;
             expect(field.getOptions(false)).toEqual([["Overworld", '"world"']]);
             // the panel lost the world: a flow that picked it keeps it, and running says it's gone
             worlds = [{ label: "Nether", value: "nether" }];
             await refreshChoices(choicesSources(ENTRIES)[0]!);
-            const kept = Blockly.serialization.blocks.append({ type: WARP, fields: { world: '"world"' } }, ws);
-            expect(kept.getFieldValue("world")).toBe('"world"');
-            expect((kept.getField("world") as Blockly.FieldDropdown).getOptions(false)).toEqual([["Nether", '"nether"'], ["world", '"world"']]);
+            const kept = Blockly.serialization.blocks.append({ type: WARP_WORLD, fields: { VALUE: '"world"' } }, ws);
+            expect(kept.getFieldValue("VALUE")).toBe('"world"');
+            expect((kept.getField("VALUE") as Blockly.FieldDropdown).getOptions(false)).toEqual([["Nether", '"nether"'], ["world", '"world"']]);
         } finally {
             ws.dispose();
         }
     });
 
     test("the run gets the choice as its value; an input with no block is left for the panel to default", async () => {
-        const ws = saved([{ type: BUILTIN.onRun, inputs: { DO: steps({ type: WARP, fields: { world: '"nether"', mode: '"slow"' } }) } }]);
+        const ws = saved([{ type: BUILTIN.onRun, inputs: { DO: steps({ type: WARP, inputs: { world: pick(WARP_WORLD, '"nether"'), mode: pick(WARP_MODE, '"slow"') } }) } }]);
         const calls: unknown[][] = [];
         await runHat(top(ws, BUILTIN.onRun), null, ws, host(calls, []));
         expect(calls).toEqual([["run", "s1/command.warp", { world: "nether", mode: "slow" }]]);
+    });
+
+    test("a variable put over a dropdown is what runs, as in any other input", async () => {
+        const ws = saved(
+            [
+                {
+                    type: BUILTIN.onRun,
+                    inputs: {
+                        DO: steps(
+                            { type: "variables_set", fields: { VAR: { id: "w" } }, inputs: { VALUE: text("end") } },
+                            { type: WARP, inputs: { world: { ...pick(WARP_WORLD, '"world"'), block: { type: "variables_get", fields: { VAR: { id: "w" } } } } } },
+                        ),
+                    },
+                },
+            ],
+            [{ name: "w", id: "w" }],
+        );
+        const calls: unknown[][] = [];
+        await runHat(top(ws, BUILTIN.onRun), null, ws, host(calls, []));
+        expect(calls).toEqual([["run", "s1/command.warp", { world: "end" }]]);
     });
 });
 

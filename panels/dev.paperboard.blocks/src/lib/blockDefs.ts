@@ -83,19 +83,10 @@ function message(
     text: string | undefined,
     inputs: Inputs,
     bases: TypeBases,
-    owner: { panelId: string; entry: string },
 ): { message0: string; args0: Json[]; inputsInline?: false } {
     const args: Json[] = [];
-    const arg = (key: string): Json => {
-        const input = inputs[key]!;
-        if (input.dynamicChoices) return { type: CHOICES_FIELD, name: key, panelId: owner.panelId, entry: owner.entry, input: key };
-        if (input.choices) {
-            // the default first, so a new block starts on it
-            const choices = [...input.choices].sort((a, b) => Number(b.value === input.default) - Number(a.value === input.default));
-            return { type: "field_dropdown", name: key, options: choices.map((c) => [c.label, choiceValue(c.value)]) };
-        }
-        return { type: "input_value", name: key, check: checksFor(input.type, bases) };
-    };
+    // every input is a socket, so a variable or any block fits it; one with choices holds their dropdown (inputChoiceBlocks)
+    const arg = (key: string): Json => ({ type: "input_value", name: key, check: checksFor(inputs[key]!.type, bases) });
     const keys = Object.keys(inputs);
     const message0 = text
         ? text.replace(/\{([^}]+)\}/g, (_m, key: string) => {
@@ -103,8 +94,35 @@ function message(
               return `%${args.length}`;
           })
         : [name, ...keys.map((key) => (args.push(arg(key)), `%${args.length}`))].join(" ");
-    const sockets = args.filter((a) => a.type === "input_value").length;
+    // a dropdown reads as a word, so it doesn't count towards the sockets that stack a block's inputs
+    const sockets = args.filter((a) => a.type === "input_value" && !inputs[a.name as string]!.choices && !inputs[a.name as string]!.dynamicChoices).length;
     return { message0, args0: args, ...(sockets > MOST_INLINE_SOCKETS ? { inputsInline: false as const } : {}) };
+}
+
+/**
+ * The dropdown each input with choices starts as: a block in the input's
+ * socket, so a variable or any block can take its place.
+ */
+function inputChoiceBlocks(inputs: Inputs, bases: TypeBases, owner: { panelId: string; entry: string }, style: string): Json[] {
+    return Object.entries(inputs)
+        .filter(([, input]) => input.choices || input.dynamicChoices)
+        .map(([key, input]) => {
+            let field: Json;
+            if (input.dynamicChoices) field = { type: CHOICES_FIELD, name: "VALUE", panelId: owner.panelId, entry: owner.entry, input: key };
+            else {
+                // the default first, so a new block starts on it
+                const choices = [...input.choices!].sort((a, b) => Number(b.value === input.default) - Number(a.value === input.default));
+                field = { type: "field_dropdown", name: "VALUE", options: choices.map((c) => [c.label, choiceValue(c.value)]) };
+            }
+            return {
+                type: registryBlockType({ kind: "choices", panelId: owner.panelId, entry: owner.entry, key }),
+                message0: "%1",
+                args0: [field],
+                output: checksFor(input.type, bases),
+                style,
+                tooltip: `${input.name}; a variable or any block can take its place`,
+            };
+        });
 }
 
 function hat(type: string, title: ReturnType<typeof message>, tooltip: string, style: string): Json {
@@ -185,12 +203,13 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
         if (categoryIcon && !found.categoryIcon) found.categoryIcon = categoryIcon;
         return found.contents;
     };
-    const toolboxBlock = (type: string, inputs: Inputs | undefined, empty: EmptyChoice = "none"): Json => {
+    const toolboxBlock = (type: string, inputs: Inputs | undefined, owner: { panelId: string; entry: string }, empty: EmptyChoice = "none"): Json => {
         const shadows: Json = {};
         const fields: Json = {};
         for (const [key, input] of Object.entries(inputs ?? {})) {
             if (input.choices || input.dynamicChoices) {
-                if (input.default !== undefined) fields[key] = choiceValue(input.default);
+                const choice = registryBlockType({ kind: "choices", panelId: owner.panelId, entry: owner.entry, key });
+                shadows[key] = { shadow: { type: choice, ...(input.default !== undefined ? { fields: { VALUE: choiceValue(input.default) } } : {}) } };
                 continue;
             }
             const shadow = shadowFor(input, bases, listing, empty);
@@ -206,6 +225,14 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
             schema.kind === "type" ? section(panelId, project, PROPERTIES_CATEGORY) : section(panelId, project, schema.category, schema.categoryIcon);
         const record = (type: string) => {
             out.schemas[type] = { panelId, entry, schema };
+        };
+        /** the dropdowns its inputs with choices start as, saved with it */
+        const choiceBlocks = (owner: string, inputs: Inputs | undefined) => {
+            for (const block of inputChoiceBlocks(inputs ?? {}, bases, { panelId, entry }, panelStyle(panelId))) {
+                record(block.type as string);
+                out.uses[block.type as string] = [owner];
+                out.blocks.push(block);
+            }
         };
         switch (schema.kind) {
             case "type": {
@@ -254,14 +281,15 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                 // a command does something, so it's a step; what it gives back is in its gear
                 out.blocks.push({
                     type,
-                    ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases, { panelId, entry }),
+                    ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases),
                     previousStatement: null,
                     nextStatement: null,
                     ...(s.output ? { extensions: [RESULTS_GEAR] } : {}),
                     style: panelStyle(panelId),
                     tooltip: s.description ?? s.name,
                 });
-                contents.push(toolboxBlock(type, s.inputs as Inputs));
+                contents.push(toolboxBlock(type, s.inputs as Inputs, { panelId, entry }));
+                choiceBlocks(type, s.inputs as Inputs);
                 if (s.output) {
                     const typeInfo = types.get(s.output);
                     const typeSchema = typeInfo?.schema as Schema<"type"> | undefined;
@@ -306,12 +334,13 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                 record(type);
                 out.blocks.push({
                     type,
-                    ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases, { panelId, entry }),
+                    ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases),
                     output: checksFor(s.type, bases),
                     style: panelStyle(panelId),
                     tooltip: s.description ?? s.name,
                 });
-                contents.push(toolboxBlock(type, s.inputs as Inputs));
+                contents.push(toolboxBlock(type, s.inputs as Inputs, { panelId, entry }));
+                choiceBlocks(type, s.inputs as Inputs);
                 if (s.changes) {
                     const changes = registryBlockType({ kind: "changes", panelId, entry });
                     record(changes);
@@ -324,7 +353,7 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                 const s = schema as Schema<"event">;
                 const type = registryBlockType({ kind: "event", panelId, entry });
                 record(type);
-                out.blocks.push(hat(type, message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases, { panelId, entry }), s.description ?? s.name, panelStyle(panelId)));
+                out.blocks.push(hat(type, message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases), s.description ?? s.name, panelStyle(panelId)));
                 const valueBlocks: Json[] = [];
                 for (const [key, v] of Object.entries(s.values ?? {})) {
                     const valueType = registryBlockType({ kind: "event-value", panelId, entry, key });
@@ -338,7 +367,8 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                     });
                     valueBlocks.push({ kind: "block", type: valueType });
                 }
-                contents.unshift(toolboxBlock(type, s.inputs as Inputs, "any"), ...valueBlocks);
+                contents.unshift(toolboxBlock(type, s.inputs as Inputs, { panelId, entry }, "any"), ...valueBlocks);
+                choiceBlocks(type, s.inputs as Inputs);
                 break;
             }
         }

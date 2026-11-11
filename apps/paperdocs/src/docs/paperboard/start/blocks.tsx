@@ -43,7 +43,7 @@ export default function BlocksDoc() {
                 <li>Drop values into the rounded and pointed holes in a block. A rounded hole takes a value, and a pointed one takes true or false.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
-                A hole for a thing a panel has, such as a server, a bot or a conversation, starts as a menu of the ones there are. Pick one, or drop a block over the menu to use a value from the flow instead.
+                A hole for a thing a panel has, such as a server, a bot or a conversation, starts as a menu of the ones there are. Pick one, or drop a block over the menu, such as a variable, to use a value from the flow instead. Every other menu in a hole works the same way.
             </PaperText>
             <PaperText preset="body" as="p">
                 A step that gives something back, such as <b>Send Message</b>, has a gear. Select it to see what the step gave back, such as the message and its ID, and drag those blocks into later steps.

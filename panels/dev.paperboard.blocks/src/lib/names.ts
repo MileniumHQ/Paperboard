@@ -9,6 +9,7 @@
 //   pb.changes|<panel>|<entry>         "when <value> changes": the entry is the value's
 //   pb.event|<panel>|<entry>           an event's hat
 //   pb.event-value|<panel>|<entry>|<key>  one value an event fires with
+//   pb.choices|<panel>|<entry>|<input>  the dropdown an input with choices starts as
 //   pb.property|<panel>:<type>         "[field] of [value]" for a type
 //   pb.property|<panel>:<type>|<project>  the same, for the fields read in a project
 //   pb.choice|<panel>:<type>           a dropdown of the values a type lists
@@ -16,13 +17,13 @@
 //
 // An entry is "kind.id" or "project/kind.id" (PaperAPI's blockEntry).
 
-export type RegistryBlockKind = "command" | "result" | "value" | "changes" | "event" | "event-value";
+export type RegistryBlockKind = "command" | "result" | "value" | "changes" | "event" | "event-value" | "choices";
 
 export interface RegistryBlockName {
     kind: RegistryBlockKind;
     panelId: string;
     entry: string;
-    /** event-value: which value; result: which field, if one */
+    /** event-value: which value; result: which field, if one; choices: which input */
     key?: string;
     /** result with a key: the type ("panel:type") the command gave back, which has the field */
     typeRef?: string;
@@ -43,11 +44,11 @@ export function parseRegistryBlockType(type: string): RegistryBlockName | null {
     if (!type.startsWith(PREFIX)) return null;
     const [head, panelId, entry, key, typeRef, ...rest] = type.split("|");
     const kind = head!.slice(PREFIX.length);
-    if (!["command", "result", "value", "changes", "event", "event-value"].includes(kind) || !panelId || !entry || rest.length) return null;
+    if (!["command", "result", "value", "changes", "event", "event-value", "choices"].includes(kind) || !panelId || !entry || rest.length) return null;
     if (kind === "result") {
         // a field names the type that has it; the whole value names neither
         if ((key === undefined) !== (typeRef === undefined) || key === "" || typeRef === "") return null;
-    } else if ((kind === "event-value") !== (key !== undefined) || typeRef !== undefined) return null;
+    } else if ((kind === "event-value" || kind === "choices") !== (key !== undefined) || key === "" || typeRef !== undefined) return null;
     return { kind: kind as RegistryBlockKind, panelId, entry, ...(key !== undefined ? { key } : {}), ...(typeRef !== undefined ? { typeRef } : {}) };
 }
 

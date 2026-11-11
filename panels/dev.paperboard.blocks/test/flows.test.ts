@@ -61,6 +61,7 @@ const COUNT = registryBlockType({ kind: "value", panelId: GAME, entry: "s1/value
 const JOINED = registryBlockType({ kind: "event", panelId: GAME, entry: "s1/event.joined" });
 const JOINED_PLAYER = registryBlockType({ kind: "event-value", panelId: GAME, entry: "s1/event.joined", key: "player" });
 const PLAYER_FIELD = propertyBlockType(PLAYER);
+const KICK_HOW = registryBlockType({ kind: "choices", panelId: GAME, entry: "s1/command.kick", key: "how" });
 const JOIN = registryBlockType({ kind: "command", panelId: GAME, entry: "s1/command.join" });
 
 beforeAll(() => {
@@ -116,7 +117,7 @@ describe("a flow the editor saved runs the way it reads", () => {
                 type: BUILTIN.onRun,
                 inputs: {
                     DO: steps(
-                        { type: KICK, fields: { how: JSON.stringify({ ban: true }) }, inputs: { player: text("alice"), reason: text("griefing") } },
+                        { type: KICK, inputs: { player: text("alice"), reason: text("griefing"), how: { shadow: { type: KICK_HOW, fields: { VALUE: JSON.stringify({ ban: true }) } } } } },
                         {
                             type: BUILTIN.log,
                             inputs: {
@@ -279,7 +280,7 @@ describe("a failing flow stops and names the block it failed on", () => {
         const ws = saved([
             {
                 type: BUILTIN.onRun,
-                inputs: { DO: steps({ type: KICK, fields: { how: '"soft"' }, inputs: { player: text("bob"), reason: text("") } }, { type: BUILTIN.log, inputs: { TEXT: text("after") } }) },
+                inputs: { DO: steps({ type: KICK, inputs: { player: text("bob"), reason: text(""), how: { shadow: { type: KICK_HOW, fields: { VALUE: '"soft"' } } } } }, { type: BUILTIN.log, inputs: { TEXT: text("after") } }) },
             },
         ]);
         const r = recorder({

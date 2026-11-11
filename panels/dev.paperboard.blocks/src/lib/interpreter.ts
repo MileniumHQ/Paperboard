@@ -803,8 +803,8 @@ async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
             return run.variables.get(id);
         }
     }
-    if (parseChoiceBlockType(block.type)) {
-        // a dropdown of a type's values keeps its choice as JSON; "none" is nothing, a missing input
+    if (parseChoiceBlockType(block.type) || parseRegistryBlockType(block.type)?.kind === "choices") {
+        // a dropdown keeps its choice as JSON; "none" is nothing, a missing input
         const choice = field(block, "VALUE");
         try {
             return JSON.parse(String(choice));
