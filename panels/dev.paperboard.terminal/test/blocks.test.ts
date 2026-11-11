@@ -6,7 +6,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { blocksApi } from "@mileniumhq/paperapi";
 import { clearWorkloads, testDaemon } from "./helpers/crane";
-import { PANEL_ID, panelFiles, serviceState, startService, stopServices } from "./helpers/service";
+import { PANEL_ID, call, panelFiles, serviceState, startService, stopServices } from "./helpers/service";
 import { within } from "./helpers/wait";
 import { runShellCommand } from "../src/lib/shellCommand";
 
@@ -67,8 +67,11 @@ describe("the Terminal's blocks", () => {
             "command.run-shell-command",
             "command.save-command",
             "command.show-tab",
+            "command.split-tab",
             "command.stop-saved-command",
             "command.type-in-tab",
+            "command.unsplit-tab",
+            "event.command-finished",
             "event.saved-command-finished",
             "event.tab-closed",
             "event.tab-opened",
@@ -88,6 +91,59 @@ describe("the Terminal's blocks", () => {
         expect(schema("event.terminal-exit")).toMatchObject({ filters: { tab: "tab" }, values: { tab: { type: `${PANEL_ID}:tab` } } });
         expect(await read("tabs")).toEqual(["tab1", "tab2"]);
         expect(await blocksApi.property(`${PANEL_ID}:tab`, "name", "tab2")).toBe("Two");
+    });
+
+    test("a tab says the program in front, its folder and each command; it opens in a folder and splits", async () => {
+        await panelFiles({ "tabs.json": TABS });
+        await startService();
+        const folder = fs.mkdtempSync(path.join(work, "here "));
+        await expect(run("new-tab", { name: "Nowhere", folder: path.join(work, "missing") })).rejects.toThrow("is not a folder on this computer");
+        await expect(call("create-tab", { label: "Odd", shell: "/bin/not-a-shell" })).rejects.toThrow("/bin/not-a-shell is not a shell on this computer");
+        // an installed program that isn't one of the computer's shells is refused too
+        await expect(call("create-tab", { label: "Odd", shell: process.execPath })).rejects.toThrow(`${process.execPath} is not a shell on this computer`);
+        // the test daemon's shell is a plain sh, which marks nothing: bash does
+        const tab = await call<string>("create-tab", { label: "Here", cwd: folder, shell: "/bin/bash" });
+        const property = (field: string) => blocksApi.property(`${PANEL_ID}:tab`, field, tab);
+        const until = async (field: string, accept: (v: unknown) => boolean) => {
+            const deadline = Date.now() + 20_000;
+            for (;;) {
+                const value = await property(field);
+                if (accept(value)) return value;
+                if (Date.now() > deadline) throw new Error(`Timed out waiting for the tab's ${field}; last: ${JSON.stringify(value)}`);
+                await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+        };
+        expect(await until("folder", (v) => v === folder)).toBe(folder);
+        await within("bash to say its folder", (async () => {
+            while ((await serviceState()).live?.[tab]?.cwd !== folder) await new Promise((resolve) => setTimeout(resolve, 50));
+        })());
+        const shell = await until("program", (v) => typeof v === "string" && v.length > 0);
+
+        const failed = nextEvent("command-finished", (p) => p.tab === tab && p.command === "sh -c 'exit 4'");
+        await settle();
+        await run("run-in-tab", { command: "sh -c 'exit 4'", tab });
+        expect(await failed.fired).toEqual({ tab, command: "sh -c 'exit 4'", succeeded: false, "exit-code": 4, result: "Exit 4" });
+
+        await run("run-in-tab", { command: "sleep 3", tab });
+        await until("program", (v) => v === "sleep");
+        await until("program", (v) => v === shell);
+
+        expect(await property("split")).toBe(false);
+        await expect(run("unsplit-tab", { tab })).rejects.toThrow("Here is not split");
+        await run("split-tab", { tab, direction: "down" });
+        expect(await property("split")).toBe(true);
+        await expect(run("split-tab", { tab, direction: "right" })).rejects.toThrow("Here is split already");
+        const split = (await serviceState()).tabs.find((t: any) => t.id === tab).split;
+        expect(split).toMatchObject({ direction: "down", session: { cwd: folder } });
+        // the second shell is a shell of its own, in the first one's folder
+        await within("the split's shell", (async () => {
+            while (!(await serviceState()).live?.[split.session.id]?.cwd) await new Promise((resolve) => setTimeout(resolve, 50));
+        })());
+        expect((await serviceState()).live[split.session.id].cwd).toBe(folder);
+        await run("unsplit-tab", { tab });
+        expect(await property("split")).toBe(false);
+        expect(fs.existsSync(path.join(work, "missing"))).toBe(false);
+        await run("close-tab", { tab });
     });
 
     test("a new tab is a Tab, announces the change, runs commands and shows their output; an unknown tab is refused", async () => {

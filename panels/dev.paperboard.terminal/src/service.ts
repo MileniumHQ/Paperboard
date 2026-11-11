@@ -9,26 +9,30 @@ import {
     blocksApi,
     type ServiceContext,
 } from "@mileniumhq/paperapi";
+import * as fs from "node:fs";
 import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scrollback";
 import { errorMessage } from "./lib/failure";
 import { runShellCommand } from "./lib/shellCommand";
 import { writeTerminal } from "./lib/terminalWrite";
 import { SavedCommands, type CommandRun, type SavedCommand } from "./lib/savedCommands";
-import { BlocksAnnouncer, exitPayload, finishedPayload, tabPayload, terminalBlocks } from "./blocks";
+import { BlocksAnnouncer, commandPayload, exitPayload, finishedPayload, tabPayload, terminalBlocks } from "./blocks";
+import { findSession, readLayout, readSavedTabs, tabSessions, type LiveSession, type SplitDirection, type TabLayout, type TerminalSession, type TerminalTab } from "./lib/tabs";
 
 // pass PANEL_ID explicitly, ambient scope resolves to last-imported panel
 const PANEL_ID = "dev.paperboard.terminal";
 
-export interface TerminalTab {
-    id: string;
-    label: string;
-}
+export type { TerminalTab } from "./lib/tabs";
 
 export interface TerminalServiceState {
     // the tab list every window mirrors; which tab a window shows is that
     // window's own choice, so open windows and computers stay in step
     tabs: TerminalTab[];
     activeTabId: string;
+    // what each session's shell has said: the program in front of it, its
+    // folder, and the last command it ran (keyed by session id, a split's too)
+    live: Record<string, LiveSession>;
+    // tabs along the top, or down the side; every window follows it
+    layout: TabLayout;
     // Show Tab's request that every open window switch to a tab; each request
     // has its own token, so a window follows it once
     showTab: { id: string; request: string };
@@ -45,6 +49,10 @@ const SCROLLBACK_DIR = "terminal-scrollback";
 
 let tabs: TerminalTab[] = [];
 let activeTabId = "";
+let layout: TabLayout = "horizontal";
+const live: Record<string, LiveSession> = {};
+// counts commands, so a window can tell a new one from one it has seen
+let commandSeq = 0;
 let showTabRequest = { id: "", request: "" };
 
 const buffers = new Map<string, string>();
@@ -77,14 +85,14 @@ const blocks = blocksApi.panel(PANEL_ID);
 const announcer = new BlocksAnnouncer(blocks);
 
 function publishTabs(ctx: Ctx) {
-    ctx.setState({ tabs: tabs.map((t) => ({ ...t })), activeTabId, showTab: { ...showTabRequest } });
+    ctx.setState({ tabs: structuredClone(tabs), activeTabId, showTab: { ...showTabRequest }, layout });
     announcer.list("tabs", tabs.map((t) => t.id));
     announcer.list("active-tab", [activeTabId]);
 }
 
 async function persistTabs(ctx: Ctx | null) {
     try {
-        await config.set({ tabs, activeTabId }, PANEL_ID, "tabs.json");
+        await config.set({ tabs, activeTabId, layout }, PANEL_ID, "tabs.json");
     } catch (err) {
         console.error("[TerminalService] tab config persist failed:", err);
     }
@@ -97,19 +105,58 @@ function cancelPersistTimer(id: string) {
     persistTimers.delete(id);
 }
 
+function liveSession(id: string): LiveSession {
+    return (live[id] ??= { program: "", cwd: "" });
+}
+
+function publishLive() {
+    serviceCtx?.setState({ live: structuredClone(live) });
+}
+
 export function subscribeSession(id: string, ctx: Ctx | null) {
     if (subscribedSessions.has(id)) return;
     subscribedSessions.add(id);
     try {
         const unsubs = [
             terminalApi.onData(id, (data) => {
-                if (!tabs.some((t) => t.id === id)) return;
+                if (!findSession(tabs, id)) return;
                 buffers.set(id, applyScrollbackCap(data, buffers.get(id) || ""));
                 schedulePersist(id);
             }),
             terminalApi.onExit(id, (exitCode) => {
+                // the program in front was the shell, and it is gone
+                if (live[id]) {
+                    live[id].program = "";
+                    publishLive();
+                }
+                const owner = findSession(tabs, id);
+                // a split's shell ending is not the tab's
+                if (owner && owner.tab.id !== id) return;
                 ctx?.emitTrigger("terminal-exit", { tabId: id, exitCode });
                 announcer.fire("terminal-exit", exitPayload(id, exitCode));
+            }),
+            terminalApi.onForeground(id, (program) => {
+                if (!findSession(tabs, id)) return;
+                liveSession(id).program = program;
+                publishLive();
+            }),
+            terminalApi.onCwd(id, (cwd) => {
+                const owner = findSession(tabs, id);
+                if (!owner) return;
+                liveSession(id).cwd = cwd;
+                publishLive();
+                // where the next shell for this session starts
+                if (owner.session.cwd !== cwd) {
+                    owner.session.cwd = cwd;
+                    void persistTabs(serviceCtx);
+                }
+            }),
+            terminalApi.onCommand(id, (finished) => {
+                const owner = findSession(tabs, id);
+                if (!owner) return;
+                liveSession(id).command = { line: finished.command, exitCode: finished.exitCode, seq: ++commandSeq };
+                publishLive();
+                announcer.fire("command-finished", commandPayload(owner.tab.id, finished));
             }),
         ];
         sessionUnsubs.set(id, unsubs);
@@ -122,6 +169,7 @@ export function unsubscribeSession(id: string) {
     // deallocated, not just guarded: drop the id AND detach the listeners
     // so a reconnect storm or daemon echo can't wake a dead tab
     subscribedSessions.delete(id);
+    delete live[id];
     const unsubs = sessionUnsubs.get(id);
     sessionUnsubs.delete(id);
     for (const unsub of unsubs ?? []) {
@@ -192,9 +240,34 @@ async function ensureSession(id: string, cols?: number, rows?: number): Promise<
     // shell that ended (Paperboard quit, or the shell exited), and keeping it
     // glued each new prompt onto the last line of the old one
     cancelPersistTimer(id);
-    buffers.set(id, "");
-    await files.write(scrollbackPath(id), "", PANEL_ID);
-    await terminalApi.create(id, { cols, rows });
+    const session = findSession(tabs, id)?.session;
+    // it starts where the last one was, unless that folder has gone since
+    let cwd = session?.cwd;
+    let notice = "";
+    if (cwd && !isFolder(cwd)) {
+        notice = `\x1b[2m${cwd} is gone, so this shell starts in the home folder.\x1b[0m\r\n`;
+        cwd = undefined;
+        session!.cwd = undefined;
+    }
+    buffers.set(id, notice);
+    await files.write(scrollbackPath(id), notice, PANEL_ID);
+    await terminalApi.create(id, { cols, rows, cwd, shell: session?.shell });
+}
+
+function isFolder(folder: string): boolean {
+    try {
+        return fs.statSync(folder).isDirectory();
+    } catch {
+        return false;
+    }
+}
+
+// a folder a caller asked for, refused before any tab opens
+function requireStart(start: { cwd?: string; shell?: string }): { cwd?: string; shell?: string } {
+    const cwd = (start.cwd || "").trim() || undefined;
+    const shell = (start.shell || "").trim() || undefined;
+    if (cwd && !isFolder(cwd)) throw new Error(`${cwd} is not a folder on this computer`);
+    return { cwd, shell };
 }
 
 // create-tab starts its shell ahead of any viewer; a shell that cannot
@@ -292,16 +365,94 @@ function liveCtx(): Ctx {
     return serviceCtx;
 }
 
-export async function createTab(ctx: Ctx, label?: string): Promise<string> {
-    const id = `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const name = (label || "").trim() || `Tab ${tabs.length + 1}`;
-    tabs.push({ id, label: name });
+function newSessionId(prefix: string): string {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+}
+
+/**
+ * Opens a tab; its shell starts in the folder and with the shell given, or
+ * the defaults. `besides` is a session whose folder the new shell starts in
+ * (a new tab from the panel opens where you are): a folder that has gone
+ * since is said in the new terminal, not refused.
+ */
+export async function createTab(ctx: Ctx, label?: string, start: { cwd?: string; shell?: string; besides?: string } = {}): Promise<string> {
+    const asked = requireStart(start);
+    const shell = asked.shell;
+    let cwd = asked.cwd;
+    if (!cwd && start.besides) {
+        const beside = findSession(tabs, start.besides);
+        if (!beside) throw new Error(`Unknown terminal tab "${start.besides}"`);
+        cwd = live[beside.session.id]?.cwd || beside.session.cwd;
+    }
+    const id = newSessionId("tab");
+    const chosen = (label || "").trim();
+    const name = chosen || `Tab ${tabs.length + 1}`;
+    const tab: TerminalTab = { id, label: name };
+    if (chosen) tab.named = true;
+    if (cwd) tab.cwd = cwd;
+    if (shell) tab.shell = shell;
+    tabs.push(tab);
+    if (shell) {
+        // a shell asked for by name must start, or the tab isn't opened: the
+        // daemon says why (one this computer doesn't have)
+        try {
+            await ensureSession(id);
+        } catch (err) {
+            tabs = tabs.filter((t) => t.id !== id);
+            buffers.delete(id);
+            throw err;
+        }
+    } else {
+        await tryEnsureSession(id);
+    }
     activeTabId = id;
-    await tryEnsureSession(id);
     subscribeSession(id, ctx);
     await persistTabs(ctx);
     announcer.fire("tab-opened", tabPayload({ id, label: name }));
     return id;
+}
+
+/** Opens a second shell beside the tab's, in the folder the first is in. */
+export async function splitTab(ctx: Ctx, tabId: string | undefined, direction: SplitDirection): Promise<string> {
+    const tab = tabs.find((t) => t.id === resolveTabId(tabId))!;
+    if (direction !== "right" && direction !== "down") throw new Error("A tab splits right or down");
+    if (tab.split) throw new Error(`${tab.label} is split already`);
+    const session: TerminalSession = { id: newSessionId("pane") };
+    const cwd = live[tab.id]?.cwd || tab.cwd;
+    if (cwd) session.cwd = cwd;
+    if (tab.shell) session.shell = tab.shell;
+    tab.split = { direction, session };
+    await tryEnsureSession(session.id);
+    subscribeSession(session.id, ctx);
+    await persistTabs(ctx);
+    return session.id;
+}
+
+/** Ends the tab's second shell, and the tab is one shell again. */
+export async function unsplitTab(ctx: Ctx, tabId: string | undefined): Promise<void> {
+    const tab = tabs.find((t) => t.id === resolveTabId(tabId))!;
+    if (!tab.split) throw new Error(`${tab.label} is not split`);
+    const id = tab.split.session.id;
+    // a shell that would not stop keeps its pane, so it stays reachable
+    await terminalApi.destroy(id);
+    tab.split = undefined;
+    forgetSession(id);
+    await files.delete(scrollbackPath(id), PANEL_ID);
+    await persistTabs(ctx);
+}
+
+function forgetSession(id: string) {
+    buffers.delete(id);
+    // teardown: detach listeners and drop the subscription id, then
+    // cancel the pending debounce so no write fires for a dead session
+    unsubscribeSession(id);
+    cancelPersistTimer(id);
+}
+
+export async function setLayout(ctx: Ctx, next: unknown): Promise<void> {
+    if (next !== "horizontal" && next !== "vertical") throw new Error("Tabs are laid out horizontal or vertical");
+    layout = next;
+    await persistTabs(ctx);
 }
 
 export async function renameTab(ctx: Ctx, id: string | undefined, label: string | undefined): Promise<void> {
@@ -310,6 +461,7 @@ export async function renameTab(ctx: Ctx, id: string | undefined, label: string 
     const name = (label || "").trim();
     if (!name) throw new Error("Label is required");
     tab.label = name;
+    tab.named = true;
     await persistTabs(ctx);
 }
 
@@ -318,14 +470,12 @@ export async function closeTab(ctx: Ctx, input: string | undefined): Promise<voi
     const closing = tabs.find((t) => t.id === id);
     if (!closing) throw new Error(`Unknown terminal tab "${input}"`);
     // a shell that would not stop keeps its tab, so it stays reachable
-    await terminalApi.destroy(id);
+    for (const session of tabSessions(closing)) await terminalApi.destroy(session.id);
     tabs = tabs.filter((t) => t.id !== id);
-    buffers.delete(id);
-    // teardown: detach listeners and drop the subscription id, then
-    // cancel the pending debounce so no write fires for a dead tab
-    unsubscribeSession(id);
-    cancelPersistTimer(id);
-    await files.delete(scrollbackPath(id), PANEL_ID);
+    for (const session of tabSessions(closing)) {
+        forgetSession(session.id);
+        await files.delete(scrollbackPath(session.id), PANEL_ID);
+    }
     if (activeTabId === id) activeTabId = tabs[0]?.id || "";
     await persistTabs(ctx);
     announcer.fire("tab-closed", tabPayload(closing));
@@ -396,7 +546,7 @@ const actions = [
         inputs: {},
         output: { type: "object", label: "Tabs" },
         icon: "terminal",
-        run: async () => tabs.map((t) => ({ ...t })),
+        run: async () => structuredClone(tabs),
     }),
 
     defineAction({
@@ -404,13 +554,68 @@ const actions = [
         name: "Create Terminal Tab",
         category: "Sessions",
         description: "Creates a persistent terminal session",
-        template: "Create terminal tab {label}",
+        template: "Create terminal tab {label} in {cwd}",
         inputs: {
             label: { type: "string", label: "Label", placeholder: "Label" },
+            cwd: { type: "string", label: "Folder", placeholder: "Folder" },
+            shell: { type: "string", label: "Shell", placeholder: "Shell" },
+            besides: { type: "string", label: "Beside Tab", placeholder: "Tab ID" },
         },
         output: { type: "string", label: "Tab ID" },
         icon: "add",
-        run: async (ctx: Ctx, inputs: { label?: string }) => createTab(ctx, inputs?.label),
+        run: async (ctx: Ctx, inputs: { label?: string; cwd?: string; shell?: string; besides?: string }) =>
+            createTab(ctx, inputs?.label, { cwd: inputs?.cwd, shell: inputs?.shell, besides: inputs?.besides }),
+    }),
+
+    defineAction({
+        id: "split-tab",
+        name: "Split Terminal Tab",
+        category: "Sessions",
+        description: "Opens a second shell beside the tab's, in the same folder",
+        template: "Split terminal tab {id} {direction}",
+        inputs: {
+            id: { type: "string", label: "Tab ID", placeholder: "Tab ID", required: true },
+            direction: { type: "string", label: "Direction", placeholder: "Direction", options: [{ label: "Right", value: "right" }, { label: "Down", value: "down" }], default: "right" },
+        },
+        output: { type: "string", label: "Pane ID" },
+        icon: "vertical_split",
+        run: async (ctx: Ctx, inputs: { id: string; direction?: SplitDirection }) => splitTab(ctx, inputs?.id, inputs?.direction ?? "right"),
+    }),
+
+    defineAction({
+        id: "unsplit-tab",
+        name: "Close Terminal Split",
+        category: "Sessions",
+        description: "Ends the second shell of a split tab",
+        template: "Close the split of terminal tab {id}",
+        inputs: {
+            id: { type: "string", label: "Tab ID", placeholder: "Tab ID", required: true },
+        },
+        output: { type: "boolean", label: "Success" },
+        icon: "close_fullscreen",
+        run: async (ctx: Ctx, inputs: { id: string }) => {
+            await unsplitTab(ctx, inputs?.id);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "set-tab-layout",
+        name: "Set Terminal Tab Layout",
+        category: "Sessions",
+        // the panel's layout button drives this
+        internal: true,
+        description: "Lays the tabs out along the top or down the side",
+        template: "Lay out terminal tabs {layout}",
+        inputs: {
+            layout: { type: "string", label: "Layout", placeholder: "Layout", options: [{ label: "Along the top", value: "horizontal" }, { label: "Down the side", value: "vertical" }], required: true },
+        },
+        output: { type: "boolean", label: "Success" },
+        icon: "view_sidebar",
+        run: async (ctx: Ctx, inputs: { layout: TabLayout }) => {
+            await setLayout(ctx, inputs?.layout);
+            return true;
+        },
     }),
 
     defineAction({
@@ -428,10 +633,11 @@ const actions = [
         icon: "open_in_new",
         run: async (ctx: Ctx, inputs: { id: string; cols?: number; rows?: number }) => {
             const id = (inputs?.id || "").trim();
-            if (!tabs.some((t) => t.id === id)) {
+            const owner = findSession(tabs, id);
+            if (!owner) {
                 throw new Error(`Unknown terminal tab "${inputs?.id}"`);
             }
-            activeTabId = id;
+            activeTabId = owner.tab.id;
             await ensureSession(id, inputs?.cols, inputs?.rows);
             subscribeSession(id, ctx);
             await persistTabs(ctx);
@@ -635,6 +841,8 @@ export const terminalService = definePanelService({
     state: {
         tabs: [] as TerminalTab[],
         activeTabId: "",
+        live: {} as Record<string, LiveSession>,
+        layout: "horizontal" as TabLayout,
         showTab: { id: "", request: "" },
         savedCommands: [] as SavedCommand[],
         commandRuns: {} as Record<string, CommandRun>,
@@ -660,11 +868,8 @@ export const terminalService = definePanelService({
 
         try {
             const saved = await config.get<any>(PANEL_ID, "tabs.json");
-            if (saved?.tabs && Array.isArray(saved.tabs)) {
-                tabs = saved.tabs.filter(
-                    (t: any) => t && typeof t.id === "string" && typeof t.label === "string",
-                );
-            }
+            tabs = readSavedTabs(saved?.tabs);
+            layout = readLayout(saved?.layout);
             if (typeof saved?.activeTabId === "string") {
                 activeTabId = saved.activeTabId;
             }
@@ -672,16 +877,16 @@ export const terminalService = definePanelService({
             console.error("[TerminalService] Failed to load tabs:", err);
         }
 
-        for (const tab of tabs) {
+        for (const session of tabs.flatMap(tabSessions)) {
             try {
-                const saved = await files.read(scrollbackPath(tab.id), PANEL_ID);
+                const saved = await files.read(scrollbackPath(session.id), PANEL_ID);
                 if (saved) {
-                    buffers.set(tab.id, saved.slice(-SCROLLBACK_CHARS));
+                    buffers.set(session.id, saved.slice(-SCROLLBACK_CHARS));
                 }
             } catch (err) {
-                console.error(`[TerminalService] scrollback restore failed for ${tab.id}:`, err);
+                console.error(`[TerminalService] scrollback restore failed for ${session.id}:`, err);
             }
-            subscribeSession(tab.id, ctx);
+            subscribeSession(session.id, ctx);
         }
 
         if (tabs.length === 0) {
@@ -703,7 +908,15 @@ export const terminalService = definePanelService({
                 activeTab,
                 showTab: (id) => showTab(liveCtx(), id),
                 moveTab: (id, position) => moveTab(liveCtx(), id, position),
-                createTab: (label) => createTab(liveCtx(), label),
+                createTab: (label, folder) => createTab(liveCtx(), label, { cwd: folder }),
+                tabProgram: (id) => live[resolveTabId(id)]?.program ?? "",
+                tabFolder: (id) => {
+                    const tab = tabs.find((t) => t.id === resolveTabId(id))!;
+                    return live[tab.id]?.cwd || tab.cwd || "";
+                },
+                tabSplit: (id) => Boolean(tabs.find((t) => t.id === resolveTabId(id))!.split),
+                splitTab: async (id, direction) => void (await splitTab(liveCtx(), id, direction)),
+                unsplitTab: (id) => unsplitTab(liveCtx(), id),
                 renameTab: (id, label) => renameTab(liveCtx(), id, label),
                 closeTab: (id) => closeTab(liveCtx(), id),
                 write: (id, text) => writeToTerminal(liveCtx(), { tabId: id, text }),

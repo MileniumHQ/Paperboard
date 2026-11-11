@@ -18,12 +18,32 @@ export interface TerminalKeyEvent {
     metaKey: boolean;
 }
 
-export type TerminalKeyAction = "copy" | null;
+export type TerminalKeyAction = "copy" | "find" | "previous-prompt" | "next-prompt" | null;
 
-/** Which terminal action the keydown should run, if any. */
+/**
+ * Which terminal action the keydown should run, if any. Each takes
+ * Ctrl+Shift everywhere (a shell reads Ctrl alone), and Cmd on macOS.
+ */
 export function terminalKeyAction(ev: TerminalKeyEvent): TerminalKeyAction {
     if (ev.type !== "keydown") return null;
-    // Ctrl+Shift+C everywhere, Cmd+C on macOS
-    if (ev.code === "KeyC" && ((ev.ctrlKey && ev.shiftKey) || ev.metaKey)) return "copy";
-    return null;
+    const chord = (ev.ctrlKey && ev.shiftKey) || ev.metaKey;
+    if (!chord) return null;
+    switch (ev.code) {
+        case "KeyC":
+            return "copy";
+        case "KeyF":
+            return "find";
+        case "ArrowUp":
+            return "previous-prompt";
+        case "ArrowDown":
+            return "next-prompt";
+        default:
+            return null;
+    }
+}
+
+/** how a terminal shortcut reads in a menu, on this computer */
+export function shortcutLabel(action: Exclude<TerminalKeyAction, null>, mac: boolean): string {
+    const key = { copy: "C", find: "F", "previous-prompt": "↑", "next-prompt": "↓" }[action];
+    return mac ? `⌘${key}` : `Ctrl+Shift+${key}`;
 }

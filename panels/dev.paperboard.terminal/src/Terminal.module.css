@@ -32,3 +32,12 @@
     min-height: 0;
     overflow: hidden;
 }
+
+/* the second shell of a split tab, divided from the first by a line */
+.splitRight {
+    border-left: var(--paper-border-width) solid var(--paper-border);
+}
+
+.splitDown {
+    border-top: var(--paper-border-width) solid var(--paper-border);
+}

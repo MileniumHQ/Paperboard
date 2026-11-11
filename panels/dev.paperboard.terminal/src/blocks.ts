@@ -1,7 +1,8 @@
 // Terminal's blocks for the Blocks panel (Actions API v2). The actions (v1,
 // service.ts) stay as they are; both run the same functions, which the
 // service hands in here.
-import type { BlockSet, BlocksHandle } from "@mileniumhq/paperapi";
+import type { BlockSet, BlocksHandle, TerminalCommand } from "@mileniumhq/paperapi";
+import type { SplitDirection } from "./lib/tabs";
 import { MAX_COMMAND_LENGTH, MAX_LABEL_LENGTH, type CommandRun, type SavedCommand } from "./lib/savedCommands";
 
 /** What the blocks do, as the service does it. */
@@ -16,7 +17,17 @@ export interface TerminalBlocksHost {
     showTab(id: string): Promise<void>;
     /** moves the tab to a place in the tab bar, 1 being the first */
     moveTab(id: string, position: number): Promise<void>;
-    createTab(label?: string): Promise<string>;
+    /** opens a tab; its shell starts in the folder, or the home folder */
+    createTab(label?: string, folder?: string): Promise<string>;
+    /** the program in front of the tab's shell; "" while no shell runs */
+    tabProgram(id: string): string;
+    /** the folder the tab's shell is in, or was last in; "" before it has said */
+    tabFolder(id: string): string;
+    tabSplit(id: string): boolean;
+    /** opens a second shell beside the tab's; throws when it is split already */
+    splitTab(id: string, direction: SplitDirection): Promise<void>;
+    /** ends the tab's second shell; throws when it isn't split */
+    unsplitTab(id: string): Promise<void>;
     renameTab(id: string, label: string): Promise<void>;
     closeTab(id: string): Promise<void>;
     /** keystrokes to the tab's shell, as typed */
@@ -56,6 +67,19 @@ export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
                 choices: () => host.tabs().map((id) => ({ label: host.tabLabel(id), value: id })),
                 fields: {
                     name: { type: "text", name: "Name", resolve: (id: string) => host.tabLabel(id) },
+                    program: {
+                        type: "text",
+                        name: "Program",
+                        description: "What runs in front of the tab's shell, such as vim, or the shell itself at its prompt; empty while no shell runs",
+                        resolve: (id: string) => host.tabProgram(id),
+                    },
+                    folder: {
+                        type: "text",
+                        name: "Folder",
+                        description: "The folder the tab's shell is in; empty until the shell has said (sh and cmd never say)",
+                        resolve: (id: string) => host.tabFolder(id),
+                    },
+                    split: { type: "boolean", name: "Split", description: "It holds a second shell beside the first", resolve: (id: string) => host.tabSplit(id) },
                 },
             },
             {
@@ -140,11 +164,37 @@ export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
                 name: "New Tab",
                 category: CATEGORY.tabs,
                 icon: "add",
-                description: "Opens a terminal tab with a shell of its own",
-                text: "open a new tab named {name}",
-                inputs: { name: { type: "text", name: "Name", optional: true } },
+                description: "Opens a terminal tab with a shell of its own, in the folder given or the home folder",
+                text: "open a new tab named {name} in {folder}",
+                inputs: {
+                    name: { type: "text", name: "Name", optional: true },
+                    folder: { type: "text", name: "Folder", optional: true },
+                },
                 output: "tab",
-                run: ({ name }: { name?: string }) => host.createTab(name),
+                run: ({ name, folder }: { name?: string; folder?: string }) => host.createTab(name, folder),
+            },
+            {
+                id: "split-tab",
+                name: "Split Tab",
+                category: CATEGORY.tabs,
+                icon: "vertical_split",
+                description: "Opens a second shell beside the tab's, in the folder the first is in",
+                text: "split {tab} {direction}",
+                inputs: {
+                    tab: { type: "tab", name: "Tab" },
+                    direction: { type: "text", name: "Direction", choices: [{ label: "right", value: "right" }, { label: "down", value: "down" }] },
+                },
+                run: ({ tab, direction }: { tab: string; direction: SplitDirection }) => host.splitTab(tab, direction),
+            },
+            {
+                id: "unsplit-tab",
+                name: "Close Split",
+                category: CATEGORY.tabs,
+                icon: "close_fullscreen",
+                description: "Ends the second shell of a split tab",
+                text: "close the split of {tab}",
+                inputs: { tab: { type: "tab", name: "Tab" } },
+                run: ({ tab }: { tab: string }) => host.unsplitTab(tab),
             },
             {
                 id: "rename-tab",
@@ -317,6 +367,23 @@ export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
                 },
             },
             {
+                id: "command-finished",
+                name: "When a Command Finishes",
+                category: CATEGORY.tabs,
+                icon: "keyboard_return",
+                description: "Fires when a command typed into a tab ends; bash, zsh, fish and PowerShell say so, sh and cmd don't",
+                text: "when a command finishes in {tab}",
+                inputs: { tab: { type: "tab", name: "Tab", optional: true } },
+                filters: { tab: "tab" },
+                values: {
+                    tab: { type: "tab", name: "Tab" },
+                    command: { type: "text", name: "Command", description: "The command line as typed; empty when the shell didn't keep it" },
+                    succeeded: { type: "boolean", name: "Succeeded", description: "It exited with code 0" },
+                    "exit-code": { type: "number", name: "Exit Code" },
+                    result: { type: "text", name: "Result", description: "How it ended, such as Exit 1" },
+                },
+            },
+            {
                 id: "saved-command-finished",
                 name: "When a Saved Command Finishes",
                 category: CATEGORY.saved,
@@ -343,6 +410,17 @@ export function exitPayload(tab: string, exitCode: number | undefined) {
         succeeded: exitCode === 0,
         "exit-code": typeof exitCode === "number" ? exitCode : null,
         result: typeof exitCode === "number" ? `Exit ${exitCode}` : "Ended without an exit code",
+    };
+}
+
+/** How a command that ended in a tab reads in its event. */
+export function commandPayload(tab: string, finished: TerminalCommand) {
+    return {
+        tab,
+        command: finished.command,
+        succeeded: finished.exitCode === 0,
+        "exit-code": finished.exitCode,
+        result: `Exit ${finished.exitCode}`,
     };
 }
 
