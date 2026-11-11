@@ -4,6 +4,8 @@ import { shellApi, logToMain, isBrowserShell } from "../../lib/shell";
 import { versionLabel as formatVersionLabel } from "../../lib/versionLabel";
 import { isShellTab } from "../../lib/shellTabs";
 import type { AppUpdateState } from "../../../../shared/appUpdate";
+import type { UpdateQueueState } from "../../../../shared/updateQueue";
+import UpdatesButton from "./UpdatesButton";
 import { leftReserve, rightReserve, type OverlayLike } from "./titlebarInsets";
 import styles from "./TopBar.module.css";
 
@@ -11,9 +13,9 @@ import styles from "./TopBar.module.css";
 const TopBar: Component<{
     updateState: AppUpdateState;
     onOpenUpdate: () => void;
-    // runtime package updates waiting for panels to stop
-    packageUpdatesWaiting: number;
-    onOpenPackageUpdates: () => void;
+    // what Paperboard is updating, and what waits for something to stop
+    updateQueue: UpdateQueueState;
+    onReleaseUpdate: (keys: string[]) => Promise<void>;
     getComputerId: () => string;
     getSelectedTab: () => string;
     /** the phone layout: no window to drag, no caption buttons, no folders to open */
@@ -115,14 +117,7 @@ const TopBar: Component<{
                             <PaperIcon>folder_open</PaperIcon>
                         </PaperButton>
                     </Show>
-                    <Show when={props.packageUpdatesWaiting > 0}>
-                        <PaperButton
-                            size="tiny"
-                            title="Package updates are waiting for panels to stop"
-                            onClick={props.onOpenPackageUpdates}>
-                            {props.packageUpdatesWaiting === 1 ? "1 update waiting" : `${props.packageUpdatesWaiting} updates waiting`}
-                        </PaperButton>
-                    </Show>
+                    <UpdatesButton state={props.updateQueue} onRelease={props.onReleaseUpdate} />
                     <Show when={props.updateState.status === "ready"}>
                         <PaperButton
                             size="tiny"

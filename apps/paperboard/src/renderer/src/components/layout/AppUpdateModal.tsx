@@ -1,5 +1,5 @@
 import { createSignal, Show } from "solid-js";
-import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress } from "@mileniumhq/paperui";
+import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress, showToast } from "@mileniumhq/paperui";
 import type { AppUpdateState } from "../../../../shared/appUpdate";
 import { shellIpc } from "../../lib/shell";
 
@@ -33,7 +33,10 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
             </Show>
             <Show when={failed()}>
                 <Show when={!packageManaged() || packageDownload()}><PaperButton variant="text" onClick={openDownload}>Download manually</PaperButton></Show>
-                <PaperButton onClick={() => shellIpc().send("relaunch-for-update")}>{packageManaged() ? "Retry check" : "Retry update"}</PaperButton>
+                <PaperButton onClick={() => {
+                    props.onClose();
+                    shellIpc().invoke<void>("update-check").catch((err) => showToast({ variant: "danger", title: "Couldn't check for updates", message: String(err) }));
+                }}>{packageManaged() ? "Retry check" : "Retry update"}</PaperButton>
             </Show>
             <Show when={ready()}>
                 <PaperButton onClick={() => shellIpc().send("quit-and-install")}>Restart to update</PaperButton>

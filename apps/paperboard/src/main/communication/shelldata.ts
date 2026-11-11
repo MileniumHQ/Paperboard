@@ -3,14 +3,11 @@
 // panel:// origins get a typed PANEL_IPC_REFUSED, never an answer.
 import { type IpcMain, type IpcMainInvokeEvent, type WebContents, BrowserWindow, app, clipboard, dialog, nativeTheme, shell } from "electron";
 import { broadcastAppSettings, syncTitleBarOverlays, applyNativeTheme, applyRunOnStartup } from "../appSettings";
-import * as fs from "fs";
 import * as path from "path";
-import { getLocalDir } from "../../../papercrane/paths";
 import { sanitizeId } from "../../../papercrane/storage";
 import { logger } from "../../../papercrane/logger";
 import { getAppUpdateState } from "../appUpdateSession";
-import { appUpdateDownloadUrl, quitAndInstallAppUpdate } from "../updater";
-import { collectPackageUpdates } from "../packageUpdates";
+import { appUpdateDownloadUrl, checkForUpdatesNow, quitAndInstallAppUpdate, releaseHolds, updateQueue } from "../updater";
 import { assertShellFrame, isRefusedFrame } from "./shellGuard";
 import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./shellHandlers";
 import { runPanelImport, runPanelExport, type PanelFileTransferDeps } from "../panelFileTransfer";
@@ -222,9 +219,25 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         );
     });
 
-    ipcMain.handle("package-updates", (event) => {
-        assertShellFrame(event, "package-updates");
-        return collectPackageUpdates();
+    ipcMain.handle("update-queue", (event) => {
+        assertShellFrame(event, "update-queue");
+        return updateQueue.snapshot();
+    });
+    // Stop and update: held updates join the list as one; resolves when they
+    // ran. An update that fails there is told by the list (and its toast),
+    // so only a request that could not start rejects
+    ipcMain.handle("update-release", async (event, args: { keys?: unknown }) => {
+        assertShellFrame(event, "update-release");
+        const keys = args?.keys;
+        if (!Array.isArray(keys) || keys.length === 0 || keys.length > 64 || keys.some((key) => typeof key !== "string" || !key || key.length > 512)) {
+            throw new Error("keys must list the held updates");
+        }
+        await releaseHolds(keys as string[]);
+    });
+    // Settings' Update everything now: look for updates in place, now
+    ipcMain.handle("update-check", async (event) => {
+        assertShellFrame(event, "update-check");
+        await checkForUpdatesNow();
     });
     ipcMain.handle("app-update-state", (event) => {
         assertShellFrame(event, "app-update-state");
@@ -246,32 +259,6 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         } catch (err: any) {
             logger.warn("[Shell] quit-and-install failed:", err?.message ?? err);
         }
-    });
-
-    // clear update cooldown so orchestrator runs next launch
-    ipcMain.on("relaunch-for-update", (event) => {
-        if (isRefusedFrame(event)) {
-            logger.warn('[Shell] PANEL_IPC_REFUSED: channel "relaunch-for-update" is shell-only');
-            return;
-        }
-        try {
-            fs.rmSync(path.join(getLocalDir(), "last_update.json"), {
-                force: true,
-            });
-        } catch (err: any) {
-            logger.warn(
-                "[Shell] failed to clear update state:",
-                err?.message ?? err,
-            );
-        }
-        const args = process.argv.slice(1).filter((a) => a !== "--update");
-        // AppImage execPath dies with the process; relaunch via APPIMAGE env
-        if (process.platform === "linux" && process.env.APPIMAGE) {
-            app.relaunch({ execPath: process.env.APPIMAGE, args });
-        } else {
-            app.relaunch({ args });
-        }
-        app.quit();
     });
 
     // full quit from the settings UI: the same path as the tray/menu Quit

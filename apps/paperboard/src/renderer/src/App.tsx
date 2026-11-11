@@ -53,8 +53,8 @@ import ComputerContextMenu from "./components/computer/ComputerContextMenu";
 import HomeView from "./components/home/HomeView";
 import AppUpdateModal from "./components/layout/AppUpdateModal";
 import { useAppUpdate } from "./hooks/useAppUpdate";
-import { usePackageUpdates } from "./hooks/usePackageUpdates";
-import PackageUpdateModal from "./components/layout/PackageUpdateModal";
+import { useUpdateQueue } from "./hooks/useUpdateQueue";
+import { pendingUpdates } from "../../shared/updateQueue";
 import TopBar from "./components/layout/TopBar";
 import { computerIcon } from "./components/computer/computerIcon";
 import MobileWelcome from "./components/computer/MobileWelcome";
@@ -70,7 +70,7 @@ import { usePanels } from "./hooks/usePanels";
 export type { ComputerItem };
 const App: Component = () => {
     const appUpdate = useAppUpdate();
-    const packageUpdates = usePackageUpdates();
+    const updateQueue = useUpdateQueue();
     const {
         computers,
         activeComputerId,
@@ -223,6 +223,35 @@ const App: Component = () => {
             });
         }
     };
+
+    // a panel whose new release is installing can't be opened; once it is
+    // in place (or the previous one is back) its view loads again
+    const updatingPanels = () =>
+        new Set(
+            updateQueue
+                .state()
+                .items.filter((item) => item.kind === "panel" && item.status === "running" && item.panelId)
+                .map((item) => `${item.computerId}::${item.panelId}`),
+        );
+    const panelUpdateSeen = new Map<string, string>();
+    createEffect(() => {
+        for (const item of updateQueue.state().items) {
+            if (item.kind !== "panel" || !item.panelId) continue;
+            const key = `${item.computerId}::${item.panelId}`;
+            const before = panelUpdateSeen.get(item.key);
+            panelUpdateSeen.set(item.key, item.status);
+            if (before === item.status) continue;
+            if (item.status === "running") {
+                setRestartState(key, { kind: "updating" });
+            } else if (before === "running") {
+                setRestartState(key, null);
+                // held: nothing was replaced, the running release stays as it is
+                if (item.status === "held") continue;
+                bumpReloadToken(key);
+                void refreshPanelsForComputer(item.computerId);
+            }
+        }
+    });
 
     const handleRestartPanel = () => {
         const target = contextMenuPanel();
@@ -575,7 +604,10 @@ const App: Component = () => {
     };
 
     const showTopBar = () =>
-        !mobile() || packageUpdates.state().notices.length > 0 || appUpdate.state().status === "ready";
+        !mobile() ||
+        pendingUpdates(updateQueue.state()).length > 0 ||
+        updateQueue.state().holds.length > 0 ||
+        appUpdate.state().status === "ready";
 
     // the mobile page's top bar: the open tab's icon and name
     const mobilePageHeading = (): { title: string; icon: JSX.Element } => {
@@ -613,8 +645,8 @@ const App: Component = () => {
                 <TopBar
                     updateState={appUpdate.state()}
                     onOpenUpdate={() => appUpdate.setOpen(true)}
-                    packageUpdatesWaiting={packageUpdates.state().notices.length}
-                    onOpenPackageUpdates={() => packageUpdates.setOpen(true)}
+                    updateQueue={updateQueue.state()}
+                    onReleaseUpdate={updateQueue.release}
                     getComputerId={activeComputerId}
                     getSelectedTab={() => getSelectedTab(activeComputerId())}
                     mobile={mobile()}
@@ -767,6 +799,8 @@ const App: Component = () => {
                                                     {(panel) => (
                                                         <PaperListItem
                                                             value={panel.id}
+                                                            disabled={updatingPanels().has(`${comp.id}::${panel.id}`)}
+                                                            title={updatingPanels().has(`${comp.id}::${panel.id}`) ? `${panel.name} is updating` : undefined}
                                                             onClick={openMobilePage}
                                                             icon={renderPanelIcon(
                                                                 panel,
@@ -984,13 +1018,6 @@ const App: Component = () => {
                 />
             </Show>
             <AppUpdateModal state={appUpdate.state()} open={appUpdate.open()} onClose={() => appUpdate.setOpen(false)} />
-            <PackageUpdateModal
-                state={packageUpdates.state()}
-                error={packageUpdates.error()}
-                open={packageUpdates.open()}
-                onClose={() => packageUpdates.setOpen(false)}
-                onRefresh={() => void packageUpdates.refresh()}
-            />
 
             <OfflineComputerModal
                 open={!!offlineTarget()}

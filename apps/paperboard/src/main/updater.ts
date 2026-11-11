@@ -18,7 +18,11 @@ import { getLocalDir } from "../../papercrane/paths";
 import { logger, getLogger } from "../../papercrane/logger";
 import { fetchRegistryJson } from "../../../../packages/paperapi/src/config";
 import { PACKAGE_DOWNLOAD_TIMEOUT_MS } from "./communication/papercrane/PaperCraneClient";
-import { announcePackageUpdates } from "./packageUpdates";
+import { collectPackageUpdates } from "./packageUpdates";
+import { PartialUpdateError, UpdateQueue, type UpdateJob } from "./updateQueue";
+import type { UpdateHold, UpdateItem, UpdateQueueState } from "../shared/updateQueue";
+import type { AppUpdateState } from "../shared/appUpdate";
+import type { UpdateTask } from "./updatePlan";
 
 // registry override policy shared with the daemon: env override honored only
 // outside production (dev/preview here) or with --allow-registry-override
@@ -34,16 +38,20 @@ const FETCH_TIMEOUT_MS = 10_000;
 const FAILURE_COOLDOWN_RUNS = 2;
 const TIMESTAMP_FILE = path.join(getLocalDir(), "last_update.json");
 
-function sendProgress(
-    win: BrowserWindow,
-    progress: number | null,
-    label: string,
-    failed = false,
-) {
-    if (!win.isDestroyed()) {
-        win.webContents.send("updater-progress", { progress, label, failed });
+// how often a running Paperboard looks for updates again, and how often it
+// looks at what holds updates back while any are held
+const RECHECK_MS = 6 * 60 * 60_000;
+const HOLD_REFRESH_MS = 30_000;
+
+function broadcastQueue(state: UpdateQueueState): void {
+    for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed() && isShellUrl(window.webContents.getURL())) {
+            window.webContents.send("update-queue", state);
+        }
     }
 }
+
+export const updateQueue = new UpdateQueue(broadcastQueue);
 
 interface UpdateState {
     lastUpdate?: number;
@@ -145,24 +153,28 @@ async function confirmCraneVersion(
     }
 }
 
-export async function runUpdateOrchestrator(
-    win: BrowserWindow,
-): Promise<void> {
+/**
+ * Looks for updates of Paperboard, its panels, runtime packages and paired
+ * computers' Paperboard Server, and runs them in the update queue. A panel
+ * or package in use is held, not stopped. Resolves once the queue has run
+ * every update it found.
+ */
+export async function runUpdateOrchestrator(): Promise<void> {
     if (orchestratorRunning) {
         logger.debug("[Updater] orchestrator already running, skipping");
-        sendProgress(win, 100, "Update check already in progress");
         return;
     }
     orchestratorRunning = true;
     let failures = 0;
-    let appRun: Promise<import("../shared/appUpdate").AppUpdateState> | null = null;
+    let appRun: Promise<AppUpdateState> | null = null;
+    updateQueue.setChecking(true);
     try {
         appRun = appUpdater().check();
-        failures = await runOrchestratorInner(win);
+        failures = await runOrchestratorInner();
     } catch (err) {
         failures++;
         logger.error("[Updater] update check failed:", err);
-        sendProgress(win, null, "Could not check for updates. Try again when the registry is reachable", true);
+        updateQueue.setChecking(false, `Paperboard could not check for updates: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
         try {
             const state = appRun ? await appRun : getAppUpdateState();
@@ -171,9 +183,199 @@ export async function runUpdateOrchestrator(
         } finally {
             orchestratorRunning = false;
             // staged runtime updates may now wait for panels to stop
-            announcePackageUpdates();
+            await refreshHolds();
         }
     }
+}
+
+let recheckTimer: ReturnType<typeof setInterval> | null = null;
+let holdTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Starts the background updater: a look for updates now (unless one ran
+ * recently), and again every few hours while Paperboard runs.
+ */
+export function startBackgroundUpdates(argv: string[]): void {
+    if (recheckTimer) return;
+    if (!shouldSkipUpdate(argv)) void runUpdateOrchestrator().catch((err) => logger.error("[Updater] Orchestrator error:", err));
+    else void refreshHolds();
+    recheckTimer = setInterval(() => {
+        void runUpdateOrchestrator().catch((err) => logger.error("[Updater] Orchestrator error:", err));
+    }, RECHECK_MS);
+    recheckTimer.unref?.();
+}
+
+export function stopBackgroundUpdates(): void {
+    if (recheckTimer) clearInterval(recheckTimer);
+    if (holdTimer) clearTimeout(holdTimer);
+    recheckTimer = null;
+    holdTimer = null;
+}
+
+/** Looks for updates now, whatever the cooldown says (Settings, Update everything now). */
+export async function checkForUpdatesNow(): Promise<void> {
+    await runUpdateOrchestrator();
+}
+
+// a panel held by its processes: what to install once they are gone
+const heldPanelTasks = new Map<string, UpdateTask>();
+
+/**
+ * Reads what holds updates back again: staged packages from each computer's
+ * daemon, and held panels whose processes may have stopped (their update
+ * then runs). While anything is held it looks again every so often.
+ */
+export async function refreshHolds(): Promise<void> {
+    if (holdTimer) clearTimeout(holdTimer);
+    holdTimer = null;
+    try {
+        const packages = await collectPackageUpdates();
+        const holds: UpdateHold[] = [];
+        const unheld: UpdateHold[] = [];
+        for (const notice of packages.notices) {
+            const key = `package:${notice.computerId}:${notice.packageName}`;
+            if (notice.error) {
+                // the swap failed and the installed release kept working
+                updateQueue.report(failedItem(key, "package", notice.computerId, notice.computerId === "local" ? null : notice.computerName, notice.packageName, notice.version, notice.error));
+                continue;
+            }
+            const hold: UpdateHold = {
+                key,
+                kind: "package",
+                computerId: notice.computerId,
+                computerName: notice.computerId === "local" ? null : notice.computerName,
+                id: notice.packageName,
+                name: notice.packageName,
+                version: notice.version,
+                sha256: null,
+                users: notice.panels,
+            };
+            // nothing important or long running uses it: it updates now,
+            // unless doing that already failed (then it waits to be asked)
+            if (notice.panels.length === 0 && !stopFailed.has(`${key}\u0000${notice.version}`)) unheld.push(hold);
+            else holds.push(hold);
+        }
+        updateQueue.setHolds("packages", holds);
+        for (const hold of unheld) {
+            void updateQueue.enqueue(inUseJob([hold])).then(([item]) => {
+                if (item.status === "failed") stopFailed.add(`${hold.key}\u0000${hold.version}`);
+            });
+        }
+        for (const failure of packages.failures) {
+            logger.warn(`[Updater] could not read held updates on ${failure.computerName}: ${failure.error}`);
+        }
+    } catch (err) {
+        logger.error("[Updater] could not read held package updates:", err);
+    }
+    // a held panel whose processes all stopped updates now
+    for (const [key, task] of [...heldPanelTasks]) {
+        const hold = updateQueue.hold(key);
+        if (!hold) {
+            heldPanelTasks.delete(key);
+            continue;
+        }
+        try {
+            const client = connectionPool.getClient(task.computerId);
+            if (!client.getStatus().connected) continue;
+            const running = await Promise.all(
+                (holdProcesses.get(key) ?? []).map((id) => client.call<{ running?: boolean }>("process:exists", { id }).then((r) => r?.running === true)),
+            );
+            if (running.some(Boolean)) continue;
+            heldPanelTasks.delete(key);
+            void updateQueue.enqueue(taskJob(task));
+        } catch (err) {
+            logger.warn(`[Updater] could not look at what holds ${task.id} back:`, err);
+        }
+    }
+    if (updateQueue.snapshot().holds.length > 0) {
+        holdTimer = setTimeout(() => void refreshHolds(), HOLD_REFRESH_MS);
+        holdTimer.unref?.();
+    }
+}
+
+// the processes each held panel was running when it was held
+const holdProcesses = new Map<string, string[]>();
+
+// updates that were stopped for without asking and failed: they are not
+// tried that way again, so a failing update can't stop processes over and
+// over; they wait for Stop and update instead
+const stopFailed = new Set<string>();
+
+/**
+ * Stop and update: the held updates join the queue as one job, which stops
+ * what uses them once and starts it again after. They must be on one
+ * computer. Resolves with their items once they ran; throws when one of
+ * them is no longer held.
+ */
+export async function releaseHolds(keys: string[]): Promise<UpdateItem[]> {
+    if (keys.length === 0) throw new Error("No update was chosen");
+    const holds = keys.map((key) => updateQueue.hold(key));
+    if (holds.some((hold) => !hold)) throw new Error("That update is no longer waiting");
+    const items = await updateQueue.enqueue(inUseJob(holds as UpdateHold[]));
+    for (const item of items) {
+        if (item.status === "failed") logger.warn(`[Updater] Stop and update of ${item.name} failed: ${item.error}`);
+    }
+    return items;
+}
+
+function inUseJob(holds: UpdateHold[]): UpdateJob {
+    const computerId = holds[0].computerId;
+    if (holds.some((hold) => hold.computerId !== computerId)) throw new Error("Updates on different computers stop separately");
+    for (const hold of holds) {
+        heldPanelTasks.delete(hold.key);
+        holdProcesses.delete(hold.key);
+    }
+    // the daemon names targets by panel id or package name
+    const keyOf = new Map(holds.map((hold) => [`${hold.kind}:${hold.id}`, hold.key]));
+    return {
+        items: holds.map((hold) => ({
+            key: hold.key,
+            kind: hold.kind,
+            computerId: hold.computerId,
+            computerName: hold.computerName,
+            panelId: hold.kind === "panel" ? hold.id : null,
+            name: hold.name,
+            version: hold.version,
+        })),
+        run: async (report) => {
+            const progress = new Map(holds.map((hold) => [hold.key, progressReporter((p) => report(p, hold.key))]));
+            const { failures } = await connectionPool.getClient(computerId).updateInUse(
+                {
+                    panels: holds.filter((h) => h.kind === "panel").map((h) => ({ id: h.id, version: h.version, sha256: h.sha256 ?? undefined })),
+                    packages: holds.filter((h) => h.kind === "package").map((h) => h.id),
+                },
+                (target, payload) => {
+                    const key = keyOf.get(target);
+                    if (!key) throw new Error(`Paperboard Server reported progress for ${target}, which it was not asked to update`);
+                    progress.get(key)!(payload);
+                },
+            );
+            const failed = Object.entries(failures);
+            if (failed.length > 0) {
+                throw new PartialUpdateError(Object.fromEntries(failed.map(([target, why]) => [keyOf.get(target) ?? target, why])));
+            }
+        },
+    };
+}
+
+function failedItem(key: string, kind: UpdateItem["kind"], computerId: string, computerName: string | null, name: string, version: string, error: string): UpdateItem {
+    return { key, kind, computerId, computerName, panelId: null, name, version, status: "failed", stage: null, percent: null, bytesLoaded: null, bytesTotal: null, error };
+}
+
+function progressReporter(report: (progress: Parameters<Parameters<UpdateJob["run"]>[0]>[0]) => void) {
+    return (payload: { stage?: string; percent?: number; bytesLoaded?: number; bytesTotal?: number }) => {
+        const stage = payload.stage === "stopping" ? "stopping"
+            : payload.stage === "downloading" || payload.stage === "checking" || payload.stage === "starting" ? "downloading"
+            : payload.stage === "extracting" || payload.stage === "verifying" || payload.stage === "completed" ? "installing"
+            : undefined;
+        report({
+            ...(stage ? { stage } : {}),
+            // stopping and installing have no measure: only bytes do
+            percent: stage === "downloading" && typeof payload.percent === "number" && payload.bytesTotal ? payload.percent : null,
+            bytesLoaded: typeof payload.bytesLoaded === "number" ? payload.bytesLoaded : null,
+            bytesTotal: typeof payload.bytesTotal === "number" ? payload.bytesTotal : null,
+        });
+    };
 }
 
 const appUpdaterLog = getLogger("electron-updater");
@@ -220,6 +422,7 @@ function appUpdater(): AppUpdateSession {
     const updater = install ? new ManualAppUpdater(app.getVersion(), install.feedUrl) : platformUpdater();
     appUpdateSession = new AppUpdateSession(updater, (state) => {
         retainAppUpdateState(state);
+        updateQueue.upsertItem(appUpdateItem(state));
         for (const window of BrowserWindow.getAllWindows()) {
             if (!window.isDestroyed() && isShellUrl(window.webContents.getURL())) {
                 window.webContents.send("app-update-state", state);
@@ -231,23 +434,41 @@ function appUpdater(): AppUpdateSession {
 
 export function disposeAppUpdater(): void {
     appUpdateSession?.dispose();
+    stopBackgroundUpdates();
 }
 
-async function runOrchestratorInner(
-    win: BrowserWindow,
-): Promise<number> {
+// Paperboard's own download, as the update list shows it
+function appUpdateItem(state: AppUpdateState): UpdateItem {
+    const status = state.status === "downloading" ? "running"
+        : state.status === "ready" ? "done"
+        : state.status === "failed" ? "failed"
+        : "done";
+    return {
+        key: "app",
+        kind: "app",
+        computerId: "local",
+        computerName: null,
+        panelId: null,
+        name: "Paperboard",
+        version: state.version ?? "",
+        status,
+        stage: state.status === "downloading" ? "downloading" : null,
+        percent: state.status === "downloading" ? state.percent : null,
+        bytesLoaded: null,
+        bytesTotal: null,
+        error: state.status === "failed" ? state.error ?? "The update could not finish" : null,
+    };
+}
 
-    sendProgress(win, null, "Checking for updates…");
+async function runOrchestratorInner(): Promise<number> {
 
-    sendProgress(win, null, "Fetching indexes…");
     const [registryPanels, registryPackages, craneDlIndex] = await Promise.all([
         fetchIndex(`${REGISTRY_URL}/panels/index.json`),
         fetchIndex(`${REGISTRY_URL}/package/index.json`),
         fetchIndex(`${REGISTRY_URL}/paperdl/crane/index.json`),
     ]);
 
-    // ping paired machines; failures ignored
-    sendProgress(win, null, "Checking computers…");
+    // ping paired machines; an unreachable one is counted, and said
     const computers = connectionPool.listAll();
 
     interface ComputerState {
@@ -303,7 +524,6 @@ async function runOrchestratorInner(
         }
     });
 
-    sendProgress(win, null, "Planning updates…");
     // planning is electron-free (updatePlan.ts) so the checksum-gate tests
     // run without a window; execution below only runs planned tasks
     const tasks = await planUpdateTasks(
@@ -337,112 +557,158 @@ async function runOrchestratorInner(
         },
     );
 
-    const total = tasks.length;
-    if (total === 0) {
-        const message = unavailableComputers
-            ? `Could not check ${unavailableComputers} computer(s). Reconnect and try again`
-            : installed.failures
-              ? `Could not check ${installed.failures} panel(s) (${installed.reasons[0]})`
-              : "Panel and server check complete";
-        sendProgress(win, 100, message, unavailableComputers + installed.failures > 0);
-        return unavailableComputers + installed.failures;
-    }
-
     let failures = unavailableComputers + installed.failures;
-    // verified and staged, installed by the daemon once the panels running
-    // the current release stop: accepted, neither failed nor done
-    let waiting = 0;
+    const checkError = unavailableComputers
+        ? `Paperboard could not reach ${unavailableComputers === 1 ? "1 computer" : `${unavailableComputers} computers`} to check for updates.`
+        : installed.failures
+          ? `Paperboard could not check ${installed.failures === 1 ? "1 panel" : `${installed.failures} panels`} for updates (${installed.reasons[0]}).`
+          : null;
+    updateQueue.setChecking(false, checkError);
 
-    for (let i = 0; i < tasks.length; i++) {
-        const task = tasks[i];
-        sendProgress(win, Math.round((i / total) * 100), task.label);
-        try {
-            const driver = connectionPool.getDriver(task.computerId);
-            switch (task.type) {
-                case "local_panel":
-                case "ext_panel":
-                    await withTimeout(
-                        driver.installPanel(task.id!, { version: task.version, sha256: task.sha256 }),
-                        TASK_TIMEOUT_MS,
-                    );
-                    break;
-                case "local_package":
-                case "ext_package": {
-                    // execution-time backstop: a task without a checksum fact
-                    // never reaches the daemon, even if planning missed it
-                    if (!validSha256(task.sha256)) {
-                        throw new Error(
-                            `Install refused for package "${task.id}": update task carries no sha256 checksum`,
-                        );
-                    }
-                    const outcome = await withTimeout(
-                        driver.downloadPackage(
-                            task.id!,
-                            `updater-${task.id}`,
-                            (payload) => {
-                                logger.debug(
-                                    `[Updater] package ${task.id} progress:`,
-                                    payload?.stage ?? payload,
-                                );
-                            },
-                            task.sha256,
-                        ),
-                        PACKAGE_DOWNLOAD_TIMEOUT_MS,
-                    );
-                    if (outcome.waiting) waiting++;
-                    break;
-                }
-                case "ext_crane": {
-                    // execution-time backstop: crane self-update refuses
-                    // without a checksum exactly like panels and packages
-                    if (!validSha256(task.sha256)) {
-                        throw new Error(
-                            `Install refused for Paperboard Server update on ${task.computerId}: update task carries no sha256 checksum`,
-                        );
-                    }
-                    if (typeof task.signature !== "string" || !task.signature) {
-                        throw new Error(
-                            `Install refused for Paperboard Server update on ${task.computerId}: the release is not signed`,
-                        );
-                    }
-                    const client = connectionPool.getClient(task.computerId);
-                    await client.updateCrane(task.version, task.downloadUrl, task.sha256, task.signature);
-                    // confirm before recording: system:update only initiates
-                    // (the daemon swaps and respawns), so persist
-                    // crane_version only when the new binary actually reports
-                    // back. A failed swap leaves the recorded version stale
-                    // and the next run retries instead of skipping a lie.
-                    const confirmed = await confirmCraneVersion(
-                        client,
-                        task.computerId,
-                        task.version!,
-                    );
-                    if (!confirmed) {
-                        throw new Error(
-                            `Paperboard Server update to ${task.version} on ${task.computerId} did not report back: refusing to record the version`,
-                        );
-                    }
-                    try {
-                        await driver.setConfig("crane_version", { version: task.version });
-                    } catch (err) {
-                        logger.warn(
-                            `[Updater] failed to persist crane_version on ${task.computerId}:`,
-                            err,
-                        );
-                    }
-                    break;
-                }
-            }
-        } catch (err: any) {
+    const results = (await Promise.all(tasks.map((task) => updateQueue.enqueue(taskJob(task))))).flat();
+    for (const item of results) {
+        if (item.status === "failed") {
             failures++;
-            logger.warn(
-                `[Updater] Failed: ${task.type} ${task.id ?? ""} on ${task.computerId}:`,
-                err?.message,
-            );
+            logger.warn(`[Updater] Failed: ${item.kind} ${item.name} on ${item.computerId}: ${item.error}`);
         }
     }
-
-    const waitingNote = waiting > 0 ? `, ${waiting} waiting for panels to stop` : "";
-    sendProgress(win, 100, failures > 0 ? `Done (${failures} failed${waitingNote})` : `Done!${waiting > 0 ? ` (${waiting} waiting for panels to stop)` : ""}`, failures > 0);
     return failures;
+}
+
+function taskJob(task: UpdateTask): UpdateJob {
+    const kind = task.type === "local_panel" || task.type === "ext_panel" ? "panel"
+        : task.type === "ext_crane" ? "server"
+        : "package";
+    const key = kind === "server" ? `server:${task.computerId}` : `${kind}:${task.computerId}:${task.id}`;
+    return {
+        items: [{
+            key,
+            kind,
+            computerId: task.computerId,
+            computerName: task.computerName,
+            panelId: kind === "panel" ? task.id! : null,
+            name: task.name,
+            version: task.version,
+        }],
+        run: (report) => runTask(task, key, (progress) => report(progress)),
+    };
+}
+
+async function runTask(task: UpdateTask, key: string, report: (progress: Parameters<Parameters<UpdateJob["run"]>[0]>[0]) => void): Promise<UpdateHold | void> {
+    const driver = connectionPool.getDriver(task.computerId);
+    const onProgress = progressReporter(report);
+    switch (task.type) {
+        case "local_panel":
+        case "ext_panel": {
+            const outcome = await withTimeout(
+                driver.installPanel(task.id!, { version: task.version, sha256: task.sha256 }, { ifUnused: true, onProgress }),
+                TASK_TIMEOUT_MS,
+            );
+            if ("held" in outcome) {
+                heldPanelTasks.set(key, task);
+                holdProcesses.set(key, outcome.held.processes);
+                return {
+                    key,
+                    kind: "panel",
+                    computerId: task.computerId,
+                    computerName: task.computerName,
+                    id: task.id!,
+                    name: task.name,
+                    version: task.version,
+                    sha256: task.sha256 ?? null,
+                    users: [task.name],
+                };
+            }
+            return;
+        }
+        case "local_package":
+        case "ext_package": {
+            // execution-time backstop: a task without a checksum fact
+            // never reaches the daemon, even if planning missed it
+            if (!validSha256(task.sha256)) {
+                throw new Error(
+                    `Install refused for package "${task.id}": update task carries no sha256 checksum`,
+                );
+            }
+            const outcome = await withTimeout(
+                driver.downloadPackage(task.id!, `updater-${task.id}`, onProgress, task.sha256),
+                PACKAGE_DOWNLOAD_TIMEOUT_MS,
+            );
+            if (outcome.waiting) {
+                // only what people rely on holds it (important or long
+                // running); anything else stops for it and starts again
+                if (!outcome.waiting.blockedBy.some((user) => user.holds)) {
+                    const { failures } = await withTimeout(
+                        connectionPool.getClient(task.computerId).updateInUse({ packages: [task.id!] }, (_target, payload) => onProgress(payload)),
+                        TASK_TIMEOUT_MS,
+                    );
+                    const failure = failures[`package:${task.id}`];
+                    if (failure) throw new Error(failure);
+                    return;
+                }
+                return {
+                    key,
+                    kind: "package",
+                    computerId: task.computerId,
+                    computerName: task.computerName,
+                    id: task.id!,
+                    name: task.name,
+                    version: task.version,
+                    sha256: null,
+                    users: await packageUserNames(task.computerId, outcome.waiting.blockedBy),
+                };
+            }
+            return;
+        }
+        case "ext_crane": {
+            // execution-time backstop: crane self-update refuses
+            // without a checksum exactly like panels and packages
+            if (!validSha256(task.sha256)) {
+                throw new Error(
+                    `Install refused for Paperboard Server update on ${task.computerId}: update task carries no sha256 checksum`,
+                );
+            }
+            if (typeof task.signature !== "string" || !task.signature) {
+                throw new Error(
+                    `Install refused for Paperboard Server update on ${task.computerId}: the release is not signed`,
+                );
+            }
+            report({ stage: "installing", percent: null });
+            const client = connectionPool.getClient(task.computerId);
+            await client.updateCrane(task.version, task.downloadUrl, task.sha256, task.signature);
+            // confirm before recording: system:update only initiates
+            // (the daemon swaps and respawns), so persist
+            // crane_version only when the new binary actually reports
+            // back. A failed swap leaves the recorded version stale
+            // and the next run retries instead of skipping a lie.
+            const confirmed = await confirmCraneVersion(
+                client,
+                task.computerId,
+                task.version!,
+            );
+            if (!confirmed) {
+                throw new Error(
+                    `Paperboard Server update to ${task.version} on ${task.computerName ?? task.computerId} did not report back`,
+                );
+            }
+            try {
+                await driver.setConfig("crane_version", { version: task.version });
+            } catch (err) {
+                logger.warn(
+                    `[Updater] failed to persist crane_version on ${task.computerId}:`,
+                    err,
+                );
+            }
+            return;
+        }
+    }
+}
+
+// the panels whose important or long-running processes hold a package back, by name
+async function packageUserNames(computerId: string, blockedBy: Array<{ owner: string | null; holds: boolean }>): Promise<string[]> {
+    const owners = [...new Set(blockedBy.filter((b) => b.holds).map((b) => b.owner))];
+    if (owners.every((o) => o === null)) return ["Paperboard"];
+    const panels = await withTimeout(connectionPool.getClient(computerId).listPanels(), PING_TIMEOUT_MS);
+    const names = new Map(panels.map((p) => [p.id, p.name || p.id]));
+    return owners.map((o) => (o === null ? "Paperboard" : names.get(o) ?? o));
 }

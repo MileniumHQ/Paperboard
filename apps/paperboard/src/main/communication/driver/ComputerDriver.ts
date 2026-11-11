@@ -1,8 +1,8 @@
 import { PanelManifest } from "../../../../papercrane/types";
-import type { PackageDownloadOutcome } from "../papercrane/PaperCraneClient";
+import type { PackageDownloadOutcome, PanelInstallOptions, PanelInstallOutcome } from "../papercrane/PaperCraneClient";
 
 export interface ProgressPayload {
-    stage: "starting" | "checking" | "downloading" | "verifying" | "extracting" | "completed" | "error";
+    stage: "starting" | "checking" | "stopping" | "downloading" | "verifying" | "extracting" | "completed" | "error";
     percent: number;
     bytesLoaded?: number;
     bytesTotal?: number;
@@ -41,7 +41,8 @@ export interface ComputerDriver {
     installPanel(
         panelId: string,
         expected: { version?: string; sha256?: string },
-    ): Promise<PanelManifest>;
+        options?: PanelInstallOptions,
+    ): Promise<PanelInstallOutcome>;
 
     downloadPackage(
         packageName: string,

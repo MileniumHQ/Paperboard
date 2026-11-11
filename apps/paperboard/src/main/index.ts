@@ -15,9 +15,9 @@ import * as fs from "fs";
 import * as path from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { startCommunicator, logRendererMessage } from "./communication/communication";
-import { allowDevShellOrigin, isRefusedFrame, keepShellNavigation } from "./communication/shellGuard";
+import { allowDevShellOrigin, keepShellNavigation } from "./communication/shellGuard";
 import connectionPool from "./communication/papercrane/ConnectionPool";
-import { shouldSkipUpdate, runUpdateOrchestrator, disposeAppUpdater } from "./updater";
+import { startBackgroundUpdates, disposeAppUpdater } from "./updater";
 import { initAppSettingsSync } from "./appSettings";
 import { logger } from "../../papercrane/logger";
 import {
@@ -344,41 +344,6 @@ async function serveBrowserShell(): Promise<void> {
     }
 }
 
-function createUpdaterWindow(): BrowserWindow {
-    const updaterWindow = new BrowserWindow({
-        width: 380,
-        height: 180,
-        show: false,
-        frame: false,
-        transparent: true,
-        backgroundColor: "#00000000",
-        resizable: false,
-        center: true,
-        hasShadow: true,
-        ...(process.platform === "linux" ? { icon } : {}),
-        webPreferences: commonWebPreferences(),
-    });
-
-    updaterWindow.webContents.on("will-navigate", (event, url) => {
-        if (!keepShellNavigation(event, url)) log.warn("[Main] Blocked updater navigation to", url);
-    });
-    updaterWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-
-    updaterWindow.on("ready-to-show", () => {
-        updaterWindow.show();
-    });
-
-    if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-        updaterWindow.loadURL(
-            `${process.env["ELECTRON_RENDERER_URL"]}/updater.html`,
-        );
-    } else {
-        updaterWindow.loadURL(`${SHELL_ORIGIN}/updater.html`);
-    }
-
-    return updaterWindow;
-}
-
 app.whenReady().then(async () => {
     if (electronDataError) {
         log.error("[Main]", electronDataError.message);
@@ -493,48 +458,16 @@ app.whenReady().then(async () => {
     });
 
     if (browserMode) {
-        // no updater pass either: it restarts into a window. Updates apply
-        // on the next windowed launch.
+        // no background updates either: they run when Paperboard next
+        // runs as a window
         for (const signal of ["SIGINT", "SIGTERM"] as const) {
             process.on(signal, () => app.quit());
         }
         await serveBrowserShell();
-    } else if (shouldSkipUpdate(process.argv)) {
-        createWindow();
     } else {
-        const updaterWindow = createUpdaterWindow();
-
-        let launched = false;
-        const launchMain = () => {
-            if (launched) return;
-            launched = true;
-            if (!updaterWindow.isDestroyed()) updaterWindow.close();
-            createWindow();
-        };
-
-        ipcMain.once("updater-finish", (event) => {
-            // a panel frame must never be able to skip the update flow.
-            // One invariant, one implementation: the check lives in
-            // shellGuard.isRefusedFrame, not as an inline copy here.
-            if (isRefusedFrame(event)) {
-                log.warn('[Shell] PANEL_IPC_REFUSED: channel "updater-finish" is shell-only');
-                return;
-            }
-            launchMain();
-        });
-        updaterWindow.on("closed", () => {
-            if (!launched) launchMain();
-        });
-
-        // hard timeout so stalled network can't block launch
-        updaterWindow.once("ready-to-show", () => {
-            runUpdateOrchestrator(updaterWindow)
-                .catch((err) => {
-                    log.error("[Updater] Orchestrator error:", err?.message);
-                })
-                .finally(() => launchMain());
-        });
-        setTimeout(launchMain, 3 * 60_000).unref?.();
+        createWindow();
+        // updates run in the background; the top bar lists them
+        startBackgroundUpdates(process.argv);
     }
 
     app.on("activate", function () {

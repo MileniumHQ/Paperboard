@@ -16,7 +16,9 @@ export const SHELL_INVOKE_CHANNELS = [
     "app-version",
     "launch-options",
     "app-update-state",
-    "package-updates",
+    "update-queue",
+    "update-release",
+    "update-check",
     "open-update-download",
     "panel-file-export",
     "panel-file-import",
@@ -32,8 +34,6 @@ export const SHELL_INVOKE_CHANNELS = [
 
 export const SHELL_SEND_CHANNELS = [
     "ping",
-    "updater-finish",
-    "relaunch-for-update",
     "quit-and-install",
     "quit-app",
     "renderer-log",
@@ -41,9 +41,8 @@ export const SHELL_SEND_CHANNELS = [
 
 export const SHELL_ON_CHANNELS = [
     "pong",
-    "updater-progress",
     "app-update-state",
-    "package-updates-changed",
+    "update-queue",
     "computers-changed",
     "discovery-changed",
     "panel-permission-ask",

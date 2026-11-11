@@ -3,7 +3,7 @@ import {
     ProgressCallback,
     SystemInfo,
 } from "./ComputerDriver";
-import { PaperCraneClient, type PackageDownloadOutcome } from "../papercrane/PaperCraneClient";
+import { PaperCraneClient, type PackageDownloadOutcome, type PanelInstallOptions, type PanelInstallOutcome } from "../papercrane/PaperCraneClient";
 import { PanelManifest } from "../../../../papercrane/types";
 
 export class RemoteComputerDriver implements ComputerDriver {
@@ -38,8 +38,8 @@ export class RemoteComputerDriver implements ComputerDriver {
         return this.client.listPanels();
     }
 
-    public async installPanel(panelId: string, expected: { version?: string; sha256?: string }): Promise<PanelManifest> {
-        return this.client.installPanel(panelId, expected);
+    public async installPanel(panelId: string, expected: { version?: string; sha256?: string }, options?: PanelInstallOptions): Promise<PanelInstallOutcome> {
+        return this.client.installPanel(panelId, expected, options);
     }
 
     public async updateCrane(version: string, downloadUrl: string, sha256: string, signature: string): Promise<void> {

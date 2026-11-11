@@ -18,6 +18,9 @@ export interface UpdateTask {
     version: string;
     downloadUrl: string;
     label: string;
+    // what the update list calls it, and where (null: this computer)
+    name: string;
+    computerName: string | null;
     sha256?: string;
     // offline release-key signature (crane binaries); the daemon verifies it
     signature?: string;
@@ -121,6 +124,8 @@ export async function planUpdateTasks(
                     reg.downloadUrl ??
                     `${opts.registryUrl}/panel/${panel.id}/download`,
                 label: `Updating panel ${panel.name || panel.id}${comp.isLocal ? "" : ` on ${comp.name}`}`,
+                name: panel.name || panel.id,
+                computerName: comp.isLocal ? null : comp.name,
                 sha256: reg.sha256,
             });
         }
@@ -156,6 +161,8 @@ export async function planUpdateTasks(
                 version: reg.version,
                 downloadUrl: platformData.url,
                 label: `Updating ${pkgId}${comp.isLocal ? "" : ` on ${comp.name}`}`,
+                name: typeof reg.name === "string" && reg.name ? reg.name : pkgId,
+                computerName: comp.isLocal ? null : comp.name,
                 sha256: pkgSha256,
             });
         }
@@ -205,6 +212,8 @@ export async function planUpdateTasks(
                             craneEntry.downloadUrl ??
                             `${opts.registryUrl}/paperdl/crane/${platform}-${arch}/download`,
                         label: `Updating Paperboard Server on ${comp.name}`,
+                        name: "Paperboard Server",
+                        computerName: comp.name,
                         sha256: craneEntry.sha256,
                         signature: craneEntry.signature,
                     });

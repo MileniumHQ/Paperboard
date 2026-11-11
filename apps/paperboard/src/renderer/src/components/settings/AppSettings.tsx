@@ -15,6 +15,7 @@ import {
     PaperQuote,
     PaperSectionHeader,
     PaperText,
+    showToast,
 } from "@mileniumhq/paperui";
 import { isBrowserShell, shellIpc } from "../../lib/shell";
 import type { SettingsFailure } from "../../hooks/useAppSettings";
@@ -86,10 +87,14 @@ const LICENSE_TEXTS: Record<LicenseKind, string> = {
     mit: mitLicenseText,
 };
 
-const UPDATE_NOTE = "Updates every panel, package, and computer, then restarts Paperboard.";
+const UPDATE_NOTE = "Looks for updates to Paperboard, every panel, package, and computer now. The top bar shows them as they run.";
 const QUIT_NOTE = "Stops the panels on this computer, unless its server daemon runs as a service. Panels on other computers keep running.";
 
-const updateEverything = () => shellIpc().send("relaunch-for-update");
+// the top bar lists what it finds, and says each failure
+const updateEverything = () =>
+    shellIpc()
+        .invoke<void>("update-check")
+        .catch((err) => showToast({ variant: "danger", title: "Couldn't check for updates", message: String(err) }));
 const quitApp = () => shellIpc().send("quit-app");
 
 export default function AppSettings(props: {
@@ -246,7 +251,7 @@ export default function AppSettings(props: {
                     </PaperButton>
                 </PaperSettingItem>
 
-                {/* browser mode has no updater window to restart into */}
+                {/* browser mode runs no updates */}
                 <Show when={!isBrowserShell()}>
                     <PaperSettingItem
                         title="Updates"
@@ -255,7 +260,7 @@ export default function AppSettings(props: {
                         <PaperEffect variant="primary">
                             <PaperButton
                                 onClick={updateEverything}>
-                                <PaperIcon>restart_alt</PaperIcon>
+                                <PaperIcon>update</PaperIcon>
                                 Update everything now
                             </PaperButton>
                         </PaperEffect>

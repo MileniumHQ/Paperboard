@@ -7,8 +7,9 @@ export interface PackageUpdateNotice {
     computerName: string;
     packageName: string;
     version: string;
-    // display names of the panels holding the update back ("Paperboard"
-    // for processes the app started itself)
+    // display names of the panels whose important or long-running
+    // processes hold the update back ("Paperboard" for processes the app
+    // started itself); empty when what uses it can stop for it
     panels: string[];
     error?: string;
 }

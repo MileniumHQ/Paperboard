@@ -10,7 +10,8 @@ import { createFrameLoopbackRedirects, LOOPBACK_REDIRECT_CANCEL, LOOPBACK_REDIRE
 import BackupLocationChooser, { type BackupLocationChoice } from "../backups/BackupLocationChooser";
 import { BACKUP_LOCATION_REQUEST, BACKUP_LOCATION_RESULT, parseBackupLocationRequest } from "../../lib/backupLocationRequest";
 
-export type RestartState = { kind: "restarting" } | { kind: "failed"; message: string };
+// restarting: the panel's service restarts; updating: a new release of the panel installs
+export type RestartState = { kind: "restarting" } | { kind: "updating" } | { kind: "failed"; message: string };
 
 export interface PanelViewProps {
     activePanel: string;
@@ -136,7 +137,7 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
         }} />
         <Show when={props.restart}>{(restart) => (
             <LoadingOverlay
-                label={restart().kind === "failed" ? undefined : "Restarting panel service…"}
+                label={restart().kind === "failed" ? undefined : restart().kind === "updating" ? "Updating panel…" : "Restarting panel service…"}
                 error={restart().kind === "failed" ? (restart() as { message: string }).message : undefined}
                 retryLabel="Restart panel"
                 onRetry={props.retryRestart}

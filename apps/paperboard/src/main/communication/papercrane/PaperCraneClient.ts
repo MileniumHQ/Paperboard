@@ -32,6 +32,7 @@ export interface ProgressPayload {
     stage:
         | "starting"
         | "checking"
+        | "stopping"
         | "downloading"
         | "verifying"
         | "extracting"
@@ -41,6 +42,8 @@ export interface ProgressPayload {
     bytesLoaded?: number;
     bytesTotal?: number;
     message?: string;
+    // update:inUse: which of its updates this is about
+    target?: string;
 }
 
 export interface CraneSystemInfo {
@@ -126,11 +129,21 @@ export interface TargetStatus {
 const DEFAULT_RPC_TIMEOUT_MS = 30_000;
 export const PACKAGE_DOWNLOAD_TIMEOUT_MS = 45 * 60_000;
 
+export interface PanelInstallOptions {
+    /** hold the install when the panel's processes run, instead of stopping them */
+    ifUnused?: boolean;
+    onProgress?: (payload: ProgressPayload) => void;
+}
+
+export type PanelInstallOutcome = { panel: PanelManifest } | { held: { processes: string[] } };
+
 // a staged update waits for the processes still running the installed release
 export interface PackageUpdateWait {
     name: string;
     version: string;
-    blockedBy: Array<{ processId: string; owner: string | null }>;
+    // holds: an important or long-running process; the others can be
+    // stopped for the update without asking
+    blockedBy: Array<{ processId: string; owner: string | null; holds: boolean }>;
     error?: string;
 }
 
@@ -754,14 +767,77 @@ export class PaperCraneClient extends EventEmitter {
         return res.running;
     }
 
-    public async installPanel(panelId: string, expected: { version?: string; sha256?: string }): Promise<PanelManifest> {
-        const res = await this.call<{ panel?: PanelManifest }>("panel:install", {
-            panelId,
-            version: expected.version,
-            sha256: expected.sha256,
+    /**
+     * Installs the registry's release of a panel. With ifUnused, a panel
+     * whose processes run is not installed: the result is held, with them.
+     */
+    public async installPanel(
+        panelId: string,
+        expected: { version?: string; sha256?: string },
+        options: PanelInstallOptions = {},
+    ): Promise<PanelInstallOutcome> {
+        return this.withProgress(options, async (downloadId) => {
+            const res = await this.call<{ panel?: PanelManifest; held?: { processes?: string[] } }>("panel:install", {
+                panelId,
+                version: expected.version,
+                sha256: expected.sha256,
+                ...(options.ifUnused ? { ifUnused: true } : {}),
+                ...(downloadId ? { downloadId } : {}),
+            }, PACKAGE_DOWNLOAD_TIMEOUT_MS);
+            if (res.held) {
+                if (!Array.isArray(res.held.processes)) throw new Error(`Daemon held ${panelId} without naming its processes`);
+                return { held: { processes: res.held.processes } };
+            }
+            if (!res.panel) throw new Error(`Panel install failed for ${panelId}`);
+            return { panel: res.panel };
         });
-        if (!res.panel) throw new Error(`Panel install failed for ${panelId}`);
-        return res.panel;
+    }
+
+    /**
+     * Stop and update: stops what the given updates wait for once, installs
+     * each panel release and swaps in each staged package, and lets the
+     * panels start their processes again. Progress and failures name their
+     * target ("panel:<id>" or "package:<name>"); one failed target does not
+     * stop the others.
+     */
+    public async updateInUse(
+        targets: { panels?: Array<{ id: string; version?: string; sha256?: string }>; packages?: string[] },
+        onProgress?: (target: string, payload: ProgressPayload) => void,
+    ): Promise<{ panels: PanelManifest[]; failures: Record<string, string> }> {
+        const progress = onProgress
+            ? (payload: ProgressPayload) => {
+                if (typeof payload.target !== "string") {
+                    logger.error("[PaperCraneClient] update progress without its target:", payload);
+                    return;
+                }
+                onProgress(payload.target, payload);
+            }
+            : undefined;
+        return this.withProgress({ onProgress: progress }, async (downloadId) => {
+            const res = await this.call<{ panels?: PanelManifest[]; failures?: Record<string, string> }>("update:inUse", {
+                panels: targets.panels ?? [],
+                packages: targets.packages ?? [],
+                ...(downloadId ? { downloadId } : {}),
+            }, PACKAGE_DOWNLOAD_TIMEOUT_MS);
+            if (!Array.isArray(res.panels) || !res.failures || typeof res.failures !== "object") {
+                throw new Error("Daemon finished the update without saying what it installed");
+            }
+            return { panels: res.panels, failures: res.failures };
+        });
+    }
+
+    private async withProgress<T>(
+        options: { onProgress?: (payload: ProgressPayload) => void },
+        run: (downloadId: string | null) => Promise<T>,
+    ): Promise<T> {
+        if (!options.onProgress) return run(null);
+        const downloadId = `progress-${crypto.randomUUID()}`;
+        this.progressListeners.set(downloadId, options.onProgress);
+        try {
+            return await run(downloadId);
+        } finally {
+            this.progressListeners.delete(downloadId);
+        }
     }
 
 

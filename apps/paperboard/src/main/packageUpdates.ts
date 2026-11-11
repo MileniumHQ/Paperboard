@@ -1,10 +1,8 @@
 // Runtime package updates that are staged on paired computers and wait for
-// the panels still running the installed release. The shell lists them so
-// the user knows which processes to stop; the daemon installs each update
-// itself once they have.
-import { BrowserWindow } from "electron";
+// the panels still running the installed release. The update list shows
+// them as held, with Stop and update; the daemon installs each update
+// itself once those processes stop.
 import connectionPool from "./communication/papercrane/ConnectionPool";
-import { isShellUrl } from "./communication/shellGuard";
 import { withTimeout } from "../../papercrane/util";
 import { logger } from "../../papercrane/logger";
 import type { PackageUpdatesState } from "../shared/packageUpdates";
@@ -25,13 +23,15 @@ export async function collectPackageUpdates(): Promise<PackageUpdatesState> {
                 const updates = await withTimeout(client.pendingPackageUpdates(), QUERY_TIMEOUT_MS);
                 if (updates.length === 0) return;
                 const names = new Map<string, string>();
-                if (updates.some((u) => u.blockedBy.some((b) => b.owner))) {
+                if (updates.some((u) => u.blockedBy.some((b) => b.owner && b.holds))) {
                     for (const panel of await withTimeout(client.listPanels(), QUERY_TIMEOUT_MS)) {
                         names.set(panel.id, panel.name || panel.id);
                     }
                 }
                 for (const update of updates) {
-                    const panels = [...new Set(update.blockedBy.map((b) => (b.owner ? names.get(b.owner) ?? b.owner : "Paperboard")))];
+                    // only important or long-running processes hold it;
+                    // with none, the updater stops the rest and updates
+                    const panels = [...new Set(update.blockedBy.filter((b) => b.holds).map((b) => (b.owner ? names.get(b.owner) ?? b.owner : "Paperboard")))];
                     state.notices.push({
                         computerId: id,
                         computerName: name,
@@ -48,13 +48,4 @@ export async function collectPackageUpdates(): Promise<PackageUpdatesState> {
         }));
     }
     return state;
-}
-
-// tells shell windows to read the list again (after an updater run)
-export function announcePackageUpdates(): void {
-    for (const window of BrowserWindow.getAllWindows()) {
-        if (!window.isDestroyed() && isShellUrl(window.webContents.getURL())) {
-            window.webContents.send("package-updates-changed");
-        }
-    }
 }

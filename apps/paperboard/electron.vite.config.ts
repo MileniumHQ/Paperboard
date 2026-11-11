@@ -23,7 +23,6 @@ export default defineConfig({
             rollupOptions: {
                 input: {
                     index: resolve(__dirname, "src/renderer/index.html"),
-                    updater: resolve(__dirname, "src/renderer/updater.html"),
                     screenshot: resolve(__dirname, "src/renderer/screenshot.html"),
                 },
             },
