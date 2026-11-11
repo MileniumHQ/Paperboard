@@ -11,13 +11,14 @@ import type {
     ServiceContext,
 } from "@mileniumhq/paperapi";
 import type { BackupRecord } from "@mileniumhq/paperapi";
-import type { ChatMessage, GameServerState } from "./types";
+import { MAX_BUFFERED_ENTRIES, type ChatMessage, type GameServerState } from "./types";
 import type { ServerScope } from "./scope";
 import { currentServer, inServer } from "./scope";
-import { TRIGGER_IDS, type TriggerId } from "./contract";
+import { ACTION_IDS, TRIGGER_IDS, type TriggerId } from "./contract";
 import { restartServerInstance, sendServerCommand, startServerInstance, stopServerInstance } from "./lifecycle";
 import { listLogFiles, readLogFile } from "./logs";
 import { sayInChat, serverBackups } from "./actions";
+import { automationView, readAutomation, writeAutomation } from "./automation";
 import { currentGameService } from "../games/service";
 import { assertGameAction, gameFor } from "../games";
 
@@ -70,9 +71,62 @@ const LOG_FILE_TYPE: BlockTypeDefinition = {
     },
 };
 
+const AUTOMATION_TYPE: BlockTypeDefinition = {
+    id: "automation",
+    name: "Automation",
+    icon: "autorenew",
+    description: "What a server does on its own",
+    base: "object",
+    fields: {
+        "restart-after-crash": { type: "boolean", name: "Restart After a Crash" },
+        "daily-restart": { type: "text", name: "Daily Restart", description: "The hour it restarts each day, as 04:00; none when it doesn't", optional: true },
+        "automatic-updates": { type: "boolean", name: "Automatic Updates", description: "Always off for a game that can't update itself" },
+        "time-zone": { type: "text", name: "Time Zone", description: "The computer's, which the daily restart hour is on" },
+    },
+};
+
 /** The types every game's blocks use, reading who's online on each server. A game adds its own through blockTypes(). */
 export function sharedTypes(onlinePlayers: (server: string) => readonly string[]): BlockTypeDefinition[] {
-    return [playerType(onlinePlayers), BACKUP_TYPE, LOG_FILE_TYPE];
+    return [playerType(onlinePlayers), BACKUP_TYPE, LOG_FILE_TYPE, AUTOMATION_TYPE];
+}
+
+/** The server's automation as its value reads. */
+async function automationValue() {
+    const view = automationView(await readAutomation());
+    return {
+        "restart-after-crash": view.restartAfterCrash,
+        "daily-restart": view.dailyRestart,
+        "automatic-updates": view.canUpdate && view.autoUpdate,
+        "time-zone": view.timeZone,
+    };
+}
+
+const DAILY_RESTART_CHOICES = [
+    { label: "never", value: "never" },
+    ...Array.from({ length: 24 }, (_, hour) => {
+        const at = `${String(hour).padStart(2, "0")}:00`;
+        return { label: `at ${at}`, value: at };
+    }),
+];
+
+/** Launches the server and waits for it to be online, as Start the Server does. */
+export async function startFromBlocks(ctx: Context): Promise<void> {
+    await startServerInstance(ctx);
+    // a launch that fails says why in the console and leaves the server offline
+    if (ctx.state.serverStatus === "offline") throw new Error("The server did not start; its console says why");
+}
+
+/** Restarts a server that is online, as Restart the Server does. */
+export async function restartFromBlocks(ctx: Context): Promise<void> {
+    if (ctx.state.serverStatus !== "online") throw new Error("The server is not online, so it can't restart");
+    await restartServerInstance(ctx);
+}
+
+/** The backup a block was given, as one this server has. */
+function backupId(backup: unknown): string {
+    const id = (backup as { id?: unknown } | null)?.id;
+    if (typeof id !== "string" || !id) throw new Error("Give a backup of this server");
+    return id;
 }
 
 const backupValue = (record: BackupRecord) => ({
@@ -143,6 +197,30 @@ export function sharedBlocks(ctx: Context): BlockSet {
                 type: "text",
                 read: async ({ file }: { file: string }) => (await readLogFile(ctx, file)).content,
             },
+            {
+                id: "console-output",
+                name: "Console Output",
+                category: "Logs",
+                icon: "terminal",
+                description: "The last lines the server's console showed, oldest first",
+                text: "last {lines} lines of the console",
+                inputs: { lines: { type: "number", name: "Lines", integer: true, min: 1, max: MAX_BUFFERED_ENTRIES, default: 50 } },
+                type: "text",
+                read: ({ lines }: { lines: number }) =>
+                    ctx.state.serverEntries
+                        .slice(-lines)
+                        .map((entry) => (typeof entry.content === "string" ? entry.content : ""))
+                        .join("\n"),
+            },
+            needsAction(ctx, ACTION_IDS.readAutomation, {
+                id: "automation",
+                name: "Automation",
+                category: "Automation",
+                icon: "autorenew",
+                description: "Whether the server restarts after a crash, the hour it restarts each day, and whether it updates itself",
+                type: "automation",
+                read: () => automationValue(),
+            }),
         ],
         commands: [
             {
@@ -151,11 +229,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                 category: "Server",
                 icon: "power",
                 description: "Launches the server; it is online once it finishes starting",
-                run: async () => {
-                    await startServerInstance(ctx);
-                    // a launch that fails says why in the console and leaves the server offline
-                    if (ctx.state.serverStatus === "offline") throw new Error("The server did not start; its console says why");
-                },
+                run: () => startFromBlocks(ctx),
             },
             {
                 id: "stop-server",
@@ -171,10 +245,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                 category: "Server",
                 icon: "restart_alt",
                 description: "Stops the running server and starts it again",
-                run: async () => {
-                    if (ctx.state.serverStatus !== "online") throw new Error("The server is not online, so it can't restart");
-                    await restartServerInstance(ctx);
-                },
+                run: () => restartFromBlocks(ctx),
             },
             {
                 id: "save-world",
@@ -217,6 +288,67 @@ export function sharedBlocks(ctx: Context): BlockSet {
                 output: "backup",
                 run: async ({ name }: { name?: string }) => backupValue(await serverBackups().create(name ? { label: name } : {})),
             },
+            {
+                id: "delete-backup",
+                name: "Delete Backup",
+                category: "Backups",
+                icon: "delete",
+                description: "Deletes one of the server's backups from where its backups go. It can't be brought back",
+                text: "Delete {backup}",
+                inputs: { backup: { type: "backup", name: "Backup" } },
+                run: async ({ backup }: { backup: unknown }) => {
+                    await serverBackups().delete(backupId(backup));
+                },
+            },
+            needsAction(ctx, ACTION_IDS.writeAutomation, {
+                id: "set-restart-after-crash",
+                name: "Set Restart After a Crash",
+                category: "Automation",
+                icon: "restart_alt",
+                description: "Whether the server starts again on its own after it crashes",
+                text: "{restart} after a crash",
+                inputs: {
+                    restart: {
+                        type: "boolean",
+                        name: "Restart After a Crash",
+                        choices: [{ label: "restart", value: true }, { label: "stay offline", value: false }],
+                    },
+                },
+                run: async ({ restart }: { restart: boolean }) => {
+                    await writeAutomation(ctx, { restartAfterCrash: restart }, restartServerInstance);
+                },
+            }),
+            needsAction(ctx, ACTION_IDS.writeAutomation, {
+                id: "set-daily-restart",
+                name: "Set Daily Restart",
+                category: "Automation",
+                icon: "schedule",
+                description: "The hour a running server restarts each day, on the computer's clock. Players are warned before it does",
+                text: "Restart the server daily {hour}",
+                inputs: { hour: { type: "text", name: "Daily Restart", choices: DAILY_RESTART_CHOICES } },
+                run: async ({ hour }: { hour: string }) => {
+                    await writeAutomation(ctx, { dailyRestart: hour === "never" ? null : hour }, restartServerInstance);
+                },
+            }),
+            needsAction(ctx, ACTION_IDS.writeAutomation, {
+                id: "set-automatic-updates",
+                name: "Set Automatic Updates",
+                category: "Automation",
+                icon: "update",
+                description: "Whether the server installs a newer build before each start, restarting a running server for one. Only for games that can update themselves",
+                text: "{update} automatically",
+                inputs: {
+                    update: {
+                        type: "boolean",
+                        name: "Automatic Updates",
+                        choices: [{ label: "update", value: true }, { label: "don't update", value: false }],
+                    },
+                },
+                run: async ({ update }: { update: boolean }) => {
+                    if (!automationView(await readAutomation()).canUpdate) throw new Error("This game can't update itself, so it has no automatic updates");
+                    await writeAutomation(ctx, { autoUpdate: update }, restartServerInstance);
+                },
+            }),
         ],
         events: [
             { id: TRIGGER_IDS.serverStarted, name: "When the Server Starts", category: "Server", icon: "play_arrow", description: "Runs once the server has finished starting" },
@@ -298,15 +430,29 @@ export function needsAction<T extends BlockCommandDefinition | BlockValueDefinit
     return { ...def, read: (inputs: unknown, block: unknown) => (check(), read(inputs, block as never)) };
 }
 
+const live = (scope: ServerScope) => {
+    if (scope.removing) throw new Error("This server was removed or is being removed");
+};
+
 /**
- * The set as it runs for one server: in that server's scope, refused once
- * it is being removed, and a command counts as the server's operation while
- * it runs (removal waits for it).
+ * Runs work as one of the server's operations: in its scope, refused once
+ * it is being removed, and counted while it runs (removal waits for it).
+ */
+export async function serverOperation<T>(scope: ServerScope, work: () => T | Promise<T>): Promise<T> {
+    live(scope);
+    scope.activeOperations++;
+    try {
+        return await inServer(scope, work);
+    } finally {
+        scope.activeOperations--;
+    }
+}
+
+/**
+ * The set as it runs for one server: a command is one of its operations,
+ * and a value is read in its scope, refused once it is being removed.
  */
 export function bindBlocks(scope: ServerScope, set: BlockSet): BlockSet {
-    const live = () => {
-        if (scope.removing) throw new Error("This server was removed or is being removed");
-    };
     // choices worked out on demand are asked in the server too
     const inputs = <T extends { inputs?: BlockCommandDefinition["inputs"] }>(def: T): T => {
         if (!def.inputs) return def;
@@ -314,7 +460,7 @@ export function bindBlocks(scope: ServerScope, set: BlockSet): BlockSet {
             Object.entries(def.inputs).map(([key, input]) => {
                 const choices = input.choices;
                 if (typeof choices !== "function") return [key, input];
-                return [key, { ...input, choices: (ctx: Parameters<typeof choices>[0]) => (live(), inServer(scope, () => choices(ctx))) }];
+                return [key, { ...input, choices: (ctx: Parameters<typeof choices>[0]) => (live(scope), inServer(scope, () => choices(ctx))) }];
             }),
         );
         return { ...def, inputs: bound };
@@ -324,20 +470,12 @@ export function bindBlocks(scope: ServerScope, set: BlockSet): BlockSet {
         events: set.events?.map(inputs),
         commands: set.commands?.map(inputs).map((command) => ({
             ...command,
-            run: async (inputs, ctx) => {
-                live();
-                scope.activeOperations++;
-                try {
-                    return await inServer(scope, () => command.run(inputs, ctx));
-                } finally {
-                    scope.activeOperations--;
-                }
-            },
+            run: (inputs, ctx) => serverOperation(scope, () => command.run(inputs, ctx)),
         })),
         values: set.values?.map(inputs).map((value) => ({
             ...value,
             read: (inputs, ctx) => {
-                live();
+                live(scope);
                 return inServer(scope, () => value.read(inputs, ctx));
             },
         })),

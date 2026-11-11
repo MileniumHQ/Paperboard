@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { actionsApi, blocksApi } from "@mileniumhq/paperapi";
+import { actionsApi, backupApi, backupLocationsApi, blocksApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installFakeJava } from "./helpers/fakeJava";
 import { installPanel, restartService, servicesState } from "./helpers/installedPanel";
@@ -23,12 +23,12 @@ const terraria = releaseFor("1.4.5.8");
 const read = <T>(value: string, inputs?: Record<string, unknown>, project = "s-a") => blocksApi.read<T>(PANEL_ID, value, inputs, { project });
 const run = <T>(command: string, inputs?: Record<string, unknown>, project = "s-a") => blocksApi.run<T>(PANEL_ID, command, inputs, { project, timeoutMs: null });
 
-/** resolves with what the next firing of `event` in `project` carried */
-function nextEvent(event: string, project: string, timeoutMs = 10_000): Promise<Record<string, unknown>> {
+/** resolves with what the next firing of `event` in `project` (or the panel's own, without one) carried */
+function nextEvent(event: string, project: string | undefined, timeoutMs = 10_000): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
             off();
-            reject(new Error(`${event} did not fire in ${project}`));
+            reject(new Error(`${event} did not fire in ${project ?? "the panel"}`));
         }, timeoutMs);
         const off = blocksApi.onEvent(PANEL_ID, event, (payload) => {
             clearTimeout(timer);
@@ -41,8 +41,8 @@ function nextEvent(event: string, project: string, timeoutMs = 10_000): Promise<
 const settle = () => new Promise((resolve) => setTimeout(resolve, 300));
 
 const SHARED = {
-    commands: ["back-up", "restart-server", "run-command", "save-world", "say", "start-server", "stop-server"],
-    values: ["backups", "log", "log-files", "online-players", "player-count", "server-status"],
+    commands: ["back-up", "delete-backup", "restart-server", "run-command", "save-world", "say", "set-automatic-updates", "set-daily-restart", "set-restart-after-crash", "start-server", "stop-server"],
+    values: ["automation", "backups", "console-output", "log", "log-files", "online-players", "player-count", "server-status"],
     events: ["server-crashed", "server-started", "server-stopped"],
 };
 const PLAYER_EVENTS = ["chat-message", "player-joined", "player-left"];
@@ -84,7 +84,7 @@ describe("each server is a Blocks project with its game's blocks", () => {
         expect((await blocksApi.projects(PANEL_ID)).map((p) => [p.id, p.name]).sort()).toEqual([["s-a", "Survival"], ["s-t", "Island"]]);
         const all = await blocksApi.list(PANEL_ID);
         const of = (prefix: string) => all.map((b) => b.entry).filter((e) => e.startsWith(prefix)).sort();
-        expect(of("type.")).toEqual(["backup", "log-file", "player", "player-statistics", "plugin", "world"].map((t) => `type.${t}`));
+        expect(of("type.")).toEqual(["automation", "backup", "log-file", "player", "player-statistics", "plugin", "server", "world"].map((t) => `type.${t}`));
         expect(of("s-a/")).toEqual(entriesOf("s-a", {
             commands: [...SHARED.commands, "ban-player", "create-world", "delete-player-data", "delete-plugin", "delete-world", "deop-player", "install-software", "kick-player", "kill-player", "op-player", "pardon-player", "reset-world", "set-game-rule", "switch-world", "uninstall-plugins", "unwhitelist-player", "whitelist-player"],
             values: [...SHARED.values, "active-world", "banned-players", "game-rule", "operators", "player-by-uuid", "player-statistics", "plugins", "statistics-of", "whitelisted-players", "worlds"],
@@ -189,5 +189,115 @@ describe("each server is a Blocks project with its game's blocks", () => {
         await run("stop-server", {}, "s-t");
         expect(await stopped).toEqual({});
         expect(await read("server-status", undefined, "s-t")).toBe("offline");
+    });
+});
+
+describe("the panel's own blocks run its servers, and each server's settings and backups", () => {
+    const panelRun = <T>(command: string, inputs?: Record<string, unknown>) => blocksApi.run<T>(PANEL_ID, command, inputs, { timeoutMs: null });
+    const panelRead = <T>(value: string, inputs?: Record<string, unknown>) => blocksApi.read<T>(PANEL_ID, value, inputs);
+    const field = <T>(server: string, name: string) => blocksApi.property<T>(`${PANEL_ID}:server`, name, server);
+
+    test("the panel lists its servers' blocks beside each server's own", async () => {
+        const all = await blocksApi.list(PANEL_ID);
+        const own = (kind: string) => all.map((b) => b.entry).filter((e) => e.startsWith(`${kind}.`)).sort();
+        expect(own("command")).toEqual(["create-server", "remove-server", "rename-server", "restart-server", "start-server", "stop-server"].map((c) => `command.${c}`));
+        expect(own("value")).toEqual(["value.server", "value.servers"]);
+        expect(own("event")).toEqual(["server-crashed", "server-started", "server-stopped"].map((e) => `event.${e}`));
+        const schema = (entry: string) => all.find((b) => b.entry === entry)!.schema as any;
+        expect(schema("command.start-server")).toMatchObject({ text: "Start {server}", inputs: { server: { type: `${PANEL_ID}:server` } } });
+        expect(schema("event.server-started")).toMatchObject({ values: { server: { type: `${PANEL_ID}:server` } }, filters: { server: "server" } });
+        expect(schema("value.servers")).toMatchObject({ type: `list<${PANEL_ID}:server>`, changes: true });
+    });
+
+    test("Servers and Server read the panel's servers, and a server's fields read its name, game and status", async () => {
+        expect(await panelRead("servers")).toEqual(["s-a", "s-t"]);
+        expect(await blocksApi.choices(PANEL_ID, "value.server", "server")).toEqual([{ label: "Survival", value: "s-a" }, { label: "Island", value: "s-t" }]);
+        expect(await panelRead("server", { server: "s-t" })).toBe("s-t");
+        await expect(panelRead("server", { server: "s-gone" })).rejects.toThrow();
+        expect(await field("s-t", "name")).toBe("Island");
+        expect(await field("s-t", "game")).toBe("Terraria");
+        expect(await field("s-t", "status")).toBe("offline");
+        await expect(field("s-gone", "name")).rejects.toThrow("Choose a server that has not been removed");
+    });
+
+    test("a server made from Blocks is renamed and removed from Blocks, and its folder is kept", async () => {
+        expect((await blocksApi.choices(PANEL_ID, "command.create-server", "game")).map((c) => c.value)).toContain("minecraft");
+        await expect(panelRun("create-server", { game: "chess", name: "Nope" })).rejects.toThrow('"Game" must be one of');
+        let changes = 0;
+        const off = blocksApi.onChange(PANEL_ID, "servers", () => changes++);
+        try {
+            await settle();
+            const made = await panelRun<string>("create-server", { game: "minecraft", name: "Creative" });
+            expect(await panelRead("servers")).toEqual(["s-a", "s-t", made]);
+            expect((await blocksApi.projects(PANEL_ID)).find((p) => p.id === made)?.name).toBe("Creative");
+            expect(await field(made, "game")).toBe("Minecraft");
+
+            expect(await panelRun("rename-server", { server: made, name: "Builders" })).toBeNull();
+            expect(await field(made, "name")).toBe("Builders");
+            expect((await blocksApi.projects(PANEL_ID)).find((p) => p.id === made)?.name).toBe("Builders");
+
+            fs.writeFileSync(path.join(folder(made), "keep.txt"), "mine");
+            expect(await panelRun("remove-server", { server: made })).toBeNull();
+            expect(await panelRead("servers")).toEqual(["s-a", "s-t"]);
+            expect((await blocksApi.projects(PANEL_ID)).map((p) => p.id)).not.toContain(made);
+            expect(fs.readFileSync(path.join(folder(made), "keep.txt"), "utf8")).toBe("mine");
+            await expect(panelRun("start-server", { server: made })).rejects.toThrow("Choose a server that has not been removed");
+
+            const deadline = Date.now() + 10_000;
+            while (changes < 2) {
+                if (Date.now() > deadline) throw new Error(`the server list announced ${changes} changes, not 2`);
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+        } finally {
+            off();
+        }
+    });
+
+    test("Start Server and Stop Server run a picked server, and its starts and stops fire the panel's events for it", async () => {
+        const state = servicesState();
+        const started = nextEvent("server-started", undefined);
+        await settle();
+        expect(await panelRun("start-server", { server: "s-t" })).toBeNull();
+        expect(await started).toEqual({ server: "s-t" });
+        await state.waitFor("s-t", (s) => s.serverStatus === "online", "Terraria online");
+        expect(await field("s-t", "status")).toBe("online");
+
+        const stopped = nextEvent("server-stopped", undefined);
+        await settle();
+        expect(await panelRun("stop-server", { server: "s-t" })).toBeNull();
+        expect(await stopped).toEqual({ server: "s-t" });
+        expect(await field("s-t", "status")).toBe("offline");
+        await expect(panelRun("restart-server", { server: "s-t" })).rejects.toThrow("The server is not online, so it can't restart");
+    });
+
+    test("Console Output reads the end of a server's console", async () => {
+        const lines = await read<string>("console-output", { lines: 1000 }, "s-t");
+        expect(lines.split("\n").length).toBeGreaterThan(1);
+        expect((await read<string>("console-output", { lines: 1 }, "s-t")).split("\n")).toHaveLength(1);
+        await expect(read("console-output", { lines: 0 }, "s-t")).rejects.toThrow('"Lines"');
+    });
+
+    test("the automation blocks change what a server does on its own, and refuse what its game can't do", async () => {
+        expect(await read("automation", undefined, "s-a")).toMatchObject({ "restart-after-crash": true, "daily-restart": null, "automatic-updates": false });
+        await run("set-daily-restart", { hour: "04:00" });
+        await run("set-restart-after-crash", { restart: false });
+        expect(await read("automation", undefined, "s-a")).toMatchObject({ "restart-after-crash": false, "daily-restart": "04:00" });
+        // each server keeps its own
+        expect(await read("automation", undefined, "s-t")).toMatchObject({ "restart-after-crash": true, "daily-restart": null });
+        await run("set-daily-restart", { hour: "never" });
+        await run("set-restart-after-crash", { restart: true });
+        expect(await read("automation", undefined, "s-a")).toMatchObject({ "restart-after-crash": true, "daily-restart": null });
+        await expect(run("set-daily-restart", { hour: "04:30" })).rejects.toThrow('"Daily Restart" must be one of');
+        await expect(run("set-automatic-updates", { update: true })).rejects.toThrow("This game can't update itself");
+    });
+
+    test("Delete Backup deletes one of the server's backups", async () => {
+        await backupLocationsApi.setForPanel(PANEL_ID, "local", undefined, "s-t");
+        const backup = await backupApi.forSource(PANEL_ID, "s-t").create({ label: "before" });
+        const listed = await read<{ id: string; name: string | null }[]>("backups", undefined, "s-t");
+        expect(listed.map((b) => [b.id, b.name])).toEqual([[backup.id, "before"]]);
+        expect(await run("delete-backup", { backup: listed[0] }, "s-t")).toBeNull();
+        expect(await read("backups", undefined, "s-t")).toEqual([]);
+        await expect(run("delete-backup", { backup: listed[0] }, "s-t")).rejects.toThrow();
     });
 });
