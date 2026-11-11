@@ -69,7 +69,7 @@ export function aiBlocks(app: AiApp): BlockSet {
                 icon: "smart_toy",
                 description:
                     "Asks a model and gives back its answer. Asks with the same memory key (a channel, a player, a ticket) continue one conversation. The model gets no actions here, since nobody is present to approve them. Fails if the answer takes longer than 28 seconds.",
-                text: "the answer of {model} to {prompt} as {personality} following {instructions} remembering {memory}",
+                text: "ask {model} {prompt} as {personality} with {instructions} memory {memory}",
                 inputs: {
                     model: { type: "model", name: "Model", description: "Leave it empty for the default model", optional: true },
                     prompt: { type: "text", name: "Prompt", maxLength: MAX_PROMPT_CHARS },
