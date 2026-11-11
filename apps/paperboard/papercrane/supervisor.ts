@@ -383,6 +383,11 @@ export async function runSupervisor(procId: string): Promise<void> {
     let pendingExit: number | null = null;
     let firstAttachDone = false;
     const clients = new Set<net.Socket>();
+    // sockets that sent attach: output frames go only to these. A socket is
+    // in `clients` from connect, but its replay (earlyFrames or the ring
+    // buffer) is taken at attach, so output in between would arrive live
+    // and again in the replay.
+    const attached = new Set<net.Socket>();
     let childPid = 0;
     let isExited = false;
     let ptyInstance: IPtyProcess | null = null;
@@ -394,7 +399,7 @@ export async function runSupervisor(procId: string): Promise<void> {
     const emitOutput = (stream: "stdout" | "stderr", data: string) => {
         ringBuffer.push(data);
         earlyFrames?.push(stream, data);
-        broadcast({ type: "data", stream, data });
+        broadcast({ type: "data", stream, data }, attached);
     };
 
     // A workload that exits before the spawning daemon has attached (a
@@ -412,9 +417,9 @@ export async function runSupervisor(procId: string): Promise<void> {
         unrefTimer(giveUp);
     };
 
-    const broadcast = (msgObj: Record<string, any>) => {
+    const broadcast = (msgObj: Record<string, any>, to: ReadonlySet<net.Socket> = clients) => {
         const payload = JSON.stringify(msgObj) + "\n";
-        for (const client of clients) {
+        for (const client of to) {
             try {
                 if (!client.destroyed) client.write(payload);
             } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
@@ -498,6 +503,7 @@ export async function runSupervisor(procId: string): Promise<void> {
                             const history = ringBuffer.getAll();
                             if (history) socket.write(JSON.stringify({ type: "history", data: history }) + "\n");
                         }
+                        attached.add(socket);
                         firstAttachDone = true;
                         earlyFrames = null;
                         if (pendingExit !== null) cleanupAndExit(pendingExit);
@@ -514,8 +520,12 @@ export async function runSupervisor(procId: string): Promise<void> {
             }
         });
 
-        socket.on("close", () => clients.delete(socket));
-        socket.on("error", () => clients.delete(socket));
+        const drop = () => {
+            clients.delete(socket);
+            attached.delete(socket);
+        };
+        socket.on("close", drop);
+        socket.on("error", drop);
     });
 
     // a workload that cannot start stays failed: the supervisor keeps

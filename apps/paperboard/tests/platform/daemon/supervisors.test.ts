@@ -1,7 +1,8 @@
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
+import * as net from "node:net";
 import * as path from "node:path";
-import { supervisorEndpointName, supervisorPresent, SupervisedProcessClient } from "../../../papercrane/supervisor";
+import { getSupervisorSocketPath, supervisorEndpointName, supervisorPresent, SupervisedProcessClient } from "../../../papercrane/supervisor";
 import { supervisorLaunch } from "../../../papercrane/supervisorLaunch";
 import { PaperCraneAuth } from "../../../papercrane/auth";
 import { PanelServicesManager } from "../../../papercrane/panelServices";
@@ -118,6 +119,50 @@ function spawn(command: string, args: string[], env: NodeJS.ProcessEnv) {
 
 // Supervised workloads are adopted, reported and stopped faithfully.
 describe("supervised workloads are reported faithfully", () => {
+	test("output printed between a socket's connect and its attach arrives once, in the replay", async () => {
+		const dir = dataDir();
+		const c = await crane(dir);
+		const rpc = await c.rpc();
+		await rpc.ok("process:run", { id: "gap", ...js("process.stdin.on('data', (d) => process.stdout.write('got:' + d)); setInterval(() => {}, 1000)") });
+		await rpc.ok("process:write", { id: "gap", data: "one\n" });
+		await waitFor("the first answer", () => dataOf(rpc, "gap").includes("got:one"));
+
+		const previous = process.env.PAPERBOARD_DIR;
+		process.env.PAPERBOARD_DIR = dir;
+		let socketPath: string;
+		try {
+			socketPath = getSupervisorSocketPath("gap");
+		} finally {
+			process.env.PAPERBOARD_DIR = previous;
+		}
+		const frames: Array<{ type: string; data?: string }> = [];
+		let buffered = "";
+		const socket = net.connect(socketPath);
+		socket.setEncoding("utf8");
+		socket.on("data", (chunk: string) => {
+			buffered += chunk;
+			const lines = buffered.split("\n");
+			buffered = lines.pop() ?? "";
+			for (const line of lines) if (line.trim()) frames.push(JSON.parse(line));
+		});
+		await waitFor("the supervisor's status frame", () => frames.some((f) => f.type === "status"));
+
+		await rpc.ok("process:write", { id: "gap", data: "two\n" });
+		await waitFor("the second answer", () => dataOf(rpc, "gap").includes("got:two"));
+		expect(frames.filter((f) => f.type === "data")).toEqual([]);
+
+		socket.write(JSON.stringify({ type: "attach" }) + "\n");
+		await waitFor("the replay", () => frames.some((f) => f.type === "history"));
+		await rpc.ok("process:write", { id: "gap", data: "three\n" });
+		await waitFor("the live answer", () => frames.some((f) => f.type === "data" && f.data?.includes("got:three")));
+		const seen = frames.filter((f) => f.type === "history" || f.type === "data").map((f) => f.data).join("");
+		expect(seen).toBe("got:one\ngot:two\ngot:three\n");
+
+		socket.destroy();
+		await rpc.ok("process:kill", { id: "gap" });
+		await rpc.close();
+	});
+
 	test("each attached socket gets every chunk once, split multibyte characters arrive whole, and terminals report one exit each", async () => {
 		const c = await crane();
 		const creator = await c.rpc();
