@@ -54,6 +54,8 @@ import {
     expectedReleaseAssets,
     missingLinuxPackageTools,
     buildCraneIndex,
+    buildSha256Sums,
+    SHA256SUMS_KEY,
     buildLatestYml,
     dlFileUrl,
     feedOf,
@@ -891,6 +893,21 @@ async function publishIndex(signingKey: KeyObject, v: string, staged: BuiltBinar
             } catch (err) {
                 console.debug("temp yml already gone:", String(err));
             }
+        }
+    }
+
+    // the install scripts' checksums: every Paperboard download of v
+    const sums = buildSha256Sums(staged.filter((b) => b.app === "pb").map((b) => ({ file: b.filename, sha256: b.sha256 })));
+    const sumsTmp = join(tmpdir(), `pb-SHA256SUMS-${Date.now()}`);
+    try {
+        writeFileSync(sumsTmp, sums);
+        await r2Put(SHA256SUMS_KEY, sumsTmp, "text/plain; charset=utf-8");
+        p.log.success(`Checksums ${SHA256SUMS_KEY} uploaded.`);
+    } finally {
+        try {
+            unlinkSync(sumsTmp);
+        } catch (err) {
+            console.debug("temp SHA256SUMS already gone:", String(err));
         }
     }
 }

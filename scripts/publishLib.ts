@@ -431,6 +431,28 @@ export function buildLatestYml(
     return { key: r2YmlKey(feed), text: yamlLines.join("\n") };
 }
 
+// The checksum list the install scripts read (packages/crane-launcher/
+// install/): one "<sha256>  <file>" line per Paperboard download of the
+// latest release, in the format sha256sum writes. Served from R2 at
+// i.paperboard.dev/pb/SHA256SUMS beside the feeds; each file is at
+// /pb/latest/<file>. apps/origami/src/routes/paperdl.ts serves this key.
+export const SHA256SUMS_KEY = "pb/SHA256SUMS";
+
+export function buildSha256Sums(files: { file: string; sha256: string }[]): string {
+    if (!files.length) throw new Error("No Paperboard downloads to list in SHA256SUMS");
+    const seen = new Set<string>();
+    const lines = [...files]
+        .sort((a, b) => a.file.localeCompare(b.file))
+        .map(({ file, sha256 }) => {
+            if (!isValidFileSegment(file)) throw new Error(`Not a download file name: ${JSON.stringify(file)}`);
+            if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error(`${file}: not a lowercase sha256: ${sha256}`);
+            if (seen.has(file)) throw new Error(`${file} is listed twice`);
+            seen.add(file);
+            return `${sha256}  ${file}`;
+        });
+    return `${lines.join("\n")}\n`;
+}
+
 // Legacy /paperdl/<app>/<target>/download compatibility: maps an old
 // target to the canonical file so existing installs keep updating through
 // a 302 to the new scheme. Unknown targets return null (genuine 404).

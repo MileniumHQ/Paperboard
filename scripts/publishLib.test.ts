@@ -8,6 +8,7 @@ import {
     assetFileName,
     buildCraneIndex,
     buildLatestYml,
+    buildSha256Sums,
     bunPinMismatch,
     dlFileUrl,
     expectedReleaseAssets,
@@ -220,5 +221,21 @@ describe("releases compile only with the exact pinned Bun", () => {
             expect(setups.length).toBeGreaterThan(0);
             for (const step of setups) expect(`bun@${step.with?.["bun-version"]}`).toBe(pkg.packageManager);
         }
+    });
+});
+
+// install.sh and install.ps1 read this list to check what they download
+describe("the install scripts' checksum list", () => {
+    test("is sha256sum's format, one line per download, sorted, and refuses anything it can't list safely", () => {
+        const a = "a".repeat(64);
+        const b = "b".repeat(64);
+        expect(buildSha256Sums([
+            { file: "paperboard-windows-x64-setup.exe", sha256: b },
+            { file: "paperboard-linux-x64.AppImage", sha256: a },
+        ])).toBe(`${a}  paperboard-linux-x64.AppImage\n${b}  paperboard-windows-x64-setup.exe\n`);
+        expect(() => buildSha256Sums([])).toThrow();
+        expect(() => buildSha256Sums([{ file: "../x", sha256: a }])).toThrow();
+        expect(() => buildSha256Sums([{ file: "x.deb", sha256: a.toUpperCase() }])).toThrow();
+        expect(() => buildSha256Sums([{ file: "x.deb", sha256: a }, { file: "x.deb", sha256: a }])).toThrow();
     });
 });
