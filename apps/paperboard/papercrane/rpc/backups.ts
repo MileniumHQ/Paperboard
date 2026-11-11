@@ -6,7 +6,7 @@ import { requireHost, resourcePanelId } from "../principal";
 import { BackupService } from "../backups/service";
 import { isDestinationId } from "../backups/config";
 import { BACKUP_LABEL_MAX } from "../backups/types";
-import { actionsRegistry } from "../actions";
+import { actionsRegistry, blocksRegistry } from "../actions";
 
 // one service per engine; it lives as long as the engine does
 const services = new WeakMap<PaperCraneEngine, BackupService>();
@@ -32,11 +32,13 @@ function panelFor(params: any, action: string, ctx: RpcContext): string {
 }
 
 // A backup or restore stops its panel's service while it runs. When that
-// service asked for it from inside an action (duringCall names the call), it
-// is gone before it can answer, so the action is answered with the outcome.
+// service asked for it from inside an action or a block (duringCall names the
+// call), it is gone before it can answer, so the call is answered with the
+// outcome. Call ids are unique across both registries; each checks that the
+// call went to this connection.
 async function carrying<T>(params: any, ctx: RpcContext, operation: () => Promise<T>): Promise<T> {
     const callId = assertOptStr(params?.duringCall, "duringCall", 64);
-    const finish = callId === undefined ? null : actionsRegistry.carryCall(callId, ctx.ws);
+    const finish = callId === undefined ? null : actionsRegistry.carryCall(callId, ctx.ws) ?? blocksRegistry.carryCall(callId, ctx.ws);
     try {
         const result = await operation();
         finish?.({ result });

@@ -547,7 +547,7 @@ export class ActionsRegistry {
         const pending = this.pendingCalls.get(callId);
         if (!pending) return null;
         if (pending.targetWs !== fromWs) {
-            throw new RpcError(ErrorCode.FORBIDDEN, "That action call was not sent to this connection");
+            throw new RpcError(ErrorCode.FORBIDDEN, `That ${this.noun} call was not sent to this connection`);
         }
         pending.carried = true;
         return (outcome) => {

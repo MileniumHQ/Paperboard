@@ -188,10 +188,11 @@ describe("named sources and beforeBackup", () => {
 		await panel.close();
 		await host.close();
 	});
+
 });
 
-// A service backing up its own panel from an action gets the backup as the answer.
-describe("a service that backs up its own panel from an action", () => {
+// A service backing up its own panel from an action or a block gets the backup as the answer.
+describe("a service that backs up its own panel from an action or a block", () => {
 	test("gets the backup record as the action's answer, answers the next call, and a foreign duringCall is refused", async () => {
 		const dir = dataDir();
 		await installPanelFiles(dir, {
@@ -218,6 +219,56 @@ describe("a service that backs up its own panel from an action", () => {
 			const call = await served.next((f) => f.type === "action_call" && f.action === "hold");
 			const intruder = await crane.rpc();
 			expect((await intruder.fail("backup:create", { panelId: "test.selfsave", duringCall: call.callId })).code).toBe("FORBIDDEN");
+			served.send({ type: "action_reply", callId: call.callId, result: "done" });
+			expect((await held).result).toEqual({ result: "done" });
+			await intruder.close();
+			await served.close();
+			await host.close();
+		} finally {
+			await crane.stop();
+			await killWorkloads(dir);
+		}
+	});
+
+	test("a block that backs up or restores gets the record as its answer, and a foreign duringCall for a block call is refused", async () => {
+		const dir = dataDir();
+		await installPanelFiles(dir, {
+			id: "test.blocksave",
+			service: serviceSource({
+				extra: `import { backupApi, blocksApi } from ${JSON.stringify(PAPERAPI)};`,
+				actions: PING,
+				options: `onInit: () => blocksApi.panel("test.blocksave").register({ commands: [
+					{ id: "save", name: "Save", run: () => backupApi.create("test.blocksave", { label: "from block" }) },
+					{ id: "put-back", name: "Put Back", inputs: { id: { type: "text", name: "Backup ID" } }, run: ({ id }) => backupApi.restore("test.blocksave", id) },
+				] }),`,
+			}),
+		});
+		const crane = await startCrane({ dataDir: dir });
+		try {
+			const host = await crane.rpc();
+			await readyService(host, "test.blocksave");
+			await host.ok("file:write", { appId: "test.blocksave", targetPath: "data.txt", content: "saved" });
+			await host.ok("backup:panel-destination-set", { panelId: "test.blocksave", destinationId: "local" });
+			const block = (entry: string, inputs: Record<string, unknown> = {}) =>
+				host.ok("blocks:call", { panelId: "test.blocksave", entry, request: { inputs }, timeoutMs: 60_000 }, 70_000);
+
+			const made = (await block("command.save")).result;
+			expect(made).toMatchObject({ panelId: "test.blocksave", label: "from block" });
+			expect((await host.ok("backup:list", { panelId: "test.blocksave" })).backups.map((b: BackupRecord) => b.id)).toEqual([made.id]);
+			await readyService(host, "test.blocksave");
+
+			await host.ok("file:write", { appId: "test.blocksave", targetPath: "data.txt", content: "changed" });
+			expect((await block("command.put-back", { id: made.id })).result).toMatchObject({ id: made.id });
+			expect(fs.readFileSync(path.join(dir, "files", "test.blocksave", "data.txt"), "utf8")).toBe("saved");
+			await readyService(host, "test.blocksave");
+
+			// a block call that went to another connection cannot be carried by this one
+			const served = await crane.rpc();
+			await served.ok("blocks:register", { panelId: "test.carrier", entry: "command.hold", schema: { kind: "command", name: "Hold" } });
+			const held = host.call("blocks:call", { panelId: "test.carrier", entry: "command.hold", request: { inputs: {} }, timeoutMs: 60_000 }, 70_000);
+			const call = await served.next((f) => f.type === "action_call" && f.registry === "blocks" && f.action === "command.hold");
+			const intruder = await crane.rpc();
+			expect((await intruder.fail("backup:create", { panelId: "test.blocksave", duringCall: call.callId })).code).toBe("FORBIDDEN");
 			served.send({ type: "action_reply", callId: call.callId, result: "done" });
 			expect((await held).result).toEqual({ result: "done" });
 			await intruder.close();
