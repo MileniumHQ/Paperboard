@@ -55,6 +55,10 @@ type supervisor struct {
 	workDone bool // the workload has exited; there is nothing left to stop
 	startErr string
 	listener net.Listener
+	// the program in front of a terminal, as last reported
+	foreground string
+	// closed when the workload exits, which ends its watchers
+	stopped chan struct{}
 }
 
 func runSupervisor(dataDir, id string) error {
@@ -69,7 +73,7 @@ func runSupervisor(dataDir, id string) error {
 		// never sit on the socket with no config
 		return err
 	}
-	s := &supervisor{id: id, cfg: cfg, at: at, early: &taggedBuffer{}, clients: map[*client]struct{}{}}
+	s := &supervisor{id: id, cfg: cfg, at: at, early: &taggedBuffer{}, clients: map[*client]struct{}{}, stopped: make(chan struct{})}
 
 	if runtime.GOOS != "windows" {
 		if err := os.Remove(at.address); err != nil && !os.IsNotExist(err) {
@@ -158,7 +162,7 @@ func (s *supervisor) startWorkload() {
 			"TERM":         "xterm-256color",
 			"COLORTERM":    "truecolor",
 		})
-		started, err := startPty(shell, cols, rows, cwd, env, s.emitOutput, s.workloadExited)
+		started, err := startPty(shell, cfg.args, cols, rows, cwd, env, s.emitOutput, s.workloadExited)
 		if err != nil {
 			// no terminal is a start failure, never a shell on pipes
 			s.failStart("Could not start a terminal: " + err.Error())
@@ -195,6 +199,12 @@ func (s *supervisor) startWorkload() {
 	s.mu.Lock()
 	s.work = work
 	s.mu.Unlock()
+	if reader, ok := work.(foregroundReader); ok {
+		logf := func(level, format string, args ...any) {
+			s.at.logf(level, "[supervisor:%s] "+format, append([]any{s.id}, args...)...)
+		}
+		go watchForeground(reader.foreground, s.emitForeground, logf, s.stopped)
+	}
 
 	// a terminal's shell is reported as the supervisor itself, as it always was
 	childPid := 0
@@ -228,6 +238,20 @@ func (s *supervisor) emitOutput(stream, data string) {
 	}
 }
 
+// The program in front of a terminal changed: every attached client hears
+// its name, and a client that attaches later hears the latest one.
+func (s *supervisor) emitForeground(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.foreground = name
+	frame := encodeFrame(map[string]any{"type": "foreground", "name": name})
+	for c := range s.clients {
+		if c.attached {
+			s.send(c, frame)
+		}
+	}
+}
+
 // A workload that exits before the spawning daemon has attached (a command
 // that runs in milliseconds) must not take the endpoint with it: the daemon
 // would find no socket and report a start failure, and the output and exit
@@ -235,6 +259,9 @@ func (s *supervisor) emitOutput(stream, data string) {
 // failed start.
 func (s *supervisor) workloadExited(code int) {
 	s.mu.Lock()
+	if !s.workDone {
+		close(s.stopped)
+	}
 	s.workDone = true
 	if s.attached {
 		s.mu.Unlock()
@@ -370,6 +397,9 @@ func (s *supervisor) handle(c *client, line []byte) {
 		}
 		// output frames go only to attached sockets: the replay was taken
 		// here, so anything sent before it would arrive twice
+		if s.foreground != "" {
+			s.send(c, encodeFrame(map[string]any{"type": "foreground", "name": s.foreground}))
+		}
 		c.attached = true
 		s.attached = true
 		s.early = nil

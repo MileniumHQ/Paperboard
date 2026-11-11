@@ -38,13 +38,33 @@ func (w *ptyWorkload) resize(cols, rows int) error {
 // SIGTERM but ends on this one, and takes its jobs with it.
 func (w *ptyWorkload) kill(string) error { return signalGroup(w.process.Pid, "SIGHUP") }
 
+// The terminal's foreground process group is the job the keyboard reaches:
+// the shell at its prompt, or what it runs. Its leader names it (the first
+// program of a pipeline).
+func (w *ptyWorkload) foreground() (string, error) {
+	conn, err := w.master.SyscallConn()
+	if err != nil {
+		return "", fmt.Errorf("the terminal cannot be asked: %w", err)
+	}
+	group, groupErr := 0, error(nil)
+	if err := conn.Control(func(fd uintptr) {
+		group, groupErr = unix.IoctlGetInt(int(fd), unix.TIOCGPGRP)
+	}); err != nil {
+		return "", fmt.Errorf("the terminal cannot be asked: %w", err)
+	}
+	if groupErr != nil {
+		return "", fmt.Errorf("the terminal has no foreground job: %w", groupErr)
+	}
+	return processName(group)
+}
+
 // keeps a file open for a writer that must not close it
 type keepOpen struct{ file *os.File }
 
 func (k keepOpen) Write(data []byte) (int, error) { return k.file.Write(data) }
 func (k keepOpen) Close() error                   { return nil }
 
-func startPty(shell string, cols, rows int, cwd string, env []string, onData func(stream, data string), onExit func(code int)) (workload, error) {
+func startPty(shell string, args []string, cols, rows int, cwd string, env []string, onData func(stream, data string), onExit func(code int)) (workload, error) {
 	program, err := findProgram(shell, cwd, env)
 	if err != nil {
 		return nil, spawnError(shell, err)
@@ -75,7 +95,7 @@ func startPty(shell string, cols, rows int, cwd string, env []string, onData fun
 
 	cmd := &exec.Cmd{
 		Path:   program,
-		Args:   []string{shell},
+		Args:   append([]string{shell}, args...),
 		Dir:    cwd,
 		Env:    env,
 		Stdin:  slave,

@@ -52,7 +52,7 @@ func environmentBlock(env []string) *uint16 {
 	return &block[0]
 }
 
-func startPty(shell string, cols, rows int, cwd string, env []string, onData func(stream, data string), onExit func(code int)) (workload, error) {
+func startPty(shell string, args []string, cols, rows int, cwd string, env []string, onData func(stream, data string), onExit func(code int)) (workload, error) {
 	program, err := findProgram(shell, cwd, env)
 	if err != nil {
 		return nil, spawnError(shell, err)
@@ -110,7 +110,7 @@ func startPty(shell string, cols, rows int, cwd string, env []string, onData fun
 	if err != nil {
 		return failed(spawnError(shell, err))
 	}
-	commandLine, err := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{shell}))
+	commandLine, err := windows.UTF16PtrFromString(windows.ComposeCommandLine(append([]string{shell}, args...)))
 	if err != nil {
 		return failed(spawnError(shell, err))
 	}

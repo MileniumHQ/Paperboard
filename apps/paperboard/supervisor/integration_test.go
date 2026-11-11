@@ -82,6 +82,7 @@ type frame struct {
 	Pid      int    `json:"pid"`
 	ChildPid int    `json:"childPid"`
 	IsPty    bool   `json:"isPty"`
+	Name     string `json:"name"`
 }
 
 type session struct {
@@ -441,4 +442,74 @@ func TestATerminalIsATerminal(t *testing.T) {
 	s.send(map[string]any{"type": "kill"})
 	s.exitCode()
 	s.supervisorExit()
+}
+
+// what a terminal's title shows: the shell at its prompt, the program it runs
+// while it runs, and the shell again after; a client that attaches late hears
+// the latest
+func TestATerminalNamesTheProgramInFront(t *testing.T) {
+	shell, run, program := "/bin/sh", "sleep 2\n", "sleep"
+	if runtime.GOOS == "windows" {
+		shell, run, program = "cmd.exe", "ping -n 3 127.0.0.1 > NUL\r\n", "ping"
+	}
+	s := supervise(t, "front", map[string]any{"isPty": true, "command": shell})
+	s.status()
+	s.send(map[string]any{"type": "attach"})
+	names := func() []string {
+		var out []string
+		for _, f := range s.snapshot() {
+			if f.Type == "foreground" {
+				out = append(out, strings.ToLower(f.Name))
+			}
+		}
+		return out
+	}
+	s.await("the shell's name", func() bool { return len(names()) > 0 })
+	first := names()[0]
+	if first == "" || first == program {
+		t.Fatalf("the shell is named %q", first)
+	}
+	s.send(map[string]any{"type": "stdin", "data": run})
+	s.await("the program's name", func() bool {
+		got := names()
+		return len(got) >= 2 && got[len(got)-1] == program
+	})
+	s.await("the shell's name again", func() bool {
+		got := names()
+		return got[len(got)-1] == first
+	})
+
+	late, err := dialEndpoint(mustEndpoint(t, s).address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer late.Close()
+	late.Write([]byte(`{"type":"attach"}` + "\n"))
+	reader := bufio.NewReader(late)
+	late.SetReadDeadline(time.Now().Add(10 * time.Second))
+	for {
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			t.Fatalf("a late client never heard the name: %v", err)
+		}
+		var f frame
+		json.Unmarshal(line, &f)
+		if f.Type == "foreground" {
+			if strings.ToLower(f.Name) != first {
+				t.Fatalf("a late client heard %q, not %q", f.Name, first)
+			}
+			break
+		}
+	}
+	s.send(map[string]any{"type": "kill"})
+	s.exitCode()
+}
+
+func mustEndpoint(t *testing.T, s *session) endpoint {
+	t.Helper()
+	at, err := resolveEndpoint(s.dataDir, s.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return at
 }
