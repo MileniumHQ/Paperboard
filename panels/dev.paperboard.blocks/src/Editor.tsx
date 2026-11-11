@@ -242,12 +242,16 @@ export default function Editor(props: {
     /** Defines every block the registry and the saved flows name, and keeps what the Library shows. */
     async function refreshBlocks(saved: SavedFlows["schemas"]): Promise<void> {
         const [entries, panelList, projects] = await Promise.all([blocksApi.list(), panelsApi.list(), blocksApi.projects()]);
-        // ask for every dropdown's choices now, so a loaded flow shows them; one that fails says so
+        // ask for every dropdown's choices now, so the canvas and the Library show them. One on the canvas that
+        // fails says so here; one only in the Library says so when its dropdown is opened, which asks again,
+        // so a panel that isn't set up yet doesn't warn in every project
+        const onCanvas = new Set(Object.values(saved).map((s) => `${s.panelId}\u0000${s.entry}`));
         await Promise.all(
             choicesSources(entries).map((source) =>
-                refreshChoices(source).catch((err: unknown) =>
-                    setNotice({ kind: "failed", title: `${panelList.find((p) => p.id === source.panelId)?.name ?? source.panelId}'s choices didn't load`, text: errorMessage(err) }),
-                ),
+                refreshChoices(source).catch((err: unknown) => {
+                    if (!onCanvas.has(`${source.panelId}\u0000${source.entry}`)) return;
+                    setNotice({ kind: "failed", title: `${panelList.find((p) => p.id === source.panelId)?.name ?? source.panelId}'s choices didn't load`, text: errorMessage(err) });
+                }),
             ),
         );
         // each panel's colour, worked out over every panel at once so two never share one
