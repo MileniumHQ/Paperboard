@@ -26,7 +26,7 @@ And of course, the panels:
 
 ## Development
 
-Paperboard is a Bun workspace. Install [Bun](https://bun.com/get), then clone the repository and run the setup command from the root:
+Paperboard is a Bun workspace. Install [Bun](https://bun.com/get) and [Go](https://go.dev/dl/), then clone the repository and run the setup command from the root:
 
 ```zsh
 git clone https://github.com/MileniumHQ/Paperboard
@@ -34,7 +34,7 @@ cd Paperboard
 bun run setup
 ```
 
-`setup` installs every workspace's dependencies, fetches the Electron runtime binary (a one-time download of roughly 100 MB), builds the shared libraries and panels, and links the panels into your Paperboard install. After that, each project has its own README with dev and build instructions. For the app, that's [apps/paperboard](apps/paperboard/README.md).
+`setup` installs every workspace's dependencies, fetches the Electron runtime binary (a one-time download of roughly 100 MB), builds the shared libraries, the workload supervisor (the one part written in Go) and the panels, and links the panels into your Paperboard install. After that, each project has its own README with dev and build instructions. For the app, that's [apps/paperboard](apps/paperboard/README.md).
 
 ## Agents & Contributing
 
