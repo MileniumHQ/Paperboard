@@ -51,7 +51,7 @@ export default function BlocksDoc() {
             <PaperText preset="body" as="p">
                 The first sections are Blocks' own: <b>Flow</b> (waits, conditions, loops and <b>Try</b>), <b>Logic</b>, <b>Math</b>, <b>Text</b>, <b>Lists</b>, <b>Time</b>, <b>Web</b>, <b>Variables</b> and <b>Functions</b>.
                 Under them, each installed panel has a section with its icon. Its blocks show the same icon and share a colour.
-                A panel with projects of its own, such as Game Server's servers, has a menu at the top of its section to pick which one the blocks use.
+                A panel with projects of its own, such as Game Server's servers, has a menu at the top of its section to pick which one the blocks use. Each project shows the picture its panel shows, such as a server's icon.
             </PaperText>
             <PaperText preset="body" as="p">
                 A block whose panel is not running stays on the canvas with a warning, and works again when the panel is back.

@@ -21,7 +21,7 @@ import { BUILTIN_BLOCKS, BUILTIN_SECTIONS, builtinPlaceholder, choicesSources, P
 import { refreshChoices, registerChoicesField } from "./lib/choicesField";
 import { LIBRARY_FLYOUT, setLibraryTop, uiGap } from "./lib/libraryFlyout";
 import { loadBlockFonts, PAPER_RENDERER, paperTheme } from "./lib/paperRenderer";
-import { NO_PANEL_ICON, assignPanelStyles, setPanelIcons, type BlockIcon } from "./lib/blockStyles";
+import { NO_PANEL_ICON, NO_PROJECT_ICON, assignPanelStyles, setPanelIcons, type BlockIcon } from "./lib/blockStyles";
 import { HEADING_KIND, type HeadingInfo } from "./lib/libraryHeading";
 import { setTextPlaceholders } from "./lib/textField";
 import { addTrash, type TrashState } from "./lib/trashZone";
@@ -39,7 +39,7 @@ import type { ProjectsState } from "./projects/state";
 import { DeleteProjectModal, ProjectNameField, RenameProjectModal } from "./projects/ProjectDialogs";
 import { createFileActions } from "./FileActions";
 import { BlocklyDialogs } from "./BlocklyDialogs";
-import { LibraryHeader, LibraryRail, type LibraryCategory } from "./Library";
+import { LibraryHeader, LibraryRail, type LibraryCategory, type LibraryProject } from "./Library";
 import styles from "./Editor.module.css";
 
 const SAVE_DELAY_MS = 400;
@@ -159,6 +159,13 @@ export default function Editor(props: {
         return found?.icon ? { src: panelAssetUrl(id, found.icon) } : { symbol: NO_PANEL_ICON };
     };
 
+    /** A project's picture as its panel gave it (a file in the panel's folder, or a data URL), else its symbol. */
+    const projectIcon = (p: BlockProjectInfo): BlockIcon => {
+        if (p.image) return { src: p.image.startsWith("data:") ? p.image : panelAssetUrl(p.panelId, p.image) };
+        return { symbol: p.icon ?? NO_PROJECT_ICON };
+    };
+    const projectOf = (panel: string, project: string) => registry().projects.find((p) => p.panelId === panel && p.id === project);
+
     const builtins = createMemo<LibraryCategory[]>(() => BUILTIN_SECTIONS.map((s) => ({ id: builtinId(s.name), name: s.name, icon: s.icon })));
     const panels = createMemo<LibraryCategory[]>(() =>
         [...new Set(registry().sections.map((s) => s.panelId))]
@@ -172,6 +179,11 @@ export default function Editor(props: {
 
     const shownPanel = () => (selected().startsWith("panel:") ? selected().slice("panel:".length) : null);
     const projectsOf = (id: string) => registry().projects.filter((p) => p.panelId === id && registry().sections.some((s) => s.panelId === id && s.project === p.id));
+    const libraryProjects = (id: string): LibraryProject[] =>
+        projectsOf(id).map((p) => {
+            const icon = projectIcon(p);
+            return { id: p.id, name: p.name, ...("src" in icon ? { iconUrl: icon.src } : { icon: icon.symbol }) };
+        });
     const shownProject = createMemo(() => {
         const id = shownPanel();
         if (!id) return null;
@@ -200,15 +212,18 @@ export default function Editor(props: {
         functionsShape();
         const query = search().trim().toLowerCase();
         if (query) {
-            const projectName = (panel: string, project: string) => registry().projects.find((p) => p.panelId === panel && p.id === project)?.name ?? project;
             const all: Group[] = [
                 ...BUILTIN_SECTIONS.filter((s) => !s.custom).map((s) => ({ label: s.name, icon: { symbol: s.icon }, blocks: s.contents })),
-                ...registry().sections.map((s) => ({
-                    icon: panelIcon(s.panelId),
-                    // a category named for its panel isn't said twice
-                    label: [panelName(s.panelId), s.project ? projectName(s.panelId, s.project) : null, s.category === panelName(s.panelId) ? null : s.category].filter(Boolean).join(" · "),
-                    blocks: s.contents,
-                })),
+                ...registry().sections.map((s) => {
+                    const project = s.project ? projectOf(s.panelId, s.project) : undefined;
+                    return {
+                        // a project's blocks show the project, as its panel shows it
+                        icon: project ? projectIcon(project) : panelIcon(s.panelId),
+                        // a category named for its panel isn't said twice
+                        label: [panelName(s.panelId), s.project ? (project?.name ?? s.project) : null, s.category === panelName(s.panelId) ? null : s.category].filter(Boolean).join(" · "),
+                        blocks: s.contents,
+                    };
+                }),
             ];
             return all.map((g) => ({ ...g, blocks: g.blocks.filter((b) => b.kind === "block" && textOf(b).includes(query)) })).filter((g) => g.blocks.length);
         }
@@ -685,7 +700,7 @@ export default function Editor(props: {
                             search={search()}
                             onSearch={setSearch}
                             count={count()}
-                            projects={shownPanel() ? projectsOf(shownPanel()!) : []}
+                            projects={shownPanel() ? libraryProjects(shownPanel()!) : []}
                             project={shownProject()}
                             onProject={(id) => setChosenProjects((chosen) => ({ ...chosen, [shownPanel()!]: id }))}
                             sections={sectionNames()}

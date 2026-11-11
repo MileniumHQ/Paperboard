@@ -867,9 +867,9 @@ export class CraneTransport {
         await this.call("blocks:unregister", { panelId, entry });
     }
 
-    public async defineBlocksProject(panelId: string, project: { id: string; name: string; icon?: string }): Promise<void> {
+    public async defineBlocksProject(panelId: string, project: { id: string; name: string; icon?: string; image?: string }): Promise<void> {
         await this.ensureConnected();
-        await this.call("blocks:project-define", { panelId, project: project.id, name: project.name, icon: project.icon });
+        await this.call("blocks:project-define", { panelId, project: project.id, name: project.name, icon: project.icon, image: project.image });
         this.blocksRegistry.addProject({ panelId, ...project });
     }
 

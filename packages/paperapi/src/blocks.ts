@@ -44,6 +44,11 @@ export interface BlockProjectDefinition {
     name: string;
     /** a Material Symbols name */
     icon?: string;
+    /**
+     * a picture shown in place of the icon: a path in the panel's folder, as
+     * a manifest's icon is, or a base64 data:image URL; at most 512 KB
+     */
+    image?: string;
 }
 
 /** A panel's blocks, or one project's. */
@@ -61,7 +66,7 @@ export interface BlocksHandle {
 
 export interface BlocksProjectHandle extends BlocksHandle {
     readonly project: string;
-    /** renames the project, or changes its icon, keeping its blocks */
+    /** renames the project, or changes its icon or picture, keeping its blocks */
     update(project: Omit<BlockProjectDefinition, "id">): Promise<void>;
     /** removes the project and every block in it */
     remove(): Promise<void>;
@@ -80,6 +85,8 @@ export interface BlockProjectInfo {
     id: string;
     name: string;
     icon?: string;
+    /** as defined: a path in the panel's folder, or a data:image URL */
+    image?: string;
 }
 
 export interface BlockCallOptions {
@@ -331,7 +338,7 @@ export const blocksApi = {
      */
     defineProject: async (project: BlockProjectDefinition, panelId?: string): Promise<BlocksProjectHandle> => {
         const pid = resolvePanel(panelId);
-        const define = (p: BlockProjectDefinition) => getTransport().defineBlocksProject(pid, { id: p.id, name: p.name, ...(p.icon ? { icon: p.icon } : {}) });
+        const define = (p: BlockProjectDefinition) => getTransport().defineBlocksProject(pid, { id: p.id, name: p.name, ...(p.icon ? { icon: p.icon } : {}), ...(p.image ? { image: p.image } : {}) });
         await define(project);
         return projectHandle(pid, project, processRegistered, daemon, define, () => getTransport().removeBlocksProject(pid, project.id));
     },

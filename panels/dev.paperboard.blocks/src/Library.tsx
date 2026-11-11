@@ -19,7 +19,9 @@ export interface LibraryCategory {
 export interface LibraryProject {
     id: string;
     name: string;
+    /** a Material Symbols name, or the project's picture */
     icon?: string;
+    iconUrl?: string;
 }
 
 export interface LibraryProps {
@@ -105,7 +107,7 @@ export function LibraryHeader(props: Omit<LibraryProps, "builtins" | "panels" | 
                         <PaperSelectMenu name="libraryProject" fullWidth value={project()} aria-label="Project" onValueChange={(value) => props.onProject(String(value))}>
                             <For each={props.projects}>
                                 {(item) => (
-                                    <PaperSelectMenuItem value={item.id} icon={item.icon ?? "folder"}>
+                                    <PaperSelectMenuItem value={item.id} icon={item.iconUrl ? <PaperIcon src={item.iconUrl} /> : item.icon}>
                                         {item.name}
                                     </PaperSelectMenuItem>
                                 )}

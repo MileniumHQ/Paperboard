@@ -132,6 +132,21 @@ describe("action names and projects belong to the socket that registered them", 
 		expect((await other.ok("actions:list", { panelId: "test.proj" })).actions).toEqual([]);
 	});
 
+	test("a Blocks project's picture is a file in the panel's folder or a data:image URL, and nothing else", async () => {
+		const owner = await panel("test.pics");
+		const png = "data:image/png;base64,iVBORw0KGgo=";
+		await owner.ok("blocks:project-define", { panelId: "test.pics", project: "s1", name: "Server 1", icon: "dns", image: png });
+		await owner.ok("blocks:project-define", { panelId: "test.pics", project: "s2", name: "Server 2", image: "/assets/games/minecraft/icon.webp" });
+		for (const image of ["https://example.com/a.png", "../other/icon.png", "/assets/../../x.png", "data:text/html;base64,PGI+", "javascript:alert(1)", `data:image/png;base64,${"A".repeat(512 * 1024)}`]) {
+			expect((await owner.fail("blocks:project-define", { panelId: "test.pics", project: "s3", name: "Server 3", image })).code).toBe("INVALID_PARAMS");
+		}
+		const projects = (await owner.ok("blocks:projects", { panelId: "test.pics" })).projects;
+		expect(projects.map((p: any) => [p.id, p.icon, p.image])).toEqual([
+			["s1", "dns", png],
+			["s2", undefined, "/assets/games/minecraft/icon.webp"],
+		]);
+	});
+
 	test("a socket gets only the events it declared, a new declaration replaces the old, [] unsubscribes and * takes all", async () => {
 		const emitter = await panel("test.events");
 		const listener = await host();

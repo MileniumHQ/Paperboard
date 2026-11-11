@@ -79,6 +79,12 @@ function updateSaved(change: (current: ServersConfig) => ServersConfig): Promise
     return work;
 }
 const icons = new Map<string, string | null>();
+/** A server as the Blocks Library shows it: as the server list does, by its own icon or else its game's. */
+const blocksProject = (server: StoredServer) => ({
+    name: server.name,
+    icon: gameFor(server.game).icon,
+    image: icons.get(server.id) ?? gameFor(server.game).art.icon,
+});
 // the panel's own blocks, once registered: before then nothing listens
 let panelBlocks: BlocksHandle | null = null;
 let announcedServers = "";
@@ -161,6 +167,7 @@ function bind(scope: ServerScope, def: ActionDefinition): ActionDefinition {
                                   await inServer(scope, () => gameServiceFor(scope.server.game).readIcon?.() ?? null),
                               );
                               publish();
+                              await scope.blocks?.update(blocksProject(scope.server));
                           }
                           return result;
                       } finally {
@@ -261,10 +268,7 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
                     PANEL_ID,
                 );
         }
-        scope.blocks = await blocksApi.defineProject(
-            { id: server.id, name: server.name, icon: gameFor(server.game).icon },
-            PANEL_ID,
-        );
+        scope.blocks = await blocksApi.defineProject({ id: server.id, ...blocksProject(server) }, PANEL_ID);
         const blocks = scope.blocks;
         await inServer(scope, async () => blocks.register(bindBlocks(scope, mergeBlocks(sharedBlocks(scope.ctx), await game.blocks?.(scope.ctx)))));
         let wasRunning = false;
@@ -296,6 +300,12 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
             scheduleUpdateChecks(scope.ctx, restartServerInstance);
             await game.initialize(scope.ctx, running);
             icons.set(server.id, (await game.readIcon?.()) ?? null);
+            // the server runs either way; only the Blocks Library keeps the game's art
+            if (icons.get(server.id)) {
+                await blocks.update(blocksProject(server)).catch((err) =>
+                    console.error(`[gameserver] the Blocks Library can't show ${server.name}'s icon:`, err),
+                );
+            }
             // the server was running when this service last saw it and nobody
             // stopped it: it went down while Paperboard was not watching (the
             // computer restarted, or the system ended it), which is a crash
@@ -347,7 +357,7 @@ function renameServer(server: unknown, name: unknown): Promise<void> {
         const scope = requireServer(server);
         const renamed = { ...scope.server, name: serverName(name) };
         await scope.project!.update({ name: renamed.name, icon: gameFor(renamed.game).icon });
-        await scope.blocks!.update({ name: renamed.name, icon: gameFor(renamed.game).icon });
+        await scope.blocks!.update(blocksProject(renamed));
         await updateSaved((current) => ({
             ...current,
             servers: current.servers.map((s) =>

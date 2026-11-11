@@ -31,7 +31,17 @@ export interface ActionProject {
     id: string;
     name: string;
     icon?: string;
+    /** a path in the panel's folder, or a base64 data:image URL */
+    image?: string;
 }
+
+/** The longest project picture: a data URL of a 256 KB server icon fits. */
+export const MAX_PROJECT_IMAGE = 512 * 1024;
+const PROJECT_IMAGE_DATA = /^data:image\/(png|webp|jpeg|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
+// a file in the panel's folder: no scheme, no climbing out of it
+const PROJECT_IMAGE_PATH = /^\/?[A-Za-z0-9._\/-]+\.(png|webp|jpe?g|gif|svg)$/i;
+const isProjectImage = (image: string) =>
+    PROJECT_IMAGE_DATA.test(image) || (PROJECT_IMAGE_PATH.test(image) && !image.split("/").includes(".."));
 
 interface RegisteredProject extends ActionProject {
     ws: WebSocket;
@@ -264,8 +274,14 @@ export class ActionsRegistry {
      * Defines a project, or renames one this socket already owns. Its actions
      * are registered afterwards as "project/action".
      */
-    public defineProject(panelId: string, project: { id: string; name: string; icon?: string }, ws: WebSocket): RegistryResult {
+    public defineProject(panelId: string, project: { id: string; name: string; icon?: string; image?: string }, ws: WebSocket): RegistryResult {
         if (!PROJECT_ID_PATTERN.test(project.id)) throw new ProjectError(`"${project.id}" is not a valid project id`);
+        if (project.image !== undefined) {
+            if (project.image.length > MAX_PROJECT_IMAGE) throw new ProjectError(`Project "${project.id}"'s picture may be at most ${MAX_PROJECT_IMAGE / 1024} KB`);
+            if (!isProjectImage(project.image)) {
+                throw new ProjectError(`Project "${project.id}"'s picture must be an image file in the panel's folder or a base64 data:image URL`);
+            }
+        }
         const name = project.name.trim();
         if (!name) throw new ProjectError(`Project "${project.id}" needs a name`);
         if (name.length > MAX_PROJECT_NAME) throw new ProjectError(`A project name may be at most ${MAX_PROJECT_NAME} characters`);
@@ -284,7 +300,7 @@ export class ActionsRegistry {
                 throw new LimitError(`The project registry is full (${MAX_PROJECTS} projects)`);
             }
         }
-        this.projects.set(key, { panelId, id: project.id, name, ...(project.icon ? { icon: project.icon } : {}), ws });
+        this.projects.set(key, { panelId, id: project.id, name, ...(project.icon ? { icon: project.icon } : {}), ...(project.image ? { image: project.image } : {}), ws });
         let set = this.socketProjects.get(ws);
         if (!set) {
             set = new Set();
@@ -324,7 +340,7 @@ export class ActionsRegistry {
         const list: ActionProject[] = [];
         for (const p of this.projects.values()) {
             if (filterPanelId && p.panelId !== filterPanelId) continue;
-            list.push({ panelId: p.panelId, id: p.id, name: p.name, ...(p.icon ? { icon: p.icon } : {}) });
+            list.push({ panelId: p.panelId, id: p.id, name: p.name, ...(p.icon ? { icon: p.icon } : {}), ...(p.image ? { image: p.image } : {}) });
         }
         return list;
     }

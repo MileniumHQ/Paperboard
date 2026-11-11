@@ -3,7 +3,7 @@
 // "kind.id" (or "project/kind.id"), and the Blocks panel lists and calls
 // them. It is the Actions registry's machinery as a separate registry, so
 // v1 actions and v2 blocks never see each other's names.
-import { blocksRegistry } from "../actions";
+import { MAX_PROJECT_IMAGE, blocksRegistry } from "../actions";
 import { ErrorCode } from "../protocol";
 import type { RpcContext } from "./context";
 import { resourcePanelId } from "../principal";
@@ -64,7 +64,8 @@ export async function handleBlocks(action: string, id: unknown, params: any, ctx
             const projectId = assertStr(params?.project, "project", 64);
             const name = assertStr(params?.name, "name", 128);
             const icon = assertOptStr(params?.icon, "icon", 128);
-            const result = blocksRegistry.defineProject(panelId, { id: projectId, name, icon }, ws);
+            const image = assertOptStr(params?.image, "image", MAX_PROJECT_IMAGE);
+            const result = blocksRegistry.defineProject(panelId, { id: projectId, name, icon, image }, ws);
             if (!result.ok) {
                 reply(id, null, conflict(`project "${projectId}"`, panelId), ErrorCode.CONFLICT);
                 return true;

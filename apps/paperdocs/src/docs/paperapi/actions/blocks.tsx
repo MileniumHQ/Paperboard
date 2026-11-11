@@ -89,8 +89,15 @@ interface BlocksHandle {
 }
 
 interface BlocksProjectHandle extends BlocksHandle {
-    update(project: { name: string; icon?: string }): Promise<void>;
+    update(project: { name: string; icon?: string; image?: string }): Promise<void>;
     remove(): Promise<void>;
+}
+
+interface BlockProjectDefinition {
+    id: string;
+    name: string;
+    icon?: string;
+    image?: string;
 }
 
 interface BlockSet {
@@ -104,6 +111,8 @@ interface BlockSet {
                 <li><PaperCode>register</PaperCode> checks the whole set first, and a broken definition registers nothing. The error says what to fix: <PaperCode>Command "kick" text names {"{who}"}, which is not one of its inputs</PaperCode>.</li>
                 <li>Types belong to the panel, so only <PaperCode>blocksApi.panel()</PaperCode> registers them. Its projects use them.</li>
                 <li>A project's blocks are its own, and its section in the Blocks toolbox shows them. <PaperCode>remove</PaperCode> takes them all away.</li>
+                <li>The Blocks project menu shows a project by <PaperCode>image</PaperCode> when it has one, else by <PaperCode>icon</PaperCode>, a Material Symbols name. Give it the picture your panel shows for the project, such as a server's icon.</li>
+                <li><PaperCode>image</PaperCode> is a path in the panel's folder, such as <PaperCode>/assets/games/minecraft/icon.webp</PaperCode>, or a base64 <PaperCode>data:image</PaperCode> URL of a PNG, WebP, JPEG or GIF. It is at most 512 KB. Any other value is refused with <PaperCode>{`Project "s1"'s picture must be an image file in the panel's folder or a base64 data:image URL`}</PaperCode>.</li>
                 <li><PaperCode>fire</PaperCode> checks the payload against the values the event declares, and <PaperCode>changed</PaperCode> needs a value with <PaperCode>changes: true</PaperCode>. Both refuse before anything is sent.</li>
             </PaperTextList>
 

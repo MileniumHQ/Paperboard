@@ -9,6 +9,7 @@ export interface RegisteredProject {
     id: string;
     name: string;
     icon?: string;
+    image?: string;
 }
 
 export type ActionHandler = (...args: any[]) => Promise<any> | any;
@@ -83,7 +84,7 @@ export class TransportRegistry {
     ): Promise<void> {
         await Promise.all(
             [...this.registeredProjects.entries()].map(([key, p]) =>
-                call(`${this.prefix}:project-define`, { panelId: p.panelId, project: p.id, name: p.name, icon: p.icon })
+                call(`${this.prefix}:project-define`, { panelId: p.panelId, project: p.id, name: p.name, icon: p.icon, image: p.image })
                     .catch((err) => onError(`${this.prefix}:project-define resubscribe ${key}`, err)),
             ),
         );

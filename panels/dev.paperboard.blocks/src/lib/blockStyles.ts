@@ -102,6 +102,8 @@ export type BlockIcon = { src: string } | { symbol: string };
 
 /** What a panel that declares no icon shows, as in the app's sidebar. */
 export const NO_PANEL_ICON = "dashboard";
+/** What a project that has neither a picture nor a symbol shows. */
+export const NO_PROJECT_ICON = "folder";
 
 let panelIcon: ((panelId: string) => BlockIcon) | null = null;
 
