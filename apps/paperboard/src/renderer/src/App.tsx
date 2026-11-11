@@ -157,7 +157,11 @@ const App: Component = () => {
         if (mobile()) setMobilePageOpen(true);
     };
 
+    // a newer selection wins: a slow probe for an older one is dropped
+    let selectionRequest = 0;
     const handleRailSelect = (val: string) => {
+        selectionRequest++;
+        setOfflineTarget(null);
         if (val === "__settings" && mobile()) {
             setMobileSettingsOpen(true);
             return;
@@ -417,6 +421,7 @@ const App: Component = () => {
     };
 
     const handleComputerSelect = async (compId: string) => {
+        const request = ++selectionRequest;
         const comp = computers().find((c) => c.id === compId);
         if (!comp || comp.isLocal) {
             finishComputerSelect(compId);
@@ -426,6 +431,7 @@ const App: Component = () => {
         // Probe before switching so offline computers prompt explicitly
         try {
             const probe = await computersApi.probe(comp.host, comp.port);
+            if (request !== selectionRequest) return;
             if (!probe?.reachable) {
                 setOfflineTarget({
                     ...comp,
@@ -435,6 +441,7 @@ const App: Component = () => {
             }
         } catch (err) {
             logToMain("error", "Failed to probe computer:", err);
+            if (request !== selectionRequest) return;
             setOfflineTarget(comp);
             return;
         }
