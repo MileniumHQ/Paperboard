@@ -10,6 +10,8 @@ import "@mileniumhq/paperui/panel.css";
 import { BUILTIN_BLOCKS, BUILTIN_SECTIONS, choicesSources, PROPERTIES_CATEGORY, registryDefinitions, type Definitions } from "./lib/blockDefs";
 import { refreshChoices, registerChoicesField } from "./lib/choicesField";
 import { LIBRARY_FLYOUT, setLibraryTop, uiGap } from "./lib/libraryFlyout";
+import { loadBlockFonts, PAPER_RENDERER, paperTheme } from "./lib/paperRenderer";
+import { setPanelIcons } from "./lib/blockStyles";
 import { errorMessage } from "./lib/failure";
 import type { SavedWorkspace } from "./lib/interpreter";
 import { DEFAULT_STATE, PANEL_ID, SERVICE_ACTIONS, type PanelState, type SavedFlows } from "./panel";
@@ -224,52 +226,64 @@ export default function App() {
     onMount(() => {
         registerChoicesField({ fetch: (s) => blocksApi.choices(s.panelId, s.entry, s.input), report: setProblem });
         define(BUILTIN_BLOCKS);
-        workspace = Blockly.inject(host, {
-            toolbox: { kind: "flyoutToolbox", contents: [] },
-            plugins: { flyoutsVerticalToolbox: LIBRARY_FLYOUT },
-            media: "./blockly-media/",
-            trashcan: true,
-            zoom: { controls: true, wheel: true },
-            move: { scrollbars: true, drag: true, wheel: false },
-        });
+        setPanelIcons(panelIcon);
+        let closed = false;
+        let offRegistry: (() => void) | undefined;
         const resize = new ResizeObserver(() => workspace && Blockly.svgResize(workspace));
-        resize.observe(host);
-
-        workspace.addChangeListener((event: Blockly.Events.Abstract) => {
-            if (event.type === Blockly.Events.VAR_CREATE || event.type === Blockly.Events.VAR_DELETE || event.type === Blockly.Events.VAR_RENAME) {
-                setVariablesVersion((v) => v + 1);
-            }
-            if (loading || event.isUiEvent) return;
-            clearTimeout(saveTimer);
-            saveTimer = setTimeout(save, SAVE_DELAY_MS);
-        });
-
         const offState = bridge.onStateChange((_patch, full) => {
             setState(full);
             showErrors(full);
         });
-        const offRegistry = blocksApi.onRegistryChange(() => {
-            refreshBlocks(schemas).then(markAway, fail("The blocks couldn't be updated"));
-        });
 
-        (async () => {
-            const flows = await bridge.call<SavedFlows>(SERVICE_ACTIONS.load);
-            await refreshBlocks(flows.schemas);
-            Blockly.serialization.workspaces.load(flows.workspace, workspace!);
-            markAway();
-        })().then(
-            () => {
-                loading = false;
-            },
-            fail("Your flows couldn't be loaded"),
-        );
-        setReady(true);
+        const start = () => {
+            if (closed) return;
+            workspace = Blockly.inject(host, {
+                renderer: PAPER_RENDERER,
+                theme: paperTheme(),
+                toolbox: { kind: "flyoutToolbox", contents: [] },
+                plugins: { flyoutsVerticalToolbox: LIBRARY_FLYOUT },
+                media: "./blockly-media/",
+                trashcan: true,
+                zoom: { controls: true, wheel: true },
+                move: { scrollbars: true, drag: true, wheel: false },
+            });
+            resize.observe(host);
+
+            workspace.addChangeListener((event: Blockly.Events.Abstract) => {
+                if (event.type === Blockly.Events.VAR_CREATE || event.type === Blockly.Events.VAR_DELETE || event.type === Blockly.Events.VAR_RENAME) {
+                    setVariablesVersion((v) => v + 1);
+                }
+                if (loading || event.isUiEvent) return;
+                clearTimeout(saveTimer);
+                saveTimer = setTimeout(save, SAVE_DELAY_MS);
+            });
+            offRegistry = blocksApi.onRegistryChange(() => {
+                refreshBlocks(schemas).then(markAway, fail("The blocks couldn't be updated"));
+            });
+
+            (async () => {
+                const flows = await bridge.call<SavedFlows>(SERVICE_ACTIONS.load);
+                await refreshBlocks(flows.schemas);
+                if (closed) return;
+                Blockly.serialization.workspaces.load(flows.workspace, workspace!);
+                markAway();
+            })().then(
+                () => {
+                    loading = false;
+                },
+                fail("Your flows couldn't be loaded"),
+            );
+            setReady(true);
+        };
+        // Blockly measures text as it draws, so it waits for the font
+        loadBlockFonts().then(start, fail("The blocks couldn't be drawn"));
 
         onCleanup(() => {
+            closed = true;
             clearTimeout(saveTimer);
             resize.disconnect();
             offState();
-            offRegistry();
+            offRegistry?.();
             workspace?.dispose();
             scratch.dispose();
         });

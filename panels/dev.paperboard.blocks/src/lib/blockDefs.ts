@@ -1,9 +1,10 @@
 // What the registry offers, as Blockly blocks and a toolbox. Types become
 // Blockly connection checks, so a socket only takes a value that fits it.
-// No styling yet: Blockly's own look, with a hue per kind.
+// Each block names its style (blockStyles.ts): a colour, and an icon.
 import type { BlockInfo, BlockInputSchema, BlockProjectInfo, BlockSchema } from "@mileniumhq/paperapi";
 import { blockEntry, parseTypeRef } from "@mileniumhq/paperapi";
 import { CHOICES_FIELD, choiceValue, type ChoicesSource } from "./choicesField";
+import type { BlockStyleName } from "./blockStyles";
 import { BUILTIN, parseEntry, propertyBlockType, registryBlockType } from "./names";
 
 type Json = Record<string, unknown>;
@@ -13,7 +14,8 @@ type Inputs = Record<string, BlockInputSchema>;
 /** A custom type's base, by "panel:type". */
 export type TypeBases = Map<string, "text" | "number" | "boolean" | "object">;
 
-const HUE = { event: 45, command: 210, value: 160, property: 290, builtin: 20 } as const;
+/** A panel's blocks share one style; its icon tells them apart. */
+const PANEL_STYLE: BlockStyleName = "panel_blocks";
 
 /**
  * The Blockly checks a type allows: core types use Blockly's own names, so
@@ -96,7 +98,7 @@ function message(
     return { message0, args0: args, ...(sockets > MOST_INLINE_SOCKETS ? { inputsInline: false as const } : {}) };
 }
 
-function hat(type: string, title: ReturnType<typeof message>, tooltip: string): Json {
+function hat(type: string, title: ReturnType<typeof message>, tooltip: string, style: BlockStyleName = PANEL_STYLE): Json {
     return {
         type,
         message0: title.message0,
@@ -104,7 +106,7 @@ function hat(type: string, title: ReturnType<typeof message>, tooltip: string): 
         ...(title.inputsInline === false ? { inputsInline: false } : {}),
         message1: "%1",
         args1: [{ type: "input_statement", name: "DO" }],
-        colour: HUE.event,
+        style,
         tooltip,
     };
 }
@@ -182,7 +184,7 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                         { type: "input_value", name: "VALUE", check: checksFor(typeRef, bases) },
                     ],
                     output: null,
-                    colour: HUE.property,
+                    style: PANEL_STYLE,
                     tooltip: `A field of a ${schema.name}`,
                 });
                 contents.push({ kind: "block", type });
@@ -196,7 +198,7 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                     type,
                     ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases, { panelId, entry }),
                     ...(s.output ? { output: checksFor(s.output, bases) } : { previousStatement: null, nextStatement: null }),
-                    colour: HUE.command,
+                    style: PANEL_STYLE,
                     tooltip: s.description ?? s.name,
                 });
                 contents.push(toolboxBlock(type, s.inputs as Inputs));
@@ -210,7 +212,7 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                     type,
                     ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases, { panelId, entry }),
                     output: checksFor(s.type, bases),
-                    colour: HUE.value,
+                    style: PANEL_STYLE,
                     tooltip: s.description ?? s.name,
                 });
                 contents.push(toolboxBlock(type, s.inputs as Inputs));
@@ -235,7 +237,7 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
                         type: valueType,
                         message0: v.name,
                         output: checksFor(v.type, bases),
-                        colour: HUE.event,
+                        style: PANEL_STYLE,
                         tooltip: v.optional ? `${v.name}, inside "${s.name}"; it may have none (check with "has a value")` : `${v.name}, inside "${s.name}"`,
                     });
                     valueBlocks.push({ kind: "block", type: valueType });
@@ -248,33 +250,31 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
     return out;
 }
 
-const statement = (type: string, message0: string, args0: Json[], tooltip: string, colour: number = HUE.builtin): Json => ({
+const statement = (type: string, message0: string, args0: Json[], tooltip: string, style: BlockStyleName = "loop_blocks"): Json => ({
     type,
     message0,
     args0,
     previousStatement: null,
     nextStatement: null,
-    colour,
+    style,
     tooltip,
 });
-const reporter = (type: string, message0: string, args0: Json[], output: string | null, tooltip: string, colour: number): Json => ({
+const reporter = (type: string, message0: string, args0: Json[], output: string | null, tooltip: string, style: BlockStyleName): Json => ({
     type,
     message0,
     args0,
     output,
-    colour,
+    style,
     tooltip,
     inputsInline: true,
 });
 const socket = (name: string, check?: string): Json => ({ type: "input_value", name, ...(check ? { check } : {}) });
 const dropdown = (name: string, options: [string, string][]): Json => ({ type: "field_dropdown", name, options });
 
-/** Blockly's own category colours, so the built-ins read like Blockly's blocks. */
-const HUES = { logic: 210, loops: 120, math: 230, text: 160, lists: 260, time: 330, web: 190, data: 290 } as const;
 
 /** This panel's own blocks, beside Blockly's. */
 export const BUILTIN_BLOCKS: Json[] = [
-    hat(BUILTIN.onRun, { message0: "When Run is clicked", args0: [] }, "Runs when you click Run"),
+    hat(BUILTIN.onRun, { message0: "When Run is clicked", args0: [] }, "Runs when you click Run", "event_blocks"),
     statement(BUILTIN.wait, "Wait %1 seconds", [socket("SECONDS", "Number")], "Waits before the next step"),
     statement(BUILTIN.waitUntil, "Wait until %1", [socket("BOOL", "Boolean")], "Waits until the condition is true, checking twice a second"),
     statement(BUILTIN.log, "Log %1", [socket("TEXT")], "Writes to the run log"),
@@ -292,26 +292,26 @@ export const BUILTIN_BLOCKS: Json[] = [
         args3: [{ type: "input_statement", name: "CATCH" }],
         previousStatement: null,
         nextStatement: null,
-        colour: HUE.builtin,
+        style: "loop_blocks",
         tooltip: "Runs the first steps; if one fails, runs the second ones instead of ending the flow",
     },
-    reporter(BUILTIN.errorMessage, "error message", [], "String", "What went wrong, inside \"If it fails\"", HUE.builtin),
-    reporter(BUILTIN.hasValue, "%1 has a value", [socket("VALUE")], "Boolean", "False when a value is missing, like the reason of a ban nobody gave a reason for", HUES.logic),
-    reporter(BUILTIN.textTest, "%1 %2 %3", [socket("TEXT", "String"), dropdown("OP", [["contains", "CONTAINS"], ["starts with", "STARTS"], ["ends with", "ENDS"]]), socket("PART", "String")], "Boolean", "Checks for a piece of text", HUES.text),
-    reporter(BUILTIN.regexTest, "%1 matches pattern %2", [socket("TEXT", "String"), socket("PATTERN", "String")], "Boolean", "Checks text against a regular expression", HUES.text),
-    reporter(BUILTIN.regexFind, "find pattern %1 in %2", [socket("PATTERN", "String"), socket("TEXT", "String")], "String", "The first match (or its first group); empty text when nothing matches", HUES.text),
-    reporter(BUILTIN.toNumber, "number from %1", [socket("TEXT", "String")], "Number", "Reads text as a number", HUES.text),
-    reporter(BUILTIN.base64, "%1 %2 as base64", [dropdown("MODE", [["encode", "ENCODE"], ["decode", "DECODE"]]), socket("TEXT", "String")], "String", "Base64 encoding", HUES.text),
-    reporter(BUILTIN.randomId, "random ID", [], "String", "A new random unique ID", HUES.math),
-    reporter(BUILTIN.jsonParse, "read JSON %1", [socket("TEXT", "String")], null, "Turns JSON text into a value", HUES.data),
-    reporter(BUILTIN.jsonText, "%1 as JSON", [socket("VALUE")], "String", "Turns a value into JSON text", HUES.data),
-    reporter(BUILTIN.getKey, "%1 of object %2", [socket("KEY", "String"), socket("OBJECT")], null, "One key of an object, like a web answer's", HUES.data),
-    reporter(BUILTIN.now, "now", [], "Number", "This moment, as a timestamp", HUES.time),
-    reporter(BUILTIN.timeFormat, "%1 as %2", [socket("TIME", "Number"), dropdown("FORMAT", [["date and time", "DATETIME"], ["date", "DATE"], ["time", "TIME"], ["weekday", "WEEKDAY"], ["ISO text", "ISO"]])], "String", "A timestamp as text, in this computer's time zone", HUES.time),
-    reporter(BUILTIN.timePart, "%1 of %2", [dropdown("PART", [["year", "YEAR"], ["month", "MONTH"], ["day", "DAY"], ["hour", "HOUR"], ["minute", "MINUTE"], ["second", "SECOND"]]), socket("TIME", "Number")], "Number", "One part of a timestamp, in this computer's time zone", HUES.time),
-    reporter(BUILTIN.timeAdd, "%1 %2 after %3", [socket("AMOUNT", "Number"), dropdown("UNIT", [["seconds", "SECONDS"], ["minutes", "MINUTES"], ["hours", "HOURS"], ["days", "DAYS"]]), socket("TIME", "Number")], "Number", "A later timestamp; a negative amount goes back", HUES.time),
-    reporter(BUILTIN.webGet, "get %1 as %2", [socket("URL", "String"), dropdown("AS", [["text", "TEXT"], ["JSON", "JSON"]])], null, "Fetches a web address (https, or http on this computer)", HUES.web),
-    reporter(BUILTIN.webPost, "post %1 to %2 and read %3", [socket("BODY"), socket("URL", "String"), dropdown("AS", [["JSON", "JSON"], ["text", "TEXT"]])], null, "Sends a value as JSON to a web address (https, or http on this computer)", HUES.web),
+    reporter(BUILTIN.errorMessage, "error message", [], "String", "What went wrong, inside \"If it fails\"", "loop_blocks"),
+    reporter(BUILTIN.hasValue, "%1 has a value", [socket("VALUE")], "Boolean", "False when a value is missing, like the reason of a ban nobody gave a reason for", "logic_blocks"),
+    reporter(BUILTIN.textTest, "%1 %2 %3", [socket("TEXT", "String"), dropdown("OP", [["contains", "CONTAINS"], ["starts with", "STARTS"], ["ends with", "ENDS"]]), socket("PART", "String")], "Boolean", "Checks for a piece of text", "text_blocks"),
+    reporter(BUILTIN.regexTest, "%1 matches pattern %2", [socket("TEXT", "String"), socket("PATTERN", "String")], "Boolean", "Checks text against a regular expression", "text_blocks"),
+    reporter(BUILTIN.regexFind, "find pattern %1 in %2", [socket("PATTERN", "String"), socket("TEXT", "String")], "String", "The first match (or its first group); empty text when nothing matches", "text_blocks"),
+    reporter(BUILTIN.toNumber, "number from %1", [socket("TEXT", "String")], "Number", "Reads text as a number", "text_blocks"),
+    reporter(BUILTIN.base64, "%1 %2 as base64", [dropdown("MODE", [["encode", "ENCODE"], ["decode", "DECODE"]]), socket("TEXT", "String")], "String", "Base64 encoding", "text_blocks"),
+    reporter(BUILTIN.randomId, "random ID", [], "String", "A new random unique ID", "math_blocks"),
+    reporter(BUILTIN.jsonParse, "read JSON %1", [socket("TEXT", "String")], null, "Turns JSON text into a value", "web_blocks"),
+    reporter(BUILTIN.jsonText, "%1 as JSON", [socket("VALUE")], "String", "Turns a value into JSON text", "web_blocks"),
+    reporter(BUILTIN.getKey, "%1 of object %2", [socket("KEY", "String"), socket("OBJECT")], null, "One key of an object, like a web answer's", "web_blocks"),
+    reporter(BUILTIN.now, "now", [], "Number", "This moment, as a timestamp", "time_blocks"),
+    reporter(BUILTIN.timeFormat, "%1 as %2", [socket("TIME", "Number"), dropdown("FORMAT", [["date and time", "DATETIME"], ["date", "DATE"], ["time", "TIME"], ["weekday", "WEEKDAY"], ["ISO text", "ISO"]])], "String", "A timestamp as text, in this computer's time zone", "time_blocks"),
+    reporter(BUILTIN.timePart, "%1 of %2", [dropdown("PART", [["year", "YEAR"], ["month", "MONTH"], ["day", "DAY"], ["hour", "HOUR"], ["minute", "MINUTE"], ["second", "SECOND"]]), socket("TIME", "Number")], "Number", "One part of a timestamp, in this computer's time zone", "time_blocks"),
+    reporter(BUILTIN.timeAdd, "%1 %2 after %3", [socket("AMOUNT", "Number"), dropdown("UNIT", [["seconds", "SECONDS"], ["minutes", "MINUTES"], ["hours", "HOURS"], ["days", "DAYS"]]), socket("TIME", "Number")], "Number", "A later timestamp; a negative amount goes back", "time_blocks"),
+    reporter(BUILTIN.webGet, "get %1 as %2", [socket("URL", "String"), dropdown("AS", [["text", "TEXT"], ["JSON", "JSON"]])], null, "Fetches a web address (https, or http on this computer)", "web_blocks"),
+    reporter(BUILTIN.webPost, "post %1 to %2 and read %3", [socket("BODY"), socket("URL", "String"), dropdown("AS", [["JSON", "JSON"], ["text", "TEXT"]])], null, "Sends a value as JSON to a web address (https, or http on this computer)", "web_blocks"),
 ];
 
 const num = (n: number) => ({ shadow: { type: "math_number", fields: { NUM: n } } });
