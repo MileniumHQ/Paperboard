@@ -1,6 +1,7 @@
 // Privileged shell-only IPC; panels speak PaperCrane directly over WebSocket.
 import { createBrowserBridge, type ShellIpc } from "./browserBridge";
 import type { LaunchOptions } from "../../../shared/launchOptions";
+import type { Graphics } from "../../../shared/graphics";
 import type { PanelPermission, PanelPermissionEntry, PermissionAnswer, PermissionAsk, ScreenPick, SystemBlock } from "../../../shared/panelPermissions";
 
 export interface ComputerInfo {
@@ -156,6 +157,13 @@ export const shellApi = {
         requireIpc().invoke<string>("app-version"),
     getLaunchOptions: (): Promise<LaunchOptions> =>
         requireIpc().invoke<LaunchOptions>("launch-options"),
+    /** whether Paperboard is drawn on a GPU, and again whenever that changes */
+    getGraphics: (): Promise<Graphics> => requireIpc().invoke<Graphics>("graphics"),
+    onGraphicsChanged: (cb: (graphics: Graphics) => void): (() => void) => {
+        const handler = (_event: unknown, data: Graphics) => cb(data);
+        requireIpc().on("graphics-changed", handler);
+        return () => requireIpc().removeListener?.("graphics-changed", handler);
+    },
 };
 // Main applies side effects of freshly persisted settings (theme, title bars,
 // login item); resolves to why Run on startup couldn't be applied, or null

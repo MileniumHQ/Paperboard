@@ -132,6 +132,7 @@ const App: Component = () => {
     );
     const {
         appSettings,
+        graphics,
         loadAppSettings,
         handleAppSettingsChange,
         settingsFailure,
@@ -710,6 +711,7 @@ const App: Component = () => {
                                     onShowTutorial={() => setOpenTutorial("app")}
                                     computers={listedComputers()}
                                     failure={settingsFailure()}
+                                    gpu={graphics().gpu}
                                     onRetryLoad={() => void retryLoadAppSettings()}
                                     onDismissFailure={dismissSettingsFailure}
                                 />
@@ -1004,6 +1006,7 @@ const App: Component = () => {
                             onShowTutorial={() => setOpenTutorial("app")}
                             computers={listedComputers()}
                             failure={settingsFailure()}
+                            gpu={graphics().gpu}
                             onRetryLoad={() => void retryLoadAppSettings()}
                             onDismissFailure={dismissSettingsFailure}
                         />

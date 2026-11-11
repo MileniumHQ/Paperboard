@@ -1,6 +1,6 @@
 /* Covers the computer's area while it can't be reached: a blurred scrim
- * over whatever was open, turned opaque when motion is reduced so the
- * message stays legible without the blur. */
+ * over whatever was open, turned opaque when blur is off so the
+ * message stays legible without it. */
 .overlay {
     position: absolute;
     top: 0;
@@ -18,13 +18,13 @@
     background-color: var(--paper-scrim);
 }
 
-:global([data-paperui-motion]) .overlay {
+:global([data-paperui-blur="off"]) .overlay {
     background-color: var(--paper-surface-raised);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
 }
 
-:global([data-paperui-motion]) :global([data-paperui-theme="dark"]) .overlay {
+:global([data-paperui-blur="off"]) :global([data-paperui-theme="dark"]) .overlay {
     background-color: var(--paper-surface-inset);
 }
 

@@ -4,23 +4,28 @@ import * as fs from "fs";
 import type { WebFrameMain } from "electron";
 import { logger } from "../../papercrane/logger";
 import { setRunOnStartup } from "./loginItem";
+import { withAppSettingsDefaults } from "../shared/appSettingsDefaults";
+import { effectiveLook, graphicsFrom, type Graphics } from "../shared/graphics";
+import { pushToShells } from "./communication/shellPush";
 import {
     TITLEBAR_OVERLAY_COLORS,
     TITLEBAR_SYMBOL_COLORS,
 } from "../../papercrane/themeConstants";
 
-// theme via nativeTheme; reduced motion AND the resolved theme are injected
+// theme via nativeTheme; reduced motion, blur AND the resolved theme are injected
 // into panel frames. <html data-paperui-theme> is what PaperProvider reads
 // when it has no explicit theme, and it also applies CSS tokens immediately.
 export interface AppSettings {
     darkMode: "system" | "light" | "dark";
     reducedMotion: boolean;
+    disableBlur: boolean;
     runOnStartup: boolean;
 }
 
 const DEFAULTS: AppSettings = {
     darkMode: "system",
     reducedMotion: false,
+    disableBlur: false,
     runOnStartup: false,
 };
 
@@ -35,7 +40,7 @@ export function appSettingsPath(): string {
 export function readAppSettings(): AppSettings {
     try {
         const raw = JSON.parse(fs.readFileSync(appSettingsPath(), "utf8"));
-        return { ...DEFAULTS, ...raw };
+        return withAppSettingsDefaults(DEFAULTS, raw);
     } catch (err: any) {
         // missing is a fresh install; unreadable is reported, not hidden
         if (err?.code !== "ENOENT") {
@@ -72,11 +77,17 @@ export function applyRunOnStartup(): string | null {
     }
 }
 
+/** Whether this window is drawn on a GPU (shared/graphics.ts). */
+export function currentGraphics(): Graphics {
+    return graphicsFrom(app.getGPUFeatureStatus().gpu_compositing);
+}
+
 // safe no-op for non-panel frames
 async function applyToFrame(frame: WebFrameMain): Promise<void> {
     try {
         if (!frame.url.startsWith("panel://")) return;
         const settings = readAppSettings();
+        const look = effectiveLook(settings, currentGraphics());
         // the OS media query is not a contract: Paperboard's forced theme
         // may disagree with the OS, and nativeTheme propagation to custom
         // protocol frames is implicit. Inject the resolved theme explicitly
@@ -85,10 +96,13 @@ async function applyToFrame(frame: WebFrameMain): Promise<void> {
         const js = `
             (() => {
                 document.documentElement.setAttribute('data-paperui-motion', ${JSON.stringify(
-                    settings.reducedMotion ? "reduced" : "auto",
+                    look.reducedMotion ? "reduced" : "auto",
                 )});
                 document.documentElement.setAttribute('data-paperui-theme', ${JSON.stringify(
                     resolvedTheme,
+                )});
+                document.documentElement.setAttribute('data-paperui-blur', ${JSON.stringify(
+                    look.disableBlur ? "off" : "auto",
                 )});
             })();
         `;
@@ -148,5 +162,15 @@ export function initAppSettingsSync(): void {
     // fires on OS flips too
     nativeTheme.on("updated", () => {
         syncTitleBarOverlays();
+    });
+
+    // a GPU process that crashes for good leaves Chromium drawing in software
+    let graphics = currentGraphics();
+    app.on("gpu-info-update", () => {
+        const next = currentGraphics();
+        if (next.gpu === graphics.gpu) return;
+        graphics = next;
+        pushToShells("graphics-changed", next);
+        broadcastAppSettings().catch((err) => logger.warn("[AppSettings] graphics broadcast failed:", err));
     });
 }

@@ -18,10 +18,6 @@
     --paper-mid-transition: 0s;
     --paper-medium-transition: 0s;
     --paper-long-transition: 0s;
-    --paper-blur-light: blur(0);
-    --paper-blur-medium: blur(0);
-    --paper-blur-heavy: blur(0);
-    backdrop-filter: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -31,9 +27,6 @@
         --paper-mid-transition: 0s;
         --paper-medium-transition: 0s;
         --paper-long-transition: 0s;
-        --paper-blur-light: blur(0);
-        --paper-blur-medium: blur(0);
-        --paper-blur-heavy: blur(0);
         /* no global * selector here: it escapes .paperui-root and mutates
            the host document — components zero their own animations under
            their own classes; doc-level opt-out rides the scoped variant */
@@ -47,7 +40,33 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+}
+
+/* No blur: the operating system's reduced transparency on :root, or an
+   ancestor with data-paperui-blur="off" (Paperboard's Disable blur setting).
+   html:root and :root[...] outrank the tokens' own :root, which comes later in styles.css;
+   !important also wins over a modal's fade, which animates backdrop-filter. */
+@media (prefers-reduced-transparency: reduce) {
+    html:root {
+        --paper-blur-light: none;
+        --paper-blur-medium: none;
+        --paper-blur-heavy: none;
+    }
+}
+
+:root[data-paperui-blur="off"],
+[data-paperui-blur="off"] {
+    --paper-blur-light: none;
+    --paper-blur-medium: none;
+    --paper-blur-heavy: none;
+}
+
+[data-paperui-blur="off"],
+[data-paperui-blur="off"] *,
+[data-paperui-blur="off"] *::before,
+[data-paperui-blur="off"] *::after {
     backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 @keyframes PaperTemplateLeave {

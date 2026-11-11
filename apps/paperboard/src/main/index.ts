@@ -291,6 +291,8 @@ function ensureBrowserHost(): Promise<BrowserHost> {
         const shared = createShellInvokeHandlers({
             appVersion: () => app.getVersion(),
             launchOptions: () => launchOptionsFromArgv(process.argv),
+            // the page is drawn by the browser it's open in, not by this process
+            graphics: () => ({ gpu: true }),
             openPath: (dir) => shell.openPath(dir),
         });
         const invoke: Record<string, (args: unknown) => unknown> = {};

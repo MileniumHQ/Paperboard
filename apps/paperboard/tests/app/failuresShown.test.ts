@@ -58,7 +58,8 @@ describe("failures reach the caller", () => {
         const second = await launchElectron({ appDir: app.dir, dataDir: saveDir, args: ["--skip-update"] });
         await shellReady(second);
         await second.evalIn(SHELL, `document.querySelector('[role=radio][aria-label="Settings"]').click()`);
-        const toggle = `document.querySelector('[role=switch]:has(input[name=reducedMotion])')`;
+        // Run on startup: animations and blur are locked on a runner without a GPU, and a failed save applies nothing
+        const toggle = `document.querySelector('[role=switch]:has(input[name=runOnStartup])')`;
         await second.evalIn(SHELL, domCondition(toggle));
         // the settings folder stops taking writes
         fs.chmodSync(path.join(saveDir, "local"), 0o555);
@@ -71,7 +72,7 @@ describe("failures reach the caller", () => {
         } finally {
             fs.chmodSync(path.join(saveDir, "local"), 0o755);
         }
-        expect(JSON.parse(fs.readFileSync(path.join(saveDir, "local", "app-settings.json"), "utf8")).reducedMotion).toBe(false);
+        expect(JSON.parse(fs.readFileSync(path.join(saveDir, "local", "app-settings.json"), "utf8")).runOnStartup).toBe(false);
         expect(await second.quit()).toEqual({ code: 0, signal: null });
     }, WAIT_MS * 3);
 
@@ -79,6 +80,7 @@ describe("failures reach the caller", () => {
         const handlers = createShellInvokeHandlers({
             appVersion: () => "0.0.0",
             launchOptions: () => ({}) as never,
+            graphics: () => ({ gpu: true }),
             // Electron's shell.openPath resolves to the system's message
             openPath: async (dir) => `Failed to open path: ${dir}`,
         });

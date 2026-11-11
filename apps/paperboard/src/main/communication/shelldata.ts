@@ -2,7 +2,7 @@
 // Every handler below validates event.senderFrame.url via shellGuard:
 // panel:// origins get a typed PANEL_IPC_REFUSED, never an answer.
 import { type IpcMain, type IpcMainInvokeEvent, type WebContents, BrowserWindow, app, clipboard, dialog, nativeTheme, shell } from "electron";
-import { broadcastAppSettings, syncTitleBarOverlays, applyNativeTheme, applyRunOnStartup } from "../appSettings";
+import { broadcastAppSettings, syncTitleBarOverlays, applyNativeTheme, applyRunOnStartup, currentGraphics } from "../appSettings";
 import * as path from "path";
 import { sanitizeId } from "../../../papercrane/storage";
 import { logger } from "../../../papercrane/logger";
@@ -115,6 +115,7 @@ export default function registerShellIpc(ipcMain: IpcMain) {
     const shared = createShellInvokeHandlers({
         appVersion: () => app.getVersion(),
         launchOptions: () => launchOptionsFromArgv(process.argv),
+        graphics: currentGraphics,
         openPath: (dir) => shell.openPath(dir),
     });
     for (const channel of SHARED_SHELL_INVOKE_CHANNELS) {

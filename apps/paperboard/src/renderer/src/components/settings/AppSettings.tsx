@@ -31,6 +31,7 @@ import mitLicenseText from "../../../../../../../packages/paperui/LICENSE?raw";
 export interface AppSettingsData {
     darkMode: "system" | "light" | "dark";
     reducedMotion: boolean;
+    disableBlur: boolean;
     runOnStartup: boolean;
     /** where Paperboard opens: Home, or a computer's id */
     startOn: string;
@@ -39,6 +40,7 @@ export interface AppSettingsData {
 export const APP_SETTINGS_DEFAULTS: AppSettingsData = {
     darkMode: "system",
     reducedMotion: false,
+    disableBlur: false,
     runOnStartup: false,
     startOn: START_ON_HOME,
 };
@@ -51,6 +53,7 @@ export interface StartComputer {
 }
 
 const START_ON_NOTE = "Open Paperboard on Home or on a computer's panels.";
+const NO_GPU = "Always on here: this computer has no graphics card, and Paperboard would lag with it off.";
 const START_ON_MISSING = "That computer isn't listed anymore, so Paperboard opens Home.";
 
 // Home, then each computer the rail lists, the way the rail shows them. A
@@ -110,6 +113,8 @@ export default function AppSettings(props: {
     compact?: boolean;
     /** a load or save that didn't go through */
     failure?: SettingsFailure | null;
+    /** false where there's no GPU: animations and blur are off whatever the settings say */
+    gpu: boolean;
     onRetryLoad?: () => void;
     onDismissFailure?: () => void;
 }) {
@@ -147,7 +152,7 @@ export default function AppSettings(props: {
                 <PaperQuote
                     variant="danger"
                     icon="warning"
-                    title={{ load: "Settings not loaded", save: "Settings not saved", apply: "Run on startup not applied" }[failure().kind]}
+                    title={{ load: "Settings not loaded", save: "Settings not saved", apply: "Run on startup not applied", graphics: "Graphics card not checked" }[failure().kind]}
                     role="alert"
                     onDismiss={props.onDismissFailure}
                 >
@@ -156,6 +161,7 @@ export default function AppSettings(props: {
                             load: `These are the defaults, not your settings: ${failure().message}`,
                             save: `Your change was not kept: ${failure().message}`,
                             apply: failure().message,
+                            graphics: `Animations and blur follow your settings, even if this computer has no graphics card: ${failure().message}`,
                         }[failure().kind]}
                         <Show when={failure().kind === "load" && props.onRetryLoad}>
                             <PaperButton size="tiny" onClick={() => props.onRetryLoad?.()}>Retry loading</PaperButton>
@@ -171,6 +177,7 @@ export default function AppSettings(props: {
             <CompactSettings
                 notice={failureNotice}
                 settings={props.settings}
+                gpu={props.gpu}
                 onChange={handleChange}
                 onShowTutorial={props.onShowTutorial}
                 computers={props.computers}
@@ -216,12 +223,24 @@ export default function AppSettings(props: {
                 </PaperSettingItem>
 
                 <PaperSettingItem
-                    title="Reduce motion"
-                    description="Disables animations, transitions, and blur effects for better performance and accessibility."
+                    title="Disable animations"
+                    description={props.gpu ? "Turns off animations and transitions." : NO_GPU}
                 >
                     <PaperToggle
                         name="reducedMotion"
-                        checked={props.settings.reducedMotion}
+                        checked={props.settings.reducedMotion || !props.gpu}
+                        disabled={!props.gpu}
+                    />
+                </PaperSettingItem>
+
+                <PaperSettingItem
+                    title="Disable blur"
+                    description={props.gpu ? "Turns off the blur behind dialogs and overlays." : NO_GPU}
+                >
+                    <PaperToggle
+                        name="disableBlur"
+                        checked={props.settings.disableBlur || !props.gpu}
+                        disabled={!props.gpu}
                     />
                 </PaperSettingItem>
 
@@ -321,6 +340,7 @@ export default function AppSettings(props: {
 // and actions as rows you tap. Only what applies on a phone is here.
 function CompactSettings(props: {
     settings: AppSettingsData;
+    gpu: boolean;
     onChange: (next: Record<string, any>) => void;
     onShowTutorial: () => void;
     computers: StartComputer[];
@@ -363,8 +383,12 @@ function CompactSettings(props: {
                             </PaperSelectMenu>
                         </div>
                         <label class={styles.row}>
-                            <PaperText preset="label" class={styles.label}>Reduce motion</PaperText>
-                            <PaperToggle name="reducedMotion" checked={props.settings.reducedMotion} />
+                            <PaperText preset="label" class={styles.label}>Disable animations</PaperText>
+                            <PaperToggle name="reducedMotion" checked={props.settings.reducedMotion || !props.gpu} disabled={!props.gpu} />
+                        </label>
+                        <label class={styles.row}>
+                            <PaperText preset="label" class={styles.label}>Disable blur</PaperText>
+                            <PaperToggle name="disableBlur" checked={props.settings.disableBlur || !props.gpu} disabled={!props.gpu} />
                         </label>
                     </div>
                 </section>
