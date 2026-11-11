@@ -31,7 +31,11 @@ The guides for building panels are at <https://paperboard.dev/docs/developers/>.
 ## What is here
 
 - `manifest.json` names the panel and points at what the build makes.
-- `src/App.tsx` is the panel's menu and pages, in `src/pages/`.
+- `src/App.tsx` opens on the projects (`src/projects/`); opening one shows
+  `src/Editor.tsx`, the Blockly canvas with the Library and the top bar.
+- `src/lib/projects.ts` keeps the projects: an index, and each project's
+  flows in its own file. The one canvas from before projects becomes
+  "My flows" the first time, and its old file is left as it was.
 - `src/panel.ts` holds what the page, the service and the widget share.
 - `src/service.ts` is the background service. Its actions are what other
   panels and the Actions panel can call, and its state is what every window

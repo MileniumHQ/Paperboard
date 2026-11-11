@@ -3,7 +3,7 @@
 // opens Blockly's website, which a panel doesn't, so it's gone.
 import * as Blockly from "blockly";
 
-/** the class of an item's symbol, styled in App.module.css */
+/** the class of an item's symbol, styled in Editor.module.css */
 export const MENU_ICON_CLASS = "paperMenuIcon";
 /** the class of an item that deletes, drawn as PaperUI's danger item */
 export const MENU_DANGER_CLASS = "paperMenuDanger";
