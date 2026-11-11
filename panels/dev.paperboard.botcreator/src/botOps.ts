@@ -229,6 +229,14 @@ export async function unbanUser(bot: Client, userId: string, guildId?: string): 
     await guild.members.unban(userId.trim());
 }
 
+/** The bot leaves a server it's in. Discord never lets a bot leave a server it owns. */
+export async function leaveServer(bot: Client, guildId: string): Promise<void> {
+    const guild = bot.guilds.cache.get(guildId.trim());
+    if (!guild) throw new Error(`The bot isn't in server ${guildId.trim()}`);
+    if (guild.ownerId === bot.user?.id) throw new Error(`The bot owns ${guild.name}, and Discord doesn't let a server's owner leave it`);
+    await guild.leave();
+}
+
 export async function kickMember(bot: Client, userId: string, reason?: string, guildId?: string): Promise<void> {
     const member = await resolveMember(bot, userId, guildId);
     await member.kick(reason ?? undefined);

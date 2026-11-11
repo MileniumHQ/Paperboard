@@ -5,7 +5,7 @@ import { blocksApi, memoryBlocks, type BlockEventDefinition } from "@mileniumhq/
 import type { BotsServiceState } from "../src/bots";
 import { blockEvent, blockTypes, commandEvent, commandEventId, staticEvents } from "../src/blocks";
 import { GLOBAL_SCOPE, type SlashCommandDefinition } from "../src/types";
-import { guild, slashCommand, startFakeDiscord, userMessage, type FakeBot, type FakeDiscord, type FakeGuild } from "./helpers/discord";
+import { guild, slashCommand, snowflake, startFakeDiscord, userMessage, type FakeBot, type FakeDiscord, type FakeGuild } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, storedBot, stopServices } from "./helpers/service";
 import { stateWhere, within } from "./helpers/wait";
 
@@ -31,23 +31,29 @@ const PANEL_EVENTS = ["bot-added", "bot-connection-failed", "bot-deleted", "bot-
 const COMMANDS = [
     "add-reaction", "add-role", "ban-user", "create-channel", "create-event", "create-invite", "create-role", "create-thread",
     "crosspost-message", "delete-channel", "delete-message", "delete-role", "disconnect-member", "edit-message", "edit-thread",
-    "follow-up-interaction", "kick-member", "move-member", "pin-message", "purge-messages", "remove-reaction", "remove-role",
+    "follow-up-interaction", "kick-member", "leave-server", "move-member", "pin-message", "purge-messages", "remove-reaction", "remove-role",
     "remove-timeout", "rename-channel", "rename-role", "reply-to-message", "respond-to-interaction", "send-dm", "send-file",
     "send-message", "send-poll", "set-activity", "set-channel-permissions", "set-channel-topic", "set-nickname", "set-role-color",
     "set-role-display", "set-slowmode", "show-modal", "show-typing", "timeout-member", "unban-user", "unpin-message",
 ];
-const VALUES = ["bot-user", "connected", "find-members", "latency", "member", "message", "recent-messages", "server-count", "servers"];
+const VALUES = [
+    "bot-user", "command-last-used", "command-uses", "commands-last-day", "connected", "find-members", "latency", "member", "message",
+    "recent-messages", "server-count", "servers", "status", "uptime",
+];
 const EVENTS = [
-    "bot-ready", "component-used", "connection-failed", "member-banned", "member-joined", "member-left", "message-deleted",
-    "message-edited", "message-received", "modal-submitted", "reaction-added", "reaction-removed", "role-added", "role-removed",
-    "thread-created", "voice-changed",
+    "bot-joined-server", "bot-left-server", "bot-ready", "channel-created", "channel-deleted", "component-used", "connection-failed",
+    "member-banned", "member-joined", "member-left", "member-roles-changed", "member-unbanned", "message-deleted", "message-edited",
+    "message-received", "modal-submitted", "nickname-changed", "reaction-added", "reaction-removed", "role-added", "role-created",
+    "role-deleted", "role-removed", "thread-created", "voice-changed",
 ];
 
 // every static trigger a session fires (session.ts attachListeners), as Actions names them
 const TRIGGERS = [
     "on-message", "on-member-join", "on-member-leave", "on-reaction-add", "on-connection-error", "interaction-triggered",
     "modal-submitted", "on-message-edited", "on-message-deleted", "on-reaction-removed", "on-member-banned", "on-role-added",
-    "on-role-removed", "on-thread-created", "on-voice-state-change", "on-bot-ready",
+    "on-role-removed", "on-thread-created", "on-voice-state-change", "on-bot-ready", "on-guild-joined", "on-guild-left",
+    "on-channel-created", "on-channel-deleted", "on-role-created", "on-role-deleted", "on-member-roles-changed", "on-member-unbanned",
+    "on-nickname-changed",
 ];
 
 /** Resolves with the next payload the bot's event fires. */
@@ -216,18 +222,100 @@ describe("a bot is a Blocks project, used through the daemon", () => {
         expect((await blocksApi.list(PANEL_ID)).some((b) => b.entry === `${BOT}/event.${event}`)).toBe(false);
     });
 
+    test("the bot's health and slash command use read what its session counted", async () => {
+        expect(await read("status")).toBe("online");
+        expect(await read<number>("uptime")).toBeGreaterThan(0);
+
+        const created = await call("create-command", { bot: BOT, name: "ping", description: "Ping the bot", options: [] });
+        const event = commandEventId({ scope: GLOBAL_SCOPE, name: "ping" });
+        try {
+            expect(await blocksApi.choices(PANEL_ID, `${BOT}/value.command-uses`, "command")).toEqual([{ label: "/ping", value: event }]);
+            expect(await read("command-uses", { command: event })).toBe(0);
+            await expect(read("command-last-used", { command: event })).rejects.toThrow("/ping hasn't been used since Bot Creator started");
+            await expect(read("command-uses", { command: "slash-gone-0000000000" })).rejects.toThrow('"Slash Command" must be one of /ping');
+            const today = await read<number>("commands-last-day");
+
+            const used = nextEvent(event);
+            await used.ready;
+            const before = Date.now();
+            discord.dispatch(fake, "INTERACTION_CREATE", slashCommand(fake, { guild: home, name: "ping" }));
+            await used.payload;
+            expect(await read("command-uses", { command: event })).toBe(1);
+            const last = await read<number>("command-last-used", { command: event });
+            expect(last).toBeGreaterThanOrEqual(before);
+            expect(last).toBeLessThanOrEqual(Date.now());
+            expect(await read("commands-last-day")).toBe(today + 1);
+        } finally {
+            await call("delete-command", { bot: BOT, id: created.command.id });
+        }
+    });
+
+    test("Discord's server, channel, role and member changes fire the bot's events with typed values", async () => {
+        const other: FakeGuild = { ...guild("Other"), owner: snowflake() };
+        const someone = { id: snowflake(), username: "someone", discriminator: "0", global_name: null, avatar: null };
+        const role = { id: snowflake(), name: "Mods", color: 0, hoist: false, position: 1, permissions: "0", managed: false, mentionable: false, flags: 0 };
+        const channel = { id: snowflake(), type: 0, guild_id: other.id, name: "news", position: 1, permission_overwrites: [], parent_id: null, nsfw: false };
+        const member = (extra: Record<string, unknown>) => ({ guild_id: other.id, user: someone, roles: [], joined_at: new Date().toISOString(), deaf: false, mute: false, flags: 0, ...extra });
+        const names = [
+            "bot-joined-server", "channel-created", "channel-deleted", "role-created", "member-joined", "member-roles-changed", "nickname-changed",
+            "role-deleted", "member-unbanned", "bot-left-server",
+        ];
+        const events = Object.fromEntries(names.map((name) => [name, nextEvent(name)]));
+        await Promise.all(Object.values(events).map((e) => e.ready));
+        const next = (name: string) => events[name]!.payload;
+
+        discord.joinGuild(fake, other);
+        expect(await next("bot-joined-server")).toEqual({ server: other.id, name: "Other" });
+        expect(await read("servers")).toEqual([home.id, other.id]);
+
+        discord.dispatch(fake, "CHANNEL_CREATE", channel);
+        const news = { channel: channel.id, name: "news", kind: "text", server: other.id };
+        expect(await next("channel-created")).toEqual(news);
+        discord.dispatch(fake, "CHANNEL_DELETE", channel);
+        expect(await next("channel-deleted")).toEqual(news);
+
+        discord.dispatch(fake, "GUILD_ROLE_CREATE", { guild_id: other.id, role });
+        expect(await next("role-created")).toEqual({ role: role.id, name: "Mods", server: other.id });
+
+        // a member the bot has seen, so Discord's update says what changed
+        discord.dispatch(fake, "GUILD_MEMBER_ADD", member({}));
+        await next("member-joined");
+        discord.dispatch(fake, "GUILD_MEMBER_UPDATE", member({ roles: [role.id], nick: "Ace" }));
+        const asMember = { member: { user: someone.id, server: other.id }, user: someone.id, server: other.id };
+        expect(await next("member-roles-changed")).toEqual({ ...asMember, added: [role.id], removed: [] });
+        expect(await next("nickname-changed")).toEqual({ ...asMember, nickname: "Ace", "previous-nickname": null });
+
+        discord.dispatch(fake, "GUILD_ROLE_DELETE", { guild_id: other.id, role_id: role.id });
+        expect(await next("role-deleted")).toEqual({ role: role.id, name: "Mods", server: other.id });
+
+        discord.dispatch(fake, "GUILD_BAN_REMOVE", { guild_id: other.id, user: someone });
+        expect(await next("member-unbanned")).toEqual({ user: someone.id, server: other.id });
+
+        // Leave Server: the bot can't leave a server it owns, nor one it isn't in
+        const before = discord.requests.length;
+        await expect(run("leave-server", { server: home.id })).rejects.toThrow("The bot owns Home, and Discord doesn't let a server's owner leave it");
+        await expect(run("leave-server", { server: "999999999999999999" })).rejects.toThrow("The bot isn't in server 999999999999999999");
+        expect(discord.requests.length).toBe(before);
+        await run("leave-server", { server: `${other.id}` });
+        expect(discord.requests.some((r) => r.method === "DELETE" && r.path === `/users/@me/guilds/${other.id}`)).toBe(true);
+        expect(await next("bot-left-server")).toEqual({ server: other.id, name: "Other" });
+        expect(await read("servers")).toEqual([home.id]);
+    });
+
     test("a bot that goes offline says Connected and its servers changed", async () => {
         const changed = new Set<string>();
-        const off = ["connected", "servers", "server-count"].map((value) => blocksApi.onChange(PANEL_ID, value, () => changed.add(value), BOT));
+        const off = ["connected", "status", "servers", "server-count"].map((value) => blocksApi.onChange(PANEL_ID, value, () => changed.add(value), BOT));
         try {
             await new Promise((resolve) => setTimeout(resolve, 300));
             discord.closeSession(fake, 4014, "Disallowed intent(s).");
             const deadline = Date.now() + 10_000;
-            while (changed.size < 3) {
+            while (changed.size < 4) {
                 if (Date.now() > deadline) throw new Error(`only ${[...changed].join(", ") || "nothing"} announced a change`);
                 await new Promise((resolve) => setTimeout(resolve, 20));
             }
             expect(await read("connected")).toBe(false);
+            expect(await read("status")).toBe("offline");
+            expect(await read("uptime")).toBe(0);
             expect(await read("server-count")).toBe(0);
             expect(await read("servers")).toEqual([]);
         } finally {

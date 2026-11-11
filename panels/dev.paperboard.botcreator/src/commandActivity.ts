@@ -55,3 +55,35 @@ export class CommandActivityRecorder {
         };
     }
 }
+
+/** How often one slash command was used, and when it last was. */
+export interface CommandUses {
+    count: number;
+    /** epoch ms */
+    last: number;
+}
+
+/**
+ * Each slash command's uses, by its scope and name, so a recreated command
+ * keeps counting. In the service's memory only, like the hourly activity:
+ * the counts start when Bot Creator does.
+ */
+export class CommandUseCounter {
+    private readonly uses = new Map<string, CommandUses>();
+    readonly since: number;
+
+    constructor(now: number = Date.now()) {
+        this.since = now;
+    }
+
+    record(command: { scope: string; name: string }, now: number = Date.now()): void {
+        const key = `${command.scope}:${command.name}`;
+        const known = this.uses.get(key);
+        this.uses.set(key, { count: (known?.count ?? 0) + 1, last: now });
+    }
+
+    get(command: { scope: string; name: string }): CommandUses | undefined {
+        const known = this.uses.get(`${command.scope}:${command.name}`);
+        return known ? { ...known } : undefined;
+    }
+}

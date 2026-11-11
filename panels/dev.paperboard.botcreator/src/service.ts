@@ -83,8 +83,10 @@ import {
     type ServiceContext,
 } from "@mileniumhq/paperapi";
 import {
+    BLOCKS_ONLY_TRIGGERS,
     blockEvent,
     botBlocks,
+    botStatus,
     commandEvent,
     commandEventId,
     panelBlocks,
@@ -2187,9 +2189,11 @@ function logFailure(what: string) {
 function sessionHost(id: string, entry: () => BotEntry) {
     return {
         emit(trigger: string, output: unknown) {
-            actionsApi.emitTrigger(projectActionId(id, trigger), output, PANEL_ID)
-                .catch(logFailure(`event ${id}/${trigger} failed`));
-            if (legacyBot === id) {
+            if (!BLOCKS_ONLY_TRIGGERS.has(trigger)) {
+                actionsApi.emitTrigger(projectActionId(id, trigger), output, PANEL_ID)
+                    .catch(logFailure(`event ${id}/${trigger} failed`));
+            }
+            if (legacyBot === id && !BLOCKS_ONLY_TRIGGERS.has(trigger)) {
                 actionsApi.emitTrigger(trigger, output, PANEL_ID)
                     .catch(logFailure(`event ${trigger} failed`));
             }
@@ -2276,6 +2280,11 @@ function blocksHost(entry: BotEntry): BotBlocksHost {
             if (!id) throw new Error("This bot's Discord user isn't known yet. Turn it on in Bot Creator.");
             return id;
         },
+        status: () => botStatus(summary(entry)),
+        uptime: () => entry.session.health().uptimeMs,
+        commands: () => entry.stored.commands,
+        activity: () => entry.session.activity.snapshot(),
+        commandUses: (command) => entry.session.commandUses.get(command),
     };
 }
 

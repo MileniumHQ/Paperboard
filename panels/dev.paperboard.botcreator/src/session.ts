@@ -21,7 +21,7 @@ import {
     componentClickPayload,
     modalSubmitPayload,
 } from "./discordOps";
-import { CommandActivityRecorder } from "./commandActivity";
+import { CommandActivityRecorder, CommandUseCounter } from "./commandActivity";
 import {
     appendCapped,
     RECENT_MESSAGE_CAP,
@@ -185,6 +185,8 @@ export class BotSession {
      * size, outlives reconnects so a gateway blip does not wipe the day's chart.
      */
     readonly activity = new CommandActivityRecorder();
+    /** Each slash command's uses and last use, for Blocks; outlives reconnects like the activity. */
+    readonly commandUses = new CommandUseCounter();
 
     // sequence guard for concurrent connect attempts: only the newest
     // start() may write session state (client/connectionStatus) — a losing
@@ -575,12 +577,41 @@ export class BotSession {
             });
         });
 
-        // the home screen shows how many servers each bot is in
-        bot.on("guildCreate", () => {
-            if (ownsSession()) this.host.changed();
+        // the home screen shows how many servers each bot is in. discord.js
+        // says guildCreate only for a server joined while connected, and
+        // guildDelete only for one left (an outage is guildUnavailable)
+        bot.on("guildCreate", (guild) => {
+            if (!ownsSession()) return;
+            this.host.changed();
+            emit("on-guild-joined", { guildId: guild.id, guildName: guild.name });
         });
-        bot.on("guildDelete", () => {
-            if (ownsSession()) this.host.changed();
+        bot.on("guildDelete", (guild) => {
+            if (!ownsSession()) return;
+            this.host.changed();
+            emit("on-guild-left", { guildId: guild.id, guildName: guild.name ?? "" });
+        });
+
+        bot.on("channelCreate", (channel) => {
+            if (!ownsSession()) return;
+            emit("on-channel-created", { channelId: channel.id, name: channel.name, type: channel.type, guildId: channel.guildId });
+        });
+        bot.on("channelDelete", (channel) => {
+            if (!ownsSession() || channel.isDMBased()) return;
+            emit("on-channel-deleted", { channelId: channel.id, name: channel.name, type: channel.type, guildId: channel.guildId });
+        });
+
+        bot.on("roleCreate", (role) => {
+            if (!ownsSession()) return;
+            emit("on-role-created", { roleId: role.id, name: role.name, guildId: role.guild.id });
+        });
+        bot.on("roleDelete", (role) => {
+            if (!ownsSession()) return;
+            emit("on-role-deleted", { roleId: role.id, name: role.name, guildId: role.guild.id });
+        });
+
+        bot.on("guildBanRemove", (ban) => {
+            if (!ownsSession()) return;
+            emit("on-member-unbanned", { userId: ban.user.id, username: ban.user.username, guildId: ban.guild.id });
         });
 
         bot.on("messageReactionAdd", (reaction, user) => {
@@ -652,6 +683,20 @@ export class BotSession {
         bot.on("guildMemberUpdate", (oldMember, newMember) => {
             if (!ownsSession()) return;
             const before = new Set((oldMember?.roles?.cache?.keys?.() ?? []) as Iterable<string>);
+            const added = [...newMember.roles.cache.keys()].filter((roleId) => !before.has(roleId));
+            const removed = [...before].filter((roleId) => !newMember.roles.cache.has(roleId));
+            if (added.length || removed.length) {
+                emit("on-member-roles-changed", { userId: newMember.user.id, guildId: newMember.guild.id, added, removed });
+            }
+            // a member discord.js hadn't seen before arrives partial: what its nickname was isn't known
+            if (!oldMember.partial && oldMember.nickname !== newMember.nickname) {
+                emit("on-nickname-changed", {
+                    userId: newMember.user.id,
+                    guildId: newMember.guild.id,
+                    nickname: newMember.nickname ?? "",
+                    previousNickname: oldMember.nickname ?? "",
+                });
+            }
             for (const roleId of newMember.roles.cache.keys()) {
                 if (!before.has(roleId)) {
                     emit("on-role-added", {
@@ -732,6 +777,7 @@ export class BotSession {
                 return;
             }
 
+            this.commandUses.record(command);
             this.rememberInteraction(interaction);
             emit(commandTriggerId(command), {
                 interactionId: interaction.id,

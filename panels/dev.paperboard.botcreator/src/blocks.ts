@@ -52,6 +52,7 @@ import {
     editThread,
     fetchMessageIn,
     kickMember,
+    leaveServer,
     memberRoles,
     messageReactions,
     moveMember,
@@ -71,6 +72,7 @@ import {
 } from "./botOps";
 import { describeChannelKind } from "./session";
 import type { BotSummary } from "./bots";
+import type { CommandActivity, CommandUses } from "./commandActivity";
 import {
     COMMAND_OPTION_TYPES,
     COMMAND_OPTION_TYPE_LABELS,
@@ -588,6 +590,15 @@ export interface BotBlocksHost {
     connected(): boolean;
     /** the bot's own user id: its application's id */
     userId(): string;
+    status(): BotStatus;
+    /** how long it has been online; 0 while it isn't */
+    uptime(): number;
+    /** its slash commands, as saved */
+    commands(): SlashCommandDefinition[];
+    /** slash commands used per hour over the last day, counted since Bot Creator started */
+    activity(): CommandActivity;
+    /** how often a slash command was used since Bot Creator started, and when last; none when it wasn't */
+    commandUses(command: SlashCommandDefinition): CommandUses | undefined;
 }
 
 type Inputs = Record<string, any>;
@@ -1175,6 +1186,16 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
                     guildId: optionalId(i.server, "Server"),
                 }),
         },
+        {
+            id: "leave-server",
+            name: "Leave Server",
+            category: "Server",
+            icon: "domain_disabled",
+            description: "The bot leaves the server. It can only come back through an invite link",
+            text: "Leave {server}",
+            inputs: { server: { type: "server", name: "Server" } },
+            run: (i) => leaveServer(bot.client(), idOf(i.server, "Server")),
+        },
         // the bot
         {
             id: "set-activity",
@@ -1195,6 +1216,18 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
     ];
 
     const servers = () => serversOf(bot);
+    const commandLabel = (command: SlashCommandDefinition) => (command.scope === GLOBAL_SCOPE ? `/${command.name}` : `/${command.name} in its server`);
+    // by its event's id: like the event, it names the same command after it's made again
+    const slashCommandInput = {
+        type: "text",
+        name: "Slash Command",
+        choices: () => bot.commands().map((command) => choice(commandLabel(command), commandEventId(command))),
+    } as const;
+    const slashCommandOf = (value: unknown): SlashCommandDefinition => {
+        const found = bot.commands().find((command) => commandEventId(command) === value);
+        if (!found) throw new Error("The bot has no such slash command any more. Pick one again");
+        return found;
+    };
     const values: BlockValueDefinition<Inputs>[] = [
         { id: "connected", name: "Connected", category: "Bot", icon: "wifi", description: "Whether the bot is online in Discord", type: "boolean", changes: true, read: () => bot.connected() },
         { id: "servers", name: "Servers", category: "Bot", icon: "dns", description: "The servers the bot is in; none while it's offline", type: "list<server>", changes: true, read: servers },
@@ -1211,6 +1244,53 @@ export function botBlocks(bot: BotBlocksHost): BlockSet {
                 const ping = bot.client().ws.ping;
                 if (!(ping >= 0)) throw new Error("Discord hasn't answered the bot's first heartbeat yet");
                 return ping;
+            },
+        },
+        {
+            id: "status",
+            name: "Status",
+            category: "Bot",
+            icon: "radio_button_checked",
+            description: "online, connecting, offline or turned off",
+            type: "text",
+            changes: true,
+            read: () => bot.status(),
+        },
+        { id: "uptime", name: "Uptime", category: "Bot", icon: "timer", description: "How long the bot has been online; 0 while it's offline", type: "duration", read: () => bot.uptime() },
+        {
+            id: "commands-last-day",
+            name: "Slash Commands Used Today",
+            category: "Slash Commands",
+            icon: "bar_chart",
+            description: "Slash commands used in the last 24 hours. Counted since Bot Creator started, so it starts again from 0 after a restart",
+            type: "number",
+            read: () => bot.activity().total,
+        },
+        {
+            id: "command-uses",
+            name: "Times a Slash Command Was Used",
+            category: "Slash Commands",
+            icon: "tag",
+            description: "Counted since Bot Creator started",
+            text: "Times {command} was used",
+            inputs: { command: slashCommandInput },
+            type: "number",
+            read: (i) => bot.commandUses(slashCommandOf(i.command))?.count ?? 0,
+        },
+        {
+            id: "command-last-used",
+            name: "When a Slash Command Was Last Used",
+            category: "Slash Commands",
+            icon: "history",
+            description: "Since Bot Creator started",
+            text: "When {command} was last used",
+            inputs: { command: slashCommandInput },
+            type: "timestamp",
+            read: (i) => {
+                const command = slashCommandOf(i.command);
+                const uses = bot.commandUses(command);
+                if (!uses) throw new Error(`/${command.name} hasn't been used since Bot Creator started`);
+                return uses.last;
             },
         },
         {
@@ -1283,6 +1363,12 @@ const reactionValues = {
     user: { type: "user", name: "User" },
     message: { type: "message", name: "Message" },
     channel: { type: "channel", name: "Channel" },
+} as const;
+const channelValues = {
+    channel: { type: "channel", name: "Channel" },
+    name: { type: "text", name: "Name" },
+    kind: { type: "text", name: "Kind", description: "text, voice, category, announcement, stage, forum, media or other" },
+    server: { type: "server", name: "Server" },
 } as const;
 const roleValues = {
     member: { type: "member", name: "Member" },
@@ -1407,8 +1493,94 @@ export const staticEvents: BlockEventDefinition[] = [
             server: { type: "server", name: "Server" },
         },
     },
+    {
+        id: "member-unbanned",
+        name: "When a User Is Unbanned",
+        category: "Members",
+        icon: "lock_open",
+        text: "When a user is unbanned in {server}",
+        inputs: serverFilter,
+        filters: { server: "server" },
+        values: { user: { type: "user", name: "User" }, server: { type: "server", name: "Server" } },
+    },
+    {
+        id: "nickname-changed",
+        name: "When a Nickname Changes",
+        category: "Members",
+        icon: "badge",
+        text: "When a nickname changes in {server}",
+        inputs: serverFilter,
+        filters: { server: "server" },
+        values: {
+            member: { type: "member", name: "Member" },
+            user: { type: "user", name: "User" },
+            server: { type: "server", name: "Server" },
+            nickname: { type: "text", name: "Nickname", description: "None when it was cleared", optional: true },
+            "previous-nickname": { type: "text", name: "Previous Nickname", description: "None when they had none", optional: true },
+        },
+    },
     { id: "role-added", name: "When a Member Gets a Role", category: "Roles", icon: "how_to_reg", text: "When a member gets {role}", inputs: { role: { ...role, optional: true } }, filters: { role: "role" }, values: roleValues },
     { id: "role-removed", name: "When a Member Loses a Role", category: "Roles", icon: "do_not_disturb_on", text: "When a member loses {role}", inputs: { role: { ...role, optional: true } }, filters: { role: "role" }, values: roleValues },
+    {
+        id: "member-roles-changed",
+        name: "When a Member's Roles Change",
+        category: "Roles",
+        icon: "manage_accounts",
+        description: "Once for each change, however many roles it gave and took",
+        text: "When a member's roles change in {server}",
+        inputs: serverFilter,
+        filters: { server: "server" },
+        values: {
+            member: { type: "member", name: "Member" },
+            user: { type: "user", name: "User" },
+            server: { type: "server", name: "Server" },
+            added: { type: "list<role>", name: "Roles Given" },
+            removed: { type: "list<role>", name: "Roles Taken" },
+        },
+    },
+    {
+        id: "role-created",
+        name: "When a Role Is Created",
+        category: "Roles",
+        icon: "add_moderator",
+        text: "When a role is created in {server}",
+        inputs: serverFilter,
+        filters: { server: "server" },
+        values: { role: { type: "role", name: "Role" }, name: { type: "text", name: "Name" }, server: { type: "server", name: "Server" } },
+    },
+    {
+        id: "role-deleted",
+        name: "When a Role Is Deleted",
+        category: "Roles",
+        icon: "remove_moderator",
+        description: "The role is gone, so only its name and server can be read",
+        text: "When a role is deleted in {server}",
+        inputs: serverFilter,
+        filters: { server: "server" },
+        values: { role: { type: "role", name: "Role" }, name: { type: "text", name: "Name" }, server: { type: "server", name: "Server" } },
+    },
+    {
+        id: "channel-created",
+        name: "When a Channel Is Created",
+        category: "Channels",
+        icon: "add_comment",
+        description: "Threads start When a Thread Is Started",
+        text: "When a channel is created in {server}",
+        inputs: serverFilter,
+        filters: { server: "server" },
+        values: channelValues,
+    },
+    {
+        id: "channel-deleted",
+        name: "When a Channel Is Deleted",
+        category: "Channels",
+        icon: "delete_forever",
+        description: "The channel is gone, so only its name, kind and server can be read",
+        text: "When a channel is deleted in {server}",
+        inputs: serverFilter,
+        filters: { server: "server" },
+        values: channelValues,
+    },
     {
         id: "thread-created",
         name: "When a Thread Is Started",
@@ -1424,6 +1596,22 @@ export const staticEvents: BlockEventDefinition[] = [
             owner: { type: "user", name: "Owner" },
             server: { type: "server", name: "Server" },
         },
+    },
+    {
+        id: "bot-joined-server",
+        name: "When the Bot Joins a Server",
+        category: "Bot",
+        icon: "domain_add",
+        description: "Someone added the bot to a server while it was online",
+        values: { server: { type: "server", name: "Server" }, name: { type: "text", name: "Name", description: "The server's name" } },
+    },
+    {
+        id: "bot-left-server",
+        name: "When the Bot Leaves a Server",
+        category: "Bot",
+        icon: "domain_disabled",
+        description: "It left, was removed, or the server was deleted. The bot can't see the server any more, so only its ID and name can be read",
+        values: { server: { type: "server", name: "Server" }, name: { type: "text", name: "Name", description: "The server's name; none when Discord didn't say", optional: true } },
     },
     { id: "bot-ready", name: "When the Bot Is Ready", category: "Bot", icon: "verified", description: "Each time the bot's connection to Discord goes live", values: { bot: { type: "user", name: "Bot User" } } },
     { id: "connection-failed", name: "When the Connection Fails", category: "Bot", icon: "error", values: { error: { type: "text", name: "Error" } } },
@@ -1508,6 +1696,19 @@ const maybe = (value: unknown) => (value === undefined || value === null ? null 
 const maybeId = (value: unknown) => (value === undefined || value === null || value === "" ? null : String(value));
 const at = (id: unknown, channelId: unknown): MessageRef => ({ id: text(id), channel: text(channelId) });
 
+/** The triggers a session fires that came after Actions: they are Blocks events only. */
+export const BLOCKS_ONLY_TRIGGERS: ReadonlySet<string> = new Set([
+    "on-guild-joined",
+    "on-guild-left",
+    "on-channel-created",
+    "on-channel-deleted",
+    "on-role-created",
+    "on-role-deleted",
+    "on-member-roles-changed",
+    "on-member-unbanned",
+    "on-nickname-changed",
+]);
+
 /**
  * One of the session's triggers (its Actions event and payload) as the
  * bot's Blocks event. Every trigger a session fires has one.
@@ -1516,6 +1717,7 @@ export function blockEvent(trigger: string, output: any, commands: SlashCommandD
     const o = output ?? {};
     const message = () => ({ message: at(o.messageId, o.channelId), content: text(o.content), author: text(o.authorId), channel: text(o.channelId), server: maybeId(o.guildId) });
     const reaction = () => ({ emoji: text(o.emoji), user: text(o.userId), message: at(o.messageId, o.channelId), channel: text(o.channelId) });
+    const channelChange = () => ({ channel: text(o.channelId), name: text(o.name), kind: describeChannelKind(Number(o.type)), server: text(o.guildId) });
     const roleChange = () => ({ member: { user: text(o.userId), server: text(o.guildId) }, user: text(o.userId), role: text(o.roleId), server: text(o.guildId) });
     switch (trigger) {
         case "on-message":
@@ -1575,6 +1777,42 @@ export function blockEvent(trigger: string, output: any, commands: SlashCommandD
             return { event: "role-added", payload: roleChange() };
         case "on-role-removed":
             return { event: "role-removed", payload: roleChange() };
+        case "on-member-unbanned":
+            return { event: "member-unbanned", payload: { user: text(o.userId), server: text(o.guildId) } };
+        case "on-nickname-changed":
+            return {
+                event: "nickname-changed",
+                payload: {
+                    member: { user: text(o.userId), server: text(o.guildId) },
+                    user: text(o.userId),
+                    server: text(o.guildId),
+                    nickname: maybeId(o.nickname),
+                    "previous-nickname": maybeId(o.previousNickname),
+                },
+            };
+        case "on-member-roles-changed":
+            return {
+                event: "member-roles-changed",
+                payload: {
+                    member: { user: text(o.userId), server: text(o.guildId) },
+                    user: text(o.userId),
+                    server: text(o.guildId),
+                    added: Array.isArray(o.added) ? o.added.map(text) : [],
+                    removed: Array.isArray(o.removed) ? o.removed.map(text) : [],
+                },
+            };
+        case "on-role-created":
+            return { event: "role-created", payload: { role: text(o.roleId), name: text(o.name), server: text(o.guildId) } };
+        case "on-role-deleted":
+            return { event: "role-deleted", payload: { role: text(o.roleId), name: text(o.name), server: text(o.guildId) } };
+        case "on-channel-created":
+            return { event: "channel-created", payload: channelChange() };
+        case "on-channel-deleted":
+            return { event: "channel-deleted", payload: channelChange() };
+        case "on-guild-joined":
+            return { event: "bot-joined-server", payload: { server: text(o.guildId), name: text(o.guildName) } };
+        case "on-guild-left":
+            return { event: "bot-left-server", payload: { server: text(o.guildId), name: maybeId(o.guildName) } };
         case "on-thread-created":
             return { event: "thread-created", payload: { thread: text(o.threadId), name: text(o.name), channel: text(o.channelId), owner: text(o.ownerId), server: text(o.guildId) } };
         case "on-bot-ready":
@@ -1605,12 +1843,13 @@ export function blockEvent(trigger: string, output: any, commands: SlashCommandD
  * session says something about it did: call the result then.
  */
 export function valueChanges(blocks: BlocksProjectHandle, bot: BotBlocksHost, label: string): () => void {
-    const read = () => ({ connected: bot.connected(), servers: serversOf(bot) });
+    const read = () => ({ connected: bot.connected(), status: bot.status(), servers: serversOf(bot) });
     let last = read();
     return () => {
         const next = read();
         const changed = [
             ...(next.connected !== last.connected ? ["connected"] : []),
+            ...(next.status !== last.status ? ["status"] : []),
             ...(next.servers.join() !== last.servers.join() ? ["servers"] : []),
             ...(next.servers.length !== last.servers.length ? ["server-count"] : []),
         ];
@@ -1669,8 +1908,10 @@ export function slashCommandValue(bot: string, command: SlashCommandDefinition):
     };
 }
 
+export type BotStatus = "online" | "connecting" | "offline" | "turned off";
+
 /** What the Status of a Bot says. */
-export function botStatus(summary: BotSummary): "online" | "connecting" | "offline" | "turned off" {
+export function botStatus(summary: BotSummary): BotStatus {
     if (summary.connected) return "online";
     if (summary.connecting) return "connecting";
     return summary.enabled ? "offline" : "turned off";

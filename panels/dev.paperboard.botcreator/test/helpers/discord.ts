@@ -30,6 +30,8 @@ export interface FakeGuild {
     id: string;
     name: string;
     channels: FakeChannel[];
+    /** the owner's user id; the bot's own when left out */
+    owner?: string;
 }
 
 export interface FakeBot {
@@ -67,6 +69,8 @@ export interface FakeDiscord {
     request(match: (req: RecordedRequest) => boolean, what: string): Promise<RecordedRequest>;
     /** sends a dispatch event on the bot's live gateway session */
     dispatch(bot: FakeBot, event: string, data: unknown): void;
+    /** adds the bot to a server while it's connected, as Discord says so (GUILD_CREATE) */
+    joinGuild(bot: FakeBot, guild: FakeGuild): void;
     /** closes the bot's live gateway session with a close code */
     closeSession(bot: FakeBot, code: number, reason: string): void;
     /** resolves once the bot has a live, identified gateway session */
@@ -134,7 +138,7 @@ export function startFakeDiscord(): FakeDiscord {
         id: guild.id,
         name: guild.name,
         icon: null,
-        owner_id: bot.appId,
+        owner_id: guild.owner ?? bot.appId,
         unavailable: false,
         member_count: 1,
         large: false,
@@ -224,6 +228,17 @@ export function startFakeDiscord(): FakeDiscord {
             if (method === "POST" && parts[2] === "messages") {
                 return json(200, { ...messagePayload(userOf(bot), found.channel.id, recorded.body, recorded.files), guild_id: found.guild.id });
             }
+        }
+        // DELETE /users/@me/guilds/:guild: the bot leaves it
+        if (method === "DELETE" && parts[0] === "users" && parts[1] === "@me" && parts[2] === "guilds" && parts[3]) {
+            if (!bot) return unauthorized();
+            const at = bot.guilds.findIndex((g) => g.id === parts[3]);
+            if (at === -1) return json(404, { message: "Unknown Guild", code: 10004 });
+            bot.guilds.splice(at, 1);
+            // and says so on the bot's gateway, as Discord does
+            const session = sessions.get(bot.token);
+            if (session) setTimeout(() => sendDispatch(session, "GUILD_DELETE", { id: parts[3] }), 0);
+            return new Response(null, { status: 204 });
         }
         return json(404, { message: `This loopback Discord does not serve ${method} ${path}`, code: 0 });
     }
@@ -326,6 +341,10 @@ export function startFakeDiscord(): FakeDiscord {
                 wake();
             }),
         dispatch: (bot, event, data) => sendDispatch(live(bot), event, data),
+        joinGuild: (bot, guild) => {
+            bot.guilds.push(guild);
+            sendDispatch(live(bot), "GUILD_CREATE", guildCreate(guild, bot));
+        },
         closeSession: (bot, code, reason) => live(bot).ws.close(code, reason),
         sessionOpen: (bot) =>
             new Promise((resolve, reject) => {
