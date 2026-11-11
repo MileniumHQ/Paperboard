@@ -95,7 +95,7 @@ export function createAgent() {
         hydration,
         error,
         hydrate,
-        installBrain: (harness: Harness) => call(UI_ACTION_IDS.installBrain, { harness }),
+        installBrain: (harness: Harness, from?: "computer" | "package") => call(UI_ACTION_IDS.installBrain, { harness, from }),
         signInBrain: (harness: Harness, method?: "browser" | "code") => call(UI_ACTION_IDS.signInBrain, { harness, method }),
         brainCode: (harness: Harness, code: string) => call(UI_ACTION_IDS.brainCode, { harness, code }),
         brainAddress: (harness: Harness, address: string) => call(UI_ACTION_IDS.brainAddress, { harness, address }),

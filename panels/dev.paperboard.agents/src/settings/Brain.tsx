@@ -19,7 +19,7 @@ export function signedInLine(b: BrainState): string {
 export function brainLine(harness: Harness, b: BrainState): string {
     switch (b.phase) {
         case "none":
-            return "Not installed.";
+            return b.found ? "Already on this computer." : "Not installed.";
         case "unsupported":
             return "Can't run on this computer.";
         case "installing":
@@ -56,6 +56,8 @@ export function createBrainActions(agent: Agent) {
     return {
         error,
         install: (h: Harness) => act(`${harnessName(h)} not installed`, () => agent.installBrain(h)),
+        useFound: (h: Harness) => act(`${harnessName(h)} not used`, () => agent.installBrain(h, "computer")),
+        installOwn: (h: Harness) => act(`${harnessName(h)} not installed`, () => agent.installBrain(h, "package")),
         signIn: (h: Harness) => act(`${harnessName(h)} not signed in`, () => agent.signInBrain(h)),
         cancel: (h: Harness) => act("Sign-in not stopped", () => agent.cancelBrainSignIn(h)),
         signOut: (h: Harness) => act(`${harnessName(h)} not signed out`, () => agent.signOutBrain(h)),
@@ -364,10 +366,15 @@ export function BrainButtons(props: { agent: Agent; harness: Harness; actions: B
     return (
         <PaperFlex direction="row" gap="half" align="center">
             <Switch>
-                <Match when={b().phase === "failed" && b().existing}>
-                    <PaperButton onClick={() => void props.actions.install(props.harness)}>
-                        <PaperIcon>download</PaperIcon> Install its own copy
+                <Match when={(b().phase === "none" || b().phase === "unsupported") && b().found}>
+                    <PaperButton variant="primary" onClick={() => void props.actions.useFound(props.harness)}>
+                        <PaperIcon>check</PaperIcon> Use it
                     </PaperButton>
+                    <Show when={b().phase === "none"}>
+                        <PaperButton variant="outline" onClick={() => void props.actions.installOwn(props.harness)}>
+                            <PaperIcon>download</PaperIcon> Install its own copy
+                        </PaperButton>
+                    </Show>
                 </Match>
                 <Match when={b().phase === "none" || (b().phase === "failed" && !b().installed)}>
                     <PaperButton variant="primary" onClick={() => void props.actions.install(props.harness)}>
@@ -398,6 +405,12 @@ export function BrainButtons(props: { agent: Agent; harness: Harness; actions: B
                     </Show>
                 </Match>
             </Switch>
+            {/* the package, with the version Paperboard pins, stays a click away from a brain running the person's own program */}
+            <Show when={b().existing && b().phase !== "installing" && b().phase !== "signing-in"}>
+                <PaperButton variant="text" onClick={() => void props.actions.installOwn(props.harness)}>
+                    Install its own copy
+                </PaperButton>
+            </Show>
         </PaperFlex>
     );
 }

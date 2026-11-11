@@ -1,11 +1,13 @@
-// The agent's brains: Codex, Claude Code and OpenCode. One the user already
-// has on this computer is used as it is (existingBrains.ts). Otherwise it's a
-// package the daemon installs from its vendor's own release (Origami pins the
-// version and checksum; the daemon verifies and unpacks it). Either way the
-// panel runs it, and signs it in with its own login commands.
+// The agent's brains: Codex, Claude Code and OpenCode. Each is a package the
+// daemon installs from its vendor's own release (Origami pins the version and
+// checksum; the daemon verifies and unpacks it), or, when the person says so,
+// the program they already have on this computer (existingBrains.ts). Either
+// way the panel runs it, and signs it in with its own login commands.
 //
-// A package that's already installed stays the brain, so a program that
-// turns up on the computer later never replaces it underneath a conversation.
+// A program on the computer is only offered: nothing of it runs until the
+// person chooses it, and the choice is the path they chose, kept in
+// choices.json. Its version is theirs, not one Origami pinned, so the
+// package stays one click away. An installed package is always the brain.
 //
 // Each harness runs with its home inside this panel's storage (CODEX_HOME,
 // CLAUDE_CONFIG_DIR, XDG_* for OpenCode), even a program the user installed,
@@ -53,7 +55,7 @@ export interface BrainsDeps {
     onState: (brains: Record<Harness, BrainState>) => void;
     platform?: NodeJS.Platform;
     arch?: string;
-    /** the harness's program already on this computer, or null; looks on PATH and where its installer puts it */
+    /** the harness's program already on this computer, or null; looks on PATH and where its installer puts it. Nothing is run. */
     find?: (harness: Harness) => string | null;
     /** how long a sign-in may take to show its page / to be finished */
     pageMs?: number;
@@ -70,7 +72,7 @@ const CODE_MAX = 2_000;
 
 export const loginProcessId = (harness: Harness) => `brain-login-${harness}`;
 
-const none = (): BrainState => ({ phase: "none", installed: false, version: null, signedIn: false, account: null, percent: null, login: null, error: null, updateWaiting: false, existing: null });
+const none = (): BrainState => ({ phase: "none", installed: false, version: null, signedIn: false, account: null, percent: null, login: null, error: null, updateWaiting: false, existing: null, found: null });
 
 interface Login {
     /** where the brain stood when the sign-in started: a stopped sign-in goes back there */
@@ -83,7 +85,7 @@ interface Login {
 export class Brains {
     private state: Record<Harness, BrainState> = { codex: none(), "claude-code": none(), opencode: none() };
     private dirs: Partial<Record<Harness, string>> = {};
-    /** the program already on the computer that a brain runs, when it isn't a package */
+    /** the program on the computer the person chose for a brain, when it isn't a package */
     private existing: Partial<Record<Harness, string>> = {};
     private busy: Record<Harness, Promise<unknown>> = { codex: Promise.resolve(), "claude-code": Promise.resolve(), opencode: Promise.resolve() };
     private logins = new Map<Harness, Login>();
@@ -127,10 +129,10 @@ export class Brains {
         return structuredClone(this.state);
     }
 
-    /** The harness's program, or null while there's neither one on the computer nor an installed package. */
+    /** The harness's program: the chosen one on the computer, or the installed package's. Null while there's neither. */
     resolve(harness: Harness): string | null {
-        const found = this.existing[harness];
-        if (found) return found;
+        const chosen = this.existing[harness];
+        if (chosen) return fs.statSync(chosen, { throwIfNoEntry: false })?.isFile() ? chosen : null;
         const dir = this.dirs[harness];
         if (!dir) return null;
         const exe = path.join(dir, "bin", PROGRAMS[harness] + (this.platform === "win32" ? ".exe" : ""));
@@ -148,24 +150,45 @@ export class Brains {
         );
     }
 
+    /** Install the package; for a brain that runs a program on the computer, look at that again instead. */
     install(harness: Harness): Promise<void> {
+        return this.exclusive(harness, async () => (this.existing[harness] ? this.look(harness) : this.download(harness)));
+    }
+
+    /** Install the package even for a brain that runs a program on the computer; once it's in, it's the brain. */
+    installOwn(harness: Harness): Promise<void> {
+        return this.exclusive(harness, () => this.download(harness));
+    }
+
+    /** Have the brain run the program found on this computer. Refused when there's none, or a package is installed. */
+    useFound(harness: Harness): Promise<void> {
         return this.exclusive(harness, async () => {
-            // one the user has is used as it is; nothing is downloaded for it. One that has failed is
-            // the exception: asking to install it again is asking for the package instead.
-            if (this.state[harness].phase !== "failed" && this.found(harness) && !(await this.packageInstalled(harness))) return this.look(harness);
-            if (!this.supported) throw this.fail(harness, `${NAMES[harness]} has no build for this computer (${this.platform}, ${this.deps.arch ?? process.arch}).`, "unsupported");
-            this.set(harness, { phase: "installing", percent: 0, error: null });
-            try {
-                await this.deps.host.packages.download(BRAIN_PACKAGES[harness], (p) => {
-                    if (p.stage === "downloading") this.set(harness, { percent: Math.round(p.percent) });
-                });
-            } catch (e) {
-                // a failed update leaves the build that was there; a failed first install leaves nothing
-                await this.look(harness, `${NAMES[harness]} didn't install: ${errorText(e)}`);
-                throw e;
-            }
+            if (await this.packageInstalled(harness)) throw new Error(`${NAMES[harness]} has its own copy installed already.`);
+            const found = this.found(harness);
+            if (!found) throw new Error(`${NAMES[harness]} isn't on this computer.`);
+            this.writeChoices({ ...this.readChoices(), [harness]: found });
             await this.look(harness);
         });
+    }
+
+    private async download(harness: Harness): Promise<void> {
+        if (!this.supported) {
+            const message = `${NAMES[harness]} has no build for this computer (${this.platform}, ${this.deps.arch ?? process.arch}).`;
+            // a brain running a program on the computer keeps running it: the refusal is the asker's, not the brain's state
+            if (this.existing[harness]) throw new Error(message);
+            throw this.fail(harness, message, "unsupported");
+        }
+        this.set(harness, { phase: "installing", percent: 0, error: null });
+        try {
+            await this.deps.host.packages.download(BRAIN_PACKAGES[harness], (p) => {
+                if (p.stage === "downloading") this.set(harness, { percent: Math.round(p.percent) });
+            });
+        } catch (e) {
+            // a failed update leaves the build that was there; a failed first install leaves nothing
+            await this.look(harness, `${NAMES[harness]} didn't install: ${errorText(e)}`);
+            throw e;
+        }
+        await this.look(harness);
     }
 
     /** Start the harness's own sign-in. Resolves when it has started; how it ends shows in the state. */
@@ -315,29 +338,72 @@ export class Brains {
         return this.supported && (await this.deps.host.packages.isInstalled(BRAIN_PACKAGES[harness]));
     }
 
+    private get choicesFile() {
+        return path.join(this.deps.dir, "choices.json");
+    }
+
+    /** The program on the computer chosen for each brain. A file that can't be read is an error, not no choice. */
+    private readChoices(): Partial<Record<Harness, string>> {
+        let text: string;
+        try {
+            text = fs.readFileSync(this.choicesFile, "utf8");
+        } catch (e) {
+            if ((e as NodeJS.ErrnoException).code === "ENOENT") return {};
+            throw e;
+        }
+        const saved: unknown = JSON.parse(text);
+        if (!saved || typeof saved !== "object" || Array.isArray(saved)) throw new Error(`${this.choicesFile} isn't a list of brains`);
+        const choices: Partial<Record<Harness, string>> = {};
+        for (const h of Object.keys(this.state) as Harness[]) {
+            const chosen = (saved as Record<string, unknown>)[h];
+            if (typeof chosen === "string" && path.isAbsolute(chosen)) choices[h] = chosen;
+            else if (chosen !== undefined) throw new Error(`${this.choicesFile} doesn't name a program for ${NAMES[h]}`);
+        }
+        return choices;
+    }
+
+    private writeChoices(choices: Partial<Record<Harness, string>>) {
+        const tmp = `${this.choicesFile}.tmp`;
+        fs.writeFileSync(tmp, JSON.stringify(choices));
+        fs.renameSync(tmp, this.choicesFile);
+    }
+
     /** What is installed and whether it's signed in. `error` is why a look follows a failure, shown with what was found. */
     private async look(harness: Harness, error: string | null = null): Promise<void> {
         const name = BRAIN_PACKAGES[harness];
         const { host } = this.deps;
         try {
-            const found = (await this.packageInstalled(harness)) ? null : this.found(harness);
-            if (found) {
+            const packaged = await this.packageInstalled(harness);
+            const choices = this.readChoices();
+            // an installed package is the brain: the choice of a program on the computer ends with it
+            if (packaged && choices[harness]) {
+                const { [harness]: _ended, ...rest } = choices;
+                this.writeChoices(rest);
+            }
+            const chosen = packaged ? undefined : choices[harness];
+            if (chosen) {
                 delete this.dirs[harness];
-                this.existing[harness] = found;
-                const version = await this.versionOf(harness, found);
+                this.existing[harness] = chosen;
+                this.set(harness, { existing: chosen, found: null });
+                if (!this.resolve(harness)) throw new Error(`${NAMES[harness]} isn't at ${chosen} anymore.`);
+                const version = await this.versionOf(harness, chosen);
+                this.set(harness, { version });
                 const { signedIn, account } = await this.status(harness);
                 const ready = signedIn || !SIGN_IN_REQUIRED[harness];
-                this.set(harness, { phase: error ? "failed" : ready ? "ready" : "installed", installed: true, version, signedIn, account, percent: null, login: null, error, updateWaiting: false, existing: found });
+                this.set(harness, { phase: error ? "failed" : ready ? "ready" : "installed", installed: true, version, signedIn, account, percent: null, login: null, error, updateWaiting: false, existing: chosen, found: null });
                 return;
             }
             delete this.existing[harness];
-            if (!this.supported) {
+            // one on the computer is offered, not run: looking for it starts nothing
+            const found = packaged ? null : this.found(harness);
+            // no package can be built for this computer, but a program found on it can still be the brain
+            if (!this.supported && !found) {
                 this.set(harness, { ...none(), phase: "unsupported", error: error ?? `${NAMES[harness]} has no build for this computer.` });
                 return;
             }
-            if (!(await host.packages.isInstalled(name))) {
+            if (!packaged) {
                 delete this.dirs[harness];
-                this.set(harness, { ...none(), phase: error ? "failed" : "none", error });
+                this.set(harness, { ...none(), phase: error ? "failed" : "none", error, found });
                 return;
             }
             this.dirs[harness] = await host.packages.getPath(name);
@@ -345,14 +411,14 @@ export class Brains {
             const [version, updateWaiting] = await Promise.all([host.packages.version(name), host.packages.updateWaiting(name)]);
             const { signedIn, account } = await this.status(harness);
             const ready = signedIn || !SIGN_IN_REQUIRED[harness];
-            this.set(harness, { phase: error ? "failed" : ready ? "ready" : "installed", installed: true, version, signedIn, account, percent: null, login: null, error, updateWaiting, existing: null });
+            this.set(harness, { phase: error ? "failed" : ready ? "ready" : "installed", installed: true, version, signedIn, account, percent: null, login: null, error, updateWaiting, existing: null, found: null });
         } catch (e) {
             this.set(harness, { phase: "failed", installed: this.resolve(harness) !== null, existing: this.existing[harness] ?? null, percent: null, login: null, error: error ?? errorText(e) });
             if (!error) throw e;
         }
     }
 
-    /** The version a program on the computer reports. One that won't run is a failure naming it, never skipped for the package. */
+    /** The version the chosen program on the computer reports. One that won't run is a failure naming it, never skipped for the package. */
     private async versionOf(harness: Harness, exe: string): Promise<string | null> {
         const out = await this.deps.host.exec(exe, ["--version"], { timeoutMs: this.deps.statusMs ?? STATUS_MS, env: this.env(harness) });
         if (out.exitCode !== 0) throw new Error(`${NAMES[harness]} on this computer (${exe}) didn't say its version: ${outputTail(out.stderr || out.stdout) || `exit ${out.exitCode}`}`);
