@@ -215,7 +215,7 @@ export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
                 name: "Run Shell Command",
                 category: CATEGORY.shell,
                 icon: "terminal",
-                description: "Runs a command in a shell of its own, waits for it, and gives back what it printed",
+                description: "Runs a command in a shell of its own, waits for it, and gives back its standard output; fails if it exits with an error",
                 text: "output of running {command}",
                 inputs: { command: { type: "text", name: "Command" } },
                 output: "text",

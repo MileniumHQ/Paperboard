@@ -11,6 +11,7 @@ import {
 } from "@mileniumhq/paperapi";
 import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scrollback";
 import { errorMessage } from "./lib/failure";
+import { runShellCommand } from "./lib/shellCommand";
 import { writeTerminal } from "./lib/terminalWrite";
 import { SavedCommands, type CommandRun, type SavedCommand } from "./lib/savedCommands";
 import { BlocksAnnouncer, exitPayload, finishedPayload, tabPayload, terminalBlocks } from "./blocks";
@@ -374,18 +375,6 @@ export function readOutput(tabId: string | undefined, lines?: number): string {
     return readWholeLines(buffers.get(id) || "", count);
 }
 
-export async function runShellCommand(command: string | undefined): Promise<string> {
-    const cmd = (command || "").trim();
-    if (!cmd) throw new Error("Command is required");
-    try {
-        const shell = resolveOneShotShell();
-        const res = await processApi.exec(shell.command, [...shell.baseArgs, cmd]);
-        return res.stdout || res.stderr || "";
-    } catch (err: any) {
-        throw new Error(err?.message || String(err));
-    }
-}
-
 function tabLabel(id: string): string {
     const known = resolveTabId(id);
     return tabs.find((t) => t.id === known)!.label;
@@ -558,7 +547,7 @@ const actions = [
         id: "run-terminal-command",
         name: "Run Shell Command",
         category: "Input",
-        description: "Runs a one-shot shell command and returns its output",
+        description: "Runs a one-shot shell command and returns its standard output; fails if the command exits with an error",
         template: "Run shell command {command}",
         inputs: {
             command: { type: "string", label: "Command", placeholder: "Command", required: true },
@@ -722,7 +711,7 @@ export const terminalService = definePanelService({
                 closeTab: (id) => closeTab(liveCtx(), id),
                 write: (id, text) => writeToTerminal(liveCtx(), { tabId: id, text }),
                 readOutput,
-                runShellCommand,
+                runShellCommand: (command) => runShellCommand(command),
                 savedCommands: () => savedCommands.view().savedCommands.map((c) => c.id),
                 savedCommand,
                 savedCommandRunning: (id) => savedCommands.view().commandRuns[savedCommand(id).id]?.state === "running",

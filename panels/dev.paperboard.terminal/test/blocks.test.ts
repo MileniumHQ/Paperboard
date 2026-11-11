@@ -5,9 +5,10 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { blocksApi } from "@mileniumhq/paperapi";
-import { clearWorkloads } from "./helpers/crane";
+import { clearWorkloads, testDaemon } from "./helpers/crane";
 import { PANEL_ID, panelFiles, serviceState, startService, stopServices } from "./helpers/service";
 import { within } from "./helpers/wait";
+import { runShellCommand } from "../src/lib/shellCommand";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
@@ -260,10 +261,40 @@ describe("the Terminal's blocks", () => {
         expect(await blocksApi.property(type, "last-exit-code", command)).toBeNull();
     });
 
-    test("Run Shell Command gives back what the command printed", async () => {
+    test("Run Shell Command gives back what the command printed to stdout, and nothing it printed to stderr", async () => {
         await panelFiles({});
         await startService();
-        expect((await run<string>("run-shell-command", { command: "echo shell-$((6*7))" })).trim()).toBe("shell-42");
+        expect(await run<string>("run-shell-command", { command: "echo shell-$((6*7))" })).toBe("shell-42");
+        expect(await run<string>("run-shell-command", { command: "printf 'one\\ntwo\\n'; echo warned >&2" })).toBe("one\ntwo");
+        // a successful command that only writes to stderr gives back nothing, not its stderr
+        expect(await run<string>("run-shell-command", { command: "echo progress >&2" })).toBe("");
+        expect(await run<string>("run-shell-command", { command: "(echo folded >&2) 2>&1" })).toBe("folded");
         await expect(run("run-shell-command", {})).rejects.toThrow('"Command" is required');
+    });
+
+    test("Run Shell Command fails on a non-zero exit with the code and the tail of what it printed", async () => {
+        await panelFiles({});
+        await startService();
+        // stderr is the reason; stdout is left out of it
+        await expect(run("run-shell-command", { command: "echo partial; echo boom >&2; exit 3" })).rejects.toThrow(
+            '"echo partial; echo boom >&2; exit 3" failed with exit code 3:\nboom',
+        );
+        // with nothing on stderr, stdout is the reason
+        await expect(run("run-shell-command", { command: "echo only-stdout; exit 1" })).rejects.toThrow("failed with exit code 1:\nonly-stdout");
+        await expect(run("run-shell-command", { command: "exit 7" })).rejects.toThrow('"exit 7" failed with exit code 7 and printed nothing');
+        // only the last lines of a long failure
+        const err = await run("run-shell-command", { command: "for i in $(seq 1 50); do echo line-$i >&2; done; exit 2" }).then(
+            () => null,
+            (e: Error) => e,
+        );
+        expect(err?.message).toContain("failed with exit code 2:\nline-41\n");
+        expect(err?.message).toContain("line-50");
+        expect(err?.message).not.toContain("line-40\n");
+    });
+
+    test("Run Shell Command stops a command that runs past its timeout and fails saying so", async () => {
+        await panelFiles({});
+        await testDaemon();
+        await expect(runShellCommand("sleep 30", 500)).rejects.toThrow('"sleep 30" was still running after 0.5 seconds, so it was stopped');
     });
 });
