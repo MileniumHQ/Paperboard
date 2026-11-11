@@ -26,6 +26,7 @@ import { HEADING_KIND, type HeadingInfo } from "./lib/libraryHeading";
 import { setTextPlaceholders } from "./lib/textField";
 import { addTrash, type TrashState } from "./lib/trashZone";
 import { addResultsTray, setResultBlocks, sourceOf } from "./lib/results";
+import { nativeTooltips } from "./lib/nativeTooltips";
 import { parseEntry, parseRegistryBlockType } from "./lib/names";
 import { tokenPixels } from "./lib/tokens";
 import { Console } from "./Console";
@@ -412,6 +413,7 @@ export default function Editor(props: {
         });
         let closed = false;
         let offRegistry: (() => void) | undefined;
+        let offTooltips: (() => void) | undefined;
         const resize = new ResizeObserver(() => workspace && Blockly.svgResize(workspace));
         const offState = bridge.onStateChange((_patch, full) => {
             setState(full);
@@ -434,7 +436,10 @@ export default function Editor(props: {
                 // Actions' dots: one at every double gap, drawn by Editor.module.css
                 grid: { spacing: tokenPixels("--paper-uigap") * 2, length: 1, colour: "transparent", snap: false },
                 move: { scrollbars: true, drag: true, wheel: false },
+                // the app makes no sounds; neither do its blocks
+                sounds: false,
             });
+            offTooltips = nativeTooltips(host);
             resize.observe(host);
             addTrash(workspace, trashTile, setTrash);
             addResultsTray(workspace, styles.resultsTray!, uiGap());
@@ -497,6 +502,7 @@ export default function Editor(props: {
             resize.disconnect();
             offState();
             offRegistry?.();
+            offTooltips?.();
             workspace?.dispose();
             scratch.dispose();
         });

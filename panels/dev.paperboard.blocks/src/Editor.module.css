@@ -339,3 +339,24 @@
     stroke: var(--paper-border);
     stroke-width: var(--paper-border-width);
 }
+
+/* The system shows a block's tooltip (lib/nativeTooltips.ts), not Blockly's
+   box; Blockly sets the box's display inline, so only !important hides it */
+:global(.blocklyTooltipDiv) {
+    display: none !important;
+}
+
+/* Typing into a field: PaperUI's compact input as it's focused, an edge with
+   the primary bar along its bottom. Blockly rounds it into a pill and rings
+   it with a glow, inline, so these take !important */
+:global(.blocklyWidgetDiv) :global(.blocklyHtmlInput) {
+    border: var(--paper-border-width) solid var(--paper-border-emphasis) !important;
+    border-radius: var(--paper-border-radius-half) !important;
+    box-shadow: inset 0 calc(var(--paper-thick-border-width) * -1) 0 var(--paper-primary);
+    outline: none;
+}
+
+:global(.blocklyWidgetDiv):has(> :global(.blocklyHtmlInput)) {
+    border-radius: var(--paper-border-radius-half) !important;
+    box-shadow: none !important;
+}
