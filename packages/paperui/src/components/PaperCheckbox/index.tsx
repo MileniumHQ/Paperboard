@@ -98,11 +98,10 @@ export function PaperCheckbox(props: PaperCheckboxProps) {
                     readOnly
                 />
                 <div class={styles.box}>
-                    <Show when={isChecked()}>
-                        <PaperIcon class={styles.iconCheck} zeroHeight>
-                            check
-                        </PaperIcon>
-                    </Show>
+                    {/* always mounted so the check animates in and out */}
+                    <PaperIcon class={styles.iconCheck} zeroHeight>
+                        check
+                    </PaperIcon>
                 </div>
             </div>
 

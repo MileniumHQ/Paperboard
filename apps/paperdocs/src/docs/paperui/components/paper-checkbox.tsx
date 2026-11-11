@@ -120,6 +120,7 @@ export function Example() {
                 <li>The root is a <PaperCode>label</PaperCode> around a focusable <PaperCode>role="checkbox"</PaperCode> element with <PaperCode>aria-checked</PaperCode>, a visually hidden native input, and the text.</li>
                 <li>The box is focusable. Space and Enter both toggle it.</li>
                 <li>Each toggle dispatches bubbling <PaperCode>change</PaperCode> and <PaperCode>input</PaperCode> events on the hidden input after setting its <PaperCode>checked</PaperCode>, so a surrounding <PaperCode>form</PaperCode> listener or a <PaperCode>FormData</PaperCode> read sees the value of an input with a <PaperCode>name</PaperCode>.</li>
+                <li>The check scales in when the box is checked and out when it is cleared. A box that renders checked does not animate.</li>
                 <li>A toggle plays the light haptic on touch devices.</li>
                 <li>There is no indeterminate state.</li>
                 <li>The box and <PaperCode>aria-checked</PaperCode> follow <PaperCode>checked</PaperCode> when you set it. <PaperCode>onChange</PaperCode> reports the requested state and you decide whether to apply it.</li>

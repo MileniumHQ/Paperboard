@@ -90,7 +90,16 @@
     height: 100%;
     user-select: none;
     line-height: 1;
-    transform: translateY(calc(var(--paper-border-width) * 0.5));
+    opacity: 0;
+    transform: translateY(calc(var(--paper-border-width) * 0.5)) scale(0.4);
+    transition:
+        opacity var(--paper-tiny-transition) var(--paper-ease-standard),
+        transform var(--paper-short-transition) var(--paper-ease-emphasized);
+}
+
+.checked .iconCheck {
+    opacity: 1;
+    transform: translateY(calc(var(--paper-border-width) * 0.5)) scale(1);
 }
 
 .content {
