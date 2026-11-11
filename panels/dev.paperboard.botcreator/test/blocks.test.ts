@@ -23,8 +23,8 @@ const TYPES = [
 ];
 // the panel's own: the builders, and the blocks that run Bot Creator itself (botsBlocks.test.ts)
 const PANEL_COMMANDS = [
-    "add-bot", "create-button", "create-command-option", "create-embed", "create-interaction-row", "create-select-menu", "create-slash-command",
-    "create-text-field", "delete-bot", "delete-slash-command", "replace-bot-token", "restart-bot", "turn-off-bot", "turn-on-bot",
+    "create-button", "create-command-option", "create-embed", "create-interaction-row", "create-select-menu", "create-slash-command",
+    "create-text-field", "delete-bot", "delete-slash-command", "restart-bot", "turn-off-bot", "turn-on-bot",
 ];
 const PANEL_VALUES = ["bot", "bots", "invite-link"];
 const PANEL_EVENTS = ["bot-added", "bot-connection-failed", "bot-deleted", "bot-offline", "bot-online"];

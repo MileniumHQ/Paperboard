@@ -6,7 +6,6 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { blocksApi, secretsApi } from "@mileniumhq/paperapi";
-import { TOKEN_IN_FLOW } from "../src/blocks";
 import { createBotId, tokenName, type BotsServiceState } from "../src/bots";
 import { testDaemon } from "./helpers/daemon";
 import { guild, startFakeDiscord, type FakeBot, type FakeDiscord, type FakeGuild } from "./helpers/discord";
@@ -61,13 +60,10 @@ describe("Bot Creator is run from Blocks by the panel's own blocks", () => {
         const offline = await heard("bot-offline");
         const deleted = await heard("bot-deleted");
         try {
-            // a flow saved with a token typed into it is refused, and the token goes nowhere
-            const before = discord.requests.length;
-            await expect(run("add-bot", { token: fake.token })).rejects.toThrow(TOKEN_IN_FLOW);
-            await expect(run("add-bot")).rejects.toThrow(TOKEN_IN_FLOW);
-            expect(discord.requests.length).toBe(before);
-            expect(await read("bots")).toEqual([]);
-            for (const name of await secretsApi.list(PANEL_ID)) expect((await secretsApi.get(name, PANEL_ID)).value).not.toBe(fake.token);
+            // no block takes a token: a flow would keep it as plain text
+            const entries = (await blocksApi.list(PANEL_ID)).map((b) => b.entry);
+            expect(entries).not.toContain("command.add-bot");
+            expect(entries).not.toContain("command.replace-bot-token");
 
             // as Bot Creator adds one: the token to the vault, then the bot by its id
             const bot = createBotId();
@@ -103,15 +99,6 @@ describe("Bot Creator is run from Blocks by the panel's own blocks", () => {
             await expect(run("create-slash-command", { name: "roll", bot, description: "Again", dms: false })).rejects.toThrow("A command named /roll already exists");
             await run("delete-slash-command", { command });
             expect(await field(bot, "slash-commands")).toEqual([]);
-
-            // nor can a flow replace its token, and the vault keeps the right one
-            await expect(run("replace-bot-token", { bot, token: other.token })).rejects.toThrow(TOKEN_IN_FLOW);
-            expect((await secretsApi.get(tokenName(bot), PANEL_ID)).value).toBe(fake.token);
-            const retired = (await blocksApi.list(PANEL_ID)).filter((b) => b.entry === "command.add-bot" || b.entry === "command.replace-bot-token");
-            expect(retired.map((b) => [b.schema.name, b.schema.category, Object.keys((b.schema as { inputs?: object }).inputs ?? {})])).toEqual([
-                ["Add Bot (Retired)", "Retired", ["token"]],
-                ["Replace Bot Token (Retired)", "Retired", ["bot", "token"]],
-            ]);
 
             await run("turn-off-bot", { bot });
             expect(await offline.next()).toEqual({ bot, error: null });

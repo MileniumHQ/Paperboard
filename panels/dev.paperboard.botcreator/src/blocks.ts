@@ -2001,49 +2001,6 @@ export function botTypes(host: BotsBlocksHost): BlockTypeDefinition[] {
 
 const botInput = { type: "bot", name: "Bot" } as const;
 
-/**
- * Why a flow can't hold a bot token: a block's inputs are saved in the flow
- * as plain text, where anyone who sees the flow (a backup, a shared copy)
- * has the bot. Tokens go in Bot Creator, which keeps them in the vault.
- */
-export const TOKEN_IN_FLOW =
-    "Bot tokens can't be typed into flows any more: a flow keeps them as plain text. " +
-    "Add the bot, or replace its token, in Bot Creator, which keeps it in the vault, then delete this block. " +
-    "If this block held a real token, reset it in Discord's developer portal.";
-
-/**
- * The two blocks that once took a token. TODO(remove after v0.5): flows
- * saved with them still name them, so they stay, with their token socket
- * (a flow saved with one loads only if it's there), to refuse saying why.
- */
-const retiredTokenBlocks: BlockCommandDefinition<Inputs>[] = [
-    {
-        id: "add-bot",
-        name: "Add Bot (Retired)",
-        category: "Retired",
-        icon: "key_off",
-        description: TOKEN_IN_FLOW,
-        text: "Add a bot with token {token}",
-        inputs: { token: { type: "text", name: "Token", optional: true } },
-        output: "bot",
-        run: () => {
-            throw new Error(TOKEN_IN_FLOW);
-        },
-    },
-    {
-        id: "replace-bot-token",
-        name: "Replace Bot Token (Retired)",
-        category: "Retired",
-        icon: "key_off",
-        description: TOKEN_IN_FLOW,
-        text: "Replace the token of {bot} with {token}",
-        inputs: { bot: { ...botInput, optional: true }, token: { type: "text", name: "Token", optional: true } },
-        run: () => {
-            throw new Error(TOKEN_IN_FLOW);
-        },
-    },
-];
-
 /** Every command a block made, or why Discord or Blocks didn't take it. */
 function committed(result: CommandMutationResult, what: string): CommandMutationResult {
     if (result.syncError) throw new Error(`${what} is saved, but Discord refused it: ${result.syncError}`);
@@ -2163,7 +2120,6 @@ export function botsBlocks(host: BotsBlocksHost): BlockSet {
                 committed(await host.deleteCommand(idOfBot(command.bot), command.id), `/${command.name}`);
             },
         },
-        ...retiredTokenBlocks,
     ];
     const values: BlockValueDefinition<Inputs>[] = [
         {
@@ -2245,7 +2201,6 @@ const BLOCK_CATEGORIES = [
     { name: "Responses", icon: "reply" },
     { name: "Buttons & Menus", icon: "smart_button" },
     { name: "Modals", icon: "dialogs" },
-    { name: "Retired", icon: "history" },
 ];
 
 export function panelBlocks(clients: ConnectedClients, bots: BotsBlocksHost): BlockSet {
