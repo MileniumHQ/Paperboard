@@ -94,7 +94,7 @@ export default function PanelsDoc() {
             </PaperText>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/paperboard/server-daemon/">run panels on another computer</PaperLink>.
+                Next: <PaperLink href="/docs/paperboard/blocks/">automate your panels with Blocks</PaperLink>.
             </PaperText>
         </PaperFlex>
     );

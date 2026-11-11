@@ -15,6 +15,10 @@
                 "panels": {
                     "name": "Install and manage panels",
                     "index": 2
+                },
+                "blocks": {
+                    "name": "Automate with Blocks",
+                    "index": 3
                 }
             }
         },
