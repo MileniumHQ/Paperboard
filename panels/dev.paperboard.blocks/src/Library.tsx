@@ -53,7 +53,7 @@ export function LibraryRail(props: Pick<LibraryProps, "builtins" | "panels" | "s
                         {(category) => (
                             <PaperRailItem
                                 value={category.id}
-                                icon={category.iconUrl ? <PaperIcon src={category.iconUrl} /> : <PaperIcon monogram>{category.name.slice(0, 2).toUpperCase()}</PaperIcon>}
+                                icon={category.iconUrl ? <PaperIcon src={category.iconUrl} /> : (category.icon ?? "extension")}
                                 label={category.name}
                                 showLabel
                             />

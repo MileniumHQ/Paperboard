@@ -5,5 +5,6 @@
     "description": "Build automations from blocks, with every panel's actions",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
-    "service": "./dist/service.js"
+    "service": "./dist/service.js",
+    "icon": "./branding/icon.png"
 }

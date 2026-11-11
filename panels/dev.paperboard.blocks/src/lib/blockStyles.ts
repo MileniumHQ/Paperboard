@@ -99,10 +99,13 @@ export function panelStyle(panelId: string): string {
 /** What a block shows before its text. */
 export type BlockIcon = { src: string } | { symbol: string };
 
-let panelIcon: ((panelId: string) => string) | null = null;
+/** What a panel that declares no icon shows, as in the app's sidebar. */
+export const NO_PANEL_ICON = "dashboard";
 
-/** Where a panel's icon is; the page knows from the panel list. */
-export function setPanelIcons(resolve: (panelId: string) => string): void {
+let panelIcon: ((panelId: string) => BlockIcon) | null = null;
+
+/** A panel's icon; the page knows from the panel list. */
+export function setPanelIcons(resolve: (panelId: string) => BlockIcon): void {
     panelIcon = resolve;
 }
 
@@ -195,7 +198,7 @@ export function blockIcon(block: Blockly.Block): BlockIcon {
     const name = block.getStyleName();
     if (name.startsWith(PANEL_STYLE_PREFIX)) {
         if (!panelIcon) throw new Error("The panels' icons aren't known yet");
-        return { src: panelIcon(panelOf(block.type)) };
+        return panelIcon(panelOf(block.type));
     }
     const style: Style | undefined = STYLES[name as BlockStyleName];
     if (!style) throw new Error(`${block.type} has the style "${name}", which Blocks doesn't draw`);

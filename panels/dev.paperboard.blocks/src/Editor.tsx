@@ -21,7 +21,7 @@ import { BUILTIN_BLOCKS, BUILTIN_SECTIONS, builtinPlaceholder, choicesSources, P
 import { refreshChoices, registerChoicesField } from "./lib/choicesField";
 import { LIBRARY_FLYOUT, setLibraryTop, uiGap } from "./lib/libraryFlyout";
 import { loadBlockFonts, PAPER_RENDERER, paperTheme } from "./lib/paperRenderer";
-import { assignPanelStyles, setPanelIcons } from "./lib/blockStyles";
+import { NO_PANEL_ICON, assignPanelStyles, setPanelIcons, type BlockIcon } from "./lib/blockStyles";
 import { HEADING_KIND, type HeadingInfo } from "./lib/libraryHeading";
 import { setTextPlaceholders } from "./lib/textField";
 import { addTrash, type TrashState } from "./lib/trashZone";
@@ -150,15 +150,20 @@ export default function Editor(props: {
     const log = createMemo(() => state().log.filter((entry) => entry.project === project));
 
     const panelName = (id: string) => registry().panels.find((p) => p.id === id)?.name ?? id;
-    const panelIcon = (id: string) => {
+    /** A panel's icon as the app shows it: the image it declares, or the symbol the sidebar shows when it has none. */
+    const panelIcon = (id: string): BlockIcon => {
         const found = registry().panels.find((p) => p.id === id);
-        return found?.iconUrl ?? panelAssetUrl(id, found?.icon || "branding/icon.png");
+        if (found?.iconUrl) return { src: found.iconUrl };
+        return found?.icon ? { src: panelAssetUrl(id, found.icon) } : { symbol: NO_PANEL_ICON };
     };
 
     const builtins = createMemo<LibraryCategory[]>(() => BUILTIN_SECTIONS.map((s) => ({ id: builtinId(s.name), name: s.name, icon: s.icon })));
     const panels = createMemo<LibraryCategory[]>(() =>
         [...new Set(registry().sections.map((s) => s.panelId))]
-            .map((id) => ({ id: panelCategoryId(id), name: panelName(id), iconUrl: panelIcon(id) }))
+            .map((id) => {
+                const icon = panelIcon(id);
+                return { id: panelCategoryId(id), name: panelName(id), ...("src" in icon ? { iconUrl: icon.src } : { icon: icon.symbol }) };
+            })
             .sort((a, b) => a.name.localeCompare(b.name)),
     );
     const category = createMemo(() => [...builtins(), ...panels()].find((c) => c.id === selected()));
@@ -196,7 +201,7 @@ export default function Editor(props: {
             const all: Group[] = [
                 ...BUILTIN_SECTIONS.filter((s) => !s.custom).map((s) => ({ label: s.name, icon: { symbol: s.icon }, blocks: s.contents })),
                 ...registry().sections.map((s) => ({
-                    icon: { src: panelIcon(s.panelId) },
+                    icon: panelIcon(s.panelId),
                     // a category named for its panel isn't said twice
                     label: [panelName(s.panelId), s.project ? projectName(s.panelId, s.project) : null, s.category === panelName(s.panelId) ? null : s.category].filter(Boolean).join(" · "),
                     blocks: s.contents,
