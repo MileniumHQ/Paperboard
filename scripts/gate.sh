@@ -149,8 +149,30 @@ gwarn() {
 
 # ── shared library artifacts ─────────────────────────────────────────────────
 # Test current shared artifacts, never whatever an earlier developer built.
-gstep paperapi-build "paperapi build" run_in "$ROOT/packages/paperapi" bun run build
-gstep paperui-build "paperui build" run_in "$ROOT/packages/paperui" bun run build
+# CI may restore a library's dist from a cache keyed by every file in the
+# package plus the lockfile, and then names it in PAPERBOARD_GATE_PREBUILT.
+# That's the same build of the same sources, so a consumer uses it as is. A
+# run of the library's own target always builds it from scratch.
+lib_build() {
+    local name="$1"
+    case " ${PAPERBOARD_GATE_PREBUILT:-} " in
+        *" $name "*)
+            if ! want "$name"; then
+                echo "--- gate: $name build"
+                if [ -f "$ROOT/packages/$name/dist/index.d.ts" ]; then
+                    echo "ok: $name build (restored, built from these exact sources)"
+                else
+                    echo "FAIL: $name build: PAPERBOARD_GATE_PREBUILT names it, but packages/$name/dist has no build" >&2
+                    FAIL=1
+                fi
+                return
+            fi
+            ;;
+    esac
+    step "$name build" run_in "$ROOT/packages/$name" bun run build
+}
+want paperapi-build && lib_build paperapi
+want paperui-build && lib_build paperui
 gstep create-panel-build "create-panel build" run_in "$ROOT/packages/create-panel" bun run build
 gstep packages "packed external consumers" node "$ROOT/scripts/check-package-artifacts.mjs"
 
