@@ -13,7 +13,7 @@ import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scro
 import { errorMessage } from "./lib/failure";
 import { writeTerminal } from "./lib/terminalWrite";
 import { SavedCommands, type CommandRun, type SavedCommand } from "./lib/savedCommands";
-import { BlocksAnnouncer, exitPayload, finishedPayload, terminalBlocks } from "./blocks";
+import { BlocksAnnouncer, exitPayload, finishedPayload, tabPayload, terminalBlocks } from "./blocks";
 
 // pass PANEL_ID explicitly, ambient scope resolves to last-imported panel
 const PANEL_ID = "dev.paperboard.terminal";
@@ -28,6 +28,9 @@ export interface TerminalServiceState {
     // window's own choice, so open windows and computers stay in step
     tabs: TerminalTab[];
     activeTabId: string;
+    // Show Tab's request that every open window switch to a tab; each request
+    // has its own token, so a window follows it once
+    showTab: { id: string; request: string };
     // saved commands (run from Home's "Pinned command" widget) and the last
     // observed outcome of each
     savedCommands: SavedCommand[];
@@ -41,6 +44,7 @@ const SCROLLBACK_DIR = "terminal-scrollback";
 
 let tabs: TerminalTab[] = [];
 let activeTabId = "";
+let showTabRequest = { id: "", request: "" };
 
 const buffers = new Map<string, string>();
 const persistTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -72,8 +76,9 @@ const blocks = blocksApi.panel(PANEL_ID);
 const announcer = new BlocksAnnouncer(blocks);
 
 function publishTabs(ctx: Ctx) {
-    ctx.setState({ tabs: tabs.map((t) => ({ ...t })), activeTabId });
+    ctx.setState({ tabs: tabs.map((t) => ({ ...t })), activeTabId, showTab: { ...showTabRequest } });
     announcer.list("tabs", tabs.map((t) => t.id));
+    announcer.list("active-tab", [activeTabId]);
 }
 
 async function persistTabs(ctx: Ctx | null) {
@@ -294,6 +299,7 @@ export async function createTab(ctx: Ctx, label?: string): Promise<string> {
     await tryEnsureSession(id);
     subscribeSession(id, ctx);
     await persistTabs(ctx);
+    announcer.fire("tab-opened", tabPayload({ id, label: name }));
     return id;
 }
 
@@ -308,7 +314,8 @@ export async function renameTab(ctx: Ctx, id: string | undefined, label: string 
 
 export async function closeTab(ctx: Ctx, input: string | undefined): Promise<void> {
     const id = (input || "").trim();
-    if (!tabs.some((t) => t.id === id)) throw new Error(`Unknown terminal tab "${input}"`);
+    const closing = tabs.find((t) => t.id === id);
+    if (!closing) throw new Error(`Unknown terminal tab "${input}"`);
     // a shell that would not stop keeps its tab, so it stays reachable
     await terminalApi.destroy(id);
     tabs = tabs.filter((t) => t.id !== id);
@@ -319,6 +326,44 @@ export async function closeTab(ctx: Ctx, input: string | undefined): Promise<voi
     cancelPersistTimer(id);
     await files.delete(scrollbackPath(id), PANEL_ID);
     if (activeTabId === id) activeTabId = tabs[0]?.id || "";
+    await persistTabs(ctx);
+    announcer.fire("tab-closed", tabPayload(closing));
+}
+
+/** Puts the tabs in this order; it must be exactly the open tabs, none dropped. */
+export async function reorderTabs(ctx: Ctx, orderedIds: unknown): Promise<void> {
+    const ids = Array.isArray(orderedIds) ? orderedIds.map((s) => String(s)) : [];
+    const byId = new Map(tabs.map((t) => [t.id, t]));
+    if (ids.length !== tabs.length || new Set(ids).size !== ids.length || !ids.every((id) => byId.has(id))) {
+        throw new Error("reorder-tabs requires exactly the current tab ids");
+    }
+    tabs = ids.map((id) => byId.get(id)!);
+    await persistTabs(ctx);
+}
+
+/** Moves a tab to a place in the tab bar, 1 being the first. */
+export async function moveTab(ctx: Ctx, tabId: string | undefined, position: number): Promise<void> {
+    const id = resolveTabId(tabId);
+    if (!Number.isInteger(position) || position < 1) throw new Error("Position must be a whole number of at least 1");
+    if (position > tabs.length) {
+        throw new Error(`Position ${position} is past the last tab; there ${tabs.length === 1 ? "is 1 tab" : `are ${tabs.length} tabs`}`);
+    }
+    const order = tabs.map((t) => t.id).filter((t) => t !== id);
+    order.splice(position - 1, 0, id);
+    await reorderTabs(ctx, order);
+}
+
+/** The tab last shown, which a new window opens on. */
+function activeTab(): string {
+    if (!tabs.some((t) => t.id === activeTabId)) throw new Error("No terminal tab is open");
+    return activeTabId;
+}
+
+/** Switches every open window to the tab, and makes it the one a new window opens on. */
+export async function showTab(ctx: Ctx, tabId: string | undefined): Promise<void> {
+    const id = resolveTabId(tabId);
+    activeTabId = id;
+    showTabRequest = { id, request: `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}` };
     await persistTabs(ctx);
 }
 
@@ -454,14 +499,7 @@ const actions = [
         output: { type: "boolean", label: "Success" },
         icon: "reorder",
         run: async (ctx: Ctx, inputs: { orderedIds?: string[] }) => {
-            const ids = Array.isArray(inputs?.orderedIds) ? inputs!.orderedIds.map((s) => String(s)) : [];
-            const byId = new Map(tabs.map((t) => [t.id, t]));
-            // accept only a permutation of the current tabs, no silent drops
-            if (ids.length !== tabs.length || !ids.every((id) => byId.has(id))) {
-                throw new Error("reorder-tabs requires exactly the current tab ids");
-            }
-            tabs = ids.map((id) => byId.get(id)!);
-            await persistTabs(ctx);
+            await reorderTabs(ctx, inputs?.orderedIds);
             return true;
         },
     }),
@@ -608,6 +646,7 @@ export const terminalService = definePanelService({
     state: {
         tabs: [] as TerminalTab[],
         activeTabId: "",
+        showTab: { id: "", request: "" },
         savedCommands: [] as SavedCommand[],
         commandRuns: {} as Record<string, CommandRun>,
         savedCommandsError: "",
@@ -675,6 +714,9 @@ export const terminalService = definePanelService({
             terminalBlocks({
                 tabs: () => tabs.map((t) => t.id),
                 tabLabel,
+                activeTab,
+                showTab: (id) => showTab(liveCtx(), id),
+                moveTab: (id, position) => moveTab(liveCtx(), id, position),
                 createTab: (label) => createTab(liveCtx(), label),
                 renameTab: (id, label) => renameTab(liveCtx(), id, label),
                 closeTab: (id) => closeTab(liveCtx(), id),
@@ -684,11 +726,13 @@ export const terminalService = definePanelService({
                 savedCommands: () => savedCommands.view().savedCommands.map((c) => c.id),
                 savedCommand,
                 savedCommandRunning: (id) => savedCommands.view().commandRuns[savedCommand(id).id]?.state === "running",
+                savedCommandRun: (id) => savedCommands.view().commandRuns[savedCommand(id).id],
                 saveCommand: (label, command) => savedCommands.add(label, command),
                 removeSavedCommand: (id) => savedCommands.remove(id),
                 runSavedCommand: async (id) => void (await savedCommands.run(id)),
+                stopSavedCommand: (id) => savedCommands.stop(id),
             }),
-            { tabs: tabs.map((t) => t.id), "saved-commands": savedCommands.view().savedCommands.map((c) => c.id) },
+            { tabs: tabs.map((t) => t.id), "active-tab": [activeTabId], "saved-commands": savedCommands.view().savedCommands.map((c) => c.id) },
         );
         publishTabs(ctx);
         console.log(`[TerminalService] Ready with ${tabs.length} persistent session(s).`);

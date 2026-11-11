@@ -10,6 +10,12 @@ export interface TerminalBlocksHost {
     tabs(): string[];
     /** throws for a tab that isn't open */
     tabLabel(id: string): string;
+    /** the tab last shown, which a new window opens on; throws when no tab is open */
+    activeTab(): string;
+    /** switches every open Terminal window to the tab */
+    showTab(id: string): Promise<void>;
+    /** moves the tab to a place in the tab bar, 1 being the first */
+    moveTab(id: string, position: number): Promise<void>;
     createTab(label?: string): Promise<string>;
     renameTab(id: string, label: string): Promise<void>;
     closeTab(id: string): Promise<void>;
@@ -22,9 +28,13 @@ export interface TerminalBlocksHost {
     /** throws for a command that isn't saved */
     savedCommand(id: string): SavedCommand;
     savedCommandRunning(id: string): boolean;
+    /** the command's current or last run; none when it has not run */
+    savedCommandRun(id: string): CommandRun | undefined;
     saveCommand(label: string | undefined, command: string): Promise<string>;
     removeSavedCommand(id: string): Promise<void>;
     runSavedCommand(id: string): Promise<void>;
+    /** resolves once the run ended; throws when it isn't running */
+    stopSavedCommand(id: string): Promise<void>;
 }
 
 const CATEGORY = { tabs: "Tabs", shell: "Shell", saved: "Saved Commands" };
@@ -52,6 +62,22 @@ export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
                     name: { type: "text", name: "Name", resolve: (id: string) => host.savedCommand(id).label },
                     command: { type: "text", name: "Command", resolve: (id: string) => host.savedCommand(id).command },
                     running: { type: "boolean", name: "Running", resolve: (id: string) => host.savedCommandRunning(id) },
+                    "last-result": {
+                        type: "text",
+                        name: "Last Result",
+                        description: "How its last run went: Running, Exit 0, Stopped, Timed out, why it failed, or Not run yet",
+                        resolve: (id: string) => lastResult(host.savedCommandRun(id)),
+                    },
+                    "last-exit-code": {
+                        type: "number",
+                        name: "Last Exit Code",
+                        description: "None while it runs, before it has run, or when its last run ended without one",
+                        optional: true,
+                        resolve: (id: string) => {
+                            const run = host.savedCommandRun(id);
+                            return run?.state === "exited" ? run.exitCode : null;
+                        },
+                    },
                 },
             },
         ],
@@ -65,6 +91,16 @@ export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
                 type: "list<tab>",
                 changes: true,
                 read: () => host.tabs(),
+            },
+            {
+                id: "active-tab",
+                name: "Active Tab",
+                category: CATEGORY.tabs,
+                icon: "tab",
+                description: "The tab last shown in the Terminal panel, which a new window opens on",
+                type: "tab",
+                changes: true,
+                read: () => host.activeTab(),
             },
             {
                 id: "output",
@@ -114,6 +150,29 @@ export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
                     name: { type: "text", name: "Name" },
                 },
                 run: ({ tab, name }: { tab: string; name: string }) => host.renameTab(tab, name),
+            },
+            {
+                id: "show-tab",
+                name: "Show Tab",
+                category: CATEGORY.tabs,
+                icon: "visibility",
+                description: "Switches the open Terminal windows to the tab, and makes it the Active Tab",
+                text: "show {tab}",
+                inputs: { tab: { type: "tab", name: "Tab" } },
+                run: ({ tab }: { tab: string }) => host.showTab(tab),
+            },
+            {
+                id: "move-tab",
+                name: "Move Tab",
+                category: CATEGORY.tabs,
+                icon: "swap_horiz",
+                description: "Moves the tab to a place in the tab bar; 1 is the first",
+                text: "move {tab} to position {position}",
+                inputs: {
+                    tab: { type: "tab", name: "Tab" },
+                    position: { type: "number", name: "Position", integer: true, min: 1 },
+                },
+                run: ({ tab, position }: { tab: string; position: number }) => host.moveTab(tab, position),
             },
             {
                 id: "close-tab",
@@ -195,8 +254,44 @@ export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
                 inputs: { command: { type: "saved-command", name: "Saved Command" } },
                 run: ({ command }: { command: string }) => host.runSavedCommand(command),
             },
+            {
+                id: "stop-saved-command",
+                name: "Stop Saved Command",
+                category: CATEGORY.saved,
+                icon: "stop",
+                description: "Stops a saved command that is running, and waits for it to end",
+                text: "stop {command}",
+                inputs: { command: { type: "saved-command", name: "Saved Command" } },
+                run: ({ command }: { command: string }) => host.stopSavedCommand(command),
+            },
         ],
         events: [
+            {
+                id: "tab-opened",
+                name: "When a Tab Opens",
+                category: CATEGORY.tabs,
+                icon: "add",
+                description: "Fires when a terminal tab is opened, from the panel or a block",
+                text: "when a tab opens",
+                values: {
+                    tab: { type: "tab", name: "Tab" },
+                    name: { type: "text", name: "Name" },
+                },
+            },
+            {
+                id: "tab-closed",
+                name: "When a Tab Closes",
+                category: CATEGORY.tabs,
+                icon: "close",
+                description: "Fires when a terminal tab is closed; the tab is gone, so its Name is given here",
+                text: "when {tab} closes",
+                inputs: { tab: { type: "tab", name: "Tab", optional: true } },
+                filters: { tab: "tab" },
+                values: {
+                    tab: { type: "tab", name: "Tab" },
+                    name: { type: "text", name: "Name" },
+                },
+            },
             {
                 id: "terminal-exit",
                 name: "When a Tab's Shell Ends",
@@ -225,8 +320,8 @@ export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
                 values: {
                     command: { type: "saved-command", name: "Saved Command" },
                     succeeded: { type: "boolean", name: "Succeeded", description: "It exited with code 0" },
-                    "exit-code": { type: "number", name: "Exit Code", description: "None when it timed out or failed to start", optional: true },
-                    result: { type: "text", name: "Result", description: "How it ended: Exit 0, Timed out, or why it failed" },
+                    "exit-code": { type: "number", name: "Exit Code", description: "None when it was stopped, timed out or failed to start", optional: true },
+                    result: { type: "text", name: "Result", description: "How it ended: Exit 0, Stopped, Timed out, or why it failed" },
                 },
             },
         ],
@@ -243,13 +338,38 @@ export function exitPayload(tab: string, exitCode: number | undefined) {
     };
 }
 
+/** How a tab that opened or closed reads in its event. */
+export function tabPayload(tab: { id: string; label: string }) {
+    return { tab: tab.id, name: tab.label };
+}
+
+/** How a run that ended reads: Exit 0, Stopped, Timed out, or why it failed. */
+function endedResult(outcome: Exclude<CommandRun, { state: "running" }>): string {
+    switch (outcome.state) {
+        case "exited":
+            return `Exit ${outcome.exitCode}`;
+        case "stopped":
+            return "Stopped";
+        case "timed-out":
+            return "Timed out";
+        case "failed":
+            return outcome.error;
+    }
+}
+
+/** A saved command's Last Result: its run as it stands, or that it has not run. */
+export function lastResult(run: CommandRun | undefined): string {
+    if (!run) return "Not run yet";
+    return run.state === "running" ? "Running" : endedResult(run);
+}
+
 /** How a finished run reads in its event. */
 export function finishedPayload(command: SavedCommand, outcome: Exclude<CommandRun, { state: "running" }>) {
     return {
         command: command.id,
         succeeded: outcome.state === "exited" && outcome.exitCode === 0,
         "exit-code": outcome.state === "exited" ? outcome.exitCode : null,
-        result: outcome.state === "exited" ? `Exit ${outcome.exitCode}` : outcome.state === "timed-out" ? "Timed out" : outcome.error,
+        result: endedResult(outcome),
     };
 }
 

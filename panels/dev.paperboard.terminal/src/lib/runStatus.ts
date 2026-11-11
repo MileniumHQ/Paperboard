@@ -43,6 +43,10 @@ export function describeRun(run: CommandRun | undefined, now: number): RunStatus
             const ago = formatAgo(now - run.endedAt);
             return { text: `Timed out · ${ago}`, value: "Timed out", caption: ago, tone: "warning", detail: `Stopped after running too long, ${ago}` };
         }
+        case "stopped": {
+            const ago = formatAgo(now - run.endedAt);
+            return { text: `Stopped · ${ago}`, value: "Stopped", caption: ago, tone: "warning", detail: `Stopped before it finished, ${ago}` };
+        }
         case "failed": {
             const ago = formatAgo(now - run.endedAt);
             return { text: `Failed · ${ago}`, value: "Failed", caption: run.error, tone: "danger", detail: run.error };

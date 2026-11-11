@@ -31,6 +31,8 @@ export type CommandRun =
     | { state: "exited"; startedAt: number; endedAt: number; exitCode: number }
     /** Killed after RUN_TIMEOUT_MS; the exit was observed, its code is not the command's verdict. */
     | { state: "timed-out"; startedAt: number; endedAt: number }
+    /** Stopped on request before it finished; the exit was observed, its code is not the command's verdict. */
+    | { state: "stopped"; startedAt: number; endedAt: number }
     /** The daemon refused the spawn, or no exit ever arrived. Not an exit code. */
     | { state: "failed"; startedAt: number; endedAt: number; error: string };
 
@@ -87,7 +89,7 @@ function isFinishedRun(raw: unknown): raw is CommandRun {
     const run = raw as Record<string, unknown>;
     if (typeof run.startedAt !== "number" || typeof run.endedAt !== "number") return false;
     if (run.state === "exited") return typeof run.exitCode === "number";
-    if (run.state === "timed-out") return true;
+    if (run.state === "timed-out" || run.state === "stopped") return true;
     if (run.state === "failed") return typeof run.error === "string";
     return false;
 }
@@ -162,7 +164,11 @@ interface LiveRun {
     timeout?: ReturnType<typeof setTimeout>;
     grace?: ReturnType<typeof setTimeout>;
     timedOut: boolean;
+    /** Asked to stop (stop()); its exit reads as stopped, not as an exit code. */
+    stopping: boolean;
     settled: boolean;
+    /** Called once, when the run settles: how stop() waits for the end. */
+    onSettled?: () => void;
 }
 
 export class SavedCommands {
@@ -277,7 +283,7 @@ export class SavedCommands {
         }
         const startedAt = this.now();
         const procId = `pinned_${command.id}_${startedAt.toString(36)}`;
-        const live: LiveRun = { commandId: command.id, procId, startedAt, accepted: false, offExit: () => {}, timedOut: false, settled: false };
+        const live: LiveRun = { commandId: command.id, procId, startedAt, accepted: false, offExit: () => {}, timedOut: false, stopping: false, settled: false };
         this.live.set(command.id, live);
         this.listen(live);
         const previousRun = this.runs[command.id];
@@ -310,6 +316,48 @@ export class SavedCommands {
     }
 
     /**
+     * Stops a saved command's run and resolves once it ended: the exit was
+     * observed, or none arrived within the grace period after the kill (the
+     * run then reads as failed). Throws when it isn't running or the daemon
+     * refused the kill; the run then keeps going.
+     */
+    async stop(id: unknown): Promise<void> {
+        this.requireLoaded();
+        const command = this.find(id);
+        const live = this.live.get(command.id);
+        if (!live || live.settled) throw new Error(`"${command.label}" is not running`);
+        if (!live.accepted) throw new Error(`"${command.label}" is still starting; stop it once it has started`);
+        const ended = new Promise<void>((resolve) => {
+            const prior = live.onSettled;
+            live.onSettled = () => {
+                prior?.();
+                resolve();
+            };
+        });
+        // already being stopped (by an earlier stop, or its deadline): the same end
+        if (live.stopping || live.timedOut) return ended;
+        live.stopping = true;
+        try {
+            await this.deps.kill(live.procId);
+        } catch (err) {
+            live.stopping = false;
+            throw new Error(`"${command.label}" could not be stopped: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        if (!live.settled) {
+            clearTimeout(live.timeout);
+            live.grace = setTimeout(() => {
+                this.settle(live, {
+                    state: "failed",
+                    startedAt: live.startedAt,
+                    endedAt: this.now(),
+                    error: "Stopped, and no exit was reported after stopping it",
+                });
+            }, this.graceMs);
+        }
+        return ended;
+    }
+
+    /**
      * The service is stopping: kills every run it owns, waits for the daemon
      * to confirm, and records that they were stopped.
      */
@@ -321,9 +369,11 @@ export class SavedCommands {
             live.offExit();
             clearTimeout(live.timeout);
             clearTimeout(live.grace);
+            live.onSettled?.();
         }
         await Promise.allSettled(pending.map((live) => this.deps.kill(live.procId)));
-        if (pending.length === 0 || !this.loaded) return;
+        // a run that ended just before keeps its outcome: its save finishes first
+        if (pending.length === 0 || !this.loaded) return this.transactions;
         const endedAt = this.now();
         for (const live of pending) {
             if (!this.commands.some((c) => c.id === live.commandId)) continue;
@@ -350,6 +400,8 @@ export class SavedCommands {
             const { startedAt } = live;
             if (live.timedOut) {
                 this.settle(live, { state: "timed-out", startedAt, endedAt: this.now() });
+            } else if (live.stopping) {
+                this.settle(live, { state: "stopped", startedAt, endedAt: this.now() });
             } else if (typeof exitCode === "number") {
                 this.settle(live, { state: "exited", startedAt, endedAt: this.now(), exitCode });
             } else {
@@ -364,6 +416,7 @@ export class SavedCommands {
         live.settled = true;
         live.offExit();
         if (this.live.get(live.commandId) === live) this.live.delete(live.commandId);
+        live.onSettled?.();
         if (previousRun) this.runs = { ...this.runs, [live.commandId]: previousRun };
         else {
             const { [live.commandId]: _gone, ...rest } = this.runs;
@@ -412,7 +465,7 @@ export class SavedCommands {
                 );
                 continue;
             }
-            const live: LiveRun = { commandId: rec.commandId, procId: rec.procId, startedAt: rec.startedAt, accepted: true, offExit: () => {}, timedOut: false, settled: false };
+            const live: LiveRun = { commandId: rec.commandId, procId: rec.procId, startedAt: rec.startedAt, accepted: true, offExit: () => {}, timedOut: false, stopping: false, settled: false };
             this.live.set(rec.commandId, live);
             this.listen(live);
             this.runs = { ...this.runs, [rec.commandId]: { state: "running", startedAt: rec.startedAt } };
@@ -427,7 +480,7 @@ export class SavedCommands {
     }
 
     private expire(commandId: string, live: LiveRun): void {
-        if (live.settled) return;
+        if (live.settled || live.stopping) return;
         live.timedOut = true;
         this.deps.kill(live.procId).catch((err) =>
             console.error(`[TerminalService] could not stop timed-out command ${commandId}:`, err),
@@ -458,9 +511,10 @@ export class SavedCommands {
             this.publish();
             if (outcome.state !== "running") this.deps.onFinished?.({ ...command }, outcome);
         }
-        this.transaction(() => this.deps.save(this.docNow())).catch((err) =>
-            console.error(`[TerminalService] could not keep the last run of ${live.commandId}:`, err),
-        );
+        // a stop waiting on this run ends once the outcome is on record
+        this.transaction(() => this.deps.save(this.docNow()))
+            .catch((err) => console.error(`[TerminalService] could not keep the last run of ${live.commandId}:`, err))
+            .finally(() => live.onSettled?.());
     }
 
     private find(id: unknown): SavedCommand {

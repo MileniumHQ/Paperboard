@@ -39,6 +39,7 @@ export interface TerminalTab {
 interface TerminalBridgeState {
     tabs: TerminalTab[];
     activeTabId: string;
+    showTab: { id: string; request: string };
     savedCommands: SavedCommand[];
     commandRuns: Record<string, CommandRun>;
     savedCommandsError: string;
@@ -46,7 +47,7 @@ interface TerminalBridgeState {
 
 const bridge = createPanelBridge<TerminalBridgeState>({
     panelId: TERMINAL_PANEL_ID,
-    defaultState: { tabs: [], activeTabId: "", savedCommands: [], commandRuns: {}, savedCommandsError: "" },
+    defaultState: { tabs: [], activeTabId: "", showTab: { id: "", request: "" }, savedCommands: [], commandRuns: {}, savedCommandsError: "" },
 });
 
 export default function App() {
@@ -89,9 +90,18 @@ export default function App() {
         setSaved("commandRuns", reconcile(full.commandRuns ?? {}));
         setSaved("savedCommandsError", full.savedCommandsError ?? "");
     };
+    // Show Tab (a block) switches every open window; a window follows each
+    // request once, and one made before it opened is already its first tab
+    let followedShow = "";
+    const followShow = (request: TerminalBridgeState["showTab"] | undefined) => {
+        if (!request?.request || request.request === followedShow) return;
+        followedShow = request.request;
+        if (tabs().some((t) => t.id === request.id)) setActiveTab(request.id);
+    };
     bridge.onStateChange((patch, full) => {
         applyTabs(patch.tabs);
         applySaved(full);
+        if (hydration() === "ready") followShow(full.showTab);
     });
 
     const hydrate = async () => {
@@ -99,6 +109,7 @@ export default function App() {
         try {
             const state = await bridge.refreshState();
             applyTabs(state.tabs);
+            followedShow = state.showTab?.request ?? "";
             if (!activeTab()) setActiveTab(state.activeTabId || tabs()[0]?.id || "");
             setHydration("ready");
             // opening the panel with every tab closed starts a shell
