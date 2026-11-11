@@ -46,16 +46,10 @@ export function offeredShells(): OfferedShell[] {
     const found: OfferedShell[] = [];
     const seen = new Set<string>();
     const offer = (file: string, name: string) => {
-        let real: string;
-        try {
-            real = fs.realpathSync(file);
-            if (!fs.statSync(real).isFile()) return;
-        } catch {
-            return; // listed but not installed
-        }
-        // /bin/bash and /usr/bin/bash are one shell on a merged /usr
-        if (seen.has(real)) return;
-        seen.add(real);
+        const key = shellKey(file);
+        if (!key) return; // listed but not installed
+        if (seen.has(key)) return;
+        seen.add(key);
         found.push({ path: file, name });
     };
     if (process.platform === "win32") {
@@ -88,10 +82,23 @@ export function offeredShells(): OfferedShell[] {
     return found;
 }
 
+// /bin/bash and /usr/bin/bash are one shell on a merged /usr; sh linked to
+// bash is still sh, since bash started as sh acts as one. null: not installed
+function shellKey(file: string): string | null {
+    try {
+        const real = fs.realpathSync(file);
+        if (!fs.statSync(real).isFile()) return null;
+        return `${real}\0${path.basename(file).toLowerCase()}`;
+    } catch {
+        return null;
+    }
+}
+
 /** a shell a caller asked for, refused unless this computer offers it */
 export function requireOfferedShell(shell: string): string {
     const offered = offeredShells();
-    if (offered.some((s) => s.path === shell)) return shell;
+    const key = shellKey(shell);
+    if (key && offered.some((s) => shellKey(s.path) === key)) return shell;
     throw new Error(`${shell} is not a shell on this computer. Its shells are ${offered.map((s) => s.path).join(", ")}.`);
 }
 
