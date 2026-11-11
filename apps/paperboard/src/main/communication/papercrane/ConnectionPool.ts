@@ -34,11 +34,15 @@ function bracketHost(host: string): string {
     return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
 }
 
+// a typed address that is no host at all never reached the network
+export function isInvalidAddressError(err: any): boolean {
+    return err?.code === "ERR_INVALID_URL" || /invalid url|failed to parse url/i.test(String(err?.message || ""));
+}
+
 // timeout = lost in transit, refusal = nothing listening there
 export function classifyProbeError(err: any): string {
     const msg = String(err?.message || "");
-    // a typed address that is no host at all never reached the network
-    if (err?.code === "ERR_INVALID_URL" || /invalid url|failed to parse url/i.test(msg)) {
+    if (isInvalidAddressError(err)) {
         return "That isn't a valid address. Type an IP address or a computer name";
     }
     if (err?.name === "TimeoutError" || /aborted|timeout/i.test(msg)) {
@@ -224,7 +228,7 @@ export class ConnectionPool extends EventEmitter {
     public async probe(
         host: string,
         port = DEFAULT_PORT,
-    ): Promise<{ reachable: boolean; hostname?: string; error?: string }> {
+    ): Promise<{ reachable: boolean; hostname?: string; error?: string; invalidAddress?: boolean }> {
         try {
             // reachability only: no credential crosses this request, so the
             // not-yet-pinned certificate is not checked here
@@ -236,7 +240,7 @@ export class ConnectionPool extends EventEmitter {
             }
             return { reachable: false, error: `HTTP ${res.status}` };
         } catch (err: any) {
-            return { reachable: false, error: classifyProbeError(err) };
+            return { reachable: false, error: classifyProbeError(err), ...(isInvalidAddressError(err) ? { invalidAddress: true } : {}) };
         }
     }
 

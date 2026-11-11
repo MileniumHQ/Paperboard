@@ -37,6 +37,8 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     // the probe's typed error carries the real reason (refused / timeout /
     // unknown host); losing it turned every failure into "check the address"
     const [probeDetail, setProbeDetail] = createSignal("");
+    // no address was reached, so the port is left out of the message
+    const [probeInvalid, setProbeInvalid] = createSignal(false);
     const [isPairing, setIsPairing] = createSignal(false);
     const [pairError, setPairError] = createSignal("");
 
@@ -72,6 +74,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
             setIsReachable(false);
             setProbeUnreachable(false);
             setProbeDetail("");
+            setProbeInvalid(false);
             return;
         }
 
@@ -85,6 +88,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                 setIsReachable(true);
                 setProbeUnreachable(false);
                 setProbeDetail("");
+                setProbeInvalid(false);
                 const rawName = (res.hostname || trimmedHost)
                     .replace(/\.local$/i, "")
                     .trim();
@@ -96,11 +100,13 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                 setIsReachable(false);
                 setProbeUnreachable(true);
                 setProbeDetail(res?.error ?? "");
+                setProbeInvalid(res?.invalidAddress === true);
             }
         } catch (err: any) {
             setIsReachable(false);
             setProbeUnreachable(true);
             setProbeDetail(String(err?.message ?? err));
+            setProbeInvalid(false);
         }
     };
 
@@ -327,8 +333,10 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
 
                             <Show when={probeUnreachable()}>
                                 <PaperText preset="error">
-                                    Can't reach {host().trim()}:
-                                    {port().trim() || "45464"}.
+                                    Can't reach {host().trim()}
+                                    <Show when={!probeInvalid()}>
+                                        :{port().trim() || "45464"}
+                                    </Show>
                                     <Show when={probeDetail()}>
                                         <br />
                                         {probeDetail()}
