@@ -37,12 +37,23 @@ jobs:
             ~/.cache/electron
           key: deps-linux-x64-${{ hashFiles('bun.lock') }}
           restore-keys: deps-linux-x64-
-      # the silent-catch and TODO-expiry gates scan with ripgrep, Game
-      # Server's art test crops through the real ffmpeg, and the app's
-      # Electron tests need a display and a session bus
+      # The libraries job proves these builds from scratch; every other job
+      # reuses one made from exactly the same files. No restore-keys: a near
+      # match is a different build.
+      - name: Restore the PaperAPI and PaperUI builds of these sources
+        id: libs
+        if: matrix.group != 'libraries'
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/paperapi/dist
+            packages/paperui/dist
+          key: libs-linux-x64-${{ hashFiles('packages/paperapi/**', 'packages/paperui/**', 'bun.lock', 'package.json', 'patches/**') }}
+      # the silent-catch and TODO-expiry gates scan with ripgrep, and the
+      # app's Electron tests need a display and a session bus
       - run: |
-          sudo apt-get update
-          sudo apt-get install -y ripgrep ffmpeg xvfb dbus
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ripgrep xvfb dbus
           # Ubuntu 24.04 keeps Electron's sandbox from making user namespaces
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: bun install --frozen-lockfile
@@ -52,6 +63,8 @@ jobs:
         run: |
           node "$(node -p "require.resolve('electron/install.js', { paths: ['apps/paperboard'] })")"
       - name: Gate
+        env:
+          PAPERBOARD_GATE_PREBUILT: ${{ steps.libs.outputs.cache-hit == 'true' && 'paperapi paperui' || '' }}
         run: |
           case "${{ matrix.group }}" in
             libraries) targets="packages paperapi paperui create-panel crane-launcher scripts" ;;
@@ -84,33 +97,89 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v5
+      # The web apps and the root's markdown can't reach a cross-platform
+      # suite, so a change made only of those skips it. Anything else, or a
+      # run with nothing to compare against, runs it.
+      - name: Does this change reach the cross-platform suite
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          case "$EVENT" in
+            push) base="$PUSH_BEFORE" ;;
+            pull_request) base="$PR_BASE" ;;
+            *) base="" ;;
+          esac
+          run=true
+          if [ -z "$base" ] || [ "$base" = 0000000000000000000000000000000000000000 ]; then
+            echo "A $EVENT run has no earlier commit to compare with: running the suite"
+          elif ! git fetch --no-tags --depth=1 origin "$base"; then
+            echo "Couldn't fetch $base to compare with: running the suite"
+          else
+            changed="$(git diff --name-only "$base" HEAD)"
+            echo "Changed since $base:"
+            echo "$changed"
+            reach="$(echo "$changed" | grep -vE '^(apps/(paperdocs|origami|pbd|panelapis)/|[^/]+\.md$)' || true)"
+            if [ -n "$changed" ] && [ -z "$reach" ]; then
+              run=false
+              echo "Only web apps and root markdown changed: skipping the cross-platform suite" | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
       - uses: oven-sh/setup-bun@v2
+        if: steps.scope.outputs.run == 'true'
         with:
           bun-version: 1.4.4
       - uses: actions/setup-node@v5
+        if: steps.scope.outputs.run == 'true'
         with:
           node-version: 24
-      - name: Cache Bun packages and the Electron binary
+      # On macOS and Windows, restoring Bun's package cache takes longer than
+      # a cold install, so only Linux keeps it
+      - name: Cache Bun packages (Linux)
+        if: steps.scope.outputs.run == 'true' && matrix.target.os == 'linux'
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ matrix.target.name }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ matrix.target.name }}-
+      - name: Cache the Electron binary
+        if: steps.scope.outputs.run == 'true'
         uses: actions/cache@v4
         with:
           path: |
-            ~/.bun/install/cache
             ~/.cache/electron
             ~/Library/Caches/electron
             ~/AppData/Local/electron/Cache
-          key: deps-${{ matrix.target.name }}-${{ hashFiles('bun.lock') }}
-          restore-keys: deps-${{ matrix.target.name }}-
+          key: electron-${{ matrix.target.name }}-${{ hashFiles('bun.lock') }}
+          restore-keys: electron-${{ matrix.target.name }}-
+      - name: Restore the PaperAPI and PaperUI builds of these sources
+        id: libs
+        if: steps.scope.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/paperapi/dist
+            packages/paperui/dist
+          key: libs-${{ matrix.target.name }}-${{ hashFiles('packages/paperapi/**', 'packages/paperui/**', 'bun.lock', 'package.json', 'patches/**') }}
       - name: Display and session bus for Electron (Linux)
-        if: matrix.target.os == 'linux'
+        if: steps.scope.outputs.run == 'true' && matrix.target.os == 'linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb dbus
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb dbus
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: bun install --frozen-lockfile
+        if: steps.scope.outputs.run == 'true'
       - name: Fetch Electron
+        if: steps.scope.outputs.run == 'true'
         run: |
           node "$(node -p "require.resolve('electron/install.js', { paths: ['apps/paperboard'] })")"
       - name: Cross-platform suite
+        if: steps.scope.outputs.run == 'true'
+        env:
+          PAPERBOARD_GATE_PREBUILT: ${{ steps.libs.outputs.cache-hit == 'true' && 'paperapi paperui' || '' }}
         run: |
           if [ "${{ matrix.target.os }}" = linux ]; then
             dbus-run-session -- xvfb-run -a bun run gate platform
