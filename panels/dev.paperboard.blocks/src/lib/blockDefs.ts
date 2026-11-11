@@ -1,13 +1,14 @@
 // What the registry offers, as Blockly blocks and a toolbox. Types become
 // Blockly connection checks, so a socket only takes a value that fits it.
 // No styling yet: Blockly's own look, with a hue per kind.
-import type { BlockInfo, BlockSchema } from "@mileniumhq/paperapi";
-import { parseTypeRef } from "@mileniumhq/paperapi";
+import type { BlockInfo, BlockInputSchema, BlockProjectInfo, BlockSchema } from "@mileniumhq/paperapi";
+import { blockEntry, parseTypeRef } from "@mileniumhq/paperapi";
+import { CHOICES_FIELD, choiceValue, type ChoicesSource } from "./choicesField";
 import { BUILTIN, parseEntry, propertyBlockType, registryBlockType } from "./names";
 
 type Json = Record<string, unknown>;
 type Schema<K extends BlockSchema["kind"]> = Extract<BlockSchema, { kind: K }>;
-type Inputs = Record<string, { type: string; name: string; optional?: boolean; choices?: { label: string; value: unknown }[] }>;
+type Inputs = Record<string, BlockInputSchema>;
 
 /** A custom type's base, by "panel:type". */
 export type TypeBases = Map<string, "text" | "number" | "boolean" | "object">;
@@ -35,23 +36,43 @@ export function checksFor(typeRef: string, bases: TypeBases): string[] | null {
     return [typeRef];
 }
 
-/** The editable block an empty socket of this type holds, if any. */
-function shadowFor(typeRef: string, bases: TypeBases): Json | undefined {
-    const checks = checksFor(typeRef, bases);
-    if (!checks) return undefined;
-    if (checks.includes("Number")) return { shadow: { type: "math_number", fields: { NUM: 0 } } };
-    if (checks.includes("Boolean")) return { shadow: { type: "logic_boolean", fields: { BOOL: "TRUE" } } };
-    if (checks.includes("String")) return { shadow: { type: "text", fields: { TEXT: "" } } };
+/** The editable block an empty socket of this type holds, if any: the input's default, or an empty one. */
+function shadowFor(input: BlockInputSchema, bases: TypeBases): Json | undefined {
+    const checks = checksFor(input.type, bases);
+    const given = input.default;
+    if (!checks) {
+        // "any": a default says which editable block fits it
+        if (typeof given === "number") return { shadow: { type: "math_number", fields: { NUM: given } } };
+        if (typeof given === "boolean") return { shadow: { type: "logic_boolean", fields: { BOOL: given ? "TRUE" : "FALSE" } } };
+        if (typeof given === "string") return { shadow: { type: "text", fields: { TEXT: given } } };
+        return undefined;
+    }
+    if (checks.includes("Number")) return { shadow: { type: "math_number", fields: { NUM: typeof given === "number" ? given : 0 } } };
+    if (checks.includes("Boolean")) return { shadow: { type: "logic_boolean", fields: { BOOL: given === false ? "FALSE" : "TRUE" } } };
+    if (checks.includes("String")) return { shadow: { type: "text", fields: { TEXT: given === undefined ? "" : String(given) } } };
     return undefined;
 }
 
+/** Every dropdown whose choices its panel works out, to ask for them up front. */
+export function choicesSources(entries: BlockInfo[]): ChoicesSource[] {
+    const out: ChoicesSource[] = [];
+    for (const { panelId, entry, schema } of entries) {
+        if (!("inputs" in schema)) continue;
+        for (const [input, def] of Object.entries(schema.inputs ?? {})) if (def.dynamicChoices) out.push({ panelId, entry, input });
+    }
+    return out;
+}
+
 /** A block's line: its text with each input's socket where its braces were. */
-function message(name: string, text: string | undefined, inputs: Inputs, bases: TypeBases): { message0: string; args0: Json[] } {
+function message(name: string, text: string | undefined, inputs: Inputs, bases: TypeBases, owner: { panelId: string; entry: string }): { message0: string; args0: Json[] } {
     const args: Json[] = [];
     const arg = (key: string): Json => {
         const input = inputs[key]!;
+        if (input.dynamicChoices) return { type: CHOICES_FIELD, name: key, panelId: owner.panelId, entry: owner.entry, input: key };
         if (input.choices) {
-            return { type: "field_dropdown", name: key, options: input.choices.map((c) => [c.label, JSON.stringify(c.value)]) };
+            // the default first, so a new block starts on it
+            const choices = [...input.choices].sort((a, b) => Number(b.value === input.default) - Number(a.value === input.default));
+            return { type: "field_dropdown", name: key, options: choices.map((c) => [c.label, choiceValue(c.value)]) };
         }
         return { type: "input_value", name: key, check: checksFor(input.type, bases) };
     };
@@ -87,11 +108,19 @@ export interface Definitions {
     sections: { key: string; panelId: string; project?: string; category?: string; contents: Json[] }[];
 }
 
-/** Blockly definitions and toolbox sections for every registry entry. */
-export function registryDefinitions(entries: BlockInfo[]): Definitions {
+/**
+ * Blockly definitions and toolbox sections for every registry entry. A
+ * type with fields read per project gets a property block in each of its
+ * panel's `projects` too.
+ */
+export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectInfo[] = []): Definitions {
     const bases: TypeBases = new Map();
-    for (const e of entries) {
-        if (e.schema.kind === "type") bases.set(`${e.panelId}:${e.schema.id}`, e.schema.base);
+    const entries = [...listed];
+    for (const e of listed) {
+        if (e.schema.kind !== "type") continue;
+        bases.set(`${e.panelId}:${e.schema.id}`, e.schema.base);
+        if (parseEntry(e.entry).project || !Object.values(e.schema.fields ?? {}).some((f) => f.perProject)) continue;
+        for (const p of projects.filter((p) => p.panelId === e.panelId)) entries.push({ ...e, entry: blockEntry("type", e.schema.id, p.id), project: p.id });
     }
     const out: Definitions = { blocks: [], schemas: {}, sections: [] };
     const section = (panelId: string, project?: string, category?: string) => {
@@ -105,12 +134,16 @@ export function registryDefinitions(entries: BlockInfo[]): Definitions {
     };
     const toolboxBlock = (type: string, inputs: Inputs | undefined): Json => {
         const shadows: Json = {};
+        const fields: Json = {};
         for (const [key, input] of Object.entries(inputs ?? {})) {
-            if (input.choices) continue;
-            const shadow = shadowFor(input.type, bases);
+            if (input.choices || input.dynamicChoices) {
+                if (input.default !== undefined) fields[key] = choiceValue(input.default);
+                continue;
+            }
+            const shadow = shadowFor(input, bases);
             if (shadow) shadows[key] = shadow;
         }
-        return { kind: "block", type, ...(Object.keys(shadows).length ? { inputs: shadows } : {}) };
+        return { kind: "block", type, ...(Object.keys(shadows).length ? { inputs: shadows } : {}), ...(Object.keys(fields).length ? { fields } : {}) };
     };
 
     for (const { panelId, entry, schema } of entries) {
@@ -121,14 +154,16 @@ export function registryDefinitions(entries: BlockInfo[]): Definitions {
         };
         switch (schema.kind) {
             case "type": {
-                const fields = Object.entries(schema.fields ?? {});
+                // the panel's block reads what needs no project; each project's, what does
+                const fields = Object.entries(schema.fields ?? {}).filter(([, f]) => Boolean(f.perProject) === Boolean(project));
                 if (!fields.length) break;
                 const typeRef = `${panelId}:${schema.id}`;
-                const type = propertyBlockType(typeRef);
+                const type = propertyBlockType(typeRef, project);
                 record(type);
                 out.blocks.push({
                     type,
-                    message0: `%1 of %2`,
+                    // the type named, so two types' "Name of" read apart
+                    message0: `%1 of ${schema.name} %2`,
                     args0: [
                         { type: "field_dropdown", name: "FIELD", options: fields.map(([key, f]) => [f.name, key]) },
                         { type: "input_value", name: "VALUE", check: checksFor(typeRef, bases) },
@@ -146,7 +181,7 @@ export function registryDefinitions(entries: BlockInfo[]): Definitions {
                 record(type);
                 out.blocks.push({
                     type,
-                    ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases),
+                    ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases, { panelId, entry }),
                     ...(s.output ? { output: checksFor(s.output, bases) } : { previousStatement: null, nextStatement: null }),
                     colour: HUE.command,
                     tooltip: s.description ?? s.name,
@@ -160,7 +195,7 @@ export function registryDefinitions(entries: BlockInfo[]): Definitions {
                 record(type);
                 out.blocks.push({
                     type,
-                    ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases),
+                    ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases, { panelId, entry }),
                     output: checksFor(s.type, bases),
                     colour: HUE.value,
                     tooltip: s.description ?? s.name,
@@ -178,7 +213,7 @@ export function registryDefinitions(entries: BlockInfo[]): Definitions {
                 const s = schema as Schema<"event">;
                 const type = registryBlockType({ kind: "event", panelId, entry });
                 record(type);
-                out.blocks.push(hat(type, message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases), s.description ?? s.name));
+                out.blocks.push(hat(type, message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases, { panelId, entry }), s.description ?? s.name));
                 const valueBlocks: Json[] = [];
                 for (const [key, v] of Object.entries(s.values ?? {})) {
                     const valueType = registryBlockType({ kind: "event-value", panelId, entry, key });
@@ -188,7 +223,7 @@ export function registryDefinitions(entries: BlockInfo[]): Definitions {
                         message0: v.name,
                         output: checksFor(v.type, bases),
                         colour: HUE.event,
-                        tooltip: `${v.name}, inside "${s.name}"`,
+                        tooltip: v.optional ? `${v.name}, inside "${s.name}"; it may have none (check with "has a value")` : `${v.name}, inside "${s.name}"`,
                     });
                     valueBlocks.push({ kind: "block", type: valueType });
                 }
@@ -248,6 +283,7 @@ export const BUILTIN_BLOCKS: Json[] = [
         tooltip: "Runs the first steps; if one fails, runs the second ones instead of ending the flow",
     },
     reporter(BUILTIN.errorMessage, "error message", [], "String", "What went wrong, inside \"If it fails\"", HUE.builtin),
+    reporter(BUILTIN.hasValue, "%1 has a value", [socket("VALUE")], "Boolean", "False when a value is missing, like the reason of a ban nobody gave a reason for", HUES.logic),
     reporter(BUILTIN.textTest, "%1 %2 %3", [socket("TEXT", "String"), dropdown("OP", [["contains", "CONTAINS"], ["starts with", "STARTS"], ["ends with", "ENDS"]]), socket("PART", "String")], "Boolean", "Checks for a piece of text", HUES.text),
     reporter(BUILTIN.regexTest, "%1 matches pattern %2", [socket("TEXT", "String"), socket("PATTERN", "String")], "Boolean", "Checks text against a regular expression", HUES.text),
     reporter(BUILTIN.regexFind, "find pattern %1 in %2", [socket("PATTERN", "String"), socket("TEXT", "String")], "String", "The first match (or its first group); empty text when nothing matches", HUES.text),
@@ -291,7 +327,7 @@ export const BUILTIN_SECTIONS: { name: string; contents: Json[]; custom?: string
     },
     {
         name: "Logic",
-        contents: ["logic_compare", "logic_operation", "logic_negate", "logic_boolean", "logic_ternary"].map((type) => b(type)),
+        contents: [...["logic_compare", "logic_operation", "logic_negate", "logic_boolean", "logic_ternary"].map((type) => b(type)), b(BUILTIN.hasValue)],
     },
     {
         name: "Math",

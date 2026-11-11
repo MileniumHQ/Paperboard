@@ -7,7 +7,8 @@ import { blocksApi, createPanelBridge, panelsApi, type BlockInfo } from "@mileni
 import { PaperButton, PaperConsole, PaperFlex, PaperText, type PaperConsoleEntry } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
-import { BUILTIN_BLOCKS, BUILTIN_SECTIONS, registryDefinitions } from "./lib/blockDefs";
+import { BUILTIN_BLOCKS, BUILTIN_SECTIONS, choicesSources, registryDefinitions } from "./lib/blockDefs";
+import { refreshChoices, registerChoicesField } from "./lib/choicesField";
 import { errorMessage } from "./lib/failure";
 import type { SavedWorkspace } from "./lib/interpreter";
 import { DEFAULT_STATE, PANEL_ID, SERVICE_ACTIONS, type PanelState, type SavedFlows } from "./panel";
@@ -40,7 +41,13 @@ export default function App() {
     /** Defines every block the registry and the saved flows name, and returns the toolbox. */
     async function refreshBlocks(saved: SavedFlows["schemas"]): Promise<Blockly.utils.toolbox.ToolboxDefinition> {
         const [entries, panels, projects] = await Promise.all([blocksApi.list(), panelsApi.list(), blocksApi.projects()]);
-        const liveDefs = registryDefinitions(entries);
+        // ask for every dropdown's choices now, so a loaded flow shows them; one that fails says so
+        await Promise.all(
+            choicesSources(entries).map((source) =>
+                refreshChoices(source).catch((err: unknown) => setProblem(`The choices for ${panels.find((p) => p.id === source.panelId)?.name ?? source.panelId} couldn't be loaded: ${errorMessage(err)}`)),
+            ),
+        );
+        const liveDefs = registryDefinitions(entries, projects);
         live = new Set(Object.keys(liveDefs.schemas));
         // a block whose panel is away keeps the shape it was saved with
         const away: BlockInfo[] = Object.entries(saved)
@@ -108,6 +115,7 @@ export default function App() {
     }
 
     onMount(() => {
+        registerChoicesField({ fetch: (s) => blocksApi.choices(s.panelId, s.entry, s.input), report: setProblem });
         workspace = Blockly.inject(host, {
             toolbox: { kind: "categoryToolbox", contents: [] },
             media: "./blockly-media/",

@@ -47,7 +47,7 @@ function host(signal: AbortSignal): Host {
             const { project, id } = parseEntry(entry);
             return untilStopped(signal, blocksApi.read(panelId, id, inputs, project ? { project } : {}));
         },
-        property: (typeRef, field, value) => untilStopped(signal, blocksApi.property(typeRef, field, value)),
+        property: (typeRef, field, value, project) => untilStopped(signal, blocksApi.property(typeRef, field, value, project ? { project } : {})),
         log: (message, blockId) => log("info", message, blockId),
     };
 }

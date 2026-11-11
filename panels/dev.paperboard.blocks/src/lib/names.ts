@@ -8,6 +8,7 @@
 //   pb.event|<panel>|<entry>           an event's hat
 //   pb.event-value|<panel>|<entry>|<key>  one value an event fires with
 //   pb.property|<panel>:<type>         "[field] of [value]" for a type
+//   pb.property|<panel>:<type>|<project>  the same, for the fields read in a project
 //
 // An entry is "kind.id" or "project/kind.id" (PaperAPI's blockEntry).
 
@@ -27,8 +28,8 @@ export function registryBlockType(name: RegistryBlockName): string {
     return [`${PREFIX}${name.kind}`, name.panelId, name.entry, ...(name.key !== undefined ? [name.key] : [])].join("|");
 }
 
-export function propertyBlockType(typeRef: string): string {
-    return `${PREFIX}property|${typeRef}`;
+export function propertyBlockType(typeRef: string, project?: string): string {
+    return [`${PREFIX}property`, typeRef, ...(project ? [project] : [])].join("|");
 }
 
 /** The registry block a type names, or null for a built-in or property block. */
@@ -41,10 +42,11 @@ export function parseRegistryBlockType(type: string): RegistryBlockName | null {
     return { kind: kind as RegistryBlockKind, panelId, entry, ...(key !== undefined ? { key } : {}) };
 }
 
-/** The type ("panel:type") a property block reads, or null. */
-export function parsePropertyBlockType(type: string): string | null {
-    const prefix = `${PREFIX}property|`;
-    return type.startsWith(prefix) ? type.slice(prefix.length) : null;
+/** The type ("panel:type") a property block reads, and the project it reads in, or null. */
+export function parsePropertyBlockType(type: string): { typeRef: string; project?: string } | null {
+    const [head, typeRef, project, ...rest] = type.split("|");
+    if (head !== `${PREFIX}property` || !typeRef || rest.length || project === "") return null;
+    return { typeRef, ...(project ? { project } : {}) };
 }
 
 /** What an entry is: its project, kind and id. */
@@ -66,6 +68,7 @@ export const BUILTIN = {
     fail: "pb_fail",
     attempt: "pb_try",
     errorMessage: "pb_error_message",
+    hasValue: "pb_has_value",
     textTest: "pb_text_test",
     regexTest: "pb_regex_test",
     regexFind: "pb_regex_find",

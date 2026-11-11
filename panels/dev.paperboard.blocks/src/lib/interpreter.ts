@@ -31,7 +31,8 @@ export interface SavedWorkspace {
 export interface Host {
     run(panelId: string, entry: string, inputs: Record<string, unknown>): Promise<unknown>;
     read(panelId: string, entry: string, inputs: Record<string, unknown>): Promise<unknown>;
-    property(typeRef: string, field: string, value: unknown): Promise<unknown>;
+    /** a per-project field is read in its project */
+    property(typeRef: string, field: string, value: unknown, project?: string): Promise<unknown>;
     log(message: string, blockId: string): void;
     /** aborted when the run is stopped */
     signal: AbortSignal;
@@ -704,17 +705,21 @@ async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
             return (await listOf(run, block, "VALUE", "The list")).length;
         case "lists_isEmpty":
             return (await listOf(run, block, "VALUE", "The list")).length === 0;
+        case BUILTIN.hasValue: {
+            const v = await value(run, block, "VALUE");
+            return v !== undefined && v !== null;
+        }
         case "variables_get": {
             const id = variableId(block);
             if (!run.variables.has(id)) throw new BlockError(`${run.names.get(id) ?? "This variable"} has no value yet`, block.id);
             return run.variables.get(id);
         }
     }
-    const typeRef = parsePropertyBlockType(block.type);
-    if (typeRef) {
+    const property = parsePropertyBlockType(block.type);
+    if (property) {
         const fieldName = field(block, "FIELD");
         if (typeof fieldName !== "string") throw new BlockError("Pick a field", block.id);
-        return run.host.property(typeRef, fieldName, await required(run, block, "VALUE", "The value"));
+        return (await run.host.property(property.typeRef, fieldName, await required(run, block, "VALUE", "The value"), property.project)) ?? null;
     }
     const name = parseRegistryBlockType(block.type);
     if (name?.kind === "value") return run.host.read(name.panelId, name.entry, await gatherInputs(run, block));
@@ -724,7 +729,8 @@ async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
         if (running?.kind !== "event" || running.panelId !== name.panelId || running.entry !== name.entry) {
             throw new BlockError(`This value only exists inside "${parseEntry(name.entry).id}" blocks`, block.id);
         }
-        return run.payload?.[name.key!];
+        // an optional value the firing left out is nothing, which "has a value" tells apart
+        return run.payload?.[name.key!] ?? null;
     }
     throw new BlockError(`"${block.type}" can't be a value`, block.id);
 }
