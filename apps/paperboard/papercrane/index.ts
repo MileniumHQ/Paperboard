@@ -387,7 +387,7 @@ function listenPaperCraneServer(
 
         const tryStart = (currentPort: number) => {
             let advertisement: AdvertisementHandle | null = null;
-            const panelServices = new PanelServicesManager(getPaperboardDir(), { sleepAfterMs: options.serviceSleepAfterMs });
+            const panelServices = new PanelServicesManager(getPaperboardDir(), { sleepAfterMs: options.serviceSleepAfterMs, sleep: !noAuth });
             const engine = new PaperCraneEngine(undefined, panelServices);
             const auth = new PaperCraneAuth(noAuth, undefined, undefined);
             const sessions = new DavSessionStore();

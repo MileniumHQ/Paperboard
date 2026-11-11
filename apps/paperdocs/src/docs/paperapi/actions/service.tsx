@@ -228,7 +228,7 @@ export default service;`}
                     </tr>
                     <tr>
                         <td>Sleep</td>
-                        <td>Stops a service that has said <PaperCode>ctx.setIdle(true)</PaperCode> once 2 minutes have passed with no call to it and none still running. Its actions, blocks and projects stay listed. The next call to one of them starts the service again and waits for it to be ready, so <PaperCode>onInit</PaperCode> runs again and whatever the service knew must be on disk. Events are not kept for a sleeping service, so one that listens for another panel's events is not idle.</td>
+                        <td>Stops a service that has said <PaperCode>ctx.setIdle(true)</PaperCode> once 2 minutes have passed with no call to it and none still running. Its actions, blocks and projects stay listed. The next call to one of them starts the service again and waits for it to be ready, so <PaperCode>onInit</PaperCode> runs again and whatever the service knew must be on disk. Events are not kept for a sleeping service, so one that listens for another panel's events is not idle. A daemon started with <PaperCode>--no-auth</PaperCode> never puts a service to sleep.</td>
                     </tr>
                     <tr>
                         <td>Stop</td>

@@ -115,8 +115,15 @@ export class PanelServicesManager {
     private sleeps = new Map<string, Promise<void>>();
     private sleepHooks: SleepHooks | null = null;
     private readonly sleepAfterMs: number;
-    constructor(private baseDir = getPaperboardDir(), options: { sleepAfterMs?: number } = {}) {
+    private readonly sleepAllowed: boolean;
+    /**
+     * `sleep: false` never puts a service to sleep. A daemon without
+     * authentication hands a panel's pages the same credential as its
+     * service, so it cannot tell the service's connection from a page's.
+     */
+    constructor(private baseDir = getPaperboardDir(), options: { sleepAfterMs?: number; sleep?: boolean } = {}) {
         this.sleepAfterMs = options.sleepAfterMs ?? SERVICE_SLEEP_AFTER_MS;
+        this.sleepAllowed = options.sleep ?? true;
     }
 
     public setSleepHooks(hooks: SleepHooks | null): void { this.sleepHooks = hooks; }
@@ -136,7 +143,7 @@ export class PanelServicesManager {
     private considerSleep(id: string, entry: RunningService): void {
         clearTimeout(entry.sleepTimer);
         entry.sleepTimer = undefined;
-        if (!entry.idle || entry.stopped || entry.state !== "ready") return;
+        if (!this.sleepAllowed || !entry.idle || entry.stopped || entry.state !== "ready") return;
         const wait = Math.max(0, entry.lastActivity + this.sleepAfterMs - Date.now());
         entry.sleepTimer = setTimeout(() => {
             this.sleep(id, entry).catch((err) => logger.error(`[services] ${id} could not be put to sleep`, err));
