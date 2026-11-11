@@ -104,6 +104,9 @@ export const characterOf = (name: string | null | undefined): Character | null =
 export const HARNESSES = ["codex", "claude-code", "opencode"] as const;
 export type Harness = (typeof HARNESSES)[number];
 
+/** The model a brain is on when none is chosen: whatever the harness is set to use already. Saved as null. */
+export const DEFAULT_MODEL = "default";
+
 export interface Settings {
     name: string;
     harness: Harness;

@@ -19,14 +19,12 @@ import {
     PaperText,
 } from "@mileniumhq/paperui";
 import BrainLogo from "../lib/BrainLogo";
-import { COMPACTIONS, HARNESSES, LIMITS, type Compaction, type Harness, type Settings as Saved } from "../contract";
+import { COMPACTIONS, DEFAULT_MODEL, HARNESSES, LIMITS, type Compaction, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
 import { SEARCH_MODELS_FROM, createModels, harnessName, loadedModels } from "../lib/brains";
 import { errorText, failure, type Failure } from "../lib/failure";
 import { BrainButtons, BrainStatus, SignInModal, brainLine, createBrainActions } from "./Brain";
 import Providers from "./Providers";
-
-const DEFAULT_MODEL = "default";
 
 export default function Settings(props: { agent: Agent }) {
     const { agent } = props;

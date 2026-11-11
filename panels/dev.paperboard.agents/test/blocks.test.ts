@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import fs from "node:fs";
+import path from "node:path";
 import { TURN_PROC_ID } from "../src/service/conversation";
 import { appRig, type AppRig } from "./support/app";
-import { SLOW } from "./support/host";
+import { plan, SLOW } from "./support/host";
 
 let rig: AppRig | null = null;
 afterEach(async () => {
@@ -16,7 +18,7 @@ describe("the agent's blocks", () => {
     test("registers the agent's types, values, commands and events, and none of the panel's own actions", async () => {
         rig = await appRig();
         const set = rig.blocks.set!;
-        expect(set.types!.map((t) => t.id)).toEqual(["conversation", "message", "fact", "note", "routine", "attachment"]);
+        expect(set.types!.map((t) => t.id)).toEqual(["conversation", "message", "fact", "note", "routine", "model", "brain", "tool-server", "app", "attachment"]);
         expect(Object.keys(set.types![0]!.fields!)).toEqual(["title", "messages"]);
         expect(Object.keys(set.types![1]!.fields!)).toEqual(["text", "from"]);
         expect(set.values!.map((v) => [v.id, v.type, v.changes ?? false])).toEqual([
@@ -26,6 +28,12 @@ describe("the agent's blocks", () => {
             ["facts", "list<fact>", true],
             ["notes", "list<note>", true],
             ["routines", "list<routine>", true],
+            ["current-brain", "brain", true],
+            ["brains", "list<brain>", false],
+            ["current-model", "model", true],
+            ["models", "list<model>", false],
+            ["tool-servers", "list<tool-server>", true],
+            ["apps", "list<app>", true],
             ["computer-running", "boolean", true],
         ]);
         expect(set.commands!.map((c) => [c.id, c.output])).toEqual([
@@ -44,6 +52,14 @@ describe("the agent's blocks", () => {
             ["add-routine-daily", "routine"],
             ["add-routine-repeating", "routine"],
             ["cancel-routine", undefined],
+            ["switch-brain", undefined],
+            ["switch-model", undefined],
+            ["install-brain", undefined],
+            ["sign-out-brain", undefined],
+            ["turn-on-tool-server", undefined],
+            ["turn-off-tool-server", undefined],
+            ["restart-tool-server", undefined],
+            ["delete-app", undefined],
             ["start-computer", undefined],
             ["stop-computer", undefined],
         ]);
@@ -52,9 +68,10 @@ describe("the agent's blocks", () => {
             ["turn-failed", { conversation: "conversation" }],
             ["routine-fired", { routine: "routine" }],
         ]);
-        // no secrets, sign-ins, provider keys or the computer's screen and input
+        expect(Object.keys(set.types!.find((t) => t.id === "tool-server")!.fields!)).toEqual(["name", "enabled", "status", "error", "tools"]);
+        // no secrets, sign-ins, provider keys, the computer's screen and input, or a tool server made from a command line
         const ids = [...set.commands!, ...set.values!].map((d) => d.id).join(" ");
-        expect(ids).not.toMatch(/secret|key|sign-in|provider|frame|input|control/);
+        expect(ids).not.toMatch(/secret|key|sign-in|code|provider|frame|input|control|add-tool|save-tool|remove-tool/);
     });
 
     test("a text to the agent is a Message, its reply fires When the Agent Replies, and the conversations announce the change", async () => {
@@ -213,5 +230,123 @@ describe("the agent's blocks", () => {
         await expect(rig.blocks.run("start-computer")).rejects.toThrow("Set up the computer first.");
         await rig.blocks.run("stop-computer");
         expect(await rig.blocks.read("computer-running")).toBe(false);
+    }, SLOW);
+
+    test("Models lists the brain's own models after its default; Switch Model saves one it lists and refuses one it doesn't", async () => {
+        rig = await appRig();
+        plan(rig.root, {
+            models: {
+                stdout: JSON.stringify({
+                    models: [
+                        { slug: "gpt-9-mini", display_name: "GPT-9 mini", description: "Quick", visibility: "list", priority: 2 },
+                        { slug: "gpt-9", display_name: "GPT-9", visibility: "list", priority: 1 },
+                        { slug: "reviewer", visibility: "hide", priority: 0 },
+                    ],
+                }),
+            },
+        });
+        expect(await rig.blocks.read("current-model")).toBe("default");
+        expect(await rig.blocks.read("models")).toEqual(["default", "gpt-9", "gpt-9-mini"]);
+        expect(await rig.blocks.property("model", "name", "default")).toBe("Default");
+        expect(await rig.blocks.property("model", "description", "gpt-9-mini")).toBe("Quick");
+        expect(await rig.blocks.property("model", "description", "gpt-9")).toBe(null);
+        expect(await rig.blocks.property("model", "older", "gpt-9")).toBe(false);
+        await expect(rig.blocks.property("model", "name", "reviewer")).rejects.toThrow('Codex has no model "reviewer"');
+
+        await rig.blocks.run("switch-model", { model: "gpt-9" });
+        expect(rig.ctx.state.settings!.model).toBe("gpt-9");
+        expect(await rig.blocks.read("current-model")).toBe("gpt-9");
+        await rig.blocks.changes.until((c) => c.includes("current-model"), "Current Model to announce the change");
+        expect(rig.blocks.changes.items).not.toContain("current-brain");
+        await expect(rig.blocks.run("switch-model", { model: "reviewer" })).rejects.toThrow('"Model" must be one of Default, GPT-9, GPT-9 mini');
+        await rig.blocks.run("switch-model", { model: "default" });
+        expect(rig.ctx.state.settings!.model).toBe(null);
+
+        // a list the brain can't give is an error, never an empty list
+        plan(rig.root, { models: { stderr: "not today", exit: 1 } });
+        await expect(rig.blocks.read("models")).rejects.toThrow("Codex couldn't list its models: not today");
+    }, SLOW);
+
+    test("brains are read, installed and signed out of; Switch Brain refuses one that isn't signed in", async () => {
+        rig = await appRig({ downloads: ["claude-code"] });
+        expect(await rig.blocks.read("brains")).toEqual(["codex", "claude-code", "opencode"]);
+        expect(await rig.blocks.read("current-brain")).toBe("codex");
+        expect(await rig.blocks.property("brain", "name", "claude-code")).toBe("Claude");
+        expect(await rig.blocks.property("brain", "status", "codex")).toBe("ready");
+        expect(await rig.blocks.property("brain", "signed-in", "codex")).toBe(true);
+        expect(await rig.blocks.property("brain", "installed", "claude-code")).toBe(false);
+        expect(await rig.blocks.property("brain", "version", "claude-code")).toBe(null);
+        await expect(rig.blocks.property("brain", "name", "gemini")).rejects.toThrow('the agent has no brain "gemini"');
+
+        await rig.blocks.run("install-brain", { brain: "claude-code" });
+        expect(await rig.blocks.property("brain", "status", "claude-code")).toBe("installed");
+        expect(await rig.blocks.property("brain", "version", "claude-code")).toBe("1.0.0");
+        await expect(rig.blocks.run("install-brain", { brain: "claude-code" })).rejects.toThrow("Claude is installed already");
+        // the download fails loudly
+        await expect(rig.blocks.run("install-brain", { brain: "opencode" })).rejects.toThrow("the test has no download for opencode");
+        expect(await rig.blocks.property("brain", "error", "opencode")).toContain("OpenCode didn't install");
+
+        await expect(rig.blocks.run("switch-brain", { brain: "claude-code" })).rejects.toThrow("Claude isn't ready: sign in to it first");
+        await expect(rig.blocks.run("sign-out-brain", { brain: "claude-code" })).rejects.toThrow("Claude isn't signed in");
+        await expect(rig.blocks.run("sign-out-brain", { brain: "opencode" })).rejects.toThrow('"Brain" must be one of Codex, Claude');
+        await rig.blocks.run("sign-out-brain", { brain: "codex" });
+        expect(await rig.blocks.property("brain", "signed-in", "codex")).toBe(false);
+        expect(await rig.blocks.property("brain", "status", "codex")).toBe("installed");
+        expect(fs.existsSync(path.join(rig.root, "storage", "brains", "codex", "auth.json"))).toBe(false);
+        expect(await rig.blocks.read("current-brain")).toBe("codex");
+    }, SLOW);
+
+    test("tool servers are listed with their state, turned off and on, restarted and announced", async () => {
+        rig = await appRig();
+        expect(await rig.blocks.read("tool-servers")).toEqual([]);
+        const program = path.join(rig.root, "whoami-server");
+        fs.copyFileSync(path.join(import.meta.dir, "support", "mcpServer.mjs"), program);
+        fs.chmodSync(program, 0o755);
+        await rig.app.toolsSave({ server: { name: "whoami", transport: "stdio", command: program, args: [], env: {}, enabled: true } });
+        expect(await rig.blocks.read("tool-servers")).toEqual(["whoami"]);
+        await rig.blocks.changes.until((c) => c.includes("tool-servers"), "Tool Servers to announce the change");
+        expect(await rig.blocks.property("tool-server", "name", "whoami")).toBe("whoami");
+        expect(await rig.blocks.property("tool-server", "enabled", "whoami")).toBe(true);
+        expect(await rig.blocks.property("tool-server", "status", "whoami")).toBe("stopped");
+
+        await rig.blocks.run("restart-tool-server", { server: "whoami" });
+        expect(await rig.blocks.property("tool-server", "status", "whoami")).toBe("running");
+        expect(await rig.blocks.property("tool-server", "tools", "whoami")).toBe(1);
+
+        await rig.blocks.run("turn-off-tool-server", { server: "whoami" });
+        expect(await rig.blocks.property("tool-server", "enabled", "whoami")).toBe(false);
+        expect(await rig.blocks.property("tool-server", "status", "whoami")).toBe("stopped");
+        expect(await rig.blocks.property("tool-server", "tools", "whoami")).toBe(0);
+        expect(rig.app.servers.config.servers[0]).toMatchObject({ name: "whoami", command: program, enabled: false });
+        await expect(rig.blocks.run("restart-tool-server", { server: "whoami" })).rejects.toThrow("whoami is switched off: turn it on first");
+        await rig.blocks.run("turn-on-tool-server", { server: "whoami" });
+        expect(await rig.blocks.property("tool-server", "enabled", "whoami")).toBe(true);
+        await expect(rig.blocks.run("turn-on-tool-server", { server: "nope" })).rejects.toThrow('"Tool Server" must be one of whoami');
+        await expect(rig.blocks.property("tool-server", "status", "nope")).rejects.toThrow('the agent has no tool server "nope"');
+
+        // one that can't start says why
+        fs.rmSync(program);
+        await expect(rig.blocks.run("restart-tool-server", { server: "whoami" })).rejects.toThrow("whoami didn't start:");
+        expect(await rig.blocks.property("tool-server", "status", "whoami")).toBe("failed");
+        expect(await rig.blocks.property("tool-server", "error", "whoami")).toBeString();
+    }, SLOW);
+
+    test("the agent's apps are listed with their titles, deleted for good, and announced", async () => {
+        rig = await appRig();
+        expect(await rig.blocks.read("apps")).toEqual([]);
+        const made = await rig.app.apps.toolset().call("start_app", { name: "planner", title: "Assignment planner", description: "Due dates, at a glance" });
+        expect(made.isError).toBeFalsy();
+        expect(await rig.blocks.read("apps")).toEqual(["planner"]);
+        await rig.blocks.changes.until((c) => c.includes("apps"), "Apps to announce the change");
+        expect(await rig.blocks.property("app", "title", "planner")).toBe("Assignment planner");
+        expect(await rig.blocks.property("app", "description", "planner")).toBe("Due dates, at a glance");
+
+        const folder = path.join(rig.root, "storage", "home", "Apps", "planner");
+        expect(fs.existsSync(path.join(folder, "package.json"))).toBe(true);
+        await rig.blocks.run("delete-app", { app: "planner" });
+        expect(await rig.blocks.read("apps")).toEqual([]);
+        expect(fs.existsSync(folder)).toBe(false);
+        await expect(rig.blocks.property("app", "title", "planner")).rejects.toThrow('the agent has no app "planner"');
+        await rig.blocks.changes.until((c) => c.filter((v) => v === "apps").length >= 2, "Apps to announce the removal");
     }, SLOW);
 });

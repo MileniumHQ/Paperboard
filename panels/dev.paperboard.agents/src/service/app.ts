@@ -7,6 +7,7 @@
 import path from "node:path";
 import {
     COMPACTIONS,
+    DEFAULT_MODEL,
     HARNESSES,
     LIMITS,
     PANEL_ID,
@@ -169,7 +170,10 @@ export class AiApp {
             host: { start: this.host.start, write: t.write, kill: this.host.kill, exists: this.host.exists, onStdout: this.host.onStdout, onStderr: this.host.onStderr, onExit: this.host.onExit, findProgram: this.host.findProgram },
             store: { read: t.readTools, write: t.writeTools },
             vault: t.vault,
-            onChange: (view) => this.ctx.emit(TOOLS_EVENT, view),
+            onChange: (view) => {
+                this.ctx.emit(TOOLS_EVENT, view);
+                this.announce("tool-servers");
+            },
         });
         await this.servers.load();
         this.routines = new Routines({
@@ -216,7 +220,10 @@ export class AiApp {
             picturesDir: path.join(root, "app-pictures"),
             picture: (url) => this.computer.picture(url),
             post: (entry) => this.conversation.post(entry),
-            onChange: () => this.ctx.setState({ apps: { revision: this.ctx.state.apps.revision + 1 } }),
+            onChange: () => {
+                this.ctx.setState({ apps: { revision: this.ctx.state.apps.revision + 1 } });
+                this.announce("apps");
+            },
         });
         this.apps = apps;
         const checkpoints = new Checkpoints({ home, dir: path.join(root, "checkpoints") });
@@ -346,6 +353,8 @@ export class AiApp {
         }
         await this.host.writeSettings(settings);
         this.ctx.setState({ settings });
+        this.announce("current-brain");
+        this.announce("current-model");
         return { saved: true };
     }
 
@@ -504,7 +513,38 @@ export class AiApp {
             computerRunning: () => this.computer.state.phase === "ready",
             startComputer: () => this.computer.start(),
             stopComputer: async () => void (await this.stopComputer()),
+            models: {
+                list: async () => (await this.models({ harness: this.settings().harness })).models,
+                current: () => this.settings().model ?? DEFAULT_MODEL,
+                choose: async (model) => void (await this.setup({ settings: { ...this.settings(), model } })),
+            },
+            brains: {
+                state: () => this.brains.snapshot(),
+                current: () => this.settings().harness,
+                // a model belongs to its brain: the new one starts on its own default, as the settings do it
+                choose: async (harness) => void (await this.setup({ settings: { ...this.settings(), harness, model: null } })),
+                install: (harness) => this.brains.install(harness),
+                signOut: (harness) => this.brains.signOut(harness),
+            },
+            toolServers: {
+                list: () => this.toolServers(),
+                setEnabled: (name, on) => this.servers.setEnabled(name, on),
+                restart: (name) => this.servers.restart(name),
+            },
+            apps: this.apps,
         });
+    }
+
+    /** The agent's settings; a flow can't change them before the agent is set up. */
+    private settings(): Settings {
+        const settings = this.ctx.state.settings;
+        if (!settings) throw new Error("The agent isn't set up yet: set it up in the Agent panel first.");
+        return settings;
+    }
+
+    private toolServers() {
+        const status = this.servers.status();
+        return this.servers.config.servers.map((s) => ({ ...status.find((x) => x.name === s.name)!, enabled: s.enabled }));
     }
 
     private flowHost(): FlowHost {
@@ -541,6 +581,11 @@ export class AiApp {
             conversations: () => this.conversationIds(),
             routines: () => this.routines.list().map((r) => r.id),
             "computer-running": () => this.computer.state.phase === "ready",
+            // nothing before the agent is set up: its first settings are a change
+            "current-brain": () => this.ctx.state.settings?.harness ?? null,
+            "current-model": () => (this.ctx.state.settings ? (this.ctx.state.settings.model ?? DEFAULT_MODEL) : null),
+            "tool-servers": () => this.servers.config.servers.map((s) => s.name),
+            apps: () => this.apps.list().map((a) => a.name),
         };
     }
 
@@ -686,7 +731,7 @@ export function parseSettings(v: unknown): Settings | null {
     if (!name || name.length > LIMITS.name) return null;
     if (!HARNESSES.includes(s.harness as Harness)) return null;
     let model: string | null = null;
-    if (typeof s.model === "string" && s.model && s.model !== "default") {
+    if (typeof s.model === "string" && s.model && s.model !== DEFAULT_MODEL) {
         // it lands in argv after -m/--model: it can never be read as a flag
         if (s.model.length > LIMITS.model || !/^\w[\w.:\-/]*$/.test(s.model)) return null;
         model = s.model;

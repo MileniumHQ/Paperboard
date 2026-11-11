@@ -279,15 +279,30 @@ export class McpServers {
     save(raw: unknown): Promise<ToolsView> {
         return this.serial(async () => {
             this.writable();
-            const spec = parseServer(raw);
-            const existing = this.entries.get(spec.name);
-            if (existing) await this.stop(existing);
-            const servers = this.config.servers.some((s) => s.name === spec.name)
-                ? this.config.servers.map((s) => (s.name === spec.name ? spec : s))
-                : [...this.config.servers, spec];
-            await this.commit({ ...this.config, servers });
+            await this.put(parseServer(raw));
             return this.view();
         });
+    }
+
+    /** Switch a server on or off, as it is otherwise. One that's switched on starts when the agent next needs its tools. */
+    setEnabled(name: unknown, on: unknown): Promise<ToolsView> {
+        return this.serial(async () => {
+            this.writable();
+            if (typeof on !== "boolean") throw new Error("on or off");
+            const spec = this.config.servers.find((s) => s.name === name);
+            if (!spec) throw new Error("there's no such server");
+            if (spec.enabled !== on) await this.put({ ...spec, enabled: on });
+            return this.view();
+        });
+    }
+
+    private async put(spec: ServerSpec) {
+        const existing = this.entries.get(spec.name);
+        if (existing) await this.stop(existing);
+        const servers = this.config.servers.some((s) => s.name === spec.name)
+            ? this.config.servers.map((s) => (s.name === spec.name ? spec : s))
+            : [...this.config.servers, spec];
+        await this.commit({ ...this.config, servers });
     }
 
     /** Remove a server: it stops (observed), then its entry and its secrets go. */

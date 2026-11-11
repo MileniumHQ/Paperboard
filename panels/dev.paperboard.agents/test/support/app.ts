@@ -24,7 +24,7 @@ export interface AppRig {
     close(): Promise<void>;
 }
 
-export async function appRig(o: { settings?: Settings; actions?: ActionEntry[] } = {}): Promise<AppRig> {
+export async function appRig(o: { settings?: Settings; actions?: ActionEntry[]; downloads?: ("claude-code" | "opencode")[] } = {}): Promise<AppRig> {
     const root = tempDir("app");
     const storage = path.join(root, "storage");
     const host = new TestHost(fakeEnv(root));
@@ -44,7 +44,8 @@ export async function appRig(o: { settings?: Settings; actions?: ActionEntry[] }
         onStdout: host.onStdout,
         onStderr: host.onStderr,
         exec: host.exec,
-        packages: packageHost({ codex }),
+        // a brain to download installs the fake one
+        packages: packageHost({ codex }, Object.fromEntries((o.downloads ?? []).map((h) => [h, brainPackage(root, h)]))),
         storageDir: async () => storage,
         readSettings: async () => o.settings ?? { name: "Ada", harness: "codex", model: null, compaction: "summarize" },
         writeSettings: async () => {},

@@ -2,9 +2,11 @@
 // (v1, flowActions.ts) stay as they are; both run the same FlowHost.
 
 import type { BlockSet } from "@mileniumhq/paperapi";
-import { LIMITS, type Routine } from "../contract";
+import { DEFAULT_MODEL, HARNESSES, LIMITS, SIGN_IN_REQUIRED, type AppInfo, type BrainModel, type BrainState, type Harness, type Routine } from "../contract";
+import type { ServerStatus } from "../toolsContract";
 import { DAY_NAMES, describeSchedule, localStamp } from "../routineText";
 import type { FlowHost, MessageReceived } from "./flowActions";
+import { HARNESS_NAMES } from "./harness";
 import type { Memory } from "./memory";
 import { parseSchedule, type Routines } from "./routines";
 
@@ -35,6 +37,38 @@ export interface BlocksHost extends FlowHost {
     /** resolves once the computer is on; throws when it can't start */
     startComputer(): Promise<void>;
     stopComputer(): Promise<void>;
+    models: {
+        /** the current brain's models, as its own picker lists them; throws when it can't list them */
+        list(): Promise<BrainModel[]>;
+        /** the current brain's model, DEFAULT_MODEL when none is chosen; throws before the agent is set up */
+        current(): string;
+        /** saves the model, DEFAULT_MODEL for none, the way the agent's settings do */
+        choose(model: string): Promise<void>;
+    };
+    brains: {
+        state(): Record<Harness, BrainState>;
+        /** throws before the agent is set up */
+        current(): Harness;
+        /** saves the brain the agent thinks with, on its default model; refused for one that isn't ready */
+        choose(harness: Harness): Promise<void>;
+        /** resolves once it's installed; throws when it couldn't be */
+        install(harness: Harness): Promise<void>;
+        signOut(harness: Harness): Promise<void>;
+    };
+    toolServers: {
+        list(): ToolServerFacts[];
+        setEnabled(name: string, on: boolean): Promise<unknown>;
+        restart(name: string): Promise<unknown>;
+    };
+    apps: {
+        list(): AppInfo[];
+        remove(name: string): unknown;
+    };
+}
+
+/** A tool server as its type's fields read it. */
+export interface ToolServerFacts extends ServerStatus {
+    enabled: boolean;
 }
 
 /** A text as its type's fields read it. */
@@ -43,7 +77,7 @@ export interface MessageFacts {
     from: "user" | "agent";
 }
 
-export const CATEGORY = { agent: "Agent", memory: "Memory", routines: "Routines", computer: "Computer" };
+export const CATEGORY = { agent: "Agent", brain: "Brain", memory: "Memory", routines: "Routines", computer: "Computer", tools: "Tool Servers", apps: "Apps" };
 
 const L = LIMITS.memory;
 
@@ -67,6 +101,10 @@ const instructions = {
     maxLength: LIMITS.instructions,
 } as const;
 
+const brainChoices = (only: (h: Harness) => boolean = () => true) => HARNESSES.filter(only).map((h) => ({ label: HARNESS_NAMES[h], value: h }));
+
+const brainInput = { type: "brain", name: "Brain", choices: brainChoices() } as const;
+
 export function flowBlocks(host: BlocksHost): BlockSet {
     const ready = async <T>(fn: () => Promise<T> | T) => {
         await host.ready();
@@ -82,6 +120,36 @@ export function flowBlocks(host: BlocksHost): BlockSet {
         if (!found) throw new Error(`the agent has no routine "${id}"; it may have been cancelled, or was a one-time routine that already ran`);
         return found;
     };
+    /** the current brain's models as its settings' dropdown offers them: its default, then what it lists */
+    const models = async (): Promise<BrainModel[]> => {
+        const harness = host.brains.current();
+        const listed = await host.models.list();
+        return [{ id: DEFAULT_MODEL, name: "Default", description: `Whatever ${HARNESS_NAMES[harness]} is set to use`, older: false }, ...listed];
+    };
+    const model = async (id: string) => {
+        const found = (await models()).find((m) => m.id === id);
+        if (!found) throw new Error(`${HARNESS_NAMES[host.brains.current()]} has no model "${id}"`);
+        return found;
+    };
+    const brain = (id: string): BrainState => {
+        if (!HARNESSES.includes(id as Harness)) throw new Error(`the agent has no brain "${id}"; its brains are ${HARNESSES.join(", ")}`);
+        return host.brains.state()[id as Harness];
+    };
+    const brainName = (id: string) => {
+        brain(id);
+        return HARNESS_NAMES[id as Harness];
+    };
+    const toolServer = (name: string): ToolServerFacts => {
+        const found = host.toolServers.list().find((s) => s.name === name);
+        if (!found) throw new Error(`the agent has no tool server "${name}"; add it on the agent's Tools page`);
+        return found;
+    };
+    const app = (name: string): AppInfo => {
+        const found = host.apps.list().find((a) => a.name === name);
+        if (!found) throw new Error(`the agent has no app "${name}"; it may have been deleted`);
+        return found;
+    };
+    const serverInput = { type: "tool-server", name: "Tool Server", choices: () => host.toolServers.list().map((s) => ({ label: s.name, value: s.name })) } as const;
     const addRoutine = (what: string, schedule: Record<string, unknown>) =>
         ready(async () => (await host.routines.add(what, parseSchedule(schedule, Date.now()))).id);
     return {
@@ -147,6 +215,64 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                         optional: true,
                         resolve: (id: string) => ready(() => routine(id).lastError),
                     },
+                },
+            },
+            {
+                id: "model",
+                name: "Model",
+                icon: "neurology",
+                description: "A model the agent's brain can think with, by its id; default is whatever the brain is set to use",
+                base: "text",
+                fields: {
+                    name: { type: "text", name: "Name", resolve: (id: string) => ready(async () => (await model(id)).name) },
+                    description: { type: "text", name: "Description", optional: true, resolve: (id: string) => ready(async () => (await model(id)).description) },
+                    older: { type: "boolean", name: "Older", description: "The brain lists it among its older models", resolve: (id: string) => ready(async () => (await model(id)).older) },
+                },
+            },
+            {
+                id: "brain",
+                name: "Brain",
+                icon: "psychology",
+                description: "An agent harness the agent can think with: codex, claude-code or opencode",
+                base: "text",
+                fields: {
+                    name: { type: "text", name: "Name", resolve: (id: string) => ready(() => brainName(id)) },
+                    status: {
+                        type: "text",
+                        name: "Status",
+                        description: "none, unsupported, installing, installed, signing-in, ready or failed",
+                        resolve: (id: string) => ready(() => brain(id).phase),
+                    },
+                    installed: { type: "boolean", name: "Installed", resolve: (id: string) => ready(() => brain(id).installed) },
+                    "signed-in": { type: "boolean", name: "Signed In", resolve: (id: string) => ready(() => brain(id).signedIn) },
+                    version: { type: "text", name: "Version", optional: true, resolve: (id: string) => ready(() => brain(id).version) },
+                    account: { type: "text", name: "Account", description: "Who it's signed in as, when it says", optional: true, resolve: (id: string) => ready(() => brain(id).account) },
+                    error: { type: "text", name: "Error", description: "Why its last install, sign-in or check failed", optional: true, resolve: (id: string) => ready(() => brain(id).error) },
+                },
+            },
+            {
+                id: "tool-server",
+                name: "Tool Server",
+                icon: "dns",
+                description: "A tool server (MCP) the agent can use, by its name",
+                base: "text",
+                fields: {
+                    name: { type: "text", name: "Name", resolve: (name: string) => ready(() => toolServer(name).name) },
+                    enabled: { type: "boolean", name: "On", description: "It's switched on for the agent", resolve: (name: string) => ready(() => toolServer(name).enabled) },
+                    status: { type: "text", name: "Status", description: "stopped, starting, running or failed; stopped while it's off", resolve: (name: string) => ready(() => toolServer(name).phase) },
+                    error: { type: "text", name: "Error", description: "Why it failed", optional: true, resolve: (name: string) => ready(() => toolServer(name).error) },
+                    tools: { type: "number", name: "Tools", description: "How many tools it offers while it's running", resolve: (name: string) => ready(() => toolServer(name).tools) },
+                },
+            },
+            {
+                id: "app",
+                name: "App",
+                icon: "web",
+                description: "A web page the agent made for the user, by its name",
+                base: "text",
+                fields: {
+                    title: { type: "text", name: "Title", resolve: (name: string) => ready(() => app(name).title) },
+                    description: { type: "text", name: "Description", optional: true, resolve: (name: string) => ready(() => app(name).description || null) },
                 },
             },
             {
@@ -225,6 +351,64 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 type: "list<routine>",
                 changes: true,
                 read: () => ready(() => host.routines.list().map((r) => r.id)),
+            },
+            {
+                id: "current-brain",
+                name: "Current Brain",
+                category: CATEGORY.brain,
+                icon: "psychology",
+                description: "The brain the agent thinks with",
+                type: "brain",
+                changes: true,
+                read: () => ready(() => host.brains.current()),
+            },
+            {
+                id: "brains",
+                name: "Brains",
+                category: CATEGORY.brain,
+                icon: "psychology",
+                description: "Every brain the agent can think with, installed or not",
+                type: "list<brain>",
+                read: () => ready(() => [...HARNESSES]),
+            },
+            {
+                id: "current-model",
+                name: "Current Model",
+                category: CATEGORY.brain,
+                icon: "neurology",
+                description: "The model the agent's brain thinks with; default when it's left to the brain",
+                type: "model",
+                changes: true,
+                read: () => ready(() => host.models.current()),
+            },
+            {
+                id: "models",
+                name: "Models",
+                category: CATEGORY.brain,
+                icon: "neurology",
+                description: "The models the agent's current brain offers, default first, as it lists them. Fails when it can't list them.",
+                type: "list<model>",
+                read: () => ready(async () => (await models()).map((m) => m.id)),
+            },
+            {
+                id: "tool-servers",
+                name: "Tool Servers",
+                category: CATEGORY.tools,
+                icon: "dns",
+                description: "The tool servers on the agent's Tools page, on or off",
+                type: "list<tool-server>",
+                changes: true,
+                read: () => ready(() => host.toolServers.list().map((s) => s.name)),
+            },
+            {
+                id: "apps",
+                name: "Apps",
+                category: CATEGORY.apps,
+                icon: "web",
+                description: "The apps the agent made, newest first",
+                type: "list<app>",
+                changes: true,
+                read: () => ready(() => host.apps.list().map((a) => a.name)),
             },
             {
                 id: "computer-running",
@@ -415,6 +599,102 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 text: "cancel {routine}",
                 inputs: { routine: { type: "routine", name: "Routine" } },
                 run: ({ routine }: { routine: string }) => ready(async () => void (await host.routines.remove(routine))),
+            },
+            {
+                id: "switch-brain",
+                name: "Switch Brain",
+                category: CATEGORY.brain,
+                icon: "swap_horiz",
+                description: "Has the agent think with another brain, on its default model. Fails when that brain isn't installed and signed in.",
+                text: "have the agent think with {brain}",
+                inputs: { brain: brainInput },
+                run: ({ brain }: { brain: Harness }) => ready(() => host.brains.choose(brain)),
+            },
+            {
+                id: "switch-model",
+                name: "Switch Model",
+                category: CATEGORY.brain,
+                icon: "tune",
+                description: "Has the agent's brain think with one of its models, or its default",
+                text: "have the agent think with {model}",
+                inputs: { model: { type: "model", name: "Model", choices: async () => (await models()).map((m) => ({ label: m.name, value: m.id })) } },
+                run: ({ model }: { model: string }) => ready(() => host.models.choose(model)),
+            },
+            {
+                id: "install-brain",
+                name: "Install Brain",
+                category: CATEGORY.brain,
+                icon: "download",
+                description: "Downloads and installs a brain, waiting until it's done. Codex and Claude need signing in to in the Agent panel after.",
+                text: "install {brain}",
+                inputs: { brain: brainInput },
+                run: ({ brain: id }: { brain: Harness }) =>
+                    ready(() => {
+                        const b = brain(id);
+                        if (b.phase === "installing") throw new Error(`${HARNESS_NAMES[id]} is installing already`);
+                        if (b.installed && b.phase !== "failed") throw new Error(`${HARNESS_NAMES[id]} is installed already`);
+                        return host.brains.install(id);
+                    }),
+            },
+            {
+                id: "sign-out-brain",
+                name: "Sign Out of Brain",
+                category: CATEGORY.brain,
+                icon: "logout",
+                description: "Signs a brain out of its account; the agent can't think with it until it's signed in again in the Agent panel",
+                text: "sign {brain} out",
+                inputs: { brain: { type: "brain", name: "Brain", choices: brainChoices((h) => SIGN_IN_REQUIRED[h]) } },
+                run: ({ brain: id }: { brain: Harness }) =>
+                    ready(() => {
+                        if (!brain(id).signedIn) throw new Error(`${HARNESS_NAMES[id]} isn't signed in`);
+                        return host.brains.signOut(id);
+                    }),
+            },
+            {
+                id: "turn-on-tool-server",
+                name: "Turn On Tool Server",
+                category: CATEGORY.tools,
+                icon: "play_arrow",
+                description: "Switches a tool server on for the agent; it starts when the agent next needs its tools",
+                text: "turn on {server}",
+                inputs: { server: serverInput },
+                run: ({ server }: { server: string }) => ready(async () => void (await host.toolServers.setEnabled(toolServer(server).name, true))),
+            },
+            {
+                id: "turn-off-tool-server",
+                name: "Turn Off Tool Server",
+                category: CATEGORY.tools,
+                icon: "pause",
+                description: "Switches a tool server off and stops it; the agent can't use its tools until it's on again",
+                text: "turn off {server}",
+                inputs: { server: serverInput },
+                run: ({ server }: { server: string }) => ready(async () => void (await host.toolServers.setEnabled(toolServer(server).name, false))),
+            },
+            {
+                id: "restart-tool-server",
+                name: "Restart Tool Server",
+                category: CATEGORY.tools,
+                icon: "restart_alt",
+                description: "Stops a tool server that's on and starts it again, waiting until it's running or has failed",
+                text: "restart {server}",
+                inputs: { server: serverInput },
+                run: ({ server }: { server: string }) =>
+                    ready(async () => {
+                        if (!toolServer(server).enabled) throw new Error(`${server} is switched off: turn it on first`);
+                        await host.toolServers.restart(server);
+                        const after = toolServer(server);
+                        if (after.phase === "failed") throw new Error(`${server} didn't start: ${after.error}`);
+                    }),
+            },
+            {
+                id: "delete-app",
+                name: "Delete App",
+                category: CATEGORY.apps,
+                icon: "delete",
+                description: "Deletes one of the agent's apps for good: its folder and its picture. Cards that showed it can't open it anymore.",
+                text: "delete {app}",
+                inputs: { app: { type: "app", name: "App", choices: () => host.apps.list().map((a) => ({ label: a.title, value: a.name })) } },
+                run: ({ app: name }: { app: string }) => ready(() => void host.apps.remove(app(name).name)),
             },
             {
                 id: "start-computer",

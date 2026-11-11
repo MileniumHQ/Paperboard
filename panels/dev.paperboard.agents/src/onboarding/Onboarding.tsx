@@ -22,7 +22,7 @@ import { scriptFor } from "./script";
 import { SEARCH_MODELS_FROM, createModels, harnessDescription, harnessName, loadedModels } from "../lib/brains";
 import BrainLogo from "../lib/BrainLogo";
 import { SetupProgress } from "../computer/Computer";
-import { HARNESSES, LIMITS, characterOf, type Harness } from "../contract";
+import { DEFAULT_MODEL, HARNESSES, LIMITS, characterOf, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import { errorText } from "../lib/failure";
 import { BrainButtons, BrainStatus, brainLine, createBrainActions } from "../settings/Brain";
@@ -35,8 +35,6 @@ import styles from "./Onboarding.module.css";
 // brain's install and sign-in, saving the settings, and the computer's setup.
 // Choosing a brain and pressing Next is all it takes: the next step installs
 // it and opens its sign-in.
-
-const DEFAULT_MODEL = "default";
 
 // the last step is the answer to the computer: setting it up, or not yet
 const STEP = { name: 0, brain: 1, signIn: 2, model: 3, computer: 4, last: 5 } as const;

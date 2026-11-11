@@ -185,11 +185,13 @@ export class TestHost {
 }
 
 /** The daemon's packages: each one installed at a folder of the test's. */
-export function packageHost(installed: Record<string, string>) {
+/** The daemon's packages: those installed, and those a download installs (each name to its package folder). */
+export function packageHost(installed: Record<string, string>, downloads: Record<string, string> = {}) {
     return {
         isInstalled: async (name: string) => name in installed,
         download: async (name: string) => {
-            throw new Error(`the test has no download for ${name}`);
+            if (!downloads[name]) throw new Error(`the test has no download for ${name}`);
+            installed[name] = downloads[name];
         },
         getPath: async (name: string) => {
             const dir = installed[name];
