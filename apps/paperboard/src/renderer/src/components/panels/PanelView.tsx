@@ -1,7 +1,7 @@
 import { PaperFlex, playHaptic, swipeFromFrame } from "@mileniumhq/paperui";
 import { backupApi, backupProgressFraction, backupProgressText, HAPTIC_MESSAGE, SWIPE_BACK_MESSAGE, type BackupProgress } from "@mileniumhq/paperapi";
 import { type Component, createEffect, createSignal, For, Show, onCleanup, onMount } from "solid-js";
-import { recordUse, liveKeys, MAX_LIVE_IFRAMES } from "./panelLru";
+import { recordUse, liveKeys, recordAway, withoutIdle, MAX_LIVE_IFRAMES, IDLE_UNLOAD_MS } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";
 import styles from "./frame.module.css";
 import { panelUrl } from "../../lib/shell";
@@ -166,7 +166,19 @@ const PanelView: Component<PanelViewProps> = (props) => {
     const [usageOrder, setUsageOrder] = createSignal<string[]>([]);
     const currentKey = () => `${props.activeComputerId}::${props.activePanel}`;
     createEffect(() => setUsageOrder((prev) => recordUse(prev, props.openedPanels, currentKey())));
-    const live = () => liveKeys(props.openedPanels, usageOrder(), currentKey(), MAX_LIVE_IFRAMES);
+    // when each panel went out of view, and a clock to notice one has been away too long
+    const [away, setAway] = createSignal<Record<string, number>>({});
+    const [now, setNow] = createSignal(Date.now());
+    createEffect(() => {
+        const opened = props.openedPanels;
+        const current = currentKey();
+        setAway((prev) => recordAway(prev, opened, current, Date.now()));
+    });
+    onMount(() => {
+        const clock = setInterval(() => setNow(Date.now()), 60_000);
+        onCleanup(() => clearInterval(clock));
+    });
+    const live = () => withoutIdle(liveKeys(props.openedPanels, usageOrder(), currentKey(), MAX_LIVE_IFRAMES), away(), currentKey(), now(), IDLE_UNLOAD_MS);
     return <PaperFlex fullWidth fullHeight background="surface-raised" flex={1} overflow="hidden" class={styles.area}>
         <For each={props.openedPanels}>{(key) => <Show when={live().has(key)}>
             <PanelFrame panelKey={key} computerName={props.computerName(key.split("::")[0])} current={key === currentKey()} reload={props.reloadTokens?.[key] || 0} retry={() => props.onReloadPanel?.(key)}

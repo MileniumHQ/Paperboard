@@ -199,6 +199,7 @@ export default function UiGuideDoc() {
                 <li>Keep the tab in a signal when another part of the page switches it. Weather's empty state opens Settings with <PaperCode>setTab("settings")</PaperCode>.</li>
                 <li>Import <PaperCode>@mileniumhq/paperui/style.css</PaperCode> and <PaperCode>@mileniumhq/paperui/panel.css</PaperCode> once, in the file that renders the panel. The scaffolded <PaperCode>src/index.tsx</PaperCode> mounts it inside <PaperCode>PaperProvider</PaperCode>, which gives the panel its full height.</li>
                 <li>A panel with one screen needs no menu: render the page alone inside <PaperCode>PaperPanel</PaperCode>.</li>
+                <li>Paperboard unloads a panel's page once it has been out of view for 15 minutes, and loads it again when the person comes back. Keep what must survive in the service or the panel's config, not only in the window.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="a-page">A page</PaperText>

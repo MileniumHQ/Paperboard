@@ -30,3 +30,30 @@ export function liveKeys(
     }
     return new Set(order.slice(-max));
 }
+
+// A panel left out of view this long has its page unloaded. Every loaded
+// panel is a renderer process of its own (a few dozen megabytes); one opened
+// once and never returned to would otherwise be held until Paperboard quits.
+// Coming back loads it again, as opening it did: a panel keeps what matters
+// in its service, not in its page.
+export const IDLE_UNLOAD_MS = 15 * 60_000;
+
+/** When each opened panel went out of view; the one in view has no entry. */
+export function recordAway(away: Record<string, number>, opened: string[], current: string, now: number): Record<string, number> {
+    const next: Record<string, number> = {};
+    for (const key of opened) {
+        if (key === current) continue;
+        next[key] = away[key] ?? now;
+    }
+    return next;
+}
+
+/** The live panels that have not been out of view for `idleMs`. */
+export function withoutIdle(live: Set<string>, away: Record<string, number>, current: string, now: number, idleMs: number): Set<string> {
+    const kept = new Set<string>();
+    for (const key of live) {
+        const since = away[key];
+        if (key === current || since === undefined || now - since < idleMs) kept.add(key);
+    }
+    return kept;
+}
