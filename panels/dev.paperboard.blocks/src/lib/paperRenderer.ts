@@ -231,6 +231,27 @@ class PaperRenderInfo extends Blockly.zelos.RenderInfo {
         this.topRow = new PaperTopRow(this.constants_);
         this.bottomRow = new PaperBottomRow(this.constants_);
     }
+
+    // Beside a tall value, zelos trims the gaps above and below a C's mouth
+    // to Scratch's size. Under PaperUI's radius that's less than the C's own
+    // corner, which then overhangs its mouth: the blocks inside sit off its
+    // edge, with a sliver of canvas under the last one.
+    protected override finalizeVerticalAlignment_(): void {
+        super.finalizeVerticalAlignment_();
+        const corner = this.constants_.INSIDE_CORNERS.height;
+        for (const row of this.rows) {
+            if (row instanceof Blockly.blockRendering.SpacerRow && (row.precedesStatement || row.followsStatement)) row.height = Math.max(row.height, corner);
+        }
+    }
+
+    // zelos spaces a notch from a rounded corner only; from a square one it
+    // would fall to its padding, and the block would sit off its stack's line
+    override getInRowSpacing_(prev: Blockly.blockRendering.Measurable | null, next: Blockly.blockRendering.Measurable | null): number {
+        if (prev && next && Blockly.blockRendering.Types.isLeftSquareCorner(prev) && Blockly.blockRendering.Types.isPreviousOrNextConnection(next)) {
+            return (next as Blockly.blockRendering.PreviousConnection).notchOffset;
+        }
+        return super.getInRowSpacing_(prev, next);
+    }
 }
 
 class PaperRenderer extends Blockly.zelos.Renderer {
