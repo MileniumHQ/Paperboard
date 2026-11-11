@@ -10,7 +10,7 @@ import { IPtyProcess } from "./types";
 import { logger } from "./logger";
 import { exactExitCode, workloadExitCode } from "./exitStatus";
 import { batchFileRefusal } from "./batchFile";
-import { killWorkload } from "./processTree";
+import { killWorkload, workloadSpawnsDetached } from "./processTree";
 import { redactEnvValues, unrefTimer } from "./storage";
 import { stopMountHolder } from "./supervisorLaunch";
 import { consoleRelayLaunch } from "./consoleRelay";
@@ -601,7 +601,7 @@ export async function runSupervisor(procId: string): Promise<void> {
             try {
                 childProcess = relay
                     ? cp.spawn(relay.command, relay.args, { cwd: finalCwd, env: { ...mergedEnv, ...relay.env }, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
-                    : cp.spawn(command, args, { cwd: finalCwd, env: mergedEnv, windowsHide: true, stdio: [config.noStdin ? "ignore" : "pipe", "pipe", "pipe"] });
+                    : cp.spawn(command, args, { cwd: finalCwd, env: mergedEnv, windowsHide: true, detached: workloadSpawnsDetached(), stdio: [config.noStdin ? "ignore" : "pipe", "pipe", "pipe"] });
             } catch (err) {
                 // a synchronous spawn throw is a start failure the creator reads, not an uncaught crash
                 failStart(`Could not start ${command}: ${(err as Error).message}`);

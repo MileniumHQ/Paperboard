@@ -218,17 +218,17 @@ describe("supervised workloads are reported faithfully", () => {
 		await rpc.close();
 	});
 
-	if (process.platform === "win32") {
-		test("killing a Windows workload ends its whole tree", async () => {
-			const c = await crane();
-			const rpc = await c.rpc();
-			await rpc.ok("process:run", { id: "tree", ...js(`const c = require("child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"]); console.log("child:" + c.pid); setInterval(() => {}, 1000);`) });
-			const grandchild = Number((await waitFor("the grandchild's pid", () => /child:(\d+)/.exec(dataOf(rpc, "tree"))))[1]);
-			await rpc.ok("process:kill", { id: "tree" });
-			await waitFor("the grandchild to be ended with its parent", () => !isAlive(grandchild));
-			await rpc.close();
-		});
-	}
+	// a wrapper's grandchild holds the output pipes: with only the wrapper
+	// ended, the workload never closes and its stop is refused
+	test("killing a workload ends its whole tree, and the workload exits", async () => {
+		const c = await crane();
+		const rpc = await c.rpc();
+		await rpc.ok("process:run", { id: "tree", ...js(`const c = require("child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "inherit" }); console.log("child:" + c.pid); setInterval(() => {}, 1000);`) });
+		const grandchild = Number((await waitFor("the grandchild's pid", () => /child:(\d+)/.exec(dataOf(rpc, "tree"))))[1]);
+		await Promise.all([exitOf(rpc, "tree"), rpc.ok("process:kill", { id: "tree" })]);
+		await waitFor("the grandchild to be ended with its parent", () => !isAlive(grandchild));
+		await rpc.close();
+	});
 
 	test("ids get distinct fixed-length endpoints, a restarted daemon adopts under the same id and refuses a second start", async () => {
 		expect(supervisorEndpointName("a.b")).not.toBe(supervisorEndpointName("a_b"));
