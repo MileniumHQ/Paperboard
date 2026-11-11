@@ -2230,8 +2230,26 @@ export function botsBlocks(host: BotsBlocksHost): BlockSet {
 }
 
 /** Bot Creator's panel-wide blocks: the types, the builders, and the bots themselves. */
+/** The sections the panel's and its bots' blocks sit in; registered with the types, before any bot's blocks. */
+const BLOCK_CATEGORIES = [
+    { name: "Bots", icon: "smart_toy" },
+    { name: "Bot", icon: "settings" },
+    { name: "Server", icon: "dns" },
+    { name: "Channels", icon: "tag" },
+    { name: "Messages", icon: "chat" },
+    { name: "Reactions", icon: "add_reaction" },
+    { name: "Embeds", icon: "featured_play_list" },
+    { name: "Members", icon: "group" },
+    { name: "Roles", icon: "shield_person" },
+    { name: "Slash Commands", icon: "terminal" },
+    { name: "Responses", icon: "reply" },
+    { name: "Buttons & Menus", icon: "smart_button" },
+    { name: "Modals", icon: "dialogs" },
+    { name: "Retired", icon: "history" },
+];
+
 export function panelBlocks(clients: ConnectedClients, bots: BotsBlocksHost): BlockSet {
     const own = botsBlocks(bots);
-    return { types: [...blockTypes(clients), ...botTypes(bots)], commands: [...builderCommands, ...own.commands!], values: own.values, events: own.events };
+    return { categories: BLOCK_CATEGORIES, types: [...blockTypes(clients), ...botTypes(bots)], commands: [...builderCommands, ...own.commands!], values: own.values, events: own.events };
 }
 

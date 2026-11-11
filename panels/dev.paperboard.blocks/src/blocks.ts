@@ -24,6 +24,7 @@ const CATEGORY = "Projects";
 
 export function blocksPanelBlocks(host: BlocksPanelHost): BlockSet {
     return {
+        categories: [{ name: CATEGORY, icon: "account_tree" }],
         types: [
             {
                 id: "project",

@@ -149,9 +149,13 @@ describe("a bot is a Blocks project, used through the daemon", () => {
         expect(send.schema).toMatchObject({
             text: "Send {content} to {channel} with {embeds} and {components}",
             category: "Messages",
+            categoryIcon: "chat",
             inputs: { channel: { type: type("channel"), name: "Channel" }, embeds: { type: `list<${type("embed")}>` } },
             output: type("message"),
         });
+        // every section has the symbol the panel declared for it
+        const missing = (await blocksApi.list(PANEL_ID)).filter((b) => b.schema.kind !== "type" && "category" in b.schema && b.schema.category && !b.schema.categoryIcon).map((b) => b.entry);
+        expect(missing).toEqual([]);
     });
 
     test("Send Message gives the Message, whose fields read what Discord has", async () => {

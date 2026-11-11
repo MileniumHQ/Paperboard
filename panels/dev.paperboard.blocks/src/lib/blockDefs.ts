@@ -117,7 +117,7 @@ export interface Definitions {
     /** each block's schema, saved with the flows */
     schemas: Record<string, { panelId: string; entry: string; schema: BlockSchema }>;
     /** toolbox entries per section: a panel or project, and a block's category in it */
-    sections: { key: string; panelId: string; project?: string; category?: string; contents: Json[] }[];
+    sections: { key: string; panelId: string; project?: string; category?: string; categoryIcon?: string; contents: Json[] }[];
 }
 
 /**
@@ -135,13 +135,15 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
         for (const p of projects.filter((p) => p.panelId === e.panelId)) entries.push({ ...e, entry: blockEntry("type", e.schema.id, p.id), project: p.id });
     }
     const out: Definitions = { blocks: [], schemas: {}, sections: [] };
-    const section = (panelId: string, project?: string, category?: string) => {
+    const section = (panelId: string, project?: string, category?: string, categoryIcon?: string) => {
         const key = [panelId, project ?? "", category ?? ""].join("\u0000");
         let found = out.sections.find((s) => s.key === key);
         if (!found) {
             found = { key, panelId, ...(project ? { project } : {}), ...(category ? { category } : {}), contents: [] };
             out.sections.push(found);
         }
+        // the symbol the panel declared for the category, from any of its blocks
+        if (categoryIcon && !found.categoryIcon) found.categoryIcon = categoryIcon;
         return found.contents;
     };
     const toolboxBlock = (type: string, inputs: Inputs | undefined): Json => {
@@ -161,7 +163,8 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
     for (const { panelId, entry, schema } of entries) {
         const { project } = parseEntry(entry);
         // a type's property block sits under Properties, after the panel's own categories
-        const contents = section(panelId, project, schema.kind === "type" ? PROPERTIES_CATEGORY : "category" in schema ? schema.category : undefined);
+        const contents =
+            schema.kind === "type" ? section(panelId, project, PROPERTIES_CATEGORY) : section(panelId, project, schema.category, schema.categoryIcon);
         const record = (type: string) => {
             out.schemas[type] = { panelId, entry, schema };
         };

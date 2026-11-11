@@ -244,6 +244,31 @@ describe("a broken definition is refused before it reaches the registry", () => 
     });
 });
 
+describe("a panel's categories head its sections", () => {
+    const refuse = (set: BlockSet) => () => validateBlockDefinitions(set, PANEL);
+    const run = () => null;
+    test("a block in a declared category is listed with its symbol, in the panel's projects too; only the panel declares them", async () => {
+        const memory = memoryBlocks("dev.test.categories");
+        await memory.panel.register({
+            categories: [{ name: "Players", icon: "group" }],
+            commands: [{ id: "list", name: "List", category: "Players", run }],
+        });
+        const server = await memory.defineProject({ id: "s1", name: "Survival" });
+        await server.register({
+            commands: [{ id: "kick", name: "Kick", category: "Players", run }],
+            values: [{ id: "count", name: "Count", category: "Other", type: "number", read: () => 1 }],
+        });
+        const schemaOf = (entry: string) => memory.list().find((b) => b.entry === entry)!.schema as { category?: string; categoryIcon?: string };
+        expect(schemaOf("command.list")).toMatchObject({ category: "Players", categoryIcon: "group" });
+        expect(schemaOf("s1/command.kick")).toMatchObject({ category: "Players", categoryIcon: "group" });
+        // a category nobody declared has no symbol
+        expect(schemaOf("s1/value.count").categoryIcon).toBeUndefined();
+        await expect(server.register({ categories: [{ name: "Chat", icon: "chat" }] })).rejects.toThrow('Categories belong to the panel, not project "s1"');
+        expect(refuse({ categories: [{ name: "A", icon: "x" }, { name: "A", icon: "y" }] })).toThrow('Category "A" is defined twice');
+        expect(refuse({ categories: [{ name: "A" } as never] })).toThrow('Category "A" icon');
+    });
+});
+
 describe("values are checked against their type", () => {
     const lookup = () => undefined;
     test("core types check their JSON shape, lists every item", () => {

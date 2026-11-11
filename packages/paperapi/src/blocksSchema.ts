@@ -139,6 +139,13 @@ export interface BlockTypeDefinition<V = any> {
     fields?: Record<string, BlockFieldDefinition<V>>;
 }
 
+/** A toolbox section a panel's blocks name in `category`, with the symbol its heading shows. */
+export interface BlockCategoryDefinition {
+    name: string;
+    /** a Material Symbols name */
+    icon: string;
+}
+
 /** A block's inputs, by key. */
 export type BlockDefinitionBaseInputs = Record<string, BlockInputDefinition>;
 
@@ -201,7 +208,11 @@ export type BlockKind = "type" | "command" | "value" | "event";
 /** An input as the registry lists it: choices worked out by a function are asked for when needed. */
 export type BlockInputSchema = Omit<BlockInputDefinition, "choices"> & { choices?: BlockChoice[]; dynamicChoices?: true };
 
-type WithInputSchemas<T> = Omit<T, "inputs"> & { inputs?: Record<string, BlockInputSchema> };
+type WithInputSchemas<T> = Omit<T, "inputs"> & {
+    inputs?: Record<string, BlockInputSchema>;
+    /** the symbol of the block's category, when its panel declared that category */
+    categoryIcon?: string;
+};
 
 /** A definition as the registry lists it: code removed, every type qualified. */
 export type BlockSchema =
@@ -319,6 +330,7 @@ function assertBase(def: BlockDefinitionBase, kind: BlockKind): string {
  * panel's ("panel:type"). Throws a message the panel's author can act on.
  */
 export function validateBlockDefinitions(set: {
+    categories?: BlockCategoryDefinition[];
     types?: BlockTypeDefinition[];
     commands?: BlockCommandDefinition[];
     values?: BlockValueDefinition[];
@@ -396,6 +408,14 @@ export function validateBlockDefinitions(set: {
                 throw new Error(`${label} filters "${input}" (${event.inputs[input]!.type}) against "${valueKey}" (${values[valueKey]!.type}); they must be one type`);
             }
         }
+    }
+    const names = new Set<string>();
+    for (const category of set.categories ?? []) {
+        if (!category || typeof category !== "object") throw new Error("A category definition must be an object");
+        assertLabel(category.name, "A category");
+        assertLabel(category.icon, `Category "${category.name}" icon`);
+        if (names.has(category.name)) throw new Error(`Category "${category.name}" is defined twice`);
+        names.add(category.name);
     }
     unique("type", set.types ?? []);
     unique("command", set.commands ?? []);

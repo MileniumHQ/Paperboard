@@ -443,6 +443,23 @@ const serversHost: ServersBlocksHost = {
         return serverOperation(scope, () => work(scope.ctx));
     },
 };
+/** The sections the panel's and its servers' blocks sit in; registered first, so every server's blocks find them. */
+const BLOCK_CATEGORIES = [
+    { name: "Servers", icon: "storage" },
+    { name: "Server", icon: "dns" },
+    { name: "Players", icon: "group" },
+    { name: "Chat", icon: "chat" },
+    { name: "Worlds", icon: "public" },
+    { name: "Game Rules", icon: "rule" },
+    { name: "Options", icon: "tune" },
+    { name: "Files", icon: "folder" },
+    { name: "Plugins", icon: "extension" },
+    { name: "Datapacks", icon: "deployed_code" },
+    { name: "Modpack", icon: "package_2" },
+    { name: "Backups", icon: "backup" },
+    { name: "Automation", icon: "autorenew" },
+    { name: "Logs", icon: "receipt_long" },
+];
 const management = (id: string, run: (...args: any[]) => any) =>
     defineAction({
         id,
@@ -491,7 +508,7 @@ export const gameServerService = definePanelService({
                 return scope.ctx.state.onlinePlayers;
             };
             const handle = blocksApi.panel(PANEL_ID);
-            await handle.register({ types: [...sharedTypes(onlinePlayers), ...gameTypes.flat(), serverType(serversHost)], ...serversBlocks(serversHost) });
+            await handle.register({ categories: BLOCK_CATEGORIES, types: [...sharedTypes(onlinePlayers), ...gameTypes.flat(), serverType(serversHost)], ...serversBlocks(serversHost) });
             const original = await config.get(PANEL_ID);
             saved = readServersConfig(original);
             // No file operations or data moves: installed records and all config

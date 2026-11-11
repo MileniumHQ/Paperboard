@@ -39,8 +39,9 @@ export default function BlocksApiDoc() {
             <PaperCode block language="tsx">
 {`import { blocksApi } from "@mileniumhq/paperapi";
 
-// the panel's types, once
+// the panel's categories and types, once
 await blocksApi.panel().register({
+    categories: [{ name: "Players", icon: "group" }],
     types: [{ id: "player", name: "Player", icon: "person", base: "text" }],
 });
 
@@ -101,6 +102,7 @@ interface BlockProjectDefinition {
 }
 
 interface BlockSet {
+    categories?: { name: string; icon: string }[];
     types?: BlockTypeDefinition[];
     commands?: BlockCommandDefinition[];
     values?: BlockValueDefinition[];
@@ -110,6 +112,7 @@ interface BlockSet {
             <PaperTextList>
                 <li><PaperCode>register</PaperCode> checks the whole set first, and a broken definition registers nothing. The error says what to fix: <PaperCode>Command "kick" text names {"{who}"}, which is not one of its inputs</PaperCode>.</li>
                 <li>Types belong to the panel, so only <PaperCode>blocksApi.panel()</PaperCode> registers them. Its projects use them.</li>
+                <li>Categories belong to the panel too. A block names one in <PaperCode>category</PaperCode>, and the Library heads its section with the category's <PaperCode>icon</PaperCode>, a Material Symbols name. Register them before the blocks that name them. A category with no declaration gets a plain heading.</li>
                 <li>A project's blocks are its own, and its section in the Blocks toolbox shows them. <PaperCode>remove</PaperCode> takes them all away.</li>
                 <li>The Blocks project menu shows a project by <PaperCode>image</PaperCode> when it has one, else by <PaperCode>icon</PaperCode>, a Material Symbols name. Give it the picture your panel shows for the project, such as a server's icon.</li>
                 <li><PaperCode>image</PaperCode> is a path in the panel's folder, such as <PaperCode>/assets/games/minecraft/icon.webp</PaperCode>, or a base64 <PaperCode>data:image</PaperCode> URL of a PNG, WebP, JPEG or GIF. It is at most 512 KB. Any other value is refused with <PaperCode>{`Project "s1"'s picture must be an image file in the panel's folder or a base64 data:image URL`}</PaperCode>.</li>

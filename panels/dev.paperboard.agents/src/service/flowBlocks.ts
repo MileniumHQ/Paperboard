@@ -155,6 +155,15 @@ export function flowBlocks(host: BlocksHost): BlockSet {
     const addRoutine = (what: string, schedule: Record<string, unknown>) =>
         ready(async () => (await host.routines.add(what, parseSchedule(schedule, Date.now()))).id);
     return {
+        categories: [
+            { name: CATEGORY.agent, icon: "robot_2" },
+            { name: CATEGORY.brain, icon: "psychology" },
+            { name: CATEGORY.memory, icon: "memory" },
+            { name: CATEGORY.routines, icon: "schedule" },
+            { name: CATEGORY.computer, icon: "computer" },
+            { name: CATEGORY.tools, icon: "handyman" },
+            { name: CATEGORY.apps, icon: "apps" },
+        ],
         types: [
             {
                 id: "conversation",

@@ -41,6 +41,11 @@ const CATEGORY = { tabs: "Tabs", shell: "Shell", saved: "Saved Commands" };
 
 export function terminalBlocks(host: TerminalBlocksHost): BlockSet {
     return {
+        categories: [
+            { name: CATEGORY.tabs, icon: "tab" },
+            { name: CATEGORY.shell, icon: "terminal" },
+            { name: CATEGORY.saved, icon: "bookmarks" },
+        ],
         types: [
             {
                 id: "tab",

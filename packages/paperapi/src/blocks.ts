@@ -21,6 +21,7 @@ import {
     type BlockEventDefinition,
     type BlockKind,
     type BlockSchema,
+    type BlockCategoryDefinition,
     type BlockTypeDefinition,
     type BlockValueDefinition,
     type TypeLookup,
@@ -30,6 +31,12 @@ export * from "./blocksSchema";
 
 /** What one panel (or one of its projects) registers in one call. */
 export interface BlockSet {
+    /**
+     * only on the panel's own handle: the sections its blocks and its
+     * projects' blocks name, each with the symbol its heading shows.
+     * A block registered before its category is declared shows a plain heading.
+     */
+    categories?: BlockCategoryDefinition[];
     /** only on the panel's own handle: a type is the panel's, whichever project uses it */
     types?: BlockTypeDefinition[];
     commands?: BlockCommandDefinition[];
@@ -110,9 +117,11 @@ interface Registered {
     values: Map<string, BlockValueDefinition>;
     /** "panel:project" */
     projects: Set<string>;
+    /** each category's symbol, keyed "panel:name" */
+    categories: Map<string, string>;
 }
 
-const newRegistered = (): Registered => ({ types: new Map(), events: new Map(), values: new Map(), projects: new Set() });
+const newRegistered = (): Registered => ({ types: new Map(), events: new Map(), values: new Map(), projects: new Set(), categories: new Map() });
 
 // what this process registered through the daemon
 const processRegistered = newRegistered();
@@ -200,8 +209,18 @@ function handleFor(panelId: string, project: string | undefined, registered: Reg
         if (project && set.types?.length) {
             throw new Error(`Types belong to the panel, not project "${project}": register them on blocksApi.panel()`);
         }
+        if (project && set.categories?.length) {
+            throw new Error(`Categories belong to the panel, not project "${project}": register them on blocksApi.panel()`);
+        }
         const available = new Set([...registered.types.keys()].filter((k) => k.startsWith(`${panelId}:`)).map((k) => k.slice(panelId.length + 1)));
         validateBlockDefinitions(set, panelId, available);
+        for (const category of set.categories ?? []) registered.categories.set(`${panelId}:${category.name}`, category.icon);
+        // the listing carries the category's symbol, so the Blocks panel can head the section with it
+        const schemaOf = (kind: "command" | "value" | "event", def: { category?: string }) => {
+            const schema = blockSchema(kind, def, panelId);
+            const icon = def.category === undefined ? undefined : registered.categories.get(`${panelId}:${def.category}`);
+            return icon ? ({ ...schema, categoryIcon: icon } as BlockSchema) : schema;
+        };
 
         for (const type of set.types ?? []) {
             const schema = blockSchema("type", type, panelId);
@@ -223,7 +242,7 @@ function handleFor(panelId: string, project: string | undefined, registered: Reg
             }, schema);
         }
         for (const command of set.commands ?? []) {
-            const schema = blockSchema("command", command, panelId);
+            const schema = schemaOf("command", command);
             const inputs = (schema as { inputs?: Record<string, BlockInputSchema> }).inputs;
             await backend.register(panelId, blockEntry("command", command.id, project), async (request: { inputs?: unknown; choices?: unknown }) => {
                 if (request?.choices !== undefined) return choicesOf(command.inputs, request.choices, ctx, command.name);
@@ -235,7 +254,7 @@ function handleFor(panelId: string, project: string | undefined, registered: Reg
             }, schema);
         }
         for (const value of set.values ?? []) {
-            const schema = blockSchema("value", value, panelId);
+            const schema = schemaOf("value", value);
             const inputs = (schema as { inputs?: Record<string, BlockInputSchema> }).inputs;
             registered.values.set(own("value", value.id), value);
             await backend.register(panelId, blockEntry("value", value.id, project), async (request: { inputs?: unknown; choices?: unknown }) => {
@@ -251,7 +270,7 @@ function handleFor(panelId: string, project: string | undefined, registered: Reg
             await backend.register(panelId, blockEntry("event", event.id, project), async (request: { choices?: unknown }) => {
                 if (request?.choices !== undefined) return choicesOf(event.inputs, request.choices, ctx, event.name);
                 throw new Error(`${event.name} is an event: it fires, it is not run`);
-            }, blockSchema("event", event, panelId));
+            }, schemaOf("event", event));
         }
     };
 

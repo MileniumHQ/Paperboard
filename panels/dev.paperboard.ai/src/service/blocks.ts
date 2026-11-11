@@ -15,6 +15,7 @@ export function aiBlocks(app: AiApp): BlockSet {
         return fn();
     };
     return {
+        categories: [{ name: CATEGORY, icon: "neurology" }],
         types: [
             {
                 id: "model",

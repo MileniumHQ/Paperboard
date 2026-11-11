@@ -68,7 +68,7 @@ interface Group {
     blocks: Json[];
 }
 
-/** A panel's category has no symbol of its own, as in the Actions library. */
+/** What a category heading shows when its panel declared no symbol for it. */
 const CATEGORY_SYMBOL = "category";
 const PROPERTIES_SYMBOL = "tune";
 
@@ -200,8 +200,12 @@ export default function Editor(props: {
             .sort((a, b) => rank(a) - rank(b))) {
             // the panel's and the project's categories of one name read as one
             const same = groups.find((g) => g.label === s.category);
-            if (same) same.blocks = [...same.blocks, ...s.contents];
-            else groups.push({ ...(s.category ? { label: s.category, icon: { symbol: s.category === PROPERTIES_CATEGORY ? PROPERTIES_SYMBOL : CATEGORY_SYMBOL } } : {}), blocks: s.contents });
+            const symbol = s.category === PROPERTIES_CATEGORY ? PROPERTIES_SYMBOL : (s.categoryIcon ?? CATEGORY_SYMBOL);
+            if (same) {
+                same.blocks = [...same.blocks, ...s.contents];
+                // a project's section may know the symbol its panel's section of that name lacked
+                if (s.categoryIcon && same.icon && "symbol" in same.icon && same.icon.symbol === CATEGORY_SYMBOL) same.icon = { symbol: s.categoryIcon };
+            } else groups.push({ ...(s.category ? { label: s.category, icon: { symbol } } : {}), blocks: s.contents });
         }
         return groups;
     };

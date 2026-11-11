@@ -99,6 +99,11 @@ describe("each server is a Blocks project with its game's blocks", () => {
         const schema = (entry: string) => all.find((b) => b.entry === entry)!.schema as any;
         expect(schema("s-a/command.kick-player")).toMatchObject({ text: "Kick {player} because {reason}", inputs: { player: { type: `${PANEL_ID}:player` } } });
         expect(schema("s-a/command.back-up")).toMatchObject({ output: `${PANEL_ID}:backup` });
+        // every section has the symbol the panel declared for it, in each server's project too
+        expect(schema("s-a/command.set-option")).toMatchObject({ category: "Options", categoryIcon: "tune" });
+        expect(schema("s-t/command.kick-player")).toMatchObject({ category: "Players", categoryIcon: "group" });
+        const missing = all.filter((b) => b.schema.kind !== "type" && "category" in b.schema && b.schema.category && !b.schema.categoryIcon).map((b) => b.entry);
+        expect(missing).toEqual([]);
         expect(schema("s-t/event.chat-message")).toMatchObject({ values: { player: { type: `${PANEL_ID}:player` }, message: { type: "text" } }, filters: { player: "player", message: "message" } });
         // the rule dropdown asks the server, so it lists the rules of the version it has now
         expect(schema("s-a/command.set-game-rule").inputs.rule).toMatchObject({ dynamicChoices: true });
