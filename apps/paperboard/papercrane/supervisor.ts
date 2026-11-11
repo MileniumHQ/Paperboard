@@ -7,6 +7,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import { logger } from "./logger";
+import { ShellMarks } from "./shellIntegration";
 import { unrefTimer } from "./storage";
 
 export const INPUT_ENCODINGS = ["utf8", "utf16le"] as const;
@@ -126,6 +127,17 @@ export class SupervisedProcessClient {
     public pid = 0;
     public childPid = 0;
     public isPty = false;
+    /** a terminal's foreground program, as the supervisor last named it */
+    public foreground = "";
+    // a terminal's shell marks its commands and folder in its output
+    private marks = new ShellMarks({
+        command: (finished) => this.emit("command", finished),
+        cwd: (cwd) => this.emit("cwd", cwd),
+    });
+    /** the folder a terminal's shell last said it is in */
+    public get cwd(): string {
+        return this.marks.cwd;
+    }
 
     constructor(
         public readonly id: string,
@@ -219,13 +231,23 @@ export class SupervisedProcessClient {
                 this.emit("status", this.status);
                 break;
             case "history":
+                // a replay repeats commands already reported; only the folder
+                // it ends in is news to a daemon that just connected
+                if (this.isPty && typeof msg.data === "string") this.marks.replay(msg.data);
                 this.emit("history", msg.data);
                 this.emit("data", msg.data);
                 break;
             case "data":
+                if (this.isPty && typeof msg.data === "string") this.marks.feed(msg.data);
                 this.emit("data", msg.data);
                 if (msg.stream === "stdout") this.emit("stdout", msg.data);
                 if (msg.stream === "stderr") this.emit("stderr", msg.data);
+                break;
+            case "foreground":
+                if (typeof msg.name === "string" && msg.name) {
+                    this.foreground = msg.name;
+                    this.emit("foreground", msg.name);
+                }
                 break;
             case "exit":
                 this.exitCode = msg.code ?? 0;

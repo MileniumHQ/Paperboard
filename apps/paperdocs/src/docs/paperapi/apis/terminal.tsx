@@ -35,14 +35,18 @@ term.onResize(({ cols, rows }) => terminalApi.resize(id, cols, rows).catch((err)
 
             <PaperText preset="subheader" as="h2" id="api">API</PaperText>
             <PaperCode block language="tsx">
-{`terminalApi.create(id: string, options?: { cols?: number; rows?: number; cwd?: string; env?: Record<string, string> }): Promise<void>;
+{`terminalApi.create(id: string, options?: { cols?: number; rows?: number; cwd?: string; env?: Record<string, string>; shell?: string }): Promise<void>;
+terminalApi.shells(): Promise<{ path: string; name: string }[]>;
 terminalApi.exists(id: string): Promise<boolean>;
 terminalApi.write(id: string, data: string): Promise<void>;
 terminalApi.resize(id: string, cols: number, rows: number): Promise<void>;
 terminalApi.destroy(id: string): Promise<void>;
 
 terminalApi.onData(id: string, callback: (text: string) => void): () => void;
-terminalApi.onExit(id: string, callback: (exitCode?: number) => void): () => void;`}
+terminalApi.onExit(id: string, callback: (exitCode?: number) => void): () => void;
+terminalApi.onForeground(id: string, callback: (name: string) => void): () => void;
+terminalApi.onCommand(id: string, callback: (finished: { command: string; exitCode: number }) => void): () => void;
+terminalApi.onCwd(id: string, callback: (cwd: string) => void): () => void;`}
             </PaperCode>
             <PaperTable>
                 <thead>
@@ -54,7 +58,11 @@ terminalApi.onExit(id: string, callback: (exitCode?: number) => void): () => voi
                 <tbody>
                     <tr>
                         <td><PaperCode>create</PaperCode></td>
-                        <td>Starts the shell, 80 by 24 unless <PaperCode>cols</PaperCode> and <PaperCode>rows</PaperCode> say otherwise. Rejects with the daemon's reason when the shell could not start.</td>
+                        <td>Starts the shell, 80 by 24 unless <PaperCode>cols</PaperCode> and <PaperCode>rows</PaperCode> say otherwise. <PaperCode>shell</PaperCode> is one of the paths <PaperCode>shells</PaperCode> lists; any other is refused. Rejects with the daemon's reason when the shell could not start.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>shells</PaperCode></td>
+                        <td>Lists the shells this computer has, the default first. On macOS and Linux they come from <PaperCode>/etc/shells</PaperCode>. On Windows they are PowerShell, PowerShell 7, Command Prompt, Git Bash and WSL, each when installed.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>write</PaperCode></td>
@@ -76,6 +84,18 @@ terminalApi.onExit(id: string, callback: (exitCode?: number) => void): () => voi
                         <td><PaperCode>onExit</PaperCode></td>
                         <td>Calls back with the shell's exit code when it ends.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>onForeground</PaperCode></td>
+                        <td>Calls back with the name of the program in front of the terminal, as a terminal's title shows it: the shell at its prompt, <PaperCode>vim</PaperCode> while vim runs. It calls once on subscribing, then on each change.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>onCommand</PaperCode></td>
+                        <td>Calls back when a command the shell ran has ended, with the command line as typed and its exit code. An empty line is not a command. <PaperCode>command</PaperCode> is <PaperCode>""</PaperCode> when the shell didn't keep the line, such as bash with <PaperCode>HISTCONTROL=ignorespace</PaperCode>.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>onCwd</PaperCode></td>
+                        <td>Calls back with the folder the shell is in. It calls once on subscribing when the folder is known, then on each change.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
@@ -83,6 +103,7 @@ terminalApi.onExit(id: string, callback: (exitCode?: number) => void): () => voi
             <PaperTextList>
                 <li>The shell is <PaperCode>powershell.exe</PaperCode> on Windows. On macOS it is <PaperCode>/bin/zsh</PaperCode>, then <PaperCode>/bin/bash</PaperCode>, then <PaperCode>/bin/sh</PaperCode>. On Linux it is <PaperCode>$SHELL</PaperCode>, then bash, then <PaperCode>/bin/sh</PaperCode>.</li>
                 <li><PaperCode>cwd</PaperCode> defaults to the home folder of the account running the daemon.</li>
+                <li>bash, zsh, fish and PowerShell start with Paperboard's shell integration. It loads the person's own startup files first, as the shell would, then marks each prompt and command (OSC 133) and the folder (OSC 7) in the output. <PaperCode>onCommand</PaperCode> and <PaperCode>onCwd</PaperCode> come from those marks, so another shell (sh, cmd) reports neither. A terminal view ignores the marks, or reads them to jump between prompts.</li>
                 <li>The shell keeps running when the page closes and when the daemon restarts. Open the page again, subscribe with <PaperCode>onData</PaperCode>, and it picks up where it was.</li>
                 <li>The id belongs to the panel that created it, at most 128 characters. Another panel's calls with that id are refused.</li>
                 <li><PaperCode>env</PaperCode> follows the same rules as a process: at most 128 entries, and no credential keys. See <PaperLink href="/docs/paperapi/process/#environment">Environment</PaperLink>.</li>

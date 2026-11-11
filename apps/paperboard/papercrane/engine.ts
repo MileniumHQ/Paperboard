@@ -28,7 +28,7 @@ import { getSocketsDir, getPaperboardDir } from "./paths";
 import { logger } from "./logger";
 import { stopMountHolder } from "./supervisorLaunch";
 import { spawnSupervisedClient } from "./engineSupervisor";
-import { getDefaultShell } from "./util";
+import { defaultTerminalShell, requireOfferedShell, shellLaunch, type ShellCommand } from "./shellIntegration";
 import { applyPackageRecipe, extractArchive, extractPackageArchive, findBinDir, packageArchiveSuffix, parsePackageLayout, RECIPE_SUFFIX } from "./engineArchives";
 import { assertRecipeRunsHere, parsePackageRecipe, recipeDigest } from "./packageRecipe";
 import { panelServices, PanelServicesManager } from "./panelServices";
@@ -48,6 +48,17 @@ export const REGISTRY_URL = resolveRegistryUrl();
 // what a caller expects to install (the release it showed the user or
 // planned an update to); the daemon's own registry lookup must agree
 type StreamListeners = Record<string, ((...args: any[]) => void) | undefined>;
+/** what a terminal tells its listeners; see SupervisedProcessClient's events */
+export interface TerminalStreams {
+    data?: (data: string) => void;
+    exit?: (exitCode: number) => void;
+    /** the program in front of the terminal changed */
+    foreground?: (name: string) => void;
+    /** a command the shell ran has ended */
+    command?: (finished: ShellCommand) => void;
+    /** the shell changed folder */
+    cwd?: (cwd: string) => void;
+}
 type StreamClient = { on: (event: string, fn: any) => unknown; off: (event: string, fn: any) => unknown };
 
 export interface ExpectedPanelRelease {
@@ -653,23 +664,22 @@ export class PaperCraneEngine {
     // Terminal management
     public async createTerminal(
         id: string,
-        cols: number = 80,
-        rows: number = 24,
-        cwd?: string,
-        env?: Record<string, string>,
-        onData?: (data: string) => void,
-        onExit?: (exitCode: number) => void,
-        // the socket that receives the stream (see subscribeStreams); without
+        options: { cols?: number; rows?: number; cwd?: string; env?: Record<string, string>; shell?: string },
+        streams: TerminalStreams,
+        // the socket that receives the streams (see subscribeStreams); without
         // one, the listeners belong to this shell alone
         subscriber?: object,
     ): Promise<void> {
-        // platform-aware shell, don't trust $SHELL in GUI apps
-        const shell =
-            process.platform === "win32" ? "powershell.exe" : getDefaultShell();
+        const { cols = 80, rows = 24, cwd, env } = options;
+        const { data: onData, exit: onExit } = streams;
+        // a chosen shell must be one this computer offers; otherwise the
+        // platform's own, never $SHELL as a GUI app inherited it
+        const shell = options.shell ? requireOfferedShell(options.shell) : defaultTerminalShell();
         this.requireNoRuntimeReplacement(shell);
         const resolvedCwd = this.resolveSpawnCwd(cwd);
+        const launch = shellLaunch(shell, { ...process.env, ...env });
         logger.debug(`[Paperboard Server] creating terminal ${id} (shell=${shell} cwd=${resolvedCwd})`);
-        if (subscriber) this.subscribeStreams(id, subscriber, { data: onData, exit: onExit });
+        if (subscriber) this.subscribeStreams(id, subscriber, { ...streams });
 
         let announced = false;
         let exited = false;
@@ -680,9 +690,9 @@ export class PaperCraneEngine {
                 type: "pty",
                 isPty: true,
                 command: shell,
-                args: [],
+                args: launch.args,
                 cwd: resolvedCwd,
-                env,
+                env: { ...env, ...launch.env },
                 cols,
                 rows,
             },
@@ -721,6 +731,15 @@ export class PaperCraneEngine {
         client.write(data);
     }
 
+    /**
+     * What is known of a running terminal: the program in front of it and
+     * the folder its shell is in, each "" until it has been said
+     */
+    public terminalState(id: string): { foreground: string; cwd: string } {
+        const client = this.clients.get(id);
+        return { foreground: client?.foreground ?? "", cwd: client?.cwd ?? "" };
+    }
+
     public resizeTerminal(id: string, cols: number, rows: number): void {
         this.clients.get(id)?.resize(cols, rows);
     }
@@ -737,12 +756,11 @@ export class PaperCraneEngine {
     public async attachTerminal(
         id: string,
         subscriber: object,
-        onData?: (data: string) => void,
-        onExit?: (code: number) => void,
+        streams: TerminalStreams,
     ): Promise<boolean> {
         // subscribed even when the shell is not running yet: it streams
         // here as soon as it starts
-        this.subscribeStreams(id, subscriber, { data: onData, exit: onExit });
+        this.subscribeStreams(id, subscriber, { ...streams });
         return (await this.getOrConnectClient(id)) !== null;
     }
 

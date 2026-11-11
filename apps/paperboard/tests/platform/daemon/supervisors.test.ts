@@ -336,12 +336,57 @@ describe("workloads and terminals take input on every platform", () => {
 			const rpc = await c.rpc();
 			await rpc.ok("term:create", { id: "tty" });
 			await rpc.ok("term:write", { id: "tty", data: "expr 40 + 2; test -t 0 && echo IS_A_TTY\r" });
-			const output = () => rpc.frames.filter((f) => f.event === "term:data" && f.payload.id === "tty").map((f) => f.payload.data).join("");
+			// the shell's marks (OSC 133, OSC 7) are invisible: what is read is what shows
+			const output = () => rpc.frames.filter((f) => f.event === "term:data" && f.payload.id === "tty").map((f) => f.payload.data).join("").replace(/\u001b\][^\u0007\u001b]*(\u0007|\u001b\\)/g, "");
 			await waitFor("the terminal's answer", () => /(^|[\r\n])42\r\n/.test(output()) && output().includes("IS_A_TTY\r"));
 			await rpc.ok("term:destroy", { id: "tty" });
 			await rpc.close();
 		});
 	}
+});
+
+// A panel follows a terminal from these: the program in front of it, each
+// command its shell ran with how it ended, and the folder it is in. Every
+// platform's default shell (bash, zsh, PowerShell) is started marked.
+describe("a terminal says what it runs", () => {
+	test("the program in front, each command with its exit code, and the shell's folder", async () => {
+		// a home of its own: the developer's startup files are not the test's
+		const home = tempDir("pb-home-");
+		fs.writeFileSync(path.join(home, ".bashrc"), "PS1='$ '\n");
+		fs.writeFileSync(path.join(home, ".zshrc"), "PS1='$ '\n");
+		const c = await crane(dataDir(), { env: { HOME: home, USERPROFILE: home, ZDOTDIR: undefined } });
+		const rpc = await c.rpc();
+		const target = path.join(tempDir(), "marked folder");
+		fs.mkdirSync(target);
+		const events = (event: string) => rpc.frames.filter((f) => f.type === "event" && f.event === event && f.payload.id === "marks").map((f) => f.payload);
+		await rpc.ok("term:create", { id: "marks", cwd: home });
+		await waitFor("the shell's name", () => events("term:foreground").length > 0);
+		const shell = String(events("term:foreground")[0].name).toLowerCase();
+
+		await rpc.ok("term:write", { id: "marks", data: `cd "${target}"\r` });
+		await waitFor("the new folder", () => events("term:cwd").some((e) => path.basename(e.cwd) === "marked folder"));
+
+		const failing = process.platform === "win32" ? "cmd /c exit 3" : "sh -c 'exit 3'";
+		await rpc.ok("term:write", { id: "marks", data: `${failing}\r` });
+		const finished = await waitFor("the failed command", () => events("term:command").find((e) => e.command === failing));
+		expect(finished.exitCode).toBe(3);
+		expect(events("term:command").find((e) => e.command.startsWith("cd "))?.exitCode).toBe(0);
+
+		const [running, program] = process.platform === "win32" ? ["ping -n 4 127.0.0.1 > $null", "ping"] : ["sleep 3", "sleep"];
+		await rpc.ok("term:write", { id: "marks", data: `${running}\r` });
+		await waitFor("the running program's name", () => events("term:foreground").some((e) => String(e.name).toLowerCase() === program));
+		await waitFor("the shell's name again", () => String(events("term:foreground").at(-1).name).toLowerCase() === shell);
+
+		// a socket that attaches later hears what is known already
+		const late = await c.rpc();
+		await late.ok("term:attach", { id: "marks" });
+		await late.next((f) => f.event === "term:cwd" && f.payload.id === "marks" && path.basename(f.payload.cwd) === "marked folder");
+		await late.next((f) => f.event === "term:foreground" && f.payload.id === "marks" && String(f.payload.name).toLowerCase() === shell);
+		await late.close();
+
+		await rpc.ok("term:destroy", { id: "marks" });
+		await rpc.close();
+	});
 });
 
 // Panel services start and hydrate.

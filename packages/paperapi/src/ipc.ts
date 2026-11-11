@@ -132,6 +132,10 @@ export const RPC_ROUTES: Record<string, WsRoute> = {
         action: "term:exists",
         unwrap: (r) => r.running,
     },
+    "terminal-shells": {
+        action: "term:shells",
+        unwrap: (r) => r.shells,
+    },
     "file-get-path": {
         action: "file:getPath",
         unwrap: (r) => r.path,
@@ -397,6 +401,21 @@ const WS_EVENTS: Record<string, EventRoute> = {
         match: (p, id) => p.id === id,
         transform: (p) => [{ exitCode: p.exitCode }],
     },
+    "terminal-foreground": {
+        source: "term:foreground",
+        match: (p, id) => p.id === id,
+        transform: (p) => [p.name],
+    },
+    "terminal-command": {
+        source: "term:command",
+        match: (p, id) => p.id === id,
+        transform: (p) => [{ command: p.command, exitCode: p.exitCode }],
+    },
+    "terminal-cwd": {
+        source: "term:cwd",
+        match: (p, id) => p.id === id,
+        transform: (p) => [p.cwd],
+    },
     "process-data": {
         source: "process:data",
         match: (p, id) => p.id === id,
@@ -549,7 +568,7 @@ export function on(
     // listener on a connection that did not start the resource (a restarted
     // service taking back a run) would otherwise never hear it.
     const tracked: "terminal" | "process" | null =
-        kind === "terminal-data" || kind === "terminal-exit"
+        kind.startsWith("terminal-")
             ? "terminal"
             : kind === "process-data" ||
                 kind === "process-stdout" ||
