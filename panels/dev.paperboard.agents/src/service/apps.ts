@@ -77,7 +77,7 @@ const HEADERS = {
         "frame-src 'none'",
         // the user's view of it, in the panel and the shell around it: Electron's paperboard: and panel: pages,
         // its development shell on localhost, or browser mode's. Not another app: those are <name>.localhost
-        "frame-ancestors paperboard: panel: http://localhost:* http://paperboard.localhost:* http://*.paperboard.localhost:*",
+        "frame-ancestors paperboard: panel: http://localhost:*",
         "object-src 'none'",
         "base-uri 'self'",
         "form-action 'self'",

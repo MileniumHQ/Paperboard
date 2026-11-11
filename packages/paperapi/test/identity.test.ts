@@ -78,8 +78,9 @@ describe("panel and computer identity are granted, never inferred", () => {
         g.window = {};
         g.__PAPERBOARD_CRANE = { computerId: "c-remote", panelId: "dev.me" };
         expect(panelAssetUrl("dev.icons", "/icon.png")).toBe("panel://c-remote.dev.icons/icon.png");
-        g.location = { protocol: "http:", host: "c-remote.dev.me.paperboard.localhost:5173" };
-        expect(panelAssetUrl("dev.icons", "icon.png")).toBe("http://c-remote.dev.icons.paperboard.localhost:5173/icon.png");
+        // a browser host serves panels from /_panel/ folders of its own origin
+        g.location = { protocol: "http:", host: "paperboard.localhost:5173", hostname: "paperboard.localhost", pathname: "/_panel/c-remote/dev.me/index.html" };
+        expect(panelAssetUrl("dev.icons", "icon.png")).toBe("http://paperboard.localhost:5173/_panel/c-remote/dev.icons/icon.png");
         for (const bad of ["../evil", "a.b/c", "", "Upper"]) {
             expect(() => panelAssetUrl(bad, "icon.png")).toThrow("Invalid panel id");
         }

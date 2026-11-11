@@ -154,7 +154,7 @@ for (const track of stream.getTracks()) track.stop();`}
                 The page decides who may frame it. To let only Paperboard show it, send this header, which names the app, its panels, its development shell and browser mode:
             </PaperText>
             <PaperCode block language="text">
-{`Content-Security-Policy: frame-ancestors paperboard: panel: http://localhost:* http://paperboard.localhost:* http://*.paperboard.localhost:*`}
+{`Content-Security-Policy: frame-ancestors paperboard: panel: http://localhost:*`}
             </PaperCode>
             <PaperText preset="body" as="p">
                 Loopback is the device showing the panel. A panel shown from another computer can't reach its program's loopback, so check <PaperLink href="/docs/paperapi/connection/#api">grantedComputerId()</PaperLink> and tell the person when it isn't <PaperCode>"local"</PaperCode>.

@@ -92,7 +92,7 @@ const computerId = grantedComputerId();`}
                     <tr>
                         <td><PaperCode>panelAssetUrl</PaperCode></td>
                         <td><PaperCode>(panelId: string, subpath?: string) =&gt; string</PaperCode></td>
-                        <td>The address of a file another panel serves on the same computer, such as its icon. Returns <PaperCode>panel://&lt;computerId&gt;.&lt;panelId&gt;/&lt;subpath&gt;</PaperCode>, or the matching <PaperCode>http</PaperCode> subdomain in browser mode. Throws like <PaperCode>requirePanelId</PaperCode> and <PaperCode>grantedComputerId</PaperCode>.</td>
+                        <td>The address of a file another panel serves on the same computer, such as its icon. Returns <PaperCode>panel://&lt;computerId&gt;.&lt;panelId&gt;/&lt;subpath&gt;</PaperCode>, or <PaperCode>/_panel/&lt;computerId&gt;/&lt;panelId&gt;/&lt;subpath&gt;</PaperCode> on the app's own address in a browser. Throws like <PaperCode>requirePanelId</PaperCode> and <PaperCode>grantedComputerId</PaperCode>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>initPaperApi</PaperCode></td>

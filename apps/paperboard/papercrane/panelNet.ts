@@ -10,7 +10,7 @@ export function buildPanelCsp(): string {
         "default-src 'self' panel: data: blob:",
         "script-src 'self'",
         "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' panel: http://*.paperboard.localhost:* data: blob: https:",
+        "img-src 'self' panel: data: blob: https:",
         "font-src 'self' data:",
         "connect-src 'self' panel: ws://127.0.0.1:* ws://localhost:* http://127.0.0.1:* http://localhost:* https:",
         "media-src 'self' panel: blob:",

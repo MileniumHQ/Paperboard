@@ -1,4 +1,5 @@
 // Privileged shell-only IPC; panels speak PaperCrane directly over WebSocket.
+import { panelPath } from "@mileniumhq/paperapi";
 import { createBrowserBridge, type ShellIpc } from "./browserBridge";
 import type { LaunchOptions } from "../../../shared/launchOptions";
 import type { Graphics } from "../../../shared/graphics";
@@ -64,12 +65,12 @@ export function shellIpc(): ShellIpc {
 const requireIpc = shellIpc;
 
 // Where a panel's documents and assets load from. Electron serves each
-// panel from its own panel:// origin; browser mode gives each panel its own
-// subdomain of the shell's host — the same scope prefix in both.
+// panel from its own panel:// origin; a browser host from a folder of the
+// shell's own origin, /_panel/<computerId>/<panelId>/.
 export function panelUrl(computerId: string, panelId: string, subpath = ""): string {
     const rest = subpath.replace(/^\.?\//, "");
     if (!isBrowserShell()) return `panel://${computerId}.${panelId}/${rest}`;
-    return `${location.protocol}//${computerId}.${panelId}.${location.host}/${rest}`;
+    return `${location.origin}${panelPath(computerId, panelId, rest)}`;
 }
 
 /** One file of an installed panel's manifest or store listing, as bytes. */
