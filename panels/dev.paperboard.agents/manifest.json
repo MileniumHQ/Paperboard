@@ -44,7 +44,7 @@
         "services": [
             {
                 "name": "Codex, Claude or OpenCode",
-                "detail": "The brain you pick, downloaded from its maker and signed in with your own account. Your conversations go to it"
+                "detail": "The brain you pick, the one already on your computer or else downloaded from its maker, and signed in with your own account. Your conversations go to it"
             },
             {
                 "name": "Helium",
