@@ -104,6 +104,7 @@ export default function TroubleshootingDoc() {
                 <li><PaperCode>Timed out with no response.</PaperCode> The computer is off, on another network, or a firewall blocks the port. Allow TCP port 45464 in the computer's firewall. On Windows, allow the daemon when Windows Firewall asks.</li>
                 <li><PaperCode>Host not found.</PaperCode> The name does not resolve. Type the computer's IP address instead.</li>
                 <li><PaperCode>Network unreachable.</PaperCode> This computer has no route to that address. Check that both are on the same network, or connected through your VPN.</li>
+                <li><PaperCode>Something other than the Paperboard server daemon answered on that port.</PaperCode> Another program uses that port on the computer. Check the port number, or move the other program to a different port.</li>
                 <li><PaperCode>That isn't a valid address.</PaperCode> What you typed is not an IP address or a computer name. Check it for spaces and stray characters.</li>
             </PaperTextList>
 

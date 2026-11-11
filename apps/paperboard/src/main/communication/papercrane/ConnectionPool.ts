@@ -234,7 +234,12 @@ export class ConnectionPool extends EventEmitter {
                 // over the authenticated pair/verify handshake instead
                 return { reachable: true };
             }
-            return { reachable: false, error: `HTTP ${res.status}` };
+            // the daemon always answers /health with 200, so any other
+            // status came from a different server on that port
+            return {
+                reachable: false,
+                error: `Something other than the Paperboard server daemon answered on that port (HTTP ${res.status}). Check the port number`,
+            };
         } catch (err: any) {
             return { reachable: false, error: classifyProbeError(err) };
         }
