@@ -58,6 +58,11 @@ export type PaperListProps = (
          * take a selection bar; their actions still work. Default true.
          */
         selectable?: boolean;
+        /**
+         * Smaller rows with smaller text, for a dense sidebar (a vertical
+         * tab strip). Default false.
+         */
+        compact?: boolean;
     };
 
 interface DragState {
@@ -73,6 +78,7 @@ interface DragState {
 
 interface PaperListContextType {
     isSelectable: () => boolean;
+    isCompact: () => boolean;
     isReorderable: () => boolean;
     hasActiveDrag: () => boolean;
     isDropping: () => boolean;
@@ -116,12 +122,14 @@ export function PaperList(props: ParentProps<PaperListProps>) {
         "scrollable",
         "background",
         "selectable",
+        "compact",
         "class",
         "classList",
         "style",
         "children",
     ]);
 
+    const isCompact = () => local.compact ?? false;
     const isSelectable = () => local.selectable ?? true;
     const isHorizontal = () =>
         local.direction === "horizontal" || Boolean(local.horizontal);
@@ -307,6 +315,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
 
     const contextValue: PaperListContextType = {
         isSelectable,
+        isCompact,
         isReorderable,
         hasActiveDrag,
         isDropping,
@@ -325,6 +334,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
             isHorizontal() ? styles.horizontal : "",
             isReorderable() ? styles.reorderable : "",
             isSelectable() ? "" : styles.static,
+            isCompact() ? styles.compact : "",
             local.borderless ? styles.borderless : "",
             local.fullWidth ? styles.fullWidth : "",
             local.fullHeight ? styles.fullHeight : "",
@@ -458,6 +468,7 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
     const { isSelected } = useSelectionItem(local.value, local.disabled);
     const listCtx = usePaperListContext();
     const selectable = () => listCtx?.isSelectable() ?? true;
+    const compact = () => listCtx?.isCompact() ?? false;
     const isDragging = () => listCtx?.isItemDragging(local.value) ?? false;
 
     const isCloseable = () =>
@@ -571,7 +582,7 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
             </Show>
 
             <div class={styles.itemText}>
-                <PaperText class={styles.listTitle} size={3} weight={500}>
+                <PaperText class={styles.listTitle} size={compact() ? 2 : 3} weight={500}>
                     <span>{local.children}</span>
                     <Show when={isCloseable()}>
                         <PaperButton size="tiny"

@@ -213,6 +213,12 @@ export function Example() {
                         <td><PaperCode>false</PaperCode>: the list only shows rows. Items can't be chosen, so they render no input, don't highlight on hover and never take the selection bar. <PaperCode>name</PaperCode> is then optional. Items' <PaperCode>actions</PaperCode> still work.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>compact</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Smaller rows for a dense sidebar, such as vertical tabs. Titles are a size smaller, icons are small, padding is tighter, and a long title ends in an ellipsis instead of wrapping.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode>, <PaperCode>style</PaperCode></td>
                         <td>Solid props</td>
                         <td>No default</td>
@@ -362,6 +368,7 @@ onClosed(value: string | number): void;`}
                 <li>Left alone, a vertical list is a sidebar: 190 pixels wide, full height, a right border, on the inset surface. Set <PaperCode>fullWidth</PaperCode> and <PaperCode>borderless</PaperCode> to use it inside a card, as the gameserver panel does.</li>
                 <li>A horizontal list is full width and auto height, with no right border.</li>
                 <li>A list scrolls rather than crushing its rows when it overflows.</li>
+                <li>A <PaperCode>compact</PaperCode> list keeps every row one line high: a title that doesn't fit ends in an ellipsis.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
@@ -451,6 +458,29 @@ export function Tabs(props: { initial: Tab[] }) {
         </PaperList>
     );
 }`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="compact">Compact vertical tabs</PaperText>
+            <PaperText preset="body" as="p">
+                The terminal panel's vertical tabs are a <PaperCode>compact</PaperCode> list: many tabs fit down a narrow sidebar, and a long name ends in an ellipsis.
+            </PaperText>
+            <PaperCard data-docs-demo surface="front">
+                <PaperList name="docs-compact" defaultValue="build" compact reorderable fullWidth borderless scrollable={false}>
+                    <PaperListItem value="build" icon="terminal" closeable>zsh</PaperListItem>
+                    <PaperListItem value="server" icon="terminal" closeable>Server — java</PaperListItem>
+                    <PaperListItem value="logs" icon="terminal" closeable>tail -f /var/log/paperboard/daemon.log</PaperListItem>
+                </PaperList>
+            </PaperCard>
+            <PaperCode block language="tsx">
+{`<PaperList name="tabs" value={active()} onValueChange={(v) => setActive(String(v))} compact reorderable>
+    <For each={tabs()}>
+        {(tab) => (
+            <PaperListItem value={tab.id} icon="terminal" onClosed={closeTab}>
+                {tab.label}
+            </PaperListItem>
+        )}
+    </For>
+</PaperList>`}
             </PaperCode>
 
             <PaperText preset="subheader" as="h3" id="confirm-close">Confirm before closing</PaperText>

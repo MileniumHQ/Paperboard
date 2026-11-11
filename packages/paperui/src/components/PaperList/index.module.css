@@ -201,3 +201,30 @@
         background var(--paper-short-transition) ease,
         color var(--paper-short-transition) ease;
 }
+
+/* compact: a dense sidebar, such as a vertical tab strip. Smaller rows,
+   smaller text and icon, and a title that ends in an ellipsis instead of
+   wrapping, so every row keeps one height. */
+.PaperList.compact .PaperListItem {
+    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
+}
+
+.PaperList.compact .PaperListItem:has([class*="PaperButton"]) {
+    padding-top: var(--paper-uigap-onefourth);
+    padding-bottom: var(--paper-uigap-onefourth);
+}
+
+.PaperList.compact.horizontal .PaperListItem {
+    padding-right: var(--paper-uigap);
+}
+
+.PaperList.compact .listIcon {
+    font-size: var(--paper-icon-size-small);
+}
+
+.PaperList.compact .listTitle > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
