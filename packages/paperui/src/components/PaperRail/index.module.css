@@ -135,3 +135,27 @@
         background: transparent;
     }
 }
+
+.PaperRailItem.reorderable {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.PaperRailItem.dragging {
+    z-index: 1;
+    cursor: grabbing;
+}
+
+.PaperRailItem.isSibling {
+    transition:
+        transform 0.22s var(--paper-ease-standard),
+        outline var(--paper-short-transition),
+        background var(--paper-tiny-transition);
+}
+
+.PaperRailItem.dropping {
+    transition:
+        transform 0s,
+        outline var(--paper-short-transition),
+        background var(--paper-tiny-transition);
+}

@@ -102,6 +102,12 @@ export function Example() {
                         <td>Draws each item's <PaperCode>label</PaperCode> under its icon, in wider items. An item's own <PaperCode>showLabel</PaperCode> wins.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>onReorder</PaperCode></td>
+                        <td><PaperCode>(newOrderValues: string[]) =&gt; void</PaperCode></td>
+                        <td>No default</td>
+                        <td>Called after a drag with the <PaperCode>reorderable</PaperCode> items' values in their new order. See <PaperLink href="#reordering">Reordering</PaperLink>.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode></td>
                         <td>Solid props</td>
                         <td>No default</td>
@@ -153,6 +159,12 @@ export function Example() {
                         <td><PaperCode>boolean</PaperCode></td>
                         <td>No default (off)</td>
                         <td>Dims the item, ignores choosing, and removes it from the tab order.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>reorderable</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>No default (off)</td>
+                        <td>Lets the item be dragged among the rail's other reorderable items.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>onClick</PaperCode></td>
@@ -217,6 +229,14 @@ export function Example() {
                 <li>A click, or Enter or Space on a focused item, selects it and calls <PaperCode>onValueChange</PaperCode>. The selected item draws a primary outline and a primary icon.</li>
                 <li>Controlled and uncontrolled work as in a form: with <PaperCode>value</PaperCode> set, the selection changes only when your signal does.</li>
                 <li>The rail is a fit-content column with a right divider and a raised surface. It grows with its items and does not scroll by itself: place it in a container that scrolls.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h3" id="reordering">Reordering</PaperText>
+            <PaperTextList>
+                <li>Mark the items that may move with <PaperCode>reorderable</PaperCode>. They move only among each other, so fixed items such as Home and Settings stay where they are. Keep the reorderable items next to each other.</li>
+                <li>Press a reorderable item with the primary mouse button or a pen and drag it up or down. A drag starts after 6 pixels of movement; shorter movement is a click. Touch does not drag, so a finger still scrolls the rail.</li>
+                <li>On drop, the rail's <PaperCode>onReorder</PaperCode> gets the reorderable items' values in their new order, as strings. The rail does not reorder its own children: reorder your data, and the items follow.</li>
+                <li>A drop where the drag began does not call <PaperCode>onReorder</PaperCode>. The click that ends a drag does not select the item.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="accessibility">Accessibility</PaperText>

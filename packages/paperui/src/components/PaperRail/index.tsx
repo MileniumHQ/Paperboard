@@ -6,12 +6,18 @@ import {
     useSelectionItem,
     type SingleSelectionProviderProps,
 } from "../contexts/selection";
+import { createReorder, type Reorder } from "../shared/reorder";
 
-const RailContext = createContext<{ showLabels?: boolean }>();
+const RailContext = createContext<{ showLabels?: boolean; reorder: Reorder }>();
+
+// the reorderable items carry their value here, apart from the rest
+const REORDER_ATTRIBUTE = "data-reorder-value";
 
 export type PaperRailProps = SingleSelectionProviderProps &
     JSX.HTMLAttributes<HTMLDivElement> & {
         showLabels?: boolean;
+        /** the reorderable items' values, in their new order, after a drag */
+        onReorder?: (newOrderValues: string[]) => void;
     };
 
 export function PaperRail(props: ParentProps<PaperRailProps>) {
@@ -21,10 +27,20 @@ export function PaperRail(props: ParentProps<PaperRailProps>) {
         "defaultValue",
         "onValueChange",
         "showLabels",
+        "onReorder",
         "class",
         "classList",
         "children",
     ]);
+
+    let railRef: HTMLDivElement | undefined;
+    const reorder = createReorder({
+        container: () => railRef,
+        itemSelector: `:scope > [${REORDER_ATTRIBUTE}]`,
+        valueAttribute: REORDER_ATTRIBUTE,
+        horizontal: () => false,
+        onReorder: () => local.onReorder,
+    });
 
     const className = () =>
         [
@@ -42,8 +58,11 @@ export function PaperRail(props: ParentProps<PaperRailProps>) {
             defaultValue={local.defaultValue}
             onValueChange={local.onValueChange}
         >
-            <RailContext.Provider value={{ showLabels: local.showLabels }}>
-                <div {...rest} class={className()} classList={local.classList}>
+            <RailContext.Provider value={{
+                get showLabels() { return local.showLabels; },
+                reorder,
+            }}>
+                <div {...rest} ref={railRef} class={className()} classList={local.classList}>
                     {local.children}
                 </div>
             </RailContext.Provider>
@@ -58,15 +77,9 @@ export interface PaperRailItemProps
     label?: JSX.Element | string;
     showLabel?: boolean;
     disabled?: boolean;
-}
-
-export interface PaperRailItemProps
-    extends JSX.HTMLAttributes<HTMLDivElement> {
-    value: string | number;
-    icon: JSX.Element | string;
-    label?: JSX.Element | string;
-    showLabel?: boolean;
-    disabled?: boolean;
+    /** drag with a mouse or pen to move it among the rail's other
+     *  reorderable items; the rail's onReorder reports the new order */
+    reorderable?: boolean;
 }
 
 export function PaperRailItem(props: PaperRailItemProps) {
@@ -77,9 +90,12 @@ export function PaperRailItem(props: PaperRailItemProps) {
         "label",
         "showLabel",
         "disabled",
+        "reorderable",
         "class",
         "classList",
+        "style",
         "onClick",
+        "onPointerDown",
         "onKeyDown",
         "aria-label",
         "title",
@@ -93,20 +109,37 @@ export function PaperRailItem(props: PaperRailItemProps) {
     // a text label names the item, unless the caller names it themselves
     const textLabel = () => (typeof local.label === "string" ? local.label : undefined);
 
+    const isDragging = () => railCtx?.reorder.isDragging(local.value) ?? false;
+
     const className = () =>
         [
             styles.PaperRailItem,
             isSelected() ? styles.selected : "",
             shouldShowLabel() ? styles.hasLabel : "",
             local.disabled ? styles.disabled : "",
+            local.reorderable ? styles.reorderable : "",
+            isDragging() ? styles.dragging : "",
+            railCtx?.reorder.isDropping() ? styles.dropping : "",
+            railCtx?.reorder.hasActiveDrag() && !isDragging() ? styles.isSibling : "",
             local.class,
         ]
             .filter(Boolean)
             .join(" ");
 
+    // touch keeps its drag for scrolling the rail
+    const handlePointerDown = (e: PointerEvent) => {
+        if (local.reorderable && !local.disabled && e.pointerType !== "touch") {
+            railCtx?.reorder.start(local.value, e);
+        }
+        if (typeof local.onPointerDown === "function") {
+            (local.onPointerDown as (e: PointerEvent) => void)(e);
+        }
+    };
+
     // hidden inputs scroll ancestors on focus, divs don't
     const activate = (e: MouseEvent) => {
-        if (local.disabled) return;
+        // the click that ends a drag is not a choice
+        if (local.disabled || railCtx?.reorder.justDragged()) return;
         select();
         if (typeof local.onClick === "function") {
             (local.onClick as (e: MouseEvent) => void)(e);
@@ -123,8 +156,14 @@ export function PaperRailItem(props: PaperRailItemProps) {
             tabIndex={local.disabled ? -1 : 0}
             class={className()}
             classList={local.classList}
+            {...{ [REORDER_ATTRIBUTE]: local.reorderable ? String(local.value) : undefined }}
+            style={{
+                ...(local.reorderable ? railCtx?.reorder.itemStyle(local.value) : {}),
+                ...(typeof local.style === "object" ? local.style : {}),
+            }}
             title={local.title ?? textLabel()}
             onClick={activate}
+            onPointerDown={handlePointerDown}
             onKeyDown={(e) => {
                 if (
                     !local.disabled &&
