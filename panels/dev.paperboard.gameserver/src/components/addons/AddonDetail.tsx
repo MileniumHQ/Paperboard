@@ -8,8 +8,10 @@ import {
     PaperLink,
     PaperMarkdown,
     PaperModal,
+    PaperSlidePage,
     PaperTable,
     PaperText,
+    usePaperPanel,
 } from "@mileniumhq/paperui";
 import type { AddonKind, AddonProject, AddonTarget, InstalledAddon } from "../../lib/addons/kind";
 import type { DetailTarget } from "./state";
@@ -35,12 +37,26 @@ export function AddonDetail<Meta>(props: {
     const [loading, setLoading] = createSignal(false);
     const [loadError, setLoadError] = createSignal<string | null>(null);
 
+    // what the page shows stays set while it closes, so it doesn't change under its exit
+    const [kept, setKept] = createSignal<DetailTarget | null>(null);
+    const [keptEntry, setKeptEntry] = createSignal<InstalledAddon | null>(null);
+    createEffect(() => {
+        if (!props.target) return;
+        setKept(props.target);
+        setKeptEntry(props.entry);
+    });
+    const entry = () => (props.target ? props.entry : keptEntry());
+    // a phone shows the page over the list; a modal takes no back swipe
+    const panel = usePaperPanel();
+    const compact = () => Boolean(panel?.compact?.());
+
     createEffect(() => {
         const target = props.target;
+        if (!target) return;
         setProject(null);
         setLoading(false);
         setLoadError(null);
-        if (!target || target.local) return;
+        if (target.local) return;
         setLoading(true);
         props.kind.source
             .project(target)
@@ -55,139 +71,154 @@ export function AddonDetail<Meta>(props: {
             .finally(() => setLoading(false));
     });
 
-    return (
-        <PaperModal open={props.target !== null} onClose={props.onClose} size="large" noHeader>
-            <Show when={props.target} keyed>
-                {(target) => {
-                    // made once per entry: both pieces share the state the kind creates
-                    const entryId = createMemo(() => props.entry?.id);
-                    const extras = createMemo(() =>
-                        entryId() && props.entry && props.extras ? untrack(() => props.extras!(props.entry!, props.onClose)) : null,
-                    );
-                    return (
-                        <PaperFlex direction="column" gap="full">
-                            <PaperFlex direction="row" gap="full" align="center">
-                                <PaperAvatar
-                                    src={project()?.iconUrl ?? target.iconUrl}
-                                    shape="square"
-                                    size="large"
-                                    fallbackIcon={props.kind.glyph}
-                                />
-                                <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
-                                    <Show when={!target.local}>
-                                        <PaperLink href={props.kind.source.pageUrl(target)} target="_blank">
-                                            {props.kind.source.pageLabel}
-                                        </PaperLink>
-                                    </Show>
-                                    <PaperText size={5} weight={700}>
-                                        {project()?.title ?? target.title}
-                                    </PaperText>
-                                    <PaperText size={2} color="text-subtle">
-                                        {truncate(target.description || project()?.description || "", 200)}
-                                    </PaperText>
+    const page = (target: DetailTarget) => {
+            // made once per entry: both pieces share the state the kind creates
+            const entryId = createMemo(() => entry()?.id);
+            const extras = createMemo(() =>
+                entryId() && entry() && props.extras ? untrack(() => props.extras!(entry()!, props.onClose)) : null,
+            );
+            return (
+                <PaperFlex direction="column" gap="full">
+                    <PaperFlex direction="row" gap="full" align="center" wrap>
+                        <PaperAvatar
+                            src={project()?.iconUrl ?? target.iconUrl}
+                            shape="square"
+                            size="large"
+                            fallbackIcon={props.kind.glyph}
+                        />
+                        <PaperFlex direction="column" gap="onefourth" flex minWidth="field">
+                            <Show when={!target.local}>
+                                <PaperLink href={props.kind.source.pageUrl(target)} target="_blank">
+                                    {props.kind.source.pageLabel}
+                                </PaperLink>
+                            </Show>
+                            <PaperText size={5} weight={700}>
+                                {project()?.title ?? target.title}
+                            </PaperText>
+                            <PaperText size={2} color="text-subtle">
+                                {truncate(target.description || project()?.description || "", 200)}
+                            </PaperText>
+                        </PaperFlex>
+                        <Show
+                            when={entry()}
+                            keyed
+                            fallback={
+                                <PaperEffect variant="success">
+                                    <PaperButton variant="success" disabled={props.busy} onClick={() => props.onInstall(target)}>
+                                        <PaperIcon>{props.busy ? "hourglass_top" : "download"}</PaperIcon>
+                                        Install
+                                    </PaperButton>
+                                </PaperEffect>
+                            }
+                        >
+                            {(entry) => (
+                                <PaperFlex direction="row" gap="half">
+                                    {extras()?.actions}
+                                    <PaperEffect variant="danger">
+                                        <PaperButton variant="danger" disabled={props.busy} onClick={() => props.onRemove(entry)}>
+                                            <PaperIcon>delete</PaperIcon>
+                                            Uninstall
+                                        </PaperButton>
+                                    </PaperEffect>
                                 </PaperFlex>
-                                <Show
-                                    when={props.entry}
-                                    keyed
-                                    fallback={
-                                        <PaperEffect variant="success">
-                                            <PaperButton variant="success" disabled={props.busy} onClick={() => props.onInstall(target)}>
-                                                <PaperIcon>{props.busy ? "hourglass_top" : "download"}</PaperIcon>
-                                                Install
-                                            </PaperButton>
-                                        </PaperEffect>
-                                    }
-                                >
-                                    {(entry) => (
-                                        <PaperFlex direction="row" gap="half">
-                                            {extras()?.actions}
-                                            <PaperEffect variant="danger">
-                                                <PaperButton variant="danger" disabled={props.busy} onClick={() => props.onRemove(entry)}>
-                                                    <PaperIcon>delete</PaperIcon>
-                                                    Uninstall
-                                                </PaperButton>
-                                            </PaperEffect>
-                                        </PaperFlex>
-                                    )}
-                                </Show>
+                            )}
+                        </Show>
+                    </PaperFlex>
+
+                    {extras()?.notice}
+
+                    <Show
+                        when={!target.local}
+                        fallback={
+                            <PaperFlex direction="column" gap="onefourth">
+                                <PaperText size={3} weight={700}>
+                                    About
+                                </PaperText>
+                                <PaperText size={2} color="text-subtle">
+                                    {target.local?.uploaded
+                                        ? `You uploaded this file. ${props.kind.source.name} has no record of it, so there are no details or updates to show.`
+                                        : `This file was added outside Paperboard. ${props.kind.source.name} has no record of it, so there are no details or updates to show.`}
+                                </PaperText>
                             </PaperFlex>
-
-                            {extras()?.notice}
-
+                        }
+                    >
+                        <PaperFlex direction="column" gap="onefourth">
+                            <PaperText size={3} weight={700}>
+                                About
+                            </PaperText>
                             <Show
-                                when={!target.local}
+                                when={!loading()}
                                 fallback={
-                                    <PaperFlex direction="column" gap="onefourth">
-                                        <PaperText size={3} weight={700}>
-                                            About
-                                        </PaperText>
-                                        <PaperText size={2} color="text-subtle">
-                                            {target.local?.uploaded
-                                                ? `You uploaded this file. ${props.kind.source.name} has no record of it, so there are no details or updates to show.`
-                                                : `This file was added outside Paperboard. ${props.kind.source.name} has no record of it, so there are no details or updates to show.`}
-                                        </PaperText>
-                                    </PaperFlex>
+                                    <PaperText size={2} color="text-subtle">
+                                        Loading details from {props.kind.source.name}...
+                                    </PaperText>
                                 }
                             >
-                                <PaperFlex direction="column" gap="onefourth">
-                                    <PaperText size={3} weight={700}>
-                                        About
-                                    </PaperText>
-                                    <Show
-                                        when={!loading()}
-                                        fallback={
-                                            <PaperText size={2} color="text-subtle">
-                                                Loading details from {props.kind.source.name}...
-                                            </PaperText>
-                                        }
-                                    >
-                                        <Show
-                                            when={project()?.body}
-                                            fallback={
-                                                <PaperText size={2} color={loadError() ? "danger" : "text-subtle"}>
-                                                    {loadError() ? `Couldn't load details: ${loadError()}` : "No description provided."}
-                                                </PaperText>
-                                            }
-                                        >
-                                            {/* Third-party markdown goes through PaperMarkdown, which renders PaperUI
-                                                elements instead of HTML; the source says whether its images may load. */}
-                                            <PaperMarkdown text={project()!.body} allowImages={project()!.allowImages} allowHtml={project()!.allowHtml} />
-                                        </Show>
-                                    </Show>
-                                </PaperFlex>
-
-                                <PaperFlex direction="column" gap="onefourth">
-                                    <PaperText size={3} weight={700}>
-                                        Information
-                                    </PaperText>
-                                    <PaperTable>
-                                        <tbody>
-                                            <For each={project()?.info ?? []}>
-                                                {(row) => (
-                                                    <tr>
-                                                        <th>{row.label}</th>
-                                                        <td>{row.value}</td>
-                                                    </tr>
-                                                )}
-                                            </For>
-                                            <tr>
-                                                <th>Installed Version</th>
-                                                <td>
-                                                    {props.entry?.version
-                                                        ? `v${props.entry.version}`
-                                                        : props.entry
-                                                          ? "Unknown (installed outside Paperboard)"
-                                                          : "Not installed"}
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </PaperTable>
-                                </PaperFlex>
+                                <Show
+                                    when={project()?.body}
+                                    fallback={
+                                        <PaperText size={2} color={loadError() ? "danger" : "text-subtle"}>
+                                            {loadError() ? `Couldn't load details: ${loadError()}` : "No description provided."}
+                                        </PaperText>
+                                    }
+                                >
+                                    {/* Third-party markdown goes through PaperMarkdown, which renders PaperUI
+                                        elements instead of HTML; the source says whether its images may load. */}
+                                    <PaperMarkdown text={project()!.body} allowImages={project()!.allowImages} allowHtml={project()!.allowHtml} />
+                                </Show>
                             </Show>
                         </PaperFlex>
-                    );
-                }}
+
+                        <PaperFlex direction="column" gap="onefourth">
+                            <PaperText size={3} weight={700}>
+                                Information
+                            </PaperText>
+                            <PaperTable>
+                                <tbody>
+                                    <For each={project()?.info ?? []}>
+                                        {(row) => (
+                                            <tr>
+                                                <th>{row.label}</th>
+                                                <td>{row.value}</td>
+                                            </tr>
+                                        )}
+                                    </For>
+                                    <tr>
+                                        <th>Installed Version</th>
+                                        <td>
+                                            {entry()?.version
+                                                ? `v${entry()!.version}`
+                                                : entry()
+                                                  ? "Unknown (installed outside Paperboard)"
+                                                  : "Not installed"}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </PaperTable>
+                        </PaperFlex>
+                    </Show>
+                </PaperFlex>
+            );
+    };
+
+    return (
+        <>
+            <Show when={!compact()}>
+                <PaperModal open={props.target !== null} onClose={props.onClose} size="large" noHeader>
+                    <Show when={kept()} keyed>
+                        {page}
+                    </Show>
+                </PaperModal>
             </Show>
-        </PaperModal>
+            <PaperSlidePage position="fixed" enabled={compact()} open={props.target !== null} title={kept()?.title ?? ""} onBack={props.onClose}>
+                <Show when={compact() && kept()} keyed>
+                    {(target) => (
+                        <PaperFlex direction="column" padding="full" scrollable="y" fullHeight>
+                            {page(target)}
+                        </PaperFlex>
+                    )}
+                </Show>
+            </PaperSlidePage>
+        </>
     );
 }
