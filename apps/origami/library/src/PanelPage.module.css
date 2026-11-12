@@ -2,7 +2,6 @@
     /* the library's own footprints: PaperUI has no token for a hero or screenshot */
     --library-hero-size: 112px;
     --library-shot-width: 544px;
-    --library-card-max: 288px;
     max-width: var(--paper-page-width);
     margin: 0 auto;
     width: 100%;
@@ -11,35 +10,6 @@
     flex-direction: column;
     gap: var(--paper-uigap-double);
     padding: var(--paper-uigap-double) var(--paper-uigap-triple) var(--paper-uigap-quadruple);
-}
-
-/* breadcrumb: a real link back to the grid, not a button */
-.crumbs {
-    display: flex;
-    align-items: center;
-    gap: var(--paper-uigap-onefourth);
-    font-family: var(--paper-font-family-rounded);
-    font-size: var(--paper-text-size-2);
-    color: var(--paper-text-subtle);
-}
-
-.crumbLink {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--paper-uigap-onefourth);
-    color: var(--paper-primary);
-    text-decoration: none;
-    font-weight: var(--paper-weight-semibold);
-    border-radius: var(--paper-border-radius-half);
-}
-
-.crumbLink:hover {
-    text-decoration: underline;
-}
-
-.crumbLink:focus-visible {
-    outline: var(--paper-focus-ring);
-    outline-offset: var(--paper-focus-offset);
 }
 
 .hero {
@@ -89,7 +59,6 @@
 .actionButton {
     min-width: var(--paper-size-field);
 }
-
 
 /* the horizontal fact strip under the hero */
 .facts {
@@ -175,76 +144,6 @@
 :global([data-paperui-theme="dark"]) .onlyLight,
 :global([data-paperui-theme="light"]) .onlyDark {
     display: none;
-}
-
-.cards {
-    display: grid;
-    /* fixed, narrow columns so one or two cards match the three-card size
-       instead of stretching across the page; the group stays centered */
-    grid-template-columns: repeat(auto-fit, minmax(var(--paper-size-card-min), var(--library-card-max)));
-    justify-content: center;
-    gap: var(--paper-uigap);
-    align-items: stretch;
-}
-
-/* every card fills its grid row, so all three share one height */
-.card {
-    height: 100%;
-    box-sizing: border-box;
-}
-
-.cardHeader {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: var(--paper-uigap-onefourth);
-}
-
-/* the heading's default margins dwarf the header gap; drop them so the
-   title sits close to its subtitle */
-.cardTitle {
-    margin: 0;
-}
-
-.cardIcon {
-    font-size: var(--paper-icon-size-huge);
-    color: var(--paper-primary);
-}
-
-.rows {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: var(--paper-text-size-2);
-}
-
-/* each row stacks its name over its detail: a card is too narrow for two
-   columns once a name or a detail runs long */
-.rows tr {
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap-onefourth);
-    padding: var(--paper-uigap-half) 0;
-}
-
-.rows tr + tr {
-    border-top: var(--paper-border-width) solid var(--paper-border-subtle);
-}
-
-.rows th,
-.rows td {
-    padding: 0;
-    text-align: left;
-    overflow-wrap: anywhere;
-}
-
-.rows th {
-    font-weight: var(--paper-weight-bold);
-    color: var(--paper-text);
-}
-
-.rows td {
-    color: var(--paper-text-subtle);
 }
 
 /* narrow frames: the hero stacks and centers, the facts fold into two rows */

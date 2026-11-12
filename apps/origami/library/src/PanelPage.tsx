@@ -11,8 +11,12 @@ import {
     PaperButton,
     PaperCard,
     PaperEffect,
+    PaperFlex,
     PaperIcon,
+    PaperKeyValue,
+    PaperKeyValueList,
     PaperMarkdown,
+    PaperSectionHeader,
     PaperText,
 } from "@mileniumhq/paperui";
 import type { PanelItem } from "../../../../packages/paperapi/src/panelMerge";
@@ -72,40 +76,23 @@ const ACTION_ICON: Record<PanelAction, string> = {
     detecting: "progress_activity",
 };
 
-const InfoCard: Component<{
-    icon: string;
-    title: string;
-    subtitle: string;
-    rows: StoreRow[];
-}> = (
-    props,
-) => (
+// A full-width section per fact list: the name on the left, what it is for
+// on the right, so a long purpose reads on one line instead of wrapping in a
+// narrow column.
+const InfoSection: Component<{ icon: string; title: string; rows: StoreRow[] }> = (props) => (
     <Show when={props.rows.length > 0}>
-        <PaperCard class={styles.card} padding="sixfourths" gap="half">
-            <div class={styles.cardHeader}>
-                <PaperIcon class={styles.cardIcon} aria-hidden="true">
-                    {props.icon}
-                </PaperIcon>
-                <PaperText as="h3" class={styles.cardTitle} size={4} weight={800} rounded>
-                    {props.title}
-                </PaperText>
-                <PaperText size={2} color="text-subtle">
-                    {props.subtitle}
-                </PaperText>
-            </div>
-            <table class={styles.rows}>
-                <tbody>
-                    <For each={props.rows}>
-                        {(row) => (
-                            <tr>
-                                <th scope="row">{row.name}</th>
-                                <td>{row.detail}</td>
-                            </tr>
-                        )}
-                    </For>
-                </tbody>
-            </table>
-        </PaperCard>
+        <section aria-label={props.title}>
+            <PaperFlex direction="column" gap="half" fullWidth>
+                <PaperSectionHeader icon={props.icon} title={props.title} />
+                <PaperCard padding="sixfourths">
+                    <PaperKeyValueList>
+                        <For each={props.rows}>
+                            {(row) => <PaperKeyValue label={row.name}>{row.detail}</PaperKeyValue>}
+                        </For>
+                    </PaperKeyValueList>
+                </PaperCard>
+            </PaperFlex>
+        </section>
     </Show>
 );
 
@@ -211,22 +198,23 @@ const PanelPage: Component<PanelPageProps> = (props) => {
 
     return (
         <article class={styles.page} aria-label={props.panel.name}>
-            <nav class={styles.crumbs} aria-label="Breadcrumb">
-                <a
-                    class={styles.crumbLink}
+            <PaperFlex direction="row">
+                <PaperButton
+                    size="small"
+                    variant="text"
                     href={panelHref(null)}
-                    onClick={(event) => {
-                        // plain left click stays in-page; modified clicks
-                        // (new tab, new window) keep the browser's behavior
+                    onClick={(event: MouseEvent) => {
+                        // a plain left click stays in-page; modified clicks
+                        // (new tab, new window) keep the link's behavior
                         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
                         event.preventDefault();
                         props.onNavigateHome();
                     }}
                 >
-                    <PaperIcon aria-hidden="true">chevron_left</PaperIcon>
+                    <PaperIcon aria-hidden="true">arrow_back</PaperIcon>
                     Library
-                </a>
-            </nav>
+                </PaperButton>
+            </PaperFlex>
 
             <header class={styles.hero}>
                 <Show
@@ -299,28 +287,14 @@ const PanelPage: Component<PanelPageProps> = (props) => {
                 )}
             </Show>
 
-            <Show
-                when={
-                    store() &&
-                    (store()!.services.length ||
-                        store()!.credits.length ||
-                        store()!.requirements.length)
-                }
-            >
-                <section class={styles.cards} aria-label="More information">
-                    <InfoCard icon="public" title="Services used"
-                        subtitle="Services that this panel contacts."
-                        rows={store()!.services} />
-                    <InfoCard icon="favorite" title="Special thanks"
-                        subtitle="Projects that make this panel possible."
-                        rows={store()!.credits} />
-                    <InfoCard
-                        icon="memory"
-                        title="Recommended system"
-                        subtitle="Recommended minimum system specs."
-                        rows={store()!.requirements}
-                    />
-                </section>
+            <Show when={store()}>
+                {(listing) => (
+                    <>
+                        <InfoSection icon="memory" title="Recommended system" rows={listing().requirements} />
+                        <InfoSection icon="public" title="Services used" rows={listing().services} />
+                        <InfoSection icon="favorite" title="Special thanks" rows={listing().credits} />
+                    </>
+                )}
             </Show>
         </article>
     );

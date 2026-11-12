@@ -12,7 +12,7 @@ export default function StoreListingDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">Store listing</PaperText>
             <PaperText preset="body" as="p">
-                The manifest's store block fills the panel's page in the Panel Library: screenshots, a long description, and three information cards.
+                The manifest's store block fills the panel's page in the Panel Library: screenshots, a long description, and up to three information sections.
                 Paperboard reads it only when the panel is published, and the files it names stay out of the install archive.
                 Every field is optional, and a panel without the block gets a page with its name, description, publisher and install button.
             </PaperText>
@@ -65,19 +65,19 @@ export default function StoreListingDoc() {
                         <td><PaperCode>services</PaperCode></td>
                         <td><PaperCode>StoreRow[]</PaperCode></td>
                         <td><PaperCode>[]</PaperCode></td>
-                        <td>The "Services used" card: websites and services the panel contacts.</td>
+                        <td>The "Services used" section: websites and services the panel contacts, each with what the panel uses it for.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>credits</PaperCode></td>
                         <td><PaperCode>StoreRow[]</PaperCode></td>
                         <td><PaperCode>[]</PaperCode></td>
-                        <td>The "Special thanks" card: projects and people the panel builds on.</td>
+                        <td>The "Special thanks" section: projects and people the panel builds on.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>requirements</PaperCode></td>
                         <td><PaperCode>StoreRow[]</PaperCode></td>
                         <td><PaperCode>[]</PaperCode></td>
-                        <td>The "Recommended system" card: storage, memory, processor, graphics.</td>
+                        <td>The "Recommended system" section: storage, memory, processor, graphics.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -102,7 +102,7 @@ interface StoreRow {
             <PaperTextList>
                 <li>Every path is relative to the panel root and inside <PaperCode>store/</PaperCode>: <PaperCode>./store/1-light.png</PaperCode> or <PaperCode>store/shots/1.png</PaperCode>. Path parts use letters, digits, <PaperCode>.</PaperCode>, <PaperCode>_</PaperCode> and <PaperCode>-</PaperCode>, and <PaperCode>..</PaperCode> is refused.</li>
                 <li>Screenshots are <PaperCode>.png</PaperCode>, <PaperCode>.webp</PaperCode>, <PaperCode>.jpg</PaperCode> or <PaperCode>.jpeg</PaperCode> files of at most 2 MB each. The gallery crops each one to 4:3 from the top, so make them 4:3.</li>
-                <li>Each card holds at most 12 rows. A card with no rows is not shown.</li>
+                <li>The sections run in the order Recommended system, Services used, Special thanks, each a full-width list with the name on the left and the detail on the right. Each holds at most 12 rows. A section with no rows is not shown.</li>
                 <li>Names and details are trimmed. An empty one after trimming is an error.</li>
                 <li>The publish step validates the block, uploads the images to the registry and inlines the about text. A listing that names a missing file or breaks a limit refuses the whole publish, with the reason, such as <PaperCode>store.screenshots has more than 8 entries</PaperCode> or <PaperCode>store.services[0] needs a name (max 48) and a detail (max 160)</PaperCode>.</li>
                 <li><PaperCode>paperapi pack</PaperCode> never puts <PaperCode>store/</PaperCode> in the install archive, so screenshots take no space on the computers that install the panel.</li>
@@ -123,7 +123,7 @@ interface StoreRow {
                     <tr><td><PaperCode>store.&lt;field&gt; must be a .png, .webp or .jpg image</PaperCode></td><td>A screenshot has another extension.</td></tr>
                     <tr><td><PaperCode>store.about must be a .md file</PaperCode></td><td><PaperCode>about</PaperCode> names another kind of file.</td></tr>
                     <tr><td><PaperCode>store.screenshots[&lt;n&gt;].alt must be 1-120 characters</PaperCode></td><td>An empty or long <PaperCode>alt</PaperCode>.</td></tr>
-                    <tr><td><PaperCode>store.&lt;table&gt; has more than 12 rows</PaperCode></td><td>Too many rows in a card.</td></tr>
+                    <tr><td><PaperCode>store.&lt;table&gt; has more than 12 rows</PaperCode></td><td>Too many rows in a section.</td></tr>
                     <tr><td><PaperCode>about exceeds the 32768-byte cap</PaperCode></td><td>The about file is over 32 KB.</td></tr>
                 </tbody>
             </PaperTable>
