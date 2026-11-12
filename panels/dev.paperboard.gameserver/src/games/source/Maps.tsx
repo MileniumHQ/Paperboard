@@ -2,7 +2,6 @@ import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
 import {
     PaperAvatar,
     PaperButton,
-    PaperCard,
     PaperChip,
     PaperEmptyState,
     PaperFlex,
@@ -194,61 +193,55 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
                                 </PaperEmptyState>
                             }
                         >
-                            <PaperCard padding="none">
-                                <PaperList
-                                    name="source-map-cycle"
-                                    value=""
-                                    background="surface-raised"
-                                    borderless
-                                    fullWidth
-                                    reorderable={current().custom && editable() && !working()}
-                                    onReorder={(order) => void save(order.map(String), "Rotation not reordered")}
-                                >
-                                    <For each={current().maps}>
-                                        {(name, index) => {
-                                            const names = () => mapNames(choiceOf(name), pictures);
-                                            return (
-                                                <PaperListItem
-                                                    value={name}
-                                                    icon={<PaperAvatar size="large" shape="square" src={workshopMap(name)?.previewImageUrl ?? pictures.of(name)} alt={names().title} fallbackIcon="map" />}
-                                                    description={[names().file, !installed().has(name) ? "Not installed" : workshopId(name) ? "Steam Workshop" : label(name), serverLevel() !== null && canonicalMap(serverLevel()!) === name ? "Playing now" : undefined].filter(Boolean).join(" · ")}
-                                                    actions={
-                                                        <Show when={current().custom && editable()}>
-                                                            <PaperFlex direction="row" gap="onefourth" align="center">
-                                                                <PaperButton size="tiny" icon aria-label={`Move ${names().title} up`} disabled={working() || index() === 0} onPointerDown={(e) => e.stopPropagation()} onClick={() => move(name, -1)}>arrow_upward</PaperButton>
-                                                                <PaperButton size="tiny" icon aria-label={`Move ${names().title} down`} disabled={working() || index() === current().maps.length - 1} onPointerDown={(e) => e.stopPropagation()} onClick={() => move(name, 1)}>arrow_downward</PaperButton>
-                                                                <PaperButton size="tiny" icon aria-label={`Remove ${names().title}`} disabled={working()} onPointerDown={(e) => e.stopPropagation()} onClick={() => remove(name)}>close</PaperButton>
-                                                            </PaperFlex>
-                                                        </Show>
-                                                    }
-                                                >
-                                                    {names().title}
-                                                </PaperListItem>
-                                            );
-                                        }}
-                                    </For>
-                                </PaperList>
-                            </PaperCard>
+                            <PaperList
+                                name="source-map-cycle"
+                                value=""
+                                fullWidth
+                                reorderable={current().custom && editable() && !working()}
+                                onReorder={(order) => void save(order.map(String), "Rotation not reordered")}
+                            >
+                                <For each={current().maps}>
+                                    {(name, index) => {
+                                        const names = () => mapNames(choiceOf(name), pictures);
+                                        return (
+                                            <PaperListItem
+                                                value={name}
+                                                icon={<PaperAvatar size="large" shape="square" src={workshopMap(name)?.previewImageUrl ?? pictures.of(name)} alt={names().title} fallbackIcon="map" />}
+                                                description={[names().file, !installed().has(name) ? "Not installed" : workshopId(name) ? "Steam Workshop" : label(name), serverLevel() !== null && canonicalMap(serverLevel()!) === name ? "Playing now" : undefined].filter(Boolean).join(" · ")}
+                                                actions={
+                                                    <Show when={current().custom && editable()}>
+                                                        <PaperFlex direction="row" gap="onefourth" align="center">
+                                                            <PaperButton size="tiny" icon aria-label={`Move ${names().title} up`} disabled={working() || index() === 0} onPointerDown={(e) => e.stopPropagation()} onClick={() => move(name, -1)}>arrow_upward</PaperButton>
+                                                            <PaperButton size="tiny" icon aria-label={`Move ${names().title} down`} disabled={working() || index() === current().maps.length - 1} onPointerDown={(e) => e.stopPropagation()} onClick={() => move(name, 1)}>arrow_downward</PaperButton>
+                                                            <PaperButton size="tiny" icon aria-label={`Remove ${names().title}`} disabled={working()} onPointerDown={(e) => e.stopPropagation()} onClick={() => remove(name)}>close</PaperButton>
+                                                        </PaperFlex>
+                                                    </Show>
+                                                }
+                                            >
+                                                {names().title}
+                                            </PaperListItem>
+                                        );
+                                    }}
+                                </For>
+                            </PaperList>
                         </Show>
                         <Show when={current().workshop.length > 0}>
                             <PaperFlex direction="column" gap="half">
                                 <PaperText size={2} weight={700} color="text-subtle">Steam Workshop maps</PaperText>
-                                <PaperCard padding="none">
-                                    <PaperList name="source-workshop-maps" value="" background="surface-raised" borderless fullWidth>
-                                        <For each={current().workshop}>
-                                            {(map) => (
-                                                <PaperListItem
-                                                    value={map.id}
-                                                    icon={<PaperAvatar size="large" shape="square" src={map.previewImageUrl ?? undefined} alt={map.title} fallbackIcon="map" />}
-                                                    description={current().workshopHeld[map.id] ?? "On this server"}
-                                                    actions={<PaperButton variant="text" disabled={working() || !!current().workshopHeld[map.id]} onPointerDown={(e) => e.stopPropagation()} onClick={() => { setError(null); setRemovingWorkshop(map); }}>Remove</PaperButton>}
-                                                >
-                                                    {map.title}
-                                                </PaperListItem>
-                                            )}
-                                        </For>
-                                    </PaperList>
-                                </PaperCard>
+                                <PaperList name="source-workshop-maps" value="" fullWidth>
+                                    <For each={current().workshop}>
+                                        {(map) => (
+                                            <PaperListItem
+                                                value={map.id}
+                                                icon={<PaperAvatar size="large" shape="square" src={map.previewImageUrl ?? undefined} alt={map.title} fallbackIcon="map" />}
+                                                description={current().workshopHeld[map.id] ?? "On this server"}
+                                                actions={<PaperButton variant="text" disabled={working() || !!current().workshopHeld[map.id]} onPointerDown={(e) => e.stopPropagation()} onClick={() => { setError(null); setRemovingWorkshop(map); }}>Remove</PaperButton>}
+                                            >
+                                                {map.title}
+                                            </PaperListItem>
+                                        )}
+                                    </For>
+                                </PaperList>
                             </PaperFlex>
                         </Show>
                         <MapPicturesCredit pictures={pictures} />

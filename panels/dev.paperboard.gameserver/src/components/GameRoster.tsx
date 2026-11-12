@@ -2,7 +2,6 @@ import { createEffect, createMemo, createSignal, on, Show, type JSX } from "soli
 import {
     PaperBadge,
     PaperButton,
-    PaperCard,
     PaperCopyButton,
     PaperEmptyState,
     PaperFlex,
@@ -203,79 +202,75 @@ export default function GameRoster<T extends RosterPlayer>(props: {
                     when={open()}
                     keyed
                     fallback={
-                        <PaperCard fullHeight>
-                            <PaperFlex fullHeight fullWidth center padding="full">
-                                <PaperEmptyState icon="group" title="Select a player" description={props.pickHint} />
-                            </PaperFlex>
-                        </PaperCard>
+                        <PaperFlex fullHeight fullWidth center padding="full">
+                            <PaperEmptyState icon="group" title="Select a player" description={props.pickHint} />
+                        </PaperFlex>
                     }
                 >
                     {(player) => (
-                        <PaperCard fullHeight scrollable>
-                            <PaperFlex direction="column" gap="full" padding="full">
-                                <PaperFlex direction="row" gap="full" align="center" wrap>
-                                    {props.avatar(player, "xlarge")}
-                                    <PaperFlex direction="column" gap="onefourth" grow minWidth={0}>
-                                        <PaperText size={7} weight={700}>{player.name}</PaperText>
-                                        <PaperFlex direction="row" gap="onefourth" align="center" wrap>
-                                            <PaperBadge variant={player.banned ? "danger" : player.online ? "success" : "monochrome"}>
-                                                {player.banned ? "Banned" : player.online ? "Online" : "Offline"}
-                                            </PaperBadge>
-                                            {props.badges?.(player)}
-                                        </PaperFlex>
+                        <PaperFlex direction="column" gap="full" padding="full" scrollable="y" fullHeight>
+                            <PaperFlex direction="row" gap="full" align="center" wrap>
+                                {props.avatar(player, "xlarge")}
+                                <PaperFlex direction="column" gap="onefourth" grow minWidth={0}>
+                                    <PaperText size={7} weight={700}>{player.name}</PaperText>
+                                    <PaperFlex direction="row" gap="onefourth" align="center" wrap>
+                                        <PaperBadge variant={player.banned ? "danger" : player.online ? "success" : "monochrome"}>
+                                            {player.banned ? "Banned" : player.online ? "Online" : "Offline"}
+                                        </PaperBadge>
+                                        {props.badges?.(player)}
                                     </PaperFlex>
                                 </PaperFlex>
+                            </PaperFlex>
 
-                                <PaperSeparator />
+                            <PaperSeparator />
 
-                                <PaperFlex direction="row" gap="half" wrap>
-                                    <PaperButton
-                                        disabled={props.state.busy() || serverStatus() !== "online" || !player.online}
-                                        onClick={() => void props.state.run(failure(player, "kicked"), () => props.moderation.kick(player))}
-                                    >
-                                        Kick
-                                    </PaperButton>
-                                    <Show when={props.moderation.canBan?.(player) ?? true}>
-                                        <Show
-                                            when={!player.banned}
-                                            fallback={
-                                                <PaperButton
-                                                    variant="primary"
-                                                    disabled={props.state.busy() || needsServer()}
-                                                    onClick={() => void props.state.run(failure(player, "unbanned"), () => props.moderation.unban(player))}
-                                                >
-                                                    Unban
-                                                </PaperButton>
-                                            }
-                                        >
-                                            <PaperButton variant="danger" disabled={props.state.busy() || needsServer()} onClick={showBanDialog}>
-                                                <PaperIcon>block</PaperIcon>Ban
+                            <PaperFlex direction="row" gap="half" wrap>
+                                <PaperButton
+                                    disabled={props.state.busy() || serverStatus() !== "online" || !player.online}
+                                    onClick={() => void props.state.run(failure(player, "kicked"), () => props.moderation.kick(player))}
+                                >
+                                    Kick
+                                </PaperButton>
+                                <Show when={props.moderation.canBan?.(player) ?? true}>
+                                    <Show
+                                        when={!player.banned}
+                                        fallback={
+                                            <PaperButton
+                                                variant="primary"
+                                                disabled={props.state.busy() || needsServer()}
+                                                onClick={() => void props.state.run(failure(player, "unbanned"), () => props.moderation.unban(player))}
+                                            >
+                                                Unban
                                             </PaperButton>
-                                        </Show>
+                                        }
+                                    >
+                                        <PaperButton variant="danger" disabled={props.state.busy() || needsServer()} onClick={showBanDialog}>
+                                            <PaperIcon>block</PaperIcon>Ban
+                                        </PaperButton>
                                     </Show>
-                                </PaperFlex>
-                                <Show when={needsServer()}>
-                                    <PaperText size={2} color="text-subtle">{props.moderation.needsServer}</PaperText>
-                                </Show>
-
-                                {props.sections?.(player)}
-
-                                <Show when={props.hasDetails?.(player) ?? true}>
-                                    <PaperSeparator />
-
-                                    <PaperText size={2} weight={700} color="text-subtle">Details</PaperText>
-                                    <PaperTable>
-                                        <tbody>
-                                            <tr>
-                                                <th>Last seen</th>
-                                                <td>{player.online ? "Online now" : player.lastSeen ? new Date(player.lastSeen).toLocaleString() : "Not seen yet"}</td>
-                                            </tr>
-                                            {props.details(player)}
-                                        </tbody>
-                                    </PaperTable>
                                 </Show>
                             </PaperFlex>
-                        </PaperCard>
+                            <Show when={needsServer()}>
+                                <PaperText size={2} color="text-subtle">{props.moderation.needsServer}</PaperText>
+                            </Show>
+
+                            {props.sections?.(player)}
+
+                            <Show when={props.hasDetails?.(player) ?? true}>
+                                <PaperSeparator />
+
+                                <PaperText size={2} weight={700} color="text-subtle">Details</PaperText>
+                                <PaperTable>
+                                    <tbody>
+                                        <tr>
+                                            <th>Last seen</th>
+                                            <td>{player.online ? "Online now" : player.lastSeen ? new Date(player.lastSeen).toLocaleString() : "Not seen yet"}</td>
+                                        </tr>
+                                        {props.details(player)}
+                                    </tbody>
+                                </PaperTable>
+                            </Show>
+                        </PaperFlex>
                     )}
                 </Show>
             </PlayerRoster>

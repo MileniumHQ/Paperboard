@@ -1,6 +1,5 @@
 import { createSignal, For, Index, Show, type JSX } from "solid-js";
 import {
-    PaperCard,
     PaperChip,
     PaperFlex,
     PaperInput,
@@ -8,7 +7,6 @@ import {
     PaperListItem,
     PaperListLabel,
     PaperQuote,
-    PaperSeparator,
     PaperSlidePage,
     PaperSplit,
     PaperSwatch,
@@ -70,8 +68,8 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                 detailActive={false}
                 onCollapsedChange={setCompact}
                 side={
-                    <PaperCard fullHeight>
-                        <PaperFlex direction="column" gap="half" padding="full" shrink={false}>
+                    <PaperFlex direction="column" gap="half" fullHeight>
+                        <PaperFlex direction="column" gap="half" shrink={false}>
                             <PaperInput
                                 fullWidth
                                 icon="search"
@@ -96,7 +94,6 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                                 )}
                             </Show>
                         </PaperFlex>
-                        <PaperSeparator />
                         <Show
                             when={any()}
                             fallback={
@@ -107,10 +104,8 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                         >
                             <PaperList
                                 name="playersList"
-                                background="surface-raised"
                                 value={compact() ? undefined : props.open}
                                 onValueChange={(val) => props.onOpen(String(val))}
-                                borderless
                                 fullWidth
                                 flex={1}
                                 scrollable
@@ -150,7 +145,7 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                                 </Index>
                             </PaperList>
                         </Show>
-                    </PaperCard>
+                    </PaperFlex>
                 }
             >
                 <Show when={!compact()}>{props.children}</Show>
@@ -164,8 +159,8 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                 onBack={() => setDetailOpen(false)}
             >
                 <Show when={compact()}>
-                    {/* the page's own margin, as a tab's page has */}
-                    <PaperFlex direction="column" flex={1} minHeight={0} overflowY="auto" padding="full">
+                    {/* the detail brings its own margin and scroll */}
+                    <PaperFlex direction="column" flex={1} minHeight={0}>
                         {props.children}
                     </PaperFlex>
                 </Show>

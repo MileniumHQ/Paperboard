@@ -777,238 +777,234 @@ function PlayerInspector(props: {
         <Show
             when={props.player}
             fallback={
-                <PaperCard fullHeight>
-                    <PaperFlex fullHeight fullWidth center padding="full">
-                        <PaperEmptyState
-                            icon="group"
-                            title="Select a player"
-                            description="Pick someone from the roster to see their status, stats, and controls."
-                        />
-                    </PaperFlex>
-                </PaperCard>
+                <PaperFlex fullHeight fullWidth center padding="full">
+                    <PaperEmptyState
+                        icon="group"
+                        title="Select a player"
+                        description="Pick someone from the roster to see their status, stats, and controls."
+                    />
+                </PaperFlex>
             }
         >
-            <PaperCard fullHeight scrollable>
-                <PaperFlex direction="column" gap="full" padding="full">
-                    {/* identity */}
-                    <PaperFlex direction="row" gap="full" align="center" wrap>
-                        <PlayerHead
-                            name={name()}
-                            uuid={props.player?.uuid}
-                            size="xlarge"
-                        />
-                        <PaperFlex
-                            direction="column"
-                            gap="onefourth"
-                            grow
-                            minWidth={0}
-                        >
-                            <PaperText size={7} weight={700}>
-                                {name()}
-                            </PaperText>
-                            <PaperFlex direction="row" gap="onefourth" align="center" wrap>
-                                <PaperBadge
-                                    variant={props.banned ? "danger" : isPlayerOnline() ? "success" : "monochrome"}
-                                >
-                                    {props.banned
-                                        ? "Banned"
-                                        : isPlayerOnline()
-                                            ? "Online"
-                                            : "Offline"}
-                                </PaperBadge>
-                                <Show when={props.player?.op}>
-                                    <PaperBadge variant="primary">OP</PaperBadge>
-                                </Show>
-                                <Show when={props.player?.whitelisted}>
-                                    <PaperBadge>Whitelisted</PaperBadge>
-                                </Show>
-                                <Show when={props.bedrock}>
-                                    <PaperBadge variant="monochrome">Bedrock</PaperBadge>
-                                </Show>
-                            </PaperFlex>
-                            <Show when={props.player?.uuid}>
-                                <PaperFlex direction="row" gap="half" align="center">
-                                    <PaperText
-                                        family="code"
-                                        size={1}
-                                        color="text-faint"
-                                        truncate
-                                    >
-                                        {props.player!.uuid}
-                                    </PaperText>
-                                    <PaperCopyButton text={props.player!.uuid!} />
-                                </PaperFlex>
+            <PaperFlex direction="column" gap="full" padding="full" scrollable="y" fullHeight>
+                {/* identity */}
+                <PaperFlex direction="row" gap="full" align="center" wrap>
+                    <PlayerHead
+                        name={name()}
+                        uuid={props.player?.uuid}
+                        size="xlarge"
+                    />
+                    <PaperFlex
+                        direction="column"
+                        gap="onefourth"
+                        grow
+                        minWidth={0}
+                    >
+                        <PaperText size={7} weight={700}>
+                            {name()}
+                        </PaperText>
+                        <PaperFlex direction="row" gap="onefourth" align="center" wrap>
+                            <PaperBadge
+                                variant={props.banned ? "danger" : isPlayerOnline() ? "success" : "monochrome"}
+                            >
+                                {props.banned
+                                    ? "Banned"
+                                    : isPlayerOnline()
+                                        ? "Online"
+                                        : "Offline"}
+                            </PaperBadge>
+                            <Show when={props.player?.op}>
+                                <PaperBadge variant="primary">OP</PaperBadge>
+                            </Show>
+                            <Show when={props.player?.whitelisted}>
+                                <PaperBadge>Whitelisted</PaperBadge>
+                            </Show>
+                            <Show when={props.bedrock}>
+                                <PaperBadge variant="monochrome">Bedrock</PaperBadge>
                             </Show>
                         </PaperFlex>
-                    </PaperFlex>
-
-                    <PaperSeparator />
-
-                    {/* moderation */}
-                    <PaperFlex direction="row" gap="half" wrap>
-                        <PaperButton
-                            disabled={!isOnline() || !isPlayerOnline()}
-                            onClick={() => props.onAction("kick")}
-                        >
-                            Kick
-                        </PaperButton>
-                        <Show
-                            when={!props.banned}
-                            fallback={
-                                <PaperButton
-                                    variant="primary"
-                                    disabled={!isOnline()}
-                                    onClick={() => void props.onPardon()}
+                        <Show when={props.player?.uuid}>
+                            <PaperFlex direction="row" gap="half" align="center">
+                                <PaperText
+                                    family="code"
+                                    size={1}
+                                    color="text-faint"
+                                    truncate
                                 >
-                                    Pardon
-                                </PaperButton>
-                            }
-                        >
-                            <PaperButton
-                                variant="danger"
-                                disabled={!isOnline()}
-                                onClick={() => props.onAction("ban")}
-                            >
-                                <PaperIcon>block</PaperIcon>Ban
-                            </PaperButton>
+                                    {props.player!.uuid}
+                                </PaperText>
+                                <PaperCopyButton text={props.player!.uuid!} />
+                            </PaperFlex>
                         </Show>
+                    </PaperFlex>
+                </PaperFlex>
+
+                <PaperSeparator />
+
+                {/* moderation */}
+                <PaperFlex direction="row" gap="half" wrap>
+                    <PaperButton
+                        disabled={!isOnline() || !isPlayerOnline()}
+                        onClick={() => props.onAction("kick")}
+                    >
+                        Kick
+                    </PaperButton>
+                    <Show
+                        when={!props.banned}
+                        fallback={
+                            <PaperButton
+                                variant="primary"
+                                disabled={!isOnline()}
+                                onClick={() => void props.onPardon()}
+                            >
+                                Pardon
+                            </PaperButton>
+                        }
+                    >
                         <PaperButton
-                            variant="warning"
-                            disabled={!isOnline() || !isPlayerOnline()}
-                            onClick={() => props.onKill()}
+                            variant="danger"
+                            disabled={!isOnline()}
+                            onClick={() => props.onAction("ban")}
                         >
-                            <PaperIcon>bolt</PaperIcon>Kill
+                            <PaperIcon>block</PaperIcon>Ban
+                        </PaperButton>
+                    </Show>
+                    <PaperButton
+                        variant="warning"
+                        disabled={!isOnline() || !isPlayerOnline()}
+                        onClick={() => props.onKill()}
+                    >
+                        <PaperIcon>bolt</PaperIcon>Kill
+                    </PaperButton>
+                </PaperFlex>
+
+                <PaperSeparator />
+
+                {/* stats */}
+                <PaperText size={2} weight={700} color="text-subtle">
+                    Status
+                </PaperText>
+                <PaperGrid min="field">
+                    <PaperStatTile
+                        icon="favorite"
+                        label="Health"
+                        value={health() ?? "–"}
+                        tone="danger"
+                        meter={healthMeter()}
+                    />
+                    <PaperStatTile
+                        icon="restaurant"
+                        label="Food"
+                        value={food() ?? "–"}
+                        tone="warning"
+                        meter={foodMeter()}
+                    />
+                    <PaperStatTile
+                        icon="bolt"
+                        label="Experience"
+                        value={
+                            stats()?.xpLevel !== undefined
+                                ? `Level ${stats()!.xpLevel}`
+                                : "–"
+                        }
+                        tone="success"
+                        meter={
+                            stats()?.xpProgress !== undefined
+                                ? { value: Math.round(stats()!.xpProgress! * 100), max: 100 }
+                                : undefined
+                        }
+                    />
+                    <PaperStatTile
+                        icon="skull"
+                        label="Deaths"
+                        value={summary()?.deaths ?? "–"}
+                    />
+                    <PaperStatTile
+                        icon="swords"
+                        label="Mob kills"
+                        value={summary()?.mobKills ?? "–"}
+                    />
+                    <PaperStatTile
+                        icon="military_tech"
+                        label="Player kills"
+                        value={summary()?.playerKills ?? "–"}
+                    />
+                    <PaperStatTile
+                        icon="route"
+                        label="Distance"
+                        value={distanceText()}
+                    />
+                    <PaperStatTile
+                        icon="diamond"
+                        label="Blocks mined"
+                        value={
+                            summary() ? summary()!.blocksMined.toLocaleString() : "–"
+                        }
+                    />
+                    <PaperStatTile
+                        icon="schedule"
+                        label="Total playtime"
+                        value={playtimeText()}
+                    />
+                </PaperGrid>
+
+                <PaperSeparator />
+
+                {/* permissions */}
+                <PaperText size={2} weight={700} color="text-subtle">
+                    Permissions
+                </PaperText>
+                <PaperSettingList autoHeight>
+                    <PaperSettingItem
+                        title="Operator"
+                        description={
+                            props.bedrock
+                                ? "Full command and administration access. While the server runs, only a Bedrock player who has joined once can be made an operator."
+                                : "Full command and administration access."
+                        }
+                    >
+                        <PaperToggle
+                            checked={props.player?.op ?? false}
+                            disabled={!canEditLists()}
+                            onChange={(checked) => props.onToggleFlag(name(), "op", checked)}
+                        />
+                    </PaperSettingItem>
+                    <PaperSettingItem
+                        title="Whitelisted"
+                        description="May join while the whitelist is enabled."
+                    >
+                        <PaperToggle
+                            checked={props.player?.whitelisted ?? false}
+                            disabled={!canEditLists()}
+                            onChange={(checked) =>
+                                props.onToggleFlag(name(), "whitelisted", checked)
+                            }
+                        />
+                    </PaperSettingItem>
+                </PaperSettingList>
+
+                <PaperSeparator />
+
+                {/* danger */}
+                <PaperText size={2} weight={700} color="danger">
+                    Danger
+                </PaperText>
+                <PaperCard accent="danger" padding="full">
+                    <PaperFlex direction="row" justify="space-between" align="center" gap="full">
+                        <PaperFlex direction="column" gap="onefourth" minWidth={0}>
+                            <PaperText size={3} weight={600}>
+                                Delete player data
+                            </PaperText>
+                            <PaperText size={2} color="text-subtle">
+                                Inventory, position and progress, moved to trash.
+                            </PaperText>
+                        </PaperFlex>
+                        <PaperButton variant="danger" onClick={props.onDeleteRequest}>
+                            <PaperIcon>delete</PaperIcon>Delete
                         </PaperButton>
                     </PaperFlex>
-
-                    <PaperSeparator />
-
-                    {/* stats */}
-                    <PaperText size={2} weight={700} color="text-subtle">
-                        Status
-                    </PaperText>
-                    <PaperGrid min="field">
-                        <PaperStatTile
-                            icon="favorite"
-                            label="Health"
-                            value={health() ?? "–"}
-                            tone="danger"
-                            meter={healthMeter()}
-                        />
-                        <PaperStatTile
-                            icon="restaurant"
-                            label="Food"
-                            value={food() ?? "–"}
-                            tone="warning"
-                            meter={foodMeter()}
-                        />
-                        <PaperStatTile
-                            icon="bolt"
-                            label="Experience"
-                            value={
-                                stats()?.xpLevel !== undefined
-                                    ? `Level ${stats()!.xpLevel}`
-                                    : "–"
-                            }
-                            tone="success"
-                            meter={
-                                stats()?.xpProgress !== undefined
-                                    ? { value: Math.round(stats()!.xpProgress! * 100), max: 100 }
-                                    : undefined
-                            }
-                        />
-                        <PaperStatTile
-                            icon="skull"
-                            label="Deaths"
-                            value={summary()?.deaths ?? "–"}
-                        />
-                        <PaperStatTile
-                            icon="swords"
-                            label="Mob kills"
-                            value={summary()?.mobKills ?? "–"}
-                        />
-                        <PaperStatTile
-                            icon="military_tech"
-                            label="Player kills"
-                            value={summary()?.playerKills ?? "–"}
-                        />
-                        <PaperStatTile
-                            icon="route"
-                            label="Distance"
-                            value={distanceText()}
-                        />
-                        <PaperStatTile
-                            icon="diamond"
-                            label="Blocks mined"
-                            value={
-                                summary() ? summary()!.blocksMined.toLocaleString() : "–"
-                            }
-                        />
-                        <PaperStatTile
-                            icon="schedule"
-                            label="Total playtime"
-                            value={playtimeText()}
-                        />
-                    </PaperGrid>
-
-                    <PaperSeparator />
-
-                    {/* permissions */}
-                    <PaperText size={2} weight={700} color="text-subtle">
-                        Permissions
-                    </PaperText>
-                    <PaperSettingList autoHeight>
-                        <PaperSettingItem
-                            title="Operator"
-                            description={
-                                props.bedrock
-                                    ? "Full command and administration access. While the server runs, only a Bedrock player who has joined once can be made an operator."
-                                    : "Full command and administration access."
-                            }
-                        >
-                            <PaperToggle
-                                checked={props.player?.op ?? false}
-                                disabled={!canEditLists()}
-                                onChange={(checked) => props.onToggleFlag(name(), "op", checked)}
-                            />
-                        </PaperSettingItem>
-                        <PaperSettingItem
-                            title="Whitelisted"
-                            description="May join while the whitelist is enabled."
-                        >
-                            <PaperToggle
-                                checked={props.player?.whitelisted ?? false}
-                                disabled={!canEditLists()}
-                                onChange={(checked) =>
-                                    props.onToggleFlag(name(), "whitelisted", checked)
-                                }
-                            />
-                        </PaperSettingItem>
-                    </PaperSettingList>
-
-                    <PaperSeparator />
-
-                    {/* danger */}
-                    <PaperText size={2} weight={700} color="danger">
-                        Danger
-                    </PaperText>
-                    <PaperCard accent="danger" padding="full">
-                        <PaperFlex direction="row" justify="space-between" align="center" gap="full">
-                            <PaperFlex direction="column" gap="onefourth" minWidth={0}>
-                                <PaperText size={3} weight={600}>
-                                    Delete player data
-                                </PaperText>
-                                <PaperText size={2} color="text-subtle">
-                                    Inventory, position and progress, moved to trash.
-                                </PaperText>
-                            </PaperFlex>
-                            <PaperButton variant="danger" onClick={props.onDeleteRequest}>
-                                <PaperIcon>delete</PaperIcon>Delete
-                            </PaperButton>
-                        </PaperFlex>
-                    </PaperCard>
-                </PaperFlex>
-            </PaperCard>
+                </PaperCard>
+            </PaperFlex>
         </Show>
     );
 }

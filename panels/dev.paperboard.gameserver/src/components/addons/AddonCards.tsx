@@ -8,8 +8,8 @@ import {
     PaperIcon,
     PaperInput,
     PaperLink,
-    PaperMediaCard,
-    PaperMediaCardGroup,
+    PaperList,
+    PaperListItem,
     PaperQuote,
     PaperText,
 } from "@mileniumhq/paperui";
@@ -18,7 +18,7 @@ import type { createAddonSearch } from "./state";
 
 const truncate = (text: string, max: number) => (text.length > max ? `${text.slice(0, max).trimEnd()}…` : text);
 
-/** The cards of what the server already has. */
+/** The list of what the server already has. */
 export function AddonInstalledList<Meta>(props: {
     kind: AddonKind<Meta>;
     listing: AddonListing<Meta>;
@@ -28,55 +28,57 @@ export function AddonInstalledList<Meta>(props: {
 }) {
     return (
         <Show when={props.listing.items.length > 0}>
-            <PaperCard>
-                <PaperFlex direction="column" gap="half" padding="full">
-                    <PaperText size={5} weight={700}>
-                        {props.kind.installedTitle}
+            <PaperFlex direction="column" gap="half">
+                <PaperText size={5} weight={700}>
+                    {props.kind.installedTitle}
+                </PaperText>
+                <Show when={props.listing.note}>
+                    <PaperText size={2} color="text-subtle">
+                        {props.listing.note}
                     </PaperText>
-                    <Show when={props.listing.note}>
-                        <PaperText size={2} color="text-subtle">
-                            {props.listing.note}
-                        </PaperText>
-                    </Show>
-                    <PaperMediaCardGroup minCardWidth="card-min">
-                        <For each={props.listing.items}>
-                            {(item) => (
-                                <PaperMediaCard
-                                    icon={<PaperAvatar src={item.iconUrl} shape="square" size="large" fallbackIcon={props.kind.glyph} />}
-                                    title={item.title}
-                                    subtitle={item.subtitle}
-                                    badge={<PaperBadge variant={item.badge.variant}>{item.badge.label}</PaperBadge>}
-                                    footerLeft={
-                                        <PaperText size={2} color="text-subtle">
-                                            {item.footer}
-                                        </PaperText>
-                                    }
-                                    footerRight={
-                                        <Show when={props.kind.itemActions?.length}>
-                                            <PaperFlex direction="row" gap="half">
-                                                <For each={props.kind.itemActions?.filter((a) => a.does !== "install" || item.project)}>
-                                                    {(action) => (
-                                                        <PaperButton
-                                                            size="tiny"
-                                                            variant={action.variant}
-                                                            disabled={props.busy || action.disabled?.()}
-                                                            onClick={() => props.onAction(item, action.does)}
-                                                        >
-                                                            <PaperIcon aria-hidden="true">{action.icon}</PaperIcon>
-                                                            {action.label}
-                                                        </PaperButton>
-                                                    )}
-                                                </For>
-                                            </PaperFlex>
-                                        </Show>
-                                    }
-                                    onClick={props.kind.itemClick === "none" ? undefined : () => props.onOpen(item)}
-                                />
-                            )}
-                        </For>
-                    </PaperMediaCardGroup>
-                </PaperFlex>
-            </PaperCard>
+                </Show>
+                <PaperList
+                    name="addon-installed"
+                    value=""
+                    onValueChange={(id) => {
+                        const item = props.listing.items.find((candidate) => candidate.id === id);
+                        if (item) props.onOpen(item);
+                    }}
+                    buttons
+                    selectable={props.kind.itemClick !== "none"}
+                    fullWidth
+                >
+                    <For each={props.listing.items}>
+                        {(item) => (
+                            <PaperListItem
+                                value={item.id}
+                                icon={<PaperAvatar src={item.iconUrl} shape="square" size="large" fallbackIcon={props.kind.glyph} />}
+                                description={[item.subtitle, item.footer].filter(Boolean).join(" · ")}
+                                actions={
+                                    <PaperFlex direction="row" gap="half" align="center">
+                                        <PaperBadge variant={item.badge.variant}>{item.badge.label}</PaperBadge>
+                                        <For each={props.kind.itemActions?.filter((a) => a.does !== "install" || item.project)}>
+                                            {(action) => (
+                                                <PaperButton
+                                                    size="tiny"
+                                                    variant={action.variant}
+                                                    disabled={props.busy || action.disabled?.()}
+                                                    onClick={() => props.onAction(item, action.does)}
+                                                >
+                                                    <PaperIcon aria-hidden="true">{action.icon}</PaperIcon>
+                                                    {action.label}
+                                                </PaperButton>
+                                            )}
+                                        </For>
+                                    </PaperFlex>
+                                }
+                            >
+                                {item.title}
+                            </PaperListItem>
+                        )}
+                    </For>
+                </PaperList>
+            </PaperFlex>
         </Show>
     );
 }
@@ -135,7 +137,7 @@ export function AddonSearchCard<Meta>(props: { kind: AddonKind<Meta>; search: Re
     );
 }
 
-/** The grid of projects a search found. */
+/** The list of projects a search found. */
 export function AddonResults<Meta>(props: {
     kind: AddonKind<Meta>;
     search: ReturnType<typeof createAddonSearch>;
@@ -145,51 +147,52 @@ export function AddonResults<Meta>(props: {
     return (
         <>
             <Show when={props.search.searching()}>
-                <PaperCard>
-                    <PaperFlex padding="full" center>
-                        <PaperText size={3} color="text-subtle">
-                            Searching {props.kind.source.name}...
-                        </PaperText>
-                    </PaperFlex>
-                </PaperCard>
+                <PaperFlex padding="full" center>
+                    <PaperText size={3} color="text-subtle">
+                        Searching {props.kind.source.name}...
+                    </PaperText>
+                </PaperFlex>
             </Show>
             <Show when={!props.search.searching() && !props.search.error() && props.search.results()}>
                 {(hits) => (
-                    <PaperCard>
-                        <PaperFlex padding="full" center={hits().length === 0}>
-                            <Show
-                                when={hits().length > 0}
-                                fallback={
-                                    <PaperText size={3} color="text-subtle">
-                                        {props.kind.emptySearch()}
-                                    </PaperText>
-                                }
-                            >
-                                <PaperMediaCardGroup minCardWidth="card-min">
-                                    <For each={hits()}>
-                                        {(hit) => (
-                                            <PaperMediaCard
-                                                icon={<PaperAvatar src={hit.iconUrl} shape="square" size="large" fallbackIcon={props.kind.glyph} />}
-                                                title={hit.title}
-                                                subtitle={truncate(hit.description, 110)}
-                                                badge={
-                                                    props.installedProjects.has(hit.projectId) ? (
-                                                        <PaperBadge variant="success">{props.kind.resultBadge}</PaperBadge>
-                                                    ) : undefined
-                                                }
-                                                footerLeft={
-                                                    <PaperText size={2} color="text-subtle">
-                                                        {hit.stat}
-                                                    </PaperText>
-                                                }
-                                                onClick={() => props.onOpen(hit)}
-                                            />
-                                        )}
-                                    </For>
-                                </PaperMediaCardGroup>
-                            </Show>
-                        </PaperFlex>
-                    </PaperCard>
+                    <Show
+                        when={hits().length > 0}
+                        fallback={
+                            <PaperFlex padding="full" center>
+                                <PaperText size={3} color="text-subtle">
+                                    {props.kind.emptySearch()}
+                                </PaperText>
+                            </PaperFlex>
+                        }
+                    >
+                        <PaperList
+                            name="addon-results"
+                            value=""
+                            onValueChange={(projectId) => {
+                                const hit = hits().find((candidate) => candidate.projectId === projectId);
+                                if (hit) props.onOpen(hit);
+                            }}
+                            buttons
+                            fullWidth
+                        >
+                            <For each={hits()}>
+                                {(hit) => (
+                                    <PaperListItem
+                                        value={hit.projectId}
+                                        icon={<PaperAvatar src={hit.iconUrl} shape="square" size="large" fallbackIcon={props.kind.glyph} />}
+                                        description={[truncate(hit.description, 110), hit.stat].filter(Boolean).join(" · ")}
+                                        actions={
+                                            <Show when={props.installedProjects.has(hit.projectId)}>
+                                                <PaperBadge variant="success">{props.kind.resultBadge}</PaperBadge>
+                                            </Show>
+                                        }
+                                    >
+                                        {hit.title}
+                                    </PaperListItem>
+                                )}
+                            </For>
+                        </PaperList>
+                    </Show>
                 )}
             </Show>
         </>

@@ -2,7 +2,6 @@ import { createEffect, createSignal, For, Show, onCleanup, untrack } from "solid
 import {
     PaperButton,
     PaperCheckbox,
-    PaperCard,
     PaperFlex,
     PaperInput,
     PaperList,
@@ -118,7 +117,7 @@ export default function VersionPicker(props: {
                 </PaperQuote>
             </Show>
 
-            <PaperCard grow minHeight={0}>
+            <PaperFlex direction="column" grow minHeight={0}>
                 <Show
                     when={!loading()}
                     fallback={
@@ -144,9 +143,7 @@ export default function VersionPicker(props: {
                             value={props.selectedVersion}
                             onValueChange={(val) => props.onSelectVersion(String(val))}
                             fullWidth
-                            borderless
                             flex
-                            background="transparent"
                         >
                             <For each={filteredVersions()}>
                                 {(item) => (
@@ -165,7 +162,7 @@ export default function VersionPicker(props: {
                         </PaperList>
                     </Show>
                 </Show>
-            </PaperCard>
+            </PaperFlex>
 
             <PaperQuote variant="warning" icon="info" title="Compatibility">
                 Paperboard works best on the latest Minecraft version. Full
