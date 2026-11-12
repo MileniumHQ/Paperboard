@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { splitProps, createSignal, Show, type JSX } from "solid-js";
+import { splitProps, createEffect, createSignal, on, onCleanup, Show, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { haptic } from "../../utils/haptics";
 import { useSettingListChecked } from "../../contexts/settingList";
@@ -11,6 +11,11 @@ export interface PaperToggleProps
     onChange?: (checked: boolean) => void;
     showIcons?: boolean;
 }
+
+// how long the knob takes to travel (its CSS transition), and how long a
+// press waits for a parent to answer with the new state before it is let go
+const KNOB_TRAVEL_MS = 380;
+const PARENT_ANSWER_MS = 10_000;
 
 export function PaperToggle(props: PaperToggleProps) {
     let inputRef: HTMLInputElement | undefined;
@@ -40,12 +45,40 @@ export function PaperToggle(props: PaperToggleProps) {
     const listChecked = useSettingListChecked(() => rest.name, "PaperToggle");
     const isChecked = () => local.checked ?? listChecked() ?? internalChecked();
 
-    const flip = (next: boolean) => {
-        // the knob gathers speed and thumps into the far edge, either way
-        haptic("toggle");
+    // A press asks for a flip; the switch only flips once its state does. A
+    // controlled switch waits for its parent (a setting saved first), so the
+    // knob's thump follows the knob, never the press ahead of it.
+    let expected = false;
+    let expectedTimer: ReturnType<typeof setTimeout> | undefined;
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
+    onCleanup(() => {
+        clearTimeout(expectedTimer);
+        clearTimeout(settleTimer);
+    });
 
-        setIsAnimating(true);
-        setTimeout(() => setIsAnimating(false), 380);
+    createEffect(
+        on(
+            isChecked,
+            () => {
+                // a change nobody pressed for (a reload, a reset) moves the knob without a thump
+                if (!expected) return;
+                expected = false;
+                clearTimeout(expectedTimer);
+                // the knob gathers speed and thumps into the far edge, either way
+                haptic("toggle");
+                setIsAnimating(true);
+                clearTimeout(settleTimer);
+                settleTimer = setTimeout(() => setIsAnimating(false), KNOB_TRAVEL_MS);
+            },
+            { defer: true },
+        ),
+    );
+
+    const flip = (next: boolean) => {
+        expected = true;
+        clearTimeout(expectedTimer);
+        // a parent that refuses the flip leaves nothing to feel
+        expectedTimer = setTimeout(() => (expected = false), PARENT_ANSWER_MS);
 
         if (local.checked === undefined) {
             setInternalChecked(next);
