@@ -63,8 +63,11 @@ describe("failures are shown", () => {
             await page.waitFor(screenShows(0, "$"), "the working tab's prompt");
             await page.evaluate(`document.querySelectorAll(".xterm-helper-textarea")[0].focus()`);
             const lines = Array.from({ length: 100 }, (_, i) => `${String(i).padStart(3, "0")}${"y".repeat(997)}\n`).join("");
-            await page.insertText(`head -n 100 > "$HOME/paste.txt"; echo pasted-$((1+1))`);
+            await page.insertText(`echo reading-$((0+1)); head -n 100 > "$HOME/paste.txt"; echo pasted-$((1+1))`);
             await pressEnter(page);
+            // the shell turns bracketed paste off before it runs the line, so
+            // once the line's first output shows, head reads the paste bare
+            await page.waitFor(screenShows(0, "reading-1"), "the shell to run the line");
             await paste(page, JSON.stringify(lines));
             await page.waitFor(screenShows(0, "pasted-2"), "the pasted lines to be read");
             expect(fs.readFileSync(path.join((await testDaemon()).home, "paste.txt"), "utf8")).toBe(lines);
