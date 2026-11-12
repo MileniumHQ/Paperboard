@@ -44,6 +44,7 @@ import { keepAliveWithoutWindows, secondLaunchAction } from "./instancePolicy";
 import { createDesktopTray, destroyDesktopTray, hasDesktopTray, refreshDesktopTray } from "./tray";
 import { pollTrayCount } from "./trayCount";
 import icon from "../../resources/icon.png?asset";
+import trayTemplateIcon from "../../resources/trayTemplate.png?asset";
 import { installScreenshotTool } from "./screenshotTool";
 import { installTextEditContextMenu } from "./contextMenu";
 import { relocateElectronData } from "./electronData";
@@ -86,6 +87,7 @@ let stopTrayPoll: (() => void) | null = null;
 function ensureDesktopTray(): void {
     createDesktopTray({
         icon,
+        macTemplateIcon: trayTemplateIcon,
         openWindow: showMainWindow,
         openInBrowser: () => void openInBrowser(),
         runningCount: () => desktopTrayCount,

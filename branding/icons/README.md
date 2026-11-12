@@ -20,3 +20,20 @@ Keep the SVGs plain: paths, basic shapes, linear gradients, patterns, clip paths
 ```sh
 rsvg-convert -w 512 -h 512 branding/icons/<name>.svg -o branding/icons/png/<name>.png
 ```
+
+## Apple app icon
+
+macOS and iOS use the Paperboard icon as an Icon Composer `.icon`, so it gets Liquid Glass and the dark, clear and tinted appearances. Apple draws the squircle, so the stacked tiles aren't in it: the fill is a diagonal gradient of the front tile's blue, and the glyph from `paperboard.svg`'s `layer-3` is two glass groups, the three white triangles in front and the half-opacity wedge behind them, centred on a 1024 × 1024 canvas.
+
+- macOS: `apps/paperboard/build/icon.icon`. electron-builder compiles it with `actool` (Xcode 26 or later), which also writes the `.icns` older macOS shows.
+- iOS: `mobile/ios/App/App/AppIcon.icon` in paperboard-cloud, the same files.
+
+Edit it in Icon Composer (in Xcode's developer apps) and copy the result to both. To see every appearance without opening it:
+
+```sh
+ictool icon.icon --export-image --output-file out.png --platform iOS --rendition Dark --width 1024 --height 1024 --scale 1
+```
+
+Renditions are `Default`, `Dark`, `ClearLight`, `ClearDark`, `TintedLight` and `TintedDark`. `ictool` lives in `Icon Composer.app/Contents/Executables/`.
+
+The macOS menu bar shows `apps/paperboard/resources/trayTemplate.png` (18 px, with a 36 px `@2x`): the same glyph in black, the wedge at half opacity, which macOS recolours for the bar.

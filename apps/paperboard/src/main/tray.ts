@@ -9,6 +9,8 @@ let tray: Tray | null = null;
 
 export interface DesktopTrayDeps {
     icon: string;
+    /** macOS menu bar glyph: a black "…Template" PNG with an @2x beside it */
+    macTemplateIcon: string;
     /** show + focus the main window, recreating it if it was destroyed */
     openWindow: () => void;
     /** open Paperboard in the default browser, signed in */
@@ -19,7 +21,14 @@ export interface DesktopTrayDeps {
 
 export function createDesktopTray(deps: DesktopTrayDeps): Tray {
     if (tray) return tray;
-    tray = new Tray(nativeImage.createFromPath(deps.icon).resize({ width: 16, height: 16 }));
+    // macOS draws a template image in the menu bar's own colour, for light,
+    // dark and tinted bars alike; elsewhere the tray shows the app icon.
+    const image =
+        process.platform === "darwin"
+            ? nativeImage.createFromPath(deps.macTemplateIcon)
+            : nativeImage.createFromPath(deps.icon).resize({ width: 16, height: 16 });
+    if (image.isEmpty()) throw new Error(`Tray icon failed to load: ${process.platform === "darwin" ? deps.macTemplateIcon : deps.icon}`);
+    tray = new Tray(image);
 
     const refresh = () => {
         if (!tray) return;
