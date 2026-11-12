@@ -3,15 +3,14 @@ import { PANEL_ID, WIDGET_IDS } from "./contract";
 import { quickAskModelChoices } from "./core/widgets";
 import { initialState, type AiState } from "./core/types";
 import { AiApp } from "./service/app";
-import { publicActions, uiActions } from "./service/actions";
+import { uiCalls } from "./service/calls";
 
 const app = new AiApp();
 
-export const aiService = definePanelService<AiState, ReturnType<typeof publicActions>>({
+export const aiService = definePanelService<AiState>({
     id: PANEL_ID,
     state: initialState(),
-    categories: [{ name: "AI", icon: "smart_toy", order: 1 }],
-    actions: [...publicActions(app), ...uiActions(app)],
+    calls: uiCalls(app),
     // what Quick ask's "Model" dropdown offers in Home's gallery
     widgetChoices: {
         [WIDGET_IDS.quickAsk]: { model: (ctx) => quickAskModelChoices(ctx.state) },

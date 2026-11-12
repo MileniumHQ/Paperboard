@@ -4,7 +4,7 @@
 import { createSignal, Show } from "solid-js";
 import { PaperButton, PaperInput, PaperWidget, PaperWidgetMessage } from "@mileniumhq/paperui";
 import type { WidgetContext } from "@mileniumhq/paperapi";
-import { UI_ACTION_IDS, WIDGET_ACTION_IDS } from "../contract";
+import { CALLS, WIDGET_CALLS } from "../contract";
 import { MAX_USER_MESSAGE_CHARS } from "../core/conversation";
 import { quickAskBlocker, quickAskModel } from "../core/widgets";
 import { HeaderAction, type WidgetAction } from "./HeaderAction";
@@ -33,7 +33,7 @@ export default function QuickAsk(props: { widget: WidgetContext }) {
         setError("");
         setSent(false);
         try {
-            await service.call(WIDGET_ACTION_IDS.quickAsk, { text: text(), ...(chosen() ? { model: chosen() } : {}) });
+            await service.call(WIDGET_CALLS.quickAsk, { text: text(), ...(chosen() ? { model: chosen() } : {}) });
             setText("");
             setSent(true);
             props.widget.openPanel();
@@ -49,7 +49,7 @@ export default function QuickAsk(props: { widget: WidgetContext }) {
         setStarting(true);
         setError("");
         try {
-            await service.call(UI_ACTION_IDS.startRuntime);
+            await service.call(CALLS.startRuntime);
         } catch (err) {
             setError(errorText(err));
         } finally {

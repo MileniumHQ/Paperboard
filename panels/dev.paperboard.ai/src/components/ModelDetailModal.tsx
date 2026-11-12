@@ -11,7 +11,7 @@ import {
     PaperTable,
     PaperText,
 } from "@mileniumhq/paperui";
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import { modelRef, type CatalogModel } from "../core/catalog";
 import { FIT_LABELS, formatBytes } from "../core/fit";
 import { CAPABILITY_LABELS, knownCapabilities } from "../lib/capabilities";
@@ -57,7 +57,7 @@ export default function ModelDetailModal(props: ModelDetailModalProps) {
         setError("");
         try {
             await ensureOllamaReady();
-            await call(UI_ACTION_IDS.pullModel, { model: ref() });
+            await call(CALLS.pullModel, { model: ref() });
         } catch (err) {
             setError(errorText(err));
         }
@@ -66,7 +66,7 @@ export default function ModelDetailModal(props: ModelDetailModalProps) {
     const cancel = async () => {
         setError("");
         try {
-            await call(UI_ACTION_IDS.cancelPull, { model: ref() });
+            await call(CALLS.cancelPull, { model: ref() });
         } catch (err) {
             setError(errorText(err));
         }

@@ -52,22 +52,13 @@ mock.module("@mileniumhq/paperapi", () => ({
         pendingUpdates: async () => pendingUpdates,
     },
     panelsApi: { list: async () => [] },
-    actionsApi: {
-        list: async () => [],
-        call: async () => undefined,
-        emit: async () => {},
-        emitTrigger: async () => {},
-        register: async () => {},
-        registerMultiple: async () => {},
-    },
-    blocksApi: { panel: () => blocks },
+    blocksApi: { panel: () => blocks, list: async () => [], run: async () => undefined, read: async () => undefined },
     inputsProblem,
     qualifyTypeRef,
     validateBlockDefinitions,
     valueProblem,
     systemApi: { getGpus: async () => ({ gpus: [], errors: [] }) },
     processApi: {},
-    defineAction: (definition: unknown) => definition,
 }));
 
 const { AiApp } = await import("../src/service/app");
@@ -132,7 +123,6 @@ function makeCtx() {
             state = { ...state, ...(typeof patch === "function" ? patch(state) : patch) };
         },
         emit() {},
-        emitTrigger() {},
     };
 }
 

@@ -92,9 +92,9 @@ export interface ChatDeps {
     capabilities: (model: string, provider?: string) => string[] | undefined;
     /** an agent model's effort levels and default, as listed */
     efforts: (model: string, provider?: string) => { efforts?: string[]; defaultEffort?: string } | undefined;
-    listActions: () => Promise<RegistryAction[]>;
+    listBlocks: () => Promise<RegistryAction[]>;
     panelNames: () => Promise<Record<string, string>>;
-    callAction: (panelId: string, action: string, args: Record<string, unknown>) => Promise<unknown>;
+    callBlock: (panelId: string, action: string, args: Record<string, unknown>) => Promise<unknown>;
     isAllowed: (key: string) => boolean;
     rememberAllowed: (key: string) => Promise<void>;
     /** the agent connection a provider id names, if it is one */
@@ -463,7 +463,7 @@ export class ChatEngine {
                 const planned = calls.slice(0, MAX_CALLS_PER_ROUND);
                 // the registry is read only when the model asks about it
                 const index = planned.some((c) => (c.name === FIND_APP_ACTIONS || c.name === CALL_APP_ACTION) && offered.has(c.name))
-                    ? buildActionIndex(await deps.listActions(), deps.ownPanelId, await deps.panelNames())
+                    ? buildActionIndex(await deps.listBlocks(), deps.ownPanelId, await deps.panelNames())
                     : null;
                 message.toolCalls = planned.map((c) => this.planCall(c, index, offered));
                 this.emitMessage(conversation.id, message);
@@ -975,7 +975,7 @@ export class ChatEngine {
                 const { pattern, text } = call.arguments as { pattern?: string; text?: string };
                 call.result = formatToolResult(await files!.search(call.arguments.path as string, { pattern, text }, signal));
             } else {
-                call.result = formatToolResult(await this.deps.callAction(call.panelId, call.action, call.arguments));
+                call.result = formatToolResult(await this.deps.callBlock(call.panelId, call.action, call.arguments));
             }
             call.status = "done";
         } catch (err) {

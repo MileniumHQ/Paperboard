@@ -14,7 +14,7 @@ import {
     PaperSelectorItem,
     PaperText,
 } from "@mileniumhq/paperui";
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import { AGENT_REGISTRY, CUSTOM_AGENT_ID, splitArgs } from "../core/agents";
 import type { Connection } from "../core/providers";
 import type { AgentState } from "../core/types";
@@ -44,7 +44,7 @@ export function agentChoiceReady(selected: readonly string[], custom: CustomAgen
 export async function addAgents(selected: readonly string[], custom: CustomAgentDraft): Promise<string | undefined> {
     let last: string | undefined;
     if (custom.on) {
-        const added = await call<Connection>(UI_ACTION_IDS.addConnection, {
+        const added = await call<Connection>(CALLS.addConnection, {
             kind: "agent",
             agent: CUSTOM_AGENT_ID,
             label: custom.label,
@@ -54,7 +54,7 @@ export async function addAgents(selected: readonly string[], custom: CustomAgent
         last = added.id;
     }
     for (const agent of selected) {
-        const added = await call<Connection>(UI_ACTION_IDS.addConnection, { kind: "agent", agent });
+        const added = await call<Connection>(CALLS.addConnection, { kind: "agent", agent });
         last = added.id;
     }
     return last;
@@ -78,7 +78,7 @@ export function AgentChooser(props: AgentChooserProps) {
         setError("");
         setInstalled(null);
         try {
-            setInstalled(await call<string[]>(UI_ACTION_IDS.installedAgents));
+            setInstalled(await call<string[]>(CALLS.installedAgents));
         } catch (err) {
             setError(errorText(err));
         }
@@ -199,9 +199,9 @@ export function AgentStatus(props: { connection: Connection }) {
             setBusy("");
         }
     };
-    const check = () => run("check", () => call(UI_ACTION_IDS.checkAgent, { id: props.connection.id }));
+    const check = () => run("check", () => call(CALLS.checkAgent, { id: props.connection.id }));
     const signIn = (methodId: string) =>
-        run(`auth:${methodId}`, () => call(UI_ACTION_IDS.authenticateAgent, { id: props.connection.id, methodId }));
+        run(`auth:${methodId}`, () => call(CALLS.authenticateAgent, { id: props.connection.id, methodId }));
 
     return (
         <>

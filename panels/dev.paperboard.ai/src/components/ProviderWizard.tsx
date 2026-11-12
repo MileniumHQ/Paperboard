@@ -9,7 +9,7 @@ import {
     PaperWizard,
     PaperWizardStep,
 } from "@mileniumhq/paperui";
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import type { Connection, ProviderKind } from "../core/providers";
 import { call, errorText, state } from "../lib/state";
 import { EndpointForm, OllamaSetup } from "./ProviderForms";
@@ -54,7 +54,7 @@ export default function ProviderWizard(props: ProviderWizardProps) {
             const id = isAgent()
                 ? await addAgents(agents(), custom())
                 : (
-                      await call<Connection>(UI_ACTION_IDS.addConnection, {
+                      await call<Connection>(CALLS.addConnection, {
                           kind: choice(),
                           ...(isEndpoint() ? { label: label(), baseUrl: baseUrl(), apiKey: apiKey() } : {}),
                       })

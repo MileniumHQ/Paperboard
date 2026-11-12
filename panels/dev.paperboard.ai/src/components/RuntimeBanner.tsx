@@ -1,6 +1,6 @@
 import { createSignal, Match, Show, Switch } from "solid-js";
 import { PaperButton, PaperCode, PaperIcon, PaperLoader, PaperText } from "@mileniumhq/paperui";
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import { call, errorText, state } from "../lib/state";
 import styles from "./RuntimeBanner.module.css";
 
@@ -14,7 +14,7 @@ export default function RuntimeBanner() {
         setBusy(true);
         setError("");
         try {
-            await call(UI_ACTION_IDS.startRuntime);
+            await call(CALLS.startRuntime);
         } catch (err) {
             setError(errorText(err));
         } finally {

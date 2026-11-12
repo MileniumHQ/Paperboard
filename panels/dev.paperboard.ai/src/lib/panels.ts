@@ -1,6 +1,6 @@
 // Names and icons of installed panels, for tool cards and permissions.
 import { createSignal } from "solid-js";
-import { actionsApi, panelAssetUrl, panelsApi, type PanelItem } from "@mileniumhq/paperapi";
+import { blocksApi, panelAssetUrl, panelsApi, type PanelItem } from "@mileniumhq/paperapi";
 
 const [panels, setPanels] = createSignal<PanelItem[]>([]);
 const [labels, setLabels] = createSignal<Record<string, string>>({});
@@ -16,10 +16,10 @@ export function loadPanelInfo(): Promise<void> {
                 console.debug("[ai] panel list unavailable:", String(err));
             }
             try {
-                const list = await actionsApi.list();
-                setLabels(Object.fromEntries(list.map((a) => [`${a.panelId}:${a.action}`, a.schema?.name ?? a.action])));
+                const list = await blocksApi.list();
+                setLabels(Object.fromEntries(list.map((b) => [`${b.panelId}:${b.entry}`, "name" in b.schema ? b.schema.name : b.entry])));
             } catch (err) {
-                console.debug("[ai] action list unavailable:", String(err));
+                console.debug("[ai] block list unavailable:", String(err));
             }
         })().finally(() => {
             loading = null;
@@ -44,6 +44,6 @@ export function panelIcon(panelId: string): string {
     return found?.iconUrl || panelAssetUrl(panelId, found?.icon || "branding/icon.png");
 }
 
-export function actionLabel(panelId: string, action: string): string {
-    return labels()[`${panelId}:${action}`] ?? action;
+export function actionLabel(panelId: string, entry: string): string {
+    return labels()[`${panelId}:${entry}`] ?? entry;
 }

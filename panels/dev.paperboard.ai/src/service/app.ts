@@ -11,7 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-    actionsApi,
+    blocksApi,
     config,
     fileApi,
     packageApi,
@@ -22,7 +22,7 @@ import {
     type PendingPackageUpdate,
     type ServiceContext,
 } from "@mileniumhq/paperapi";
-import { agentProcId, EVENTS, OLLAMA_PACKAGE, OLLAMA_PROC_ID, PANEL_ID, TRIGGER_IDS } from "../contract";
+import { agentProcId, EVENTS, OLLAMA_PACKAGE, OLLAMA_PROC_ID, PANEL_ID, EVENT_BLOCK_IDS } from "../contract";
 import { AGENT_REGISTRY, agentLaunch, agentModelName, bridgeModes, CUSTOM_AGENT_ID, installHint, registryAgent, validateCustomAgent } from "../core/agents";
 import { askSystemPrompt, isConversationId, isPromptStyle, MAX_CUSTOM_PROMPT_CHARS, MAX_USER_MESSAGE_CHARS } from "../core/conversation";
 import {
@@ -56,7 +56,7 @@ import {
     type FavoriteModel,
 } from "../core/favorites";
 import { MAX_AGENT_MODELS } from "../core/acp";
-import type { RegistryAction } from "../core/tools";
+import { blocksToRegistry, parseBlockEntry } from "../core/tools";
 import {
     DEFAULT_SETTINGS,
     type AgentModel,
@@ -70,7 +70,6 @@ import {
     type Settings,
 } from "../core/types";
 import manifest from "../../manifest.json";
-import { republishPublicActions } from "./actions";
 import { AiBlocks, aiBlocks } from "./blocks";
 import { runShell } from "./builtins";
 import { askOnce, ChatEngine, type ApprovalDecision } from "./chat";
@@ -195,10 +194,6 @@ export class AiApp {
             clients: () => this.buildProviderClients(),
             onModels: (models, modelErrors) => {
                 this.ctx.setState({ models, modelErrors });
-                // the model dropdowns on Ask AI and the triggers follow this list
-                void republishPublicActions(this).catch((err) =>
-                    console.error("[ai] republishing action options failed:", String(err)),
-                );
                 this.blocks.list("models", () => this.blockModels());
             },
             onPulls: (pulls) => this.ctx.setState({ pulls }),
@@ -579,9 +574,13 @@ export class AiApp {
             settings: () => this.ctx.state.settings,
             capabilities: (model, provider) => this.models.capabilities(model, provider),
             efforts: (model, provider) => this.models.efforts(model, provider),
-            listActions: () => actionsApi.list() as Promise<RegistryAction[]>,
+            listBlocks: async () => blocksToRegistry(await blocksApi.list()),
             panelNames: () => this.panelNames(),
-            callAction: (panelId, action, args) => actionsApi.call(panelId, action, args),
+            callBlock: (panelId, entry, args) => {
+                const block = parseBlockEntry(entry);
+                const options = block.project ? { project: block.project } : undefined;
+                return block.kind === "value" ? blocksApi.read(panelId, block.id, args, options) : blocksApi.run(panelId, block.id, args, options);
+            },
             isAllowed: (key) => this.ctx.state.alwaysAllowed.includes(key),
             rememberAllowed: (key) => this.allowAlways(key),
             runShell: (command, signal, cwd) => runShell(command, signal, cwd),
@@ -593,8 +592,7 @@ export class AiApp {
             onApprovals: (approvals) => this.ctx.setState({ approvals }),
             onSpeed: (model, tps) => void this.recordSpeed(model, tps),
             onReplyFinished: (payload) => {
-                this.ctx.emitTrigger(TRIGGER_IDS.replyFinished, payload);
-                this.blocks.fire(TRIGGER_IDS.replyFinished, { text: payload.text, chat: payload.conversationId, model: this.chatModel(payload.conversationId, payload.model) });
+                this.blocks.fire(EVENT_BLOCK_IDS.replyFinished, { text: payload.text, chat: payload.conversationId, model: this.chatModel(payload.conversationId, payload.model) });
             },
         });
         await this.loadConfig();
@@ -759,8 +757,6 @@ export class AiApp {
             c.favorites = favorites;
         });
         this.ctx.setState({ favorites });
-        // the model dropdowns of Ask AI and the reply trigger are the favorites
-        void republishPublicActions(this).catch((err) => console.error("[ai] republishing action options failed:", String(err)));
         this.blocks.list("favorite-models", () => this.favoriteModels());
         return favorites;
     }

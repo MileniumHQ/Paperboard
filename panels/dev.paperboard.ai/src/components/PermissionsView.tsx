@@ -1,6 +1,6 @@
 import { createSignal, For, onMount, Show } from "solid-js";
 import { PaperButton, PaperCard, PaperEmptyState, PaperModal, PaperText } from "@mileniumhq/paperui";
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import { actionLabel, loadPanelInfo, panelIcon, panelName } from "../lib/panels";
 import { call, errorText, state } from "../lib/state";
 import styles from "./PermissionsView.module.css";
@@ -19,7 +19,7 @@ export default function PermissionsView() {
     const revoke = async (key: string) => {
         setError("");
         try {
-            await call(UI_ACTION_IDS.revokePermission, { key });
+            await call(CALLS.revokePermission, { key });
         } catch (err) {
             setError(errorText(err));
         }

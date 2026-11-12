@@ -10,7 +10,7 @@ import {
     PaperText,
     PaperToggle,
 } from "@mileniumhq/paperui";
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import PromptingSettings from "./PromptingSettings";
 import { saveSettings } from "../core/saveSettings";
 import type { Settings } from "../core/types";
@@ -28,7 +28,7 @@ export default function SettingsView() {
         setError("");
         try {
             await saveSettings(patch, {
-                update: (patch) => call<Settings>(UI_ACTION_IDS.updateSettings, patch),
+                update: (patch) => call<Settings>(CALLS.updateSettings, patch),
                 refresh: async () => { await bridge.refreshState(); },
             });
             return true;
@@ -42,7 +42,7 @@ export default function SettingsView() {
         setDeletingAll(true);
         setError("");
         try {
-            await call(UI_ACTION_IDS.deleteAllConversations);
+            await call(CALLS.deleteAllConversations);
             setConfirmingDeleteAll(false);
         } catch (err) {
             setError(errorText(err));
@@ -80,7 +80,7 @@ export default function SettingsView() {
                 </PaperSettingItem>
                 <PaperSettingItem
                     title="App actions"
-                    description="Lets the model look up your other panels' actions and ask to run them. Each action asks for your approval unless you chose Always allow for it."
+                    description="Lets the model look up the blocks of your other panels, their commands and values, and ask to run them. Each one asks for your approval unless you chose Always allow for it."
                 >
                     <PaperToggle
                         name="panelActions"

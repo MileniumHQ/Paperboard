@@ -2,7 +2,7 @@
 // state.runtime, which the model browser renders as "Installing Ollama..."
 // or "Starting Ollama..." rows; this only drives the sequence.
 
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import { OLLAMA_PROVIDER } from "../core/providers";
 import { call, state } from "./state";
 
@@ -49,9 +49,9 @@ export async function ensureOllamaReady(): Promise<void> {
     // acknowledge immediately, so nothing here blocks on the download/boot
     if (state.runtime.status !== "installing" && state.runtime.status !== "starting") {
         if (state.runtime.packageInstalled === false || state.runtime.status === "missing") {
-            await call(UI_ACTION_IDS.installRuntime);
+            await call(CALLS.installRuntime);
         } else {
-            await call(UI_ACTION_IDS.startRuntime);
+            await call(CALLS.startRuntime);
         }
     }
 

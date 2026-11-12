@@ -1,6 +1,6 @@
 import { createSignal, For, Match, Show, Switch } from "solid-js";
 import { PaperBadge, PaperButton, PaperCode, PaperCopyButton, PaperIcon, PaperText, type PaperBadgeVariant } from "@mileniumhq/paperui";
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import { editLines } from "../core/diff";
 import type { AgentPermissionKind, AgentToolDetails, AgentToolKind, ToolCallRecord } from "../core/types";
 import { call, errorText, state } from "../lib/state";
@@ -144,7 +144,7 @@ export default function ToolCallApproval(props: { call: ToolCallRecord }) {
         setBusy(true);
         setError("");
         try {
-            await call(UI_ACTION_IDS.resolveApproval, { id: record().id, ...(typeof decision === "string" ? { decision } : decision) });
+            await call(CALLS.resolveApproval, { id: record().id, ...(typeof decision === "string" ? { decision } : decision) });
         } catch (err) {
             setError(errorText(err));
         } finally {

@@ -14,7 +14,7 @@ export interface WidgetService {
     state: AiState;
     hydration: Accessor<Hydration>;
     hydrate: () => Promise<void>;
-    call: <R>(action: string, inputs?: Record<string, unknown>) => Promise<R>;
+    call: <R>(name: string, inputs?: Record<string, unknown>) => Promise<R>;
 }
 
 /** Call inside a component: the bridge is disposed with it. */
@@ -38,7 +38,7 @@ export function useWidgetService(): WidgetService {
         offState();
         bridge.dispose();
     });
-    return { state, hydration, hydrate, call: (action, inputs = {}) => bridge.call(action, inputs) };
+    return { state, hydration, hydrate, call: (name, inputs = {}) => bridge.call(name, inputs) };
 }
 
 export function useVisible(widget: WidgetContext): Accessor<boolean> {

@@ -14,7 +14,7 @@ import {
     PaperText,
     type LoaderStatus,
 } from "@mileniumhq/paperui";
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import { call, errorText, state } from "../lib/state";
 
 const STEP_MS = 300;
@@ -62,8 +62,8 @@ export function OllamaSetup() {
             if (status() === "ready") return;
             const action =
                 state.runtime.packageInstalled === false || status() === "missing"
-                    ? UI_ACTION_IDS.installRuntime
-                    : UI_ACTION_IDS.startRuntime;
+                    ? CALLS.installRuntime
+                    : CALLS.startRuntime;
             await call(action);
         } catch (err) {
             setError(errorText(err));
@@ -133,7 +133,7 @@ export function EndpointForm(props: EndpointFormProps) {
         setResult("");
         setError("");
         try {
-            const res = await call<{ models: number }>(UI_ACTION_IDS.testConnection, {
+            const res = await call<{ models: number }>(CALLS.testConnection, {
                 ...(props.id ? { id: props.id } : {}),
                 baseUrl: props.baseUrl,
                 apiKey: props.apiKey,

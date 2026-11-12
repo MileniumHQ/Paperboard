@@ -1,30 +1,70 @@
-// The Paperboard action registry as the model sees it: which actions are
-// callable, how a call's arguments are checked, and how results come back.
-// appActions.ts offers them through two fixed search and call tools.
+// The Paperboard block registry as the model sees it: which commands and
+// values of other panels are callable, how a call's arguments are checked,
+// and how results come back. appActions.ts offers them through two fixed
+// search and call tools.
 
-/** The slice of actionsApi.list() entries this module reads. */
+import type { BlockInfo } from "@mileniumhq/paperapi";
+
+/**
+ * A command or value of another panel, as the model's tools use it. `action`
+ * is the block's registry entry ("command.kick", or "project/command.kick"
+ * in a project of the panel), the part of a call's id after the panel.
+ */
 export interface RegistryAction {
     panelId: string;
     action: string;
-    schema?: {
+    schema: {
         name?: string;
         description?: string;
-        internal?: boolean;
-        eventOnly?: boolean;
         inputs?: Record<string, RegistryInput>;
     };
 }
 
 export interface RegistryInput {
+    /** the block input's type: "text", "number", "boolean", "list<player>", ... */
     type: string;
     label?: string;
     description?: string;
-    placeholder?: string;
     required?: boolean;
-    optional?: boolean;
-    default?: unknown;
     options?: { label: string; value: unknown }[];
-    typeName?: string;
+}
+
+const NUMBER_TYPES: ReadonlySet<string> = new Set(["number", "duration", "timestamp"]);
+
+/**
+ * The commands and values every panel lists (blocksApi.list), in the shape
+ * the tools use. Events and types are not callable and are left out. An
+ * input is required unless it is optional or has a default.
+ */
+export function blocksToRegistry(infos: readonly BlockInfo[]): RegistryAction[] {
+    const out: RegistryAction[] = [];
+    for (const info of infos) {
+        const schema = info.schema;
+        if (schema.kind !== "command" && schema.kind !== "value") continue;
+        const inputs: Record<string, RegistryInput> = {};
+        for (const [key, input] of Object.entries(schema.inputs ?? {})) {
+            inputs[key] = {
+                type: input.type,
+                label: input.name,
+                ...(input.description ? { description: input.description } : {}),
+                required: input.optional !== true && input.default === undefined,
+                ...(input.choices && input.choices.length > 0 ? { options: input.choices } : {}),
+            };
+        }
+        out.push({
+            panelId: info.panelId,
+            action: info.entry,
+            schema: { name: schema.name, ...(schema.description ? { description: schema.description } : {}), inputs },
+        });
+    }
+    return out;
+}
+
+/** A registry entry ("command.kick", "world/value.players") as the block it names. */
+export function parseBlockEntry(entry: string): { kind: "command" | "value"; id: string; project?: string } {
+    const match = /^(?:(.+)\/)?(command|value)\.(.+)$/.exec(entry);
+    if (!match) throw new Error(`"${entry}" is not a command or value`);
+    return { kind: match[2] as "command" | "value", id: match[3]!, ...(match[1] ? { project: match[1] } : {}) };
 }
 
 export interface OllamaTool {
@@ -58,7 +98,7 @@ export interface ToolTarget {
     inputs: Record<string, RegistryInput>;
 }
 
-// Panels whose actions are never offered as tools. The terminal's actions
+// Panels whose blocks are never offered as tools. The terminal's commands
 // would be an unapproved-per-command shell; the built-in shell tool asks
 // before every command instead.
 const EXCLUDED_PANELS: ReadonlySet<string> = new Set(["dev.paperboard.terminal"]);
@@ -66,15 +106,13 @@ const EXCLUDED_PANELS: ReadonlySet<string> = new Set(["dev.paperboard.terminal"]
 export function isCallableAction(entry: RegistryAction, ownPanelId: string): boolean {
     if (entry.panelId === ownPanelId) return false; // no self-recursion
     if (EXCLUDED_PANELS.has(entry.panelId)) return false;
-    const s = entry.schema;
-    if (!s) return false; // bare handlers have no contract to describe
-    return !s.internal && !s.eventOnly;
+    return true;
 }
 
 export class ToolArgumentError extends Error {}
 
 /**
- * Checks a model's arguments against the action's declared inputs before
+ * Checks a model's arguments against the block's declared inputs before
  * anything runs: unknown keys dropped, required keys present, scalars
  * coerced where the model sent "5" for a number. The target panel still
  * validates at its own boundary; this keeps garbage out of the approval
@@ -101,12 +139,13 @@ export function prepareArguments(target: ToolTarget, raw: unknown): Record<strin
             if (input.required === true) throw new ToolArgumentError(`missing required argument "${key}"`);
             continue;
         }
-        if (input.type === "number" && typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) {
+        const numeric = NUMBER_TYPES.has(input.type);
+        if (numeric && typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) {
             value = Number(value);
         } else if (input.type === "boolean" && (value === "true" || value === "false")) {
             value = value === "true";
         }
-        if (input.type === "number" && typeof value !== "number") {
+        if (numeric && typeof value !== "number") {
             throw new ToolArgumentError(`argument "${key}" must be a number`);
         }
         if (input.type === "boolean" && typeof value !== "boolean") {

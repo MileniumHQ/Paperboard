@@ -14,7 +14,7 @@ import {
     PaperQuote,
     PaperText,
 } from "@mileniumhq/paperui";
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import type { Connection } from "../core/providers";
 import { call, errorText, state } from "../lib/state";
 import AgentLogo from "./AgentLogo";
@@ -129,7 +129,7 @@ function ConnectionPane(props: { connection: Connection; onPick: (ref: string, p
         setRetrying(true);
         setError("");
         try {
-            await call(UI_ACTION_IDS.refreshModels);
+            await call(CALLS.refreshModels);
         } catch (err) {
             setError(errorText(err));
         } finally {
@@ -141,7 +141,7 @@ function ConnectionPane(props: { connection: Connection; onPick: (ref: string, p
         setRemoving(true);
         setError("");
         try {
-            await call(UI_ACTION_IDS.removeConnection, { id: props.connection.id });
+            await call(CALLS.removeConnection, { id: props.connection.id });
             setConfirmRemove(false);
         } catch (err) {
             setConfirmRemove(false);
@@ -243,7 +243,7 @@ function EditEndpoint(props: { connection: Connection; onDone: () => void }) {
         setSaving(true);
         setError("");
         try {
-            await call(UI_ACTION_IDS.updateConnection, { id: props.connection.id, label: label(), baseUrl: baseUrl(), apiKey: apiKey() });
+            await call(CALLS.updateConnection, { id: props.connection.id, label: label(), baseUrl: baseUrl(), apiKey: apiKey() });
             props.onDone();
         } catch (err) {
             setError(errorText(err));

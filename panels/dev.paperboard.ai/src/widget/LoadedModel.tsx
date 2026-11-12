@@ -4,7 +4,7 @@
 import { createEffect, createSignal, on, onCleanup, Show } from "solid-js";
 import { PaperWidget, PaperWidgetMessage, PaperWidgetStat } from "@mileniumhq/paperui";
 import type { WidgetContext } from "@mileniumhq/paperapi";
-import { UI_ACTION_IDS, WIDGET_ACTION_IDS } from "../contract";
+import { CALLS, WIDGET_CALLS } from "../contract";
 import { featuredLoaded, loadedDetail, runtimeBlocker } from "../core/widgets";
 import type { LoadedModelsReport } from "../core/types";
 import { HeaderAction, type WidgetAction } from "./HeaderAction";
@@ -30,7 +30,7 @@ export default function LoadedModel(props: { widget: WidgetContext }) {
         reading = true;
         const mine = generation;
         try {
-            const next = await service.call<LoadedModelsReport>(WIDGET_ACTION_IDS.loadedModels);
+            const next = await service.call<LoadedModelsReport>(WIDGET_CALLS.loadedModels);
             if (mine !== generation) return;
             setReport(next);
             setReadError("");
@@ -69,7 +69,7 @@ export default function LoadedModel(props: { widget: WidgetContext }) {
         setActionError("");
         generation++;
         try {
-            setReport(await service.call<LoadedModelsReport>(WIDGET_ACTION_IDS.unloadModel, { model: name }));
+            setReport(await service.call<LoadedModelsReport>(WIDGET_CALLS.unloadModel, { model: name }));
             setReadError("");
         } catch (err) {
             setActionError(errorText(err));
@@ -82,7 +82,7 @@ export default function LoadedModel(props: { widget: WidgetContext }) {
         setStarting(true);
         setActionError("");
         try {
-            await service.call(UI_ACTION_IDS.startRuntime);
+            await service.call(CALLS.startRuntime);
         } catch (err) {
             setActionError(errorText(err));
         } finally {

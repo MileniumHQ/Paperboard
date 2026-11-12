@@ -1,4 +1,4 @@
-// Other panels' actions, offered to the model without describing them all.
+// Other panels' blocks (commands and values), offered to the model without describing them all.
 //
 // Injecting one tool per action grows the prompt with every installed panel
 // and makes small models pick the wrong tool long before the context fills.
@@ -43,7 +43,7 @@ export const APP_ACTION_TOOLS: readonly OllamaTool[] = [
         function: {
             name: FIND_APP_ACTIONS,
             description:
-                "Search the user's other apps for actions you can run (for example: start a game server, post a message). Returns up to 8 matches, each with its exact id and arguments. Search before calling call_app_action.",
+                "Search the user's other apps for actions you can run: their commands and values (for example: start a game server, post a message). Returns up to 8 matches, each with its exact id and arguments. Search before calling call_app_action.",
             parameters: {
                 type: "object",
                 properties: { query: { type: "string", description: "Keywords for the app or what the action does" } },

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "bun:test";
+import type { BlockInfo } from "@mileniumhq/paperapi";
 import { BuiltinArgumentError, builtinArguments, MAX_COMMAND_CHARS, shellArgv } from "../src/core/builtins";
 import { systemPrompt, PROMPT_STYLES } from "../src/core/conversation";
 import fs from "node:fs";
@@ -13,8 +14,10 @@ import {
 } from "../src/core/catalog";
 import { architectureFromModelInfo, estimateFit, gpuBudget, kvCacheBytes } from "../src/core/fit";
 import {
+    blocksToRegistry,
     formatToolResult,
     MAX_TOOL_RESULT_CHARS,
+    parseBlockEntry,
     prepareArguments,
     ToolArgumentError,
     type RegistryAction,
@@ -169,30 +172,33 @@ describe("fit estimate", () => {
     });
 });
 
-const registry: RegistryAction[] = [
+const GAME = "dev.paperboard.gameserver";
+const blockList = [
+    { panelId: GAME, entry: "command.start-server", schema: { kind: "command", id: "start-server", name: "Start Server", description: "Starts the Minecraft server" } },
     {
-        panelId: "dev.paperboard.gameserver",
-        action: "start-server",
-        schema: { name: "Start Server", description: "Starts the Minecraft server" },
-    },
-    {
-        panelId: "dev.paperboard.gameserver",
-        action: "kick-player",
+        panelId: GAME,
+        entry: "command.kick-player",
         schema: {
+            kind: "command",
+            id: "kick-player",
             name: "Kick Player",
             inputs: {
-                player: { type: "string", label: "Player", required: true },
-                count: { type: "number", label: "Count" },
-                mode: { type: "string", label: "Mode", options: [{ label: "Soft", value: "soft" }, { label: "Hard", value: "hard" }] },
+                player: { type: "text", name: "Player" },
+                count: { type: "number", name: "Count", optional: true },
+                mode: { type: "text", name: "Mode", optional: true, choices: [{ label: "Soft", value: "soft" }, { label: "Hard", value: "hard" }] },
+                reason: { type: "text", name: "Reason", default: "none" },
             },
         },
     },
-    { panelId: "dev.paperboard.gameserver", action: "get-state", schema: { name: "State", internal: true } },
-    { panelId: "dev.paperboard.gameserver", action: "player-joined", schema: { name: "Player Joined", eventOnly: true } },
-    { panelId: "dev.paperboard.ai", action: "ask", schema: { name: "Ask AI" } },
-    { panelId: "com.other.gameserver", action: "start-server", schema: { name: "Start Other" } },
-    { panelId: "dev.paperboard.terminal", action: "bare-handler" },
-];
+    { panelId: GAME, entry: "value.players", schema: { kind: "value", id: "players", name: "Players", type: "list<text>" } },
+    { panelId: GAME, entry: "event.player-joined", schema: { kind: "event", id: "player-joined", name: "Player Joined" } },
+    { panelId: GAME, entry: "type.player", schema: { kind: "type", id: "player", name: "Player", base: "text" } },
+    { panelId: GAME, entry: "world/command.save", schema: { kind: "command", id: "save", name: "Save World" } },
+    { panelId: "dev.paperboard.ai", entry: "command.ask", schema: { kind: "command", id: "ask", name: "Ask AI" } },
+    { panelId: "com.other.gameserver", entry: "command.start-server", schema: { kind: "command", id: "start-server", name: "Start Other" } },
+    { panelId: "dev.paperboard.terminal", entry: "command.run", schema: { kind: "command", id: "run", name: "Run" } },
+] as unknown as BlockInfo[];
+const registry: RegistryAction[] = blocksToRegistry(blockList);
 
 /** n panels with ten actions each, every field as large as a panel could make it */
 function bigRegistry(panels: number): RegistryAction[] {
@@ -201,7 +207,7 @@ function bigRegistry(panels: number): RegistryAction[] {
         Array.from({ length: 40 }, (_, i) => [
             `input${i}`.repeat(10),
             {
-                type: "string",
+                type: "text",
                 label: "L".repeat(500),
                 description: "D".repeat(5000),
                 required: i % 2 === 0,
@@ -215,7 +221,7 @@ function bigRegistry(panels: number): RegistryAction[] {
         for (let a = 0; a < 10; a++) {
             out.push({
                 panelId: `com.example.panel${p}`,
-                action: `do-thing-${a}`,
+                action: `command.do-thing-${a}`,
                 schema: {
                     name: `Thing ${a} of panel ${p}`,
                     description: `Does thing ${a}. ${filler}`,
@@ -230,37 +236,39 @@ function bigRegistry(panels: number): RegistryAction[] {
 describe("app actions: searched, never all listed", () => {
     const index = buildActionIndex(registry, "dev.paperboard.ai", { "dev.paperboard.gameserver": "Game Server" });
 
-    it("indexes only callable actions of other panels, by their exact panelId:action id", () => {
+    it("indexes the commands and values of other panels (not events, types, the terminal or itself), by their exact panelId:entry id", () => {
         expect([...index.byId.keys()].sort()).toEqual([
-            "com.other.gameserver:start-server",
-            "dev.paperboard.gameserver:kick-player",
-            "dev.paperboard.gameserver:start-server",
+            "com.other.gameserver:command.start-server",
+            "dev.paperboard.gameserver:command.kick-player",
+            "dev.paperboard.gameserver:command.start-server",
+            "dev.paperboard.gameserver:value.players",
+            "dev.paperboard.gameserver:world/command.save",
         ]);
     });
 
     it("finds the action a query describes, best match first", () => {
-        expect(searchActions(index, "kick a player").matches[0]!.id).toBe("dev.paperboard.gameserver:kick-player");
-        expect(searchActions(index, "minecraft").matches.map((m) => m.id)).toEqual(["dev.paperboard.gameserver:start-server"]);
-        expect(searchActions(index, "start the minecraft server").matches.slice(0, 2).map((m) => m.id)).toEqual(["dev.paperboard.gameserver:start-server", "com.other.gameserver:start-server"]);
+        expect(searchActions(index, "kick a player").matches[0]!.id).toBe("dev.paperboard.gameserver:command.kick-player");
+        expect(searchActions(index, "minecraft").matches.map((m) => m.id)).toEqual(["dev.paperboard.gameserver:command.start-server"]);
+        expect(searchActions(index, "start the minecraft server").matches.slice(0, 2).map((m) => m.id)).toEqual(["dev.paperboard.gameserver:command.start-server", "com.other.gameserver:command.start-server"]);
         expect(searchActions(index, "teleport").matches).toHaveLength(0);
         // the result names the exact id and the arguments a call needs
         const text = formatFoundActions(index, "kick");
-        expect(text).toContain("id: dev.paperboard.gameserver:kick-player");
-        expect(text).toContain("player (string, required)");
+        expect(text).toContain("id: dev.paperboard.gameserver:command.kick-player");
+        expect(text).toContain("player (text, required)");
         expect(text).toContain('one of "soft", "hard"');
     });
 
     it("resolves a call only by an exact id, never a guessed one", () => {
-        const { target, rawArguments } = resolveActionCall(index, { id: "dev.paperboard.gameserver:kick-player", arguments: { player: "Steve" } });
-        expect(target).toMatchObject({ panelId: "dev.paperboard.gameserver", action: "kick-player" });
+        const { target, rawArguments } = resolveActionCall(index, { id: "dev.paperboard.gameserver:command.kick-player", arguments: { player: "Steve" } });
+        expect(target).toMatchObject({ panelId: "dev.paperboard.gameserver", action: "command.kick-player" });
         expect(prepareArguments(target, rawArguments)).toEqual({ player: "Steve" });
         // arguments sent beside the id are read too
-        expect(resolveActionCall(index, '{"id":"dev.paperboard.gameserver:kick-player","player":"Alex"}').rawArguments).toEqual({ player: "Alex" });
-        expect(() => resolveActionCall(index, { id: "kick-player" })).toThrow(/no app action with the id "kick-player"/);
-        expect(() => resolveActionCall(index, { id: "dev.paperboard.gameserver:get-state" })).toThrow(ToolArgumentError); // internal
-        expect(() => resolveActionCall(index, { id: "dev.paperboard.ai:ask" })).toThrow(ToolArgumentError); // self
+        expect(resolveActionCall(index, '{"id":"dev.paperboard.gameserver:command.kick-player","player":"Alex"}').rawArguments).toEqual({ player: "Alex" });
+        expect(() => resolveActionCall(index, { id: "command.kick-player" })).toThrow(/no app action with the id "command.kick-player"/);
+        expect(() => resolveActionCall(index, { id: "dev.paperboard.gameserver:event.player-joined" })).toThrow(ToolArgumentError); // an event
+        expect(() => resolveActionCall(index, { id: "dev.paperboard.ai:command.ask" })).toThrow(ToolArgumentError); // self
         expect(() => resolveActionCall(index, {})).toThrow(/missing required argument "id"/);
-        expect(() => resolveActionCall(index, { id: "dev.paperboard.gameserver:kick-player", arguments: [1] })).toThrow(/JSON object/);
+        expect(() => resolveActionCall(index, { id: "dev.paperboard.gameserver:command.kick-player", arguments: [1] })).toThrow(/JSON object/);
     });
 
     it("1000 panels: the offered tools stay fixed and a search stays under its cap", () => {
@@ -276,8 +284,8 @@ describe("app actions: searched, never all listed", () => {
         }
         expect(searchActions(big, "filler").matches).toHaveLength(MAX_FOUND_ACTIONS);
         expect(searchActions(big, "filler").total).toBe(10_000);
-        expect(searchActions(big, "com.example.panel999:do-thing-7").matches[0]!.id).toBe("com.example.panel999:do-thing-7");
-        expect(() => resolveActionCall(big, { id: "com.example.panel1000:do-thing-0" })).toThrow(/no app action/);
+        expect(searchActions(big, "com.example.panel999:command.do-thing-7").matches[0]!.id).toBe("com.example.panel999:command.do-thing-7");
+        expect(() => resolveActionCall(big, { id: "com.example.panel1000:command.do-thing-0" })).toThrow(/no app action/);
     });
 
     it("says how many actions it left out past the index cap", () => {
@@ -287,13 +295,35 @@ describe("app actions: searched, never all listed", () => {
         expect(formatFoundActions(over, "thing")).toContain("10 actions were not searched");
     });
 
+    it("reads the block schemas: required unless optional or defaulted, choices as options, numbers as numbers", () => {
+        const kick = registry.find((r) => r.action === "command.kick-player")!;
+        expect(kick.schema.inputs).toEqual({
+            player: { type: "text", label: "Player", required: true },
+            count: { type: "number", label: "Count", required: false },
+            mode: { type: "text", label: "Mode", required: false, options: [{ label: "Soft", value: "soft" }, { label: "Hard", value: "hard" }] },
+            reason: { type: "text", label: "Reason", required: false },
+        });
+        // events and types are not callable; a value is
+        expect(registry.map((r) => r.action)).toContain("value.players");
+        expect(registry.map((r) => r.action)).not.toContain("event.player-joined");
+        expect(registry.map((r) => r.action)).not.toContain("type.player");
+    });
+
+    it("names the block a registry entry is, in a project or not", () => {
+        expect(parseBlockEntry("command.kick-player")).toEqual({ kind: "command", id: "kick-player" });
+        expect(parseBlockEntry("value.players")).toEqual({ kind: "value", id: "players" });
+        expect(parseBlockEntry("world/command.save")).toEqual({ kind: "command", id: "save", project: "world" });
+        expect(() => parseBlockEntry("event.player-joined")).toThrow(/not a command or value/);
+    });
+
     it("prepares arguments: coerces scalars, drops unknowns, refuses bad input", () => {
-        const kick = index.byId.get("dev.paperboard.gameserver:kick-player")!;
+        const kick = index.byId.get("dev.paperboard.gameserver:command.kick-player")!;
         expect(prepareArguments(kick, { player: "Steve", count: "3", extra: 1 })).toEqual({ player: "Steve", count: 3 });
         expect(prepareArguments(kick, '{"player":"Alex","mode":"hard"}')).toEqual({ player: "Alex", mode: "hard" });
         expect(() => prepareArguments(kick, {})).toThrow(ToolArgumentError);
         expect(() => prepareArguments(kick, { player: "x", count: "many" })).toThrow(/number/);
         expect(() => prepareArguments(kick, { player: "x", mode: "medium" })).toThrow(/one of/);
+        expect(() => prepareArguments(kick, { player: "x", reason: 5 })).not.toThrow();
         expect(() => prepareArguments(kick, "not json")).toThrow(/JSON object/);
     });
 

@@ -15,7 +15,7 @@ import {
     PaperSelectMenuItem,
     PaperText,
 } from "@mileniumhq/paperui";
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import { isValidModelRef, modelRef, searchCatalog, type CatalogModel, type CatalogSort } from "../core/catalog";
 import { formatBytes } from "../core/fit";
 import { OLLAMA_PROVIDER, OLLAMA_PROVIDER_ID } from "../core/providers";
@@ -127,7 +127,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
             // installing/starting the provider happens first, with its own
             // progress row, so a fresh computer is one click, not a wizard
             await ensureOllamaReady();
-            await call(UI_ACTION_IDS.pullModel, { model: ref });
+            await call(CALLS.pullModel, { model: ref });
         } catch (err) {
             setError(errorText(err));
         }
@@ -148,7 +148,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
         if (!model) return;
         setDeleting(true);
         try {
-            await call(UI_ACTION_IDS.deleteModel, { model });
+            await call(CALLS.deleteModel, { model });
             setConfirmDelete(null);
         } catch (err) {
             setError(errorText(err));
@@ -161,7 +161,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
     const makeDefault = async (model: string) => {
         setError("");
         try {
-            await call(UI_ACTION_IDS.updateSettings, { defaultModel: model, defaultProvider: props.provider });
+            await call(CALLS.updateSettings, { defaultModel: model, defaultProvider: props.provider });
         } catch (err) {
             setError(errorText(err));
         }
@@ -348,7 +348,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                                     <PaperText size={1} color="text-muted">
                                         {p.totalBytes > 0 ? `${Math.round((p.completedBytes / p.totalBytes) * 100)}% · ${formatBytes(p.completedBytes)} of ${formatBytes(p.totalBytes)}` : p.status}
                                     </PaperText>
-                                    <PaperButton size="tiny" onClick={() => void call(UI_ACTION_IDS.cancelPull, { model: p.model }).catch((err) => setError(errorText(err)))}>
+                                    <PaperButton size="tiny" onClick={() => void call(CALLS.cancelPull, { model: p.model }).catch((err) => setError(errorText(err)))}>
                                         Cancel
                                     </PaperButton>
                                 </div>

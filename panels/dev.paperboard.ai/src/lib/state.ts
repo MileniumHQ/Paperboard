@@ -4,8 +4,8 @@
 
 import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { actionsApi, createPanelBridge } from "@mileniumhq/paperapi";
-import { EVENTS, PANEL_ID, UI_ACTION_IDS } from "../contract";
+import { createPanelBridge } from "@mileniumhq/paperapi";
+import { EVENTS, PANEL_ID, CALLS } from "../contract";
 import { OpenChatSync } from "../core/openChat";
 import {
     initialState,
@@ -44,10 +44,10 @@ export async function hydrate(): Promise<void> {
     }
 }
 
-type UiAction = (typeof UI_ACTION_IDS)[keyof typeof UI_ACTION_IDS];
+type UiCall = (typeof CALLS)[keyof typeof CALLS];
 
-export function call<R = unknown>(action: UiAction, inputs: Record<string, unknown> = {}): Promise<R> {
-    return bridge.call<R>(action, inputs);
+export function call<R = unknown>(name: UiCall, inputs: Record<string, unknown> = {}): Promise<R> {
+    return bridge.call<R>(name, inputs);
 }
 
 export function errorText(err: unknown): string {
@@ -75,7 +75,7 @@ function upsertMessage(message: ChatMessage): void {
 // whether this window sent it, another window or computer did, or the panel
 // was reloaded mid-reply
 const sync = new OpenChatSync({
-    fetch: (id) => call<ConversationSnapshot>(UI_ACTION_IDS.getConversation, { id }),
+    fetch: (id) => call<ConversationSnapshot>(CALLS.getConversation, { id }),
     shown: () => conversation.current?.id ?? null,
     show: (c, same) => {
         setOpenError("");
@@ -115,7 +115,7 @@ export async function rewindOpen(messageId: string): Promise<void> {
     const c = conversation.current;
     if (!c) return;
     const generation = sync.generation();
-    const after = await call<Conversation>(UI_ACTION_IDS.rewindConversation, { id: c.id, messageId });
+    const after = await call<Conversation>(CALLS.rewindConversation, { id: c.id, messageId });
     // the stopped reply may have sent its last events meanwhile; the
     // service's result is the truth, applied only if this chat is still open
     if (generation === sync.generation()) setConversation("current", "messages", reconcile(after.messages, { key: "id" }));
@@ -127,9 +127,9 @@ let subscribed: (() => void)[] = [];
 export function subscribeChatEvents(): () => void {
     if (subscribed.length === 0) {
         subscribed = [
-            actionsApi.on(PANEL_ID, EVENTS.chatMessage, (e: ChatMessageEvent) => sync.onMessage(e)),
-            actionsApi.on(PANEL_ID, EVENTS.chatDelta, (e: ChatDeltaEvent) => sync.onDelta(e)),
-            actionsApi.on(PANEL_ID, EVENTS.chatReset, (e: ChatResetEvent) => sync.onReset(e)),
+            bridge.on(EVENTS.chatMessage, (e: ChatMessageEvent) => sync.onMessage(e)),
+            bridge.on(EVENTS.chatDelta, (e: ChatDeltaEvent) => sync.onDelta(e)),
+            bridge.on(EVENTS.chatReset, (e: ChatResetEvent) => sync.onReset(e)),
         ];
     }
     return () => {

@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, Index, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { PaperButton, PaperEmptyState, PaperIcon, PaperPage, PaperText } from "@mileniumhq/paperui";
-import { actionsApi } from "@mileniumhq/paperapi";
-import { UI_ACTION_IDS } from "../contract";
+import { blocksApi } from "@mileniumhq/paperapi";
+import { CALLS } from "../contract";
 import { bridgeModes, modePicker } from "../core/agents";
 import { localModePicker } from "../core/projectTools";
 import { chatEffort } from "../core/reasoning";
@@ -53,7 +53,7 @@ export default function ChatView() {
     onMount(() => {
         const off = subscribeChatEvents();
         void loadPanelInfo();
-        const offRegistry = actionsApi.onRegistryChange(() => void loadPanelInfo());
+        const offRegistry = blocksApi.onRegistryChange(() => void loadPanelInfo());
         onCleanup(() => {
             off();
             offRegistry();
@@ -86,7 +86,7 @@ export default function ChatView() {
             () => state.openRequest,
             (request) => {
                 if (!request) return;
-                void call<string | null>(UI_ACTION_IDS.takeOpenRequest)
+                void call<string | null>(CALLS.takeOpenRequest)
                     .then((id) => {
                         if (!id) return;
                         setSettingsOpen(false);
@@ -160,7 +160,7 @@ export default function ChatView() {
         if (!id) return setDraftEffort(effort);
         setError("");
         try {
-            await call(UI_ACTION_IDS.setChatEffort, { id, effort });
+            await call(CALLS.setChatEffort, { id, effort });
             if (conversation()?.id === id) setOpenEffort(effort);
         } catch (err) {
             setError(errorText(err));
@@ -176,7 +176,7 @@ export default function ChatView() {
         setModeBusy(true);
         setError("");
         try {
-            await call(UI_ACTION_IDS.setAgentMode, { id, mode });
+            await call(CALLS.setAgentMode, { id, mode });
             if (conversation()?.id === id) setOpenMode(mode);
         } catch (err) {
             setError(errorText(err));
@@ -192,7 +192,7 @@ export default function ChatView() {
             setDraftMode(mode);
             return;
         }
-        await call(UI_ACTION_IDS.setAgentMode, { id, mode });
+        await call(CALLS.setAgentMode, { id, mode });
         if (conversation()?.id === id) setOpenMode(mode);
     };
     // the menu item that opened the dialog is gone once it closes: focus goes back to the picker
@@ -244,7 +244,7 @@ export default function ChatView() {
         setStarting(true);
         setError("");
         try {
-            await call(UI_ACTION_IDS.startRuntime);
+            await call(CALLS.startRuntime);
         } catch (err) {
             setError(errorText(err));
         } finally {
@@ -271,7 +271,7 @@ export default function ChatView() {
         try {
             if (!id) {
                 const provider = installed()?.provider ?? chatProvider();
-                const c = await call<Conversation>(UI_ACTION_IDS.newConversation, { model: model(), ...(provider ? { provider } : {}) });
+                const c = await call<Conversation>(CALLS.newConversation, { model: model(), ...(provider ? { provider } : {}) });
                 // hold the selection before the draft flag drops: the summary
                 // event may still be travelling when this call's answer lands
                 selection.created(c.id);
@@ -284,17 +284,17 @@ export default function ChatView() {
                 const mode = draftMode();
                 setDraftMode(undefined);
                 if (mode && modes()?.modes.some((m) => m.id === mode)) {
-                    await call(UI_ACTION_IDS.setAgentMode, { id, mode });
+                    await call(CALLS.setAgentMode, { id, mode });
                     setOpenMode(mode);
                 }
                 if (effort && agentConnection()) {
-                    await call(UI_ACTION_IDS.setChatEffort, { id, effort });
+                    await call(CALLS.setChatEffort, { id, effort });
                     setOpenEffort(effort);
                 }
-                if ((agentConnection() || localConnection()) && chosen && chosen !== c.project) await call(UI_ACTION_IDS.setConversationProject, { id, project: chosen });
+                if ((agentConnection() || localConnection()) && chosen && chosen !== c.project) await call(CALLS.setConversationProject, { id, project: chosen });
             }
             scroll.stick();
-            await call(UI_ACTION_IDS.sendMessage, { id, text, reasoning, attachments });
+            await call(CALLS.sendMessage, { id, text, reasoning, attachments });
             return true;
         } catch (err) {
             setError(errorText(err));
@@ -307,10 +307,10 @@ export default function ChatView() {
         try {
             const c = conversation();
             if (c) {
-                await call(UI_ACTION_IDS.setConversationModel, { id: c.id, model: next, provider });
+                await call(CALLS.setConversationModel, { id: c.id, model: next, provider });
                 setOpenModel(next, provider);
             } else {
-                await call(UI_ACTION_IDS.updateSettings, { defaultModel: next, defaultProvider: provider });
+                await call(CALLS.updateSettings, { defaultModel: next, defaultProvider: provider });
             }
         } catch (err) {
             setError(errorText(err));
@@ -319,7 +319,7 @@ export default function ChatView() {
 
     const rename = async (id: string, title: string) => {
         try {
-            await call(UI_ACTION_IDS.renameConversation, { id, title });
+            await call(CALLS.renameConversation, { id, title });
         } catch (err) {
             setError(errorText(err));
             throw err;
@@ -328,7 +328,7 @@ export default function ChatView() {
 
     const remove = async (id: string) => {
         try {
-            await call(UI_ACTION_IDS.deleteConversation, { id });
+            await call(CALLS.deleteConversation, { id });
         } catch (err) {
             setError(errorText(err));
             throw err;
@@ -466,10 +466,10 @@ export default function ChatView() {
                     reasoning={state.settings.reasoning}
                     onOpenModels={() => setModelsOpen(true)}
                     onReasoningChange={(level) =>
-                        void call(UI_ACTION_IDS.updateSettings, { reasoning: level }).catch((err) => setError(errorText(err)))
+                        void call(CALLS.updateSettings, { reasoning: level }).catch((err) => setError(errorText(err)))
                     }
                     onSend={send}
-                    onStop={() => conversation() && void call(UI_ACTION_IDS.stopGeneration, { id: conversation()!.id }).catch((err) => setError(errorText(err)))}
+                    onStop={() => conversation() && void call(CALLS.stopGeneration, { id: conversation()!.id }).catch((err) => setError(errorText(err)))}
                 />
                 </Show>
             </section>

@@ -14,15 +14,8 @@ export function agentProcId(connectionId: string): string {
 // the package id is the provider's own fact (core/providers.ts)
 export const OLLAMA_PACKAGE = OLLAMA_PROVIDER.runtime!.packageId;
 
-/** Public actions: flow blocks other panels can call. */
-export const ACTION_IDS = {
-    ask: "ask",
-    forgetMemory: "forget-memory",
-    listModels: "list-models",
-} as const;
-
-/** Control plane for this panel's own UI (internal, never flow blocks). */
-export const UI_ACTION_IDS = {
+/** What the panel's own page asks its service (bridge.call), by call name. */
+export const CALLS = {
     installRuntime: "ui-install-runtime",
     startRuntime: "ui-start-runtime",
     addConnection: "ui-add-connection",
@@ -56,8 +49,8 @@ export const UI_ACTION_IDS = {
     takeOpenRequest: "ui-take-open-request",
 } as const;
 
-/** What the Home widgets call (widget.html); internal, never flow blocks. */
-export const WIDGET_ACTION_IDS = {
+/** What the Home widgets ask the service (widget.html), by call name. */
+export const WIDGET_CALLS = {
     quickAsk: "widget-quick-ask",
     loadedModels: "widget-loaded-models",
     unloadModel: "widget-unload-model",
@@ -69,7 +62,8 @@ export const WIDGET_IDS = {
     loadedModel: "loaded-model",
 } as const;
 
-export const TRIGGER_IDS = {
+/** This panel's block events. */
+export const EVENT_BLOCK_IDS = {
     replyFinished: "reply-finished",
 } as const;
 

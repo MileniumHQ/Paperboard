@@ -1,6 +1,6 @@
 import { createSignal, Show } from "solid-js";
 import { PaperButton, PaperCard, PaperIcon, PaperProgress, PaperText } from "@mileniumhq/paperui";
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import { formatBytes } from "../core/fit";
 import { OLLAMA_PROVIDER } from "../core/providers";
 import { call, errorText, state } from "../lib/state";
@@ -12,7 +12,7 @@ export default function OllamaRuntimeCard() {
     const provider = () => OLLAMA_PROVIDER;
     const runtime = () => state.runtime;
 
-    const run = async (action: typeof UI_ACTION_IDS.installRuntime | typeof UI_ACTION_IDS.startRuntime) => {
+    const run = async (action: typeof CALLS.installRuntime | typeof CALLS.startRuntime) => {
         setBusy(true);
         setError("");
         try {
@@ -68,7 +68,7 @@ export default function OllamaRuntimeCard() {
                     <PaperButton
                         variant="primary"
                         disabled={busy() || runtime().status === "installing"}
-                        onClick={() => void run(UI_ACTION_IDS.installRuntime)}
+                        onClick={() => void run(CALLS.installRuntime)}
                     >
                         <PaperIcon>download</PaperIcon> Install {provider().label}
                     </PaperButton>
@@ -77,7 +77,7 @@ export default function OllamaRuntimeCard() {
                     <PaperButton
                         variant="primary"
                         disabled={busy() || runtime().status === "starting" || runtime().status === "installing"}
-                        onClick={() => void run(UI_ACTION_IDS.startRuntime)}
+                        onClick={() => void run(CALLS.startRuntime)}
                     >
                         <PaperIcon>play_arrow</PaperIcon> Start {provider().label}
                     </PaperButton>

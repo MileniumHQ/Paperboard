@@ -1,13 +1,55 @@
-// The AI panel's blocks for the Blocks panel (Actions API v2). The public
-// actions (v1, actions.ts) stay as they are; both run the same functions.
+// The AI panel's blocks for the Blocks panel: Ask AI, Forget Memory, the
+// model lists and When AI Replies.
 import { blocksApi, type BlockSet } from "@mileniumhq/paperapi";
 import { MAX_MEMORY_KEY_CHARS } from "../core/askMemory";
-import { PROMPT_STYLES, PROMPT_STYLE_LABELS } from "../core/conversation";
-import { PANEL_ID, TRIGGER_IDS } from "../contract";
-import { askFromFlow, forgetFromFlow, MAX_INSTRUCTIONS_CHARS, MAX_PROMPT_CHARS } from "./actions";
+import { isPromptStyle, PROMPT_STYLES, PROMPT_STYLE_LABELS } from "../core/conversation";
+import { PANEL_ID, EVENT_BLOCK_IDS } from "../contract";
 import type { AiApp } from "./app";
 
 const CATEGORY = "AI";
+
+export function str(value: unknown, name: string, max = 200): string {
+    if (typeof value !== "string" || !value.trim()) throw new Error(`${name} is required`);
+    if (value.length > max) throw new Error(`${name} is limited to ${max} characters`);
+    return value.trim();
+}
+
+export function optStr(value: unknown, name: string, max = 200): string | undefined {
+    if (value === undefined || value === null || value === "") return undefined;
+    return str(value, name, max);
+}
+
+export const MAX_PROMPT_CHARS = 32_000;
+export const MAX_INSTRUCTIONS_CHARS = 8_000;
+
+export interface AskInputs {
+    prompt?: string;
+    model?: string;
+    personality?: string;
+    instructions?: string;
+    memory?: string;
+}
+
+/** Ask AI, as its block runs it. */
+export async function askFromFlow(app: AiApp, inputs: AskInputs | undefined): Promise<string> {
+    await app.ready;
+    if (inputs?.personality !== undefined && inputs.personality !== "" && !isPromptStyle(inputs.personality)) {
+        throw new Error(`Unknown personality ${JSON.stringify(inputs.personality)}.`);
+    }
+    return app.ask(
+        str(inputs?.prompt, "prompt", MAX_PROMPT_CHARS),
+        optStr(inputs?.model, "model"),
+        optStr(inputs?.instructions, "instructions", MAX_INSTRUCTIONS_CHARS),
+        isPromptStyle(inputs?.personality) ? inputs.personality : undefined,
+        optStr(inputs?.memory, "memory", MAX_MEMORY_KEY_CHARS),
+    );
+}
+
+/** Forget Memory, as its block runs it. */
+export async function forgetFromFlow(app: AiApp, memory: unknown): Promise<boolean> {
+    await app.ready;
+    return app.forgetMemory(str(memory, "memory", MAX_MEMORY_KEY_CHARS));
+}
 
 export function aiBlocks(app: AiApp): BlockSet {
     const ready = async <T>(fn: () => T | Promise<T>) => {
@@ -115,7 +157,7 @@ export function aiBlocks(app: AiApp): BlockSet {
         ],
         events: [
             {
-                id: TRIGGER_IDS.replyFinished,
+                id: EVENT_BLOCK_IDS.replyFinished,
                 name: "When AI Replies",
                 category: CATEGORY,
                 icon: "forum",

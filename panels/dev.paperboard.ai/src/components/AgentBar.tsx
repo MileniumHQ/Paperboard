@@ -14,7 +14,7 @@ import {
     PaperSelectorItem,
     PaperText,
 } from "@mileniumhq/paperui";
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import type { Connection } from "../core/providers";
 import { call, errorText, state } from "../lib/state";
 import styles from "./AgentBar.module.css";
@@ -56,7 +56,7 @@ export default function AgentBar(props: AgentBarProps) {
                     <PaperText size={2}>{props.connection.label} needs you to sign in.</PaperText>
                     <For each={agent()?.authMethods ?? []} fallback={<PaperText size={2} color="text-muted">Sign in with its own command in a terminal, then send again.</PaperText>}>
                         {(m) => (
-                            <PaperButton size="small" title={m.description} disabled={busy()} onClick={() => void act(() => call(UI_ACTION_IDS.authenticateAgent, { id: props.connection.id, methodId: m.id }))}>
+                            <PaperButton size="small" title={m.description} disabled={busy()} onClick={() => void act(() => call(CALLS.authenticateAgent, { id: props.connection.id, methodId: m.id }))}>
                                 {m.name}
                             </PaperButton>
                         )}
@@ -67,7 +67,7 @@ export default function AgentBar(props: AgentBarProps) {
                 <div class={styles.notice} role="status">
                     <PaperIcon>error</PaperIcon>
                     <PaperText size={2} truncate title={agent()?.errorDetail}>{agent()?.error ?? `${props.connection.label} stopped.`}</PaperText>
-                    <PaperButton size="small" disabled={busy()} onClick={() => void act(() => call(UI_ACTION_IDS.checkAgent, { id: props.connection.id }))}>
+                    <PaperButton size="small" disabled={busy()} onClick={() => void act(() => call(CALLS.checkAgent, { id: props.connection.id }))}>
                         <PaperIcon>refresh</PaperIcon> Try again
                     </PaperButton>
                 </div>
@@ -91,7 +91,7 @@ export default function AgentBar(props: AgentBarProps) {
                 onClose={() => setChoosing(false)}
                 onChoose={async (project) => {
                     if (props.conversationId) {
-                        await call(UI_ACTION_IDS.setConversationProject, { id: props.conversationId, project });
+                        await call(CALLS.setConversationProject, { id: props.conversationId, project });
                     } else {
                         props.onDraftProject(project ?? undefined);
                     }
@@ -130,7 +130,7 @@ function ProjectModal(props: {
     const choose = (project: string) => run(() => props.onChoose(project));
     const create = () =>
         run(async () => {
-            const created = await call<string>(UI_ACTION_IDS.createProject, { name: name() });
+            const created = await call<string>(CALLS.createProject, { name: name() });
             setName("");
             await props.onChoose(created);
         });

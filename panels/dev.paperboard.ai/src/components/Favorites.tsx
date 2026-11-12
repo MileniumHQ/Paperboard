@@ -3,7 +3,7 @@
 
 import { createSignal, For, Show } from "solid-js";
 import { PaperButton, PaperEmptyState, PaperIcon, PaperMediaCard, PaperMediaCardGroup, PaperText } from "@mileniumhq/paperui";
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import { isFavorite } from "../core/favorites";
 import { makerOf } from "../lib/catalog";
 import { call, errorText, state } from "../lib/state";
@@ -18,7 +18,7 @@ export function FavoriteToggle(props: { provider: string; model: string; label?:
     const toggle = async () => {
         setBusy(true);
         try {
-            await call(UI_ACTION_IDS.setFavorite, { provider: props.provider, model: props.model, favorite: !on() });
+            await call(CALLS.setFavorite, { provider: props.provider, model: props.model, favorite: !on() });
         } catch (err) {
             props.onError(errorText(err));
         } finally {

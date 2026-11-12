@@ -4,7 +4,7 @@
 
 import { createSignal, Show } from "solid-js";
 import { PaperButton, PaperCheckbox, PaperFlex, PaperModal, PaperText } from "@mileniumhq/paperui";
-import { UI_ACTION_IDS } from "../contract";
+import { CALLS } from "../contract";
 import { call, errorText } from "../lib/state";
 
 export interface NoSandboxDialogProps {
@@ -33,7 +33,7 @@ export default function NoSandboxDialog(props: NoSandboxDialogProps) {
         setError("");
         try {
             await props.onTurnOn();
-            if (dontShowAgain()) await call(UI_ACTION_IDS.updateSettings, { noSandboxWarning: false });
+            if (dontShowAgain()) await call(CALLS.updateSettings, { noSandboxWarning: false });
             setBusy(false);
             close();
         } catch (err) {
