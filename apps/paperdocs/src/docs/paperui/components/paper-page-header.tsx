@@ -107,7 +107,7 @@ export function Example() {
             <PaperTextList>
                 <li>The header is flat: a raised surface with a border and no shadow, so it sits at the same depth as the page below it.</li>
                 <li>The header fills the width of its container, such as the column of a <PaperLink href="/docs/paperui/paperpage/">PaperPage</PaperLink>.</li>
-                <li>The heading takes the room it needs first. When the row is too narrow for the title and the actions side by side, the actions wrap under it.</li>
+                <li>The heading takes the room it needs first. When the row is too narrow for the title and the actions side by side, the actions wrap under it. Under it they are never wider than the header: buttons that don't fit on one row wrap onto the next, and a long subtitle, address or path breaks instead of running past the edge.</li>
                 <li><PaperCode>centerWhenStacked</PaperCode> measures the row with a resize observer. Where the browser has none, the header never centers.</li>
                 <li>The title is a <PaperCode>span</PaperCode>, not a heading element, so it does not appear in the page's heading outline. Add a heading element yourself where assistive technology needs one.</li>
             </PaperTextList>

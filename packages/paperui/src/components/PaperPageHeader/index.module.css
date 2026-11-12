@@ -42,18 +42,24 @@
     flex-direction: column;
     gap: var(--paper-uigap-onefourth);
     min-width: 0;
-}
-
-.title {
+    /* a long name, address or path breaks rather than running off the card */
     overflow-wrap: anywhere;
 }
 
+/* The actions keep to one row while it fits. Wrapped under the title, they
+   are never wider than the header: they wrap onto more rows instead. */
 .actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: var(--paper-uigap-half);
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.actions > * {
+    max-width: 100%;
 }
 
 /* centerWhenStacked: once the actions wrap under the title, both rows sit
