@@ -38,6 +38,12 @@ export interface PaperSlidePageProps {
      * foot, so the strip reads as part of it. Default surface.
      */
     background?: PaperBackgroundSurface;
+    /**
+     * A computed color for that strip alone, when the content's foot isn't a
+     * PaperUI surface the shell knows: an app shell passes what a panel frame
+     * reports (FRAME_BACKGROUND_EVENT). Default the page's background.
+     */
+    footColor?: string;
     children: JSX.Element;
 }
 
@@ -142,7 +148,10 @@ export function PaperSlidePage(props: PaperSlidePageProps) {
                     </Show>
                 </header>
             </Show>
-            <div class={props.enabled ? styles.content : styles.passthrough}>
+            <div
+                class={props.enabled ? styles.content : styles.passthrough}
+                style={{ "background-color": props.enabled ? props.footColor : undefined }}
+            >
                 {props.children}
                 <Show when={props.enabled}>
                     {/* above content that would otherwise take the touch (an iframe) */}

@@ -355,6 +355,13 @@ export function Done() {
                 A component with its own <PaperCode>:active</PaperCode> style adds <PaperCode>:not([data-paper-press-out])</PaperCode> to it, and <PaperCode>pressedOutside(el, x, y)</PaperCode> answers whether a pointer has left a control.
             </PaperText>
 
+            <PaperText preset="subheader" as="h2" id="frame-background">A frame's foot color</PaperText>
+            <PaperText preset="body" as="p">
+                On a phone, Paperboard stops a panel's frame above the home indicator and fills the strip under it.{" "}
+                <PaperLink href="/docs/paperui/paperprovider/">PaperProvider</PaperLink> in a framed document reports the color showing at the middle of its bottom edge as <PaperCode>paperui:frame-background</PaperCode> (<PaperCode>FRAME_BACKGROUND_EVENT</PaperCode>) on <PaperCode>window</PaperCode>, whenever it changes, and <PaperCode>@mileniumhq/paperapi</PaperCode> forwards it, so the strip is the panel's own color.
+                A panel needs nothing for this; <PaperCode>bottomEdgeColor()</PaperCode> returns the color it would report.
+            </PaperText>
+
             <PaperText preset="subheader" as="h2" id="swipe-back">Swipe back</PaperText>
             <PaperText preset="body" as="p">
                 On a phone layout an open page goes back when it is dragged to the right, like the iOS back swipe.{" "}
