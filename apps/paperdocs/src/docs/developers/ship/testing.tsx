@@ -120,24 +120,24 @@ import { describe, expect, it } from "bun:test";
 const dataDir = process.env.E2E_PAPERBOARD_DIR;
 if (!dataDir) throw new Error("Set E2E_PAPERBOARD_DIR to the data folder of a test Paperboard");
 
-function call(action: string, inputs: unknown) {
-    const proc = Bun.spawnSync(["bunx", "paperapi", "call", "dev.example.weather", action, JSON.stringify(inputs)], {
+function call(block: string, inputs: unknown) {
+    const proc = Bun.spawnSync(["bunx", "paperapi", "call", "dev.example.weather", block, JSON.stringify(inputs)], {
         env: { ...process.env, PAPERBOARD_DIR: dataDir, NO_COLOR: "1" },
     });
     return { code: proc.exitCode, stdout: proc.stdout.toString(), stderr: proc.stderr.toString() };
 }
 
-describe("follow-city", () => {
+describe("command.follow-city", () => {
     it("refuses a city it already follows, with the reason", () => {
-        call("follow-city", { city: "Lima" });
-        const again = call("follow-city", { city: "Lima" });
+        call("command.follow-city", { city: "Lima" });
+        const again = call("command.follow-city", { city: "Lima" });
         expect(again.code).toBe(1);
         expect(again.stderr).toContain("Weather already follows Lima");
-        call("unfollow-city", { city: "Lima" });
+        call("command.unfollow-city", { city: "Lima" });
     });
 
     it("refuses an empty city before saving anything", () => {
-        const empty = call("follow-city", { city: "  " });
+        const empty = call("command.follow-city", { city: "  " });
         expect(empty.code).toBe(1);
         expect(empty.stderr).toContain("Enter a city name");
     });
@@ -211,7 +211,7 @@ Ran 11 tests across 2 files.`}
             <PaperText preset="subheader" as="h2" id="prove-a-fix">Prove a fix</PaperText>
             <PaperText preset="body" as="p">
                 Every fix comes with a test that fails without it. Write the test first, watch it fail, then fix the code.
-                With <PaperCode>dropsToFreezing</PaperCode> cut down to <PaperCode>return after.temperature &lt;= limit;</PaperCode>, Weather's trigger would fire on every check while a city stays frozen. The test <PaperCode>stays quiet while the city stays frozen</PaperCode> catches it:
+                With <PaperCode>dropsToFreezing</PaperCode> cut down to <PaperCode>return after.temperature &lt;= limit;</PaperCode>, Weather's freezing event would fire on every check while a city stays frozen. The test <PaperCode>stays quiet while the city stays frozen</PaperCode> catches it:
             </PaperText>
             <PaperCode block language="sh">
 {`$ bun test
@@ -227,7 +227,7 @@ Received: true
 
             <PaperText preset="subheader" as="h2" id="end-to-end">End-to-end tests: a real Paperboard</PaperText>
             <PaperText preset="body" as="p">
-                An end-to-end test calls the panel's actions through a test Paperboard, the same way flows and agents do.
+                An end-to-end test runs the panel's blocks through a test Paperboard, the same way flows and agents do.
                 Weather's spawns <PaperCode>paperapi call</PaperCode> with <PaperCode>PAPERBOARD_DIR</PaperCode> set to the test Paperboard's data folder, taken from <PaperCode>E2E_PAPERBOARD_DIR</PaperCode>:
             </PaperText>
             <PaperCode block language="tsx">{E2E_TEST}</PaperCode>

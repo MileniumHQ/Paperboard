@@ -14,7 +14,7 @@ export default function PaperApiOverviewDoc() {
             <PaperText preset="body" as="p">
                 PaperAPI is the TypeScript SDK a panel uses to talk to the Paperboard server daemon on its computer.
                 Import it in the panel page, the panel service, and the widget page.
-                Every call goes over one authenticated WebSocket to the daemon, which owns storage, processes, secrets and the action registry.
+                Every call goes over one authenticated WebSocket to the daemon, which owns storage, processes, secrets and the block registry.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="install">Install</PaperText>
@@ -85,9 +85,9 @@ export default function PaperApiOverviewDoc() {
                     <tr><td><PaperLink href="/docs/paperapi/package/">packageApi</PaperLink></td><td>Runtimes and tools from the Origami registry, such as Java.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/ports/">portApi</PaperLink></td><td>Network ports the panel's programs listen on, without clashes.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/backups/">backupApi</PaperLink></td><td>Backups of the panel's files and config, made now or on a schedule.</td></tr>
-                    <tr><td><PaperLink href="/docs/paperapi/actions/">actionsApi</PaperLink></td><td>Actions, triggers and events other panels, flows and agents call.</td></tr>
-                    <tr><td><PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink></td><td>The service's entry point: state, actions and lifecycle hooks.</td></tr>
-                    <tr><td><PaperLink href="/docs/paperapi/bridge/">createPanelBridge</PaperLink></td><td>The panel page's view of its service: state and action calls.</td></tr>
+                    <tr><td><PaperLink href="/docs/paperapi/blocks/">blocksApi</PaperLink></td><td>Blocks: the commands, values and events other panels, flows and agents use.</td></tr>
+                    <tr><td><PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink></td><td>The service's entry point: state, calls and lifecycle hooks.</td></tr>
+                    <tr><td><PaperLink href="/docs/paperapi/bridge/">createPanelBridge</PaperLink></td><td>The panel page's view of its service: state and calls.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/widgets/">defineWidgets</PaperLink></td><td>The widget page's mount functions.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/system/">systemApi</PaperLink></td><td>Facts about the computer: OS, address, GPUs, usage.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/panels/">panelsApi</PaperLink></td><td>Installed panels and the Panel Library.</td></tr>
@@ -118,7 +118,7 @@ export default function PaperApiOverviewDoc() {
             </PaperTextList>
             <PaperText preset="body" as="p">
                 The connection opens on the first call, or in a frame when the shell sends its start-up check, whichever comes first.
-                In a service, the first call is usually the action registration <PaperCode>definePanelService</PaperCode> makes.
+                In a service, the first call is usually the block registration <PaperCode>definePanelService</PaperCode> makes.
             </PaperText>
 
             <PaperText preset="body" as="p">

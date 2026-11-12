@@ -14,18 +14,13 @@ async function saveSettings(ctx: Ctx, settings: WeatherSettings): Promise<void> 
     ctx.setState({ settings });
 }`;
 
-const SET_UNITS = `defineAction({
-    id: "set-units",
-    name: "Set units",
-    description: "Switches between Celsius and Fahrenheit",
-    internal: true,
-    run: async (ctx: Ctx, inputs: { units?: string }) => {
-        if (inputs.units !== "metric" && inputs.units !== "imperial") throw new Error("Units are metric or imperial");
-        await saveSettings(ctx, { ...ctx.state.settings, units: inputs.units });
-        await refreshAll(ctx);
-        return true;
-    },
-}),`;
+const SET_UNITS = `// in definePanelService's calls
+setUnits: async (ctx: Ctx, input?: { units?: string }) => {
+    if (input?.units !== "metric" && input?.units !== "imperial") throw new Error("Units are metric or imperial");
+    await saveSettings(ctx, { ...ctx.state.settings, units: input.units });
+    await refreshAll(ctx);
+    return true;
+},`;
 
 const READ_KEY = `async function readKey(): Promise<string> {
     const stored = await secretsApi.get(API_KEY_SECRET, PANEL_ID);
@@ -33,18 +28,13 @@ const READ_KEY = `async function readKey(): Promise<string> {
     return stored.value;
 }`;
 
-const KEY_CHANGED = `defineAction({
-    id: "key-changed",
-    name: "API key changed",
-    description: "Reads the API key again after the settings page saved or removed it",
-    internal: true,
-    run: async (ctx: Ctx) => {
-        const stored = await secretsApi.get(API_KEY_SECRET, PANEL_ID);
-        ctx.setState({ hasKey: stored.found });
-        await refreshAll(ctx);
-        return true;
-    },
-}),`;
+const KEY_CHANGED = `// reads the API key again after the settings page saved or removed it
+keyChanged: async (ctx: Ctx) => {
+    const stored = await secretsApi.get(API_KEY_SECRET, PANEL_ID);
+    ctx.setState({ hasKey: stored.found });
+    await refreshAll(ctx);
+    return true;
+},`;
 
 const SETTINGS_PAGE = `import { createSignal, Show } from "solid-js";
 import {
@@ -73,7 +63,7 @@ export default function SettingsPage() {
     const setUnits = async (units: string | number) => {
         setFailure(null);
         try {
-            await bridge.call<boolean>("set-units", { units });
+            await bridge.call<boolean>("setUnits", { units });
         } catch (err) {
             setFailure({ title: "Units not changed", message: errorMessage(err) });
         }
@@ -85,7 +75,7 @@ export default function SettingsPage() {
             // the key goes to the vault; the service reads it from there
             await secretsApi.set(API_KEY_SECRET, key(), PANEL_ID);
             setKey("");
-            await bridge.call<boolean>("key-changed");
+            await bridge.call<boolean>("keyChanged");
         } catch (err) {
             setFailure({ title: "API key not saved", message: errorMessage(err) });
         }
@@ -96,7 +86,7 @@ export default function SettingsPage() {
         setFailure(null);
         try {
             await secretsApi.delete(API_KEY_SECRET, PANEL_ID);
-            await bridge.call<boolean>("key-changed");
+            await bridge.call<boolean>("keyChanged");
         } catch (err) {
             setFailure({ title: "API key not removed", message: errorMessage(err) });
         }
@@ -209,11 +199,11 @@ export default function SettingsAndSecretsDoc() {
             </PaperText>
             <PaperCode block language="tsx">{SAVE_SETTINGS}</PaperCode>
             <PaperText preset="body" as="p">
-                The page changes a setting by calling an internal action, which checks the value before it saves:
+                The page changes a setting by calling the service, which checks the value before it saves:
             </PaperText>
             <PaperCode block language="tsx">{SET_UNITS}</PaperCode>
             <PaperTextList>
-                <li><PaperCode>internal: true</PaperCode> keeps the action out of the Actions panel's library and the Agent panel, and refuses it to other panels. The panel's own pages still call it. See <PaperLink href="/docs/developers/actions/#internal">Expose actions</PaperLink>.</li>
+                <li>A call in <PaperCode>calls</PaperCode> is internal: the Blocks panel and agents never see it, and other panels are refused. Only the panel's own pages call it. See <PaperLink href="/docs/developers/blocks/#calls">Expose blocks</PaperLink>.</li>
                 <li><PaperCode>configApi.get</PaperCode> resolves with <PaperCode>null</PaperCode> before the first save. Weather starts from <PaperCode>{"{ ...DEFAULT_SETTINGS, ...saved }"}</PaperCode> in <PaperCode>onInit</PaperCode>, so a setting added in a later version gets its default.</li>
                 <li>Settings are in the state, so every window shows the current value without asking.</li>
             </PaperTextList>
@@ -226,7 +216,7 @@ export default function SettingsAndSecretsDoc() {
             <PaperCode block language="tsx">{KEY_CHANGED}</PaperCode>
             <PaperTextList>
                 <li>The state holds <PaperCode>hasKey</PaperCode>, never the key. Every page and widget of the panel receives the state.</li>
-                <li>The key never travels as an action input or result, so the page never sends it to the service and nothing that calls an action sees it.</li>
+                <li>The key never travels as a call or block input or result, so the page never sends it to the service and nothing that runs a block sees it.</li>
                 <li>A missing key is a failure with the fix in it: <PaperCode>Add an OpenWeather API key in Weather's settings</PaperCode>. It shows on every city until a key is saved.</li>
                 <li><PaperCode>paperapi monitor</PaperCode> prints the secret's name, never its value.</li>
             </PaperTextList>
@@ -250,16 +240,16 @@ export default function SettingsAndSecretsDoc() {
 
             <PaperText preset="subheader" as="h2" id="check-it">Check it</PaperText>
             <PaperCode block language="sh">
-{`bunx paperapi call dev.example.weather set-units '{"units":"imperial"}'
+{`bunx paperapi call dev.example.weather setUnits '{"units":"imperial"}'
 bunx paperapi restart
-bunx paperapi call dev.example.weather __getState`}
+bunx paperapi call dev.example.weather value.panel-state`}
             </PaperCode>
             <PaperText preset="body" as="p">
                 After the restart, <PaperCode>settings.units</PaperCode> is still <PaperCode>imperial</PaperCode> and <PaperCode>hasKey</PaperCode> says whether a key is saved. The key itself appears nowhere in the output.
             </PaperText>
 
             <PaperText preset="body" as="p">
-                Next: <PaperLink href="/docs/developers/actions/">expose actions</PaperLink>.
+                Next: <PaperLink href="/docs/developers/blocks/">expose blocks</PaperLink>.
             </PaperText>
         </PaperFlex>
     );

@@ -230,7 +230,7 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
             <PaperText preset="subheader" as="h3" id="labels">Rail with labels</PaperText>
             <PaperText preset="body" as="p">
-                The Actions panel's action library is a rail of categories with <PaperCode>showLabels</PaperCode>.
+                The Blocks panel's block library is a rail of categories with <PaperCode>showLabels</PaperCode>.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">
                 <PaperRail name="docs-rail-labels" showLabels defaultValue="home">

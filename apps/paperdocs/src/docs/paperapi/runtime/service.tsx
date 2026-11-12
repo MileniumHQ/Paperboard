@@ -12,7 +12,7 @@ export default function ServiceApiDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">definePanelService</PaperText>
             <PaperText preset="body" as="p">
-                definePanelService is the entry point of a panel's service: it registers the panel's actions, holds its state, and tells the daemon it is ready.
+                definePanelService is the entry point of a panel's service: it answers the panel's page, holds its state, and tells the daemon it is ready.
                 The Paperboard server daemon runs the service as a background process that keeps going while the Paperboard window is closed.
                 Give a panel a service when it owns something long-lived: a server, a bot, a schedule, a connection.
             </PaperText>
@@ -22,7 +22,7 @@ export default function ServiceApiDoc() {
                 Name the built file in the manifest's <PaperCode>service</PaperCode> field, such as <PaperCode>./dist/service.js</PaperCode>, and call <PaperCode>definePanelService</PaperCode> once at its top level.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { definePanelService, secretsApi } from "@mileniumhq/paperapi";
+{`import { blocksApi, definePanelService, secretsApi } from "@mileniumhq/paperapi";
 
 const PANEL_ID = "dev.example.weather";
 
@@ -33,22 +33,30 @@ interface WeatherState {
 const service = definePanelService({
     id: PANEL_ID,
     state: { lastCity: "" } as WeatherState,
-    actions: [
-        {
-            id: "forecast",
-            name: "Get forecast",
-            description: "Returns today's high and low for a city",
-            inputs: { city: { type: "string", label: "City", placeholder: "City", required: true, maxLength: 64 } },
-            output: "object",
-            run: async (ctx, inputs: { city: string }) => {
-                const key = await secretsApi.get("apiKey", PANEL_ID);
-                if (!key.found) throw new Error("Add an API key in the Weather panel first");
-                ctx.setState({ lastCity: inputs.city });
-                return { city: inputs.city, high: 21, low: 12 };
-            },
+    // what the panel's own page asks: bridge.call("forecast", { city: "Oslo" })
+    calls: {
+        forecast: async (ctx, input?: { city?: string }) => {
+            const key = await secretsApi.get("apiKey", PANEL_ID);
+            if (!key.found) throw new Error("Add an API key in the Weather panel first");
+            if (!input?.city) throw new Error("Enter a city name");
+            ctx.setState({ lastCity: input.city });
+            ctx.emit("forecast-ready", { city: input.city });
+            return { city: input.city, high: 21, low: 12 };
         },
-    ],
+    },
     onInit: async (ctx) => {
+        // what the Blocks panel, agents and other panels can use
+        await blocksApi.panel(PANEL_ID).register({
+            commands: [{
+                id: "get-forecast",
+                name: "Get Forecast",
+                description: "Returns today's high and low for a city",
+                inputs: { city: { type: "text", name: "City", maxLength: 64 } },
+                output: "any",
+                outputName: "Forecast",
+                run: ({ city }: { city: string }) => ({ city, high: 21, low: 12 }),
+            }],
+        });
         console.log(\`Weather service ready, last city: \${ctx.state.lastCity || "none"}\`);
     },
 });
@@ -58,11 +66,11 @@ export default service;`}
 
             <PaperText preset="subheader" as="h2" id="api">API</PaperText>
             <PaperCode block language="tsx">
-{`function definePanelService<TState extends Record<string, any>, TActions>(
-    options: DefinePanelServiceOptions<TState, TActions>,
+{`function definePanelService<TState extends Record<string, any>, TCalls>(
+    options: DefinePanelServiceOptions<TState, TCalls>,
 ): {
     panelId: string;
-    /** resolves once every action is registered and onInit has finished */
+    /** resolves once the service's own blocks are registered and onInit has finished */
     ready: Promise<void>;
     ctx: ServiceContext<TState>;
     getState(): TState;
@@ -83,7 +91,7 @@ export default service;`}
                         <td><PaperCode>id</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td><PaperCode>getPanelId()</PaperCode>, the id the daemon started the service with</td>
-                        <td>The panel the service registers its actions under.</td>
+                        <td>The panel the service registers its blocks under.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>state</PaperCode></td>
@@ -92,22 +100,10 @@ export default service;`}
                         <td>The starting state. It lives in memory: save what must survive a restart with <PaperLink href="/docs/paperapi/config/">configApi</PaperLink>.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>actions</PaperCode></td>
-                        <td><PaperCode>ActionDefinition[]</PaperCode> or <PaperCode>Record&lt;string, (ctx, inputs, options) =&gt; any&gt;</PaperCode></td>
-                        <td>No default (no actions)</td>
-                        <td>The array form registers each definition with its schema, as <PaperLink href="/docs/paperapi/actions/#definitions">actionsApi.register</PaperLink> does, with <PaperCode>run(ctx, inputs)</PaperCode> receiving the service context. The map form registers plain handlers by name, with no schema, as <PaperCode>handler(ctx, inputs, options)</PaperCode>.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>types</PaperCode></td>
-                        <td><PaperCode>CustomTypeDefinition[]</PaperCode></td>
-                        <td>No default</td>
-                        <td>Custom data types the actions name, defined before they register. See <PaperLink href="/docs/paperapi/actions/#types">Types</PaperLink>.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>categories</PaperCode></td>
-                        <td><PaperCode>ActionCategoryDefinition[]</PaperCode></td>
-                        <td>No default</td>
-                        <td>Icon and order for the categories actions name by string. An action with <PaperCode>category: "Forecasts"</PaperCode> gets the entry whose <PaperCode>name</PaperCode> is <PaperCode>"Forecasts"</PaperCode>.</td>
+                        <td><PaperCode>calls</PaperCode></td>
+                        <td><PaperCode>Record&lt;string, (ctx, input?) =&gt; unknown | Promise&lt;unknown&gt;&gt;</PaperCode></td>
+                        <td>No default (no calls)</td>
+                        <td>What the panel's own page asks the service, by name: <PaperCode>bridge.call(name, input)</PaperCode>. See <PaperLink href="#calls">Calls</PaperLink>. For what other panels, flows and agents use, register blocks in <PaperCode>onInit</PaperCode> with <PaperLink href="/docs/paperapi/blocks/">blocksApi</PaperLink>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>widgetChoices</PaperCode></td>
@@ -119,7 +115,7 @@ export default service;`}
                         <td><PaperCode>onInit</PaperCode></td>
                         <td><PaperCode>(ctx) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
                         <td>No default</td>
-                        <td>Runs after every action is registered. The service reports ready once it resolves, so do start-up work here: load config, reconnect, adopt running processes.</td>
+                        <td>Runs after the service's calls are registered. The service reports ready once it resolves, so do start-up work here: load config, reconnect, adopt running processes.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>beforeBackup</PaperCode></td>
@@ -166,10 +162,8 @@ export default service;`}
     /** the current state; always the latest value */
     readonly state: TState;
     setState(patchOrUpdater: Partial<TState> | ((prev: TState) => Partial<TState>)): void;
-    /** broadcasts an event from this panel */
+    /** tells the panel's page something happened; other panels can't hear it */
     emit(event: string, payload?: unknown): void;
-    /** fires one of this panel's triggers, starting the flows built on it */
-    emitTrigger<T = any>(triggerId: string, output: T): void;
 }`}
             </PaperCode>
             <PaperTable>
@@ -182,17 +176,63 @@ export default service;`}
                 <tbody>
                     <tr>
                         <td><PaperCode>setState</PaperCode></td>
-                        <td>Merges the patch into the state, one level deep, then sends the patch to every <PaperLink href="/docs/paperapi/bridge/">panel bridge</PaperLink> as the <PaperCode>__stateChanged</PaperCode> event. One send is in flight at a time: patches made while it travels are merged into the next one, so a service that sets state hundreds of times a second sends far fewer events.</td>
+                        <td>Merges the patch into the state, one level deep, then sends the patch to every <PaperLink href="/docs/paperapi/bridge/">panel bridge</PaperLink> as the internal <PaperCode>panel-state-changed</PaperCode> event. One send is in flight at a time: patches made while it travels are merged into the next one, so a service that sets state hundreds of times a second sends far fewer events.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>emit</PaperCode>, <PaperCode>emitTrigger</PaperCode></td>
-                        <td>Return at once. A failure is logged to the service's standard error with <PaperCode>{"[Service:<id>] Failed to emit"}</PaperCode>; call <PaperLink href="/docs/paperapi/actions/">actionsApi.emit</PaperLink> directly to await and handle it.</td>
+                        <td><PaperCode>emit</PaperCode></td>
+                        <td>Returns at once. The page hears it through <PaperCode>bridge.on(event, callback)</PaperCode> or <PaperCode>serviceApi.on</PaperCode>. It fires the internal event <PaperCode>emit-&lt;kebab-name&gt;</PaperCode>, which is registered the first time it is emitted. A name that can't be made an id throws where it is emitted. A delivery that fails is logged to the service's standard error with <PaperCode>{"[Service:<id>] Failed to emit event"}</PaperCode>.</td>
                     </tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                The service registers the internal action <PaperCode>__getState</PaperCode>, which returns the whole state once the service is ready. Bridges call it to hydrate.
-                With <PaperCode>widgetChoices</PaperCode>, it also registers the internal <PaperCode>__widgetChoices</PaperCode>.
+                The service registers the internal value <PaperCode>panel-state</PaperCode>, which returns the whole state once the service is ready, and the internal event <PaperCode>panel-state-changed</PaperCode>. Bridges read the value to hydrate and hear the event for each patch.
+                With <PaperCode>widgetChoices</PaperCode>, it also registers the internal command <PaperCode>widget-choices</PaperCode>.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="calls">Calls</PaperText>
+            <PaperText preset="body" as="p">
+                A call is what the panel's own page asks its service to do. Each entry of <PaperCode>calls</PaperCode> is registered as an internal command, <PaperCode>call-&lt;kebab-name&gt;</PaperCode>, so <PaperCode>followCity</PaperCode> becomes <PaperCode>call-follow-city</PaperCode>.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`type ServiceCall<TState> = (ctx: ServiceContext<TState>, input?: any) => unknown | Promise<unknown>;`}
+            </PaperCode>
+            <PaperTextList>
+                <li>A call gets one optional input, any JSON, and its return value goes back to the caller. Returning <PaperCode>undefined</PaperCode> gives the caller <PaperCode>null</PaperCode>.</li>
+                <li>A call that throws rejects the caller with the same message. Throw sentences the person using the panel can act on.</li>
+                <li>Two names that make the same id, such as <PaperCode>followCity</PaperCode> and <PaperCode>follow-city</PaperCode>, throw when the service is defined. A name of more than 59 characters, or one with no letters or digits, throws too.</li>
+                <li>Internal blocks are never listed, and the daemon refuses them to every other panel. Check a call's input all the same: <PaperCode>paperapi call</PaperCode> reaches it.</li>
+                <li>The input is not checked against a schema. For a block with typed, checked inputs, register one with <PaperLink href="/docs/paperapi/blocks/">blocksApi</PaperLink> in <PaperCode>onInit</PaperCode>.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h3" id="service-api">serviceApi</PaperText>
+            <PaperText preset="body" as="p">
+                The page reaches its service with <PaperCode>serviceApi</PaperCode>, which <PaperLink href="/docs/paperapi/bridge/">createPanelBridge</PaperLink> wraps with the panel id filled in. Use it directly from code that has no bridge.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { serviceApi } from "@mileniumhq/paperapi";
+
+serviceApi.call<T = unknown>(panelId: string, name: string, input?: unknown, options?: { timeoutMs?: number | null }): Promise<T>;
+serviceApi.on<T = unknown>(panelId: string, event: string, callback: (payload: T) => void): () => void;
+
+const forecast = await serviceApi.call<Forecast>("dev.example.weather", "forecast", { city: "Oslo" });
+const stop = serviceApi.on<{ city: string }>("dev.example.weather", "forecast-ready", (payload) => console.log(payload.city));`}
+            </PaperCode>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Export</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>STATE_VALUE</PaperCode></td><td><PaperCode>"panel-state"</PaperCode>, the internal value holding the service's state.</td></tr>
+                    <tr><td><PaperCode>STATE_EVENT</PaperCode></td><td><PaperCode>"panel-state-changed"</PaperCode>, the internal event each patch travels on.</td></tr>
+                    <tr><td><PaperCode>WIDGET_CHOICES_COMMAND</PaperCode></td><td><PaperCode>"widget-choices"</PaperCode>, the internal command Home asks a widget option's dropdown from.</td></tr>
+                    <tr><td><PaperCode>callBlockId(name)</PaperCode>, <PaperCode>eventBlockId(name)</PaperCode></td><td>The block id a call name (<PaperCode>call-follow-city</PaperCode>) or an emitted event name (<PaperCode>emit-forecast-ready</PaperCode>) becomes. They throw for a name that can't be one.</td></tr>
+                </tbody>
+            </PaperTable>
+            <PaperText preset="body" as="p">
+                Another panel calling <PaperCode>serviceApi.call</PaperCode> on your panel is refused: a call is internal.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="lifecycle">Lifecycle</PaperText>
@@ -214,7 +254,7 @@ export default service;`}
                     </tr>
                     <tr>
                         <td>Ready</td>
-                        <td>Waits for the service to report ready, which <PaperCode>definePanelService</PaperCode> does once its actions are registered and <PaperCode>onInit</PaperCode> resolves. A service that has not reported within 20 seconds is killed and marked failed, with <PaperCode>did not report ready within 20s</PaperCode>, and is not restarted.</td>
+                        <td>Waits for the service to report ready, which <PaperCode>definePanelService</PaperCode> does once its calls are registered and <PaperCode>onInit</PaperCode> resolves. A service that has not reported within 20 seconds is killed and marked failed, with <PaperCode>did not report ready within 20s</PaperCode>, and is not restarted.</td>
                     </tr>
                     <tr>
                         <td>Crash</td>
@@ -256,9 +296,9 @@ export default service;`}
 
             <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
             <PaperTextList>
-                <li>A definition that breaks a rule throws when it registers, before anything reaches the daemon. See <PaperLink href="/docs/paperapi/actions/#definition-rules">definition rules</PaperLink>.</li>
+                <li>A block that breaks a rule throws when it registers, before anything reaches the daemon. See <PaperLink href="/docs/paperapi/blocks/#registering">Registering</PaperLink>.</li>
                 <li>When a registration or <PaperCode>onInit</PaperCode> fails, <PaperCode>ready</PaperCode> rejects, the error is logged as <PaperCode>{"[Service:<id>] initialization failed:"}</PaperCode>, and the service never reports ready, so the daemon kills it after 20 seconds.</li>
-                <li>An error thrown by an action's <PaperCode>run</PaperCode> rejects the caller's <PaperCode>actionsApi.call</PaperCode> with the same message. Throw sentences the person using the panel can act on.</li>
+                <li>An error thrown by a call rejects the caller's <PaperCode>bridge.call</PaperCode> with the same message. Throw sentences the person using the panel can act on.</li>
                 <li>A <PaperCode>beforeBackup</PaperCode> that throws refuses the backup with <PaperCode>The panel could not get ready for a backup: &lt;message&gt;</PaperCode>. A <PaperCode>beforeRestore</PaperCode> that throws refuses the restore with its own message.</li>
                 <li><PaperCode>afterBackup</PaperCode> and <PaperCode>afterRestore</PaperCode> are told only while the service is ready. A backup that ends while the service is stopped or still starting is not heard. An error they throw is logged as <PaperCode>{"[Service:<id>] afterBackup failed:"}</PaperCode>.</li>
                 <li>The daemon waits at most 5 minutes for either hook, then fails with <PaperCode>Service &lt;id&gt; did not get ready for the backup within 300 s</PaperCode>. The hooks run only while the service is ready; a stopped or failed service is not asked.</li>

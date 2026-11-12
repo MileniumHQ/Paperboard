@@ -47,7 +47,7 @@ export default function ManifestDoc() {
                         <td><PaperCode>id</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td>Packer: yes. Daemon: no, the folder name is used.</td>
-                        <td>The panel's identity everywhere: its folder, its storage, its credential, its actions. See <PaperLink href="/docs/paperapi/manifest/#panel-id">Panel id</PaperLink>. The daemon refuses a manifest whose id differs from its folder name.</td>
+                        <td>The panel's identity everywhere: its folder, its storage, its credential, its blocks. See <PaperLink href="/docs/paperapi/manifest/#panel-id">Panel id</PaperLink>. The daemon refuses a manifest whose id differs from its folder name.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>name</PaperCode></td>

@@ -12,7 +12,7 @@ export default function FirstPanelDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">Your first panel</PaperText>
             <PaperText preset="body" as="p">
-                Make a panel with a page, a background service and a Home widget, run it in Paperboard, and add an action of your own.
+                Make a panel with a page, a background service and a Home widget, run it in Paperboard, and add a block of your own.
                 It takes about fifteen minutes.
                 At the end you have a working panel folder and the commands you use every day to build on it.
             </PaperText>
@@ -45,7 +45,7 @@ Description [Hello panel]: Says hello to people by name
 Publisher, credited on the library page (leave empty to set it later): Ada Lovelace
 
 A background service keeps the panel's state and runs its work whether or not a window is open.
-Other panels and the Actions panel call what it offers. Without one, the panel is only UI.
+The Blocks panel and other panels use the blocks it offers. Without one, the panel is only UI.
 Include a background service? [Y/n]:
 
 A widget puts a small live tile from your panel on Paperboard's Home page.
@@ -138,7 +138,7 @@ dev.example.hello in .
   ✓ Build       dist/index.html, dist/service.js, dist/widget.html
   ✓ Link        /home/ada/.paperboard/panels/dev.example.hello → .
   ✓ Paperboard  running at 127.0.0.1:45464, data in /home/ada/.paperboard
-  ✓ Service     answering, with 2 actions registered
+  ✓ Service     answering
 
 Ready: Paperboard can run this panel.`}
             </PaperCode>
@@ -163,72 +163,83 @@ Ready: Paperboard can run this panel.`}
 
             <PaperText preset="subheader" as="h2" id="call">5. Call it from the terminal</PaperText>
             <PaperText preset="body" as="p">
-                Everything the service offers is an action, and anything can call an action: the page, another panel, a flow, or you.
-                With no action name, <PaperCode>paperapi call</PaperCode> lists them:
+                The service offers a Greet block, and anything can run a block: another panel, a flow in the Blocks panel, an agent, or you.
+                With no name, <PaperCode>paperapi call</PaperCode> lists the panel's blocks:
             </PaperText>
             <PaperCode block language="sh">
 {`$ bunx paperapi call dev.example.hello
-2 actions on dev.example.hello:
-__getState  Get Panel State (internal)
-greet       Greet  (name: string)
+1 block on dev.example.hello:
+command.greet  Greet  (name: text)
 
-$ bunx paperapi call dev.example.hello greet '{"name":"Grace"}'
-✓ dev.example.hello greet · 0.9 ms
+$ bunx paperapi call dev.example.hello command.greet '{"name":"Grace"}'
+✓ dev.example.hello command.greet · 0.9 ms
 "Hello, Grace!"`}
             </PaperCode>
             <PaperText preset="body" as="p">
                 The count on the open Service page goes up at the same moment. The service owns the count, and every window mirrors it.
+                The Service page itself does not use the block. It asks the service with a call, <PaperCode>bridge.call("greet", name)</PaperCode>, which no other panel can make.
             </PaperText>
 
-            <PaperText preset="subheader" as="h2" id="add-an-action">6. Add an action</PaperText>
+            <PaperText preset="subheader" as="h2" id="add-a-block">6. Add a block</PaperText>
             <PaperText preset="body" as="p">
-                Give the service a second action that sets the count back to zero.
-                Replace <PaperCode>src/service.ts</PaperCode> with this. The new part is the <PaperCode>reset-greetings</PaperCode> action.
+                Give the service a second block that sets the count back to zero, and a call so the page can use it.
+                Replace <PaperCode>src/service.ts</PaperCode> with this. The new parts are the <PaperCode>resetGreetings</PaperCode> call and the <PaperCode>reset-greetings</PaperCode> block.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { definePanelService, defineAction, type ServiceContext } from "@mileniumhq/paperapi";
+{`import { blocksApi, definePanelService, type ServiceContext } from "@mileniumhq/paperapi";
 import { buildGreeting } from "./lib/greet";
 import { DEFAULT_STATE, PANEL_ID, type PanelState } from "./panel";
 
 type Ctx = ServiceContext<PanelState>;
 
-const actions = [
-    defineAction({
-        id: "greet",
-        name: "Greet",
-        category: "General",
-        description: "Greets a person by name",
-        template: "Greet {name}",
-        inputs: {
-            name: { type: "string", label: "Name", placeholder: "Name", required: true },
-        },
-        output: { type: "string", label: "Greeting" },
-        icon: "waving_hand",
-        run: async (ctx: Ctx, inputs: { name?: string }) => {
-            const greeting = buildGreeting(inputs?.name);
-            ctx.setState({ greetingCount: ctx.state.greetingCount + 1 });
-            return greeting;
-        },
-    }),
-    defineAction({
-        id: "reset-greetings",
-        name: "Reset greetings",
-        category: "General",
-        description: "Sets the greeting count back to zero",
-        icon: "restart_alt",
-        run: async (ctx: Ctx) => {
-            ctx.setState({ greetingCount: 0 });
-            return true;
-        },
-    }),
-];
+function greet(ctx: Ctx, name: unknown): string {
+    const greeting = buildGreeting(name);
+    ctx.setState({ greetingCount: ctx.state.greetingCount + 1 });
+    return greeting;
+}
+
+function resetGreetings(ctx: Ctx): boolean {
+    ctx.setState({ greetingCount: 0 });
+    return true;
+}
 
 export default definePanelService({
     id: PANEL_ID,
     state: DEFAULT_STATE,
-    categories: [{ name: "General", icon: "star", order: 1 }],
-    actions,
-    async onInit() {
+    // what the panel's own page asks
+    calls: {
+        greet: (ctx: Ctx, name?: unknown) => greet(ctx, name),
+        resetGreetings: (ctx: Ctx) => resetGreetings(ctx),
+    },
+    async onInit(ctx) {
+        // what the Blocks panel and other panels can use
+        await blocksApi.panel(PANEL_ID).register({
+            categories: [{ name: "General", icon: "star" }],
+            commands: [
+                {
+                    id: "greet",
+                    name: "Greet",
+                    description: "Greets a person by name",
+                    category: "General",
+                    icon: "waving_hand",
+                    text: "Greet {name}",
+                    inputs: { name: { type: "text", name: "Name" } },
+                    output: "text",
+                    outputName: "Greeting",
+                    run: (inputs: { name: string }) => greet(ctx, inputs.name),
+                },
+                {
+                    id: "reset-greetings",
+                    name: "Reset Greetings",
+                    description: "Sets the greeting count back to zero",
+                    category: "General",
+                    icon: "restart_alt",
+                    output: "boolean",
+                    outputName: "Reset",
+                    run: () => resetGreetings(ctx),
+                },
+            ],
+        });
         console.log(\`[\${PANEL_ID}] service ready.\`);
     },
 });`}
@@ -241,7 +252,7 @@ export default definePanelService({
     const reset = async () => {
         setResetFailure("");
         try {
-            await bridge.call<boolean>("reset-greetings");
+            await bridge.call<boolean>("resetGreetings");
         } catch (err) {
             console.error("[Service] reset failed:", err);
             setResetFailure(errorMessage(err));
@@ -276,8 +287,8 @@ export default definePanelService({
 $ bunx paperapi restart
 ✓ Restarted dev.example.hello's service · ready in 58.6 ms
 
-$ bunx paperapi call dev.example.hello reset-greetings
-✓ dev.example.hello reset-greetings · 0.5 ms
+$ bunx paperapi call dev.example.hello command.reset-greetings
+✓ dev.example.hello command.reset-greetings · 0.5 ms
 true`}
             </PaperCode>
             <PaperText preset="body" as="p">
@@ -293,13 +304,13 @@ true`}
 {`bunx paperapi monitor --panel dev.example.hello`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                Press Greet in Paperboard, or call an action from the first terminal. Every call, event and service change prints one line, with its time and how it went:
+                Press Greet in Paperboard, or run a block from the first terminal. Every call, event and service change prints one line, with its time and how it went:
             </PaperText>
             <PaperCode block language="text">
 {`Watching calls involving dev.example.hello on Paperboard at 127.0.0.1:45464. Press Ctrl+C to stop.
-05:40:12.875  dev.example.hello         actions:emit                         0.2 ms  ok  event=__stateChanged payload={state} duringCall=‹41 chars›
-05:40:12.875  host                      actions:call                         0.6 ms  ok  panelId=dev.example.hello action=greet args=[1] timeoutMs=30000
-05:40:12.938  host                      actions:call                         0.2 ms  ✗ INTERNAL Name is required  panelId=dev.example.hello action=greet args=[1] timeoutMs=30000
+05:40:12.875  dev.example.hello         blocks:emit                          0.2 ms  ok  panelId=dev.example.hello entry=‹25 chars› payload={state} duringCall=‹41 chars›
+05:40:12.875  host                      blocks:call                          0.6 ms  ok  panelId=dev.example.hello entry=‹13 chars› request={inputs} timeoutMs=30000
+05:40:12.938  host                      blocks:call                          0.2 ms  ✗ INTERNAL Name is required  panelId=dev.example.hello entry=‹13 chars› request={inputs} timeoutMs=30000
 05:40:13.000  dev.example.hello         service stopped                   code null
 05:40:13.000  dev.example.hello         service starting                  pid 2547010
 05:40:13.061  dev.example.hello         service ready                     pid 2547010`}
@@ -311,7 +322,7 @@ true`}
             <PaperText preset="subheader" as="h2" id="what-you-have">What you have</PaperText>
             <PaperTextList>
                 <li>A panel folder that builds, tests, and runs in Paperboard from where it is.</li>
-                <li>A service with two actions that the Actions panel, other panels and agents can call.</li>
+                <li>A service with two blocks that the Blocks panel, other panels and agents can run, and calls for its own page.</li>
                 <li>A Greetings widget, which Edit Home on the Home page offers under Hello.</li>
                 <li>The daily loop: <PaperCode>bun run build</PaperCode>, <PaperCode>bunx paperapi restart</PaperCode>, Restart Panel, and <PaperCode>doctor</PaperCode>, <PaperCode>call</PaperCode> and <PaperCode>monitor</PaperCode> when something is off.</li>
             </PaperTextList>

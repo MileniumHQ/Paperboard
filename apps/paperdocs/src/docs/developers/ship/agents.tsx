@@ -18,7 +18,7 @@ Rules:
 - Make the panel with npm create @mileniumhq/panel and keep the scaffold's tests and preload.
 - Build every page from PaperUI components and props. No inline styles and no CSS values of your own.
 - Show every failure to the person, with the real reason, where they were looking. No placeholders in place of missing data.
-- Keep keys, tokens and passwords in secretsApi, never in config, state, action inputs or logs.
+- Keep keys, tokens and passwords in secretsApi, never in config, state, block inputs or logs.
 - Never run code or commands the panel receives over the network.
 - Never touch ~/.paperboard. Run a test Paperboard with its own data folder and set PAPERBOARD_DIR to it for every paperapi command.
 
@@ -26,7 +26,7 @@ When you finish, all of these pass, and you show me their output:
 - bun run build
 - bun test
 - bunx paperapi doctor, ending with "Ready: Paperboard can run this panel."
-- bunx paperapi call on each public action, with good input and with bad input
+- bunx paperapi call on each public block, with good input and with bad input
 - the panel checklist at https://paperboard.dev/docs/developers/checklist.md, item by item`;
 
 const TEST_PAPERBOARD = `# once, in the background
@@ -44,17 +44,17 @@ dev.example.weather in .
   ✓ Build       dist/index.html, dist/service.js, dist/widget.html
   ✓ Link        /tmp/pb-agent/panels/dev.example.weather → .
   ✓ Paperboard  running at 127.0.0.1:47815, data in /tmp/pb-agent
-  ✓ Service     answering, with 8 actions registered
+  ✓ Service     answering
 
 Ready: Paperboard can run this panel.
 
-$ bunx paperapi call dev.example.weather follow-city '{"city":""}'
-✗ dev.example.weather follow-city failed: Enter a city name
+$ bunx paperapi call dev.example.weather command.follow-city '{"city":""}'
+✗ dev.example.weather command.follow-city failed: Enter a city name
 $ echo $?
 1`;
 
 const MONITOR = `$ timeout 10 bunx paperapi monitor --panel dev.example.weather --json
-{"type":"rpc","at":1793802300891,"panel":null,"method":"actions:call","target":"dev.example.weather","ms":0.2,"ok":true,"args":{"panelId":"dev.example.weather","action":"__getState","args":{"type":"array","size":1},"timeoutMs":30000}}`;
+{"type":"rpc","at":1793802300891,"panel":null,"method":"blocks:call","target":"dev.example.weather","ms":0.2,"ok":true,"args":{"panelId":"dev.example.weather","entry":{"type":"string","size":17},"request":{"type":"object","keys":["inputs"]},"timeoutMs":30000}}`;
 
 export default function AgentsGuideDoc() {
     return (
@@ -91,7 +91,7 @@ export default function AgentsGuideDoc() {
             <PaperTextList>
                 <li>Name the panel's id and name in the first line if you have picked them, such as <PaperCode>dev.example.weather</PaperCode> and Weather.</li>
                 <li>Say which services and accounts it uses, and where the agent gets a test key. Enter the key in the panel's own page in the test Paperboard yourself, so it goes to secretsApi and never into the chat or the code.</li>
-                <li>Ask for one part at a time on a large panel: the service first, then the page, then actions and widgets. The guides follow the same order.</li>
+                <li>Ask for one part at a time on a large panel: the service first, then the page, then blocks and widgets. The guides follow the same order.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="test-paperboard">Give it a test Paperboard</PaperText>
@@ -118,14 +118,14 @@ export default function AgentsGuideDoc() {
                     <tr><td><PaperCode>bun run build</PaperCode></td><td>The page, widgets and service compile, with no type errors.</td></tr>
                     <tr><td><PaperCode>bun test</PaperCode></td><td>The panel's rules hold, and no page has an inline style or a modal in the wrong place.</td></tr>
                     <tr><td><PaperCode>bunx paperapi doctor</PaperCode></td><td>The manifest is valid, the build is complete, the panel is linked, and its service answers. Each failed line says what to run next.</td></tr>
-                    <tr><td><PaperCode>bunx paperapi call &lt;panel-id&gt;</PaperCode></td><td>Lists the panel's actions. With an action id and JSON input, runs it and prints the result or the error.</td></tr>
+                    <tr><td><PaperCode>bunx paperapi call &lt;panel-id&gt;</PaperCode></td><td>Lists the panel's blocks. With a block's entry and JSON inputs, or a service call's name and JSON input, runs it and prints the result or the error.</td></tr>
                     <tr><td><PaperCode>bunx paperapi monitor --panel &lt;panel-id&gt; --json</PaperCode></td><td>Every call, event and service change of the panel, one JSON object per line.</td></tr>
-                    <tr><td>The end-to-end tests</td><td>The actions work through a running Paperboard. See <PaperLink href="/docs/developers/testing/#end-to-end">End-to-end tests</PaperLink>.</td></tr>
+                    <tr><td>The end-to-end tests</td><td>The blocks work through a running Paperboard. See <PaperLink href="/docs/developers/testing/#end-to-end">End-to-end tests</PaperLink>.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperCode block language="sh">{CHECK}</PaperCode>
             <PaperTextList>
-                <li>A failed call exits with 1 and prints the action's own message. The call with an empty city has to fail with a sentence a person can act on: an agent that only tries good input never sees the failures.</li>
+                <li>A failed call exits with 1 and prints the block's own message. The call with an empty city has to fail with a sentence a person can act on: an agent that only tries good input never sees the failures.</li>
                 <li><PaperCode>monitor</PaperCode> runs until it is stopped. Have the agent run it with a time limit, or in the background and stop it when it has what it needs, so the run never hangs on it.</li>
                 <li><PaperCode>--json</PaperCode> sends only the records to standard output, and the <PaperCode>Watching</PaperCode> line to standard error, so the output parses line by line.</li>
             </PaperTextList>

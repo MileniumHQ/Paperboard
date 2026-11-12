@@ -42,8 +42,8 @@
                     "name": "Settings and secrets",
                     "index": 4
                 },
-                "actions": {
-                    "name": "Expose actions",
+                "blocks": {
+                    "name": "Expose blocks",
                     "index": 5
                 },
                 "widgets": {

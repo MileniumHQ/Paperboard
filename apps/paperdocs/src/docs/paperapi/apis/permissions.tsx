@@ -12,7 +12,7 @@ export default function PermissionsDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">Permissions</PaperText>
             <PaperText preset="body" as="p">
-                A panel can reach its own data, any panel's actions and events, the microphone, camera and screen once the person allows it, and the internet.
+                A panel can reach its own data, any panel's blocks and events, the microphone, camera and screen once the person allows it, and the internet.
                 Panels are reviewed and first-party, so this isn't a sandbox: a panel can start any program on its computer.
                 What the daemon does enforce is ownership, and this page lists it exactly.
             </PaperText>
@@ -32,7 +32,7 @@ export default function PermissionsDoc() {
                 <li><PaperLink href="/docs/paperapi/config/">configApi</PaperLink>, <PaperLink href="/docs/paperapi/secrets/">secretsApi</PaperLink> and <PaperLink href="/docs/paperapi/file/">fileApi</PaperLink></li>
                 <li><PaperLink href="/docs/paperapi/ports/">portApi</PaperLink> and <PaperLink href="/docs/paperapi/backups/">backupsApi</PaperLink></li>
                 <li><PaperLink href="/docs/paperapi/panels/">panelsApi</PaperLink> <PaperCode>restartService</PaperCode> and <PaperCode>uninstall</PaperCode></li>
-                <li>Registering actions, firing events and triggers, with <PaperLink href="/docs/paperapi/actions/">actionsApi</PaperLink></li>
+                <li>Registering blocks, firing events and announcing value changes, with <PaperLink href="/docs/paperapi/blocks/">blocksApi</PaperLink></li>
             </PaperTextList>
             <PaperText preset="body" as="p">
                 Any other id is refused with <PaperCode>FORBIDDEN</PaperCode>:
@@ -46,8 +46,8 @@ export default function PermissionsDoc() {
 
             <PaperText preset="subheader" as="h2" id="shared">Shared between panels</PaperText>
             <PaperTextList>
-                <li>Any panel can call any other panel's actions, except the ones its definition marks <PaperCode>internal</PaperCode>. An internal action called by another panel is refused with <PaperCode>Action "&lt;action&gt;" is internal to panel "&lt;panel&gt;"</PaperCode> (<PaperCode>FORBIDDEN</PaperCode>).</li>
-                <li>Any panel can listen to any panel's events and triggers.</li>
+                <li>Any panel can run any other panel's blocks, except the ones its definition marks <PaperCode>internal</PaperCode>, which include the calls a service declares for its own page. An internal block run by another panel is refused with <PaperCode>Block "&lt;entry&gt;" is internal to panel "&lt;panel&gt;"</PaperCode> (<PaperCode>FORBIDDEN</PaperCode>).</li>
+                <li>Any panel can listen to any panel's events.</li>
                 <li>Any panel can list the installed panels and the registry, and read the computer's details with <PaperLink href="/docs/paperapi/system/">systemApi</PaperLink>.</li>
                 <li>Packages from <PaperLink href="/docs/paperapi/package/">packageApi</PaperLink> are installed once per computer, for every panel.</li>
             </PaperTextList>

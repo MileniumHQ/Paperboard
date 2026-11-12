@@ -12,7 +12,7 @@ export default function BridgeApiDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">createPanelBridge</PaperText>
             <PaperText preset="body" as="p">
-                createPanelBridge connects a panel page or widget to its own service: it keeps a copy of the service's state and calls the service's actions.
+                createPanelBridge connects a panel page or widget to its own service: it keeps a copy of the service's state, calls the service and hears what it emits.
                 Create one in the panel's interface wherever it shows what the <PaperLink href="/docs/paperapi/service/">service</PaperLink> holds.
                 The bridge works on a panel page and in a widget. A service has no bridge: it owns the state.
             </PaperText>
@@ -33,12 +33,12 @@ interface Forecast {
     low: number;
 }
 
-interface WeatherActions {
-    forecast(inputs: { city: string }): Promise<Forecast>;
+interface WeatherCalls {
+    forecast(input: { city: string }): Promise<Forecast>;
 }
 
 export function WeatherView() {
-    const bridge = createPanelBridge<WeatherState, WeatherActions>({
+    const bridge = createPanelBridge<WeatherState, WeatherCalls>({
         defaultState: { lastCity: "" },
     });
     const [state, setState] = createSignal(bridge.getState());
@@ -54,7 +54,7 @@ export function WeatherView() {
     const load = async () => {
         setFailure("");
         try {
-            setForecast(await bridge.actions.forecast({ city: "Lisbon" }));
+            setForecast(await bridge.calls.forecast({ city: "Lisbon" }));
         } catch (err) {
             setFailure(err instanceof Error ? err.message : String(err));
         }
@@ -81,8 +81,8 @@ export function WeatherView() {
             <PaperCode block language="tsx">
 {`function createPanelBridge<
     TState extends Record<string, any> = Record<string, any>,
-    TActions extends Record<string, (...args: any[]) => Promise<any>> = Record<string, (...args: any[]) => Promise<any>>,
->(options?: PanelBridgeOptions<TState>): PanelBridge<TState, TActions>;
+    TCalls extends Record<string, (input?: any) => Promise<any>> = Record<string, (input?: any) => Promise<any>>,
+>(options?: PanelBridgeOptions<TState>): PanelBridge<TState, TCalls>;
 
 interface PanelBridgeOptions<TState> {
     /** defaults to getPanelId(), the panel the page belongs to */
@@ -126,14 +126,19 @@ interface PanelBridgeOptions<TState> {
                         <td>The result of the last refresh: <PaperCode>ready</PaperCode> is true when it succeeded, and <PaperCode>error</PaperCode> holds its message when it failed.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>actions</PaperCode></td>
-                        <td><PaperCode>TActions</PaperCode></td>
-                        <td>A proxy: <PaperCode>bridge.actions.forecast(inputs, options)</PaperCode> is <PaperCode>actionsApi.call(panelId, "forecast", inputs, options)</PaperCode>. Any name works, so a misspelled one rejects at call time with <PaperCode>not registered or unavailable</PaperCode>.</td>
+                        <td><PaperCode>calls</PaperCode></td>
+                        <td><PaperCode>TCalls</PaperCode></td>
+                        <td>A proxy: <PaperCode>bridge.calls.forecast(input)</PaperCode> is <PaperCode>bridge.call("forecast", input)</PaperCode>. Any name works, so a misspelled one rejects at call time with <PaperCode>not registered or unavailable</PaperCode>.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>call(name, inputs?, options?)</PaperCode></td>
-                        <td><PaperCode>&lt;R&gt;(actionName: string, ...args: any[]) =&gt; Promise&lt;R&gt;</PaperCode></td>
-                        <td>The same call by name. <PaperCode>options</PaperCode> is an <PaperLink href="/docs/paperapi/actions/#calling">ActionCallOptions</PaperLink>, for a longer timeout.</td>
+                        <td><PaperCode>call(name, input?)</PaperCode></td>
+                        <td><PaperCode>&lt;R&gt;(name: string, input?: unknown) =&gt; Promise&lt;R&gt;</PaperCode></td>
+                        <td>Runs the call of that name that the service declares in <PaperCode>calls</PaperCode>, with one input of any JSON, and resolves with what it returned, or <PaperCode>null</PaperCode> when it returned nothing. It is <PaperCode>serviceApi.call(panelId, name, input)</PaperCode>.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>on(event, callback)</PaperCode></td>
+                        <td><PaperCode>&lt;T&gt;(event: string, callback: (payload: T) =&gt; void) =&gt; () =&gt; void</PaperCode></td>
+                        <td>Calls <PaperCode>callback</PaperCode> with the payload each time the service does <PaperCode>ctx.emit(event, payload)</PaperCode>. Returns the function that stops it. It is <PaperCode>serviceApi.on(panelId, event, callback)</PaperCode>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>dispose()</PaperCode></td>
@@ -145,7 +150,7 @@ interface PanelBridgeOptions<TState> {
 
             <PaperText preset="subheader" as="h2" id="state-sync">State sync</PaperText>
             <PaperTextList ordered>
-                <li>On creation, the bridge subscribes to the service's <PaperCode>__stateChanged</PaperCode> event and asks for the whole state with the internal <PaperCode>__getState</PaperCode> action.</li>
+                <li>On creation, the bridge listens for the service's internal <PaperCode>panel-state-changed</PaperCode> event and reads the whole state from its internal <PaperCode>panel-state</PaperCode> value.</li>
                 <li>Each <PaperCode>setState</PaperCode> in the service arrives as a patch. The bridge merges it into its copy, one level deep, and calls every <PaperCode>onStateChange</PaperCode> callback.</li>
                 <li>The copy is not a reactive store. Each merge replaces it with a new object, so put <PaperCode>full</PaperCode> into a signal from <PaperCode>onStateChange</PaperCode>, as the sample does, for the page to update.</li>
                 <li>Patches sent while the page was disconnected are lost. After a reconnect, call <PaperCode>refreshState()</PaperCode> to catch up.</li>
@@ -172,16 +177,16 @@ interface PanelBridgeOptions<TState> {
                         <td>The page holds 128 bridges. Thrown by <PaperCode>createPanelBridge</PaperCode>.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>Action "&lt;name&gt;" on panel "&lt;id&gt;" is not registered or unavailable</PaperCode></td>
-                        <td>The service is not running, has not registered the action yet, or the name is wrong.</td>
+                        <td><PaperCode>Block "command.call-&lt;name&gt;" on panel "&lt;id&gt;" is not registered or unavailable</PaperCode></td>
+                        <td>The service is not running, has not registered its calls yet, or the name is wrong.</td>
                     </tr>
                     <tr>
-                        <td>The action's own message</td>
-                        <td>The service's handler threw. The call rejects with the same text.</td>
+                        <td>The call's own message</td>
+                        <td>The service's call threw. The caller rejects with the same text.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>PaperCrane 'actions:call' timed out</PaperCode></td>
-                        <td>The action ran longer than the call's timeout, 30 seconds unless <PaperCode>timeoutMs</PaperCode> says otherwise.</td>
+                        <td><PaperCode>Block call "&lt;id&gt;:command.call-&lt;name&gt;" timed out after 30000ms</PaperCode></td>
+                        <td>The call ran longer than 30 seconds.</td>
                     </tr>
                 </tbody>
             </PaperTable>

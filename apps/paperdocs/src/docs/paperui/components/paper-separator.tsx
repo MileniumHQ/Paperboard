@@ -114,7 +114,7 @@ export function Example() {
 
             <PaperText preset="subheader" as="h3" id="menu-groups">Splitting a menu</PaperText>
             <PaperText preset="body" as="p">
-                The Actions panel puts a separator before the destructive item of its project menu.
+                The Blocks panel puts a separator before the destructive item of its project menu.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { PaperContextMenuItem, PaperSeparator } from "@mileniumhq/paperui";

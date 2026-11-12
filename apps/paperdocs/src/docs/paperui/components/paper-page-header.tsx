@@ -115,7 +115,7 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
             <PaperText preset="subheader" as="h3" id="title-only">Title with an optional action</PaperText>
             <PaperText preset="body" as="p">
-                The Actions panel shows its New project button only when there are projects, because an empty page offers it in the empty state instead.
+                The Blocks panel shows its New project button only when there are projects, because an empty page offers it in the empty state instead.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { Show } from "solid-js";

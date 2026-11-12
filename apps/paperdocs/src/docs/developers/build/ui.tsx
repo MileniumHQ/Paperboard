@@ -62,7 +62,7 @@ export default function ForecastPage(props: { openSettings: () => void }) {
         setBusy(true);
         setFailure("");
         try {
-            await bridge.call<boolean>("follow-city", { city: city() });
+            await bridge.call<boolean>("followCity", { city: city() });
             setCity("");
         } catch (err) {
             setFailure(errorMessage(err));

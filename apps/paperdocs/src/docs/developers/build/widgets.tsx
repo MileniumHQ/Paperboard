@@ -259,8 +259,8 @@ export default function WidgetsGuideDoc() {
             </PaperText>
             <PaperCode block language="tsx">{WIDGET_CHOICES}</PaperCode>
             <PaperCode block language="sh">
-{`$ bunx paperapi call dev.example.weather __widgetChoices '{"widgetId":"forecast","optionId":"city"}'
-✓ dev.example.weather __widgetChoices · 0.6 ms
+{`$ bunx paperapi call dev.example.weather command.widget-choices '{"widget":"forecast","option":"city"}'
+✓ dev.example.weather command.widget-choices · 0.6 ms
 [
   {
     "value": "Oslo",

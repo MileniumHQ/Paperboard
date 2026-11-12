@@ -55,7 +55,7 @@ export default function PackagingGuideDoc() {
 
             <PaperText preset="subheader" as="h2" id="icon">Give it an icon</PaperText>
             <PaperText preset="body" as="p">
-                Paperboard shows the icon in the panel list, and the Actions panel shows it on every block of the panel's actions.
+                Paperboard shows the icon in the panel list, and the Blocks panel shows it on every block of the panel.
                 A panel without one gets a stand-in in the list and a broken image on its blocks.
                 Save a square PNG as <PaperCode>branding/icon.png</PaperCode> and name it in the manifest:
             </PaperText>

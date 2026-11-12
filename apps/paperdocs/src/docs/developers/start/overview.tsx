@@ -47,7 +47,7 @@ export default function GuidesOverviewDoc() {
                     </tr>
                     <tr>
                         <td>Service</td>
-                        <td>A background program the Paperboard server daemon keeps running, with or without a window open. It holds the panel's state and offers its actions.</td>
+                        <td>A background program the Paperboard server daemon keeps running, with or without a window open. It holds the panel's state and offers its blocks.</td>
                         <td><PaperLink href="/docs/developers/services/">Services and state</PaperLink></td>
                     </tr>
                     <tr>
@@ -56,9 +56,9 @@ export default function GuidesOverviewDoc() {
                         <td><PaperLink href="/docs/developers/widgets/">Add a Home widget</PaperLink></td>
                     </tr>
                     <tr>
-                        <td>Actions</td>
-                        <td>What the panel offers to other panels, to flows in the Actions panel, and to agents.</td>
-                        <td><PaperLink href="/docs/developers/actions/">Expose actions</PaperLink></td>
+                        <td>Blocks</td>
+                        <td>What the panel offers to other panels, to flows in the Blocks panel, and to agents.</td>
+                        <td><PaperLink href="/docs/developers/blocks/">Expose blocks</PaperLink></td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -101,14 +101,14 @@ export default function GuidesOverviewDoc() {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td><PaperLink href="/docs/developers/first-panel/">Your first panel</PaperLink></td><td>Make a panel, run it in Paperboard, and add an action to it.</td></tr>
+                    <tr><td><PaperLink href="/docs/developers/first-panel/">Your first panel</PaperLink></td><td>Make a panel, run it in Paperboard, and add a call to it.</td></tr>
                     <tr><td><PaperLink href="/docs/developers/anatomy/">Anatomy of a panel</PaperLink></td><td>Learn what each file in the panel folder does.</td></tr>
                     <tr><td><PaperLink href="/docs/developers/dev-loop/">The development loop</PaperLink></td><td>Build, restart, call and watch a panel while you work.</td></tr>
                     <tr><td><PaperLink href="/docs/developers/services/">Services and state</PaperLink></td><td>Keep state in a service and mirror it in every window.</td></tr>
                     <tr><td><PaperLink href="/docs/developers/ui/">Design the interface</PaperLink></td><td>Lay out pages with PaperUI.</td></tr>
                     <tr><td><PaperLink href="/docs/developers/errors/">Show every failure</PaperLink></td><td>Throw failures with reasons and show them.</td></tr>
                     <tr><td><PaperLink href="/docs/developers/settings-and-secrets/">Settings and secrets</PaperLink></td><td>Save settings, and keep keys out of them.</td></tr>
-                    <tr><td><PaperLink href="/docs/developers/actions/">Expose actions</PaperLink></td><td>Offer actions and triggers to flows and agents.</td></tr>
+                    <tr><td><PaperLink href="/docs/developers/blocks/">Expose blocks</PaperLink></td><td>Offer blocks and events to flows and agents.</td></tr>
                     <tr><td><PaperLink href="/docs/developers/widgets/">Add a Home widget</PaperLink></td><td>Put one live fact on Home.</td></tr>
                     <tr><td><PaperLink href="/docs/developers/testing/">Test a panel</PaperLink></td><td>Unit tests, and tests against a real Paperboard.</td></tr>
                     <tr><td><PaperLink href="/docs/developers/checklist/">Panel checklist</PaperLink></td><td>Check the panel before you ship it.</td></tr>

@@ -12,7 +12,7 @@ export default function PaperApiCliDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">paperapi</PaperText>
             <PaperText preset="body" as="p">
-                The paperapi command links a panel folder into Paperboard, checks it, calls its actions, watches its traffic, and packs it for release.
+                The paperapi command links a panel folder into Paperboard, checks it, runs its blocks and calls, watches its traffic, and packs it for release.
                 It ships with <PaperCode>@mileniumhq/paperapi</PaperCode> and works on the data folder of the Paperboard you run on this computer.
                 Use it for the whole development loop: link once, then build, restart, call and watch.
             </PaperText>
@@ -63,9 +63,9 @@ bunx paperapi doctor`}
                         <td>Prints PaperAPI calls, events, service changes and process changes on this computer as they happen.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>call &lt;panel-id&gt; [action] [inputs]</PaperCode></td>
+                        <td><PaperCode>call &lt;panel-id&gt; [name] [inputs]</PaperCode></td>
                         <td><PaperCode>-t, --timeout &lt;ms&gt;</PaperCode></td>
-                        <td>Calls a panel's action and prints its result as JSON. With no action, lists the panel's actions.</td>
+                        <td>Runs one of a panel's blocks or one of its service's calls and prints the result as JSON. With no name, lists the panel's blocks.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>restart [panel]</PaperCode></td>
@@ -129,7 +129,7 @@ bunx paperapi doctor`}
                 </thead>
                 <tbody>
                     <tr><td><PaperCode>0</PaperCode></td><td>The command did what it was asked.</td></tr>
-                    <tr><td><PaperCode>1</PaperCode></td><td>It failed: Paperboard is not running, the action threw, <PaperCode>doctor</PaperCode> found a problem.</td></tr>
+                    <tr><td><PaperCode>1</PaperCode></td><td>It failed: Paperboard is not running, the block or call threw, <PaperCode>doctor</PaperCode> found a problem.</td></tr>
                     <tr><td><PaperCode>2</PaperCode></td><td>The command line is wrong: an unknown command or option, an invalid panel id, inputs that are not JSON, a bad timeout.</td></tr>
                 </tbody>
             </PaperTable>
@@ -137,7 +137,7 @@ bunx paperapi doctor`}
                 A failure prints one line starting with <PaperCode>✗</PaperCode> on standard error, then an indented hint when there is a known fix.
             </PaperText>
             <PaperCode block language="sh">
-{`$ bunx paperapi call dev.example.weather forecast '{city:"Oslo"}'
+{`$ bunx paperapi call dev.example.weather command.get-forecast '{city:"Oslo"}'
 ✗ The inputs are not JSON: JSON Parse error: Expected '}'
   Pass one JSON value, quoted for your shell: '{"name":"Ada"}', or '"text"' for a string.`}
             </PaperCode>
@@ -145,7 +145,7 @@ bunx paperapi doctor`}
             <PaperText preset="subheader" as="h2" id="connecting">How it reaches Paperboard</PaperText>
             <PaperText preset="body" as="p">
                 <PaperCode>doctor</PaperCode>, <PaperCode>monitor</PaperCode>, <PaperCode>call</PaperCode> and <PaperCode>restart</PaperCode> read the port and the host token from <PaperCode>$PAPERBOARD_DIR/local/crane.json</PaperCode>, which the running Paperboard server daemon writes.
-                They connect as the host, so they can call any panel's actions, internal ones too.
+                They connect as the host, so they can run any panel's blocks, internal ones too.
                 Before sending the token, the command makes the listener prove it holds the same token, so a different program on that port never receives it.
                 A daemon started with authentication off is refused.
             </PaperText>
@@ -234,7 +234,7 @@ $ bunx paperapi links --json
                     </tr>
                     <tr>
                         <td>Service</td>
-                        <td>The manifest names a service that has registered nothing with Paperboard.</td>
+                        <td>The manifest names a service that does not answer a read of its state.</td>
                         <td>Never. Skipped for a panel without a service.</td>
                     </tr>
                 </tbody>
@@ -259,7 +259,7 @@ dev.example.weather in .
   ✓ Build       dist/index.html, dist/service.js
   ✓ Link        /home/ada/.paperboard/panels/dev.example.weather → .
   ✓ Paperboard  running at 127.0.0.1:47911, data in /home/ada/.paperboard
-  ✓ Service     answering, with 3 actions registered
+  ✓ Service     answering
 
 Ready: Paperboard can run this panel.`}
             </PaperCode>
@@ -275,7 +275,7 @@ Ready: Paperboard can run this panel.`}
     { "name": "Build", "status": "ok", "detail": "dist/index.html, dist/service.js" },
     { "name": "Link", "status": "ok", "detail": "/home/ada/.paperboard/panels/dev.example.weather → ." },
     { "name": "Paperboard", "status": "ok", "detail": "running at 127.0.0.1:47911, data in /home/ada/.paperboard" },
-    { "name": "Service", "status": "ok", "detail": "answering, with 3 actions registered" }
+    { "name": "Service", "status": "ok", "detail": "answering" }
   ],
   "problems": 0,
   "warnings": 0
@@ -284,30 +284,52 @@ Ready: Paperboard can run this panel.`}
 
             <PaperText preset="subheader" as="h2" id="call">call</PaperText>
             <PaperText preset="body" as="p">
-                <PaperCode>inputs</PaperCode> is one JSON value, quoted for your shell. It reaches the action as its inputs.
+                The name decides what runs. A name shaped like a block, <PaperCode>command.get-forecast</PaperCode>, <PaperCode>value.player-count</PaperCode> or <PaperCode>server1/command.kick</PaperCode> for a block in a project, runs that block, and the inputs are one JSON object that names each input.
+                Any other name, such as <PaperCode>followCity</PaperCode>, runs the call of that name that the panel's service declares in <PaperCode>definePanelService</PaperCode>, and the inputs are any one JSON value.
                 The result is printed as indented JSON on standard output, after a status line on standard error with the time the call took.
+            </PaperText>
+            <PaperText preset="body" as="p">
+                With no name, the command lists the panel's blocks. A service's own calls are not blocks anyone lists, so name one to run it.
             </PaperText>
             <PaperCode block language="sh">
 {`$ bunx paperapi call dev.example.weather
-3 actions on dev.example.weather:
-__getState  Get Panel State (internal)
-forecast    Get forecast  (city: string)
-save-key    Save API key  (key: string)
+3 blocks on dev.example.weather:
+command.follow-city   Follow City  (city: text)
+command.get-forecast  Get Forecast  (city: text)
+event.freezing        When a City Freezes
 
-$ bunx paperapi call dev.example.weather forecast '{"city":"Oslo"}'
-✓ dev.example.weather forecast · 1.3 ms
+$ bunx paperapi call dev.example.weather command.get-forecast '{"city":"Oslo"}'
+✓ dev.example.weather command.get-forecast · 1.3 ms
 {
-  "city": "Oslo",
+  "temperature": 18,
   "high": 21,
-  "low": 12
+  "low": 12,
+  "summary": "Clear"
+}
+
+$ bunx paperapi call dev.example.weather followCity '{"city":"Oslo"}'
+✓ dev.example.weather followCity · 1.5 ms
+
+$ bunx paperapi call dev.example.weather value.panel-state
+✓ dev.example.weather value.panel-state · 0.8 ms
+{
+  "settings": { "cities": ["Oslo"], "units": "metric" },
+  "forecasts": {},
+  "failures": {}
 }
 
 $ bunx paperapi call dev.example.weather nope
-✗ dev.example.weather nope failed: Action "nope" on panel "dev.example.weather" is not registered or unavailable
-  See what dev.example.weather offers: paperapi call dev.example.weather`}
+✗ dev.example.weather nope failed: Block "command.call-nope" on panel "dev.example.weather" is not registered or unavailable
+  See dev.example.weather's blocks: paperapi call dev.example.weather. A call is one its service declares in definePanelService's calls.`}
             </PaperCode>
+            <PaperTextList>
+                <li>A block run with inputs that are not an object exits 2 with <PaperCode>A block's inputs are one JSON object</PaperCode>.</li>
+                <li>A call name becomes the id <PaperCode>call-&lt;kebab-name&gt;</PaperCode>, so <PaperCode>followCity</PaperCode> and <PaperCode>follow-city</PaperCode> are the same call.</li>
+                <li><PaperCode>value.panel-state</PaperCode> prints the service's whole state. It is the internal value the panel's pages read, and the one <PaperCode>doctor</PaperCode> reads.</li>
+                <li>A panel with no blocks right now fails the listing with <PaperCode>has no blocks to run right now</PaperCode>. Run <PaperCode>doctor</PaperCode> to see whether its service is up.</li>
+            </PaperTextList>
             <PaperText preset="body" as="p">
-                <PaperCode>--timeout</PaperCode> takes a whole number of milliseconds from 1 to 60000, or <PaperCode>none</PaperCode> to wait for as long as the action runs. The default is 30000.
+                <PaperCode>--timeout</PaperCode> takes a whole number of milliseconds from 1 to 60000, or <PaperCode>none</PaperCode> to wait for as long as the block runs. The default is 30000.
                 Any other value exits 2 with <PaperCode>--timeout must be a whole number of milliseconds from 1 to 60000, or "none"</PaperCode>.
             </PaperText>
 
@@ -337,8 +359,8 @@ $ bunx paperapi restart dev.example.nothing
             <PaperCode block language="sh">
 {`$ bunx paperapi monitor
 Watching every panel on Paperboard at 127.0.0.1:47911. Press Ctrl+C to stop.
-04:50:13.009  host                      actions:call                         1.0 ms  ok  panelId=dev.example.weather action=forecast args=[1] timeoutMs=30000
-04:50:13.010  dev.example.weather       event actions:dev.example.weather:__stateChanged  109 B → 0 sockets
+04:50:13.009  host                      blocks:call                          1.0 ms  ok  panelId=dev.example.weather entry=‹20 chars› request={inputs} timeoutMs=30000
+04:50:13.010  dev.example.weather       event blocks:dev.example.weather:event.panel-state-changed  109 B → 0 sockets
 04:50:13.048  dev.example.weather       secrets:set                          0.8 ms  ok  name=apiKey value=‹15 chars› duringCall=‹41 chars›
 04:50:13.049  dev.example.weather       config:set                           0.6 ms  ok  id=dev.example.weather data={city,units} duringCall=‹41 chars›
 04:50:13.089  dev.example.weather       service stopped                   code null
@@ -352,7 +374,7 @@ Watching every panel on Paperboard at 127.0.0.1:47911. Press Ctrl+C to stop.
 
             <PaperText preset="subheader" as="h3" id="monitor-redaction">What the monitor shows of arguments</PaperText>
             <PaperText preset="body" as="p">
-                The daemon never sends secret values, file contents, config documents, action inputs or results to the monitor.
+                The daemon never sends secret values, file contents, config documents, block inputs or results to the monitor.
                 Arguments that name things are shown by value when they are a number, a boolean, null, or a string of at most 256 characters:
             </PaperText>
             <PaperCode block language="text">

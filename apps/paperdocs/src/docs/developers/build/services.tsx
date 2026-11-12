@@ -51,7 +51,7 @@ export const DEFAULT_STATE: WeatherState = {
 
 export const API_KEY_SECRET = "openweather-key";`;
 
-const SERVICE_TS = `import { configApi, defineAction, definePanelService, secretsApi, type ServiceContext } from "@mileniumhq/paperapi";
+const SERVICE_TS = `import { configApi, definePanelService, secretsApi, type ServiceContext } from "@mileniumhq/paperapi";
 import { cityName, currentWeatherUrl, readCurrentWeather } from "./lib/openWeather";
 import { API_KEY_SECRET, DEFAULT_SETTINGS, DEFAULT_STATE, PANEL_ID, type WeatherSettings, type WeatherState } from "./panel";
 
@@ -88,25 +88,17 @@ async function refreshAll(ctx: Ctx): Promise<void> {
 export default definePanelService({
     id: PANEL_ID,
     state: DEFAULT_STATE,
-    actions: [
-        defineAction({
-            id: "follow-city",
-            name: "Follow city",
-            description: "Adds a city to the ones Weather checks every 15 minutes",
-            inputs: {
-                city: { type: "string", label: "City", placeholder: "City", required: true, maxLength: 64 },
-            },
-            output: "boolean",
-            run: async (ctx: Ctx, inputs: { city?: string }) => {
-                const city = cityName(inputs.city);
-                const { settings } = ctx.state;
-                if (settings.cities.includes(city)) throw new Error(\`Weather already follows \${city}\`);
-                await saveSettings(ctx, { ...settings, cities: [...settings.cities, city] });
-                await refreshCity(ctx, city);
-                return true;
-            },
-        }),
-    ],
+    // what the panel's own page asks the service: bridge.call("followCity", { city })
+    calls: {
+        followCity: async (ctx: Ctx, input?: { city?: string }) => {
+            const city = cityName(input?.city);
+            const { settings } = ctx.state;
+            if (settings.cities.includes(city)) throw new Error(\`Weather already follows \${city}\`);
+            await saveSettings(ctx, { ...settings, cities: [...settings.cities, city] });
+            await refreshCity(ctx, city);
+            return true;
+        },
+    },
     async onInit(ctx: Ctx) {
         try {
             const saved = await configApi.get<WeatherSettings>(PANEL_ID);
@@ -183,7 +175,7 @@ export default function ServicesDoc() {
                     <tr><td>Shows something and acts only when a person presses a button</td><td>Not needed. The page calls the APIs itself.</td></tr>
                     <tr><td>Works on a schedule, such as Weather's check every 15 minutes</td><td>Needed. The page runs only while a window shows it.</td></tr>
                     <tr><td>Runs a server, a bot, or another long-running program</td><td>Needed. It starts the program and watches it.</td></tr>
-                    <tr><td>Offers actions to flows, agents or other panels</td><td>Needed. Actions are registered by the service.</td></tr>
+                    <tr><td>Offers blocks to flows, agents or other panels</td><td>Needed. Blocks are registered by the service.</td></tr>
                     <tr><td>Has a Home widget that shows live data</td><td>Needed. The widget reads the service's state.</td></tr>
                 </tbody>
             </PaperTable>
@@ -203,14 +195,14 @@ export default function ServicesDoc() {
 
             <PaperText preset="subheader" as="h2" id="write-the-service">Write the service</PaperText>
             <PaperText preset="body" as="p">
-                Here is Weather's service with one of its actions. Its parts are explained below.
+                Here is Weather's service with one of its calls. Its parts are explained below.
             </PaperText>
             <PaperCode block language="tsx">{SERVICE_TS}</PaperCode>
 
             <PaperText preset="title" as="h3" id="set-state">Change the state with setState</PaperText>
             <PaperTextList>
                 <li><PaperCode>ctx.state</PaperCode> is the current state. Read it, never change it in place.</li>
-                <li><PaperCode>ctx.setState(patch)</PaperCode> replaces the top-level keys in the patch and keeps the others. <PaperCode>{"{ settings }"}</PaperCode> replaces the whole <PaperCode>settings</PaperCode> object, so build the new one from the old, as <PaperCode>follow-city</PaperCode> does.</li>
+                <li><PaperCode>ctx.setState(patch)</PaperCode> replaces the top-level keys in the patch and keeps the others. <PaperCode>{"{ settings }"}</PaperCode> replaces the whole <PaperCode>settings</PaperCode> object, so build the new one from the old, as <PaperCode>followCity</PaperCode> does.</li>
                 <li>Pass a function, <PaperCode>{"ctx.setState((prev) => ({ ... }))"}</PaperCode>, when the new value depends on the old one and the code awaited something since it read it. Two cities that finish at once each add their own entry to <PaperCode>forecasts</PaperCode>.</li>
                 <li>Each patch is sent to every open window and widget of the panel. Patches made while one is on its way are sent together in the next.</li>
             </PaperTextList>
@@ -229,8 +221,8 @@ export default function ServicesDoc() {
             <PaperText preset="title" as="h3" id="save">Save first, then show</PaperText>
             <PaperText preset="body" as="p">
                 What must outlive a restart goes to <PaperLink href="/docs/paperapi/config/">configApi</PaperLink>, the panel's settings document.
-                <PaperCode>saveSettings</PaperCode> awaits <PaperCode>configApi.set</PaperCode> before it changes the state. When the save fails, the action fails with the reason and the window still shows what is on disk.
-                Make the service the only code that writes the document. Pages and widgets ask it to, through an action.
+                <PaperCode>saveSettings</PaperCode> awaits <PaperCode>configApi.set</PaperCode> before it changes the state. When the save fails, the call fails with the reason and the window still shows what is on disk.
+                Make the service the only code that writes the document. Pages and widgets ask it to, through a call.
             </PaperText>
 
             <PaperText preset="title" as="h3" id="background-work">Work in the background</PaperText>
@@ -240,6 +232,17 @@ export default function ServicesDoc() {
                 A failure that only reaches the log is a failure nobody sees. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.
                 Give every <PaperCode>fetch</PaperCode> a timeout with <PaperCode>AbortSignal.timeout</PaperCode>, so a site that never answers can't hold the work up forever.
             </PaperText>
+
+            <PaperText preset="title" as="h3" id="calls">Answer the page with calls</PaperText>
+            <PaperText preset="body" as="p">
+                <PaperCode>calls</PaperCode> is what the panel's own page asks its service to do. Each call gets one optional input, any JSON, and what it returns goes back to the page. Returning nothing gives the page <PaperCode>null</PaperCode>.
+            </PaperText>
+            <PaperTextList>
+                <li>A call that throws rejects the page's <PaperCode>bridge.call</PaperCode> with the same message. Throw a sentence the person can act on.</li>
+                <li>Calls are private to the panel. No other panel, flow or agent can run one, and none is listed. What they should be able to do is a block: see <PaperLink href="/docs/developers/blocks/">Expose blocks</PaperLink>.</li>
+                <li>Tell the page that something happened with <PaperCode>ctx.emit(event, payload)</PaperCode>. The page hears it with <PaperCode>bridge.on(event, callback)</PaperCode>. Use it for what is not state, such as a line of output.</li>
+                <li>Check the input of every call. The page is trusted no more than a person is: <PaperCode>cityName</PaperCode> refuses an empty city.</li>
+            </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="mirror-on-the-page">Mirror the state on the page</PaperText>
             <PaperText preset="body" as="p">
@@ -253,8 +256,8 @@ export default function ServicesDoc() {
             <PaperCode block language="tsx">{PAGE_USE}</PaperCode>
             <PaperTextList>
                 <li>Make the bridge at module level, not inside a component. Paperboard waits for the bridges a page makes as it loads before it shows the panel, and shows the failure in place of the panel when one can't reach the service.</li>
-                <li>The page changes state only by calling an action, with <PaperCode>{"bridge.call(\"follow-city\", { city })"}</PaperCode>. The service's <PaperCode>setState</PaperCode> then reaches every window, including the one that called.</li>
-                <li><PaperCode>bridge.call</PaperCode> rejects with the message the action threw. Show it. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</li>
+                <li>The page changes state only by calling the service, with <PaperCode>{"bridge.call(\"followCity\", { city })"}</PaperCode>. The service's <PaperCode>setState</PaperCode> then reaches every window, including the one that called.</li>
+                <li><PaperCode>bridge.call</PaperCode> rejects with the message the call threw. Show it. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="programs">Run other programs</PaperText>
@@ -278,8 +281,8 @@ export default function ServicesDoc() {
             <PaperCode block language="sh">
 {`bun run build
 bunx paperapi restart
-bunx paperapi call dev.example.weather follow-city '{"city":"Oslo"}'
-bunx paperapi call dev.example.weather __getState`}
+bunx paperapi call dev.example.weather followCity '{"city":"Oslo"}'
+bunx paperapi call dev.example.weather value.panel-state`}
             </PaperCode>
             <PaperText preset="body" as="p">
                 The last command prints the service's whole state, with Oslo in <PaperCode>settings.cities</PaperCode>.

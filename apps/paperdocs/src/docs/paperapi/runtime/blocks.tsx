@@ -13,7 +13,8 @@ export default function BlocksApiDoc() {
             <PaperText preset="header" as="h1">blocksApi</PaperText>
             <PaperText preset="body" as="p">
                 blocksApi registers what a panel offers the Blocks panel, and is how the Blocks panel lists, runs and reads it.
-                It is the second version of <PaperLink href="/docs/paperapi/actions/">actionsApi</PaperLink>, and a registry of its own: Actions keeps working, and neither sees the other's blocks.
+                Agents use the same blocks as tools, and any other panel can run them.
+                A panel's own page uses it too, for the <PaperCode>internal</PaperCode> blocks that <PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink> makes of its <PaperCode>calls</PaperCode>.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="kinds">Four kinds of block</PaperText>

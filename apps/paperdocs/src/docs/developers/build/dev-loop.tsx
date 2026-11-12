@@ -81,24 +81,23 @@ dev.example.weather in .
                 <li>It exits 1 when any check fails, so a script can stop on it. <PaperCode>--json</PaperCode> prints the checks as one object.</li>
             </PaperTextList>
 
-            <PaperText preset="subheader" as="h2" id="call">Try an action: call</PaperText>
+            <PaperText preset="subheader" as="h2" id="call">Try a block or a call: call</PaperText>
             <PaperText preset="body" as="p">
-                <PaperCode>bunx paperapi call &lt;panel-id&gt;</PaperCode> lists the panel's actions with their inputs.
-                Add an action name and one JSON value to call it, as Paperboard and other panels do:
+                <PaperCode>bunx paperapi call &lt;panel-id&gt;</PaperCode> lists the panel's blocks with their inputs.
+                Add a block's entry and a JSON object to run it, as Paperboard and other panels do. A name that is not a block, such as the page's <PaperCode>followCity</PaperCode>, runs the service's call of that name with one JSON value:
             </PaperText>
             <PaperCode block language="sh">
-{`$ bunx paperapi call dev.example.weather follow-city '{"city":"Oslo"}'
-✓ dev.example.weather follow-city · 1.5 ms
-true
+{`$ bunx paperapi call dev.example.weather command.follow-city '{"city":"Oslo"}'
+✓ dev.example.weather command.follow-city · 1.5 ms
 
-$ bunx paperapi call dev.example.weather follow-city '{"city":"Oslo"}'
-✗ dev.example.weather follow-city failed: Weather already follows Oslo`}
+$ bunx paperapi call dev.example.weather command.follow-city '{"city":"Oslo"}'
+✗ dev.example.weather command.follow-city failed: Weather already follows Oslo`}
             </PaperCode>
             <PaperTextList>
                 <li>The result prints as JSON on standard output, so you can pipe it.</li>
                 <li>A thrown error prints its message and the command exits 1. That message is exactly what the panel page, a flow, or an agent would see.</li>
-                <li>The command calls as Paperboard itself, so it reaches internal actions too. <PaperCode>bunx paperapi call &lt;panel-id&gt; __getState</PaperCode> prints the service's whole state.</li>
-                <li>A call waits 30 seconds. Pass <PaperCode>--timeout none</PaperCode> for an action that runs longer.</li>
+                <li>The command calls as Paperboard itself, so it reaches internal blocks too. <PaperCode>bunx paperapi call &lt;panel-id&gt; value.panel-state</PaperCode> prints the service's whole state.</li>
+                <li>A call waits 30 seconds. Pass <PaperCode>--timeout none</PaperCode> for a block that runs longer.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="monitor">See what happens: monitor</PaperText>
@@ -107,11 +106,11 @@ $ bunx paperapi call dev.example.weather follow-city '{"city":"Oslo"}'
                 It prints a line for every PaperAPI call the panel makes or receives, every event it sends, and every start, stop and crash of its service:
             </PaperText>
             <PaperCode block language="text">
-{`05:54:57.678  host                      actions:call                         0.2 ms  ✗ INTERNAL Weather already follows Oslo  panelId=dev.example.weather action=follow-city args=[1] timeoutMs=30000
+{`05:54:57.678  host                      blocks:call                          0.2 ms  ✗ INTERNAL Weather already follows Oslo  panelId=dev.example.weather entry=‹19 chars› request={inputs} timeoutMs=30000
 05:54:57.736  dev.example.weather       config:set                           0.3 ms  ok  id=dev.example.weather data={cities,units} duringCall=‹41 chars›
-05:54:57.736  dev.example.weather       actions:emit                         0.0 ms  ok  event=__stateChanged payload={state} duringCall=‹41 chars›
+05:54:57.736  dev.example.weather       blocks:emit                          0.0 ms  ok  panelId=dev.example.weather entry=‹25 chars› payload={state} duringCall=‹41 chars›
 05:54:57.736  dev.example.weather       secrets:get                          0.0 ms  ok  name=openweather-key duringCall=‹41 chars›
-05:54:57.735  host                      actions:call                        11.5 ms  ok  panelId=dev.example.weather action=set-units args=[1] timeoutMs=30000
+05:54:57.735  host                      blocks:call                         11.5 ms  ok  panelId=dev.example.weather entry=‹22 chars› request={inputs} timeoutMs=30000
 05:55:13.000  dev.example.weather       service stopped                   code null
 05:55:13.000  dev.example.weather       service starting                  pid 2547010
 05:55:13.061  dev.example.weather       service ready                     pid 2547010`}
@@ -120,8 +119,8 @@ $ bunx paperapi call dev.example.weather follow-city '{"city":"Oslo"}'
                 <li>A button that does nothing shows here: either no call line appears, so the page never called, or a line with <PaperCode>✗</PaperCode> shows the call failed and why.</li>
                 <li>A service that keeps crashing shows as <PaperCode>service exited</PaperCode> and <PaperCode>service starting</PaperCode> lines. Its own output is in the log, below.</li>
                 <li>Only PaperAPI traffic shows. A <PaperCode>fetch</PaperCode> the service makes to a website does not, so log its failures and put them in the state.</li>
-                <li><PaperCode>duringCall</PaperCode> marks a call the panel made while it was answering another, such as the <PaperCode>config:set</PaperCode> inside <PaperCode>set-units</PaperCode>.</li>
-                <li>Secret values, file contents, config documents, action inputs and results never appear. <PaperLink href="/docs/paperapi/cli/#monitor-redaction">What the monitor shows</PaperLink> lists what does.</li>
+                <li><PaperCode>duringCall</PaperCode> marks a call the panel made while it was answering another, such as the <PaperCode>config:set</PaperCode> inside <PaperCode>setUnits</PaperCode>.</li>
+                <li>Secret values, file contents, config documents, block inputs and results never appear. <PaperLink href="/docs/paperapi/cli/#monitor-redaction">What the monitor shows</PaperLink> lists what does.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="logs">Read the service's output</PaperText>

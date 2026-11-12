@@ -117,9 +117,9 @@ const computerId = grantedComputerId();`}
             <PaperTextList>
                 <li>One WebSocket per computer, to <PaperCode>ws://127.0.0.1:&lt;port&gt;</PaperCode>. A paired computer is reached through the local daemon.</li>
                 <li>Opening the socket times out after 10 seconds with <PaperCode>PaperCrane connection timed out</PaperCode>.</li>
-                <li>A call times out after 30 seconds unless its API says otherwise, with <PaperCode>{"PaperCrane '<action>' timed out"}</PaperCode>. Downloads, installs, uninstalls, backups and restores have no timeout.</li>
-                <li>At most 1000 calls wait for an answer at once. The next one throws <PaperCode>PaperCrane transport has 1000 outstanding calls (cap 1000); refusing to queue '&lt;action&gt;'</PaperCode>.</li>
-                <li>A dropped socket reconnects with a backoff from 400 milliseconds up to 5 seconds. Registered actions, event subscriptions and process and terminal attachments are restored after it reconnects.</li>
+                <li>A call times out after 30 seconds unless its API says otherwise, with <PaperCode>{"PaperCrane '<method>' timed out"}</PaperCode>. Downloads, installs, uninstalls, backups and restores have no timeout.</li>
+                <li>At most 1000 calls wait for an answer at once. The next one throws <PaperCode>PaperCrane transport has 1000 outstanding calls (cap 1000); refusing to queue '&lt;method&gt;'</PaperCode>.</li>
+                <li>A dropped socket reconnects with a backoff from 400 milliseconds up to 5 seconds. Registered blocks, event subscriptions and process and terminal attachments are restored after it reconnects.</li>
                 <li>Every frame carries the credential and the protocol version, exported as <PaperCode>PROTOCOL_VERSION</PaperCode> (2).</li>
             </PaperTextList>
 
@@ -138,10 +138,10 @@ const computerId = grantedComputerId();`}
                 <tbody>
                     <tr><td><PaperCode>AUTH_REQUIRED</PaperCode></td><td>The credential is missing, wrong or revoked.</td></tr>
                     <tr><td><PaperCode>BAD_PROTOCOL</PaperCode></td><td>The SDK and the daemon speak different protocol versions.</td></tr>
-                    <tr><td><PaperCode>NOT_FOUND</PaperCode></td><td>The action or thing named does not exist, such as <PaperCode>Unknown action: system:nope</PaperCode> or an unclaimed port.</td></tr>
+                    <tr><td><PaperCode>NOT_FOUND</PaperCode></td><td>The method or thing named does not exist, such as <PaperCode>Unknown action: system:nope</PaperCode> or an unclaimed port.</td></tr>
                     <tr><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>An argument breaks a rule: a bad name, a value over a limit, a bad path.</td></tr>
-                    <tr><td><PaperCode>FORBIDDEN</PaperCode></td><td>The credential may not do this, such as naming another panel or calling a host-only action.</td></tr>
-                    <tr><td><PaperCode>CONFLICT</PaperCode></td><td>The state does not allow it now: a port is taken, no backup location is chosen, an action name is held by another connection.</td></tr>
+                    <tr><td><PaperCode>FORBIDDEN</PaperCode></td><td>The credential may not do this, such as naming another panel or calling a host-only method.</td></tr>
+                    <tr><td><PaperCode>CONFLICT</PaperCode></td><td>The state does not allow it now: a port is taken, no backup location is chosen, a block is already registered by another connection.</td></tr>
                     <tr><td><PaperCode>INTERNAL</PaperCode></td><td>Anything else the daemon reports, including refused file paths.</td></tr>
                 </tbody>
             </PaperTable>
@@ -167,14 +167,14 @@ try {
                 When the frame loads, the shell posts <PaperCode>paperboard:initialize</PaperCode>. PaperAPI then, in order:
             </PaperText>
             <PaperTextList ordered>
-                <li>Connects, and calls the service's internal <PaperCode>__getState</PaperCode> action when the manifest names a service.</li>
+                <li>Connects, and reads the service's internal <PaperCode>panel-state</PaperCode> value when the manifest names a service. The service answers once it is ready.</li>
                 <li>On a widget page, mounts the widget the shell asked for.</li>
                 <li>Hydrates every <PaperLink href="/docs/paperapi/bridge/">panel bridge</PaperLink> on the page.</li>
                 <li>Waits for fonts and images to paint, for at most 4 seconds.</li>
                 <li>Posts <PaperCode>paperboard:ready</PaperCode>, or <PaperCode>paperboard:failed</PaperCode> with the error message, which the shell shows.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
-                A panel page that has not answered after 25 seconds is shown as failed with <PaperCode>The panel did not finish connecting to its service.</PaperCode> A page that never imports PaperAPI never answers. The internal action names are exported as <PaperCode>STATE_GET_ACTION</PaperCode>, <PaperCode>STATE_SYNC_EVENT</PaperCode> and <PaperCode>WIDGET_CHOICES_ACTION</PaperCode>.
+                A panel page that has not answered after 25 seconds is shown as failed with <PaperCode>The panel did not finish connecting to its service.</PaperCode> A page that never imports PaperAPI never answers. The internal block ids are exported as <PaperCode>STATE_VALUE</PaperCode> (<PaperCode>panel-state</PaperCode>), <PaperCode>STATE_EVENT</PaperCode> (<PaperCode>panel-state-changed</PaperCode>) and <PaperCode>WIDGET_CHOICES_COMMAND</PaperCode> (<PaperCode>widget-choices</PaperCode>).
             </PaperText>
 
             <PaperText preset="body" as="p">

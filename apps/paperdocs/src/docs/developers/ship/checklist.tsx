@@ -50,7 +50,7 @@ export default function ChecklistDoc() {
 
             <PaperText preset="subheader" as="h2" id="failures">Failures</PaperText>
             <PaperTextList>
-                <li>Every button, form and action shows its failure with the reason, where the person was looking. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</li>
+                <li>Every button, form, call and block shows its failure with the reason, where the person was looking. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</li>
                 <li>Work in the background puts its failures in the state, and the page shows them.</li>
                 <li>A service that can't load its settings keeps running and says so on the page.</li>
                 <li>Nothing shows a placeholder or a zero in place of something missing.</li>
@@ -60,7 +60,7 @@ export default function ChecklistDoc() {
 
             <PaperText preset="subheader" as="h2" id="data-and-secrets">Data and secrets</PaperText>
             <PaperTextList>
-                <li>Keys, tokens and passwords are in <PaperCode>secretsApi</PaperCode> only: never in config, files, the state, an action's inputs or results, or the log. See <PaperLink href="/docs/developers/settings-and-secrets/">Settings and secrets</PaperLink>.</li>
+                <li>Keys, tokens and passwords are in <PaperCode>secretsApi</PaperCode> only: never in config, files, the state, a block's or call's inputs or results, or the log. See <PaperLink href="/docs/developers/settings-and-secrets/">Settings and secrets</PaperLink>.</li>
                 <li>One writer per config document, usually the service.</li>
                 <li>Settings and state survive <PaperCode>bunx paperapi restart</PaperCode>.</li>
                 <li>Nothing the panel does on stop, update or uninstall deletes the person's data.</li>
@@ -68,12 +68,12 @@ export default function ChecklistDoc() {
                 <li>Tests never reach <PaperCode>~/.paperboard</PaperCode>.</li>
             </PaperTextList>
 
-            <PaperText preset="subheader" as="h2" id="actions">Actions and widgets</PaperText>
+            <PaperText preset="subheader" as="h2" id="blocks">Blocks and widgets</PaperText>
             <PaperTextList>
-                <li>Every public action has a <PaperCode>description</PaperCode> an agent can decide from, a <PaperCode>template</PaperCode>, and a <PaperCode>category</PaperCode> named after the panel. See <PaperLink href="/docs/developers/actions/">Expose actions</PaperLink>.</li>
-                <li>Every input has a limit, and every <PaperCode>placeholder</PaperCode> names the kind of value: <PaperCode>City</PaperCode>, not <PaperCode>Oslo</PaperCode>.</li>
-                <li>Actions only the panel's pages call are <PaperCode>internal</PaperCode>.</li>
-                <li>A trigger fires once per change, not on every check.</li>
+                <li>Every block has a <PaperCode>description</PaperCode> an agent can decide from, a <PaperCode>text</PaperCode>, and a <PaperCode>category</PaperCode> named after the panel. See <PaperLink href="/docs/developers/blocks/">Expose blocks</PaperLink>.</li>
+                <li>Every input has a limit and a <PaperCode>name</PaperCode> that is the kind of value: <PaperCode>City</PaperCode>, not <PaperCode>Oslo</PaperCode>.</li>
+                <li>What only the panel's pages ask for is a <PaperCode>calls</PaperCode> entry of the service, not a block.</li>
+                <li>An event fires once per change, not on every check.</li>
                 <li>Every widget shows one fact, and says what is wrong when it can't. See <PaperLink href="/docs/developers/widgets/">Add a Home widget</PaperLink>.</li>
             </PaperTextList>
 

@@ -52,8 +52,8 @@ export function dropsToFreezing(before: Forecast | undefined, after: Forecast, u
     return after.temperature <= limit && (before === undefined || before.temperature > limit);
 }`;
 
-const FOLLOW_RUN = `run: async (ctx: Ctx, inputs: { city?: string }) => {
-    const city = cityName(inputs.city);
+const FOLLOW_RUN = `followCity: async (ctx: Ctx, input?: { city?: string }) => {
+    const city = cityName(input?.city);
     const { settings } = ctx.state;
     if (settings.cities.includes(city)) throw new Error(\`Weather already follows \${city}\`);
     if (settings.cities.length >= 12) throw new Error("Weather follows at most 12 cities. Remove one first.");
@@ -66,7 +66,7 @@ const PAGE_CALL = `const follow = async () => {
     setBusy(true);
     setFailure("");
     try {
-        await bridge.call<boolean>("follow-city", { city: city() });
+        await bridge.call<boolean>("followCity", { city: city() });
         setCity("");
     } catch (err) {
         setFailure(errorMessage(err));
@@ -89,7 +89,7 @@ const REFRESH_CITY = `async function refreshCity(ctx: Ctx, city: string): Promis
         ctx.setState((prev) => ({ forecasts: { ...prev.forecasts, [city]: forecast }, failures }));
         // once when the city drops to freezing, not on every check while it stays there
         if (dropsToFreezing(before, forecast, ctx.state.settings.units)) {
-            ctx.emitTrigger("freezing", { city, temperature: forecast.temperature });
+            await weatherBlocks.fire("freezing", { city, temperature: forecast.temperature });
         }
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -161,18 +161,18 @@ export default function ErrorsGuideDoc() {
             <PaperCode block language="tsx">{OPEN_WEATHER}</PaperCode>
             <PaperTextList>
                 <li>Throw <PaperCode>Error</PaperCode> objects. Paperboard passes on only the message: the stack, the cause and any other fields stay in the service.</li>
-                <li>Put the input in the message, as <PaperCode>OpenWeather refused Oslo</PaperCode> does. A flow or an agent that called the action reads the same text.</li>
+                <li>Put the input in the message, as <PaperCode>OpenWeather refused Oslo</PaperCode> does. A flow or an agent that ran the block reads the same text.</li>
                 <li>Pass on a service's own reason, such as OpenWeather's <PaperCode>message</PaperCode>, instead of replacing it with your own guess.</li>
             </PaperTextList>
 
-            <PaperText preset="subheader" as="h2" id="actions">Failures in an action</PaperText>
+            <PaperText preset="subheader" as="h2" id="calls">Failures in a call or a block</PaperText>
             <PaperText preset="body" as="p">
-                An action fails by throwing. Its caller gets the same message, whether the caller is the panel's page, another panel, a flow or an agent:
+                A call or a block fails by throwing. Its caller gets the same message, whether the caller is the panel's page, another panel, a flow or an agent:
             </PaperText>
             <PaperCode block language="tsx">{FOLLOW_RUN}</PaperCode>
             <PaperCode block language="sh">
-{`$ bunx paperapi call dev.example.weather follow-city '{"city":"  "}'
-✗ dev.example.weather follow-city failed: Enter a city name`}
+{`$ bunx paperapi call dev.example.weather followCity '{"city":"  "}'
+✗ dev.example.weather followCity failed: Enter a city name`}
             </PaperCode>
             <PaperText preset="body" as="p">
                 Check the input before changing anything, so a refused call leaves nothing half done.
@@ -240,7 +240,7 @@ export default function ErrorsGuideDoc() {
 
             <PaperText preset="subheader" as="h2" id="check-it">Check it</PaperText>
             <PaperTextList>
-                <li>Call every action with input it must refuse, with <PaperCode>bunx paperapi call</PaperCode>, and read the message as the person would.</li>
+                <li>Run every block and call with input it must refuse, with <PaperCode>bunx paperapi call</PaperCode>, and read the message as the person would.</li>
                 <li>Leave <PaperCode>bunx paperapi monitor --panel &lt;panel-id&gt;</PaperCode> running and press every button. A call marked <PaperCode>✗</PaperCode> must show on the page too.</li>
                 <li>Stop the network or remove the API key and look at every page and widget. Each says what is wrong.</li>
             </PaperTextList>

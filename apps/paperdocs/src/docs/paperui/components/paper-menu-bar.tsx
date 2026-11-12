@@ -197,7 +197,7 @@ export function Example(props: { onNew: () => void; onOpen: () => void; onDelete
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
             <PaperText preset="subheader" as="h3" id="editor-bar">Editor bar under a title</PaperText>
             <PaperText preset="body" as="p">
-                The Actions panel puts a tiny bar under the project name, with Project, File, Backup, and Insert menus.
+                The Blocks panel puts a tiny bar under the project name, with Project, File, and Backup menus.
                 Dangerous items sit below a separator, in the danger color.
             </PaperText>
             <PaperCode block language="tsx">

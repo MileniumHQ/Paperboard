@@ -16,7 +16,7 @@
         "name": "PaperAPI",
         "icon": "api",
         "image": "/paperapi.png",
-        "description": "The panel runtime: manifest, services, actions, and host APIs."
+        "description": "The panel runtime: manifest, services, blocks, and host APIs."
     },
     "paperui": {
         "name": "PaperUI",

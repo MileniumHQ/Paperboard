@@ -136,7 +136,7 @@ export function Example() {
             <PaperText preset="subheader" as="h3" id="saved-setting">A setting that saves</PaperText>
             <PaperText preset="body" as="p">
                 Keep the switch controlled by the stored value, so a failed save leaves it where it was, and show why.
-                The Actions panel's project cards use a controlled switch for their on and off setting.
+                The Blocks panel's project cards use a controlled switch for their on and off setting.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { createSignal, Show } from "solid-js";

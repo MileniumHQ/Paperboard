@@ -30,14 +30,11 @@
                 }
             }
         },
-        "actions": {
-            "name": "Actions",
+        "runtime": {
+            "name": "Runtime",
             "icon": "bolt",
             "sort": "alphabetical",
             "pages": {
-                "actions": {
-                    "name": "Actions API"
-                },
                 "blocks": {
                     "name": "Blocks API"
                 },
