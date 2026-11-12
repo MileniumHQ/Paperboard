@@ -15,23 +15,40 @@ export interface FrameBackgroundDetail {
 /** how often a framed document looks again, beside the moments it knows of */
 const LOOK_MS = 1000;
 
-function opaque(color: string): boolean {
-    if (!color || color === "transparent") return false;
-    const alpha = /^rgba\((?:[^,]+,){3}\s*([\d.]+)\s*\)$/.exec(color);
-    return !alpha || Number(alpha[1]) >= 1;
+type Rgba = [number, number, number, number];
+
+function parse(color: string): Rgba | null {
+    const m = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/.exec(color);
+    if (!m) return null;
+    return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])];
 }
 
-/** the color showing at the middle of this document's bottom edge */
+/**
+ * The color showing at the middle of this document's bottom edge: the first
+ * opaque background under it, with any translucent layers above that (a
+ * modal's scrim) laid over it.
+ */
 export function bottomEdgeColor(): string | null {
     if (typeof document === "undefined") return null;
-    let el: Element | null = document.elementFromPoint(window.innerWidth / 2, window.innerHeight - 1);
-    for (; el; el = el.parentElement) {
-        const color = getComputedStyle(el).backgroundColor;
-        if (opaque(color)) return color;
-    }
-    for (const root of [document.body, document.documentElement]) {
-        const color = root ? getComputedStyle(root).backgroundColor : "";
-        if (opaque(color)) return color;
+    const layers: Rgba[] = [];
+    const chain: Element[] = [];
+    for (let el = document.elementFromPoint(window.innerWidth / 2, window.innerHeight - 1); el; el = el.parentElement) chain.push(el);
+    for (const root of [document.body, document.documentElement]) if (root && !chain.includes(root)) chain.push(root);
+    for (const el of chain) {
+        const color = parse(getComputedStyle(el).backgroundColor);
+        if (!color || color[3] === 0) continue;
+        if (color[3] < 1) {
+            layers.push(color);
+            continue;
+        }
+        let [r, g, b] = color;
+        // the nearest layer is the last laid on
+        for (const [lr, lg, lb, la] of layers.reverse()) {
+            r = lr * la + r * (1 - la);
+            g = lg * la + g * (1 - la);
+            b = lb * la + b * (1 - la);
+        }
+        return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
     }
     return null;
 }
