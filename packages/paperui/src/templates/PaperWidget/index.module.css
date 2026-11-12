@@ -72,19 +72,24 @@
     pointer-events: auto;
 }
 
-/* one line, the same height in every widget, whatever sits at its end */
+/* one line tall, the same in every widget, whatever sits at its end; a
+   title too long for the tile wraps to a second line before it is cut */
 .header {
+    --line: calc(var(--paper-text-size-2) * var(--paper-leading-snug));
     flex-shrink: 0;
     display: flex;
-    align-items: center;
-    gap: var(--paper-uigap-half);
+    align-items: flex-start;
+    gap: 0 var(--paper-uigap-half);
     min-width: 0;
-    height: calc(var(--paper-text-size-2) * var(--paper-leading-snug));
+    min-height: var(--line);
     font-size: var(--paper-text-size-2);
 }
 
 .headerIcon {
     flex-shrink: 0;
+    height: var(--line);
+    display: inline-flex;
+    align-items: center;
     font-size: var(--paper-icon-size-tiny);
     color: var(--paper-text-subtle);
 }
@@ -99,20 +104,27 @@
 /* the title gives way last: the detail shrinks long before it does */
 .title {
     flex: 0 1 auto;
-    min-width: 0;
+    /* never cut mid-word beside the detail: that gives way instead */
+    min-width: min-content;
+    max-width: 100%;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: break-word;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     font-weight: var(--paper-weight-bold);
 }
 
 .detail {
     flex: 0 1000 auto;
     min-width: 0;
+    max-width: 100%;
     margin-inline-start: auto;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    line-height: var(--line);
     font-size: var(--paper-text-size-1);
     color: var(--paper-text-subtle);
     font-variant-numeric: tabular-nums;
@@ -124,7 +136,7 @@
     margin-inline-start: auto;
     display: flex;
     align-items: center;
-    margin-block: calc((1lh - var(--paper-control-size-tiny)) / 2);
+    margin-block: calc((var(--line) - var(--paper-control-size-tiny)) / 2);
     margin-inline-end: calc(var(--paper-uigap-onefourth) * -1);
 }
 
@@ -169,8 +181,11 @@
 
 .statValue {
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: break-word;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     font-size: clamp(var(--paper-text-size-3), min(40cqh, 20cqw), var(--paper-text-size-12));
     font-weight: var(--paper-weight-bold);
     line-height: var(--paper-leading-none);
@@ -326,8 +341,11 @@ button.rowInner {
 .messageTitle {
     max-width: 100%;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: break-word;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     font-size: var(--paper-text-size-2);
     font-weight: var(--paper-weight-semibold);
 }

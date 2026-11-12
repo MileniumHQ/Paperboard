@@ -13,7 +13,7 @@ const toneStyle = (tone: PaperRole | "none" | undefined): JSX.CSSProperties | un
  * One Home widget, laid out the same way as every other:
  *
  *   ┌───────────────────────────────┐
- *   │ ◇ Title               detail ⋯ │  header: one line, always on top
+ *   │ ◇ Title               detail ⋯ │  header: a long title wraps to a second line
  *   │                               │
  *   │ body: a stat, rows, a chart,  │  everything starts at the same
  *   │ or a message                  │  left edge as the title
