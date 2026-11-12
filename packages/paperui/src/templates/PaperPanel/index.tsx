@@ -43,7 +43,10 @@ export function PaperPanel(props: ParentProps<PaperPanelProps>) {
         "children",
     ]);
 
-    const [width, setWidth] = createSignal<number | null>(null);
+    // Until it is measured, a panel is as wide as its document (a panel
+    // fills its frame): its first paint already takes the phone layout,
+    // rather than showing the wide one and then sliding its page away.
+    const [width, setWidth] = createSignal<number | null>(typeof window === "undefined" ? null : window.innerWidth);
     const [pageOpen, setPageOpen] = createSignal(false);
     const [entries, setEntries] = createSignal<ReadonlyMap<string | number, PaperPanelEntry>>(new Map());
 

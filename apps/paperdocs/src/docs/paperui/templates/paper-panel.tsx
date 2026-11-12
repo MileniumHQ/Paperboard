@@ -97,7 +97,7 @@ export default function App() {
             <PaperTextList>
                 <li>The panel fills its parent (<PaperCode>100%</PaperCode> wide and tall), clips overflow, and lays out as a flex row.</li>
                 <li>The menu sizes itself. The interface group takes the remaining space, and its active item owns the scrolling. You write no layout styles.</li>
-                <li>A row panel that is narrower than 520px takes the phone layout. The width is the panel's own box, measured on mount and on every resize, not the screen.</li>
+                <li>A row panel that is narrower than 520px takes the phone layout. The width is the panel's own box, measured on mount and on every resize, not the screen. Before it is measured, the panel takes the document's width, so a phone's first paint is already the phone layout.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="phone">Phone layout</PaperText>
