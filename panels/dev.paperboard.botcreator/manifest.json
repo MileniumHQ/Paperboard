@@ -82,6 +82,10 @@
             {
                 "name": "discord.js",
                 "detail": "Providing the bot engine"
+            },
+            {
+                "name": "discord.py",
+                "detail": "Developer Portal screenshots in the setup guide (MIT)"
             }
         ]
     }

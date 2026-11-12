@@ -52,7 +52,12 @@ export interface BotsServiceState {
     bots: BotSummary[];
     /** why the saved bots could not be read; nothing is written over them meanwhile */
     botsError: string | null;
+    /** the setup guide for making a Discord application has been finished or skipped; it shows once */
+    setupGuideSeen: boolean;
 }
+
+/** the config field that keeps the setup guide from showing again */
+export const SETUP_GUIDE_FIELD = "setupGuideSeen";
 
 // the Blocks project id rule (papercrane PROJECT_ID_PATTERN)
 const BOT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
