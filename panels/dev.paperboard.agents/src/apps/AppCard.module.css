@@ -1,17 +1,3 @@
-/* the app's card sits in the chat among the agent's bubbles, like the sign-in card */
-.card {
-    align-self: flex-start;
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap-half);
-    width: min(80%, var(--paper-size-panel-small));
-    box-sizing: border-box;
-    padding: var(--paper-uigap);
-    border-radius: var(--paper-border-radius);
-    background: var(--paper-surface-inset);
-    color: var(--paper-text);
-}
-
 /* the title and description take the room left beside the picture, but
    never less than a readable line: below that, Open wraps to its own row */
 .text {

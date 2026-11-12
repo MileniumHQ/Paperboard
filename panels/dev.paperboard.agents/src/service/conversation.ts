@@ -26,7 +26,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AppEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
+import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type AppEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./browser";
 import { Attachments, sizeText } from "./attachments";
 import { AcpTurn, type AcpEvent } from "./acp";
@@ -112,6 +112,8 @@ export interface ConversationDeps {
     emit: (entry: ChatEntry) => void;
     /** a turn ended without doing what it was for: its error, as the conversation shows it */
     onTurnFailed?: (error: string) => void;
+    /** a turn is over, whatever became of it: what was allowed for it lapses */
+    onTurnEnd?: () => void;
     onState: (s: ChatState) => void;
     /** Codex's home, where its rollouts say how long a thread is; null leaves Codex's threads unmeasured */
     codexHome: string | null;
@@ -228,8 +230,8 @@ export class Conversation {
         this.pump();
     }
 
-    /** Add or update a card: a sign-in request (signIn.ts owns it; this only shows it) or an app shown to the user. */
-    post(entry: SignInEntry | AppEntry) {
+    /** Add or update a card: a sign-in, access or prompt request (signIn.ts, access.ts and prompts.ts own them; this only shows them) or an app shown to the user. */
+    post(entry: SignInEntry | AccessEntry | PromptEntry | ToolServerEntry | ToolSignInEntry | AppEntry) {
         if (this.closed) return;
         this.put(entry);
     }
@@ -537,9 +539,19 @@ export class Conversation {
                 this.stopRequested = false;
                 this.turnFromFlow = false;
                 this.turnInstructions = undefined;
+                try {
+                    this.deps.onTurnEnd?.();
+                } catch (e) {
+                    console.error("[ai] a turn's end couldn't be handled:", (e as Error).message);
+                }
                 this.pump();
             });
         this.state();
+    }
+
+    /** a turn is running now */
+    turning(): boolean {
+        return this.running !== null;
     }
 
     /** Read now, so now they join the conversation. */
@@ -893,9 +905,12 @@ export class Conversation {
                 throw new Error(`${file} line ${n + 1} is unreadable: ${(err as Error).message}`);
             }
             // transcripts from before the chat was only a chat hold tool-call entries: not messages, not shown
-            if (e.kind !== "user" && e.kind !== "agent" && e.kind !== "error" && e.kind !== "sign-in" && e.kind !== "app") return;
+            if (e.kind !== "user" && e.kind !== "agent" && e.kind !== "error" && e.kind !== "sign-in" && e.kind !== "app" && e.kind !== "access" && e.kind !== "prompt" && e.kind !== "tool-server" && e.kind !== "tool-sign-in") return;
             // a sign-in request lives only as long as the service that asked for it
             if (e.kind === "sign-in" && (e.status === "waiting" || e.status === "submitting")) e = { ...e, status: "expired" };
+            if (e.kind === "access" && e.status === "waiting") e = { ...e, status: "expired" };
+            if (e.kind === "prompt" && (e.status === "waiting" || e.status === "sending")) e = { ...e, status: "expired" };
+            if (e.kind === "tool-server" && e.status === "waiting") e = { ...e, status: "expired" };
             byId.delete(e.id); // re-insert so a changed entry keeps its newest position
             byId.set(e.id, e);
         });

@@ -1,17 +1,4 @@
-/* the sign-in card sits in the chat among the agent's bubbles, and reads like one */
-.card {
-    align-self: flex-start;
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap-half);
-    width: min(80%, var(--paper-size-panel-small));
-    box-sizing: border-box;
-    padding: var(--paper-uigap);
-    border-radius: var(--paper-border-radius);
-    background: var(--paper-surface-inset);
-    color: var(--paper-text);
-}
-
+/* the picture of the page the agent wants signed in to */
 .shot {
     display: block;
     width: 100%;

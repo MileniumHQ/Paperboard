@@ -5,7 +5,7 @@
 // shell line), and a secret never lives in the config, only the name of the
 // vault entry that holds it.
 
-import { DEFAULT_TOOLS, TOOL_LIMITS as L, type ServerSpec, type ServerValue, type ToolsConfig } from "../toolsContract";
+import { DEFAULT_TOOLS, OAUTH_SECRET, TOOL_LIMITS as L, type ServerSpec, type ServerValue, type ToolsConfig } from "../toolsContract";
 
 const NAME = /^[a-z][a-z0-9-]*$/;
 // names the agent's own tool names or the service use
@@ -96,7 +96,11 @@ export function parseServer(raw: unknown): ServerSpec {
         return { name, where, transport, command, args, env: parseValues(raw.env, "environment", "env", L.env), enabled };
     }
     if (transport === "http") {
-        exactKeys(raw, ["name", "where", "transport", "url", "headers", "enabled"], name);
+        exactKeys(raw, ["name", "where", "transport", "url", "headers", "oauth", "sse", "enabled"], name);
+        const oauth: unknown = raw.oauth === undefined ? false : raw.oauth;
+        if (typeof oauth !== "boolean") return fail("oauth is on or off");
+        const sse: unknown = raw.sse === undefined ? false : raw.sse;
+        if (typeof sse !== "boolean") return fail("sse is on or off");
         const url = text(raw.url, "the address", L.url).trim();
         let u: URL;
         try {
@@ -109,7 +113,10 @@ export function parseServer(raw: unknown): ServerSpec {
         for (const k of u.searchParams.keys()) {
             if (SECRETISH_QUERY.test(k)) fail(`the address carries "${k}" in plaintext; use a header with a secret instead`);
         }
-        return { name, where: "host", transport, url, headers: parseValues(raw.headers, "headers", "headers", L.headers), enabled };
+        const headers = parseValues(raw.headers, "headers", "headers", L.headers);
+        // a signed-in server's Authorization header comes from its tokens
+        if (oauth && Object.keys(headers).some((h) => h.toLowerCase() === "authorization")) fail("a server you sign in to gets its Authorization header from the sign-in; remove that header");
+        return { name, where: "host", transport, url, headers, oauth, sse, enabled };
     }
     return fail('transport is "stdio" or "http"');
 }
@@ -141,7 +148,8 @@ export const vaultName = (server: string, secret: string) => `mcp.${server}.${se
 /** every secret name a server's spec points at */
 export function secretNames(s: ServerSpec): string[] {
     const values = Object.values(s.transport === "stdio" ? s.env : s.headers);
-    return [...new Set(values.flatMap((v) => (typeof v === "string" ? [] : [v.secret])))];
+    const named = values.flatMap((v) => (typeof v === "string" ? [] : [v.secret]));
+    return [...new Set(s.transport === "http" && s.oauth ? [...named, OAUTH_SECRET] : named)];
 }
 
 export function checkSecretName(name: unknown): string {

@@ -51,6 +51,9 @@ export function createTools() {
         setActions: (on: boolean) => call(TOOLS_ACTION_IDS.setActions, { on }),
         setSecret: (server: string, name: string, value: string) => call(TOOLS_ACTION_IDS.setSecret, { server, name, value }),
         deleteSecret: (server: string, name: string) => call(TOOLS_ACTION_IDS.deleteSecret, { server, name }),
+        signIn: (name: string) => call(TOOLS_ACTION_IDS.signIn, { name }),
+        finishSignIn: (name: string, address: string) => call(TOOLS_ACTION_IDS.signInFinish, { name, address }),
+        cancelSignIn: (name: string) => call(TOOLS_ACTION_IDS.signInCancel, { name }),
     };
 }
 

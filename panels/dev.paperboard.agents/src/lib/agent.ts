@@ -29,6 +29,8 @@ import {
     type Routine,
     type Settings,
     type WindowFrame,
+    type AccessItem,
+    type AccessView,
 } from "../contract";
 
 export type Hydration = "loading" | "ready" | "failed";
@@ -129,6 +131,14 @@ export function createAgent() {
         signInShot: (id: string) => call<{ image: string }>(UI_ACTION_IDS.signInShot, { id }),
         signIn: (id: string, values: string[]) => call(UI_ACTION_IDS.signIn, { id, values }),
         declineSignIn: (id: string) => call(UI_ACTION_IDS.declineSignIn, { id }),
+        answerPrompt: (id: string, values: string[]) => call(UI_ACTION_IDS.answerPrompt, { id, values }),
+        declinePrompt: (id: string) => call(UI_ACTION_IDS.declinePrompt, { id }),
+        access: () => call<AccessView>(UI_ACTION_IDS.access),
+        answerAccess: (id: string, how: "once" | "always" | "decline") => call(UI_ACTION_IDS.answerAccess, { id, how }),
+        answerToolServer: (id: string, allow: boolean) => call(UI_ACTION_IDS.answerToolServer, { id, allow }),
+        revokeAccess: (grant: AccessItem) => call<AccessView>(UI_ACTION_IDS.revokeAccess, { grant }),
+        /** what the agent may do on the user's computer changed (here, on a card, or in another window) */
+        onAccess: (cb: (view: AccessView) => void) => actionsApi.on(PANEL_ID, EVENTS.access, cb),
         apps: () => call<AppInfo[]>(UI_ACTION_IDS.apps),
         openApp: (name: string) => call<{ url: string; title: string }>(UI_ACTION_IDS.openApp, { name }),
         appPicture: (name: string) => call<{ image: string }>(UI_ACTION_IDS.appPicture, { name }),

@@ -22,13 +22,16 @@ export interface Form {
     args: string;
     url: string;
     rows: Row[];
+    /** kept as the server had them; the editor doesn't change how it signs in or streams */
+    oauth: boolean;
+    sse: boolean;
     enabled: boolean;
 }
 
 let keys = 0;
 export const newRow = (o: Partial<Row> = {}): Row => ({ key: ++keys, name: "", kind: "value", value: "", typed: "", ...o });
 
-export const blankForm = (): Form => ({ editing: false, name: "", transport: "stdio", command: "", args: "", url: "", rows: [], enabled: true });
+export const blankForm = (): Form => ({ editing: false, name: "", transport: "stdio", command: "", args: "", url: "", rows: [], oauth: false, sse: false, enabled: true });
 
 /** the vault name the service keeps a row's secret under: the row's own name, made plain */
 export const secretNameOf = (rowName: string) => rowName.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
@@ -44,6 +47,8 @@ export function formFromSpec(s: ServerSpec): Form {
         args: s.transport === "stdio" ? s.args.join("\n") : "",
         url: s.transport === "http" ? s.url : "",
         rows,
+        oauth: s.transport === "http" && s.oauth,
+        sse: s.transport === "http" && s.sse,
         enabled: s.enabled,
     };
 }
@@ -55,7 +60,7 @@ export function specFromForm(f: Form): ServerSpec {
         if (!name) continue;
         values[name] = r.kind === "secret" ? { secret: secretNameOf(name) } : r.value;
     }
-    if (f.transport === "http") return { name: f.name.trim(), where: "host", transport: "http", url: f.url.trim(), headers: values, enabled: f.enabled };
+    if (f.transport === "http") return { name: f.name.trim(), where: "host", transport: "http", url: f.url.trim(), headers: values, oauth: f.oauth, sse: f.sse, enabled: f.enabled };
     return {
         name: f.name.trim(),
         where: "host",

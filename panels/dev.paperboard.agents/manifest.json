@@ -55,6 +55,10 @@
                 "detail": "Pages the agent opens and fetches: public websites only, never your computer or local network"
             },
             {
+                "name": "Tool servers you add",
+                "detail": "The MCP servers you add, or ask the agent to add, and their sign-in pages. A server that's a program may download itself when it starts, like a package from npm. What the agent asks a server, and what it's given, goes to whoever runs it"
+            },
+            {
                 "name": "npm",
                 "detail": "Packages for the apps the agent makes"
             },

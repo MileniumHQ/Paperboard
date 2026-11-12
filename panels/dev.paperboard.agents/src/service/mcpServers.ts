@@ -7,17 +7,21 @@
 
 import type { Launch } from "./which";
 import { PANEL_ID } from "../contract";
+import crypto from "node:crypto";
 import {
     TOOL_LIMITS as L,
+    OAUTH_SECRET,
     type ServerSpec,
     type ServerStatus,
+    type SignIn,
     type ToolsConfig,
     type ToolsView,
     DEFAULT_TOOLS,
 } from "../toolsContract";
 import type { ToolResult } from "./computerMcp";
 import { checkSecretName, parseServer, parseToolsConfig, secretNames, vaultName } from "./mcpConfig";
-import { HttpWire, McpClient, StdioWire, type McpTool, type ProcessHost } from "./mcpClient";
+import { HttpWire, McpClient, SseWire, StdioWire, Unauthorized, type McpTool, type ProcessHost } from "./mcpClient";
+import { Callback, SIGN_IN_MS, SignInNeeded, authorizeUrl, discover, exchange, parseTokens, pkcePair, refresh, register, stale, type Tokens } from "./mcpOAuth";
 
 const WARM_MS = 25_000;
 const RETRY_AFTER_MS = 30_000;
@@ -50,6 +54,19 @@ interface Entry {
     /** bumped to cancel whatever is starting */
     gen: number;
     failedAt: number;
+    /** it failed because the user has to sign in (again) */
+    needsSignIn: boolean;
+}
+
+/** a sign-in waiting for the browser to come back */
+interface Pending extends SignIn {
+    state: string;
+    verifier: string;
+    client: Pick<Tokens, "clientId" | "clientSecret" | "clientAuth" | "tokenEndpoint" | "resource">;
+    listener: Callback;
+    timer: ReturnType<typeof setTimeout>;
+    /** set once the code is being traded, so a second arrival is ignored */
+    finishing: boolean;
 }
 
 export const processId = (name: string) => `${PANEL_ID}.mcp.${name}`;
@@ -59,6 +76,7 @@ export class McpServers {
     config: ToolsConfig = structuredClone(DEFAULT_TOOLS);
     configError: string | null = null;
     private entries = new Map<string, Entry>();
+    private signIns = new Map<string, Pending>();
     private lock: Promise<unknown> = Promise.resolve();
     private publishing = false;
     private dirty = false;
@@ -86,7 +104,7 @@ export class McpServers {
         for (const spec of this.config.servers) {
             const entry = this.entries.get(spec.name);
             if (entry) entry.spec = spec;
-            else this.entries.set(spec.name, { spec, phase: "stopped", error: null, client: null, tools: [], starting: null, gen: 0, failedAt: 0 });
+            else this.entries.set(spec.name, { spec, phase: "stopped", error: null, client: null, tools: [], starting: null, gen: 0, failedAt: 0, needsSignIn: false });
         }
     }
 
@@ -105,7 +123,13 @@ export class McpServers {
     status(): ServerStatus[] {
         return this.config.servers.map((s) => {
             const e = this.entries.get(s.name)!;
-            return { name: s.name, phase: s.enabled ? e.phase : "stopped", error: s.enabled ? e.error : null, tools: e.phase === "running" ? e.tools.length : 0 };
+            return {
+                name: s.name,
+                phase: s.enabled ? e.phase : "stopped",
+                needsSignIn: s.enabled && e.needsSignIn,
+                error: s.enabled ? e.error : null,
+                tools: e.phase === "running" ? e.tools.length : 0,
+            };
         });
     }
 
@@ -115,7 +139,9 @@ export class McpServers {
             const m = /^mcp\.([a-z][a-z0-9-]*)\.(.+)$/.exec(full);
             if (m) (secrets[m[1]!] ??= []).push(m[2]!);
         }
-        return { config: this.config, status: this.status(), secrets, configError: this.configError };
+        const signIns: Record<string, SignIn> = {};
+        for (const [name, p] of this.signIns) signIns[name] = { url: p.url, callback: p.callback, error: p.error };
+        return { config: this.config, status: this.status(), secrets, configError: this.configError, signIns };
     }
 
     /** the servers that are up, with their tools */
@@ -142,7 +168,7 @@ export class McpServers {
         const now = (this.deps.now ?? Date.now)();
         const starts: Promise<void>[] = [];
         for (const e of this.entries.values()) {
-            if (!e.spec.enabled || e.phase === "running") continue;
+            if (!e.spec.enabled || e.phase === "running" || e.needsSignIn) continue;
             if (e.phase === "failed" && now - e.failedAt < RETRY_AFTER_MS) continue;
             starts.push(this.start(e));
         }
@@ -160,6 +186,7 @@ export class McpServers {
         const gen = ++e.gen;
         e.phase = "starting";
         e.error = null;
+        e.needsSignIn = false;
         this.changed();
         const run = (async () => {
             let client: McpClient | null = null;
@@ -184,6 +211,10 @@ export class McpServers {
                 this.settle(e, gen, "running", null);
             } catch (err) {
                 let why = message(err);
+                if (err instanceof Unauthorized || err instanceof SignInNeeded) {
+                    e.needsSignIn = true;
+                    why = err instanceof Unauthorized && !(e.spec.transport === "http" && e.spec.oauth) ? "it asks you to sign in" : why;
+                }
                 if (client) {
                     try {
                         await client.close();
@@ -218,6 +249,7 @@ export class McpServers {
         e.tools = [];
         e.phase = "stopped";
         e.error = null;
+        e.needsSignIn = false;
         this.changed();
         if (client) await client.close();
     }
@@ -235,7 +267,11 @@ export class McpServers {
             }
             return out;
         };
-        if (spec.transport === "http") return new HttpWire({ url: spec.url, headers: await values(spec.headers), fetch: this.deps.fetch });
+        if (spec.transport === "http") {
+            const authorize = spec.oauth ? (fresh: boolean) => this.authorization(spec.name, fresh) : undefined;
+            const o = { url: spec.url, headers: await values(spec.headers), fetch: this.deps.fetch, authorize };
+            return spec.sse ? SseWire.open(o) : new HttpWire(o);
+        }
         const env = await values(spec.env);
         const launch = this.deps.host.findProgram(spec.command, spec.args);
         if (!launch) throw new Error(`"${spec.command}" isn't installed on this computer`);
@@ -311,6 +347,7 @@ export class McpServers {
             this.writable();
             const spec = this.config.servers.find((s) => s.name === name);
             if (!spec) throw new Error("there's no such server");
+            this.cancelSignIn(spec.name);
             await this.stop(this.entries.get(spec.name)!);
             await this.commit({ ...this.config, servers: this.config.servers.filter((s) => s !== spec) });
             const failed: string[] = [];
@@ -375,6 +412,156 @@ export class McpServers {
         });
     }
 
+    // ------------------------------------------------------------- signing in
+
+    private get fetcher() {
+        return this.deps.fetch ?? fetch;
+    }
+
+    /** The Authorization header for a signed-in server, refreshing its tokens when they're due (or `fresh` is asked for). */
+    private async authorization(server: string, fresh: boolean): Promise<string> {
+        const saved = await this.deps.vault.get(vaultName(server, OAUTH_SECRET));
+        if (saved === null) throw new SignInNeeded("sign in to it first");
+        let t = parseTokens(saved);
+        if (fresh || stale(t, (this.deps.now ?? Date.now)())) {
+            try {
+                t = await refresh(this.fetcher, t);
+            } catch (e) {
+                throw e instanceof SignInNeeded ? e : new SignInNeeded(`the sign-in couldn't be renewed (${message(e)}); sign in again`);
+            }
+            await this.deps.vault.set(vaultName(server, OAUTH_SECRET), JSON.stringify(t));
+        }
+        return `${/^bearer$/i.test(t.type) ? "Bearer" : t.type} ${t.access}`;
+    }
+
+    /**
+     * Start signing in to a web server: it's switched to signing in if it
+     * wasn't, Paperboard registers with its sign-in server, and the view gets
+     * the page to open. The browser comes back to a loopback address here, or
+     * on the user's device, which hands it over with finishSignIn.
+     */
+    signIn(name: unknown): Promise<ToolsView> {
+        return this.serial(async () => {
+            this.writable();
+            const spec = this.config.servers.find((s) => s.name === name);
+            if (!spec) throw new Error("there's no such server");
+            if (spec.transport !== "http") throw new Error(`${spec.name} is a program on this computer; it has nothing to sign in to`);
+            this.cancelSignIn(spec.name);
+            if (!spec.oauth) await this.put({ ...spec, oauth: true });
+            const listener = new Callback();
+            try {
+                const redirect = await listener.listen(
+                    (address) => this.arrive(spec.name, address, true),
+                    () => {
+                        const p = this.signIns.get(spec.name);
+                        return !p || p.listener !== listener || p.error !== null;
+                    },
+                );
+                const found = await discover(this.fetcher, spec.url);
+                const client = await register(this.fetcher, found, redirect);
+                const { verifier, challenge } = pkcePair();
+                const state = crypto.randomBytes(16).toString("base64url");
+                const pending: Pending = {
+                    url: authorizeUrl(found, client.clientId, redirect, state, challenge),
+                    callback: redirect,
+                    error: null,
+                    state,
+                    verifier,
+                    client: { ...client, tokenEndpoint: found.tokenEndpoint, resource: found.resource },
+                    listener,
+                    finishing: false,
+                    timer: setTimeout(() => this.failSignIn(spec.name, "the sign-in wasn't finished in time; start it again"), SIGN_IN_MS),
+                };
+                this.signIns.set(spec.name, pending);
+            } catch (e) {
+                listener.close();
+                throw e;
+            }
+            this.changed();
+            return this.view();
+        });
+    }
+
+    /** The address the browser came back to, caught on the user's device. */
+    async finishSignIn(name: unknown, address: unknown): Promise<ToolsView> {
+        if (typeof name !== "string" || typeof address !== "string") throw new Error("which server, and the address the browser ended on");
+        const failure = await this.arrive(name, address, false);
+        if (failure) throw new Error(failure);
+        return this.view();
+    }
+
+    cancelSignInFor(name: unknown): Promise<ToolsView> {
+        if (typeof name === "string") this.cancelSignIn(name);
+        this.changed();
+        return this.view();
+    }
+
+    /** End a sign-in. One ended by the browser's own visit keeps its listener until the page is sent; the listener closes itself then. */
+    private cancelSignIn(name: string, keepListener = false) {
+        const p = this.signIns.get(name);
+        if (!p) return;
+        clearTimeout(p.timer);
+        if (!keepListener) p.listener.close();
+        this.signIns.delete(name);
+    }
+
+    private failSignIn(name: string, why: string, keepListener = false) {
+        const p = this.signIns.get(name);
+        if (!p) return;
+        clearTimeout(p.timer);
+        if (!keepListener) p.listener.close();
+        p.error = why;
+        p.finishing = false;
+        this.changed();
+    }
+
+    /** The browser came back: trade the code for tokens. Resolves with why it failed, or null. */
+    private async arrive(name: string, address: string, fromListener: boolean): Promise<string | null> {
+        const p = this.signIns.get(name);
+        if (!p || p.error) return "this sign-in isn't waiting anymore; start it again";
+        if (p.finishing) return null;
+        let url: URL;
+        try {
+            url = new URL(address);
+        } catch (e) {
+            console.warn(`[ai] ${name}'s sign-in came back to an address that isn't a URL:`, message(e));
+            return "that isn't the address the sign-in came back to";
+        }
+        const expected = new URL(p.callback);
+        if (url.origin !== expected.origin || url.pathname !== expected.pathname) return "that isn't the address the sign-in came back to";
+        if (url.searchParams.get("state") !== p.state) return "that address is from a different sign-in";
+        const refused = url.searchParams.get("error");
+        if (refused) {
+            const why = `the sign-in was refused: ${url.searchParams.get("error_description") ?? refused}`;
+            this.failSignIn(name, why, fromListener);
+            return why;
+        }
+        const code = url.searchParams.get("code");
+        if (!code) return "the address has no sign-in code";
+        p.finishing = true;
+        try {
+            const tokens = await exchange(this.fetcher, p.client, code, p.callback, p.verifier);
+            await this.deps.vault.set(vaultName(name, OAUTH_SECRET), JSON.stringify(tokens));
+        } catch (e) {
+            const why = message(e);
+            console.error(`[ai] ${name}'s sign-in couldn't trade its code for tokens:`, why);
+            this.failSignIn(name, why, fromListener);
+            return why;
+        }
+        this.cancelSignIn(name, fromListener);
+        // it starts again with the tokens, now rather than at the next turn
+        const e = this.entries.get(name);
+        if (e && e.spec.enabled) {
+            e.needsSignIn = false;
+            await this.serial(async () => {
+                await this.stop(e);
+                await this.start(e);
+            });
+        }
+        this.changed();
+        return null;
+    }
+
     // ------------------------------------------------------------- the agent's use
 
     async callTool(server: string, tool: string, args: Record<string, unknown>): Promise<ToolResult> {
@@ -394,6 +581,7 @@ export class McpServers {
     /** Stop every server and observe each one gone. */
     async shutdown(): Promise<void> {
         this.closed = true;
+        for (const name of [...this.signIns.keys()]) this.cancelSignIn(name);
         const results = await Promise.allSettled([...this.entries.values()].map((e) => this.stop(e)));
         const failures = results.flatMap((r) => (r.status === "rejected" ? [message(r.reason)] : []));
         if (failures.length) throw new Error(`tool servers didn't all stop: ${failures.join("; ")}`);

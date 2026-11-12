@@ -76,6 +76,14 @@ export const UI_ACTION_IDS = {
     signInShot: "ui-sign-in-shot",
     signIn: "ui-sign-in",
     declineSignIn: "ui-decline-sign-in",
+    // the user's computer: answer a permission request, read what's allowed, take a grant back
+    answerAccess: "ui-answer-access",
+    answerPrompt: "ui-answer-prompt",
+    declinePrompt: "ui-decline-prompt",
+    access: "ui-access",
+    revokeAccess: "ui-revoke-access",
+    // a program the agent asks to run as one of its tool servers: allowed or not
+    answerToolServer: "ui-answer-tool-server",
     // the apps the agent made: list them, open one (its address), its picture, or delete it
     apps: "ui-apps",
     openApp: "ui-open-app",
@@ -90,6 +98,8 @@ export const EVENTS = {
     cleared: "chat-cleared",
     // another conversation is the current one now: read its history again
     switched: "chat-switched",
+    // what the agent may do on the user's computer changed; the whole AccessView
+    access: "access-changed",
 } as const;
 
 /**
@@ -171,6 +181,34 @@ export const LIMITS = {
         valueChars: 1000,
         /** an unanswered request lapses after this long */
         waitMinutes: 10,
+    },
+    access: {
+        /** folders and commands in one request */
+        items: 5,
+        reasonChars: 500,
+        pathChars: 1024,
+        /** arguments in a command, its program included */
+        commandArgs: 32,
+        argChars: 1024,
+        /** an unanswered request lapses after this long */
+        waitMinutes: 15,
+        /** grants kept for good */
+        always: 200,
+    },
+    toolServers: {
+        reasonChars: 500,
+        /** an unanswered request lapses after this long */
+        waitMinutes: 15,
+    },
+    prompt: {
+        fields: 6,
+        titleChars: 60,
+        reasonChars: 500,
+        labelChars: 40,
+        valueChars: 4000,
+        prefixChars: 32,
+        /** an unanswered request lapses after this long */
+        waitMinutes: 30,
     },
 } as const;
 
@@ -465,6 +503,10 @@ export type ChatEntry =
     // title: the operation that didn't happen, like "Not answered"; entries written before it have none
     | { id: string; at: number; kind: "error"; title?: string; text: string }
     | SignInEntry
+    | AccessEntry
+    | PromptEntry
+    | ToolServerEntry
+    | ToolSignInEntry
     | AppEntry;
 
 /** An app the agent made, as the user's list shows it. */
@@ -505,6 +547,91 @@ export interface SignInEntry {
     /** submitted: the values were typed in and submit pressed, not that the site let them in */
     status: "waiting" | "submitting" | "submitted" | "declined" | "expired" | "failed";
     error?: string;
+}
+
+/**
+ * A field the agent asks the user to fill in. A secret one (a key, a token) is saved in the vault for one of the
+ * agent's tool servers, under the name its config uses; the agent learns only that it was saved.
+ */
+export interface PromptField {
+    label: string;
+    /** prefix: put before what the user types, like "Bearer " for a header that holds the whole value */
+    secret: { server: string; name: string; prefix?: string } | null;
+}
+
+/** The agent asking the user for things only they know, typed into the chat. */
+export interface PromptEntry {
+    id: string;
+    at: number;
+    kind: "prompt";
+    title: string;
+    reason: string;
+    fields: PromptField[];
+    status: "waiting" | "sending" | "sent" | "declined" | "expired" | "failed";
+    error?: string;
+}
+
+/**
+ * The agent asking to add (or change) a tool server that runs a program on the user's computer. Nothing runs
+ * until the user allows it on this card.
+ */
+export interface ToolServerEntry {
+    id: string;
+    at: number;
+    kind: "tool-server";
+    server: string;
+    /** it changes a server the agent already has, rather than adding one */
+    change: boolean;
+    /** what it is and why, in the agent's words */
+    reason: string;
+    /** the program and its arguments, as they run */
+    command: string[];
+    /** its environment: a plain value, or null for a secret the vault holds */
+    env: { name: string; value: string | null }[];
+    status: "waiting" | "allowed" | "declined" | "expired" | "failed";
+    error?: string;
+}
+
+/** The agent asking the user to sign in to one of its tool servers. How it's going is read live from the tools. */
+export interface ToolSignInEntry {
+    id: string;
+    at: number;
+    kind: "tool-sign-in";
+    server: string;
+    /** the server's address, for the card */
+    url: string;
+}
+
+/** Something on the user's computer the agent asks for: a folder to work in, or a command to run. */
+export type AccessItem =
+    | { kind: "folder"; path: string }
+    | {
+          kind: "command";
+          /** the program and the arguments the grant covers, as run: one program, never a shell line */
+          command: string[];
+          /** it also covers the same command with more arguments after these */
+          anyArguments: boolean;
+      };
+
+/** The agent asking for access to the user's computer: answered on its card, once or for good. */
+export interface AccessEntry {
+    id: string;
+    at: number;
+    kind: "access";
+    /** what it wants to do and why, in its words */
+    reason: string;
+    items: AccessItem[];
+    /** allowed: for this time; always: kept until the user takes it back on the Access page */
+    status: "waiting" | "allowed" | "always" | "declined" | "expired";
+}
+
+/** A grant, as the Access page lists it. */
+export type AccessGrant = AccessItem & { at: number; once: boolean };
+
+export interface AccessView {
+    grants: AccessGrant[];
+    /** the grants file couldn't be read: nothing it held is allowed, and nothing is written over it */
+    error: string | null;
 }
 
 export const SETUP_STEPS: SetupStepId[] = ["download", "unpack"];

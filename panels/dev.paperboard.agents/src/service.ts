@@ -14,7 +14,7 @@ const host: AppHost = {
     // a harness's stdout is its protocol: stderr never mixes into it
     onStdout: (id, cb) => processApi.onStdout(id, cb),
     onStderr: (id, cb) => processApi.onStderr(id, cb),
-    exec: (command, args, o) => processApi.exec(command, args, { timeoutMs: o?.timeoutMs, env: o?.env }),
+    exec: (command, args, o) => processApi.exec(command, args, { timeoutMs: o?.timeoutMs, env: o?.env, cwd: o?.cwd }),
     packages: {
         isInstalled: (name) => packageApi.isInstalled(name),
         download: (name, onProgress) => packageApi.download(name, onProgress),
@@ -128,6 +128,12 @@ export const aiService = definePanelService({
         ui(UI_ACTION_IDS.signInShot, "The picture of a sign-in the agent asked for", (i) => app.signIns.shot(i.id)),
         ui(UI_ACTION_IDS.signIn, "Sign in where the agent asked, with values it never sees", (i) => app.signIns.submit(i.id, i.values)),
         ui(UI_ACTION_IDS.declineSignIn, "Say no to a sign-in the agent asked for", (i) => app.signIns.decline(i.id)),
+        ui(UI_ACTION_IDS.access, "List what the agent may do on your computer", () => app.accessView()),
+        ui(UI_ACTION_IDS.answerAccess, "Answer the agent's request for access to your computer", (i) => app.answerAccess(i)),
+        ui(UI_ACTION_IDS.revokeAccess, "Take back something the agent may do on your computer", (i) => app.revokeAccess(i)),
+        ui(UI_ACTION_IDS.answerPrompt, "Answer what the agent asked, secret answers going to the vault", (i) => app.prompts.answer(i.id, i.values)),
+        ui(UI_ACTION_IDS.declinePrompt, "Say no to what the agent asked", (i) => app.prompts.decline(i.id)),
+        ui(UI_ACTION_IDS.answerToolServer, "Allow or refuse a program the agent asks to run as a tool server", (i) => app.answerToolServer(i)),
         ui(UI_ACTION_IDS.apps, "List the apps the agent made", () => app.apps.list()),
         ui(UI_ACTION_IDS.openApp, "Open one of the agent's apps", (i) => app.apps.open(i.name)),
         ui(UI_ACTION_IDS.appPicture, "The picture of one of the agent's apps", (i) => app.apps.pictureOf(i.name)),
@@ -140,6 +146,9 @@ export const aiService = definePanelService({
         ui(TOOLS_ACTION_IDS.setActions, "Allow or refuse Paperboard actions for the agent", (i) => app.toolsSetActions(i)),
         ui(TOOLS_ACTION_IDS.setSecret, "Save a tool server's secret", (i) => app.toolsSetSecret(i)),
         ui(TOOLS_ACTION_IDS.deleteSecret, "Delete a tool server's secret", (i) => app.toolsDeleteSecret(i)),
+        ui(TOOLS_ACTION_IDS.signIn, "Start signing in to a tool server", (i) => app.toolsSignIn(i)),
+        ui(TOOLS_ACTION_IDS.signInFinish, "Finish signing in to a tool server", (i) => app.toolsSignInFinish(i)),
+        ui(TOOLS_ACTION_IDS.signInCancel, "Stop signing in to a tool server", (i) => app.toolsSignInCancel(i)),
     ],
     async onInit(ctx) {
         await app.init({

@@ -2,7 +2,7 @@
 // and Open, which puts it beside the chat. It is never a link.
 
 import { Show, createSignal } from "solid-js";
-import { PaperButton, PaperFlex, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import type { AppEntry } from "../contract";
 import { failure, type Failure } from "../lib/failure";
 import type { Launcher } from "./launcher";
@@ -25,34 +25,36 @@ export default function AppCard(props: { entry: AppEntry; apps: Launcher }) {
     };
 
     return (
-        <section class={styles.card} aria-label={e().title} data-message={e().id}>
-            {/* in the narrow column beside an open app, Open wraps under the
-                text instead of squeezing it to a word per line */}
-            <PaperFlex direction="row" align="center" gap="full" wrap>
-                <Show when={there()} fallback={<PaperIcon>delete</PaperIcon>}>
-                    <Picture apps={props.apps} name={e().app} title={e().title} taken />
-                </Show>
-                <PaperFlex class={styles.text} gap="onefourth">
-                    <PaperText preset="label">
-                        {e().title}
-                    </PaperText>
-                    <PaperText preset="hint">
-                        {there() ? e().description : "This app was deleted."}
-                    </PaperText>
+        <PaperFlex direction="row">
+            <PaperCard fullWidth={false} shrink maxWidth="panel-small" padding="full" gap="half" role="region" aria-label={e().title} data-message={e().id}>
+                {/* in the narrow column beside an open app, Open wraps under the
+                    text instead of squeezing it to a word per line */}
+                <PaperFlex direction="row" align="center" gap="full" wrap>
+                    <Show when={there()} fallback={<PaperIcon>delete</PaperIcon>}>
+                        <Picture apps={props.apps} name={e().app} title={e().title} taken />
+                    </Show>
+                    <PaperFlex class={styles.text} gap="onefourth">
+                        <PaperText preset="label">
+                            {e().title}
+                        </PaperText>
+                        <PaperText preset="hint">
+                            {there() ? e().description : "This app was deleted."}
+                        </PaperText>
+                    </PaperFlex>
+                    <Show when={there()}>
+                        <PaperButton class={styles.open} variant="text" disabled={busy()} onClick={open}>
+                            Open <PaperIcon>open_in_new</PaperIcon>
+                        </PaperButton>
+                    </Show>
                 </PaperFlex>
-                <Show when={there()}>
-                    <PaperButton class={styles.open} variant="text" disabled={busy()} onClick={open}>
-                        Open <PaperIcon>open_in_new</PaperIcon>
-                    </PaperButton>
+                <Show when={error()}>
+                    {(shown) => (
+                        <PaperQuote variant="danger" icon="error" title={shown().title} role="alert" onDismiss={() => setError(null)}>
+                            {shown().message}
+                        </PaperQuote>
+                    )}
                 </Show>
-            </PaperFlex>
-            <Show when={error()}>
-                {(shown) => (
-                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert" onDismiss={() => setError(null)}>
-                        {shown().message}
-                    </PaperQuote>
-                )}
-            </Show>
-        </section>
+            </PaperCard>
+        </PaperFlex>
     );
 }

@@ -15,6 +15,7 @@ import {
     TRIGGER_IDS,
     type AiState,
     type Compaction,
+    type AccessView,
     type Harness,
     type MemoryList,
     type Settings,
@@ -35,6 +36,7 @@ import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from "./computerTools";
 import { filesToolset } from "./attachmentTools";
 import { actionsToolset, type ActionsHost } from "./actionsToolset";
 import { McpServers, type Vault } from "./mcpServers";
+import { checkSecretName } from "./mcpConfig";
 import { mcpToolset } from "./mcpToolset";
 import { TOOLS_EVENT, type ToolsConfig, type ToolsView } from "../toolsContract";
 import { askClaudeModels, listModels } from "./models";
@@ -42,6 +44,9 @@ import { Memory } from "./memory";
 import { messagesToolset } from "./messages";
 import { Routines } from "./routines";
 import { SignIns } from "./signIn";
+import { Access } from "./access";
+import { Prompts } from "./prompts";
+import { ServerTools } from "./serverTools";
 import { describeSchedule, localStamp } from "../routineText";
 import { toolbox, type Toolbox } from "./toolsets";
 import { Asker } from "./ask";
@@ -71,7 +76,7 @@ export interface AppHost extends Omit<ComputerHost, "packages">, Omit<TurnHost, 
     /** the panel's config document: the agent's settings */
     readSettings(): Promise<unknown>;
     writeSettings(s: Settings): Promise<void>;
-    exec(command: string, args: string[], o?: { timeoutMs?: number; env?: Record<string, string> }): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+    exec(command: string, args: string[], o?: { timeoutMs?: number; env?: Record<string, string>; cwd?: string }): Promise<{ stdout: string; stderr: string; exitCode: number }>;
     /** a program on PATH: for the user's own tool servers */
     findProgram(command: string, args: readonly string[]): Launch | null;
     /** a brain's program already on this computer; the daemon's own lookup when left out */
@@ -99,6 +104,9 @@ export class AiApp {
     memory!: Memory;
     routines!: Routines;
     signIns!: SignIns;
+    access!: Access;
+    prompts!: Prompts;
+    serverTools!: ServerTools;
     private mcp: ComputerMcp | null = null;
     apps!: Apps;
     private tools: Toolbox | null = null;
@@ -175,6 +183,7 @@ export class AiApp {
             vault: t.vault,
             onChange: (view) => {
                 this.ctx.emit(TOOLS_EVENT, view);
+                this.serverTools?.seen(view);
                 this.announce("tool-servers");
             },
         });
@@ -198,6 +207,29 @@ export class AiApp {
         this.signIns = new SignIns({
             prepare: (args) => this.computer.callTool("sign_in_prepare", args),
             fill: (args) => this.computer.view("view_sign_in", args),
+            post: (entry) => this.conversation.post(entry),
+            notice: (text) => this.conversation.notice(text),
+        });
+        this.access = new Access({
+            file: path.join(root, "access.json"),
+            findProgram: (command, args) => this.host.findProgram(command, args),
+            exec: (command, args, o) => this.host.exec(command, args, o),
+            post: (entry) => this.conversation.post(entry),
+            notice: (text) => this.conversation.notice(text),
+            turning: () => this.conversation?.turning() ?? false,
+            onChange: (view) => this.ctx.emit(EVENTS.access, view),
+        });
+        this.access.load();
+        this.prompts = new Prompts({
+            hasServer: (server) => this.servers.config.servers.some((x) => x.name === server),
+            checkSecretName,
+            saveSecret: (server, name, value) => this.servers.setSecret(server, name, value),
+            post: (entry) => this.conversation.post(entry),
+            notice: (text) => this.conversation.notice(text),
+        });
+        this.serverTools = new ServerTools({
+            servers: this.servers,
+            findProgram: (command, args) => this.host.findProgram(command, args),
             post: (entry) => this.conversation.post(entry),
             notice: (text) => this.conversation.notice(text),
         });
@@ -245,6 +277,9 @@ export class AiApp {
             this.memory.toolset(),
             this.routines.toolset(),
             this.signIns.toolset(),
+            this.access.toolset(),
+            this.prompts.toolset(),
+            this.serverTools.toolset(),
             mcpToolset(this.servers),
             actionsToolset({ host: t.actions, enabled: () => this.servers.config.actions }),
         ], () => this.conversation?.mode() ?? { fromFlow: false });
@@ -304,6 +339,7 @@ export class AiApp {
                 if (entry.kind === "user" || entry.kind === "agent") this.publish();
             },
             onTurnFailed: (error) => this.fireBlock("turn-failed", { error, conversation: this.conversation.id() }),
+            onTurnEnd: () => this.access.turnEnded(),
             onState: (chat) => this.ctx.setState({ chat }),
             codexHome: this.brains.homes.codex,
         });
@@ -328,6 +364,9 @@ export class AiApp {
     async shutdown() {
         // before the conversation closes, so a waiting request's bubble says it lapsed
         this.signIns?.shutdown();
+        this.access?.shutdown();
+        this.prompts?.shutdown();
+        this.serverTools?.shutdown();
         const stops = await Promise.allSettled([
             this.routines?.shutdown(),
             this.conversation?.shutdown(),
@@ -475,6 +514,9 @@ export class AiApp {
     }
 
     async startOver() {
+        this.access?.shutdown();
+        this.prompts?.shutdown();
+        this.serverTools?.shutdown();
         const r = await this.conversation.clear();
         this.ctx.emit(EVENTS.cleared, {});
         this.publish();
@@ -484,6 +526,9 @@ export class AiApp {
     /** Start a new conversation, or continue a past one: a waiting sign-in belongs to the one being put away. */
     async newConversation() {
         this.signIns?.shutdown();
+        this.access?.shutdown();
+        this.prompts?.shutdown();
+        this.serverTools?.shutdown();
         const r = await this.conversation.newConversation();
         this.ctx.emit(EVENTS.switched, {});
         this.publish();
@@ -492,6 +537,9 @@ export class AiApp {
 
     async openConversation(id: unknown) {
         this.signIns?.shutdown();
+        this.access?.shutdown();
+        this.prompts?.shutdown();
+        this.serverTools?.shutdown();
         const r = await this.conversation.open(id);
         this.ctx.emit(EVENTS.switched, {});
         this.publish();
@@ -688,6 +736,19 @@ export class AiApp {
 
     // ------------------------------------------------------------- the Tools page
 
+    accessView(): AccessView {
+        return this.access.view();
+    }
+    answerAccess(i: Record<string, unknown>) {
+        return this.access.answer(i.id, i.how);
+    }
+    revokeAccess(i: Record<string, unknown>) {
+        return this.access.revoke(i.grant);
+    }
+    answerToolServer(i: Record<string, unknown>) {
+        return this.serverTools.answer(i.id, i.allow);
+    }
+
     toolsView(): Promise<ToolsView> {
         return this.servers.view();
     }
@@ -708,6 +769,15 @@ export class AiApp {
     }
     toolsDeleteSecret(i: Record<string, unknown>) {
         return this.servers.deleteSecret(i.server, i.name);
+    }
+    toolsSignIn(i: Record<string, unknown>) {
+        return this.servers.signIn(i.name);
+    }
+    toolsSignInFinish(i: Record<string, unknown>) {
+        return this.servers.finishSignIn(i.name, i.address);
+    }
+    toolsSignInCancel(i: Record<string, unknown>) {
+        return this.servers.cancelSignInFor(i.name);
     }
 
     // ------------------------------------------------------------- the user's view

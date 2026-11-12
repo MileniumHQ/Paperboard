@@ -14,6 +14,9 @@ export const TOOLS_ACTION_IDS = {
     setActions: "ui-tools-set-actions",
     setSecret: "ui-tools-set-secret",
     deleteSecret: "ui-tools-delete-secret",
+    signIn: "ui-tools-sign-in",
+    signInFinish: "ui-tools-sign-in-finish",
+    signInCancel: "ui-tools-sign-in-cancel",
 } as const;
 
 /** a server's status changed; the payload is the whole ToolsView */
@@ -62,8 +65,15 @@ export type ServerSpec =
           transport: "http";
           url: string;
           headers: Record<string, ServerValue>;
+          /** the server signs the user in (OAuth); its tokens live in the vault under OAUTH_SECRET */
+          oauth: boolean;
+          /** the older HTTP+SSE transport: a stream the server answers on, and an address to post to */
+          sse: boolean;
           enabled: boolean;
       };
+
+/** the vault entry a signed-in server's tokens are kept under */
+export const OAUTH_SECRET = "oauth";
 
 export interface ToolsConfig {
     /** may the agent find and run other panels' actions */
@@ -78,6 +88,8 @@ export type ServerPhase = "stopped" | "starting" | "running" | "failed";
 export interface ServerStatus {
     name: string;
     phase: ServerPhase;
+    /** the server wants the user to sign in (again) before it can start */
+    needsSignIn: boolean;
     /** why it failed (or why it is stopped: disabled, its computer is off) */
     error: string | null;
     tools: number;
@@ -90,4 +102,15 @@ export interface ToolsView {
     secrets: Record<string, string[]>;
     /** set when tools.json is unreadable: nothing was overwritten, and saving is refused until it is fixed */
     configError: string | null;
+    /** sign-ins under way, by server */
+    signIns: Record<string, SignIn>;
+}
+
+/** A sign-in under way: the page to open, and the loopback address it comes back to. */
+export interface SignIn {
+    url: string;
+    /** where the browser comes back to; on another device the panel catches it there and passes it on */
+    callback: string;
+    /** why it stopped, if it did */
+    error: string | null;
 }

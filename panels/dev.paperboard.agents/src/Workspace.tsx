@@ -1,10 +1,11 @@
 // The panel once the agent exists: the conversation, and one menu that opens a
-// modal with a sidebar (computer, apps, memories, routines, tools, settings)
+// modal with a sidebar (computer, apps, memories, routines, tools, access, settings)
 // beside the page. An app opened from a card or the Apps page slides in from
 // the right, and the chat steps aside to a column, or all the way off to the left.
 
 import { For, Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import { PAPER_PANEL_COMPACT_WIDTH, PaperFlex, PaperMenu, PaperMenuItem, PaperModal } from "@mileniumhq/paperui";
+import Access from "./access/Access";
 import Apps from "./apps/Apps";
 import AppView from "./apps/AppView";
 import { createLauncher, type OpenApp } from "./apps/launcher";
@@ -19,7 +20,7 @@ import type { Agent } from "./lib/agent";
 import { PageHold } from "./lib/pageHold";
 import styles from "./Workspace.module.css";
 
-export type Page = "computer" | "apps" | "memories" | "routines" | "tools" | "settings";
+export type Page = "computer" | "apps" | "memories" | "routines" | "tools" | "access" | "settings";
 
 const PAGES: { id: Page; title: string; icon: string }[] = [
     { id: "computer", title: "Computer", icon: "computer" },
@@ -27,6 +28,7 @@ const PAGES: { id: Page; title: string; icon: string }[] = [
     { id: "memories", title: "Memories", icon: "neurology" },
     { id: "routines", title: "Routines", icon: "event_repeat" },
     { id: "tools", title: "Tools", icon: "construction" },
+    { id: "access", title: "Access", icon: "shield_person" },
     { id: "settings", title: "Settings", icon: "settings" },
 ];
 
@@ -79,6 +81,8 @@ export default function Workspace(props: { agent: Agent }) {
                 return <Routines agent={agent} />;
             case "tools":
                 return <Tools agent={agent} />;
+            case "access":
+                return <Access agent={agent} />;
             case "settings":
                 return <Settings agent={agent} />;
         }
@@ -110,7 +114,7 @@ export default function Workspace(props: { agent: Agent }) {
                             )}
                         </For>
                     </PaperMenu>
-                    <PaperFlex flex minWidth={0} minHeight={0} scrollable="y" padding={shown() === "computer" || shown() === "apps" ? undefined : "double"}>
+                    <PaperFlex flex minWidth={0} minHeight={0} scrollable="y" padding={shown() === "computer" || shown() === "apps" || shown() === "tools" || shown() === "access" ? undefined : "double"}>
                         <For each={mounted()}>
                             {(p) => {
                                 // a chosen page asks for its first reads as it mounts; one that reads nothing shows in this same frame
