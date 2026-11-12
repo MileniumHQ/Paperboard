@@ -1,9 +1,12 @@
-import { type JSX, Show, createEffect, on } from "solid-js";
+import { type JSX, For, Show, createEffect, on } from "solid-js";
 import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
 import { createSwipeBack } from "../../utils/swipeBack";
 import { createNavigationBack } from "../../utils/navigationBack";
+import { createPageCrumb } from "../../utils/pageCrumbs";
+import { resolveBackground } from "../../utils/theme";
+import type { PaperBackgroundSurface } from "../../types";
 import styles from "./index.module.css";
 
 export interface PaperSlidePageProps {
@@ -11,6 +14,13 @@ export interface PaperSlidePageProps {
     enabled: boolean;
     open: boolean;
     title: string;
+    /**
+     * Where the person is inside the page, after its title, outermost
+     * first: the bar reads "Title › Crumb › Crumb", the last crumb kept
+     * whole and the earlier ones shortened. An app shell passes the open
+     * pages a panel frame reports (pageCrumbs).
+     */
+    crumbs?: string[];
     /** a Material icon name, or an element (an app's own icon) */
     icon?: JSX.Element;
     onBack: () => void;
@@ -22,6 +32,12 @@ export interface PaperSlidePageProps {
      * fixed: covers the whole screen (an app shell's top-level page).
      */
     position?: "absolute" | "fixed";
+    /**
+     * The page's surface, which also fills the strip a fixed page keeps
+     * clear above the home indicator. Match what the content shows at its
+     * foot, so the strip reads as part of it. Default surface.
+     */
+    background?: PaperBackgroundSurface;
     children: JSX.Element;
 }
 
@@ -39,6 +55,8 @@ export interface PaperSlidePageProps {
  */
 export function PaperSlidePage(props: PaperSlidePageProps) {
     createNavigationBack(() => props.enabled && props.open, () => props.onBack());
+    // a page inside a panel names itself to the shell's bar
+    createPageCrumb(() => props.enabled && props.open && props.position !== "fixed", () => props.title);
     let pageRef: HTMLDivElement | undefined;
     const swipe = createSwipeBack({
         width: () => pageRef?.clientWidth ?? window.innerWidth,
@@ -79,9 +97,9 @@ export function PaperSlidePage(props: PaperSlidePageProps) {
                 [styles.dragging]: props.enabled && swipe.offset() !== null,
                 [styles.closed]: props.enabled && !props.open,
             }}
-            style={{ transform: transform() }}
+            style={{ transform: transform(), background: props.enabled ? resolveBackground(props.background) : undefined }}
             role={props.enabled ? "region" : undefined}
-            aria-label={props.enabled ? props.title : undefined}
+            aria-label={props.enabled ? [props.title, ...(props.crumbs ?? [])].join(", ") : undefined}
             inert={props.enabled && !props.open}
         >
             <Show when={props.enabled}>
@@ -94,9 +112,27 @@ export function PaperSlidePage(props: PaperSlidePageProps) {
                             {typeof props.icon === "string" ? <PaperIcon>{props.icon}</PaperIcon> : props.icon}
                         </span>
                     </Show>
-                    <PaperText class={styles.title} size={3} weight={700}>
-                        {props.title}
-                    </PaperText>
+                    <span class={styles.trail}>
+                        <PaperText class={styles.title} size={props.position === "fixed" ? 2 : 3} weight={700}>
+                            {props.title}
+                        </PaperText>
+                        <For each={props.crumbs ?? []}>
+                            {(crumb, index) => (
+                                <>
+                                    <PaperIcon class={styles.separator} aria-hidden="true">chevron_right</PaperIcon>
+                                    <PaperText
+                                        class={styles.crumb}
+                                        classList={{ [styles.current]: index() === (props.crumbs?.length ?? 0) - 1 }}
+                                        size={2}
+                                        weight={index() === (props.crumbs?.length ?? 0) - 1 ? 700 : 600}
+                                        color={index() === (props.crumbs?.length ?? 0) - 1 ? undefined : "text-subtle"}
+                                    >
+                                        {crumb}
+                                    </PaperText>
+                                </>
+                            )}
+                        </For>
+                    </span>
                     <Show when={props.onMore}>
                         {(onMore) => (
                             <PaperButton icon variant="text" aria-label={props.moreLabel ?? "More"} onClick={(e: MouseEvent) => onMore()(e)}>

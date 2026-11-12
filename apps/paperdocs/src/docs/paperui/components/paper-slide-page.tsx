@@ -111,6 +111,18 @@ export function Drilldown(props: { phone: boolean }) {
                         <td><PaperCode>"absolute"</PaperCode> covers the nearest positioned container, such as a PaperPanel. <PaperCode>"fixed"</PaperCode> covers the whole screen, for an app's top-level page, and pads the bar and content by the device's safe areas.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>crumbs</PaperCode></td>
+                        <td><PaperCode>string[]</PaperCode></td>
+                        <td>No default</td>
+                        <td>Where the person is inside the page, outermost first, drawn after the title: "Title › Crumb › Crumb". The last crumb stays whole and the earlier ones shorten. Paperboard's shell passes the pages a panel has open, so its bar reads "Game Server › My Server › Overview".</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>background</PaperCode></td>
+                        <td><PaperCode>PaperBackgroundSurface</PaperCode></td>
+                        <td><PaperCode>"surface"</PaperCode></td>
+                        <td>The page's surface. A fixed page's content stops above the home indicator, and this surface fills that strip, so match what the content shows at its foot. Paperboard's panel page is <PaperCode>"surface-app"</PaperCode>, the background every panel document paints.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>children</PaperCode></td>
                         <td><PaperCode>JSX.Element</PaperCode></td>
                         <td>No default (required)</td>
@@ -133,6 +145,7 @@ export function Drilldown(props: { phone: boolean }) {
                 <li>The children are never moved or remounted, whether the layout is wide or phone, open or closed. State inside them, and an iframe's loaded page, survive.</li>
                 <li>Closed, the page is <PaperCode>inert</PaperCode>: it takes no focus or clicks.</li>
                 <li>Opening and closing animate. Switching between the wide and phone layout does not: a closed page appears off-screen at once.</li>
+                <li>In a panel, an open page names itself to Paperboard: the app's top bar shows its title as a crumb after the panel's name, and the page draws no bar of its own. The app's Back goes back through the panel's pages first. Outside Paperboard, or in its desktop layout, the page keeps its own bar.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>

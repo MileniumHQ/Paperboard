@@ -2,6 +2,7 @@ import { invoke, send, on, unpackIpcPayload } from "./ipc";
 import "./readiness";
 import "./swipeBack";
 import "./haptics";
+import "./pageCrumbs";
 
 export * from "./ipc";
 export * from "./config";
@@ -18,6 +19,7 @@ export * from "./ports";
 export * from "./loopback";
 export { SWIPE_BACK_MESSAGE, swipeBackMessage, type SwipeBackMessage } from "./swipeBack";
 export { HAPTIC_MESSAGE, hapticMessage, type HapticMessage } from "./haptics";
+export { PAGE_BACK_MESSAGE, PAGE_CRUMBS_MESSAGE, pageCrumbsMessage, type PageCrumbsMessage } from "./pageCrumbs";
 export * from "./package";
 export * from "./file";
 export * from "./process";

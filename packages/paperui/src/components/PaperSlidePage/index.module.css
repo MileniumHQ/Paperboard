@@ -40,8 +40,10 @@
     touch-action: none;
 }
 
+/* an app's top-level page keeps its bar slim: the screen's height is for
+   the content */
 .fixed > .bar {
-    min-height: calc(var(--paper-size-bar) + var(--paper-safe-area-top));
+    min-height: calc(var(--paper-control-size-large) + var(--paper-safe-area-top));
     padding-top: var(--paper-safe-area-top);
     padding-left: calc(var(--paper-uigap-half) + var(--paper-safe-area-left));
     padding-right: calc(var(--paper-uigap-half) + var(--paper-safe-area-right));
@@ -53,12 +55,48 @@
     flex-shrink: 0;
 }
 
-.title {
+/* "Title › Crumb › Crumb" on one line: the last crumb stays whole (up to
+   most of the line) and the ones before it shorten first */
+.trail {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-sixth);
+    overflow: hidden;
+}
+
+.title,
+.crumb {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.title {
+    flex: 0 1 auto;
+}
+
+.crumb {
+    flex: 0 2 auto;
+}
+
+.crumb.current {
+    flex: 0 0 auto;
+    max-width: 65%;
+}
+
+.separator {
+    flex-shrink: 0;
+    font-size: var(--paper-icon-size-small);
+    color: var(--paper-text-faint);
+}
+
+/* the shell holding this panel draws its pages' bars, with their titles as
+   crumbs, so a page in the frame shows none of its own */
+.page:not(.fixed) > .bar:where(:global([data-paper-host-bars]) *) {
+    display: none;
 }
 
 .content {
