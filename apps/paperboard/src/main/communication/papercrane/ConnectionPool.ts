@@ -34,17 +34,25 @@ function bracketHost(host: string): string {
     return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
 }
 
-// a typed address that is no host at all never reached the network
-export function isInvalidAddressError(err: any): boolean {
-    return err?.code === "ERR_INVALID_URL" || /invalid url|failed to parse url/i.test(String(err?.message || ""));
+const INVALID_ADDRESS = "That isn't a valid address. Type an IP address or a computer name";
+const INVALID_PORT = "That isn't a valid port. Type a whole number from 1 to 65535";
+
+// the host alone: a bad port must never be blamed on it
+function isValidHost(host: string): boolean {
+    return URL.canParse(`https://${bracketHost(host)}/`);
+}
+
+// what was typed, or null unless it is a whole number from 1 to 65535
+function parseProbePort(port: number | string): number | null {
+    const text = String(port).trim();
+    if (!/^\d{1,5}$/.test(text)) return null;
+    const n = Number(text);
+    return n >= 1 && n <= 65535 ? n : null;
 }
 
 // timeout = lost in transit, refusal = nothing listening there
 export function classifyProbeError(err: any): string {
     const msg = String(err?.message || "");
-    if (isInvalidAddressError(err)) {
-        return "That isn't a valid address. Type an IP address or a computer name";
-    }
     if (err?.name === "TimeoutError" || /aborted|timeout/i.test(msg)) {
         return "Timed out with no response. The computer may be offline, on a different network, or its firewall is blocking the Paperboard server daemon";
     }
@@ -225,14 +233,18 @@ export class ConnectionPool extends EventEmitter {
         return Array.from(this.computers.values()).map(({ id, name }) => ({ id, name }));
     }
 
+    // port arrives as typed, so a bad one is an answer, not a quiet default
     public async probe(
         host: string,
-        port = DEFAULT_PORT,
+        port: number | string = DEFAULT_PORT,
     ): Promise<{ reachable: boolean; hostname?: string; error?: string; invalidAddress?: boolean }> {
+        if (!isValidHost(host)) return { reachable: false, error: INVALID_ADDRESS, invalidAddress: true };
+        const portNumber = parseProbePort(port);
+        if (portNumber === null) return { reachable: false, error: INVALID_PORT };
         try {
             // reachability only: no credential crosses this request, so the
             // not-yet-pinned certificate is not checked here
-            const res = await pinnedRequest(`https://${bracketHost(host)}:${port}/health`, null, { timeoutMs: 2000 });
+            const res = await pinnedRequest(`https://${bracketHost(host)}:${portNumber}/health`, null, { timeoutMs: 2000 });
             if (res.ok) {
                 // /health carries liveness + version only; hostname arrives
                 // over the authenticated pair/verify handshake instead
@@ -240,7 +252,7 @@ export class ConnectionPool extends EventEmitter {
             }
             return { reachable: false, error: `HTTP ${res.status}` };
         } catch (err: any) {
-            return { reachable: false, error: classifyProbeError(err), ...(isInvalidAddressError(err) ? { invalidAddress: true } : {}) };
+            return { reachable: false, error: classifyProbeError(err) };
         }
     }
 

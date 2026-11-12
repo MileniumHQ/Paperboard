@@ -79,9 +79,10 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
         }
 
         try {
+            // empty means the default; anything else is checked as typed
             const res = await computers.probe(
                 trimmedHost,
-                Number(trimmedPort) || 45464,
+                trimmedPort === "" ? undefined : trimmedPort,
             );
 
             if (res && res.reachable) {

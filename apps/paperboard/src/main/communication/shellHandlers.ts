@@ -75,7 +75,11 @@ export function createShellInvokeHandlers(
 
         "computer-probe": async (args) => {
             const host = requireString(field(args, "host"), "host");
-            return await connectionPool.probe(host, field(args, "port") as number | undefined);
+            const port = field(args, "port");
+            if (port !== undefined && typeof port !== "number" && typeof port !== "string") {
+                throw new Error("port must be a number or a string");
+            }
+            return await connectionPool.probe(host, port);
         },
 
         "computer-pair": async (args) => {

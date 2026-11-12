@@ -93,7 +93,7 @@ export const computersApi = {
     list: (): Promise<ComputerListResult> =>
         requireIpc().invoke<ComputerListResult>("computers-list"),
 
-    probe: (host: string, port?: number): Promise<ComputerProbeResult> =>
+    probe: (host: string, port?: number | string): Promise<ComputerProbeResult> =>
         requireIpc().invoke<ComputerProbeResult>("computer-probe", {
             host,
             port,

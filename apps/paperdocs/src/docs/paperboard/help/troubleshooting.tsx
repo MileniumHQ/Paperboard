@@ -105,6 +105,7 @@ export default function TroubleshootingDoc() {
                 <li><PaperCode>Host not found.</PaperCode> The name does not resolve. Type the computer's IP address instead.</li>
                 <li><PaperCode>Network unreachable.</PaperCode> This computer has no route to that address. Check that both are on the same network, or connected through your VPN.</li>
                 <li><PaperCode>That isn't a valid address.</PaperCode> What you typed is not an IP address or a computer name. Check it for spaces and stray characters.</li>
+                <li><PaperCode>That isn't a valid port.</PaperCode> The port must be a whole number from 1 to 65535. The default is 45464.</li>
             </PaperTextList>
 
             <PaperText preset="title" as="h3" id="not-listed">The computer is not in the list</PaperText>
