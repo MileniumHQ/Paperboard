@@ -42,6 +42,7 @@ interface SwipeTarget {
     el: () => HTMLElement | undefined;
     active: () => boolean;
     width: () => number;
+    offset: () => number | null;
     setOffset: (offset: number | null) => void;
     onBack: () => void;
 }
@@ -82,15 +83,39 @@ export function parseSwipeBack(data: unknown): SwipeBackDetail | null {
     return { phase, dx: Math.max(0, dx), velocity };
 }
 
+// where a frame's swipe has got to, and how fast, in this document
+interface FrameSwipe {
+    dx: number;
+    t: number;
+    velocity: number;
+}
+const frameSwipes = new WeakMap<SwipeTarget, FrameSwipe>();
+
 /**
  * A swipe a frame's document reported (it had no page of its own to go back
  * from): drives the open page holding `frame`. Returns whether one did.
+ *
+ * The frame moves with the page, under the finger, so the finger's position
+ * in the frame falls behind by however far the page has already gone. Taken
+ * as it is, the page would chase its own movement and stutter on a slow
+ * drag; the page's offset is added back, and the speed is measured here.
  */
 export function swipeFromFrame(frame: Element, data: unknown): boolean {
     const detail = parseSwipeBack(data);
     const target = detail && targetFor(frame);
     if (!detail || !target) return false;
-    apply(target, detail);
+    const dx = Math.max(0, detail.dx + (target.offset() ?? 0));
+    const now = performance.now();
+    const before = frameSwipes.get(target);
+    if (detail.phase === "move") {
+        const dt = before ? now - before.t : 0;
+        const velocity = before && dt > 0 ? (dx - before.dx) / dt : (before?.velocity ?? 0);
+        frameSwipes.set(target, { dx, t: now, velocity });
+        apply(target, { phase: "move", dx, velocity });
+        return true;
+    }
+    frameSwipes.delete(target);
+    apply(target, { phase: detail.phase, dx, velocity: before?.velocity ?? 0 });
     return true;
 }
 
@@ -234,7 +259,7 @@ export function createSwipeBack(opts: {
     const el = opts.el;
     const active = opts.active;
     if (el && active) {
-        const target: SwipeTarget = { el, active, width: opts.width, setOffset, onBack: () => opts.onBack() };
+        const target: SwipeTarget = { el, active, width: opts.width, offset, setOffset, onBack: () => opts.onBack() };
         targets.add(target);
         // a page that closes mid-swipe springs back
         createEffect(() => {
