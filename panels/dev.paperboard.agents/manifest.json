@@ -56,7 +56,7 @@
             },
             {
                 "name": "Tool servers you add",
-                "detail": "The MCP servers you add, or ask the agent to add, and their sign-in pages. A server that's a program may download itself when it starts, like a package from npm. What the agent asks a server, and what it's given, goes to whoever runs it"
+                "detail": "MCP servers you or the agent add, and their sign-in pages. Some download themselves, like npm packages. Whoever runs one sees what the agent sends and gets back"
             },
             {
                 "name": "npm",
