@@ -20,6 +20,7 @@ Paperboard is a dashboard for self-hostable programs. Panels are like the apps. 
 - **Always test.** Unless you're certain it'll work fine, always do a manual check to ensure the feature works and looks great.
 - When making Actions, placeholders are the type (etc "Text" or "Channel ID") and not a description (etc "Example Text" "1234567890")
 - **Be careful with deletes:** stop a service before touching its files, and keep user data on uninstall.
+- **Deprecated panels:** AI and Actions are deprecated panels. Unless asked, don't change anything about them. It's a waste of time.
 
 Tests:
 
