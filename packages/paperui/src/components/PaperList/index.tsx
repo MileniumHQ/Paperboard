@@ -63,10 +63,18 @@ export type PaperListProps = (
          * tab strip). Default false.
          */
         compact?: boolean;
+        /**
+         * A list of buttons, like a phone's navigation list: pressing an item
+         * still chooses it (onValueChange, the item's onClick), but no item
+         * stays highlighted, because what it opens covers the list. Default
+         * false.
+         */
+        buttons?: boolean;
     };
 
 interface PaperListContextType {
     isSelectable: () => boolean;
+    isButtons: () => boolean;
     isCompact: () => boolean;
     isReorderable: () => boolean;
     hasActiveDrag: () => boolean;
@@ -111,6 +119,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
         "background",
         "selectable",
         "compact",
+        "buttons",
         "class",
         "classList",
         "style",
@@ -149,6 +158,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
 
     const contextValue: PaperListContextType = {
         isSelectable,
+        isButtons: () => local.buttons ?? false,
         isCompact,
         isReorderable,
         hasActiveDrag: reorder.hasActiveDrag,
@@ -319,7 +329,7 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
     const className = () =>
         [
             styles.PaperListItem,
-            isSelected() && selectable() ? styles.selected : "",
+            isSelected() && selectable() && !listCtx?.isButtons() ? styles.selected : "",
             isDragging() ? styles.dragging : "",
             listCtx?.isDropping() ? styles.dropping : "",
             listCtx?.hasActiveDrag() && !isDragging() ? styles.isSibling : "",

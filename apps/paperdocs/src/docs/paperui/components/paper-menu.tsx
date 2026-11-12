@@ -314,7 +314,7 @@ export function Example() {
             <PaperText preset="subheader" as="h3" id="in-a-panel">In a PaperPanel</PaperText>
             <PaperTextList>
                 <li>A vertical, non-embedded menu directly inside a <PaperLink href="/docs/paperui/paperpanel/">PaperPanel</PaperLink> is the panel's navigation. Pair it with a <PaperLink href="/docs/paperui/paperinterfacegroup/">PaperInterfaceGroup</PaperLink> whose <PaperCode>value</PaperCode> follows the menu's.</li>
-                <li>In the panel's compact (phone) layout, choosing an entry, even the current one, opens its page, and the page bar shows the entry's title and icon. While a page is open the menu is inert.</li>
+                <li>In the panel's compact (phone) layout, choosing an entry, even the current one, opens its page, and the page bar shows the entry's title and icon. While a page is open the menu is inert. The menu is a list of buttons there: no entry stays highlighted, because the page it opens covers the menu.</li>
                 <li>A horizontal menu, or one with <PaperCode>embedded</PaperCode>, is not the panel's navigation and has none of this.</li>
             </PaperTextList>
 

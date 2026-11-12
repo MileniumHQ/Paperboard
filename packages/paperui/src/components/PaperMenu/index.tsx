@@ -329,7 +329,9 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
     const className = () =>
         [
             styles.PaperMenuItem,
-            isSelected() ? styles.selected : "",
+            // a phone-width panel's menu is a list of buttons: what an entry
+            // opens covers the menu, so none stays highlighted
+            isSelected() && !(isPanelNav && panel?.compact?.()) ? styles.selected : "",
             local.disabled ? styles.disabled : "",
             local.class,
         ]

@@ -213,6 +213,12 @@ export function Example() {
                         <td><PaperCode>false</PaperCode>: the list only shows rows. Items can't be chosen, so they render no input, don't highlight on hover and never take the selection bar. <PaperCode>name</PaperCode> is then optional. Items' <PaperCode>actions</PaperCode> still work.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>buttons</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>A list of buttons, like a phone's navigation list. Pressing an item still chooses it (<PaperCode>onValueChange</PaperCode>, the item's <PaperCode>onClick</PaperCode>), but no item keeps the selection bar or highlight, because what it opens covers the list. Pass it only in that layout; a sidebar beside its content keeps showing what's open.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>compact</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td><PaperCode>false</PaperCode></td>
