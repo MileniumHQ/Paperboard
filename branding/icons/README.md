@@ -23,7 +23,7 @@ rsvg-convert -w 512 -h 512 branding/icons/<name>.svg -o branding/icons/png/<name
 
 ## Apple app icon
 
-macOS and iOS use the Paperboard icon as an Icon Composer `.icon`, so it gets Liquid Glass and the dark, clear and tinted appearances. Apple draws its own squircle, and the whole logo sits inside it: the glyph never leaves its stack. The fill is white fading to a cool grey, and the logo is four glass groups, front to back: the three white triangles, the half-opacity wedge, the front tile and the back tile. It's the 875 canvas at 78%, centred on a 1024 × 1024 one. The wedge is its own group so dark mode keeps it see-through.
+macOS and iOS use the Paperboard icon as an Icon Composer `.icon`, so it gets Liquid Glass and the dark, clear and tinted appearances. Apple draws its own squircle, and the whole logo sits inside it: the glyph never leaves its stack. The fill is white fading to a cool grey, and the logo is four glass groups, front to back: the three white triangles, the half-opacity wedge, the front tile and the back tile. It's the 875 canvas at 84%, centred on a 1024 × 1024 one. The wedge is its own group so dark mode keeps it see-through.
 
 - macOS: `apps/paperboard/build/icon.icon`. electron-builder compiles it with `actool` (Xcode 26 or later), which also writes the `.icns` older macOS shows.
 - iOS: `mobile/ios/App/App/AppIcon.icon` in paperboard-cloud, the same files.
@@ -36,6 +36,6 @@ ictool icon.icon --export-image --output-file out.png --platform iOS --rendition
 
 Renditions are `Default`, `Dark`, `ClearLight`, `ClearDark`, `TintedLight` and `TintedDark`. `ictool` lives in `Icon Composer.app/Contents/Executables/`.
 
-Android's launcher icon (paperboard-cloud, `mobile/android/app/src/main/res/drawable/ic_launcher_*.xml`) is the same fill and logo as vectors, with the logo two thirds of the visible icon. Its themed-icon layer draws the back tile, front tile and glyph at rising opacity.
+Android's launcher icon (paperboard-cloud, `mobile/android/app/src/main/res/drawable/ic_launcher_*.xml`) is the same fill and logo as vectors, with the logo 51.5 dp of the 72 dp visible, just inside the safe zone. Its themed-icon layer draws the back tile, front tile and glyph at rising opacity.
 
 The macOS menu bar shows `apps/paperboard/resources/trayTemplate.png` (18 px, with a 36 px `@2x`): the whole logo in black, the back tile at half opacity and the glyph cut out of the front tile, which macOS recolours for the bar.
