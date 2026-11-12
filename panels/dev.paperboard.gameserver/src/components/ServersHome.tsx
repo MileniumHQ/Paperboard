@@ -23,7 +23,11 @@ import { serversBridge, openServer } from "../lib/api";
 import type { ServerSummary, ServersState } from "../service";
 import { gameFor, games, serverSubtitle } from "../games";
 import GamePicker from "./GamePicker";
-export default function ServersHome(props: { state: ServersState }) {
+export default function ServersHome(props: {
+    state: ServersState;
+    /** opens a server; on a phone its page slides in first */
+    onOpen: (id: string) => void;
+}) {
     const [dialog, setDialog] = createSignal<"add" | "rename" | "remove" | null>(null);
     const [target, setTarget] = createSignal<ServerSummary | null>(null);
     const [name, setName] = createSignal("");
@@ -130,7 +134,7 @@ export default function ServersHome(props: { state: ServersState }) {
                                                 : server.state.serverStatus}
                                         </PaperBadge>
                                     }
-                                    onClick={() => openServer(server.id)}
+                                    onClick={() => props.onOpen(server.id)}
                                     footerLeft={
                                         <Show when={server.configured && server.state.serverPort}>
                                             {(port) => (
@@ -169,7 +173,7 @@ export default function ServersHome(props: { state: ServersState }) {
                 placement={menu.placement()}
                 onClose={menu.close}
             >
-                <PaperContextMenuItem icon="open_in_new" onClick={() => openServer(target()!.id)}>
+                <PaperContextMenuItem icon="open_in_new" onClick={() => props.onOpen(target()!.id)}>
                     Open
                 </PaperContextMenuItem>
                 <PaperContextMenuItem icon="edit" onClick={() => ask("rename")}>

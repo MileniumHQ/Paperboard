@@ -3,6 +3,7 @@ import { createEffect, createMemo, createSignal, onMount, onCleanup, untrack, Fo
 import { tabIds } from "./lib/tabIds";
 import {
     PaperPanel, PaperPresence, PaperButton, PaperIcon, PaperQuote, PaperLoader, PaperFlex, PaperText,
+    PaperSlidePage, PAPER_PANEL_COMPACT_WIDTH, getVar,
     PaperMenu,
     PaperMenuItem,
     PaperMenuLabel,
@@ -26,6 +27,24 @@ import "@mileniumhq/paperui/panel.css";
 
 // the menu entry that leaves the server for the home screen
 const HOME_ENTRY = "home";
+
+/** how long PaperUI's pages take to slide, which a page waits out before the next step */
+function slideMs(): number {
+    const duration = getVar("mid-transition");
+    const value = parseFloat(duration);
+    if (!Number.isFinite(value)) throw new Error(`The page transition is not a duration: "${duration}"`);
+    return duration.endsWith("ms") ? value : value * 1000;
+}
+
+/** the phone layout, the width at which PaperPanel puts its menu and page one over the other */
+function createCompact(): () => boolean {
+    const query = window.matchMedia(`(max-width: ${PAPER_PANEL_COMPACT_WIDTH - 0.02}px)`);
+    const [compact, setCompact] = createSignal(query.matches);
+    const change = () => setCompact(query.matches);
+    query.addEventListener("change", change);
+    onCleanup(() => query.removeEventListener("change", change));
+    return compact;
+}
 
 export default function App() {
     const [configured, setConfigured] = createSignal<boolean | null>(null);
@@ -79,6 +98,45 @@ export default function App() {
 
     const [servers, setServers] = createSignal<ServersState | null>(null);
     const [failure, setFailure] = createSignal("");
+
+    // Each server is a document of its own (see lib/api). On a phone the
+    // server is a page that slides in over the list: it opens before the
+    // server's document loads inside it, and a document opened on a server
+    // starts with its page already open. Going back slides the page out over
+    // the list that is already underneath, then lets the server's page go.
+    const compact = createCompact();
+    const [shown, setShown] = createSignal<string | null>(selectedServerId);
+    const [pageOpen, setPageOpen] = createSignal(selectedServerId !== null);
+    // set once the page has slid away: this document no longer shows its server
+    const [retired, setRetired] = createSignal(false);
+    const serverHere = () => selectedServerId !== null && !retired();
+    const shownName = () => servers()?.servers.find((server) => server.id === shown())?.name ?? "";
+    let navigation: ReturnType<typeof setTimeout> | undefined;
+    const openServerPage = (id: string) => {
+        if (!compact()) {
+            openServer(id);
+            return;
+        }
+        setShown(id);
+        setPageOpen(true);
+        if (serverHere() && id === selectedServerId) return;
+        // the page has slid in over the list; the server's document loads inside it
+        navigation = setTimeout(() => openServer(id), slideMs());
+    };
+    const closeServerPage = () => {
+        clearTimeout(navigation);
+        setPageOpen(false);
+        const closed = shown();
+        setTimeout(() => {
+            if (pageOpen() || shown() !== closed) return;
+            setShown(null);
+            if (selectedServerId === null || retired()) return;
+            setRetired(true);
+            const url = new URL(window.location.href);
+            url.searchParams.delete("server");
+            window.history.replaceState(window.history.state, "", url.href);
+        }, slideMs());
+    };
     const fail = (what: string, err: unknown) => {
         console.error(`[App] ${what} failed:`, err);
         setFailure(err instanceof Error ? err.message : String(err));
@@ -110,80 +168,107 @@ export default function App() {
         void load();
     });
 
-    return (
-        <Show when={!failure()} fallback={<PaperQuote variant="danger" title="Servers could not be loaded" role="alert">{failure()}<PaperButton onClick={() => openServer(null)}>Servers</PaperButton></PaperQuote>}>
+    // the server's own page: its setup wizard until it is set up, then its menu and tabs
+    const serverView = () => (
         <Show
-            when={servers()}
+            when={configured()}
             fallback={
-                // centred, and only after a moment: opening a server reloads the page
-                <PaperFlex fullWidth fullHeight align="center" justify="center">
-                    <PaperLoader loaderStatus="indeterminate" delay={400} label="Loading servers" />
-                </PaperFlex>
-            }
-        >
-        <Show when={selectedServerId} fallback={<ServersHome state={servers()!} />}>
-            <Show
-                when={configured()}
-                fallback={
-                    // the wizard has no menu, so it keeps a way back to the servers
-                    <PaperFlex direction="column" fullWidth fullHeight>
+                // the wizard has no menu, so a wide layout keeps a way back to the servers
+                <PaperFlex direction="column" fullWidth fullHeight>
+                    <Show when={!compact()}>
                         <PaperFlex direction="row" align="center" gap="half" padding="half">
                             <PaperButton icon variant="text" title="Back to Servers" aria-label="Back to Servers" onClick={() => openServer(null)}>
                                 <PaperIcon>arrow_back</PaperIcon>
                             </PaperButton>
                             <PaperText preset="title">{selectedServer(servers()!).name}</PaperText>
                         </PaperFlex>
-                        <PaperFlex direction="column" fullWidth fullHeight>
-                            {gameUI()!.setup({
-                                get initialSoftware() { return selectedServer(servers()!).state.serverSoftware; },
-                                get initialVersion() { return selectedServer(servers()!).state.serverVersion; },
-                                onComplete: () => { setSetUpHere(true); setConfigured(true); },
-                            })}
-                        </PaperFlex>
+                    </Show>
+                    <PaperFlex direction="column" fullWidth fullHeight>
+                        {gameUI()!.setup({
+                            get initialSoftware() { return selectedServer(servers()!).state.serverSoftware; },
+                            get initialVersion() { return selectedServer(servers()!).state.serverVersion; },
+                            onComplete: () => { setSetUpHere(true); setConfigured(true); },
+                        })}
                     </PaperFlex>
-                }
-            >
-                <PaperPresence when appear={setUpHere()} motion="fade">
-                <PaperPanel>
-                    <PaperMenu
-                        name="serverMenu"
-                        value={activeTab()}
-                        onValueChange={(val) => {
-                            if (val === HOME_ENTRY) openServer(null);
-                            else setActiveTab(String(val));
-                        }}
-                    >
+                </PaperFlex>
+            }
+        >
+            <PaperPresence when appear={setUpHere()} motion="fade">
+            <PaperPanel>
+                <PaperMenu
+                    name="serverMenu"
+                    value={activeTab()}
+                    onValueChange={(val) => {
+                        if (val === HOME_ENTRY) openServer(null);
+                        else setActiveTab(String(val));
+                    }}
+                >
+                    {/* a phone leaves the server with the page's back button, under the server's name */}
+                    <Show when={!compact()}>
                         <PaperMenuItem value={HOME_ENTRY} icon="arrow_back">
                             All servers
                         </PaperMenuItem>
                         <PaperMenuLabel>{selectedServer(servers()!).name}</PaperMenuLabel>
-                        {/* by position: describe() makes new tab objects whenever the state changes */}
-                        <Index each={features().tabs}>
-                            {(tab, index) => <>
-                                <Show when={tab().group && tab().group !== features().tabs[index - 1]?.group}>
-                                    <PaperMenuLabel>{tab().group}</PaperMenuLabel>
-                                </Show>
-                                <PaperMenuItem value={tab().id} icon={tab().icon}>{tab().label}</PaperMenuItem>
-                            </>}
-                        </Index>
-                    </PaperMenu>
+                    </Show>
+                    {/* by position: describe() makes new tab objects whenever the state changes */}
+                    <Index each={features().tabs}>
+                        {(tab, index) => <>
+                            <Show when={tab().group && tab().group !== features().tabs[index - 1]?.group}>
+                                <PaperMenuLabel>{tab().group}</PaperMenuLabel>
+                            </Show>
+                            <PaperMenuItem value={tab().id} icon={tab().icon}>{tab().label}</PaperMenuItem>
+                        </>}
+                    </Index>
+                </PaperMenu>
 
-                    <PaperInterfaceGroup value={activeTab()}>
-                        <For each={shownTabs()}>
-                            {(id) => {
-                                const tab = () => features().tabs.find((t) => t.id === id)!;
-                                const owner = untrack(() => tab().owner);
-                                return <PaperInterfaceItem value={id} variant={tab().variant} width={tab().width}>
-                                    {/* made once; its props follow the features, so a state change never remounts the tab */}
-                                    {untrack(() => renderTab(id, owner))}
-                                </PaperInterfaceItem>;
-                            }}
-                        </For>
-                    </PaperInterfaceGroup>
-                </PaperPanel>
-                </PaperPresence>
-            </Show>
+                <PaperInterfaceGroup value={activeTab()}>
+                    <For each={shownTabs()}>
+                        {(id) => {
+                            const tab = () => features().tabs.find((t) => t.id === id)!;
+                            const owner = untrack(() => tab().owner);
+                            return <PaperInterfaceItem value={id} variant={tab().variant} width={tab().width}>
+                                {/* made once; its props follow the features, so a state change never remounts the tab */}
+                                {untrack(() => renderTab(id, owner))}
+                            </PaperInterfaceItem>;
+                        }}
+                    </For>
+                </PaperInterfaceGroup>
+            </PaperPanel>
+            </PaperPresence>
         </Show>
+    );
+
+    const loading = () => (
+        // centred, and only after a moment: opening a server reloads the page
+        <PaperFlex fullWidth fullHeight align="center" justify="center">
+            <PaperLoader loaderStatus="indeterminate" delay={400} label="Loading servers" />
+        </PaperFlex>
+    );
+
+    return (
+        <Show when={!failure()} fallback={<PaperQuote variant="danger" title="Servers could not be loaded" role="alert">{failure()}<PaperButton onClick={() => openServer(null)}>Servers</PaperButton></PaperQuote>}>
+        <Show
+            when={compact()}
+            fallback={
+                <Show when={servers()} fallback={loading()}>
+                    <Show when={serverHere()} fallback={<ServersHome state={servers()!} onOpen={openServerPage} />}>
+                        {serverView()}
+                    </Show>
+                </Show>
+            }
+        >
+            <Show when={servers()}>
+                <ServersHome state={servers()!} onOpen={openServerPage} />
+            </Show>
+            <PaperSlidePage enabled open={pageOpen()} position="fixed" title={shownName()} onBack={closeServerPage}>
+                <Show when={shown()}>
+                    {(id) => (
+                        <Show when={servers() && serverHere() && id() === selectedServerId} fallback={loading()}>
+                            {serverView()}
+                        </Show>
+                    )}
+                </Show>
+            </PaperSlidePage>
         </Show>
         </Show>
     );
