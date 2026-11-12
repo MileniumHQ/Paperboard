@@ -6,6 +6,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { copyText, getVar, pasteText } from "@mileniumhq/paperui";
 import { serviceApi, terminalApi } from "@mileniumhq/paperapi";
 import { terminalKeyAction, type TerminalKeyAction } from "./keys";
+import { keyBytes, withModifiers, type Modifiers, type NamedKey } from "./lib/softKeys";
 import { errorMessage, type Outcome } from "./lib/failure";
 import { joinScrollback } from "./lib/scrollback";
 import { linkOpens, outputText, pasteRunsAtOnce, promptTarget, type ScreenLine } from "./lib/screen";
@@ -21,6 +22,10 @@ export interface TerminalHandle {
     focus(): void;
     /** pastes as typed, asking first when the paste would run at once */
     paste(text: string): Promise<void>;
+    /** sends a key the phone's keyboard doesn't have, as the program running now reads it */
+    sendKey(key: NamedKey): void;
+    /** types text as the keyboard would, so a latched Ctrl or Alt applies to it */
+    type(text: string): void;
     /** the last finished command's output; null before one has finished */
     lastOutput(): string | null;
     /** scrolls to the shell's previous or next prompt; false when there is none */
@@ -69,6 +74,10 @@ export interface TerminalComponentProps {
     onFailure: (failure: Outcome) => void;
     /** the screen took the keyboard */
     onFocus?: () => void;
+    /** Ctrl and Alt latched by the key row, applied to the next key typed */
+    modifiers?: () => Modifiers;
+    /** the next key used up the latched modifiers */
+    onModifiersUsed?: () => void;
     /** the shell printed while this screen was hidden */
     onActivity?: () => void;
     /** the shell rang the bell */
@@ -285,11 +294,22 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 stop(`Lost this terminal: ${errorMessage(err)}`, "Press any key to try again.");
             });
         };
-        term.onData(send);
+        term.onData((data) => {
+            const typed = withModifiers(data, props.modifiers?.() ?? { ctrl: false, alt: false });
+            if (typed.consumed) props.onModifiersUsed?.();
+            send(typed.data);
+        });
 
         const handle: TerminalHandle = {
             term,
             focus: () => term.focus(),
+            sendKey: (key) => {
+                const mods = props.modifiers?.() ?? { ctrl: false, alt: false };
+                // user input, so it reaches the shell the way a typed key does
+                term.input(keyBytes(key, term.modes.applicationCursorKeysMode, mods), true);
+                props.onModifiersUsed?.();
+            },
+            type: (text) => term.input(text, true),
             paste: async (text) => {
                 if (pasteRunsAtOnce(text, { atPrompt, bracketedPaste: term.modes.bracketedPasteMode }) && !(await props.confirmPaste(text))) return;
                 // as the keyboard pastes: bracketed when the shell asked for it
@@ -373,10 +393,14 @@ export function TerminalComponent(props: TerminalComponentProps) {
         });
     });
 
-    // xterm measures its parent to fit, so the padding sits outside it
+    // xterm measures its parent to fit, so the padding sits outside it. A tap
+    // anywhere on the screen, padding included, takes the keyboard; the
+    // click is the gesture a phone allows to raise its on-screen keyboard
+    // (a scroll or a long press never becomes a click).
     return (
         <div
             class={styles.screen}
+            onClick={() => activeTerminals.get(props.id)?.focus()}
             onContextMenu={(e) => {
                 e.preventDefault();
                 props.onFocus?.();

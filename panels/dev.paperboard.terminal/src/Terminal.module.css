@@ -41,3 +41,15 @@
 .splitDown {
     border-top: var(--paper-border-width) solid var(--paper-border);
 }
+
+/* a phone's other shell of a split stays mounted but out of sight */
+.layer .paneAway {
+    display: none;
+}
+
+/* the on-screen keyboard covers the bottom of the panel; its height is set
+ * by the panel as it changes (--terminal-keyboard-inset) */
+.keyboardAvoid {
+    padding-bottom: var(--terminal-keyboard-inset, 0px);
+    box-sizing: border-box;
+}
