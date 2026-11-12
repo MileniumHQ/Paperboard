@@ -10,14 +10,13 @@ import {
     PaperModal,
     PaperQuote,
     PaperText,
-    PaperTextList,
 } from "@mileniumhq/paperui";
 import { errorToMessage, extractApplicationIdFromToken } from "../types";
 
-const PORTAL_URL = "https://discord.com/developers/applications";
+export const PORTAL_URL = "https://discord.com/developers/applications";
 
 /** The token field and what it says about the token typed into it. */
-function TokenField(props: { value: string; onInput: (value: string) => void; appId: string | null; expectedAppId?: string }) {
+export function TokenField(props: { value: string; onInput: (value: string) => void; appId: string | null; expectedAppId?: string }) {
     return (
         <PaperFlex direction="column" gap="half">
             <PaperInput
@@ -93,26 +92,9 @@ export function NewBotModal(props: {
             <form onSubmit={(e) => { e.preventDefault(); void submit(); }}>
                 <PaperFlex direction="column" gap="full">
                     <PaperText preset="text">
-                        Each bot is its own Discord application. Make one in the{" "}
-                        <PaperLink href={PORTAL_URL} target="_blank">Discord Developer Portal</PaperLink>:
+                        Paste the token from your bot's page in the{" "}
+                        <PaperLink href={PORTAL_URL} target="_blank">Discord Developer Portal</PaperLink>.
                     </PaperText>
-                    <PaperTextList ordered spacing="compact">
-                        <PaperTextList.Item>
-                            Click <strong>New Application</strong> and name your bot
-                        </PaperTextList.Item>
-                        <PaperTextList.Item>
-                            Go to the <strong>Bot</strong> tab in the sidebar
-                        </PaperTextList.Item>
-                        <PaperTextList.Item>
-                            Under <strong>Privileged Gateway Intents</strong>, enable{" "}
-                            <strong>Message Content Intent</strong> and{" "}
-                            <strong>Server Members Intent</strong> so message
-                            and member flows receive event data
-                        </PaperTextList.Item>
-                        <PaperTextList.Item>
-                            Click <strong>Reset Token</strong>, copy the token and paste it here
-                        </PaperTextList.Item>
-                    </PaperTextList>
                     <TokenField value={token()} onInput={setToken} appId={appId()} />
                     <Show when={error()}>
                         {(text) => (

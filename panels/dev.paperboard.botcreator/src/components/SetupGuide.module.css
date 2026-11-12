@@ -1,0 +1,11 @@
+/* A screenshot of the Discord Developer Portal: as wide as the step, never
+ * wider than itself, and it gives up height before the step scrolls. */
+.shot {
+    display: block;
+    max-width: 100%;
+    min-height: 0;
+    height: auto;
+    object-fit: contain;
+    border-radius: var(--paper-border-radius);
+    border: var(--paper-border-width) solid var(--paper-border);
+}

@@ -49,6 +49,7 @@ import {
     LEGACY_TOKEN_NAME,
     MAX_BOTS,
     PANEL_ID,
+    SETUP_GUIDE_FIELD,
     byCreation,
     createBotId,
     isBotId,
@@ -152,8 +153,14 @@ function summary(entry: BotEntry): BotSummary {
     };
 }
 
+// the setup guide is for someone with no bots yet: a computer that already
+// has one has been through it
+function setupGuideSeen(): boolean {
+    return savedExtras[SETUP_GUIDE_FIELD] === true || bots.size > 0;
+}
+
 function publish(): void {
-    serviceCtx?.setState({ bots: [...bots.values()].map(summary), botsError });
+    serviceCtx?.setState({ bots: [...bots.values()].map(summary), botsError, setupGuideSeen: setupGuideSeen() });
 }
 
 function requireReadable(): void {
@@ -174,6 +181,8 @@ function saveBots(): Promise<void> {
     const write = writing.then(async () => {
         const document = {
             ...savedExtras,
+            // a computer with a bot has been through the setup guide
+            ...(bots.size > 0 ? { [SETUP_GUIDE_FIELD]: true } : {}),
             version: BOTS_VERSION,
             bots: [...bots.values()].map((entry) => entry.stored),
         };
@@ -693,6 +702,15 @@ export const serviceCalls = {
     /** Stops a bot and removes it, its token, its commands and its Blocks project. */
     deleteBot: async (_ctx: unknown, input: any) => ({ deleted: await deleteBot(requireBot(input?.bot)) }),
 
+    /** The setup guide was finished or skipped: it never shows again. Saved with the bots. */
+    markSetupGuideSeen: async () => {
+        requireReadable();
+        savedExtras = { ...savedExtras, [SETUP_GUIDE_FIELD]: true };
+        await saveBots();
+        publish();
+        return true;
+    },
+
     /** Gateway, cache and memory health. */
     getHealth: (_ctx: unknown, input: any) => requireBot(input?.bot).session.health(),
 
@@ -790,7 +808,7 @@ export function startBots<T>(entries: Iterable<T>, start: (entry: T) => Promise<
 
 export const botService = definePanelService({
     id: PANEL_ID,
-    state: { bots: [], botsError: null } as BotsServiceState,
+    state: { bots: [], botsError: null, setupGuideSeen: true } as BotsServiceState,
     calls: serviceCalls,
     widgetChoices: {
         "bot-status": { bot: botChoices },
@@ -811,6 +829,11 @@ export const botService = definePanelService({
         } catch (err) {
             panelBlocksError = errorToMessage(err);
             console.error("[DiscordService] registering the Blocks types failed:", panelBlocksError);
+        }
+        // bots saved before the guide existed: remember that they have been through it
+        if (!botsError && bots.size > 0 && savedExtras[SETUP_GUIDE_FIELD] !== true) {
+            savedExtras = { ...savedExtras, [SETUP_GUIDE_FIELD]: true };
+            await saveBots().catch(logFailure("saving that the setup guide is done failed"));
         }
         for (const entry of bots.values()) await registerEntry(entry);
         publish();

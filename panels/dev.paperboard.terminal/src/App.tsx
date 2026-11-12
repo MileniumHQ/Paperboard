@@ -18,6 +18,7 @@ import {
     PaperContextMenuItem,
     PaperContextMenuHeader,
     copyText,
+    showToast,
     type LoaderStatus,
 } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
@@ -33,6 +34,10 @@ import type { CommandRun, SavedCommand } from "./lib/savedCommands";
 import { describeRun } from "./lib/runStatus";
 import { errorMessage, type Outcome } from "./lib/failure";
 import { shortcutLabel } from "./keys";
+import SoftKeys from "./SoftKeys";
+import { createCompact } from "./lib/compact";
+import { watchKeyboardInset } from "./lib/keyboardInset";
+import { NO_MODIFIERS, type Modifiers, type NamedKey } from "./lib/softKeys";
 import { pasteLines } from "./lib/screen";
 import { tabSessions, tabTitle, type LiveSession, type SplitDirection, type TabLayout, type TerminalSession, type TerminalTab } from "./lib/tabs";
 
@@ -106,7 +111,10 @@ export default function App() {
         layout: "horizontal",
     });
     const tabs = () => mirror.tabs;
-    const vertical = () => mirror.layout === "vertical";
+    // on a phone the tabs are always along the top: a side list would take
+    // most of the width, and split shells share the one screen
+    const compact = createCompact();
+    const vertical = () => mirror.layout === "vertical" && !compact();
     const applyTabs = (next: unknown) => {
         if (Array.isArray(next)) setMirror("tabs", reconcile(next as TerminalTab[], { key: "id" }));
     };
@@ -136,6 +144,43 @@ export default function App() {
     const currentSession = () => {
         const tab = shownTab();
         return tab ? focusedOf(tab) : "";
+    };
+    // ── the phone's key row ─────────────────────────────────────────────────
+    // shown while a screen has the cursor, which is while the on-screen
+    // keyboard is up; it rides on top of the keyboard
+    const [typing, setTyping] = createSignal(false);
+    const [keyboardInset, setKeyboardInset] = createSignal(0);
+    const [modifiers, setModifiers] = createSignal<Modifiers>(NO_MODIFIERS);
+    const showKeys = () => compact() && typing();
+    onMount(() => {
+        onCleanup(watchKeyboardInset(setKeyboardInset));
+        // a screen has the cursor when its helper textarea does; focus moving
+        // between screens, or to a key and back, settles before it is read
+        const read = () => setTyping(document.activeElement?.classList.contains("xterm-helper-textarea") ?? false);
+        const lost = () => setTimeout(read);
+        document.addEventListener("focusin", read);
+        document.addEventListener("focusout", lost);
+        onCleanup(() => {
+            document.removeEventListener("focusin", read);
+            document.removeEventListener("focusout", lost);
+        });
+    });
+    // the latch is for the next key typed, not for the next time the keyboard comes up
+    createEffect(on(showKeys, (shown) => !shown && setModifiers(NO_MODIFIERS)));
+    const toggleModifier = (which: keyof Modifiers) => setModifiers((m) => ({ ...m, [which]: !m[which] }));
+    const keepKeyboard = () => activeTerminals.get(currentSession())?.focus();
+    const pressKey = (key: NamedKey) => {
+        activeTerminals.get(currentSession())?.sendKey(key);
+        keepKeyboard();
+    };
+    const typeKey = (text: string) => {
+        activeTerminals.get(currentSession())?.type(text);
+        keepKeyboard();
+    };
+    const hideKeyboard = () => {
+        const field = document.activeElement;
+        if (field instanceof HTMLElement) field.blur();
+        setTyping(false);
     };
     const folderOfSession = (session: TerminalSession) => mirror.live[session.id]?.cwd || session.cwd || "";
 
@@ -311,13 +356,27 @@ export default function App() {
             report("Layout not saved")(err);
         });
     };
+    // the phone shows no pointer or selection handles, so a copy says it happened
+    const copied = (what: string) => compact() && showToast({ title: `${what} copied`, variant: "success", duration: 1500 });
     const copy = () => {
         setFailure(null);
-        copySelection(currentSession()).catch(report("Nothing copied"));
+        copySelection(currentSession()).then(() => copied("Selection"), report("Nothing copied"));
     };
     const paste = () => {
         setFailure(null);
         pasteClipboard(currentSession()).catch(report("Nothing pasted"));
+    };
+    // the phone can't select text on the screen, so its Copy copies what is
+    // selected or, with nothing selected, the last command's output
+    const copyForKeyRow = () => {
+        const screen = activeTerminals.get(currentSession());
+        if (screen?.term.hasSelection()) copy();
+        else copyLastOutput();
+        keepKeyboard();
+    };
+    const pasteForKeyRow = () => {
+        paste();
+        keepKeyboard();
     };
     const copyLastOutput = () => {
         setFailure(null);
@@ -332,6 +391,7 @@ export default function App() {
         copyText(output)
             .then((ok) => {
                 if (!ok) throw new Error("The clipboard refused the output.");
+                copied("Last output");
             })
             .catch(report("Output not copied"));
     };
@@ -435,13 +495,16 @@ export default function App() {
 
     // the screen of one shell in a tab; a split's second shell keeps a floor
     // so dragging the line can't close it
+    // On a phone only the shell with the keyboard shows (the tab list lists
+    // both): it stays mounted when hidden, as every screen does.
+    const awayOnPhone = (tab: TerminalTab, session: string) => compact() && focusedOf(tab) !== session;
     const Pane = (paneProps: { tab: TerminalTab; session: string; class?: string; floor?: boolean }) => (
         <PaperFlex
             flex
-            minWidth={paneProps.floor ? "field" : 0}
-            minHeight={paneProps.floor ? "field" : 0}
+            minWidth={paneProps.floor && !compact() ? "field" : 0}
+            minHeight={paneProps.floor && !compact() ? "field" : 0}
             direction="column"
-            class={paneProps.class}
+            class={[paneProps.class, awayOnPhone(paneProps.tab, paneProps.session) ? styles.paneAway : ""].filter(Boolean).join(" ")}
         >
             <TerminalComponent
                 id={paneProps.session}
@@ -452,6 +515,8 @@ export default function App() {
                 onActivity={() => noticeOutput(paneProps.session)}
                 onBell={() => notice(paneProps.session, { bell: true })}
                 onKeyAction={(action) => action === "find" && openFind()}
+                modifiers={modifiers}
+                onModifiersUsed={() => setModifiers(NO_MODIFIERS)}
                 confirmPaste={confirmPaste}
             />
         </PaperFlex>
@@ -476,18 +541,21 @@ export default function App() {
                     <PaperIcon>expand_more</PaperIcon>
                 </PaperButton>
             </Show>
-            <PaperButton
-                size="tiny"
-                icon
-                onClick={(e) => (shownTab()?.split ? unsplit(activeTab()) : splitMenu.openBelow(e))}
-                title={shownTab()?.split ? "Close Split" : "Split"}
-                aria-label={shownTab()?.split ? "Close Split" : "Split"}
-                aria-haspopup={shownTab()?.split ? undefined : "menu"}
-                aria-expanded={shownTab()?.split ? undefined : splitMenu.isOpen()}
-                disabled={!shownTab()}
-            >
-                <PaperIcon>{shownTab()?.split ? "close_fullscreen" : "vertical_split"}</PaperIcon>
-            </PaperButton>
+            {/* a split is for a computer's screen; a phone can only close one made elsewhere */}
+            <Show when={!compact() || shownTab()?.split}>
+                <PaperButton
+                    size="tiny"
+                    icon
+                    onClick={(e) => (shownTab()?.split ? unsplit(activeTab()) : splitMenu.openBelow(e))}
+                    title={shownTab()?.split ? "Close Split" : "Split"}
+                    aria-label={shownTab()?.split ? "Close Split" : "Split"}
+                    aria-haspopup={shownTab()?.split ? undefined : "menu"}
+                    aria-expanded={shownTab()?.split ? undefined : splitMenu.isOpen()}
+                    disabled={!shownTab()}
+                >
+                    <PaperIcon>{shownTab()?.split ? "close_fullscreen" : "vertical_split"}</PaperIcon>
+                </PaperButton>
+            </Show>
             <PaperButton
                 size="tiny"
                 icon
@@ -499,22 +567,26 @@ export default function App() {
             >
                 <PaperIcon>bookmarks</PaperIcon>
             </PaperButton>
-            <PaperButton
-                size="tiny"
-                icon
-                onClick={toggleLayout}
-                title={vertical() ? "Tabs along the top" : "Tabs down the side"}
-                aria-label={vertical() ? "Tabs along the top" : "Tabs down the side"}
-            >
-                <PaperIcon>{vertical() ? "top_panel_open" : "side_navigation"}</PaperIcon>
-            </PaperButton>
+            <Show when={!compact()}>
+                <PaperButton
+                    size="tiny"
+                    icon
+                    onClick={toggleLayout}
+                    title={vertical() ? "Tabs along the top" : "Tabs down the side"}
+                    aria-label={vertical() ? "Tabs along the top" : "Tabs down the side"}
+                >
+                    <PaperIcon>{vertical() ? "top_panel_open" : "side_navigation"}</PaperIcon>
+                </PaperButton>
+            </Show>
         </PaperFlex>
     );
 
     return (
         <>
+            {/* the keyboard covers the bottom of the panel: lift everything above it */}
             <PaperFlex
-                class="paperui-root unselectable"
+                class={`paperui-root unselectable ${styles.keyboardAvoid}`}
+                style={{ "--terminal-keyboard-inset": `${keyboardInset()}px` }}
                 fullWidth
                 fullHeight
                 direction={vertical() ? "row" : "column"}
@@ -679,10 +751,11 @@ export default function App() {
                                             {/* the line between the two shells drags; each keeps a floor */}
                                             <PaperFlex
                                                 direction={tab.split?.direction === "down" ? "column" : "row"}
-                                                resizable
+                                                resizable={!compact()}
                                                 flex
-                                                minWidth="field"
-                                                minHeight="field"
+                                                minWidth={compact() ? 0 : "field"}
+                                                minHeight={compact() ? 0 : "field"}
+                                                class={awayOnPhone(tab, tab.id) ? styles.paneAway : undefined}
                                             >
                                                 <Pane tab={tab} session={tab.id} />
                                             </PaperFlex>
@@ -707,6 +780,21 @@ export default function App() {
                             )}
                         </For>
                     </PaperFlex>
+                    <Show when={showKeys()}>
+                        <SoftKeys
+                            ctrl={modifiers().ctrl}
+                            alt={modifiers().alt}
+                            onToggle={(which) => {
+                                toggleModifier(which);
+                                keepKeyboard();
+                            }}
+                            onKey={pressKey}
+                            onType={typeKey}
+                            onCopy={copyForKeyRow}
+                            onPaste={pasteForKeyRow}
+                            onHideKeyboard={hideKeyboard}
+                        />
+                    </Show>
                 </PaperFlex>
             </PaperFlex>
             <PaperContextMenu
@@ -724,14 +812,14 @@ export default function App() {
                 <Show
                     when={contextTab()?.split}
                     fallback={
-                        <>
+                        <Show when={!compact()}>
                             <PaperContextMenuItem icon="splitscreen_right" onClick={() => { tabMenu.close(); split(contextTabId()!, "right"); }}>
                                 Split Right
                             </PaperContextMenuItem>
                             <PaperContextMenuItem icon="splitscreen_bottom" onClick={() => { tabMenu.close(); split(contextTabId()!, "down"); }}>
                                 Split Down
                             </PaperContextMenuItem>
-                        </>
+                        </Show>
                     }
                 >
                     <PaperContextMenuItem icon="close_fullscreen" onClick={() => { tabMenu.close(); unsplit(contextTabId()!); }}>
@@ -748,7 +836,7 @@ export default function App() {
                 placement={terminalMenu.placement()}
                 onClose={terminalMenu.close}
             >
-                <PaperContextMenuItem icon="content_copy" keybind={shortcutLabel("copy", MAC)} onClick={copy}>
+                <PaperContextMenuItem icon="content_copy" keybind={compact() ? undefined : shortcutLabel("copy", MAC)} onClick={copy}>
                     Copy
                 </PaperContextMenuItem>
                 <PaperContextMenuItem icon="content_paste" onClick={paste}>
@@ -757,26 +845,26 @@ export default function App() {
                 <PaperContextMenuItem icon="output" onClick={copyLastOutput}>
                     Copy Last Output
                 </PaperContextMenuItem>
-                <PaperContextMenuItem icon="search" keybind={shortcutLabel("find", MAC)} onClick={openFind}>
+                <PaperContextMenuItem icon="search" keybind={compact() ? undefined : shortcutLabel("find", MAC)} onClick={openFind}>
                     Find…
                 </PaperContextMenuItem>
-                <PaperContextMenuItem icon="keyboard_arrow_up" keybind={shortcutLabel("previous-prompt", MAC)} onClick={() => activeTerminals.get(currentSession())?.jumpToPrompt(-1)}>
+                <PaperContextMenuItem icon="keyboard_arrow_up" keybind={compact() ? undefined : shortcutLabel("previous-prompt", MAC)} onClick={() => activeTerminals.get(currentSession())?.jumpToPrompt(-1)}>
                     Previous Prompt
                 </PaperContextMenuItem>
-                <PaperContextMenuItem icon="keyboard_arrow_down" keybind={shortcutLabel("next-prompt", MAC)} onClick={() => activeTerminals.get(currentSession())?.jumpToPrompt(1)}>
+                <PaperContextMenuItem icon="keyboard_arrow_down" keybind={compact() ? undefined : shortcutLabel("next-prompt", MAC)} onClick={() => activeTerminals.get(currentSession())?.jumpToPrompt(1)}>
                     Next Prompt
                 </PaperContextMenuItem>
                 <Show
                     when={shownTab()?.split}
                     fallback={
-                        <>
+                        <Show when={!compact()}>
                             <PaperContextMenuItem icon="splitscreen_right" onClick={() => split(activeTab(), "right")}>
                                 Split Right
                             </PaperContextMenuItem>
                             <PaperContextMenuItem icon="splitscreen_bottom" onClick={() => split(activeTab(), "down")}>
                                 Split Down
                             </PaperContextMenuItem>
-                        </>
+                        </Show>
                     }
                 >
                     <PaperContextMenuItem icon="close_fullscreen" onClick={() => unsplit(activeTab())}>
