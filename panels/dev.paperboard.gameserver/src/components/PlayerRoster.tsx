@@ -163,7 +163,12 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                 title={props.open ?? ""}
                 onBack={() => setDetailOpen(false)}
             >
-                <Show when={compact()}>{props.children}</Show>
+                <Show when={compact()}>
+                    {/* the page's own margin, as a tab's page has */}
+                    <PaperFlex direction="column" flex={1} minHeight={0} overflowY="auto" padding="full">
+                        {props.children}
+                    </PaperFlex>
+                </Show>
             </PaperSlidePage>
         </PaperFlex>
     );
