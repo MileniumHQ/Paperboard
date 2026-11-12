@@ -174,6 +174,7 @@ export function Example() {
             <PaperTextList>
                 <li>The modal is drawn in a portal on the page, above everything else, so a clipping parent cannot cut it off.</li>
                 <li>Keep it rendered and toggle <PaperCode>open</PaperCode>. A <PaperCode>Show</PaperCode> around the modal removes it the moment it closes, so the exit animation never plays and the dialog gets no frame to release the page for assistive technology before it leaves.</li>
+                <li>A closing modal keeps showing what it showed. Clearing the thing it describes as it closes (the selected computer, the item) doesn't blank the dialog while it leaves.</li>
                 <li>A closing dialog drops <PaperCode>aria-modal</PaperCode> at once and leaves the page a frame later, after its exit animation.</li>
                 <li>A modal taller than the screen scrolls inside its body, up to 85% of the viewport height. On phones it may use the full screen height.</li>
             </PaperTextList>

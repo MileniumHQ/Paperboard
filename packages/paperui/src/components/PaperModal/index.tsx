@@ -3,6 +3,7 @@ import styles from "./index.module.css";
 import {
     splitProps,
     createEffect,
+    createMemo,
     createSignal,
     createUniqueId,
     onCleanup,
@@ -46,6 +47,17 @@ const [openModals, setOpenModals] = createSignal<object[]>([]);
 
 // how long a closed dialog waits for a frame before it leaves without one
 const LEAVE_WITHOUT_FRAME_MS = 100;
+
+/**
+ * Draws its content while the modal is open and keeps the last drawing
+ * through the exit animation. A caller that clears what the modal shows as
+ * it closes (the computer it names, the item it describes) would otherwise
+ * blank the dialog for the whole time it takes to leave.
+ */
+function Held(props: { open: boolean; children: () => JSX.Element }) {
+    const content = createMemo<JSX.Element>((last) => (props.open ? props.children() : last));
+    return <>{content()}</>;
+}
 
 export function PaperModal(props: ParentProps<PaperModalProps>) {
     let modalRef: HTMLDivElement | undefined;
@@ -220,63 +232,69 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
                             .join(" ")}
                         classList={local.classList}
                     >
-                        <Show
-                            when={
-                                !local.noHeader &&
-                                (local.title || local.onClose)
-                            }
-                        >
-                            <div class={styles.header}>
-                                <Show when={local.title}>
-                                    <span id={titleId}><PaperText size={4} weight={700}>
-                                        {local.title}
-                                    </PaperText></span>
+                        <Held open={!!local.open}>
+                            {() => (
+                                <>
+                                <Show
+                                    when={
+                                        !local.noHeader &&
+                                        (local.title || local.onClose)
+                                    }
+                                >
+                                    <div class={styles.header}>
+                                        <Show when={local.title}>
+                                            <span id={titleId}><PaperText size={4} weight={700}>
+                                                {local.title}
+                                            </PaperText></span>
+                                        </Show>
+
+                                        <Show when={local.onClose}>
+                                            <PaperButton size="tiny"
+                                                icon
+                                                type="button"
+                                                variant="text"
+                                                onClick={() => local.onClose?.()}
+                                                aria-label="Close modal"
+                                                class={styles.closeBtn}>
+                                                <PaperIcon aria-hidden="true" zeroHeight>
+                                                    close
+                                                </PaperIcon>
+                                            </PaperButton>
+                                        </Show>
+                                    </div>
                                 </Show>
 
-                                <Show when={local.onClose}>
+                                <Show when={local.noHeader && local.onClose}>
                                     <PaperButton size="tiny"
                                         icon
                                         type="button"
                                         variant="text"
                                         onClick={() => local.onClose?.()}
                                         aria-label="Close modal"
-                                        class={styles.closeBtn}>
+                                        class={styles.floatingCloseBtn}>
                                         <PaperIcon aria-hidden="true" zeroHeight>
                                             close
                                         </PaperIcon>
                                     </PaperButton>
                                 </Show>
-                            </div>
-                        </Show>
 
-                        <Show when={local.noHeader && local.onClose}>
-                            <PaperButton size="tiny"
-                                icon
-                                type="button"
-                                variant="text"
-                                onClick={() => local.onClose?.()}
-                                aria-label="Close modal"
-                                class={styles.floatingCloseBtn}>
-                                <PaperIcon aria-hidden="true" zeroHeight>
-                                    close
-                                </PaperIcon>
-                            </PaperButton>
-                        </Show>
+                                <div
+                                    class={[
+                                        styles.body,
+                                        local.noPadding ? styles.noPadding : "",
+                                    ]
+                                        .filter(Boolean)
+                                        .join(" ")}
+                                >
+                                    {local.children}
+                                </div>
 
-                        <div
-                            class={[
-                                styles.body,
-                                local.noPadding ? styles.noPadding : "",
-                            ]
-                                .filter(Boolean)
-                                .join(" ")}
-                        >
-                            {local.children}
-                        </div>
-
-                        <Show when={local.footer}>
-                            <div class={styles.footer}>{local.footer}</div>
-                        </Show>
+                                <Show when={local.footer}>
+                                    <div class={styles.footer}>{local.footer}</div>
+                                </Show>
+                                </>
+                            )}
+                        </Held>
                     </div>
                 </div>
             </PaperPresence>

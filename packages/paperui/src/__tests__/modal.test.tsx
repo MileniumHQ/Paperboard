@@ -96,4 +96,23 @@ describe("PaperModal keyboard, stacking and focus", () => {
         escape();
         expect(closes).toBe(1);
     });
+
+    test("a modal keeps what it showed while it leaves, even when its subject is cleared as it closes", () => {
+        const [subject, setSubject] = createSignal<{ name: string } | undefined>({ name: "Desk" });
+        const [open, setOpen] = createSignal(true);
+        render(() => (
+            <PaperModal open={open()} title={`Can't reach ${subject()?.name ?? "computer"}`} footer={<span>{subject()?.name} footer</span>}>
+                <span>{subject() ? subject()!.name : "nothing"}</span>
+            </PaperModal>
+        ));
+        expect(screen.getByText("Desk")).toBeTruthy();
+
+        // the caller clears the subject in the same breath as it closes
+        setOpen(false);
+        setSubject(undefined);
+
+        expect(screen.getByText("Desk")).toBeTruthy();
+        expect(screen.getByText("Can't reach Desk")).toBeTruthy();
+        expect(screen.getByText("Desk footer")).toBeTruthy();
+    });
 });
