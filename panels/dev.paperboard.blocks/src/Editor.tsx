@@ -26,7 +26,9 @@ import { HEADING_KIND, type HeadingInfo } from "./lib/libraryHeading";
 import { setTextPlaceholders } from "./lib/textField";
 import { addTrash, type TrashState } from "./lib/trashZone";
 import { addResultsTray, setResultBlocks, sourceOf } from "./lib/results";
+import { cullOffscreenStacks } from "./lib/culling";
 import { nativeTooltips } from "./lib/nativeTooltips";
+import "./lib/undrawnFields";
 import { parseEntry, parseRegistryBlockType } from "./lib/names";
 import { tokenPixels } from "./lib/tokens";
 import { Console } from "./Console";
@@ -46,6 +48,8 @@ import { LibraryHeader, LibraryRail, type LibraryCategory, type LibraryProject }
 import styles from "./Editor.module.css";
 
 const SAVE_DELAY_MS = 400;
+/** How long typing in the search pauses before the list is searched. */
+const SEARCH_PAUSE_MS = 250;
 /** the notice a failed save leaves, cleared by the next save that works */
 const NOT_SAVED = "Your changes weren't saved";
 
@@ -127,6 +131,18 @@ export default function Editor(props: {
     const [selected, setSelected] = createSignal(builtinId(BUILTIN_SECTIONS[0]!.name));
     const [chosenProjects, setChosenProjects] = createSignal<Record<string, string>>({});
     const [search, setSearch] = createSignal("");
+    // what the list is searched for: the search once typing pauses, so each
+    // letter doesn't draw a list the next one replaces (a first letter can
+    // match a hundred blocks, a long wait on a slow computer)
+    const [query, setQuery] = createSignal("");
+    let queryTimer: ReturnType<typeof setTimeout> | undefined;
+    const typeSearch = (text: string) => {
+        setSearch(text);
+        clearTimeout(queryTimer);
+        if (!text.trim()) setQuery("");
+        else queryTimer = setTimeout(() => setQuery(text), SEARCH_PAUSE_MS);
+    };
+    onCleanup(() => clearTimeout(queryTimer));
     const [collapsed, setCollapsed] = createSignal(false);
     const [ready, setReady] = createSignal(false);
     // bumped each time the blocks are (re)defined, so the list draws them anew
@@ -219,8 +235,8 @@ export default function Editor(props: {
     const groups = createMemo<Group[]>(() => {
         variablesVersion();
         functionsShape();
-        const query = search().trim().toLowerCase();
-        if (query) {
+        const words = query().trim().toLowerCase();
+        if (words) {
             const all: Group[] = [
                 ...BUILTIN_SECTIONS.filter((s) => !s.custom).map((s) => ({ label: s.name, icon: { symbol: s.icon }, blocks: s.contents })),
                 ...registry().sections.map((s) => {
@@ -234,7 +250,7 @@ export default function Editor(props: {
                     };
                 }),
             ];
-            return all.map((g) => ({ ...g, blocks: g.blocks.filter((b) => b.kind === "block" && textOf(b).includes(query)) })).filter((g) => g.blocks.length);
+            return all.map((g) => ({ ...g, blocks: g.blocks.filter((b) => b.kind === "block" && textOf(b).includes(words)) })).filter((g) => g.blocks.length);
         }
         const builtin = BUILTIN_SECTIONS.find((s) => builtinId(s.name) === selected());
         if (builtin) {
@@ -414,6 +430,7 @@ export default function Editor(props: {
         let closed = false;
         let offRegistry: (() => void) | undefined;
         let offTooltips: (() => void) | undefined;
+        let offCulling: (() => void) | undefined;
         const resize = new ResizeObserver(() => workspace && Blockly.svgResize(workspace));
         const offState = bridge.onStateChange((_patch, full) => {
             setState(full);
@@ -440,6 +457,7 @@ export default function Editor(props: {
                 sounds: false,
             });
             offTooltips = nativeTooltips(host);
+            offCulling = cullOffscreenStacks(workspace);
             resize.observe(host);
             addTrash(workspace, trashTile, setTrash);
             addResultsTray(workspace, styles.resultsTray!, uiGap());
@@ -503,6 +521,7 @@ export default function Editor(props: {
             offState();
             offRegistry?.();
             offTooltips?.();
+            offCulling?.();
             workspace?.dispose();
             scratch.dispose();
         });
@@ -626,7 +645,7 @@ export default function Editor(props: {
 
     const choose = (id: string) => {
         setSelected(id);
-        setSearch("");
+        typeSearch("");
     };
 
     return (
@@ -736,7 +755,7 @@ export default function Editor(props: {
                             category={category()}
                             selected={selected()}
                             search={search()}
-                            onSearch={setSearch}
+                            onSearch={typeSearch}
                             count={count()}
                             projects={shownPanel() ? libraryProjects(shownPanel()!) : []}
                             project={shownProject()}

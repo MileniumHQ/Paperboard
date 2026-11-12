@@ -4,6 +4,7 @@
 // canvas is zoomed to, and is --library-width wide unless a block needs
 // more. The header takes its width from the list's element (CSS anchors).
 import * as Blockly from "blockly";
+import { tokenPixels } from "./tokens";
 
 export const LIBRARY_FLYOUT = "pbLibraryFlyout";
 
@@ -23,7 +24,7 @@ function cssPixels(from: Element, property: string): number {
 
 /** PaperUI's gap, in pixels. */
 export function uiGap(): number {
-    return cssPixels(document.documentElement, "--paper-uigap");
+    return tokenPixels("--paper-uigap");
 }
 
 export class LibraryFlyout extends Blockly.VerticalFlyout {
