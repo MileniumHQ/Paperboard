@@ -386,27 +386,45 @@ export class BrowserComputer {
         return path.join(this.deps.dir, "downloading");
     }
 
+    /** The browser's own home as macOS sees it (not the agent's home folder): the Library it writes, like its crash database, stays in here. */
+    private systemHomeDir() {
+        return path.join(this.deps.dir, "system");
+    }
+
     /**
      * The profile's own settings that keep the browser to its proxy and ready to use: WebRTC sends no UDP
      * around the proxy (its command-line switch is ignored; this pref is not), and Helium's first-run page
-     * is done. The browser owns the rest of the file; an unreadable one is left alone and starting stops.
+     * is done, with Helium's services off. Local State, shared by the profile's people, turns Helium's crash
+     * reporting off, which also discards any reports it kept. The browser owns the rest of each file; an unreadable one is left alone
+     * and starting stops.
      */
     private seedPreferences() {
-        const file = path.join(this.profileDir(), "Default", "Preferences");
-        let prefs: Record<string, any> = {};
+        this.editSettings(path.join(this.profileDir(), "Default", "Preferences"), (prefs) => {
+            prefs.webrtc = { ...prefs.webrtc, ip_handling_policy: "disable_non_proxied_udp", multiple_routes_enabled: false, nonproxied_udp_enabled: false };
+            // Helium's own cloud (filter lists, bangs, update checks, push, spellcheck, extension proxy) stays off, and
+            // pages are told not to sell or share what they see (Global Privacy Control)
+            prefs.helium = { ...prefs.helium, completed_onboarding: true, global_privacy_control: true, services: { ...prefs.helium?.services, enabled: false } };
+            prefs.browser = { ...prefs.browser, has_seen_welcome_page: true };
+            prefs.download = { ...prefs.download, prompt_for_download: false };
+        });
+        this.editSettings(path.join(this.profileDir(), "Local State"), (state) => {
+            // Helium's CrashReportingMode: -1 disabled, 0 ask, 1 automatic
+            state.helium = { ...state.helium, crash_reporting: { ...state.helium?.crash_reporting, mode: -1 } };
+        });
+    }
+
+    private editSettings(file: string, edit: (settings: Record<string, any>) => void) {
+        let settings: Record<string, any> = {};
         if (fs.existsSync(file)) {
             try {
-                prefs = JSON.parse(fs.readFileSync(file, "utf8"));
+                settings = JSON.parse(fs.readFileSync(file, "utf8"));
             } catch {
                 throw new Error(`The browser's settings (${file}) are unreadable; they were left as they are.`);
             }
         }
-        prefs.webrtc = { ...prefs.webrtc, ip_handling_policy: "disable_non_proxied_udp", multiple_routes_enabled: false, nonproxied_udp_enabled: false };
-        prefs.helium = { ...prefs.helium, completed_onboarding: true };
-        prefs.browser = { ...prefs.browser, has_seen_welcome_page: true };
-        prefs.download = { ...prefs.download, prompt_for_download: false };
+        edit(settings);
         fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(`${file}.tmp`, JSON.stringify(prefs));
+        fs.writeFileSync(`${file}.tmp`, JSON.stringify(settings));
         fs.renameSync(`${file}.tmp`, file);
     }
 
@@ -445,7 +463,10 @@ export class BrowserComputer {
         // running from before it's asked for: an exit that comes while starting is still seen
         this.running = true;
         try {
-            await this.deps.host.start({ id: BROWSER_PROC_ID, command: exe, args, cwd: this.deps.dir });
+            // macOS: Helium keeps its crash database under the user's Library, not the profile; a home of its own keeps it here
+            const env = this.platform === "darwin" ? { CFFIXED_USER_HOME: this.systemHomeDir() } : undefined;
+            if (env) fs.mkdirSync(env.CFFIXED_USER_HOME, { recursive: true });
+            await this.deps.host.start({ id: BROWSER_PROC_ID, command: exe, args, cwd: this.deps.dir, env });
         } catch (e) {
             this.running = await this.deps.host.exists(BROWSER_PROC_ID);
             throw e;
