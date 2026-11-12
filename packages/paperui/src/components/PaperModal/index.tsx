@@ -209,7 +209,7 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
                 exitClass={styles.backdropTransitionOut}
             >
                 <div
-                    class={styles.backdrop}
+                    class={`${styles.backdrop} paper-no-edge`}
                     classList={{
                         [styles.bottom]: local.placement === "bottom",
                         [styles.concealed]: !!local.concealed,

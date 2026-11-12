@@ -126,13 +126,7 @@ export function Drilldown(props: { phone: boolean }) {
                         <td><PaperCode>background</PaperCode></td>
                         <td><PaperCode>PaperBackgroundSurface</PaperCode></td>
                         <td><PaperCode>"surface"</PaperCode></td>
-                        <td>The page's surface. A fixed page's content stops above the home indicator, and this surface fills that strip, so match what the content shows at its foot.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>footColor</PaperCode></td>
-                        <td><PaperCode>string</PaperCode></td>
-                        <td>The page's background</td>
-                        <td>A computed color for that strip alone, when the content's foot isn't a surface the app knows. Paperboard's shell passes the color a panel reports along its bottom edge (<PaperCode>FRAME_BACKGROUND_EVENT</PaperCode>, see Utilities), so the strip under a panel is the panel's own.</td>
+                        <td>The page's surface.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>children</PaperCode></td>

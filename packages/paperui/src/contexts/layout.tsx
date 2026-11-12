@@ -40,6 +40,17 @@ export function usePaperLayout() {
 
 /** Turns layout props into inline styles. The same props give the same
  *  styles in any parent: nothing here reads the parent's direction. */
+/**
+ * Whether these layout props make a surface scroll up and down: its content
+ * ends with the bottom-edge spacer (.paper-scroll-end in styles.css).
+ */
+export function scrollsVertically(props: Pick<PaperLayoutProps, "scrollable" | "overflow" | "overflowY">): boolean {
+    const scrolls = (value: unknown) => value === "auto" || value === "scroll";
+    if (props.overflowY !== undefined) return scrolls(props.overflowY);
+    if (props.overflow !== undefined) return scrolls(props.overflow);
+    return props.scrollable === true || props.scrollable === "y";
+}
+
 export function resolveLayoutStyles(props: PaperLayoutProps): JSX.CSSProperties {
     const styles: JSX.CSSProperties = {};
 

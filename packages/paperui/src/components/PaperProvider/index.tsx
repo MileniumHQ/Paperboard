@@ -14,7 +14,6 @@ import { PaperToastRegion } from "../PaperToast";
 import { installSwipeBack } from "../../utils/swipeBack";
 import { installTouchHold } from "../../utils/touchHold";
 import { installPressCancel } from "../../utils/pressCancel";
-import { installFrameBackground } from "../../utils/frameBackground";
 import { installPageZoomLock } from "../../utils/pageZoom";
 
 export type ThemeMode = "light" | "dark" | "system";
@@ -117,8 +116,6 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
     onCleanup(installTouchHold());
     // a press that slides off its control lets go of it, like a native button
     onCleanup(installPressCancel());
-    // in a panel frame: the shell colors the strip under it to match
-    onCleanup(installFrameBackground());
     // a pinch is for a panel's own gestures, not for zooming the document
     onCleanup(installPageZoomLock());
 

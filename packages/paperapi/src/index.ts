@@ -3,6 +3,7 @@ import "./readiness";
 import "./swipeBack";
 import "./haptics";
 import "./pageCrumbs";
+import "./frameInsets";
 
 export * from "./ipc";
 export * from "./config";
@@ -20,7 +21,7 @@ export * from "./loopback";
 export { SWIPE_BACK_MESSAGE, swipeBackMessage, type SwipeBackMessage } from "./swipeBack";
 export { HAPTIC_MESSAGE, hapticMessage, type HapticMessage } from "./haptics";
 export { PAGE_BACK_MESSAGE, PAGE_BARS_MESSAGE, PAGE_CRUMBS_MESSAGE, pageCrumbsMessage, type PageCrumbsMessage } from "./pageCrumbs";
-export { FRAME_BACKGROUND_MESSAGE, frameBackgroundMessage, isFrameBackgroundColor, type FrameBackgroundMessage } from "./frameBackground";
+export { FRAME_INSETS_MESSAGE, frameInsetBottom, type FrameInsetsMessage } from "./frameInsets";
 export * from "./package";
 export * from "./file";
 export * from "./process";

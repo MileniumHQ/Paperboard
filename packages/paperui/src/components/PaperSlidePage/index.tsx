@@ -38,18 +38,8 @@ export interface PaperSlidePageProps {
      * fixed: covers the whole screen (an app shell's top-level page).
      */
     position?: "absolute" | "fixed";
-    /**
-     * The page's surface, which also fills the strip a fixed page keeps
-     * clear above the home indicator. Match what the content shows at its
-     * foot, so the strip reads as part of it. Default surface.
-     */
+    /** The page's surface. Default surface. */
     background?: PaperBackgroundSurface;
-    /**
-     * A computed color for that strip alone, when the content's foot isn't a
-     * PaperUI surface the shell knows: an app shell passes what a panel frame
-     * reports (FRAME_BACKGROUND_EVENT). Default the page's background.
-     */
-    footColor?: string;
     children: JSX.Element;
 }
 
@@ -180,7 +170,7 @@ export function PaperSlidePage(props: PaperSlidePageProps) {
             </Show>
             <div
                 class={props.enabled ? styles.content : styles.passthrough}
-                style={{ "background-color": props.enabled ? props.footColor : undefined }}
+                data-paper-edge={props.enabled && props.position === "fixed" ? "" : undefined}
             >
                 {props.children}
                 <Show when={props.enabled}>

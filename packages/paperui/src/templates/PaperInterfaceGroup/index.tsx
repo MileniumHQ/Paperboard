@@ -76,7 +76,7 @@ export function PaperInterfaceItem(props: ParentProps<PaperInterfaceItemProps>) 
     const hostsPage = () => variant() === "page" || variant() === "fill";
 
     const className = () =>
-        [styles.PaperInterfaceItem, styles[variant()], local.class]
+        [styles.PaperInterfaceItem, styles[variant()], variant() === "page" || variant() === "plain" ? "paper-scroll-end" : "", local.class]
             .filter(Boolean)
             .join(" ");
 
