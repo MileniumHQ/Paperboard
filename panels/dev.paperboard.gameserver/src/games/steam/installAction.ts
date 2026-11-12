@@ -1,11 +1,12 @@
 import { installApp, installedBuild, latestBuild } from "./steamcmd";
-import { assertHost, exclusive, gameAction, hostSupportHere, readSettings, updateSettings, type BusyFlag, type Context } from "../serviceKit";
+import { assertHost, exclusive, hostSupportHere, readSettings, updateSettings, type BusyFlag, type Context } from "../serviceKit";
+import type { ServerCalls } from "../../service/calls";
 import type { GameDefinition } from "../types";
 
 export interface SteamInstallSpec {
     game: GameDefinition;
     appId: number;
-    /** Action ids: the install's facts, its newest build on Steam, and install or update. */
+    /** Call names: the install's facts, its newest build on Steam, and install or update. */
     ids: { info: string; latest: string; install: string };
     installDir(): Promise<string>;
     flag(): BusyFlag;
@@ -84,12 +85,11 @@ export function steamInstall(spec: SteamInstallSpec): (ctx: Context) => Promise<
     };
 }
 
-/** The Updates tab's three Actions for a game downloaded from Steam. */
-export function steamInstallActions(spec: SteamInstallSpec) {
-    const name = spec.game.name;
+/** The Updates tab's three calls for a game downloaded from Steam. */
+export function steamInstallCalls(spec: SteamInstallSpec): ServerCalls {
     const install = steamInstall(spec);
-    return [
-        gameAction(spec.ids.info, `${name} install`, async () => {
+    return {
+        [spec.ids.info]: async () => {
             const saved = await readSettings();
             return {
                 host: hostSupportHere(spec.game),
@@ -98,8 +98,8 @@ export function steamInstallActions(spec: SteamInstallSpec) {
                 // a finished install saves its build; one cut short does not
                 downloaded: typeof saved.build === "string",
             };
-        }),
-        gameAction(spec.ids.latest, `${name} newest build`, () => steamUpdateStatus(spec)),
-        gameAction(spec.ids.install, `Install or update ${name}`, async (ctx) => { await install(ctx); return true; }),
-    ];
+        },
+        [spec.ids.latest]: () => steamUpdateStatus(spec),
+        [spec.ids.install]: async (ctx) => { await install(ctx); return true; },
+    };
 }

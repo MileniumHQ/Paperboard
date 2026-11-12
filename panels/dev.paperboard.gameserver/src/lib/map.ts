@@ -1,5 +1,5 @@
 import { serverBridge } from "./server";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 import type { MapDimension, RegionCoord } from "../core/map";
 
 export interface MapDimensionRegions {
@@ -23,7 +23,7 @@ export interface RenderedTile {
 
 export async function listMapRegions(): Promise<MapRegionsResult> {
     const result = await serverBridge.call<Partial<MapRegionsResult>>(
-        ACTION_IDS.listMapRegions,
+        CALLS.listMapRegions,
     );
     // the service and this UI ship together; an unrecognized shape is a
     // failure, not "no terrain" — coercing it to empty hid real errors
@@ -41,7 +41,7 @@ export async function renderMapTile(
     rx: number,
     rz: number,
 ): Promise<RenderedTile | null> {
-    return serverBridge.call<RenderedTile | null>(ACTION_IDS.renderMapTile, {
+    return serverBridge.call<RenderedTile | null>(CALLS.renderMapTile, {
         dimension,
         rx,
         rz,

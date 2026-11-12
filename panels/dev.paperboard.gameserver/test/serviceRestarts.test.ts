@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { actionsApi, backupApi, backupLocationsApi } from "@mileniumhq/paperapi";
+import { serviceApi, backupApi, backupLocationsApi } from "@mileniumhq/paperapi";
+import { callServer } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installFakeJava } from "./helpers/fakeJava";
 import { installPanel, restartService, servicesState, waitForFile } from "./helpers/installedPanel";
@@ -26,7 +27,7 @@ const alive = (pid: number) => {
         throw err;
     }
 };
-const call = <T = unknown>(action: string, inputs: unknown = {}) => actionsApi.call<T>(PANEL_ID, action, inputs, { timeoutMs: null });
+const call = <T = unknown>(name: string, input: unknown = {}) => serviceApi.call<T>(PANEL_ID, name, input, { timeoutMs: null });
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -50,9 +51,9 @@ afterAll(async () => {
 describe("servers through restarts", () => {
     test("a server running when the service starts again is shown online with its players and its console history", async () => {
         const state = servicesState();
-        await call("s-a/start-server");
+        await callServer("s-a", "start-server");
         await state.waitFor("s-a", (s) => s.serverStatus === "online" && s.onlinePlayers.length === 2, "s-a online with its players");
-        await call("s-a/run-command", { command: "say before the restart" });
+        await callServer("s-a", "run-command", { command: "say before the restart" });
         await state.waitFor("s-a", (s) => s.serverEntries.some((e) => e.content.includes("[Server] before the restart")), "the command's echo");
         // the console is kept on disk for the next service
         await waitForFile(historyFile("s-a"), (text) => text.includes("[Server] before the restart"), "the console history to be saved");
@@ -79,7 +80,7 @@ describe("servers through restarts", () => {
         const back = await state.waitFor("s-a", (s) => s.serverStatus === "online" && runs("s-a").length === 2, "s-a started again");
         expect(back.serverEntries.map((e) => e.content)).toContain("[Server] The server stopped while Paperboard was not running. Starting it again.");
         expect(runs("s-a")[1]).not.toBe(pid);
-        await call("s-a/stop-server");
+        await callServer("s-a", "stop-server");
         await state.waitFor("s-a", (s) => s.serverStatus === "offline", "s-a to stop");
     });
 

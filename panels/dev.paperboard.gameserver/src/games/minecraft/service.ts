@@ -4,7 +4,6 @@ import { files as fileApi } from "../../service/api";
 import { PANEL_ID } from "../../service/types";
 import { settleInterruptedWork } from "../../service/recovery";
 import { stopLeftoverInstaller } from "../../service/installerProcess";
-import { setPlayerNamesChangedHandler } from "../../service/players";
 import { readServerIcon } from "../../service/serverIcon";
 import { processApi } from "../../service/api";
 import type { GameService } from "../serviceTypes";
@@ -17,30 +16,19 @@ import { withSavingPaused, pauseSavingForBackup, recoverPausedSaving, saveWorld 
 
 export const minecraftService: GameService = {
     primaryProcessId: "mc-server",
-    customTypes: async () => (await import("./actions")).customTypes,
     initialState: initialServerState,
-    actions: async () => {
-        const { panelActions, panelEventActions } = await import("./actions");
-        return [...panelActions, ...panelEventActions];
-    },
+    calls: async () => (await import("./calls")).minecraftCalls,
     blocks: async (ctx) => (await import("./blocks")).minecraftBlocks(ctx),
     blockTypes: async () => (await import("./blocks")).minecraftBlockTypes,
     async initialize(ctx, running) {
         if (!running) await settleInterruptedWork(ctx);
         await recoverPausedSaving();
-        const { scheduleRepublishDynamicActions, republishDynamicActions } = await import("./actions");
-        setPlayerNamesChangedHandler(() => scheduleRepublishDynamicActions(ctx));
-        await republishDynamicActions(ctx);
         // a server adopted from the last service answers who is on and its
         // live rules again; nothing else asks until it next starts
         if (running) onReady(ctx);
     },
     async beforeRemove() { await stopLeftoverInstaller(); },
-    async dispose() {
-        const { cancelDynamicActions } = await import("./actions");
-        cancelDynamicActions();
-        setPlayerNamesChangedHandler(null);
-    },
+    async dispose() {},
     readIcon: () => readServerIcon({ serverDir: () => fileApi.getPath("", PANEL_ID) }),
     processIds: ["mc-server", "mc-installer"],
     // the running server locks each world's, and Windows won't let a locked file be read

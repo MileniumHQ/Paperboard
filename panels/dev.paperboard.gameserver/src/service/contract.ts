@@ -1,15 +1,15 @@
-// canonical names for actions, triggers, and the panel id. both the daemon
+// canonical names for calls, trigger events, and the panel id. both the daemon
 // service and the panel UI import from here so a rename can never silently
 // break the other half of the bridge.
 //
-// Every UI→service call goes through serverBridge.call(ACTION_IDS.*) —
-// never the stringly serverBridge.actions.* proxy. A name used by the UI
-// that is missing here is a compile error, not a silent debug-log at
-// runtime (which is how eight working-looking buttons did nothing).
+// Every UI→service call goes through serverBridge.call(CALLS.*), never a
+// bare string. A name used by the UI that is missing here is a compile
+// error, not a silent failure at runtime (which is how eight
+// working-looking buttons did nothing).
 
 export const PANEL_ID = "dev.paperboard.gameserver";
 
-export const ACTION_IDS = {
+export const CALLS = {
     runCommand: "run-command",
     saveWorld: "save-world",
     readGameOptions: "read-game-options",
@@ -29,8 +29,6 @@ export const ACTION_IDS = {
     unwhitelistPlayer: "unwhitelist-player",
     pardonPlayer: "pardon-player",
     killPlayer: "kill-player",
-    listPlayers: "list-players",
-    playerCount: "player-count",
     killConflictingProcess: "kill-conflicting-process",
     resetWorldFiles: "reset-world-files",
     clearActiveIssue: "clear-active-issue",
@@ -79,7 +77,6 @@ export const ACTION_IDS = {
     uploadModpack: "upload-modpack",
     discardAddonUpload: "discard-addon-upload",
     deletePlayerData: "delete-player-data",
-    getUsernameFromUuid: "get-username-from-uuid",
     getPlayerSkin: "get-player-skin",
     forgetPlayerData: "forget-player-data",
     queryPlayerStats: "query-player-stats",
@@ -93,11 +90,11 @@ export const ACTION_IDS = {
     queryOnlinePlayers: "query-online-players",
     queryGamerules: "query-gamerules",
     setGamerule: "set-gamerule",
-    applyRuntimeProperties: "apply-runtime-properties",
 } as const;
 
-export type ActionId = (typeof ACTION_IDS)[keyof typeof ACTION_IDS];
+export type CallName = (typeof CALLS)[keyof typeof CALLS];
 
+// the Blocks events a server fires, by their block ids
 export const TRIGGER_IDS = {
     chatMessage: "chat-message",
     playerJoined: "player-joined",

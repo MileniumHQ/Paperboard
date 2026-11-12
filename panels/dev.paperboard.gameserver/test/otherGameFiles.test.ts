@@ -71,8 +71,8 @@ describe("other games' files", () => {
             state: tf2Service.initialState(),
         });
         await server.run(() => tf2Service.initialize(server.scope.ctx, false));
-        const actions = await tf2Service.actions();
-        const call = (id: string, input: unknown) => server.run(() => actions.find((a) => a.id === id)!.run!(server.scope.ctx, input));
+        const calls = await tf2Service.calls();
+        const call = (id: string, input: unknown) => server.run(() => calls[id]!(server.scope.ctx, input));
         const cfg = (name: string) => path.join(server.dir, "install", "tf", "cfg", name);
 
         expect(await call("team-fortress-2-map-cycle", {})).toMatchObject({ maps: ["ctf_2fort", "cp_dustbowl"], custom: false, file: "cfg/mapcycle.txt" });

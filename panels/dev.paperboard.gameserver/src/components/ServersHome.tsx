@@ -253,7 +253,7 @@ export default function ServersHome(props: { state: ServersState }) {
                     when={dialog() !== "remove"}
                     fallback={
                         <PaperText>
-                            The server will stop and leave this list and Actions. Its files and
+                            The server will stop and leave this list and Blocks. Its files and
                             backups will be kept.
                         </PaperText>
                     }

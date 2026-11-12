@@ -1,9 +1,9 @@
 // Minecraft's own blocks, beside the ones every game shares (service/blocks.ts).
-// Each runs what the matching Action (v1) runs, from actions.ts.
+// Each runs what the matching call runs, from calls.ts.
 import type { BlockCommandDefinition, BlockSet, BlockTypeDefinition, BlockValueDefinition, ServiceContext } from "../../service/api";
 import type { GameServerState } from "../../service/types";
-import { ACTION_IDS } from "../../service/contract";
-import { needsAction, playerEvents, runGameAction } from "../../service/blocks";
+import { CALLS } from "../../service/contract";
+import { needsCall, playerEvents, runGameCall } from "../../service/blocks";
 import { listRoster } from "../../service/playerLists";
 import { listPlayerStats } from "../../service/playerStats";
 import { listWorlds, resolveLevelName } from "../../service/worlds";
@@ -28,7 +28,7 @@ import {
     removePlugin,
     removeWorld,
     resetWorld,
-} from "./actions";
+} from "./calls";
 
 type Context = ServiceContext<GameServerState>;
 
@@ -254,7 +254,7 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                     await installVersion(ctx, software, version);
                 },
             },
-            needsAction(ctx, ACTION_IDS.deletePlugin, {
+            needsCall(ctx, CALLS.deletePlugin, {
                 id: "install-plugin",
                 name: "Install Plugin",
                 category: "Plugins",
@@ -268,7 +268,7 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                     return { file: installed.file, name: installed.name, version: installed.version };
                 },
             }),
-            needsAction(ctx, ACTION_IDS.deletePlugin, {
+            needsCall(ctx, CALLS.deletePlugin, {
                 id: "delete-plugin",
                 name: "Delete Plugin",
                 category: "Plugins",
@@ -278,7 +278,7 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                 inputs: { file: { type: "text", name: "File" } },
                 run: ({ file }: { file: string }) => removePlugin(ctx, file),
             }),
-            needsAction(ctx, ACTION_IDS.uninstallAllPlugins, {
+            needsCall(ctx, CALLS.uninstallAllPlugins, {
                 id: "uninstall-plugins",
                 name: "Uninstall Every Plugin",
                 category: "Plugins",
@@ -288,7 +288,7 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                 outputName: "Plugins Removed",
                 run: () => uninstallAllPlugins(ctx),
             }),
-            needsAction(ctx, ACTION_IDS.installDatapack, {
+            needsCall(ctx, CALLS.installDatapack, {
                 id: "install-datapack",
                 name: "Install Datapack",
                 category: "Datapacks",
@@ -298,14 +298,14 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                 inputs: { datapack: { type: "text", name: "Modrinth Project", description: "Its id or the name in its Modrinth address, such as terralith" } },
                 output: "datapack",
                 run: async ({ datapack }: { datapack: string }) => {
-                    const installed = await runGameAction<{ name: string }>(ctx, ACTION_IDS.installDatapack, { projectId: datapack });
-                    const listing = await runGameAction<DatapackListing>(ctx, ACTION_IDS.listDatapacks, {});
+                    const installed = await runGameCall<{ name: string }>(ctx, CALLS.installDatapack, { projectId: datapack });
+                    const listing = await runGameCall<DatapackListing>(ctx, CALLS.listDatapacks, {});
                     const pack = listing.packs.find((p) => p.name === installed.name);
                     if (!pack) throw new Error(`${installed.name} was installed, but the active world doesn't list it`);
                     return { name: pack.name, title: pack.record?.title ?? "", version: pack.record?.version ?? "" };
                 },
             }),
-            needsAction(ctx, ACTION_IDS.removeDatapack, {
+            needsCall(ctx, CALLS.removeDatapack, {
                 id: "remove-datapack",
                 name: "Remove Datapack",
                 category: "Datapacks",
@@ -315,12 +315,12 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                 inputs: { datapack: { type: "text", name: "Datapack", description: "Its name, as Datapacks lists it" } },
                 run: async ({ datapack }: { datapack: string }) => {
                     // the tab removes what it listed; a block can name anything, so it is checked first
-                    const listing = await runGameAction<DatapackListing>(ctx, ACTION_IDS.listDatapacks, {});
+                    const listing = await runGameCall<DatapackListing>(ctx, CALLS.listDatapacks, {});
                     if (!listing.packs.some((p) => p.name === datapack)) throw new Error(`The active world has no datapack named ${datapack}`);
-                    await runGameAction(ctx, ACTION_IDS.removeDatapack, { name: datapack });
+                    await runGameCall(ctx, CALLS.removeDatapack, { name: datapack });
                 },
             }),
-            needsAction(ctx, ACTION_IDS.installModpack, {
+            needsCall(ctx, CALLS.installModpack, {
                 id: "install-modpack",
                 name: "Install Modpack",
                 category: "Modpack",
@@ -332,26 +332,26 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                     version: { type: "text", name: "Version", optional: true, description: "A version number Modrinth lists for it" },
                 },
                 run: async ({ modpack, version }: { modpack: string; version?: string }) => {
-                    const versions = await runGameAction<ModrinthVersion[]>(ctx, ACTION_IDS.listModpackVersions, { projectId: modpack });
+                    const versions = await runGameCall<ModrinthVersion[]>(ctx, CALLS.listModpackVersions, { projectId: modpack });
                     const chosen = version ? versions.find((v) => v.versionNumber === version || v.id === version) : versions[0];
                     if (!chosen) throw new Error(version ? `${modpack} has no version ${version} for this server's software` : `${modpack} has no version for this server's software`);
-                    await runGameAction(ctx, ACTION_IDS.installModpack, { projectId: modpack, versionId: chosen.id });
+                    await runGameCall(ctx, CALLS.installModpack, { projectId: modpack, versionId: chosen.id });
                 },
             }),
-            needsAction(ctx, ACTION_IDS.removeModpack, {
+            needsCall(ctx, CALLS.removeModpack, {
                 id: "remove-modpack",
                 name: "Remove Modpack",
                 category: "Modpack",
                 icon: "delete",
                 description: "Moves the modpack's files to the trash, keeping the server software, while the server is stopped",
                 run: async () => {
-                    await runGameAction(ctx, ACTION_IDS.removeModpack, {});
+                    await runGameCall(ctx, CALLS.removeModpack, {});
                 },
             }),
         ],
         values: [
             rules.value,
-            needsAction(ctx, ACTION_IDS.listDatapacks, {
+            needsCall(ctx, CALLS.listDatapacks, {
                 id: "datapacks",
                 name: "Datapacks",
                 category: "Datapacks",
@@ -359,11 +359,11 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                 description: "The datapacks in the active world",
                 type: "list<datapack>",
                 read: async () => {
-                    const listing = await runGameAction<DatapackListing>(ctx, ACTION_IDS.listDatapacks, {});
+                    const listing = await runGameCall<DatapackListing>(ctx, CALLS.listDatapacks, {});
                     return listing.packs.map((pack) => ({ name: pack.name, title: pack.record?.title ?? "", version: pack.record?.version ?? "" }));
                 },
             }),
-            needsAction(ctx, ACTION_IDS.readModpack, {
+            needsCall(ctx, CALLS.readModpack, {
                 id: "modpack",
                 name: "Modpack",
                 category: "Modpack",
@@ -371,7 +371,7 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                 description: "The modpack the server runs; a server without one fails",
                 type: "modpack",
                 read: async () => {
-                    const { modpack } = await runGameAction<{ modpack: ModpackRecord | null }>(ctx, ACTION_IDS.readModpack, {});
+                    const { modpack } = await runGameCall<{ modpack: ModpackRecord | null }>(ctx, CALLS.readModpack, {});
                     if (!modpack) throw new Error("This server has no modpack");
                     return { title: modpack.title, version: modpack.versionNumber, minecraft: modpack.mcVersion };
                 },
@@ -390,7 +390,7 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                 type: "player",
                 read: ({ uuid }: { uuid: string }) => playerForUuid(uuid),
             },
-            needsAction(ctx, ACTION_IDS.listPlayerStats, {
+            needsCall(ctx, CALLS.listPlayerStats, {
                 id: "player-statistics",
                 name: "Player Statistics",
                 category: "Players",
@@ -399,7 +399,7 @@ export function minecraftBlocks(ctx: Context): BlockSet {
                 type: "list<player-statistics>",
                 read: async () => (await listPlayerStats(ctx)).map(statisticsValue),
             }),
-            needsAction(ctx, ACTION_IDS.listPlayerStats, {
+            needsCall(ctx, CALLS.listPlayerStats, {
                 id: "statistics-of",
                 name: "Statistics of Player",
                 category: "Players",

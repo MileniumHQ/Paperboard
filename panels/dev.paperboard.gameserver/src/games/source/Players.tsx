@@ -13,7 +13,7 @@ import GameRoster, { CopyRow, createRosterState, type RosterPlayer } from "../..
 import { byName, withUniqueNames } from "../rosterNames";
 import PlayerAvatar from "../../components/PlayerAvatar";
 import { serverBridge } from "../../lib/server";
-import { sourceActions, type SourceGameSpec } from "./index";
+import { sourceCalls, type SourceGameSpec } from "./index";
 import { noStats, type SourceBan, type SourceSeen, type SourceStats } from "./roster";
 import type { SourceOnline } from "./service";
 
@@ -33,7 +33,7 @@ interface Player extends RosterPlayer {
 }
 
 export default function SourcePlayers(props: { spec: SourceGameSpec }) {
-    const ids = sourceActions(props.spec.id);
+    const ids = sourceCalls(props.spec.id);
     const [seen, setSeen] = createSignal<SourceSeen[]>([]);
     const [bans, setBans] = createSignal<SourceBan[]>([]);
     const [online, setOnline] = createSignal<SourceOnline[]>([]);

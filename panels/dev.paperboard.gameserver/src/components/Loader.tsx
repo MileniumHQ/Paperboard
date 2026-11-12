@@ -3,7 +3,7 @@ import { createEffect, createSignal, on, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperPageHeader, PaperQuote } from "@mileniumhq/paperui";
 import ConfigSettings from "./ConfigSettings";
 import { serverBridge, serverSoftware, serverStatus } from "../lib/server";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 import { SOFTWARE_NAMES } from "../lib/software";
 import type { LoaderSettingsView } from "../service/loaderSettings";
 
@@ -17,7 +17,7 @@ export default function Loader(props: { active: boolean }) {
     const load = async () => {
         setLoadError("");
         try {
-            setSettings(await serverBridge.call<LoaderSettingsView>(ACTION_IDS.readLoaderSettings));
+            setSettings(await serverBridge.call<LoaderSettingsView>(CALLS.readLoaderSettings));
         } catch (err) {
             setLoadError(err instanceof Error ? err.message : String(err));
         }
@@ -65,7 +65,7 @@ export default function Loader(props: { active: boolean }) {
                         </Show>
                         <ConfigSettings
                             groups={view().groups}
-                            write={(id, value) => serverBridge.call(ACTION_IDS.writeLoaderSetting, { id, value })}
+                            write={(id, value) => serverBridge.call(CALLS.writeLoaderSetting, { id, value })}
                             reload={load}
                         />
                     </Show>

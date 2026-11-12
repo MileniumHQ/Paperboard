@@ -13,7 +13,7 @@ import { observeSavingLine } from "./saving";
 import { type GameServerState, SERVER_PROC_ID, appendCapped } from "../../service/types";
 import { TRIGGER_IDS } from "../../service/contract";
 import { noteCrashReport } from "../../service/automation";
-import { serverLocal } from "../../service/scope";
+import { emitTrigger, serverLocal } from "../../service/scope";
 /** What Minecraft prints when it crashes: its crash report, and its watchdog giving up on a frozen server. */
 const CRASH_LINES = ["This crash report has been saved to", "Considering it crashed, server will forcibly shutdown"];
 
@@ -122,7 +122,7 @@ export function observeLine(ctx: ServiceContext<GameServerState>, line: string, 
     const ready = clean.includes("Done (") || clean.includes("Done in") || clean.includes('For help, type "help"') || clean.includes("Started server");
     if (ready && ctx.state.serverStatus !== "online") {
         ctx.setState({ serverStatus: "online" });
-        ctx.emitTrigger(TRIGGER_IDS.serverStarted, true);
+        emitTrigger(ctx, TRIGGER_IDS.serverStarted, true);
         onReady(ctx);
     } else if (!ready && (clean.includes("Stopping server") || clean.includes("Saving players"))) {
         ctx.setState({ serverStatus: "stopping" });
@@ -137,7 +137,7 @@ export function observeLine(ctx: ServiceContext<GameServerState>, line: string, 
         });
         // only player messages emit the chat-message trigger
         if (chat.sender && !chat.event) {
-            ctx.emitTrigger(TRIGGER_IDS.chatMessage, chat);
+            emitTrigger(ctx, TRIGGER_IDS.chatMessage, chat);
         }
     }
 

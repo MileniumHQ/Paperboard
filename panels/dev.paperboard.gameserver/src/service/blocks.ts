@@ -1,4 +1,4 @@
-// Game Server's blocks for the Blocks panel (Actions API v2). Each server is
+// Game Server's blocks for the Blocks panel. Each server is
 // a Blocks project of its own; what every game shares is here, and a game
 // adds its own through its service's blocks().
 import type {
@@ -14,13 +14,13 @@ import type { BackupEnded, BackupRecord } from "@mileniumhq/paperapi";
 import { MAX_BUFFERED_ENTRIES, type ChatMessage, type GameServerState } from "./types";
 import type { ServerScope } from "./scope";
 import { currentServer, inServer } from "./scope";
-import { ACTION_IDS, TRIGGER_IDS, type TriggerId } from "./contract";
+import { CALLS, TRIGGER_IDS, type TriggerId } from "./contract";
 import { restartServerInstance, sendServerCommand, startServerInstance, stopServerInstance } from "./lifecycle";
 import { listLogFiles, readLogFile } from "./logs";
-import { sayInChat, serverBackups } from "./actions";
+import { sayInChat, serverBackups } from "./calls";
 import { automationView, readAutomation, writeAutomation } from "./automation";
 import { currentGameService } from "../games/service";
-import { assertGameAction, gameFor } from "../games";
+import { assertGameCall, gameFor } from "../games";
 
 type Context = ServiceContext<GameServerState>;
 
@@ -212,7 +212,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                         .map((entry) => (typeof entry.content === "string" ? entry.content : ""))
                         .join("\n"),
             },
-            needsAction(ctx, ACTION_IDS.readAutomation, {
+            needsCall(ctx, CALLS.readAutomation, {
                 id: "automation",
                 name: "Automation",
                 category: "Automation",
@@ -311,7 +311,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                     await serverBackups().delete(backupId(backup));
                 },
             },
-            needsAction(ctx, ACTION_IDS.writeAutomation, {
+            needsCall(ctx, CALLS.writeAutomation, {
                 id: "set-restart-after-crash",
                 name: "Set Restart After a Crash",
                 category: "Automation",
@@ -329,7 +329,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                     await writeAutomation(ctx, { restartAfterCrash: restart }, restartServerInstance);
                 },
             }),
-            needsAction(ctx, ACTION_IDS.writeAutomation, {
+            needsCall(ctx, CALLS.writeAutomation, {
                 id: "set-daily-restart",
                 name: "Set Daily Restart",
                 category: "Automation",
@@ -341,7 +341,7 @@ export function sharedBlocks(ctx: Context): BlockSet {
                     await writeAutomation(ctx, { dailyRestart: hour === "never" ? null : hour }, restartServerInstance);
                 },
             }),
-            needsAction(ctx, ACTION_IDS.writeAutomation, {
+            needsCall(ctx, CALLS.writeAutomation, {
                 id: "set-automatic-updates",
                 name: "Set Automatic Updates",
                 category: "Automation",
@@ -430,11 +430,11 @@ export function playerEvents(): BlockEventDefinition[] {
     ];
 }
 
-/** Runs one of the game's Actions (v1) the way its tab does, so a block is checked as the tab's edit is. */
-export async function runGameAction<T>(ctx: Context, id: string, inputs: Record<string, unknown>): Promise<T> {
-    const action = (await currentGameService().actions()).find((a) => a.id === id);
-    if (!action?.run) throw new Error(`${gameFor(currentServer()!.server.game).name} has no "${id}" action`);
-    return (await action.run(ctx, inputs)) as T;
+/** Runs one of the game's calls the way its tab does, so a block is checked as the tab's edit is. */
+export async function runGameCall<T>(ctx: Context, id: string, inputs: Record<string, unknown>): Promise<T> {
+    const call = (await currentGameService().calls())[id];
+    if (!call) throw new Error(`${gameFor(currentServer()!.server.game).name} has no "${id}" call`);
+    return (await call(ctx, inputs)) as T;
 }
 
 /** How a game kicks, bans and unbans a player by the name Blocks knows them by, and who it has banned. */
@@ -492,14 +492,14 @@ export function mergeBlocks(...sets: (BlockSet | undefined)[]): BlockSet {
 }
 
 /**
- * A block that only works where the game offers the Action (v1) it shares
- * its work with, such as plugins on a server software that has them.
+ * A block that only works where the game offers the call it shares its
+ * work with, such as plugins on a server software that has them.
  */
-export function needsAction<T extends BlockCommandDefinition | BlockValueDefinition>(ctx: Context, actionId: string, def: T): T {
+export function needsCall<T extends BlockCommandDefinition | BlockValueDefinition>(ctx: Context, call: string, def: T): T {
     const check = () => {
         const scope = currentServer();
         if (!scope) throw new Error(`${def.name} needs a server`);
-        assertGameAction(gameFor(scope.server.game), { settings: ctx.state.gameSettings, software: ctx.state.serverSoftware, version: ctx.state.serverVersion }, actionId);
+        assertGameCall(gameFor(scope.server.game), { settings: ctx.state.gameSettings, software: ctx.state.serverSoftware, version: ctx.state.serverVersion }, call);
     };
     if ("run" in def) {
         const run = def.run;

@@ -1,7 +1,7 @@
 import type { GameDefinition, GameOption, GameTab } from "../types";
-import { ACTION_IDS as A } from "../../service/contract";
+import { CALLS as A } from "../../service/contract";
 import { gameArt } from "../art";
-import { AUTOMATION_ACTIONS, AUTOMATION_TAB } from "../automation";
+import { AUTOMATION_CALLS, AUTOMATION_TAB } from "../automation";
 import { hostRoutes } from "../host";
 import type { ModscanGame } from "../steam/modscan";
 import type { SourcePlugin } from "./sourcemod";
@@ -83,8 +83,8 @@ export function mapMode(spec: Pick<SourceGameSpec, "mapModes">, map: string): st
     return spec.mapModes?.[map.split("_")[0]!.toLowerCase()];
 }
 
-/** Action ids every Source game registers, prefixed with its game id. */
-export const sourceActions = (id: string) => ({
+/** Call names every Source game answers, prefixed with its game id. */
+export const sourceCalls = (id: string) => ({
     info: `${id}-info`,
     latest: `${id}-latest`,
     install: `${id}-install`,
@@ -146,7 +146,7 @@ export const SOURCEMOD_PACKAGES = [
 ] as const;
 
 export function sourceGame(spec: SourceGameSpec): GameDefinition {
-    const ids = sourceActions(spec.id);
+    const ids = sourceCalls(spec.id);
     const tabs: GameTab[] = [
         { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
         { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },
@@ -174,7 +174,7 @@ export function sourceGame(spec: SourceGameSpec): GameDefinition {
                 control: { kind: "rcon" },
                 widgets: ["status", "console"],
                 packages: [{ id: "steamcmd", purpose: `Downloads and updates the ${spec.name} dedicated server from Steam` }, ...Object.values(spec.libraryPackages ?? {}), ...(spec.sourcemod ? SOURCEMOD_PACKAGES : [])],
-                actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, ...Object.values(ids), A.discardAddonUpload, "backup-server", ...AUTOMATION_ACTIONS],
+                calls: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, ...Object.values(ids), A.discardAddonUpload, ...AUTOMATION_CALLS],
                 tabs,
             };
         },

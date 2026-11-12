@@ -4,7 +4,7 @@
 // with inServer(scope, () => ...).
 import type { ServiceContext } from "@mileniumhq/paperapi";
 import { gameServiceFor } from "../../src/games/service";
-import type { ServerScope } from "../../src/service/scope";
+import { bindScope, type ServerScope } from "../../src/service/scope";
 import type { GameServerState } from "../../src/service/types";
 import type { StoredServer } from "../../src/servers";
 
@@ -42,7 +42,6 @@ export function testScope(server: Partial<StoredServer> & { directory: string },
             for (const check of [...waiters]) check();
         },
         emit: (event, payload) => events.push({ event, payload }),
-        emitTrigger: (id, output) => triggers.push({ id, output }),
     };
     const scope: TestScope = {
         server: stored,
@@ -57,7 +56,7 @@ export function testScope(server: Partial<StoredServer> & { directory: string },
             scope.server = { ...scope.server, settings };
             for (const check of [...waiters]) check();
         },
-        bindAction: (def) => def,
+        trigger: (id, output) => void triggers.push({ id, output }),
         triggers,
         events,
         history,
@@ -78,5 +77,6 @@ export function testScope(server: Partial<StoredServer> & { directory: string },
             });
         },
     };
+    bindScope(ctx, scope);
     return scope;
 }

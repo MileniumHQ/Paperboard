@@ -1,4 +1,4 @@
-import { serverLocal } from "./scope";
+import { emitTrigger, serverLocal } from "./scope";
 import { processApi, type ServiceContext } from "./api";
 import { currentGame, currentGameService } from "../games/service";
 import { assertRecoverySettled } from "./recoveryState";
@@ -44,7 +44,7 @@ function monitorReadiness(ctx: ServiceContext<GameServerState>): void {
             if (Date.now() >= deadline) throw new Error("Startup deadline exceeded");
             const ready = await readiness.probe(ctx);
             if (!active()) { clearTimeout(expired); return; }
-            if (ready) { clearTimeout(expired); cancelReadiness(); ctx.setState({ serverStatus: "online" }); ctx.emitTrigger(TRIGGER_IDS.serverStarted, true); return; }
+            if (ready) { clearTimeout(expired); cancelReadiness(); ctx.setState({ serverStatus: "online" }); emitTrigger(ctx, TRIGGER_IDS.serverStarted, true); return; }
             local().readinessTimer = setTimeout(() => void poll(), 100);
             local().readinessTimer?.unref?.();
         } catch (err) { await fail(err); }
@@ -359,9 +359,9 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>, exitCode
                 content: "[Server] Process stopped.",
             }),
         });
-        ctx.emitTrigger(TRIGGER_IDS.serverStopped, true);
+        emitTrigger(ctx, TRIGGER_IDS.serverStopped, true);
         if (exit.kind === "crashed") {
-            ctx.emitTrigger(TRIGGER_IDS.serverCrashed, exitCode ?? null);
+            emitTrigger(ctx, TRIGGER_IDS.serverCrashed, exitCode ?? null);
             // SIGKILL, while the system's count of programs it ended for
             // memory went up: the system ran out and chose the server
             const baseline = local().oomBaseline;

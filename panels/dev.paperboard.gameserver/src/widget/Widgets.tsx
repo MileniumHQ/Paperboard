@@ -14,7 +14,7 @@ import {
     type PaperRole,
     type PaperWidgetRow,
 } from "@mileniumhq/paperui";
-import { ACTION_IDS, PANEL_ID } from "../service/contract";
+import { CALLS, PANEL_ID } from "../service/contract";
 import { getStatusBadge } from "../core/statusBadge";
 import { SOFTWARE_NAMES } from "../lib/software";
 import type { HeadFetch } from "../lib/skins";
@@ -108,7 +108,7 @@ function askForCap(server: WidgetServer) {
         if (c.server.supportsPlayers === false) return;
         if (c.server.serverStatus !== "online" || c.server.maxPlayers !== null) return;
         asked = true;
-        server.call(ACTION_IDS.queryOnlinePlayers).catch((err) =>
+        server.call(CALLS.queryOnlinePlayers).catch((err) =>
             console.warn("[gameserver widget] player list query failed:", messageOf(err)),
         );
     });
@@ -148,8 +148,8 @@ export function StatusWidget(props: Props) {
                 // can't start, so it opens the panel to set up
                 const control = () =>
                     status() === "offline"
-                        ? { label: "Start server", short: "Start", icon: "play_arrow", variant: "success" as const, act: () => run("start", ACTION_IDS.startServer) }
-                        : { label: "Stop server", short: "Stop", icon: "stop", variant: "danger" as const, act: () => run("stop", ACTION_IDS.stopServer) };
+                        ? { label: "Start server", short: "Start", icon: "play_arrow", variant: "success" as const, act: () => run("start", CALLS.startServer) }
+                        : { label: "Stop server", short: "Stop", icon: "stop", variant: "danger" as const, act: () => run("stop", CALLS.stopServer) };
                 const canControl = () => installed() || status() !== "offline";
                 const button = (small: boolean) => (
                     <PaperButton
@@ -247,7 +247,7 @@ function useNameCasing(server: WidgetServer) {
     createEffect(
         on(server.visible, (shown) => {
             if (!shown) return;
-            server.call<{ kind: string; text?: string }>(ACTION_IDS.readServerFile, { path: "usercache.json" })
+            server.call<{ kind: string; text?: string }>(CALLS.readServerFile, { path: "usercache.json" })
                 .then((file) => {
                     if (file.kind !== "text") throw new Error("The player cache is not text");
                     const raw = file.text;
@@ -274,7 +274,7 @@ export function PlayersWidget(props: Props) {
     askForCap(server);
     const nameOf = useNameCasing(server);
     const loadHead: HeadFetch = (request) =>
-        server.call<string | null>(ACTION_IDS.getPlayerSkin, { player: request.name, size: request.size });
+        server.call<string | null>(CALLS.getPlayerSkin, { player: request.name, size: request.size });
 
     return (
         <Connected server={server} widget={props.widget} title="Players" icon="group" short={false}>

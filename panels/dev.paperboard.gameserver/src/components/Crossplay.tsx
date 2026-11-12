@@ -14,7 +14,7 @@ import ConfigSettings from "./ConfigSettings";
 import { errorMessage } from "../lib/failure";
 import { crossplayPlatform, disableCrossplay, enableCrossplay, readCrossplay } from "../lib/crossplay";
 import { localIp, serverBridge, serverSoftware, serverStatus } from "../lib/server";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 import type { CrossplayView } from "../service/crossplay";
 import { BEDROCK_PORT_SETTING_ID } from "../software/crossplay";
 
@@ -131,7 +131,7 @@ export default function Crossplay(props: { active: boolean }) {
                     </PaperSettingList>
                     <ConfigSettings
                         groups={view()!.groups}
-                        write={(id, value) => serverBridge.call(ACTION_IDS.writeCrossplaySetting, { id, value })}
+                        write={(id, value) => serverBridge.call(CALLS.writeCrossplaySetting, { id, value })}
                         reload={load}
                         plain
                     />

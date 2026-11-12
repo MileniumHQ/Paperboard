@@ -73,7 +73,8 @@ export interface GameFeatures {
     backupWhileRunning: "quiesce" | "offline";
     control: Control;
     tabs: readonly GameTab[];
-    actions: readonly string[];
+    /** The calls this game, with this software and version, answers. */
+    calls: readonly string[];
     widgets: readonly string[];
     packages: readonly PackageRequirement[];
 }

@@ -2,7 +2,7 @@
 // the skin (the browser cannot: the profile endpoints send no CORS headers)
 // and asks again every time, so nothing here is kept either.
 import { serverBridge } from "./server";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 
 export interface HeadRequest {
     name: string;
@@ -14,7 +14,7 @@ export interface HeadRequest {
 export type HeadFetch = (request: HeadRequest) => Promise<string | null | undefined>;
 
 export const loadHead: HeadFetch = (request) =>
-    serverBridge.call<string | null>(ACTION_IDS.getPlayerSkin, {
+    serverBridge.call<string | null>(CALLS.getPlayerSkin, {
         player: request.name,
         uuid: request.uuid,
         size: request.size,

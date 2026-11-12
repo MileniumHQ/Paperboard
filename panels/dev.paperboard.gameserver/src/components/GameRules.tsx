@@ -12,7 +12,7 @@ import {
 } from "@mileniumhq/paperui";
 import { serverStatus, serverBridge, gamerules, serverVersion } from "../lib/server";
 import { gamerulesFor } from "../core/gamerules";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 import { humanizeIdentifier } from "../core/format";
 import { PaperPageHeader } from "@mileniumhq/paperui";
 import { errorMessage } from "../lib/failure";
@@ -61,7 +61,7 @@ export default function GameRules() {
     createEffect(() => {
         if (!isOnline()) return;
         serverBridge
-            .call(ACTION_IDS.queryGamerules, {
+            .call(CALLS.queryGamerules, {
                 names: availableGamerules().map((rule) => rule.name),
             })
             .then(() => setSyncError(""))
@@ -74,7 +74,7 @@ export default function GameRules() {
     const updateRule = (name: string, value: string) => {
         setRuleError(null);
         serverBridge
-            .call(ACTION_IDS.setGamerule, { name, value })
+            .call(CALLS.setGamerule, { name, value })
             .catch((err) => setRuleError({ title: `${humanizeIdentifier(name)} not changed`, message: errorMessage(err) }));
     };
 

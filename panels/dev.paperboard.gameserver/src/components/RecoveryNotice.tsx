@@ -1,6 +1,6 @@
 import { createSignal, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperQuote } from "@mileniumhq/paperui";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 import { recoveryBlock, serverBridge } from "../lib/server";
 
 // An interrupted install or modpack change that could not be cleaned up
@@ -14,7 +14,7 @@ export default function RecoveryNotice() {
         setRetrying(true);
         setFailure("");
         try {
-            await serverBridge.call(ACTION_IDS.retryRecovery);
+            await serverBridge.call(CALLS.retryRecovery);
         } catch (err) {
             setFailure(err instanceof Error ? err.message : String(err));
         } finally {

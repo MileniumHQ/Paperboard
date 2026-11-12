@@ -18,7 +18,7 @@ import {
 import type { GameFeatures, GameOption, GameTab, OptionSection } from "../games";
 import { serverBridge, serverStatus } from "../lib/server";
 import { errorMessage } from "../lib/failure";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 import { fitsNumber } from "../games/options";
 
 /**
@@ -172,7 +172,7 @@ export default function GameOptions(props: {
     const load = async () => {
         setLoadError("");
         try {
-            setValues(await serverBridge.call<Record<string, unknown>>(ACTION_IDS.readGameOptions));
+            setValues(await serverBridge.call<Record<string, unknown>>(CALLS.readGameOptions));
         } catch (err) {
             setLoadError(errorMessage(err));
         }
@@ -185,7 +185,7 @@ export default function GameOptions(props: {
         setSaving(true);
         setSaveError("");
         try {
-            setValues(await serverBridge.call<Record<string, unknown>>(ACTION_IDS.writeGameOptions, { patch: { [id]: next } }));
+            setValues(await serverBridge.call<Record<string, unknown>>(CALLS.writeGameOptions, { patch: { [id]: next } }));
         } catch (err) {
             setSaveError(errorMessage(err));
         } finally {

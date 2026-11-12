@@ -10,8 +10,8 @@ import { parseInstallRecord } from "../../src/software/installRecord";
 import { heapFit, oomKillCount } from "../../src/service/memory";
 import { afterCrash } from "../../src/service/automation";
 import { startServerInstance, stopServerInstance } from "../../src/service/lifecycle";
-import { panelActions } from "../../src/games/minecraft/actions";
-import { ACTION_IDS } from "../../src/service/contract";
+import { minecraftCalls } from "../../src/games/minecraft/calls";
+import { CALLS } from "../../src/service/contract";
 import { testScope } from "../helpers/scope";
 import { inServer } from "../../src/service/scope";
 
@@ -64,10 +64,10 @@ describe("the launch record", () => {
     });
 
     test("the generic config patch cannot set what an install records", async () => {
-        const action = panelActions.find((a) => a.id === ACTION_IDS.updatePanelConfig)!;
+        const call = minecraftCalls[CALLS.updatePanelConfig]!;
         const scope = testScope({ directory: "servers/patch" });
         for (const key of ["software", "version", "install"]) {
-            await expect(inServer(scope, () => (action.run as Function)(scope.ctx, { patch: { [key]: "forge" } }))).rejects.toThrow(
+            await expect(inServer(scope, () => call(scope.ctx, { patch: { [key]: "forge" } }))).rejects.toThrow(
                 `"${key}" is set by installing a server version`,
             );
         }

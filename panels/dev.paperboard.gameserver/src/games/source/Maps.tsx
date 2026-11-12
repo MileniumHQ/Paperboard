@@ -15,7 +15,7 @@ import {
 } from "@mileniumhq/paperui";
 import { serverBridge, serverLevel, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
-import { mapMode, sourceActions, type SourceGameSpec, type SourceMapCycle } from "./index";
+import { mapMode, sourceCalls, type SourceGameSpec, type SourceMapCycle } from "./index";
 import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices, mapNames, type MapChoice } from "./MapCards";
 import { createMapPictures } from "./useMapPictures";
 import { workshopChoice } from "./useWorkshopMaps";
@@ -28,7 +28,7 @@ import { canonicalMap, workshopId, workshopName, type SourceWorkshopHit, type So
 // rotation Paperboard's, written to a file of its own that the server is
 // pointed at (games/source/mapcycle.ts).
 export default function SourceMaps(props: { spec: SourceGameSpec; active: boolean }) {
-    const ids = sourceActions(props.spec.id);
+    const ids = sourceCalls(props.spec.id);
     const [view, setView] = createSignal<SourceMapCycle | null>(null);
     const [loadError, setLoadError] = createSignal("");
     const [working, setWorking] = createSignal(false);

@@ -1,5 +1,5 @@
 import { serverBridge, serverVersion } from "./server";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 import { searchProjects, type ModrinthHit } from "./modrinth";
 import { RESOURCEPACK_PROJECT_TYPE, type ResourcePackSelection } from "../core/resourcepack";
 import type { ResourcePackView } from "../service/resourcepack";
@@ -20,15 +20,15 @@ export async function searchResourcePacks(query: string, signal?: AbortSignal): 
     });
 }
 
-export const readResourcePack = () => serverBridge.call<ResourcePackView>(ACTION_IDS.readResourcePack);
+export const readResourcePack = () => serverBridge.call<ResourcePackView>(CALLS.readResourcePack);
 
 export const listResourcePackVersions = (projectId: string) =>
-    serverBridge.call<ModrinthVersion[]>(ACTION_IDS.listResourcePackVersions, { projectId });
+    serverBridge.call<ModrinthVersion[]>(CALLS.listResourcePackVersions, { projectId });
 
 export const selectModrinthResourcePack = (projectId: string, versionId: string) =>
-    serverBridge.call<ResourcePackSelection>(ACTION_IDS.selectResourcePack, { projectId, versionId });
+    serverBridge.call<ResourcePackSelection>(CALLS.selectResourcePack, { projectId, versionId });
 
 export const selectCustomResourcePack = (url: string) =>
-    serverBridge.call<ResourcePackSelection>(ACTION_IDS.selectResourcePack, { url });
+    serverBridge.call<ResourcePackSelection>(CALLS.selectResourcePack, { url });
 
-export const removeResourcePack = () => serverBridge.call(ACTION_IDS.removeResourcePack);
+export const removeResourcePack = () => serverBridge.call(CALLS.removeResourcePack);

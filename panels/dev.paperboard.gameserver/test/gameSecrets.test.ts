@@ -7,7 +7,7 @@ import { gameServer, type GameServer } from "./helpers/game";
 import { freePort, installPalworld } from "./helpers/palworld";
 import { placeStandIn } from "./helpers/standIn";
 import { PANEL_ID } from "../src/servers";
-import { ACTION_IDS } from "../src/service/contract";
+import { CALLS } from "../src/service/contract";
 import { processApi } from "../src/service/api";
 import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 import { gameServiceFor } from "../src/games/service";
@@ -22,9 +22,9 @@ afterAll(async () => {
 });
 
 const call = async (server: GameServer, id: string, input: unknown) => {
-    const def = (await gameServiceFor(server.scope.server.game).actions()).find((a) => a.id === id);
-    if (!def?.run) throw new Error(`${server.scope.server.game} has no action ${id}`);
-    return server.run(() => def.run!(server.scope.ctx, input));
+    const def = (await gameServiceFor(server.scope.server.game).calls())[id];
+    if (!def) throw new Error(`${server.scope.server.game} has no call ${id}`);
+    return server.run(() => def(server.scope.ctx, input));
 };
 const vault = async (server: GameServer, name: string) => (await secretsApi.get(`${server.scope.server.id}-${server.scope.server.game}-${name}`, PANEL_ID)).value ?? "";
 /** every file in the server folder that holds `text` */
@@ -58,7 +58,7 @@ describe("game server secrets and inputs", () => {
     test("Terraria's join password lives in the vault, is hidden in the console and chat, and is in its config only while it runs", async () => {
         const server = await terrariaServer();
         const secret = "tera-Secret-7";
-        await call(server, ACTION_IDS.writeGameOptions, { patch: { password: secret } });
+        await call(server, CALLS.writeGameOptions, { patch: { password: secret } });
         expect(await vault(server, "join-password")).toBe(secret);
         expect(JSON.stringify(server.scope.server.settings)).not.toContain(secret);
         expect(filesHolding(server.dir, secret)).toEqual([]);
@@ -93,7 +93,7 @@ describe("game server secrets and inputs", () => {
         });
         const service = gameServiceFor("team-fortress-2");
         await server.run(() => service.initialize(server.scope.ctx, false));
-        await call(server, ACTION_IDS.writeGameOptions, { patch: { rconPassword: "rcon-Secret-1", password: "join-Secret-1", hostname: "My Server" } });
+        await call(server, CALLS.writeGameOptions, { patch: { rconPassword: "rcon-Secret-1", password: "join-Secret-1", hostname: "My Server" } });
         expect([await vault(server, "rcon-password"), await vault(server, "join-password")]).toEqual(["rcon-Secret-1", "join-Secret-1"]);
         // writing the rotation writes the game's config files from the settings
         await call(server, "team-fortress-2-map-cycle-set", { maps: ["ctf_2fort"] });
@@ -103,7 +103,7 @@ describe("game server secrets and inputs", () => {
 
         const settingsBefore = JSON.stringify(server.scope.server.settings);
         for (const hostname of ['x"; rcon_password y', "a;quit", "two\nlines"]) {
-            await expect(call(server, ACTION_IDS.writeGameOptions, { patch: { hostname } })).rejects.toThrow();
+            await expect(call(server, CALLS.writeGameOptions, { patch: { hostname } })).rejects.toThrow();
         }
         await expect(call(server, "team-fortress-2-map-cycle-set", { maps: ["../../cfg/server"] })).rejects.toThrow("Choose a map by its name");
         await expect(call(server, "team-fortress-2-plugin-remove", { file: "../../../server.cfg" })).rejects.toThrow();

@@ -3,7 +3,7 @@ import { PaperButton, PaperCenteredInterface, PaperFlex, PaperIcon, PaperMediaCa
 import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import SteamSetup from "../steam/SteamSetup";
-import { sourceActions, type SourceGameSpec } from "./index";
+import { sourceCalls, type SourceGameSpec } from "./index";
 import MapCards, { MapPicturesCredit, MapPicturesFailure, mapChoices } from "./MapCards";
 import { playModes } from "./modes";
 import { createMapPictures, preloadMapPictures } from "./useMapPictures";
@@ -25,7 +25,7 @@ type Choice = { mode: string | null; map: string };
  * the cards are drawn when their step opens.
  */
 export default function SourceSetup(props: { spec: SourceGameSpec; onComplete(): void }) {
-    const ids = sourceActions(props.spec.id);
+    const ids = sourceCalls(props.spec.id);
     const pictures = createMapPictures(props.spec);
     preloadMapPictures(pictures);
     // the maps are only there once the download is, so they are read when its step is left

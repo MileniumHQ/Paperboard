@@ -14,7 +14,7 @@ import {
 import { serverBridge, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { discardUpload, listAdded, newStage, pickFiles, stageFolder } from "../../lib/addons/upload";
-import { sourceActions, type SourceGameSpec, type SourceModView } from "./index";
+import { sourceCalls, type SourceGameSpec, type SourceModView } from "./index";
 import type { SourcePlugin } from "./sourcemod";
 
 const upload = pickFiles("Upload plugins", ["smx"]);
@@ -23,7 +23,7 @@ const upload = pickFiles("Upload plugins", ["smx"]);
 // turned on or off where SourceMod keeps them. There is no catalog that
 // checks what it lists, so plugins come as .smx files the user uploads.
 export default function SourceMods(props: { spec: SourceGameSpec; active: boolean }) {
-    const ids = sourceActions(props.spec.id);
+    const ids = sourceCalls(props.spec.id);
     const [view, setView] = createSignal<SourceModView | null>(null);
     const [loadError, setLoadError] = createSignal("");
     const [working, setWorking] = createSignal<string | null>(null);

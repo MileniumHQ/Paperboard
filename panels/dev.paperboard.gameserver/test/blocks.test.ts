@@ -3,7 +3,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { actionsApi, backupApi, backupLocationsApi, blocksApi, type BackupRecord } from "@mileniumhq/paperapi";
+import { backupApi, backupLocationsApi, blocksApi, type BackupRecord } from "@mileniumhq/paperapi";
+import { callServer } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installFakeJava } from "./helpers/fakeJava";
 import { installPanel, restartService, servicesState } from "./helpers/installedPanel";
@@ -75,7 +76,7 @@ beforeAll(async () => {
     await restartService();
 });
 afterAll(async () => {
-    for (const server of ["s-a", "s-t"]) await actionsApi.call(PANEL_ID, `${server}/stop-server`, {}, { timeoutMs: null });
+    for (const server of ["s-a", "s-t"]) await callServer(server, "stop-server");
     await daemon?.stop();
 });
 
@@ -124,7 +125,7 @@ describe("each server is a Blocks project with its game's blocks", () => {
         // add-ons: the active world's datapacks, and no modpack on Paper
         expect(await read("datapacks")).toEqual([]);
         await expect(run("remove-datapack", { datapack: "missing.zip" })).rejects.toThrow("The active world has no datapack named missing.zip");
-        await expect(run("install-modpack", { modpack: "fabulously-optimized" })).rejects.toThrow('does not support action "install-modpack"');
+        await expect(run("install-modpack", { modpack: "fabulously-optimized" })).rejects.toThrow('does not support "install-modpack"');
         await expect(read("modpack")).rejects.toThrow("This server has no modpack");
     });
 

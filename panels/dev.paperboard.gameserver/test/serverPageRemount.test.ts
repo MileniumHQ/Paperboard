@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { actionsApi, processApi } from "@mileniumhq/paperapi";
+import { processApi } from "@mileniumhq/paperapi";
+import { callServer } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { openPage, servePanel } from "./helpers/browser";
 import { installFakeJava } from "./helpers/fakeJava";
@@ -20,8 +21,14 @@ afterAll(async () => {
 
 const SERVERS = "servers-0123456789ab";
 const ACTIVE = `document.querySelector("[class*=PaperInterfaceItem]")`;
-/** the action names of the page's calls, in order */
-const calls = (frames: string[]) => frames.flatMap((f) => (f.includes('"action":"actions:call"') ? [JSON.parse(f).params.action as string] : []));
+/** the page's calls to the service, in order, each as "server/name" */
+const calls = (frames: string[]) =>
+    frames.flatMap((f) => {
+        if (!f.includes('"action":"blocks:call"')) return [];
+        const { entry, request } = JSON.parse(f).params;
+        const call = /^command\.call-(.+)$/.exec(entry)?.[1];
+        return call ? [`${request.inputs.input.server}/${call}`] : [];
+    });
 
 // The server page does not remount while state arrives.
 describe("the server page", () => {
@@ -48,9 +55,9 @@ describe("the server page", () => {
             expect(calls(page.sentFrames)).toContain("s-mc/read-game-options");
 
             // a start pushes status and every console line; a config edit pushes settings
-            await actionsApi.call(PANEL_ID, "s-mc/start-server", {});
+            await callServer("s-mc", "start-server");
             await page.received((f) => f.includes('"server:s-mc":{"serverStatus":"online"'), "the server's online state");
-            await actionsApi.call(PANEL_ID, "s-mc/update-panel-config", { patch: { ramGB: 3 } });
+            await callServer("s-mc", "update-panel-config", { patch: { ramGB: 3 } });
             await page.received((f) => f.includes('"ramAllocation":3'), "the edited settings");
 
             expect(await page.evaluate(`${ACTIVE}.firstElementChild.dataset.mounted`)).toBe("first");
@@ -71,7 +78,7 @@ describe("the server page", () => {
             expect(page.consoleErrors).toEqual([]);
         } finally {
             await page.close();
-            await actionsApi.call(PANEL_ID, "s-mc/stop-server", {});
+            await callServer("s-mc", "stop-server");
             await exited;
             served.stop();
         }

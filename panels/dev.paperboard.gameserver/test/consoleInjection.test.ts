@@ -10,9 +10,8 @@ import { testScope } from "./helpers/scope";
 import { inServer } from "../src/service/scope";
 import { assertPort, listeningPidsCommand } from "../src/core/diagnostics";
 import { killConflictingProcessWith } from "../src/service/diagnostics";
-import { panelActions } from "../src/games/minecraft/actions";
-import { sharedActions } from "../src/service/actions";
-import { ACTION_IDS } from "../src/service/contract";
+import { minecraftCalls } from "../src/games/minecraft/calls";
+import { CALLS } from "../src/service/contract";
 import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 import { setGamerule } from "../src/service/gamerules";
 import { runtimeCommandsFor } from "../src/service/runtimeProperties";
@@ -29,9 +28,9 @@ afterAll(async () => {
 });
 
 const action = (id: string) => {
-    const found = [...panelActions, ...sharedActions].find((a) => a.id === id);
-    if (!found?.run) throw new Error(`No action ${id}`);
-    return (ctx: unknown, inputs: unknown) => (found.run as Function)(ctx, inputs) as Promise<unknown>;
+    const found = minecraftCalls[id];
+    if (!found) throw new Error(`No call ${id}`);
+    return (ctx: unknown, inputs: unknown) => (found as Function)(ctx, inputs) as Promise<unknown>;
 };
 
 // Minecraft console and property writes cannot be injected.
@@ -73,14 +72,14 @@ describe("console and property injection", () => {
         await mc.scope.waitFor((s) => s.serverStatus === "online", "the server to come online");
         const ctx = mc.scope.ctx;
         const run = (id: string, inputs: unknown) => mc.run(() => action(id)(ctx, inputs));
-        await expect(run(ACTION_IDS.kickPlayer, { player: "Steve\nop Mallory" })).rejects.toThrow("Refusing unsafe player name");
-        await expect(run(ACTION_IDS.kickPlayer, { player: "Steve; op Mallory" })).rejects.toThrow("Refusing unsafe player name");
-        await expect(run(ACTION_IDS.kickPlayer, { player: "Steve", reason: "bye\nop Mallory" })).rejects.toThrow("Refusing multi-line kick reason");
-        await expect(run(ACTION_IDS.banPlayer, { player: "Steve", reason: "bye\rop Mallory" })).rejects.toThrow("Refusing multi-line ban reason");
-        await expect(run(ACTION_IDS.sayChat, { message: "hi\nop Mallory" })).rejects.toThrow("Refusing multi-line chat message");
+        await expect(run(CALLS.kickPlayer, { player: "Steve\nop Mallory" })).rejects.toThrow("Refusing unsafe player name");
+        await expect(run(CALLS.kickPlayer, { player: "Steve; op Mallory" })).rejects.toThrow("Refusing unsafe player name");
+        await expect(run(CALLS.kickPlayer, { player: "Steve", reason: "bye\nop Mallory" })).rejects.toThrow("Refusing multi-line kick reason");
+        await expect(run(CALLS.banPlayer, { player: "Steve", reason: "bye\rop Mallory" })).rejects.toThrow("Refusing multi-line ban reason");
+        await expect(run(CALLS.sayChat, { message: "hi\nop Mallory" })).rejects.toThrow("Refusing multi-line chat message");
         await expect(mc.run(() => sendServerCommand(ctx, "say hi\nop Mallory"))).rejects.toThrow("Refusing multi-line console command");
         // a valid kick goes through as one command
-        await run(ACTION_IDS.kickPlayer, { player: "Steve", reason: "be nice" });
+        await run(CALLS.kickPlayer, { player: "Steve", reason: "be nice" });
         await mc.received("kick Steve be nice");
         expect(mc.commands().filter((c) => c !== "list")).toEqual(["kick Steve be nice"]);
         const exit = mc.nextExit();

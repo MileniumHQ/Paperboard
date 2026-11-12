@@ -3,7 +3,7 @@ import { PaperButton, PaperFlex, PaperInput, PaperLink, PaperQuote, PaperText } 
 import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { formatCount } from "../../lib/addons/presentation";
-import { sourceActions, type SourceGameSpec } from "./index";
+import { sourceCalls, type SourceGameSpec } from "./index";
 import MapCards from "./MapCards";
 import { workshopChoice } from "./useWorkshopMaps";
 import type { SourceWorkshopHit, SourceWorkshopResults } from "./workshop";
@@ -22,7 +22,7 @@ export default function WorkshopPane(props: {
     inRotation: readonly string[];
     onPick(map: SourceWorkshopHit): void;
 }) {
-    const ids = sourceActions(props.spec.id);
+    const ids = sourceCalls(props.spec.id);
     const [query, setQuery] = createSignal("");
     const [results, setResults] = createSignal<SourceWorkshopResults | null>(null);
     const [searching, setSearching] = createSignal(false);

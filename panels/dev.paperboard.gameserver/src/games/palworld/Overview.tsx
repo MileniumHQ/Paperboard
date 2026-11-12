@@ -3,7 +3,7 @@ import { PaperAvatar, PaperButton, PaperGrid, PaperInput, PaperModal, PaperQuote
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { gameSettings, serverBridge, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
-import { ACTION_IDS } from "../../service/contract";
+import { CALLS } from "../../service/contract";
 import { palworld } from "./index";
 import type { PalworldMetrics } from "./rest";
 import { fpsTone, TARGET_FPS, uptimeLabel } from "./health";
@@ -23,7 +23,7 @@ export default function PalworldOverview() {
         setSaving(true);
         setError("");
         try {
-            await serverBridge.call(ACTION_IDS.writeGameOptions, { patch: { [DESCRIPTION]: draft().trim() } });
+            await serverBridge.call(CALLS.writeGameOptions, { patch: { [DESCRIPTION]: draft().trim() } });
             setPending(serverStatus() !== "offline");
             setOpen(false);
         } catch (err) {

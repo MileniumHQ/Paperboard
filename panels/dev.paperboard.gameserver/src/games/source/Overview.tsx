@@ -4,15 +4,15 @@ import ServerOverview, { EditableDetail } from "../../components/ServerOverview"
 import { gameSettings, serverBridge, serverLevel, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import type { GameDefinition } from "../types";
-import { ACTION_IDS as A } from "../../service/contract";
-import { mapMode, sourceActions, type SourceGameSpec } from "./index";
+import { CALLS as A } from "../../service/contract";
+import { mapMode, sourceCalls, type SourceGameSpec } from "./index";
 import MapCards, { mapChoices, mapNames } from "./MapCards";
 import { createMapPictures } from "./useMapPictures";
 import { createWorkshopMaps } from "./useWorkshopMaps";
 import { canonicalMap } from "./workshop";
 
 export default function SourceOverview(props: { spec: SourceGameSpec; game: GameDefinition }) {
-    const ids = sourceActions(props.spec.id);
+    const ids = sourceCalls(props.spec.id);
     const features = props.game.describe({ software: "", version: "" });
     // a running server's own map, which its map cycle changes; the one it starts on otherwise
     const map = () => canonicalMap(serverLevel() ?? String(gameSettings().map ?? ""));
@@ -64,7 +64,7 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
             }
             software="Steam"
             control={features.control}
-            world={features.actions.includes(A.saveWorld)}
+            world={features.calls.includes(A.saveWorld)}
         >
             <PaperModal
                 open={open()}

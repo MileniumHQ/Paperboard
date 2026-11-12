@@ -1,4 +1,4 @@
-import { PANEL_ID, ACTION_IDS } from "../service/contract";
+import { PANEL_ID, CALLS } from "../service/contract";
 import { createSignal } from "solid-js";
 import { createPanelBridge } from "./api";
 import type { PaperConsoleEntry } from "@mileniumhq/paperui";
@@ -106,7 +106,7 @@ serverBridge.onStateChange((patch) => {
 // are gone, and with them the ambient (id-less) config.get/set calls.
 export async function loadServerConfig() {
     try {
-        await serverBridge.call(ACTION_IDS.loadConfig);
+        await serverBridge.call(CALLS.loadConfig);
         applyStatePatch(await serverBridge.refreshState() as any, currentSetters());
     } catch (err) {
         reportActionError("load-server-config", err);
@@ -114,7 +114,7 @@ export async function loadServerConfig() {
 }
 
 export async function updatePanelConfig(patch: Record<string, unknown>) {
-    await serverBridge.call(ACTION_IDS.updatePanelConfig, { patch });
+    await serverBridge.call(CALLS.updatePanelConfig, { patch });
     applyStatePatch(await serverBridge.refreshState() as any, currentSetters());
 }
 
@@ -132,37 +132,37 @@ function reportActionError(action: string, err: unknown): void {
 export function startServer() {
     setServerActionError("");
     serverBridge
-        .call(ACTION_IDS.startServer)
+        .call(CALLS.startServer)
         .catch((err) => reportActionError("start-server", err));
 }
 
 export function stopServer() {
     setServerActionError("");
     serverBridge
-        .call(ACTION_IDS.stopServer)
+        .call(CALLS.stopServer)
         .catch((err) => reportActionError("stop-server", err));
 }
 
 export function restartServer() {
     setServerActionError("");
     serverBridge
-        .call(ACTION_IDS.restartServer)
+        .call(CALLS.restartServer)
         .catch((err) => reportActionError("restart-server", err));
 }
 
 /** Rejects when the command did not run; the console that sent it shows why. */
 export function sendServerCommand(cmd: string): Promise<unknown> {
-    return serverBridge.call(ACTION_IDS.runCommand, { command: cmd });
+    return serverBridge.call(CALLS.runCommand, { command: cmd });
 }
 
 /** Rejects when the message was not sent; the chat that sent it shows why. */
 export function sendChatMessage(msg: string): Promise<unknown> {
-    return serverBridge.call(ACTION_IDS.sayChat, { message: msg });
+    return serverBridge.call(CALLS.sayChat, { message: msg });
 }
 
 /** Asks the game to write its world to disk; resolves once the game confirms it. */
 export function saveWorld(): Promise<unknown> {
-    return serverBridge.call(ACTION_IDS.saveWorld, undefined, { timeoutMs: null });
+    return serverBridge.call(CALLS.saveWorld, undefined, { timeoutMs: null });
 }
 
 export { getStatusBadge } from "../core/statusBadge";

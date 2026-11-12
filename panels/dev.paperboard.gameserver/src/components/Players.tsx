@@ -36,7 +36,7 @@ import {
     serverBridge,
     serverStatus,
 } from "../lib/server";
-import { ACTION_IDS, type ActionId } from "../service/contract";
+import { CALLS, type CallName } from "../service/contract";
 import { JAVA_NAME_PATTERN, PLAYER_NAME_PATTERN } from "../core/players";
 import { bedrockPlayerName, gamertagOf, isFloodgateUuid, type BedrockNaming } from "../core/bedrock";
 import PlayerHead from "./PlayerHead";
@@ -149,7 +149,7 @@ export default function Players() {
         if (wanted.length === 0) return;
         for (const uuid of wanted) requestedNames.add(uuid);
         serverBridge
-            .call<Record<string, string>>(ACTION_IDS.currentPlayerNames, { uuids: wanted })
+            .call<Record<string, string>>(CALLS.currentPlayerNames, { uuids: wanted })
             .then((names) => {
                 const entries = Object.entries(names ?? {});
                 if (entries.length === 0) return;
@@ -185,7 +185,7 @@ export default function Players() {
     // are the truth, so this runs again after anything that changes them
     const loadRoster = async (): Promise<void> => {
         try {
-            const roster = (await serverBridge.call<RosterEntry[]>(ACTION_IDS.listRoster)) ?? [];
+            const roster = (await serverBridge.call<RosterEntry[]>(CALLS.listRoster)) ?? [];
             const listed = withCurrentNames(roster.map(({ banned: _banned, ...player }) => player));
             setPlayers(listed);
             setBannedNames(new Set(listed.filter((_, i) => roster[i].banned).map((p) => p.name.toLowerCase())));
@@ -216,7 +216,7 @@ export default function Players() {
         });
         void loadRoster();
         serverBridge
-            .call<BedrockNaming | null>(ACTION_IDS.readBedrockNaming)
+            .call<BedrockNaming | null>(CALLS.readBedrockNaming)
             .then((naming) => setBedrock(naming ?? null))
             .catch((err) => {
                 console.error("[Players] read-bedrock-naming failed:", err);
@@ -352,7 +352,7 @@ export default function Players() {
     // composes console commands from raw values anymore; every player
     // mutation is a named, validated service action.
     const callPlayerAction = async (
-        actionId: ActionId,
+        actionId: CallName,
         playerName: string,
         failure: string,
         extra?: Record<string, unknown>,
@@ -373,10 +373,10 @@ export default function Players() {
         field: "op" | "whitelisted",
         value: boolean,
     ) => {
-        const actionId: ActionId =
+        const actionId: CallName =
             field === "op"
-                ? value ? ACTION_IDS.opPlayer : ACTION_IDS.deopPlayer
-                : value ? ACTION_IDS.whitelistPlayer : ACTION_IDS.unwhitelistPlayer;
+                ? value ? CALLS.opPlayer : CALLS.deopPlayer
+                : value ? CALLS.whitelistPlayer : CALLS.unwhitelistPlayer;
         const failure = field === "op" ? (value ? "made an operator" : "removed as an operator") : value ? "whitelisted" : "removed from the whitelist";
         const uuid = allPlayers().find((p) => p.name === playerName)?.uuid;
         const ok = await callPlayerAction(actionId, playerName, failure, { uuid });
@@ -399,8 +399,8 @@ export default function Players() {
 
     const setPlayerBanned = (playerName: string, banned: boolean, reason?: string): Promise<boolean> => {
         const result = banned
-            ? callPlayerAction(ACTION_IDS.banPlayer, playerName, "banned", { reason })
-            : callPlayerAction(ACTION_IDS.pardonPlayer, playerName, "pardoned");
+            ? callPlayerAction(CALLS.banPlayer, playerName, "banned", { reason })
+            : callPlayerAction(CALLS.pardonPlayer, playerName, "pardoned");
         // a written console command is not ban-truth: re-verify from the
         // ban file after a delay so the UI's ban state converges on what
         // the server actually recorded
@@ -410,10 +410,10 @@ export default function Players() {
     };
 
     const kickPlayer = (playerName: string, reason?: string): Promise<boolean> =>
-        callPlayerAction(ACTION_IDS.kickPlayer, playerName, "kicked", { reason });
+        callPlayerAction(CALLS.kickPlayer, playerName, "kicked", { reason });
 
     const killPlayer = (playerName: string): Promise<boolean> =>
-        callPlayerAction(ACTION_IDS.killPlayer, playerName, "killed");
+        callPlayerAction(CALLS.killPlayer, playerName, "killed");
 
     // whitelist a name that may not be on the roster yet (a player who has
     // not joined). A gamertag becomes the name Floodgate gives it here. The
@@ -437,7 +437,7 @@ export default function Players() {
             return;
         }
         try {
-            await serverBridge.call(ACTION_IDS.whitelistPlayer, { player: name });
+            await serverBridge.call(CALLS.whitelistPlayer, { player: name });
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             console.error(`[Players] whitelist failed for "${name}":`, message);
@@ -495,7 +495,7 @@ export default function Players() {
         // out first, then trash-first delete under the actual level-name.
         // Without a uuid the service resolves one from the server's files
         try {
-            await serverBridge.call(ACTION_IDS.deletePlayerData, {
+            await serverBridge.call(CALLS.deletePlayerData, {
                 player: player.name,
                 uuid: player.uuid,
             });

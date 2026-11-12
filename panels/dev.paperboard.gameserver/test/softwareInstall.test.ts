@@ -14,7 +14,7 @@ import { neoforgeProvider } from "../src/games/minecraft/providers/neoforge";
 import { InstallerStillRunningError, runInstallerProcess, type InstallerRun } from "../src/service/installerProcess";
 import { startServerInstance } from "../src/service/lifecycle";
 import { INSTALL_RECORD_KEY } from "../src/software/installRecord";
-import { ACTION_IDS } from "../src/service/contract";
+import { CALLS } from "../src/service/contract";
 import { installFakeJava } from "./helpers/fakeJava";
 import { createRoot } from "solid-js";
 
@@ -191,9 +191,9 @@ describe("software installs", () => {
         await modpacks.installModpack("AANobbMI", "abc123");
         await modpacks.removeModpack();
         expect(calls).toEqual([
-            { action: ACTION_IDS.installServerVersion, options: { timeoutMs: null } },
-            { action: ACTION_IDS.installModpack, options: { timeoutMs: null } },
-            { action: ACTION_IDS.removeModpack, options: { timeoutMs: null } },
+            { action: CALLS.installServerVersion, options: { timeoutMs: null } },
+            { action: CALLS.installModpack, options: { timeoutMs: null } },
+            { action: CALLS.removeModpack, options: { timeoutMs: null } },
         ]);
     });
 });

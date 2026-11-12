@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { actionsApi, processApi as rawProcess } from "@mileniumhq/paperapi";
+import { processApi as rawProcess } from "@mileniumhq/paperapi";
+import { callServer } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { minecraftServer } from "./helpers/minecraft";
 import { gameServer } from "./helpers/game";
@@ -81,7 +82,7 @@ describe("failures are shown", () => {
         await mc.close();
 
         const exited = new Promise<void>((resolve) => rawProcess.onExit("s-pal-palworld-server", () => resolve()));
-        await actionsApi.call(PANEL_ID, "s-pal/start-server", {});
+        await callServer("s-pal", "start-server");
         const pal = await openPage(`${served.url}/?server=s-pal`);
         try {
             await pal.waitFor(`document.body.innerText.includes("ONLINE")`, "Palworld to show online");
@@ -104,11 +105,11 @@ describe("failures are shown", () => {
             await pal.waitFor(quote("Message not sent"), "the refused chat message to be shown");
             expect(await quoteText(pal, "Message not sent")).toContain("Palworld answered 500 to announce: chat is switched off");
             expect(await pal.evaluate<string>(`document.querySelector('input[placeholder="Message server..."]').value`)).toBe("hello all");
-            expect(pal.sentFrames.slice(sentBefore).filter((f) => f.includes("s-pal/say-chat") && f.includes("hello all"))).toHaveLength(1);
+            expect(pal.sentFrames.slice(sentBefore).filter((f) => f.includes("command.call-say-chat") && f.includes("hello all"))).toHaveLength(1);
             expect([pal.exceptions, mc.exceptions]).toEqual([[], []]);
         } finally {
             await pal.close();
-            await actionsApi.call(PANEL_ID, "s-pal/stop-server", {});
+            await callServer("s-pal", "stop-server");
             await exited;
             served.stop();
         }

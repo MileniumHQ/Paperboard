@@ -1,4 +1,4 @@
-// Game Server's own blocks for the Blocks panel (Actions API v2): the ones
+// Game Server's own blocks for the Blocks panel: the ones
 // that run the panel itself, as its home screen does. Each server's own
 // blocks are its Blocks project (blocks.ts); these make, rename, remove,
 // start and stop servers by picking one.

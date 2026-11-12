@@ -1,14 +1,10 @@
 import {
     definePanelService,
     backupApi,
-    actionsApi,
     blocksApi,
     config,
     fileApi,
-    defineAction,
-    WIDGET_CHOICES_ACTION,
     type ServiceContext,
-    type ActionDefinition,
     type BlocksHandle,
 } from "@mileniumhq/paperapi";
 import {
@@ -22,11 +18,13 @@ import {
     type StoredServer,
 } from "./servers";
 import * as nodeFs from "node:fs/promises";
-import { inServer, type ServerScope } from "./service/scope";
+import { bindScope, inServer, type ServerScope } from "./service/scope";
+import type { ServerCalls } from "./service/calls";
 import { announceChanges, bindBlocks, fireBackupEnded, fireTrigger, mergeBlocks, serverOperation, sharedBlocks, sharedTypes } from "./service/blocks";
 import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from "./service/serversBlocks";
-import { processApi as scopedProcess, LEGACY_DEPRECATION } from "./service/api";
+import { processApi as scopedProcess } from "./service/api";
 import { type GameServerState, SERVER_PROC_ID, appendCapped } from "./service/types";
+import { CALLS } from "./service/contract";
 import { setRecoveryBlock } from "./service/recoveryState";
 import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance, startServerInstance } from "./service/lifecycle";
 import { cancelAutomation, readAutomation, scheduleDailyRestart, scheduleUpdateChecks } from "./service/automation";
@@ -34,13 +32,11 @@ import { historyWriter, readHistory } from "./service/history";
 
 import { currentGameService, gameServiceFor } from "./games/service";
 import { settingsBlocks } from "./service/settingsBlocks";
-import { assertGameAction, gameFor, games } from "./games";
+import { assertGameCall, gameFor, games } from "./games";
 import { loadServerOptions } from "./service/options";
 import { livePortDeps } from "./service/portDeps";
 import { waitUntil } from "./games/serviceKit";
 export * from "./service/types";
-export * from "./games/minecraft/actions";
-export { LEGACY_DEPRECATION };
 
 export interface ServerSummary extends Omit<StoredServer, "settings"> {
     configured: boolean;
@@ -145,40 +141,38 @@ function requireServer(id: unknown): ServerScope {
     if (!entry) throw new Error("Choose a server that has not been removed");
     return entry;
 }
-function bind(scope: ServerScope, def: ActionDefinition): ActionDefinition {
-    return {
-        ...def,
-        ...(def.run
-            ? {
-                  run: async (_ctx: unknown, ...args: any[]) => {
-                      if (!entries.has(scope.server.id) || scope.removing)
-                          throw new Error("This server was removed or is being removed");
-                      assertGameAction(gameFor(scope.server.game), {
-                          settings: scope.ctx.state.gameSettings,
-                          software: scope.ctx.state.serverSoftware,
-                          version: scope.ctx.state.serverVersion,
-                      }, def.id);
-                      scope.activeOperations++;
-                      try {
-                          const result = await inServer(scope, () =>
-                              (def.run as Function)(scope.ctx, ...args),
-                          );
-                          if (["set-server-icon", "remove-server-icon"].includes(def.id)) {
-                              icons.set(
-                                  scope.server.id,
-                                  await inServer(scope, () => gameServiceFor(scope.server.game).readIcon?.() ?? null),
-                              );
-                              publish();
-                              await scope.blocks?.update(blocksProject(scope.server));
-                          }
-                          return result;
-                      } finally {
-                          scope.activeOperations--;
-                      }
-                  },
-              }
-            : {}),
-    };
+/** Every game's calls, by game; a server answers the ones its game does. */
+const gameCalls = new Map<string, ServerCalls>(await Promise.all(games.map(async (game): Promise<[string, ServerCalls]> => [game.id, await gameServiceFor(game.id).calls()])));
+// what a server's icon call changes in the lists that show it
+const ICON_CALLS: readonly string[] = [CALLS.setServerIcon, CALLS.removeServerIcon];
+/** Runs one of a server's calls: the input names the server, and the rest is the call's own. */
+async function serverCall(name: string, input: unknown): Promise<unknown> {
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error(`${name} needs the server it is for`);
+    const { server, ...rest } = input as Record<string, unknown>;
+    const scope = requireServer(server);
+    if (scope.removing) throw new Error("This server was removed or is being removed");
+    assertGameCall(gameFor(scope.server.game), {
+        settings: scope.ctx.state.gameSettings,
+        software: scope.ctx.state.serverSoftware,
+        version: scope.ctx.state.serverVersion,
+    }, name);
+    const call = gameCalls.get(scope.server.game)?.[name];
+    if (!call) throw new Error(`${gameFor(scope.server.game).name} has no call "${name}"`);
+    scope.activeOperations++;
+    try {
+        const result = await inServer(scope, () => call(scope.ctx, rest));
+        if (ICON_CALLS.includes(name)) {
+            icons.set(
+                scope.server.id,
+                await inServer(scope, () => gameServiceFor(scope.server.game).readIcon?.() ?? null),
+            );
+            publish();
+            await scope.blocks?.update(blocksProject(scope.server));
+        }
+        return result;
+    } finally {
+        scope.activeOperations--;
+    }
 }
 function createScope(server: StoredServer): ServerScope {
     const game = gameServiceFor(server.game);
@@ -202,14 +196,12 @@ function createScope(server: StoredServer): ServerScope {
                 publish(scope);
                 histories.get(server.id)?.changed(state);
             },
-            emit: (event, payload) => rootContext.emit(`${server.id}/${event}`, payload),
-            emitTrigger(id, output) {
-                rootContext.emitTrigger(`${server.id}/${id}`, output);
-                if (scope.legacy) rootContext.emitTrigger(id, output);
-                fireTrigger(scope.blocks, id, output, server.name);
-                fireServerEvent(id, server.id);
-            },
+            emit: (event, payload) => rootContext.emit(event, { server: server.id, payload }),
         } as ServiceContext<GameServerState>,
+        trigger(id, output) {
+            fireTrigger(scope.blocks, id, output, server.name);
+            fireServerEvent(id, server.id);
+        },
         saveSettings: async (settings) => {
             await updateSaved((current) => {
                 requireServer(server.id);
@@ -222,8 +214,8 @@ function createScope(server: StoredServer): ServerScope {
             });
             publish();
         },
-        bindAction: (def) => bind(scope, def),
     };
+    bindScope(scope.ctx, scope);
     entries.set(server.id, scope);
     histories.set(server.id, historyWriter(() => historyFile(server.id), (err) => {
         console.error(`[gameserver] the console history of ${server.name} could not be saved:`, err);
@@ -257,19 +249,6 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
             ...(scope.legacy || game.backupExclude ? { exclude: [...(scope.legacy ? [saved.serversDirectory] : []), ...(game.backupExclude ?? [])] } : {}),
             ...(game.backupSkip ? { skip: [...game.backupSkip] } : {}),
         });
-        scope.project = await actionsApi.defineProject(
-            { id: server.id, name: server.name, icon: gameFor(server.game).icon },
-            PANEL_ID,
-        );
-        for (const def of await game.actions()) {
-            await scope.project.register(bind(scope, def));
-            if (scope.legacy)
-                await actionsApi.register(
-                    { ...bind(scope, def), deprecated: LEGACY_DEPRECATION },
-                    undefined,
-                    PANEL_ID,
-                );
-        }
         scope.blocks = await blocksApi.defineProject({ id: server.id, ...blocksProject(server) }, PANEL_ID);
         const blocks = scope.blocks;
         await inServer(scope, async () => blocks.register(bindBlocks(scope, mergeBlocks(sharedBlocks(scope.ctx), settingsBlocks(scope.ctx), await game.blocks?.(scope.ctx)))));
@@ -364,7 +343,6 @@ function renameServer(server: unknown, name: unknown): Promise<void> {
     return serial(async () => {
         const scope = requireServer(server);
         const renamed = { ...scope.server, name: serverName(name) };
-        await scope.project!.update({ name: renamed.name, icon: gameFor(renamed.game).icon });
         await scope.blocks!.update(blocksProject(renamed));
         await updateSaved((current) => ({
             ...current,
@@ -402,11 +380,7 @@ function removeServer(server: unknown): Promise<void> {
                     await livePortDeps().ports.release(name);
             });
             await backupApi.forSource(PANEL_ID, id).setSchedule(null);
-            await scope.project!.remove();
             await scope.blocks!.remove();
-            if (scope.legacy)
-                for (const def of await gameServiceFor(scope.server.game).actions())
-                    await actionsApi.unregister(def.id, PANEL_ID);
             await updateSaved((current) => {
                 const next = {
                     ...current,
@@ -467,44 +441,33 @@ const BLOCK_CATEGORIES = [
     { name: "Automation", icon: "autorenew" },
     { name: "Logs", icon: "receipt_long" },
 ];
-const management = (id: string, run: (...args: any[]) => any) =>
-    defineAction({
-        id,
-        name: id,
-        description: "Manage saved servers",
-        internal: true,
-        inputs: {},
-        run: (_ctx, ...args) => run(...args),
-    });
+type RootCalls = Record<string, (ctx: ServiceContext<ServersState>, input: any) => unknown>;
+/** The calls that manage the saved servers; every other call is a server's own and names its server. */
+const managementCalls: RootCalls = {
+    "read-server-config": (_ctx, { server }) => requireServer(server).server.settings,
+    "add-server": async (_ctx, { name, game }) => ({ id: await addServer(name, game) }),
+    "rename-server": async (_ctx, { server, name }) => (await renameServer(server, name), true),
+    "remove-server": async (_ctx, { server }) => (await removeServer(server), { removed: server }),
+};
+/** One root call for each name any game answers, which asks the server in its input. */
+const callNames = [...new Set([...gameCalls.values()].flatMap((calls) => Object.keys(calls)))];
+for (const name of callNames) {
+    if (Object.hasOwn(managementCalls, name)) throw new Error(`The call "${name}" is both a server's and a management call`);
+}
 export const gameServerService = definePanelService({
     id: PANEL_ID,
     state: { servers: [], serversError: null } as ServersState,
-    types: (await Promise.all(games.map(g => gameServiceFor(g.id).customTypes?.() ?? []))).flat(),
-    categories: [
-        { name: "Server", icon: "dns", order: 1 },
-        { name: "Players", icon: "group", order: 2 },
-        { name: "Worlds", icon: "public", order: 3 },
-        { name: "Game Rules", icon: "rule", order: 4 },
-        { name: "Plugins", icon: "extension", order: 5 },
-        { name: "Logs", icon: "receipt_long", order: 6 },
-        { name: "Events", icon: "bolt", order: 7 },
-    ],
-    actions: [
-        management("list-servers", () => rootContext.state),
-        management(
-            "read-server-config",
-            ({ server }: any) => requireServer(server).server.settings,
-        ),
-        management("add-server", async ({ name, game }: any) => ({ id: await addServer(name, game) })),
-        management("rename-server", async ({ server, name }: any) => (await renameServer(server, name), true)),
-        management("remove-server", async ({ server }: any) => (await removeServer(server), { removed: server })),
-        management(WIDGET_CHOICES_ACTION, ({ widgetId }: { widgetId: string }) =>
-            saved.servers.filter((server) => {
-                const state = entries.get(server.id)!.ctx.state;
-                return gameFor(server.game).describe({ software: state.serverSoftware, version: state.serverVersion, settings: state.gameSettings }).widgets.includes(widgetId);
-            }).map((s) => ({ value: s.id, label: s.name })),
-        ),
-    ],
+    calls: {
+        ...managementCalls,
+        ...Object.fromEntries(callNames.map((name): [string, RootCalls[string]] => [name, (_ctx, input) => serverCall(name, input)])),
+    },
+    // Home's gallery: each widget's "Server" dropdown offers the servers whose game shows that widget
+    widgetChoices: Object.fromEntries(["status", "players", "console", "motd"].map((widgetId) => [widgetId, {
+        server: () => saved.servers.filter((server) => {
+            const state = entries.get(server.id)!.ctx.state;
+            return gameFor(server.game).describe({ software: state.serverSoftware, version: state.serverVersion, settings: state.gameSettings }).widgets.includes(widgetId);
+        }).map((s) => ({ value: s.id, label: s.name })),
+    }])),
     async onInit(ctx) {
         rootContext = ctx;
         try {

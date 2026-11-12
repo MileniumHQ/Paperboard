@@ -3,6 +3,8 @@
 export * from "@mileniumhq/paperapi";
 import {
     createPanelBridge as rawBridge,
+    serviceApi,
+    type BlockCallOptions,
     fileApi as rawFiles,
     config as rawConfig,
     portApi as rawPorts,
@@ -63,20 +65,19 @@ export const portApi: typeof rawPorts = {
         return (await rawPorts.list(panel, scope)).filter((claim) => names.includes(claim.name));
     },
 };
+/** One of the selected server's calls: the service is told which server it is for. */
+function callServer<T>(name: string, input?: Record<string, unknown>, options?: BlockCallOptions): Promise<T> {
+    if (!selectedServerId) return Promise.reject(new Error("Choose a server first"));
+    return serviceApi.call<T>(PANEL_ID, name, { ...input, server: selectedServerId }, options);
+}
 export const config: typeof rawConfig = {
     get: <T>() => serversBridge.call<T>("read-server-config", { server: selectedServerId }),
-    set: (patch) => {
-        if (!selectedServerId) throw new Error("Choose a server first");
-        return serversBridge.call(`${selectedServerId}/update-panel-config`, { patch });
-    },
+    set: (patch) => callServer("update-panel-config", { patch }),
 };
 // Existing tabs use the same bridge contract, projected onto this server.
 export function createPanelBridge(_options: any) {
     return {
-        call: <T = unknown>(action: string, ...args: any[]): Promise<T> => {
-            if (!selectedServerId) return Promise.reject(new Error("Choose a server first"));
-            return serversBridge.call<T>(`${selectedServerId}/${action}`, ...args);
-        },
+        call: callServer,
         refreshState: async () => {
             const state = await serversBridge.refreshState();
             return serverStateOf(state, selectedServer(state).id);

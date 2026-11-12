@@ -1,7 +1,7 @@
 import { createEffect, createSignal, onMount } from "solid-js";
 import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
-import { sourceActions, type SourceGameSpec, type SourceMapPictures } from "./index";
+import { sourceCalls, type SourceGameSpec, type SourceMapPictures } from "./index";
 
 /** A game's map pictures and names as a screen has them: asked for once, kept, and failing out loud. */
 export interface MapPicturesState {
@@ -40,7 +40,7 @@ export function createMapPictures(spec: SourceGameSpec): MapPicturesState {
     const load = async () => {
         setError("");
         try {
-            setLoaded(await serverBridge.call<SourceMapPictures>(sourceActions(spec.id).mapPictures));
+            setLoaded(await serverBridge.call<SourceMapPictures>(sourceCalls(spec.id).mapPictures));
         } catch (err) {
             setError(errorMessage(err));
         }

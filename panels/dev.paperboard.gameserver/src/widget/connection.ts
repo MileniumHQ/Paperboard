@@ -3,7 +3,7 @@
 // shown again, it re-reads the state. "unavailable" is the service failing to
 // answer, never an empty server.
 import { createSignal, onCleanup, type Accessor } from "solid-js";
-import { createPanelBridge, type WidgetContext } from "@mileniumhq/paperapi";
+import { createPanelBridge, serviceApi, type WidgetContext } from "@mileniumhq/paperapi";
 import { gameFor } from "../games";
 import { serverStateOf } from "../servers";
 import { PANEL_ID } from "../service/contract";
@@ -69,8 +69,8 @@ export interface WidgetServer {
     connection: Accessor<Connection>;
     visible: Accessor<boolean>;
     retry(): void;
-    /** calls a Game Server action; rejects when the widget is hidden */
-    call<R = unknown>(action: string, ...args: unknown[]): Promise<R>;
+    /** calls one of the chosen server's calls; rejects when the widget is hidden */
+    call<R = unknown>(name: string, input?: Record<string, unknown>): Promise<R>;
 }
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -143,7 +143,7 @@ export function useWidgetServer(widget: WidgetContext): WidgetServer {
             setConnection({ phase: "loading" });
             refresh();
         },
-        call: <R,>(action: string, ...args: unknown[]) =>
-            bridge && chosen ? bridge.call<R>(`${chosen}/${action}`, ...args) : Promise.reject(new Error("Choose a server in the widget options")),
+        call: <R,>(name: string, input?: Record<string, unknown>) =>
+            bridge && chosen ? serviceApi.call<R>(PANEL_ID, name, { ...input, server: chosen }) : Promise.reject(new Error("Choose a server in the widget options")),
     };
 }

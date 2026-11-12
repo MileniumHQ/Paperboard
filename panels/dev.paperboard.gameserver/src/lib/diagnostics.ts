@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 import { serverPort, serverBridge } from "./server";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 import { checkLogForIssues as coreCheckLogForIssues } from "../core/diagnostics";
 import type { ServerIssue, ServerIssueAction } from "../core/diagnostics";
 
@@ -11,16 +11,16 @@ export const [activeIssue, setActiveIssue] = createSignal<ServerIssue | null>(nu
 
 /** Rejects when the service kept the issue; the modal showing it says why. */
 export function clearActiveIssue(): Promise<unknown> {
-    return serverBridge.call(ACTION_IDS.clearActiveIssue);
+    return serverBridge.call(CALLS.clearActiveIssue);
 }
 
 export async function killConflictingProcess(port: string = serverPort()): Promise<boolean> {
     // the boolean is the service's verified outcome, not a convenience flag
-    const res = await serverBridge.call<boolean>(ACTION_IDS.killConflictingProcess, { port });
+    const res = await serverBridge.call<boolean>(CALLS.killConflictingProcess, { port });
     return res !== false;
 }
 
 export async function resetWorldFiles(): Promise<boolean> {
-    const res = await serverBridge.call<boolean>(ACTION_IDS.resetWorldFiles);
+    const res = await serverBridge.call<boolean>(CALLS.resetWorldFiles);
     return res !== false;
 }

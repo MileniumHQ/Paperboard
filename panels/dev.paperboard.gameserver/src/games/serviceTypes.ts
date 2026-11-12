@@ -1,5 +1,6 @@
 /** Service-only module contract. Never imported as a value by renderers. */
-import type { ActionDefinition, ServiceContext } from "../service/api";
+import type { ServiceContext } from "../service/api";
+import type { ServerCalls } from "../service/calls";
 import type { GameServerState } from "../service/types";
 import type { PortDeps } from "../service/ports";
 export interface LaunchCommand {
@@ -23,7 +24,8 @@ export interface PortSpec {
 type Context = ServiceContext<GameServerState>;
 export interface GameService {
     initialState(): GameServerState;
-    actions(): Promise<readonly ActionDefinition[]>;
+    /** The calls the server's page makes, by name; each is handed the server's context and the rest of the call's input. */
+    calls(): Promise<ServerCalls>;
     /** The game's own blocks for the Blocks panel, beside the ones every game shares; its joins, leaves and chat among them. */
     blocks?(ctx: Context): Promise<import("@mileniumhq/paperapi").BlockSet>;
     /** The Blocks types the game's own blocks use; the panel registers them. */
@@ -38,7 +40,6 @@ export interface GameService {
     /** The server's own icon, for games that have one. */
     readIcon?(): Promise<string | null>;
     primaryProcessId: string;
-    customTypes?(): Promise<import("../service/api").CustomTypeDefinition[]>;
     readiness?: { timeoutMs: number; probe(ctx: Context): Promise<boolean> };
     stopTimeoutMs?: number;
     processIds: readonly string[];

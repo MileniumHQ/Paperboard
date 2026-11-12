@@ -1,5 +1,5 @@
 import { serverBridge } from "./server";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 
 export interface LogFileInfo {
     name: string;
@@ -14,9 +14,9 @@ export interface LogFileContent {
 }
 
 export async function listLogFiles(): Promise<LogFileInfo[]> {
-    return serverBridge.call<LogFileInfo[]>(ACTION_IDS.listLogFiles);
+    return serverBridge.call<LogFileInfo[]>(CALLS.listLogFiles);
 }
 
 export async function readLogFile(name: string): Promise<LogFileContent> {
-    return serverBridge.call<LogFileContent>(ACTION_IDS.readLogFile, { name });
+    return serverBridge.call<LogFileContent>(CALLS.readLogFile, { name });
 }

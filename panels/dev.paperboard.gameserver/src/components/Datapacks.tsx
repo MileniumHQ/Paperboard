@@ -1,7 +1,7 @@
 import { createSignal, Show } from "solid-js";
 import { PaperButton, PaperEffect, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { serverBridge, serverStatus } from "../lib/server";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 import { errorMessage } from "../lib/failure";
 import { datapacksKind } from "../lib/addons/datapacks";
 import AddonBrowser from "./addons/AddonBrowser";
@@ -19,7 +19,7 @@ export default function Datapacks(props: { active: boolean }) {
         setReloading(true);
         setReloadMessage(null);
         try {
-            await serverBridge.call(ACTION_IDS.runCommand, { command: "reload" });
+            await serverBridge.call(CALLS.runCommand, { command: "reload" });
             setReloadMessage({ ok: true, text: "Reload sent. The console shows whether every datapack loaded." });
         } catch (err) {
             setReloadMessage({ ok: false, text: errorMessage(err) });

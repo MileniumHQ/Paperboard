@@ -1,12 +1,12 @@
 // The blocks every game shares for its options and its files. Each runs the
-// Action (v1) the Options and Files tabs run, so a block is checked exactly
+// call the Options and Files tabs run, so a block is checked exactly
 // as an edit there is: the game's own rules, a busy server, a file the game
 // keeps to itself.
 import type { BlockSet, ServiceContext } from "@mileniumhq/paperapi";
 import type { GameServerState } from "./types";
-import { ACTION_IDS } from "./contract";
+import { CALLS } from "./contract";
 import { currentGame } from "../games/service";
-import { runGameAction } from "./blocks";
+import { runGameCall } from "./blocks";
 import type { GameOption } from "../games/types";
 
 type Context = ServiceContext<GameServerState>;
@@ -63,7 +63,7 @@ export function settingsBlocks(ctx: Context): BlockSet {
                 type: "any",
                 read: async ({ option: id }: { option: string }) => {
                     const checked = optionNamed(ctx, id);
-                    const values = await runGameAction<Record<string, unknown>>(ctx, ACTION_IDS.readGameOptions, {});
+                    const values = await runGameCall<Record<string, unknown>>(ctx, CALLS.readGameOptions, {});
                     if (!Object.hasOwn(values, checked.id)) throw new Error(`${checked.label} has no value yet`);
                     return values[checked.id];
                 },
@@ -78,7 +78,7 @@ export function settingsBlocks(ctx: Context): BlockSet {
                 inputs: { folder: { type: "text", name: "Folder", optional: true } },
                 type: "list<text>",
                 read: async ({ folder }: { folder?: string }) => {
-                    const listing = await runGameAction<{ entries: { path: string; kind: "file" | "folder" }[]; note?: string }>(ctx, ACTION_IDS.listServerFiles, {
+                    const listing = await runGameCall<{ entries: { path: string; kind: "file" | "folder" }[]; note?: string }>(ctx, CALLS.listServerFiles, {
                         path: folder ?? "",
                     });
                     return listing.entries.map((entry) => (entry.kind === "folder" ? `${entry.path}/` : entry.path));
@@ -94,7 +94,7 @@ export function settingsBlocks(ctx: Context): BlockSet {
                 inputs: { file },
                 type: "text",
                 read: async ({ file: path }: { file: string }) => {
-                    const content = await runGameAction<{ kind: string; text?: string; reason?: string }>(ctx, ACTION_IDS.readServerFile, { path });
+                    const content = await runGameCall<{ kind: string; text?: string; reason?: string }>(ctx, CALLS.readServerFile, { path });
                     if (content.kind === "unavailable") throw new Error(content.reason ?? `${path} can't be read as text`);
                     if (content.kind !== "text" || content.text === undefined) throw new Error(`${path} is not a text file`);
                     return content.text;
@@ -112,7 +112,7 @@ export function settingsBlocks(ctx: Context): BlockSet {
                 inputs: { option, value: { type: "any", name: "Value" } },
                 run: async ({ option: id, value }: { option: string; value: unknown }) => {
                     const checked = optionNamed(ctx, id);
-                    await runGameAction(ctx, ACTION_IDS.writeGameOptions, { patch: { [checked.id]: optionValue(checked, value) } });
+                    await runGameCall(ctx, CALLS.writeGameOptions, { patch: { [checked.id]: optionValue(checked, value) } });
                 },
             },
             {
@@ -124,10 +124,10 @@ export function settingsBlocks(ctx: Context): BlockSet {
                 text: "Write {text} to {file}",
                 inputs: { text: { type: "text", name: "Text" }, file },
                 run: async ({ text, file: path }: { text: string; file: string }) => {
-                    const content = await runGameAction<{ kind: string; version?: string; reason?: string }>(ctx, ACTION_IDS.readServerFile, { path });
+                    const content = await runGameCall<{ kind: string; version?: string; reason?: string }>(ctx, CALLS.readServerFile, { path });
                     if (content.kind === "unavailable") throw new Error(content.reason ?? `${path} can't be written as text`);
                     if (content.kind !== "text" || !content.version) throw new Error(`${path} is not a text file`);
-                    await runGameAction(ctx, ACTION_IDS.writeServerFile, { path, text, version: content.version });
+                    await runGameCall(ctx, CALLS.writeServerFile, { path, text, version: content.version });
                 },
             },
         ],

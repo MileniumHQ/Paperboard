@@ -1,6 +1,6 @@
 import { defaultGame, gameFor } from "./games";
 import type { GameServerState } from "./service/types";
-// A server's id is also its Actions project id. Files stay where they were
+// A server's id is also its Blocks project id. Files stay where they were
 // created: the migrated server owns the original panel folder.
 export const PANEL_ID = "dev.paperboard.gameserver";
 export const SERVERS_VERSION = 2;
@@ -18,7 +18,7 @@ export interface ServersConfig {
     /** Reserved once, so legacy backups never exclude a pre-existing user directory. */
     serversDirectory: string;
     servers: StoredServer[];
-    /** TODO(remove after v0.5): with the deprecated project-less actions. */
+    /** The server migrated from before several servers: it keeps its original process, port and backup names, and it is what a widget with no server chosen shows. */
     legacyServer?: string;
 }
 export function isServerId(id: unknown): id is string {

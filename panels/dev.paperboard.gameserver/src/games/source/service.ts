@@ -1,21 +1,21 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { packages as packageApi, processApi } from "../../service/api";
-import { serverLocal } from "../../service/scope";
+import { emitTrigger, serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
 import { appendCapped } from "../../service/types";
-import { ACTION_IDS, TRIGGER_IDS } from "../../service/contract";
+import { CALLS, TRIGGER_IDS } from "../../service/contract";
 import { validateOptions } from "../options";
 import { installedBuild, steamClientLibrary } from "../steam/steamcmd";
-import { steamInstall, steamInstallActions, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
+import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import {
-    ConsoleBuffer, assertHost, exists, gameAction, isLinked, linkFolder, pushChat, readSettings, redact, report,
+    ConsoleBuffer, assertHost, exists, isLinked, linkFolder, pushChat, readSettings, redact, report,
     serverRoot, serverSecret, settingPort, settled, singleLine, unlinkFolder, updateSettings, writePrivate, type Context,
 } from "../serviceKit";
 import type { GameDefinition } from "../types";
 import type { GameService } from "../serviceTypes";
 import { addonStageDir } from "../../core/addonUpload";
-import { SOURCEMOD_PACKAGES, sourceActions, type SourceGameSpec, type SourceMapCycle, type SourceModView } from "./index";
+import { SOURCEMOD_PACKAGES, sourceCalls, type SourceGameSpec, type SourceMapCycle, type SourceModView } from "./index";
 import { pluginFile, SourceMod, SOURCEMOD_MISSING } from "./sourcemod";
 import { cvarValue, mapName, optionValue, secretsCfg, serverCfg } from "./config";
 import { cfgMapCycleFile, checkRotation, DEFAULT_MAPCYCLE, findMap, installedMaps, mapCycleFile, PAPERBOARD_MAPCYCLE, readServerCycle } from "./mapcycle";
@@ -53,7 +53,7 @@ export function connectedMs(text: string): number {
 }
 
 export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameService {
-    const ids = sourceActions(spec.id);
+    const ids = sourceCalls(spec.id);
     const PROC = `${spec.id}-server`;
     const options = spec.options;
 
@@ -274,7 +274,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 setOnline(ctx);
                 if (isPlayer(p.steamId)) {
                     pushChat(ctx, { event: "join", sender: p.name, text: `${p.name} joined the game` });
-                    ctx.emitTrigger(TRIGGER_IDS.playerJoined, p.name);
+                    emitTrigger(ctx, TRIGGER_IDS.playerJoined, p.name);
                     roster().remember(p.steamId, p.name).catch((err) => report(ctx, `Could not record ${p.name}`, err));
                 }
                 return;
@@ -289,7 +289,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 const name = p.name || known?.name || "";
                 if (isPlayer(p.steamId) && name) {
                     pushChat(ctx, { event: "leave", sender: name, text: `${name} left the game` });
-                    ctx.emitTrigger(TRIGGER_IDS.playerLeft, name);
+                    emitTrigger(ctx, TRIGGER_IDS.playerLeft, name);
                     roster().remember(p.steamId, name).catch((err) => report(ctx, `Could not record ${name} leaving`, err));
                     saveStats().catch((err) => report(ctx, `Could not save ${name}'s stats`, err));
                 }
@@ -325,7 +325,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (p.steamId === "Console") { pushChat(ctx, { event: "server", content: event.text, text: `<Server> ${event.text}` }); return; }
                 if (p.steamId === "BOT") return;
                 const text = event.team ? `(Team) ${event.text}` : event.text;
-                ctx.emitTrigger(TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: p.name, content: text, text: `<${p.name}> ${text}` }));
+                emitTrigger(ctx, TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: p.name, content: text, text: `<${p.name}> ${text}` }));
                 return;
             }
         }
@@ -388,7 +388,6 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
     }
 
     const online = (ctx: Context) => settled(ctx, spec.name);
-    const action = gameAction;
     const steam: SteamInstallSpec = {
         game, appId: spec.appId, ids: { info: ids.info, latest: ids.latest, install: ids.install },
         installDir, flag: local, loadOptions,
@@ -404,27 +403,27 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
         installUpdate: steamInstall(steam),
         initialState: () => ({ ...initialServerState(), serverSoftware: spec.id, serverPort: String(spec.defaultPort), serverMotd: "" }),
         blocks: async (ctx) => {
-            const { mergeBlocks, onlyIdNamed, playerEvents, rosterBlocks, runGameAction } = await import("../../service/blocks");
+            const { mergeBlocks, onlyIdNamed, playerEvents, rosterBlocks, runGameCall } = await import("../../service/blocks");
             // the server kicks by its own user id and bans by Steam id: a block's
             // player name is looked up among the players online, then the ones it has seen
             const people = () => [...local().online.values()].filter((p) => p.steamId !== "BOT");
             const nameOf = (p: { name: string }) => p.name;
             const steamOf = (p: { steamId: string }) => p.steamId;
             return mergeBlocks({ events: playerEvents() }, rosterBlocks({
-                kick: (name) => runGameAction(ctx, ids.kick, { userId: onlyIdNamed(name, [...local().online.values()], nameOf, (p) => String(p.userId), "online") }),
-                ban: async (name) => runGameAction(ctx, ids.ban, { steamId: onlyIdNamed(name, [...people(), ...await roster().seen()], nameOf, steamOf, "on this server") }),
+                kick: (name) => runGameCall(ctx, ids.kick, { userId: onlyIdNamed(name, [...local().online.values()], nameOf, (p) => String(p.userId), "online") }),
+                ban: async (name) => runGameCall(ctx, ids.ban, { steamId: onlyIdNamed(name, [...people(), ...await roster().seen()], nameOf, steamOf, "on this server") }),
                 unban: async (name) => {
                     const bans = await roster().bans();
                     // listed by their Steam id when Paperboard never saw them
                     const byId = bans.find((ban) => ban.steamId === name);
-                    return runGameAction(ctx, ids.unban, { steamId: byId ? byId.steamId : onlyIdNamed(name, bans, nameOf, steamOf, "banned") });
+                    return runGameCall(ctx, ids.unban, { steamId: byId ? byId.steamId : onlyIdNamed(name, bans, nameOf, steamOf, "banned") });
                 },
                 banned: async () => (await roster().bans()).map((ban) => ban.name || ban.steamId),
             }));
         },
-        actions: async () => { const { sharedActions, backupAction } = await import("../../service/actions"); return [...sharedActions, backupAction,
-            action(ACTION_IDS.readGameOptions, "Read options", async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; }),
-            action(ACTION_IDS.writeGameOptions, "Save options", async (ctx, { patch }) => {
+        calls: async () => { const { sharedCalls } = await import("../../service/calls"); return { ...sharedCalls,
+            [CALLS.readGameOptions]: async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; },
+            [CALLS.writeGameOptions]: async (ctx, { patch }) => {
                 if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
                 if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("Options patch is required");
                 const next = validateOptions(options, spec.name, patch, await settings());
@@ -447,36 +446,36 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (await exists(await installDir())) await writeConfigs();
                 await loadOptions(ctx);
                 return ctx.state.gameSettings;
-            }),
-            ...steamInstallActions(steam),
-            action(ids.players, `${spec.name} players`, async () => {
+            },
+            ...steamInstallCalls(steam),
+            [ids.players]: async () => {
                 await saveStats();
                 return { seen: await roster().seen(), bans: await roster().bans(), online: [...local().online.values()], admins: (await modsOn()) ? await (await mods()).admins() : null };
-            }),
-            action(ids.kick, "Kick player", async (ctx, { userId }) => {
+            },
+            [ids.kick]: async (ctx, { userId }) => {
                 if (!online(ctx)) throw new Error(`${spec.name} is not running`);
                 const player = local().online.get(Number(userId));
                 if (!player) throw new Error("That player is not online");
                 const reply = await rcon().exec(`kickid ${player.userId} Kicked by the server admin`);
                 if (/not found/.test(reply)) throw new Error(`${spec.name} did not find that player: ${reply.trim()}`);
                 return true;
-            }),
-            action(ids.ban, "Ban player", async (ctx, { steamId: raw }) => {
+            },
+            [ids.ban]: async (ctx, { steamId: raw }) => {
                 const id = steamId(raw);
                 await roster().ban(id);
                 if (online(ctx)) await rcon().exec(`banid 0 ${id} kick`);
                 if (await exists(await installDir())) await writeConfigs();
                 return true;
-            }),
-            action(ids.unban, "Unban player", async (ctx, { steamId: raw }) => {
+            },
+            [ids.unban]: async (ctx, { steamId: raw }) => {
                 const id = steamId(raw);
                 await roster().unban(id);
                 if (online(ctx)) await rcon().exec(`removeid ${id}`);
                 if (await exists(await installDir())) await writeConfigs();
                 return true;
-            }),
-            action(ids.sourcemod, "SourceMod", (ctx) => modsView(ctx)),
-            action(ids.sourcemodSet, "Turn SourceMod on or off", (ctx, { on }) => modChange(ctx, async (sm) => {
+            },
+            [ids.sourcemod]: (ctx) => modsView(ctx),
+            [ids.sourcemodSet]: (ctx, { on }) => modChange(ctx, async (sm) => {
                 if (typeof on !== "boolean") throw new Error("Choose on or off");
                 if (on && !(await sm.installed())) {
                     const [metamod, sourcemod] = await Promise.all(SOURCEMOD_PACKAGES.map(async ({ id }) => {
@@ -488,20 +487,20 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 await updateSettings({ sourcemod: on });
                 // a running server keeps what it started with until it restarts
                 if (ctx.state.serverStatus === "offline") await placeMods();
-            })),
-            action(ids.plugin, "Turn a plugin on or off", (ctx, { file, on }) => modChange(ctx, async (sm) => {
+            }),
+            [ids.plugin]: (ctx, { file, on }) => modChange(ctx, async (sm) => {
                 if (typeof on !== "boolean") throw new Error("Choose on or off");
                 const name = pluginFile(file);
                 if (!(await sm.setEnabled(name, on))) return;
                 if (on) await loadPlugin(ctx, name);
                 else await smLive(ctx, `sm plugins unload ${name}`);
-            })),
-            action(ids.pluginRemove, "Remove a plugin", (ctx, { file }) => modChange(ctx, async (sm) => {
+            }),
+            [ids.pluginRemove]: (ctx, { file }) => modChange(ctx, async (sm) => {
                 const name = pluginFile(file);
                 await smLive(ctx, `sm plugins unload ${name}`);
                 await sm.remove(name);
-            })),
-            action(ids.pluginUpload, "Add uploaded plugins", async (ctx, { stage }) => {
+            }),
+            [ids.pluginUpload]: async (ctx, { stage }) => {
                 const dir = path.join(await root(), addonStageDir(stage));
                 let added: string[] = [];
                 try {
@@ -517,27 +516,27 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                     });
                     return { added, view };
                 } finally { await fs.rm(dir, { recursive: true, force: true }); }
-            }),
-            action(ACTION_IDS.discardAddonUpload, "Discard upload", async (_ctx, { stage }) => { await fs.rm(path.join(await root(), addonStageDir(stage)), { recursive: true, force: true }); return true; }),
-            action(ids.admin, "Make a player a SourceMod admin", (ctx, { steamId: raw, admin }) => modChange(ctx, async (sm) => {
+            },
+            [CALLS.discardAddonUpload]: async (_ctx, { stage }) => { await fs.rm(path.join(await root(), addonStageDir(stage)), { recursive: true, force: true }); return true; },
+            [ids.admin]: (ctx, { steamId: raw, admin }) => modChange(ctx, async (sm) => {
                 if (typeof admin !== "boolean") throw new Error("Choose admin or not");
                 if (!(await modsOn())) throw new Error("Turn SourceMod on in Mods first");
                 const id = steamId(raw);
                 if (!isPlayer(id)) throw new Error("Only a Steam player can be an admin");
                 await sm.setAdmin(id, admin);
                 await smLive(ctx, "sm_reloadadmins");
-            })),
-            action(ids.maps, `${spec.name} maps`, async () => installedMaps(await gameDir())),
-            action(ids.mapPictures, `${spec.name} map pictures`, async () => {
+            }),
+            [ids.maps]: async () => installedMaps(await gameDir()),
+            [ids.mapPictures]: async () => {
                 if (!spec.mapPictures) throw new Error(`${spec.name} has no source of map pictures`);
                 return mapPictures(spec.mapPictures);
-            }),
-            action(ids.workshopMaps, `${spec.name} Steam Workshop maps`, () => workshopLibrary()),
-            action(ids.workshopFind, `Search the Steam Workshop for ${spec.name} maps`, async (_ctx, { query }) => {
+            },
+            [ids.workshopMaps]: () => workshopLibrary(),
+            [ids.workshopFind]: async (_ctx, { query }) => {
                 if (typeof query !== "string") throw new Error("Type what to search the Steam Workshop for");
                 return findWorkshopMaps(spec, query, new Set((await workshopLibrary()).map((m) => m.id)));
-            }),
-            action(ids.workshopAdd, `Add a Steam Workshop ${spec.name} map`, async (_ctx, { id }) => {
+            },
+            [ids.workshopAdd]: async (_ctx, { id }) => {
                 if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
                 if (typeof id !== "string" || !/^[1-9]\d{0,19}$/.test(id)) throw new Error("Choose a Steam Workshop item by its id");
                 // checked before it can be named: the server leaves a bad item as "will not sync" and plays on
@@ -545,8 +544,8 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 const have = await workshopLibrary();
                 await updateSettings({ workshopMaps: [...have.filter((m) => m.id !== id), map] });
                 return workshopLibrary();
-            }),
-            action(ids.workshopRemove, `Remove a Steam Workshop ${spec.name} map`, async (ctx, { id }) => {
+            },
+            [ids.workshopRemove]: async (ctx, { id }) => {
                 if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
                 if (typeof id !== "string") throw new Error("Choose a Steam Workshop item by its id");
                 const have = await workshopLibrary();
@@ -556,18 +555,18 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (held) throw new Error(`${found.title} was not removed. ${held}`);
                 await updateSettings({ workshopMaps: have.filter((m) => m.id !== id) });
                 return workshopLibrary();
-            }),
-            action(ids.mapCycle, `${spec.name} map rotation`, (ctx) => mapCycleView(ctx)),
-            action(ids.mapCycleSet, "Set the map rotation", async (ctx, { maps }) => {
+            },
+            [ids.mapCycle]: (ctx) => mapCycleView(ctx),
+            [ids.mapCycleSet]: async (ctx, { maps }) => {
                 if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
                 await refuseOverriddenCycle();
                 // null hands the rotation back to the game's map cycle file
                 await setRotation(ctx, maps === null ? null : checkRotation(maps, await availableMaps()));
                 return mapCycleView(ctx);
-            }),
+            },
             // setup's last choice: how the server plays. A mode makes its installed maps the rotation, the chosen map first
             // and the one the server starts on; no mode leaves the rotation to the game's map cycle
-            action(ids.play, "Set how the server plays", async (ctx, { mode, map: raw }) => {
+            [ids.play]: async (ctx, { mode, map: raw }) => {
                 if (local().busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
                 const installed = await installedMaps(await gameDir());
                 const map = mapName(raw);
@@ -583,8 +582,8 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 await setRotation(ctx, rotation, { map, configured: true });
                 await loadOptions(ctx);
                 return mapCycleView(ctx);
-            }),
-            action(ids.changeMap, "Change map", async (ctx, { map: raw }) => {
+            },
+            [ids.changeMap]: async (ctx, { map: raw }) => {
                 const map = mapName(raw);
                 if (!(await mapAvailable(map))) throw new Error(`${map} is not installed`);
                 const running = online(ctx);
@@ -592,8 +591,8 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (running) await rcon().exec(`changelevel ${map}`);
                 await loadOptions(ctx);
                 return { now: running };
-            }),
-        ]; },
+            },
+        }; },
         loadOptions,
         async initialize(ctx, running) {
             local().roster = new SourceRoster(await root());

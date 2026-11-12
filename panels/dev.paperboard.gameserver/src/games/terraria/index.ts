@@ -1,7 +1,7 @@
 import type { GameDefinition, GameOption, OptionSection } from "../types";
-import { ACTION_IDS as A } from "../../service/contract";
+import { CALLS as A } from "../../service/contract";
 import { gameArt } from "../art";
-import { AUTOMATION_ACTIONS, AUTOMATION_TAB } from "../automation";
+import { AUTOMATION_CALLS, AUTOMATION_TAB } from "../automation";
 import { hostRoutes } from "../host";
 import { XNA_4 } from "../windowsRuntime";
 import { softwareName, terrariaSoftware, tmodloaderReleases } from "./catalog";
@@ -35,8 +35,8 @@ function journeyPermissions(): GameOption[] {
 }
 /** The options a new world is generated with, asked for in New World rather than Options. */
 export const WORLD_GENERATION: readonly string[] = options.filter(o => o.scope === "world").map(o => o.id);
-/** Mod actions a tModLoader server adds; a vanilla server refuses them. */
-export const MOD_ACTIONS = ["terraria-mods", "terraria-mod-search", "terraria-mod-items", "terraria-mod-install", "terraria-mod-remove", "terraria-mod-upload", "terraria-mod-updates", A.discardAddonUpload] as const;
+/** Mod calls a tModLoader server adds; a vanilla server refuses them. */
+export const MOD_CALLS = ["terraria-mods", "terraria-mod-search", "terraria-mod-items", "terraria-mod-install", "terraria-mod-remove", "terraria-mod-upload", "terraria-mod-updates", A.discardAddonUpload] as const;
 export const terraria: GameDefinition = {
     id: "terraria", name: "Terraria", icon: "landscape", art: gameArt("terraria"),
     softwareLabel: ({ software, version }) => `${softwareName(terrariaSoftware(software))} ${version}`.trim(),
@@ -50,7 +50,7 @@ export const terraria: GameDefinition = {
         return {
             options, optionsWhileRunning: "locked", backupWhileRunning: "offline", control: { kind: "stdin" }, widgets: ["status", "console"],
             packages: modded ? [{ id: runtime, purpose: ".NET runtime for tModLoader" }] : [XNA_4.package],
-            actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", A.saveWorld, "terraria-motd", "terraria-players", "terraria-kick", "terraria-ban", "terraria-unban", "backup-server", ...AUTOMATION_ACTIONS, ...(modded ? MOD_ACTIONS : [])],
+            calls: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", A.saveWorld, "terraria-motd", "terraria-players", "terraria-kick", "terraria-ban", "terraria-unban", ...AUTOMATION_CALLS, ...(modded ? MOD_CALLS : [])],
             tabs: [
                 { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
                 { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },

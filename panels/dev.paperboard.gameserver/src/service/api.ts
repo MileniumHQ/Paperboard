@@ -5,7 +5,6 @@ import {
     config as rawConfig,
     fileApi as rawFiles,
     processApi as rawProcess,
-    actionsApi as rawActions,
     portApi as rawPorts,
 } from "@mileniumhq/paperapi";
 import { serverPortLabel, serverPortName } from "../core/portNames";
@@ -54,24 +53,6 @@ export const processApi = new Proxy(rawProcess, {
         };
     },
 });
-export const actionsApi: typeof rawActions = {
-    ...rawActions,
-    register: async (...args: Parameters<typeof rawActions.register>) => {
-        const scope = currentServer();
-        if (!scope) return rawActions.register(...args);
-        if (scope.removing) throw new Error("The server is being removed");
-        if (!scope.project) throw new Error("This server's Actions project is not ready");
-        await scope.project.register(scope.bindAction(args[0]));
-        if (scope.legacy)
-            await rawActions.register(
-                { ...scope.bindAction(args[0]), deprecated: LEGACY_DEPRECATION },
-                undefined,
-                args[2],
-            );
-    },
-};
-export const LEGACY_DEPRECATION =
-    "Choose this server's action from its project in Actions. Old actions will be removed after v0.5.";
 export const portApi: typeof rawPorts = {
     ...rawPorts,
     claim: (panel, request) => {

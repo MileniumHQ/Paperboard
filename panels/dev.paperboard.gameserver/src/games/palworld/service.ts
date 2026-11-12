@@ -1,17 +1,17 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { serverLocal } from "../../service/scope";
+import { emitTrigger, serverLocal } from "../../service/scope";
 import { initialServerState } from "../../service/initialState";
 import { appendCapped } from "../../service/types";
-import { ACTION_IDS, TRIGGER_IDS } from "../../service/contract";
+import { CALLS, TRIGGER_IDS } from "../../service/contract";
 import { validateOptions } from "../options";
 import { installedBuild } from "../steam/steamcmd";
 import { VISUAL_CPP_X64 } from "../windowsRuntime";
 import { provideWindowsRuntime } from "../windowsRuntimeInstall";
-import { steamInstall, steamInstallActions, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
+import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import type { GameService } from "../serviceTypes";
 import {
-    ConsoleBuffer, assertHost, exists, fileStamp, gameAction, hostSupportHere, linkFolder, offlineBackup, pushChat, readSettings, redact, report,
+    ConsoleBuffer, assertHost, exists, fileStamp, hostSupportHere, linkFolder, offlineBackup, pushChat, readSettings, redact, report,
     resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, updateSettings, waitUntil, writePrivate, type Context,
 } from "../serviceKit";
 import { palworld, options, PALWORLD_APP_ID } from "./index";
@@ -163,11 +163,11 @@ async function pollPlayers(ctx: Context) {
     else {
         for (const [id, p] of now) if (!before.has(id)) {
             pushChat(ctx, { event: "join", sender: p.name, text: `${p.name} joined the game` });
-            ctx.emitTrigger(TRIGGER_IDS.playerJoined, p.name);
+            emitTrigger(ctx, TRIGGER_IDS.playerJoined, p.name);
         }
         for (const [id, p] of before) if (!now.has(id)) {
             pushChat(ctx, { event: "leave", sender: p.name, text: `${p.name} left the game` });
-            ctx.emitTrigger(TRIGGER_IDS.playerLeft, p.name);
+            emitTrigger(ctx, TRIGGER_IDS.playerLeft, p.name);
         }
     }
     roster().remember(players).catch((err) => report(ctx, "Could not record Palworld's players", err));
@@ -221,21 +221,21 @@ export const palworldService: GameService = {
     installUpdate: steamInstall(steam),
     initialState: () => ({ ...initialServerState(), serverSoftware: "palworld", serverPort: String(DEFAULT_PORT), serverMotd: "" }),
     blocks: async (ctx) => {
-        const { mergeBlocks, onlyIdNamed, playerEvents, rosterBlocks, runGameAction } = await import("../../service/blocks");
+        const { mergeBlocks, onlyIdNamed, playerEvents, rosterBlocks, runGameCall } = await import("../../service/blocks");
         // Palworld kicks and bans by user id: a block's player name is looked up
         // among the players online, then the ones the server has seen
         const known = async () => [...local().online, ...await roster().seen()];
         const nameOf = (p: { name: string }) => p.name;
         const idOf = (p: { userId: string }) => p.userId;
         return mergeBlocks({ events: playerEvents() }, rosterBlocks({
-            kick: (name) => runGameAction(ctx, "palworld-kick", { userId: onlyIdNamed(name, local().online, nameOf, idOf, "online") }),
-            ban: async (name) => runGameAction(ctx, "palworld-ban", { userId: onlyIdNamed(name, await known(), nameOf, idOf, "on this server") }),
+            kick: (name) => runGameCall(ctx, "palworld-kick", { userId: onlyIdNamed(name, local().online, nameOf, idOf, "online") }),
+            ban: async (name) => runGameCall(ctx, "palworld-ban", { userId: onlyIdNamed(name, await known(), nameOf, idOf, "on this server") }),
             unban: async (name) => {
                 const bans = new Set(await roster().bans());
                 // listed by their user id when Paperboard never saw them
-                if (bans.has(name)) return runGameAction(ctx, "palworld-unban", { userId: name });
+                if (bans.has(name)) return runGameCall(ctx, "palworld-unban", { userId: name });
                 const banned = (await roster().seen()).filter((p) => bans.has(p.userId));
-                return runGameAction(ctx, "palworld-unban", { userId: onlyIdNamed(name, banned, nameOf, idOf, "banned") });
+                return runGameCall(ctx, "palworld-unban", { userId: onlyIdNamed(name, banned, nameOf, idOf, "banned") });
             },
             // a ban of a player Paperboard never saw shows as their user id, as the Players tab shows it
             banned: async () => {
@@ -244,9 +244,9 @@ export const palworldService: GameService = {
             },
         }));
     },
-    actions: async () => { const { sharedActions, backupAction } = await import("../../service/actions"); return [...sharedActions, backupAction,
-        gameAction(ACTION_IDS.readGameOptions, "Read options", async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; }),
-        gameAction(ACTION_IDS.writeGameOptions, "Save options", async (ctx, { patch }) => {
+    calls: async () => { const { sharedCalls } = await import("../../service/calls"); return { ...sharedCalls,
+        [CALLS.readGameOptions]: async (ctx) => { await loadOptions(ctx); return ctx.state.gameSettings; },
+        [CALLS.writeGameOptions]: async (ctx, { patch }) => {
             if (local().busy) throw new Error("Wait for the Palworld operation to finish");
             if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("Options patch is required");
             validateOptions(options, "Palworld", patch);
@@ -260,31 +260,31 @@ export const palworldService: GameService = {
             if (Object.keys(panel).length > 0) await updateSettings(panel);
             await loadOptions(ctx);
             return ctx.state.gameSettings;
-        }),
-        ...steamInstallActions(steam),
-        gameAction("palworld-metrics", "Palworld server health", () => rest().metrics()),
-        gameAction("palworld-players", "Palworld players", async () => ({ seen: await roster().seen(), bans: await roster().bans(), online: local().online })),
-        gameAction("palworld-kick", "Kick player", async (ctx, { userId: id }) => {
+        },
+        ...steamInstallCalls(steam),
+        ["palworld-metrics"]: () => rest().metrics(),
+        ["palworld-players"]: async () => ({ seen: await roster().seen(), bans: await roster().bans(), online: local().online }),
+        ["palworld-kick"]: async (ctx, { userId: id }) => {
             const checked = userId(id);
             if (!settled(ctx, "Palworld") || !local().online.some((p) => p.userId === checked)) throw new Error("That player is not online");
             await rest().kick(checked);
             await pollPlayers(ctx);
             return true;
-        }),
-        gameAction("palworld-ban", "Ban player", async (ctx, { userId: id }) => {
+        },
+        ["palworld-ban"]: async (ctx, { userId: id }) => {
             const checked = userId(id);
             if (!settled(ctx, "Palworld")) throw new Error(BANS_ONLINE);
             await rest().ban(checked);
             await pollPlayers(ctx);
             return true;
-        }),
-        gameAction("palworld-unban", "Unban player", async (ctx, { userId: id }) => {
+        },
+        ["palworld-unban"]: async (ctx, { userId: id }) => {
             const checked = userId(id);
             if (!settled(ctx, "Palworld")) throw new Error(BANS_ONLINE);
             await rest().unban(checked);
             return true;
-        }),
-    ]; },
+        },
+    }; },
     loadOptions,
     async initialize(ctx, running) {
         local().roster = new PalworldRoster(await serverRoot(), await savedDir());
@@ -389,7 +389,7 @@ export const palworldService: GameService = {
         })().catch((err) => report(ctx, "Could not record Palworld's version", err));
         try {
             const said = parseChat(line, local().online.map((p) => p.name));
-            if (said) ctx.emitTrigger(TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: said.sender, content: said.content, text: `<${said.sender}> ${said.content}` }));
+            if (said) emitTrigger(ctx, TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: said.sender, content: said.content, text: `<${said.sender}> ${said.content}` }));
         } catch (err) { report(ctx, "Could not read a chat message", err); }
         local().console.push(ctx, line);
     },

@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { actionsApi, getTransport } from "@mileniumhq/paperapi";
+import { serviceApi, getTransport } from "@mileniumhq/paperapi";
+import { callServer } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { fakeJavaBinary, installFakeJava } from "./helpers/fakeJava";
 import { installPanel, restartService, servicesState } from "./helpers/installedPanel";
@@ -20,7 +21,7 @@ const JAVA = javaPackageFor("1.21.1")!;
 const PLATFORM = `${process.platform === "win32" ? "windows" : process.platform === "darwin" ? "macos" : "linux"}-${process.arch === "arm64" ? "arm64" : "x64"}`;
 /** the stand-in server's pids, one per start (helpers/fakeJava.main.ts) */
 const runs = () => (fs.existsSync(path.join(serverDir, "runs.log")) ? fs.readFileSync(path.join(serverDir, "runs.log"), "utf8").split("\n").filter(Boolean).map(Number) : []);
-const call = <T = unknown>(action: string, inputs: unknown = {}) => actionsApi.call<T>(PANEL_ID, action, inputs, { timeoutMs: null });
+const call = <T = unknown>(name: string, input: unknown = {}) => serviceApi.call<T>(PANEL_ID, name, input, { timeoutMs: null });
 
 let registry: LoopbackServer;
 let daemon: TestDaemon;
@@ -59,7 +60,7 @@ beforeAll(async () => {
     await restartService();
 });
 afterAll(async () => {
-    await call(`${ID}/stop-server`);
+    await callServer(ID, "stop-server");
     await daemon?.stop();
     await registry?.close();
     delete process.env.ORIGAMI_REGISTRY_URL;
@@ -71,7 +72,7 @@ afterAll(async () => {
 describe("Stop and update", () => {
     test("a Java update waits for a running server; Stop and update stops it with stop, swaps Java in and starts it again", async () => {
         const state = servicesState();
-        await call(`${ID}/start-server`);
+        await callServer(ID, "start-server");
         await state.waitFor(ID, (s) => s.serverStatus === "online", "the server online");
         expect(runs()).toHaveLength(1);
 

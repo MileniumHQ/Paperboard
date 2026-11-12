@@ -1,6 +1,6 @@
 import { createEffect, createSignal } from "solid-js";
 import type { LoaderStatus } from "@mileniumhq/paperui";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 import type { InstallOutcome } from "../games/minecraft/softwareInstall";
 import { providerFor } from "../games/minecraft/providers";
 import { SOFTWARE_NAMES, getRequiredJavaVersion, type ServerSoftwareType } from "./software";
@@ -113,7 +113,7 @@ export function createInstallRun() {
                 // a jar download plus a Forge or NeoForge installer outlasts the
                 // bridge's 30 s default; the service's progress shows it is alive
                 const outcome = await serverBridge.call<InstallOutcome>(
-                    ACTION_IDS.installServerVersion,
+                    CALLS.installServerVersion,
                     { software, version },
                     { timeoutMs: null },
                 );

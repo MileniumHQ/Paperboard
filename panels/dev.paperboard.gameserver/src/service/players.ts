@@ -1,4 +1,4 @@
-import { serverLocal } from "./scope";
+import { emitTrigger, serverLocal } from "./scope";
 import { files as fileApi, type ServiceContext } from "./api";
 import { writeServerLineBestEffort } from "./serverConsole";
 import {
@@ -33,7 +33,7 @@ import { PANEL_ID } from "./types";
 import { TRIGGER_IDS } from "./contract";
 import { send } from "../games/minecraft/saving";
 
-const local = serverLocal(() => ({ lastJoinAt: new Map<string, number>(), pendingStats: [] as PendingStatQuery[], recentNames: [] as string[], onNamesChanged: null as (() => void) | null, pendingPositionQueries: [] as PendingPositionQuery[] }));
+const local = serverLocal(() => ({ lastJoinAt: new Map<string, number>(), pendingStats: [] as PendingStatQuery[], recentNames: [] as string[], pendingPositionQueries: [] as PendingPositionQuery[] }));
 
 export { usernameFromUuid } from "./playerStats";
 
@@ -41,14 +41,8 @@ export type { PlayerStatData };
 export { PLAYER_NAME_PATTERN, SERVER_PROC_ID, STAT_QUERIES };
 
 // Recently seen player names in their original casing (state keys are
-// normalized), newest last. This backs the join/leave triggers' player
-// dropdown: the options must match the event payload's casing, and the list
-// must stay bounded like every other buffer in the panel.
-
-/** The gameserver service wires this to republish the triggers' options. */
-export function setPlayerNamesChangedHandler(handler: (() => void) | null): void {
-    local().onNamesChanged = handler;
-}
+// normalized), newest last. The list must stay bounded like every other
+// buffer in the panel.
 
 function rememberPlayerName(name: string): void {
     const key = normalizePlayerKey(name);
@@ -56,17 +50,11 @@ function rememberPlayerName(name: string): void {
     if (existing >= 0) local().recentNames.splice(existing, 1);
     local().recentNames.push(name);
     while (local().recentNames.length > MAX_BUFFERED_ENTRIES) local().recentNames.shift();
-    local().onNamesChanged?.();
 }
 
 function nameKnown(name: string): boolean {
     const key = normalizePlayerKey(name);
     return local().recentNames.some((n) => normalizePlayerKey(n) === key);
-}
-
-/** Newest first, original casing — the order the trigger dropdown shows. */
-export function playerNameOptions(): string[] {
-    return [...local().recentNames].reverse();
 }
 
 // join timestamps are keyed per username and only deleted on leave —
@@ -88,7 +76,6 @@ export const __playersTest = {
     clearJoins: () => local().lastJoinAt.clear(),
     clearNames: () => {
         local().recentNames.length = 0;
-        local().onNamesChanged = null;
     },
     remember: (name: string) => rememberPlayerName(name),
 };
@@ -128,7 +115,7 @@ export function trackPlayerActivity(
                 : [...prev.onlinePlayers, key];
             return { seenPlayers: seen, onlinePlayers: online };
         });
-        ctx.emitTrigger(TRIGGER_IDS.playerJoined, joined);
+        emitTrigger(ctx, TRIGGER_IDS.playerJoined, joined);
         return;
     }
 
@@ -149,7 +136,7 @@ export function trackPlayerActivity(
             playtime[key] = (playtime[key] ?? 0) + sessionSeconds;
             return { onlinePlayers: online, playerPlaytime: capEntries(playtime) };
         });
-        ctx.emitTrigger(TRIGGER_IDS.playerLeft, left);
+        emitTrigger(ctx, TRIGGER_IDS.playerLeft, left);
         return;
     }
 

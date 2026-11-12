@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 import { serverBridge } from "./server";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 import type { PlayerStatData, PlayerPosition } from "../core/players";
 import type { PlayerStatSummary } from "../core/playerStats";
 
@@ -32,7 +32,7 @@ export const [playerStatSummaries, setPlayerStatSummaries] = createSignal<
 
 // rejects when the stats can't be read; the caller shows why
 export async function loadPlayerStats(): Promise<void> {
-    const list = await serverBridge.call<PlayerStatSummary[]>(ACTION_IDS.listPlayerStats);
+    const list = await serverBridge.call<PlayerStatSummary[]>(CALLS.listPlayerStats);
     const next = new Map<string, PlayerStatSummary>();
     for (const entry of list ?? []) {
         if (entry && typeof entry.uuid === "string") {
@@ -83,25 +83,25 @@ export function forgetPlayerData(name: string, uuid?: string) {
         next.delete(key);
         return next;
     });
-    serverBridge.call(ACTION_IDS.forgetPlayerData, { player: name }).catch((err) =>
+    serverBridge.call(CALLS.forgetPlayerData, { player: name }).catch((err) =>
         console.debug("[players] forgetPlayerData failed:", String(err)),
     );
 }
 
 export function queryPlayerStats(name: string) {
-    serverBridge.call(ACTION_IDS.queryPlayerStats, { player: name }).catch((err) =>
+    serverBridge.call(CALLS.queryPlayerStats, { player: name }).catch((err) =>
         console.debug("[players] queryPlayerStats failed:", String(err)),
     );
 }
 
 export function queryOnlinePlayers() {
-    serverBridge.call(ACTION_IDS.queryOnlinePlayers).catch((err) =>
+    serverBridge.call(CALLS.queryOnlinePlayers).catch((err) =>
         console.debug("[players] queryOnlinePlayers failed:", String(err)),
     );
 }
 
 export function queryPlayerPositions() {
-    serverBridge.call(ACTION_IDS.queryPlayerPositions).catch((err) =>
+    serverBridge.call(CALLS.queryPlayerPositions).catch((err) =>
         console.debug("[players] queryPlayerPositions failed:", String(err)),
     );
 }

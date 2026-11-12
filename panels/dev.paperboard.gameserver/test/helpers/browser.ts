@@ -161,7 +161,7 @@ export async function openPage(url: string): Promise<Page> {
         async settled() {
             // every frame the daemon and page exchange is JSON
             const idOf = (frame: string): unknown => JSON.parse(frame).id;
-            const asked = sentFrames.filter((f) => f.includes('"action":"actions:call"')).map(idOf);
+            const asked = sentFrames.filter((f) => f.includes('"action":"blocks:call"')).map(idOf);
             for (const id of asked) await page.received((f) => idOf(f) === id, `the answer to call ${id}`);
         },
         received: (match, what) =>

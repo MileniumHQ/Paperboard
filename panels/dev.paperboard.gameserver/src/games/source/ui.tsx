@@ -3,7 +3,7 @@ import PlayerAvatar from "../../components/PlayerAvatar";
 import type { GameDefinition } from "../types";
 import type { GameUI } from "../uiTypes";
 import SteamVersions from "../steam/SteamVersions";
-import { sourceActions, type SourceGameSpec } from "./index";
+import { sourceCalls, type SourceGameSpec } from "./index";
 import SourceOverview from "./Overview";
 import SourcePlayers from "./Players";
 import SourceSetup from "./Setup";
@@ -11,7 +11,7 @@ import SourceMaps from "./Maps";
 import SourceMods from "./Mods";
 
 export function sourceUI(spec: SourceGameSpec, game: GameDefinition): GameUI {
-    const ids = sourceActions(spec.id);
+    const ids = sourceCalls(spec.id);
     return {
         create(ctx) {
             return {

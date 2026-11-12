@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { actionsApi, backupApi, backupLocationsApi, processApi } from "@mileniumhq/paperapi";
+import { backupApi, backupLocationsApi, processApi } from "@mileniumhq/paperapi";
+import { callServer } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installFakeJava } from "./helpers/fakeJava";
 import { installPanel, restartService, servicesState, waitForFile } from "./helpers/installedPanel";
@@ -44,7 +45,7 @@ afterAll(async () => {
 
 // Game Server keeps servers, history and backups through restarts and migration.
 describe("v1 migration", () => {
-    test("a v1 config becomes the legacy server first, keeping its settings, running process and backup schedule; legacy actions still act on it", async () => {
+    test("a v1 config becomes the legacy server first, keeping its settings, running process and backup schedule; its calls act on it", async () => {
         // what the v1 service left: its server running under the bare process id, a backup schedule on the panel
         await backupLocationsApi.setForPanel(PANEL_ID, "local");
         await backupApi.setSchedule(PANEL_ID, { everyHours: 12, keep: 5 });
@@ -65,15 +66,12 @@ describe("v1 migration", () => {
         expect(runs()).toEqual([pid!]);
         expect((await backupApi.forSource(PANEL_ID, id).status()).schedule).toMatchObject({ everyHours: 12, keep: 5 });
 
-        // an automation made before servers had projects calls the bare action
-        await actionsApi.call(PANEL_ID, "run-command", { command: "say from an old flow" });
-        await waitForFile(path.join(legacyDir, "commands.log"), (text) => text.includes("say from an old flow"), "the legacy action to reach the server");
-        // and the server's own project acts on the same server
-        await actionsApi.call(PANEL_ID, `${id}/run-command`, { command: "say from its project" });
-        await waitForFile(path.join(legacyDir, "commands.log"), (text) => text.includes("say from its project"), "the project action to reach the server");
+        // a call for the migrated server reaches the process it already ran
+        await callServer(id, "run-command", { command: "say from its page" });
+        await waitForFile(path.join(legacyDir, "commands.log"), (text) => text.includes("say from its page"), "the call to reach the server");
         expect(fs.readFileSync(path.join(legacyDir, "world", "level.dat"), "utf8")).toBe("the v1 world");
 
-        await actionsApi.call(PANEL_ID, `${id}/stop-server`, {});
+        await callServer(id, "stop-server");
         await servicesState().waitFor(id, (s) => s.serverStatus === "offline", "the legacy server to stop");
     });
 });

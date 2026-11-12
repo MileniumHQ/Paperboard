@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { actionsApi, assertActionInputs, validateActionDefinition } from "@mileniumhq/paperapi";
+import { callBlockId, serviceApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
-import { ACTION_IDS, TRIGGER_IDS } from "../src/service/contract";
-import { bindDynamicAction, deletePluginAction, deleteWorldAction, panelActions, panelEventActions, playerJoinedTrigger, playerLeftTrigger, setActiveWorldAction, setGameruleAction } from "../src/games/minecraft/actions";
-import { assertGameAction, gameFor, games } from "../src/games";
+import { callServer } from "./helpers/serverCall";
+import { minecraftServer } from "./helpers/minecraft";
+import { CALLS, TRIGGER_IDS } from "../src/service/contract";
+import { minecraftCalls } from "../src/games/minecraft/calls";
+import { playerEvents, sharedBlocks } from "../src/service/blocks";
+import { assertGameCall, gameFor, games } from "../src/games";
 import { gameServiceFor } from "../src/games/service";
 import { PANEL_ID, readServersConfig } from "../src/servers";
 
@@ -17,62 +20,43 @@ afterAll(async () => {
     await daemon?.stop();
 });
 
-// the options lists depend on what the server has; the ids are fixed
-const DYNAMIC = [setActiveWorldAction(["world"]), setGameruleAction(["keep_inventory"]), deleteWorldAction(["world"]), deletePluginAction(["a.jar"])];
 const NODE_BUILTINS = /^(node:|(fs|path|os|child_process|net|tls|dgram|crypto|stream|util|events|zlib|worker_threads|http|https)(\/.*)?$)/;
 
-// Action and game contracts are complete and fail closed.
-describe("action and game contracts", () => {
-    test("every Minecraft action id is in the service contract, with none orphaned", () => {
-        const contract = Object.values(ACTION_IDS).sort();
-        const defined = [...panelActions, ...DYNAMIC].map((a) => a.id).sort();
-        expect(defined).toEqual(contract);
-        expect(new Set(defined).size).toBe(defined.length);
-        expect(panelEventActions.map((a) => a.id).sort()).toEqual(Object.values(TRIGGER_IDS).sort());
+// Call and game contracts are complete and fail closed.
+describe("call and game contracts", () => {
+    test("every Minecraft call is in the service contract, with none orphaned", () => {
+        expect(Object.keys(minecraftCalls).sort()).toEqual(Object.values(CALLS).sort());
     });
 
-    test("every game's actions pass paperapi's validator, and what a game describes it also defines", async () => {
+    test("every game's calls can be made over blocks without clashing, and what a game describes it also answers", async () => {
+        const everyone = new Map<string, string>();
         for (const game of games) {
             const service = gameServiceFor(game.id);
-            const actions = await service.actions();
-            const ids = actions.map((a) => a.id);
-            expect([game.id, new Set(ids).size]).toEqual([game.id, ids.length]);
-            for (const def of actions) expect(() => validateActionDefinition(def)).not.toThrow();
+            const names = Object.keys(await service.calls());
+            for (const name of names) {
+                // each call is an internal block: its name must make a valid, unclashing id
+                const id = callBlockId(name);
+                const other = everyone.get(id);
+                expect([game.id, name, other === undefined || other === name]).toEqual([game.id, name, true]);
+                everyone.set(id, name);
+            }
             const initial = service.initialState();
-            const described = game.describe({ software: initial.serverSoftware, version: initial.serverVersion, settings: initial.gameSettings }).actions;
-            // Minecraft's option-listing actions are published as the server's worlds and plugins change
-            const published = [...ids, ...(game.id === "minecraft" ? DYNAMIC.map((d) => d.id) : [])];
-            expect([game.id, described.filter((id) => !published.includes(id))]).toEqual([game.id, []]);
+            const described = game.describe({ software: initial.serverSoftware, version: initial.serverVersion, settings: initial.gameSettings }).calls;
+            expect([game.id, described.filter((name) => !names.includes(name))]).toEqual([game.id, []]);
         }
-        for (const def of DYNAMIC) expect(() => validateActionDefinition(def)).not.toThrow();
     });
 
-    test("event triggers stay uncallable, and join, leave and chat match on inputs they declare", () => {
-        const dynamic = [playerJoinedTrigger(["Alice", "Bob"]), playerLeftTrigger(["Alice"])];
-        for (const def of [...panelEventActions, ...dynamic]) {
-            const bound = bindDynamicAction(def, {} as never);
-            expect([def.id, typeof bound.run]).toEqual([def.id, "undefined"]);
-            expect(() => validateActionDefinition(bound)).not.toThrow();
-        }
-        for (const def of [...dynamic, panelEventActions.find((a) => a.id === TRIGGER_IDS.chatMessage)!]) {
-            const rules = [def.match].flat();
-            expect(rules.length).toBeGreaterThan(0);
-            for (const rule of rules) expect(Object.keys(def.inputs ?? {})).toContain(rule!.input);
-        }
-        expect(dynamic[0]!.inputs!.player!.options).toEqual([
-            { label: "Alice", value: "Alice" },
-            { label: "Bob", value: "Bob" },
-        ]);
+    test("every event a game emits is a Blocks event of that name", () => {
+        const events = [...sharedBlocks({} as never).events!, ...playerEvents()].map((event) => event.id);
+        for (const id of Object.values(TRIGGER_IDS)) expect(events).toContain(id);
     });
 
-    test("an empty value is a valid edit for every setting, file and property write", () => {
-        const call = (id: string, values: Record<string, unknown>) => assertActionInputs(panelActions.find((a) => a.id === id)!.inputs, values);
-        expect(() => call(ACTION_IDS.writeLoaderSetting, { id: "paper.x", value: "" })).not.toThrow();
-        expect(() => call(ACTION_IDS.writeCrossplaySetting, { id: "geyser.server-name", value: "" })).not.toThrow();
-        expect(() => call(ACTION_IDS.writeServerFile, { path: "a.txt", text: "", version: "0".repeat(64) })).not.toThrow();
-        expect(() => call(ACTION_IDS.applyRuntimeProperties, { values: { motd: "" } })).not.toThrow();
-        // the setting's name is still required
-        expect(() => call(ACTION_IDS.writeLoaderSetting, { id: "", value: "x" })).toThrow("is required");
+    test("an empty value is a valid edit for a file write, and a setting still needs its name", async () => {
+        const mc = minecraftServer({ files: { "a.txt": "text" } });
+        const read: { version: string } = await mc.run(() => minecraftCalls[CALLS.readServerFile]!(mc.scope.ctx, { path: "a.txt" }) as Promise<{ version: string }>);
+        await mc.run(() => minecraftCalls[CALLS.writeServerFile]!(mc.scope.ctx, { path: "a.txt", text: "", version: read.version }));
+        expect(fs.readFileSync(path.join(mc.dir, "a.txt"), "utf8")).toBe("");
+        await expect(mc.run(() => minecraftCalls[CALLS.writeLoaderSetting]!(mc.scope.ctx, { id: "", value: "x" }))).rejects.toThrow();
     });
 
     test("unknown games throw instead of falling back to Minecraft", () => {
@@ -107,7 +91,7 @@ describe("action and game contracts", () => {
         expect(nodeImports).toEqual([]);
     });
 
-    test("the running service refuses an action a server's software or version does not have, before it runs", async () => {
+    test("the running service refuses a call a server's software or version does not have, before it runs", async () => {
         // stored before the service starts, as the user's earlier session left them
         const config = path.join(daemon.dataDir, "configs", `${PANEL_ID}.json`);
         fs.mkdirSync(path.dirname(config), { recursive: true });
@@ -126,18 +110,18 @@ describe("action and game contracts", () => {
         const { gameServerService } = await import("../src/service");
         await gameServerService.ready;
         expect(gameServerService.getState().serversError).toBeNull();
-        const call = (server: string, action: string, inputs: unknown = {}) => actionsApi.call(PANEL_ID, `${server}/${action}`, inputs);
+        const call = (server: string, name: string, input: Record<string, unknown> = {}) => callServer(server, name, input);
 
-        await expect(call("s-vanilla", ACTION_IDS.readCrossplay)).rejects.toThrow('Minecraft does not support action "read-crossplay" with this server\'s software and version');
-        await expect(call("s-old", ACTION_IDS.listDatapacks)).rejects.toThrow('does not support action "list-datapacks"');
+        await expect(call("s-vanilla", CALLS.readCrossplay)).rejects.toThrow('Minecraft does not support "read-crossplay" with this server\'s software and version');
+        await expect(call("s-old", CALLS.listDatapacks)).rejects.toThrow('does not support "list-datapacks"');
         // nothing ran: the refused crossplay read would have seeded no files, and the server folder holds none
         expect(fs.readdirSync(path.join(daemon.dataDir, "files", PANEL_ID, "servers-0123456789ab", "s-vanilla"))).toEqual([]);
-        expect(await call("s-paper", ACTION_IDS.readCrossplay)).toMatchObject({ software: "paper", geyser: null, floodgate: null });
+        expect(await call("s-paper", CALLS.readCrossplay)).toMatchObject({ software: "paper", geyser: null, floodgate: null });
 
         // the same check, as the service makes it
-        expect(() => assertGameAction(gameFor("minecraft"), { software: "forge", version: "1.20.1", settings: {} }, ACTION_IDS.prepareCrossplay)).toThrow("does not support");
-        await expect(actionsApi.call(PANEL_ID, "add-server", { name: "Factory", game: "factorio" })).rejects.toThrow("Unsupported game: factorio");
-        await expect(actionsApi.call(PANEL_ID, "add-server", { name: "Proto", game: "__proto__" })).rejects.toThrow("Unsupported game: __proto__");
+        expect(() => assertGameCall(gameFor("minecraft"), { software: "forge", version: "1.20.1", settings: {} }, CALLS.prepareCrossplay)).toThrow("does not support");
+        await expect(serviceApi.call(PANEL_ID, "add-server", { name: "Factory", game: "factorio" })).rejects.toThrow("Unsupported game: factorio");
+        await expect(serviceApi.call(PANEL_ID, "add-server", { name: "Proto", game: "__proto__" })).rejects.toThrow("Unsupported game: __proto__");
         expect(gameServerService.getState().servers.map((s: { id: string }) => s.id)).toEqual(["s-vanilla", "s-old", "s-paper"]);
     });
 });

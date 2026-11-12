@@ -4,7 +4,7 @@ import { fileApi, config } from "./api";
 import { PANEL_ID } from "../service/types";
 import { serverSoftware, serverVersion, updatePanelConfig, serverBridge } from "./server";
 import { behaviorVersionOf } from "./versionProfile";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 import { SOFTWARE, type ServerSoftwareType } from "./software";
 import { sanitizeFileName } from "./filesystem";
 import {
@@ -57,12 +57,12 @@ export async function listInstalledPlugins(): Promise<{
 }> {
     // service-owned (service/plugins.ts): listing verifies hashes against
     // install records, and the twin that lived here is gone
-    return serverBridge.call(ACTION_IDS.listInstalledPlugins);
+    return serverBridge.call(CALLS.listInstalledPlugins);
 }
 
 export async function deletePlugin(filename: string): Promise<void> {
     // service-owned: trash-first delete, never a bare fileApi.delete
-    await serverBridge.call(ACTION_IDS.deletePlugin, { filename });
+    await serverBridge.call(CALLS.deletePlugin, { filename });
 }
 
 export interface ResolvedDownload {
@@ -1023,5 +1023,5 @@ export async function uninstallPlugin(filename: string): Promise<void> {
 // trash-first removal of every jar under both plugins/ and mods/, plus the
 // install records — used when switching server software invalidates them all
 export async function uninstallAllPlugins(): Promise<void> {
-    await serverBridge.call(ACTION_IDS.uninstallAllPlugins);
+    await serverBridge.call(CALLS.uninstallAllPlugins);
 }

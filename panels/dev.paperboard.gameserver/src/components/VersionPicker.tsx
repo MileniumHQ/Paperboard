@@ -12,7 +12,7 @@ import {
 } from "@mileniumhq/paperui";
 import type { ServerSoftwareType, VersionItem } from "../lib/software";
 import { serverBridge } from "../lib/server";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 
 // Shared Minecraft version picker: search, release-channel filters and the
 // version list. Used by onboarding (Setup) and the Versions tab so there is
@@ -43,7 +43,7 @@ export default function VersionPicker(props: {
         props.onSelectVersion("");
         try {
             // the service fetches upstream: some indexes refuse cross-origin reads
-            const versions = (await serverBridge.call<VersionItem[]>(ACTION_IDS.listSoftwareVersions, { software }))
+            const versions = (await serverBridge.call<VersionItem[]>(CALLS.listSoftwareVersions, { software }))
                 .filter((v) => v.installable && (v.type === "release" || v.type === "snapshot"));
             if (currentGeneration !== generation) return;
             setAllVersions(versions);

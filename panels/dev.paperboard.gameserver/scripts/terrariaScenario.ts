@@ -8,7 +8,7 @@ import { PaperCraneEngine } from "../../../apps/paperboard/papercrane/engine";
 import { PanelServicesManager } from "../../../apps/paperboard/papercrane/panelServices";
 import { PaperCraneAuth } from "../../../apps/paperboard/papercrane/auth";
 import { setupWebSocketServer } from "../../../apps/paperboard/papercrane/ws";
-import { initPaperApi, closeTransport, actionsApi, backupApi, config, fileApi, processApi, secretsApi, WIDGET_CHOICES_ACTION } from "@mileniumhq/paperapi";
+import { initPaperApi, closeTransport, blocksApi, serviceApi, STATE_VALUE, backupApi, config, fileApi, processApi, secretsApi, getWidgetChoices } from "@mileniumhq/paperapi";
 import { backupServiceFor } from "../../../apps/paperboard/papercrane/rpc/backups";
 import { getNetworkIp } from "../../../apps/paperboard/papercrane/util";
 import { LOCAL_DESTINATION_ID } from "../../../apps/paperboard/papercrane/backups/config";
@@ -54,10 +54,11 @@ export async function runTerrariaScenario(real: boolean): Promise<void> {
         await Bun.write(path.join(panelDir, "service.mjs"), source);
         await config.set({ version: 2, serversDirectory: "servers-0123456789ab", servers: [] }, PANEL);
         services.init((wss.address() as any).port, undefined, auth); await services.waitUntilReady(PANEL);
-        await actionsApi.call(PANEL, "add-server", { name: "Terraria", game: "terraria" });
+        await serviceApi.call(PANEL, "add-server", { name: "Terraria", game: "terraria" });
         const saved = await config.get<any>(PANEL); const first = saved.servers[0];
-        const call = <T = any>(id: string, input?: any) => actionsApi.call<T>(PANEL, `${first.id}/${id}`, input, { timeoutMs: null });
-        const state = async () => serverStateOf(await actionsApi.call<any>(PANEL, "list-servers"), first.id);
+        const call = <T = any>(name: string, input?: any) => serviceApi.call<T>(PANEL, name, { ...input, server: first.id }, { timeoutMs: null });
+        const panelState = () => blocksApi.read<any>(PANEL, STATE_VALUE);
+        const state = async () => serverStateOf(await panelState(), first.id);
         const directory = await fileApi.getPath(first.directory, PANEL);
         const version = "1.4.5.8"; const release = releaseFor(version);
         processes.push(`${first.id}-terraria-server`);
@@ -78,15 +79,15 @@ for await (const line of console) { fs.appendFileSync(path.join(path.dirname(con
             await services.stopService(PANEL); services.startService(PANEL); await services.waitUntilReady(PANEL);
         }
         if (!real) {
-            const added = await actionsApi.call<any>(PANEL, "add-server", { name: "Independent Terraria", game: "terraria" });
+            const added = await serviceApi.call<any>(PANEL, "add-server", { name: "Independent Terraria", game: "terraria" });
             const current = await config.get<any>(PANEL); second = current.servers.find((s: any) => s.id === added.id);
             second.settings = { configured: true, software: "vanilla", version };
             await config.set(current, PANEL);
             await fs.promises.cp(path.join(directory, "install"), path.join(await fileApi.getPath(second.directory, PANEL), "install"), { recursive: true });
             await services.stopService(PANEL); services.startService(PANEL); await services.waitUntilReady(PANEL);
-            await actionsApi.call(PANEL, `${second.id}/start-server`);
+            await serviceApi.call(PANEL, "start-server", { server: second.id }, { timeoutMs: null });
             processes.push(`${second.id}-terraria-server`);
-            await until(async () => serverStateOf(await actionsApi.call<any>(PANEL, "list-servers"), second.id).serverStatus === "online", "second server online");
+            await until(async () => serverStateOf(await panelState(), second.id).serverStatus === "online", "second server online");
         }
         let rejected = false;
         try { await call("op-player", { player: "Steve" }); } catch (err) { rejected = /not found|not registered|not available|does not support|Unknown action/i.test(String(err)); }
@@ -133,10 +134,10 @@ for await (const line of console) { fs.appendFileSync(path.join(path.dirname(con
         await until(async () => (await state()).serverStatus === "online", "restart after restore", 30_000);
         assert(!fs.existsSync(path.join(directory, "after-backup.txt")), "Restore did not replace source data");
         assert((await secretsApi.get(`${first.id}-terraria-join-password`, PANEL)).value === "wire-secret", "Restore lost vault credential");
-        assert(!(await actionsApi.call<any[]>(PANEL, WIDGET_CHOICES_ACTION, { widgetId: "players" })).some(x => x.value === first.id), "Terraria offered unsupported players widget");
+        assert(!(await getWidgetChoices("", PANEL, "players", "server")).some(x => x.value === first.id), "Terraria offered unsupported players widget");
         await call("run-command", { command: "playing" }); console.log("playing: command delivered"); await call("save-world");
         if (second) {
-            const other = serverStateOf(await actionsApi.call<any>(PANEL, "list-servers"), second.id);
+            const other = serverStateOf(await panelState(), second.id);
             assert(other.serverStatus === "online", "Backup or restore stopped another server");
             assert(other.serverPort !== (await state()).serverPort, "Servers share a port");
             await call("run-command", { command: "isolation-first" });
@@ -146,7 +147,7 @@ for await (const line of console) { fs.appendFileSync(path.join(path.dirname(con
             // only the command sent to the first one tells the servers apart
             const otherCommands = path.join(otherDirectory, "worlds/commands.txt");
             assert(!(fs.existsSync(otherCommands) && fs.readFileSync(otherCommands, "utf8").split("\n").includes("isolation-first")), "Command reached the wrong server");
-            await actionsApi.call(PANEL, "remove-server", { server: second.id });
+            await serviceApi.call(PANEL, "remove-server", { server: second.id });
             assert(fs.existsSync(path.join(otherDirectory, "worlds/World.wld")), "Removing a server deleted its world");
         }
         console.log("restore: original world loaded, later file removed, vault credential retained, restarted ONLINE");
@@ -174,7 +175,7 @@ for await (const line of console) { fs.appendFileSync(path.join(path.dirname(con
         }
     } catch (err) {
         if (real) {
-            const snapshot = await actionsApi.call<any>(PANEL, "list-servers").catch(() => null);
+            const snapshot = await blocksApi.read<any>(PANEL, STATE_VALUE).catch(() => null);
             if (snapshot) for (const server of snapshot.servers) console.error("Failure console:\n" + serverStateOf(snapshot, server.id).serverEntries.map(e => e.content).filter(line => !/^\d+\.?\d*%/.test(String(line))).join("\n"));
         }
         throw err;

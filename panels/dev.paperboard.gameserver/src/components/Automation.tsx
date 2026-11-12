@@ -13,7 +13,7 @@ import {
 } from "@mileniumhq/paperui";
 import { serverBridge } from "../lib/server";
 import { errorMessage } from "../lib/failure";
-import { ACTION_IDS } from "../service/contract";
+import { CALLS } from "../service/contract";
 import type { AutomationView } from "../service/automation";
 
 const OFF = "off";
@@ -30,7 +30,7 @@ export default function Automation() {
     const load = async () => {
         setLoadError("");
         try {
-            setView(await serverBridge.call<AutomationView>(ACTION_IDS.readAutomation));
+            setView(await serverBridge.call<AutomationView>(CALLS.readAutomation));
         } catch (err) {
             setLoadError(errorMessage(err));
         }
@@ -41,7 +41,7 @@ export default function Automation() {
         setSaving(true);
         setSaveError("");
         try {
-            setView(await serverBridge.call<AutomationView>(ACTION_IDS.writeAutomation, { patch }));
+            setView(await serverBridge.call<AutomationView>(CALLS.writeAutomation, { patch }));
         } catch (err) {
             setSaveError(errorMessage(err));
         } finally {

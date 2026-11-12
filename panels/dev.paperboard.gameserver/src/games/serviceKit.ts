@@ -7,7 +7,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { config, files, processApi, type ServiceContext } from "../service/api";
-import { defineAction, fileApi as rawFiles, secretsApi } from "@mileniumhq/paperapi";
+import { fileApi as rawFiles, secretsApi } from "@mileniumhq/paperapi";
 import { currentServer } from "../service/scope";
 import type { PaperConsoleEntry } from "@mileniumhq/paperui";
 import { appendCapped, PANEL_ID, type ChatMessage, type GameServerState } from "../service/types";
@@ -125,10 +125,6 @@ export function settled(ctx: Context, game: string): boolean {
     if (status !== "online" && status !== "offline") throw new Error(`Wait for ${game} to finish starting or stopping`);
     return status === "online";
 }
-
-/** An internal Action of a game's service; input is checked by its run. */
-export const gameAction = (id: string, name: string, run: (ctx: Context, input: any) => unknown) =>
-    defineAction({ id, name, category: "Server", description: name, internal: true, inputs: {}, run: run as (ctx: Context, input: any) => any });
 
 /** Hides values from console lines: passwords the game was started with. */
 export function redact(line: string, secrets: readonly string[]): string {

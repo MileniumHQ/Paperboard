@@ -6,7 +6,7 @@ import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { gameServer, type GameServer } from "./helpers/game";
 import { DEFAULT_PALWORLD_INI, freePort, installPalworld } from "./helpers/palworld";
 import { PANEL_ID } from "../src/servers";
-import { ACTION_IDS } from "../src/service/contract";
+import { CALLS } from "../src/service/contract";
 import { startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 import { palworldService } from "../src/games/palworld/service";
 import { decode, encode, parseOptionSettings, writeOptionSettings } from "../src/games/palworld/ini";
@@ -39,13 +39,13 @@ const entry = (text: string, key: string) => parseOptionSettings(text).find((e) 
 const vault = async (server: GameServer, name: string) => (await secretsApi.get(`${server.scope.server.id}-palworld-${name}`, PANEL_ID)).value ?? "";
 /** the Files tab opening the settings file; it runs after any cleanup already queued */
 const settled = (server: GameServer) => server.run(() => palworldService.assertFileAccess!(server.scope.ctx, INI, false));
-const action = async (id: string) => (await palworldService.actions()).find((a) => a.id === id)!;
+const action = async (id: string) => (await palworldService.calls())[id]!;
 
 // Secrets stay out of files and the console.
 describe("secrets", () => {
     test("Palworld's passwords live in the vault, are in its settings file only while it runs, and never reach the console", async () => {
         const server = await palworldServer();
-        await server.run(async () => (await action(ACTION_IDS.writeGameOptions)).run!(server.scope.ctx, { patch: { password: "join-secret-1" } }));
+        await server.run(async () => (await action(CALLS.writeGameOptions))(server.scope.ctx, { patch: { password: "join-secret-1" } }));
         expect(await vault(server, "join-password")).toBe("join-secret-1");
 
         await server.run(() => startServerInstance(server.scope.ctx));

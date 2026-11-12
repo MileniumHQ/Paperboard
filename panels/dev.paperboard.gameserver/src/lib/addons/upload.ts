@@ -1,7 +1,7 @@
 import { fileApi } from "../api";
 import { addonStageDir } from "../../core/addonUpload";
 import { serverBridge } from "../server";
-import { ACTION_IDS } from "../../service/contract";
+import { CALLS } from "../../service/contract";
 import { PANEL_ID } from "../../service/types";
 import type { UploadOutcome } from "../../service/addonUploads";
 import type { AddonUploadSource } from "./kind";
@@ -17,17 +17,17 @@ export const newStage = () => crypto.randomUUID();
 export const stageFolder = (stage: string) => addonStageDir(stage);
 
 export const discardUpload = async (stage: string) => {
-    await serverBridge.call(ACTION_IDS.discardAddonUpload, { stage });
+    await serverBridge.call(CALLS.discardAddonUpload, { stage });
 };
 
-export const commitPlugins = (stage: string) => serverBridge.call<UploadOutcome>(ACTION_IDS.uploadPlugins, { stage });
+export const commitPlugins = (stage: string) => serverBridge.call<UploadOutcome>(CALLS.uploadPlugins, { stage });
 
-export const commitDatapacks = (stage: string) => serverBridge.call<UploadOutcome>(ACTION_IDS.uploadDatapacks, { stage });
+export const commitDatapacks = (stage: string) => serverBridge.call<UploadOutcome>(CALLS.uploadDatapacks, { stage });
 
 // reading, downloading and placing a pack runs for minutes: the call is
 // waited out, not cut off at the bridge's 30 s default
 export const commitModpack = (stage: string) =>
-    serverBridge.call(ACTION_IDS.uploadModpack, { stage }, { timeoutMs: null });
+    serverBridge.call(CALLS.uploadModpack, { stage }, { timeoutMs: null });
 
 export const pickFiles = (label: string, extensions: string[], icon = "upload_file"): AddonUploadSource => ({
     label,
