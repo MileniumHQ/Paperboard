@@ -329,6 +329,8 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    /* the end of the list is the end of the drag: it doesn't carry on to scroll the page behind the sheet */
+    overscroll-behavior: contain;
     padding: var(--paper-uigap);
     display: flex;
     flex-direction: column;
