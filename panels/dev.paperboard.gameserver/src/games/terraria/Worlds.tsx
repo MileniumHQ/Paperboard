@@ -9,8 +9,8 @@ import {
     PaperFlex,
     PaperIcon,
     PaperInput,
-    PaperMediaCard,
-    PaperMediaCardGroup,
+    PaperList,
+    PaperListItem,
     PaperModal,
     PaperPageHeader,
     PaperQuote,
@@ -248,23 +248,26 @@ export default function TerrariaWorlds() {
 
             <Show when={worlds() !== null} fallback={emptyCard(listError() ? "Couldn't load worlds." : "Loading worlds...")}>
                 <Show when={(worlds() ?? []).length > 0} fallback={emptyCard("No worlds yet. Create one, or start the server to generate one.")}>
-                    <PaperCard>
-                        <PaperFlex padding="full">
-                            <PaperMediaCardGroup minCardWidth="card-min">
-                                <For each={worlds() ?? []}>
-                                    {(world) => (
-                                        <PaperMediaCard
-                                            icon={<WorldTile active={world.active} />}
-                                            title={world.header?.name ?? world.name}
-                                            subtitle={summary(world.header, world.generated)}
-                                            badge={world.active ? <PaperBadge variant="success">Active</PaperBadge> : undefined}
-                                            onClick={() => setSelected(world.name)}
-                                        />
-                                    )}
-                                </For>
-                            </PaperMediaCardGroup>
-                        </PaperFlex>
-                    </PaperCard>
+                    <PaperList
+                        name="terraria-worlds"
+                        value=""
+                        onValueChange={(name) => setSelected(String(name))}
+                        buttons
+                        fullWidth
+                    >
+                        <For each={worlds() ?? []}>
+                            {(world) => (
+                                <PaperListItem
+                                    value={world.name}
+                                    icon={<WorldTile active={world.active} />}
+                                    description={summary(world.header, world.generated)}
+                                    actions={world.active ? <PaperBadge variant="success">Active</PaperBadge> : undefined}
+                                >
+                                    {world.header?.name ?? world.name}
+                                </PaperListItem>
+                            )}
+                        </For>
+                    </PaperList>
                 </Show>
             </Show>
 

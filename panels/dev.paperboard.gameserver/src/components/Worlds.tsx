@@ -13,8 +13,8 @@ import {
     PaperFlex,
     PaperIcon,
     PaperInput,
-    PaperMediaCard,
-    PaperMediaCardGroup,
+    PaperList,
+    PaperListItem,
     PaperModal,
     PaperPageHeader,
     PaperQuote,
@@ -360,29 +360,26 @@ export default function Worlds() {
                                 </PaperCard>
                             }
                         >
-                            <PaperCard>
-                                <PaperFlex padding="full">
-                                    <PaperMediaCardGroup minCardWidth="card-min">
-                                        <For each={worlds() ?? []}>
-                                            {(world) => (
-                                                <PaperMediaCard
-                                                    icon={<WorldTile active={world.active} />}
-                                                    title={world.name}
-                                                    subtitle={dimensionsLabel(world)}
-                                                    badge={
-                                                        world.active ? (
-                                                            <PaperBadge variant="success">
-                                                                Active
-                                                            </PaperBadge>
-                                                        ) : undefined
-                                                    }
-                                                    onClick={() => setSelected(world)}
-                                                />
-                                            )}
-                                        </For>
-                                    </PaperMediaCardGroup>
-                                </PaperFlex>
-                            </PaperCard>
+                            <PaperList
+                                name="worlds"
+                                value=""
+                                onValueChange={(name) => setSelected((worlds() ?? []).find((world) => world.name === name) ?? null)}
+                                buttons
+                                fullWidth
+                            >
+                                <For each={worlds() ?? []}>
+                                    {(world) => (
+                                        <PaperListItem
+                                            value={world.name}
+                                            icon={<WorldTile active={world.active} />}
+                                            description={dimensionsLabel(world)}
+                                            actions={world.active ? <PaperBadge variant="success">Active</PaperBadge> : undefined}
+                                        >
+                                            {world.name}
+                                        </PaperListItem>
+                                    )}
+                                </For>
+                            </PaperList>
                         </Show>
                     </Show>
 
