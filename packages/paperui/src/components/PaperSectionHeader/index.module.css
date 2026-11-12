@@ -5,7 +5,9 @@
     gap: var(--paper-uigap-half);
     width: 100%;
     box-sizing: border-box;
-    padding: 0 var(--paper-inset-outside);
+    /* the title sits in a little from the card edge below it; the actions
+       end flush with that edge, so a header button lines up with the card */
+    padding: 0 0 0 var(--paper-uigap);
     color: var(--paper-text-subtle);
 }
 
