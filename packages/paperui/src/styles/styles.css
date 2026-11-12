@@ -36,26 +36,6 @@
     --paper-focus-offset: 2px;
 }
 
-/* A surface that runs to the screen's bottom edge (an app's top-level page,
- * a panel's document in a phone shell's frame) carries [data-paper-edge].
- * Its scroll surfaces (.paper-scroll-end, set by PaperFlex, PaperList and
- * the page items that scroll) end with a spacer as tall as the bottom inset,
- * so the last row scrolls clear of the home indicator or keyboard while the
- * list itself runs under it. A scroller inside another scroller is not at
- * the edge, and a surface that pads itself by the inset (a modal) marks
- * itself .paper-no-edge. */
-[data-paper-edge] .paper-scroll-end::after {
-    content: "";
-    display: block;
-    flex: none;
-    height: var(--paper-safe-area-bottom);
-}
-
-[data-paper-edge] .paper-scroll-end .paper-scroll-end::after,
-[data-paper-edge] .paper-no-edge .paper-scroll-end::after {
-    content: none;
-}
-
 /* NOTE: this library styles nothing outside .paperui-root /
  * [data-paperui-theme]. Document-level resets (html/body margin) belong to
  * the consuming app, not the library — see the shell's own shell.css. */

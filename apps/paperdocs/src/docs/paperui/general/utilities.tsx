@@ -362,12 +362,11 @@ export function Done() {
                 It listens to no touches: a panel that reads a pinch itself (a map) still receives all of them, and <PaperCode>lockedViewport(content)</PaperCode> returns a viewport meta's content with zoom switched off.
             </PaperText>
 
-            <PaperText preset="subheader" as="h2" id="scroll-under-the-edge">Scrolling under the home indicator</PaperText>
+            <PaperText preset="subheader" as="h2" id="frame-background">A frame's foot color</PaperText>
             <PaperText preset="body" as="p">
-                A surface that runs to the bottom of a phone's screen carries <PaperCode>data-paper-edge</PaperCode>: a fixed <PaperLink href="/docs/paperui/paperslidepage/">PaperSlidePage</PaperLink>'s content does, and so does a panel's document once the shell has told it how much of its foot the home indicator covers (<PaperCode>@mileniumhq/paperapi</PaperCode> sets <PaperCode>--paper-safe-area-bottom</PaperCode> from that message).
-                Inside it, PaperFlex, PaperList and page items that scroll up and down end with a spacer as tall as <PaperCode>--paper-safe-area-bottom</PaperCode>, so the list scrolls under the indicator and its last row still scrolls clear of it. A panel needs nothing for this.
-                A scroller inside another scroller is not at the edge and gets no spacer, and a surface that pads itself by the inset (a modal) marks itself <PaperCode>paper-no-edge</PaperCode>.
-                Controls fixed to the bottom of such a surface pad by <PaperCode>--paper-safe-area-bottom</PaperCode> themselves.
+                On a phone, Paperboard stops a panel's frame above the home indicator and fills the strip under it.{" "}
+                <PaperLink href="/docs/paperui/paperprovider/">PaperProvider</PaperLink> in a framed document reports the color showing at the middle of its bottom edge as <PaperCode>paperui:frame-background</PaperCode> (<PaperCode>FRAME_BACKGROUND_EVENT</PaperCode>) on <PaperCode>window</PaperCode>, whenever it changes, and <PaperCode>@mileniumhq/paperapi</PaperCode> forwards it, so the strip is the panel's own color.
+                A panel needs nothing for this; <PaperCode>bottomEdgeColor()</PaperCode> returns the color it would report.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="swipe-back">Swipe back</PaperText>

@@ -183,7 +183,6 @@ export function PaperList(props: ParentProps<PaperListProps>) {
             local.fullWidth ? styles.fullWidth : "",
             local.fullHeight ? styles.fullHeight : "",
             isScrollable() ? styles.scrollable : "",
-            isScrollable() && local.scrollable !== "x" && !isHorizontal() ? "paper-scroll-end" : "",
             local.class,
         ]
             .filter(Boolean)

@@ -136,7 +136,7 @@ export function PaperPopover(props: ParentProps<PaperPopoverProps>) {
                     ref={box}
                     role="dialog"
                     {...rest}
-                    class={[styles.PaperPopover, "paper-no-edge", local.class].filter(Boolean).join(" ")}
+                    class={[styles.PaperPopover, local.class].filter(Boolean).join(" ")}
                     classList={{
                         [styles.placed]: position() !== null,
                         [styles.above]: position()?.side === "above",

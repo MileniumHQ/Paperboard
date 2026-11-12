@@ -5,7 +5,6 @@ import { recordUse, liveKeys, recordAway, withoutIdle, MAX_LIVE_IFRAMES, IDLE_UN
 import LoadingOverlay from "./LoadingOverlay";
 import styles from "./frame.module.css";
 import { panelUrl } from "../../lib/shell";
-import { watchFrameInsets } from "../../lib/frameInsets";
 import { FILE_TRANSFER_RESULT, parseFileTransferMessage, runPanelFileTransfer } from "../../lib/panelFileTransfer";
 import { createFrameLoopbackRedirects, LOOPBACK_REDIRECT_CANCEL, LOOPBACK_REDIRECT_REQUEST, LOOPBACK_REDIRECT_RESULT, parseLoopbackRedirectMessage } from "../../lib/panelLoopbackRedirect";
 import BackupLocationChooser, { type BackupLocationChoice } from "../backups/BackupLocationChooser";
@@ -36,8 +35,6 @@ const PanelFrame: Component<{ panelKey: string; heading: { icon: JSX.Element; na
     const [failure, setFailure] = createSignal("");
     let frame: HTMLIFrameElement | undefined;
     let generation = "";
-    let insetProbe: HTMLDivElement | undefined;
-    let insets: ReturnType<typeof watchFrameInsets> | undefined;
     // A backup or restore stops the panel's service while it copies or swaps
     // the data. The frame says so, with how far along it is, instead of
     // failing to reach the service; by source ("" = the panel's own data).
@@ -130,19 +127,12 @@ const PanelFrame: Component<{ panelKey: string; heading: { icon: JSX.Element; na
         // and its sign-in redirect stops being caught
         onCleanup(() => { if (frame) swipeFromFrame(frame, { phase: "cancel", dx: 0, velocity: 0 }); clearTimeout(timer); window.removeEventListener("message", receive); setChooser(null); loopback.closeAll(); });
     });
-    // the frame may run under the home indicator or the keyboard: its document is told how far
-    onMount(() => {
-        if (!frame || !insetProbe) throw new Error("the panel frame did not mount");
-        insets = watchFrameInsets(frame, insetProbe, () => generation);
-        onCleanup(() => insets?.stop());
-    });
     onMount(() => { if (frame) frame.src = panelUrl(computerId, panelId, `?_r=${props.reload}&generation=${generation}`); });
     return <div class={styles.panelLayer} classList={{ [styles.away]: !props.current }}>
-        <div ref={insetProbe} class={styles.insetProbe} aria-hidden="true" />
         <iframe ref={frame} data-panel-key={props.panelKey} title={panelId}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="clipboard-read; clipboard-write; microphone; camera; display-capture"
-            onLoad={() => { frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName }, "*"); insets?.send(); }}
+            onLoad={() => { frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName }, "*"); }}
             class={`${styles.frame} ${styles.panelFrame}`} classList={{ [styles.unpainted]: !ready() || Boolean(failure()) || Boolean(props.restart) || Boolean(held()) }} />
         <BackupLocationChooser computerId={computerId} computerName={props.computerName} panelId={panelId} sourceId={chooser()?.sourceId} open={chooser() !== null} onDone={(result) => {
             const request = chooser();

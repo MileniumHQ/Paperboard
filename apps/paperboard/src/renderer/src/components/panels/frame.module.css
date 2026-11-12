@@ -61,14 +61,3 @@
 .overlayHeading {
     max-width: 100%;
 }
-
-/* measures the bottom safe area for the frame's document (lib/frameInsets) */
-.insetProbe {
-    position: fixed;
-    left: 0;
-    bottom: 0;
-    width: 1px;
-    height: var(--paper-safe-area-bottom);
-    visibility: hidden;
-    pointer-events: none;
-}

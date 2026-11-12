@@ -11,7 +11,6 @@ import { resolveSpacing, resolveBackground } from "../../utils/theme";
 import {
     PaperLayoutContext,
     resolveLayoutStyles,
-    scrollsVertically,
     type PaperLayoutProps,
     type PaperLayoutContextValue,
 } from "../../contexts/layout";
@@ -207,9 +206,6 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
         }
     };
 
-    // a column that scrolls ends with the bottom-edge spacer (styles.css)
-    const scrollsEnd = () => !isRow() && scrollsVertically(local);
-
     const layoutContextValue: PaperLayoutContextValue = {
         direction: local.direction || "column",
         parentIsFlex: true,
@@ -220,7 +216,7 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
             <div
                 ref={containerRef}
                 {...rest}
-                class={[styles.PaperFlex, scrollsEnd() ? "paper-scroll-end" : "", local.class].filter(Boolean).join(" ")}
+                class={[styles.PaperFlex, local.class].filter(Boolean).join(" ")}
                 classList={local.classList}
                 style={style()}
             >
