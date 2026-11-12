@@ -110,6 +110,8 @@
 
 .fixed > .content {
     padding-bottom: var(--paper-safe-area-bottom);
+    /* the strip under the content follows it (footColor) without a jump */
+    transition: background-color var(--paper-mid-transition) var(--paper-ease-standard);
     padding-left: var(--paper-safe-area-left);
     padding-right: var(--paper-safe-area-right);
 }
