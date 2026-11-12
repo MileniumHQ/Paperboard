@@ -3,11 +3,22 @@
 @import "./fonts.css";
 @import "./rules.css";
 
+/* How much of the bottom an on-screen keyboard covers. A host whose web view
+   keeps its size under the keyboard (a native app) sets it on the root as the
+   keyboard moves, and may transition it to follow the keyboard. */
+@property --paper-keyboard-inset {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 0px;
+}
+
 :root {
-    /* Backgrounds fill the viewport; controls consume insets at their own boundary. */
+    /* Backgrounds fill the viewport; controls consume insets at their own
+       boundary. The bottom one is the keyboard while it's up, so content
+       stays above it and backgrounds carry on underneath. */
     --paper-safe-area-top: env(safe-area-inset-top, 0px);
     --paper-safe-area-right: env(safe-area-inset-right, 0px);
-    --paper-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --paper-safe-area-bottom: max(env(safe-area-inset-bottom, 0px), var(--paper-keyboard-inset));
     --paper-safe-area-left: env(safe-area-inset-left, 0px);
 
     --paper-font-family:

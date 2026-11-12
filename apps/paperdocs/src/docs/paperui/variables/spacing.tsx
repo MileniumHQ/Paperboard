@@ -303,6 +303,11 @@ export default function SpacingDoc() {
                 On a device with a notch or a home indicator, <PaperCode>--paper-safe-area-top</PaperCode>, <PaperCode>-right</PaperCode>, <PaperCode>-bottom</PaperCode>, and <PaperCode>-left</PaperCode> hold the insets, and are <PaperCode>0px</PaperCode> elsewhere.
                 Backgrounds fill the viewport, and controls consume the inset at their own boundary, so a panel built from PaperUI components needs no code for them.
             </PaperText>
+            <PaperText preset="body" as="p">
+                While an on-screen keyboard is up, <PaperCode>--paper-safe-area-bottom</PaperCode> is the keyboard's height instead, when that's larger.
+                A host whose web view keeps its size under the keyboard (the iOS app) sets <PaperCode>--paper-keyboard-inset</PaperCode> on the root as the keyboard moves, and may transition it, since it is a registered length.
+                Content padded by the bottom inset then sits above the keyboard, and its background carries on underneath.
+            </PaperText>
 
             <PaperText preset="subheader" as="h2" id="layers">Layers</PaperText>
             <PaperText preset="body" as="p">
