@@ -81,6 +81,7 @@ export * from "./utils/swipeBack";
 export * from "./utils/pressCancel";
 export * from "./utils/pageCrumbs";
 export * from "./utils/frameBackground";
+export * from "./utils/pageZoom";
 export * from "./utils/haptics";
 
 export * from "./types";

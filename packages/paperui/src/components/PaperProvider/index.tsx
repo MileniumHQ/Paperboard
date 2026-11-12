@@ -15,6 +15,7 @@ import { installSwipeBack } from "../../utils/swipeBack";
 import { installTouchHold } from "../../utils/touchHold";
 import { installPressCancel } from "../../utils/pressCancel";
 import { installFrameBackground } from "../../utils/frameBackground";
+import { installPageZoomLock } from "../../utils/pageZoom";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -118,6 +119,8 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
     onCleanup(installPressCancel());
     // in a panel frame: the shell colors the strip under it to match
     onCleanup(installFrameBackground());
+    // a pinch is for a panel's own gestures, not for zooming the document
+    onCleanup(installPageZoomLock());
 
     const currentThemeMode = createMemo(() => local.theme ?? internalTheme());
     const resolvedTheme = createMemo(() => {

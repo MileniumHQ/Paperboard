@@ -355,6 +355,13 @@ export function Done() {
                 A component with its own <PaperCode>:active</PaperCode> style adds <PaperCode>:not([data-paper-press-out])</PaperCode> to it, and <PaperCode>pressedOutside(el, x, y)</PaperCode> answers whether a pointer has left a control.
             </PaperText>
 
+            <PaperText preset="subheader" as="h2" id="page-zoom">No page zoom</PaperText>
+            <PaperText preset="body" as="p">
+                On a phone, pinching must not zoom the document.{" "}
+                <PaperLink href="/docs/paperui/paperprovider/">PaperProvider</PaperLink> sets <PaperCode>maximum-scale=1, user-scalable=no</PaperCode> on the page's viewport meta and <PaperCode>touch-action: pan-x pan-y</PaperCode> on its root, so every panel gets it without writing anything.
+                It listens to no touches: a panel that reads a pinch itself (a map) still receives all of them, and <PaperCode>lockedViewport(content)</PaperCode> returns a viewport meta's content with zoom switched off.
+            </PaperText>
+
             <PaperText preset="subheader" as="h2" id="frame-background">A frame's foot color</PaperText>
             <PaperText preset="body" as="p">
                 On a phone, Paperboard stops a panel's frame above the home indicator and fills the strip under it.{" "}
