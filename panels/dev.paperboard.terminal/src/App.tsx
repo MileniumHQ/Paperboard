@@ -34,7 +34,7 @@ import { describeRun } from "./lib/runStatus";
 import { errorMessage, type Outcome } from "./lib/failure";
 import { shortcutLabel } from "./keys";
 import { pasteLines } from "./lib/screen";
-import { tabSessions, tabTitle, type LiveSession, type SplitDirection, type TabLayout, type TerminalTab } from "./lib/tabs";
+import { tabSessions, tabTitle, type LiveSession, type SplitDirection, type TabLayout, type TerminalSession, type TerminalTab } from "./lib/tabs";
 
 const TERMINAL_PANEL_ID = "dev.paperboard.terminal";
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -137,7 +137,7 @@ export default function App() {
         const tab = shownTab();
         return tab ? focusedOf(tab) : "";
     };
-    const folderOf = (tab: TerminalTab) => mirror.live[focusedOf(tab)]?.cwd || tab.cwd || "";
+    const folderOfSession = (session: TerminalSession) => mirror.live[session.id]?.cwd || session.cwd || "";
 
     // ── what hidden tabs did, in this window ────────────────────────────────
     const [attention, setAttention] = createStore<Record<string, Attention>>({});
@@ -268,6 +268,20 @@ export default function App() {
         } catch (err) {
             report("Tab not opened")(err);
         }
+    };
+    // a shell picked in the tab list: its tab is shown, and it has the keyboard
+    const chooseSession = (id: string) => {
+        const owner = ownerOf(id);
+        if (!owner) return;
+        setFocusedPane(owner.id, id);
+        if (owner.id !== activeTab()) handleSwitchTab(owner.id);
+        queueMicrotask(() => activeTerminals.get(id)?.focus());
+    };
+    const openTabMenu = (e: MouseEvent, tabId: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextTabId(tabId);
+        tabMenu.openAtMouse(e);
     };
     const handleSwitchTab = (id: string) => {
         setActiveTab(id);
@@ -419,9 +433,16 @@ export default function App() {
     };
     const contextTab = () => tabs().find((t) => t.id === contextTabId());
 
-    // the screen of one shell in a tab
-    const Pane = (paneProps: { tab: TerminalTab; session: string; class?: string }) => (
-        <PaperFlex flex minWidth={0} minHeight={0} direction="column" class={paneProps.class}>
+    // the screen of one shell in a tab; a split's second shell keeps a floor
+    // so dragging the line can't close it
+    const Pane = (paneProps: { tab: TerminalTab; session: string; class?: string; floor?: boolean }) => (
+        <PaperFlex
+            flex
+            minWidth={paneProps.floor ? "field" : 0}
+            minHeight={paneProps.floor ? "field" : 0}
+            direction="column"
+            class={paneProps.class}
+        >
             <TerminalComponent
                 id={paneProps.session}
                 focused={activeTab() === paneProps.tab.id && focusedOf(paneProps.tab) === paneProps.session}
@@ -504,13 +525,15 @@ export default function App() {
                     compact={vertical()}
                     direction={vertical() ? "vertical" : "horizontal"}
                     name="terminal-tabs"
-                    value={activeTab()}
-                    onValueChange={(val) => handleSwitchTab(String(val))}
+                    value={currentSession()}
+                    onValueChange={(val) => chooseSession(String(val))}
                     onReorder={(newOrder) => {
                         const current = tabs();
+                        // a split's second shell is listed but moves with its tab
                         const reordered = newOrder
                             .map((id) => current.find((item) => item.id === id)!)
                             .filter(Boolean);
+                        if (reordered.every((t, i) => t.id === current[i]?.id)) return;
                         // shown at once; the service's order is the truth, so a
                         // failed reorder pulls it back
                         setMirror("tabs", reordered);
@@ -532,21 +555,38 @@ export default function App() {
                 >
                     <For each={tabs()}>
                         {(tab) => (
-                            <PaperListItem
-                                icon={attention[tab.id]?.bell ? "notifications_active" : "terminal"}
-                                loaderStatus={statusOf(tab.id)}
-                                value={tab.id}
-                                title={folderOf(tab)}
-                                onClosed={(closedId) => handleCloseTab(String(closedId))}
-                                onContextMenu={(e: MouseEvent) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setContextTabId(tab.id);
-                                    tabMenu.openAtMouse(e);
-                                }}
-                            >
-                                {tabTitle(tab, mirror.live, focusedOf(tab))}
-                            </PaperListItem>
+                            <>
+                                <PaperListItem
+                                    icon={attention[tab.id]?.bell ? "notifications_active" : "terminal"}
+                                    loaderStatus={statusOf(tab.id)}
+                                    value={tab.id}
+                                    title={folderOfSession(tab)}
+                                    onClosed={(closedId) => handleCloseTab(String(closedId))}
+                                    onContextMenu={(e: MouseEvent) => openTabMenu(e, tab.id)}
+                                >
+                                    {tabTitle(tab, mirror.live, tab.id)}
+                                </PaperListItem>
+                                {/* a split's second shell is listed under its tab, to pick or close */}
+                                <Show when={tab.split}>
+                                    {(shown) => {
+                                        // read once: a split keeps its session, and a read
+                                        // after the split closes would throw mid-update
+                                        const session = shown().session;
+                                        return (
+                                            <PaperListItem
+                                                icon="subdirectory_arrow_right"
+                                                value={session.id}
+                                                title={folderOfSession(session)}
+                                                aria-label={`${tab.label}, second shell`}
+                                                onClosed={() => unsplit(tab.id)}
+                                                onContextMenu={(e: MouseEvent) => openTabMenu(e, tab.id)}
+                                            >
+                                                {mirror.live[session.id]?.program || tab.label}
+                                            </PaperListItem>
+                                        );
+                                    }}
+                                </Show>
+                            </>
                         )}
                     </For>
                     <Toolbar />
@@ -635,7 +675,18 @@ export default function App() {
                             {(tab) => (
                                 <div classList={{ [styles.layer]: true, [styles.hidden]: activeTab() !== tab.id }}>
                                     <PaperFlex direction={tab.split?.direction === "down" ? "column" : "row"} fullWidth fullHeight minHeight={0}>
-                                        <Pane tab={tab} session={tab.id} />
+                                        <Show when={tab.split} fallback={<Pane tab={tab} session={tab.id} />}>
+                                            {/* the line between the two shells drags; each keeps a floor */}
+                                            <PaperFlex
+                                                direction={tab.split?.direction === "down" ? "column" : "row"}
+                                                resizable
+                                                flex
+                                                minWidth="field"
+                                                minHeight="field"
+                                            >
+                                                <Pane tab={tab} session={tab.id} />
+                                            </PaperFlex>
+                                        </Show>
                                         <Show when={tab.split}>
                                             {(shown) => {
                                                 // read once: a split keeps its session, and a read
@@ -645,6 +696,7 @@ export default function App() {
                                                     <Pane
                                                         tab={tab}
                                                         session={session}
+                                                        floor
                                                         class={tab.split?.direction === "down" ? styles.splitDown : styles.splitRight}
                                                     />
                                                 );
