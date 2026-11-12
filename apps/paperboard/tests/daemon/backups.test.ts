@@ -158,9 +158,9 @@ describe("named sources and beforeBackup", () => {
 		await installPanelFiles(dir, {
 			id: "test.prep",
 			service: countedService(log, {
-				extra: "let release: () => void = () => {}; let mode = 'refuse';",
+				extra: "let released = false; let release: () => void = () => { released = true; }; let mode = 'refuse';",
 				actions: "{ ping: async () => 'pong', allow: async () => { mode = 'wait'; return true; }, release: async () => { release(); return true; } }",
-				options: "beforeBackup: async () => { if (mode === 'refuse') throw new Error('world is busy'); await new Promise<void>((r) => { release = r; }); },",
+				options: "beforeBackup: async () => { if (mode === 'refuse') throw new Error('world is busy'); if (!released) await new Promise<void>((r) => { release = r; }); },",
 			}),
 		});
 		const daemon = await startDaemon({ dataDir: dir });
