@@ -51,8 +51,8 @@ export interface SavedFlows {
 
 export const EMPTY_FLOWS: SavedFlows = { workspace: {}, schemas: {} };
 
-/** The service's own actions, which only this panel's page calls. */
-export const SERVICE_ACTIONS = {
+/** The service's own calls, which only this panel's page makes. */
+export const SERVICE_CALLS = {
     load: "load-flows",
     save: "save-flows",
     run: "run-flows",

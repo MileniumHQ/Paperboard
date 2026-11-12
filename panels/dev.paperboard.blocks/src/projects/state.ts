@@ -4,7 +4,7 @@
 import { createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { bridge } from "../bridge";
-import { SERVICE_ACTIONS, type PanelState } from "../panel";
+import { SERVICE_CALLS, type PanelState } from "../panel";
 import type { ProjectSummary } from "../lib/projects";
 
 export type ProjectsState = ReturnType<typeof createProjects>;
@@ -39,13 +39,13 @@ export function createProjects() {
         /** the projects Home shows: a draft is only seen in its editor */
         kept: () => state.projects.filter((p) => !p.draft),
         find: (id: string): ProjectSummary | undefined => state.projects.find((p) => p.id === id),
-        create: (name?: string) => bridge.call<ProjectSummary>(SERVICE_ACTIONS.createProject, name ? { name } : {}),
-        rename: (project: string, name: string) => bridge.call<ProjectSummary>(SERVICE_ACTIONS.updateProject, { project, name }),
-        setEnabled: (project: string, enabled: boolean) => bridge.call<ProjectSummary>(SERVICE_ACTIONS.updateProject, { project, enabled }),
-        duplicate: (project: string) => bridge.call<ProjectSummary>(SERVICE_ACTIONS.duplicateProject, { project }),
-        remove: (project: string) => bridge.call<{ deleted: boolean }>(SERVICE_ACTIONS.deleteProject, { project }),
+        create: (name?: string) => bridge.call<ProjectSummary>(SERVICE_CALLS.createProject, name ? { name } : {}),
+        rename: (project: string, name: string) => bridge.call<ProjectSummary>(SERVICE_CALLS.updateProject, { project, name }),
+        setEnabled: (project: string, enabled: boolean) => bridge.call<ProjectSummary>(SERVICE_CALLS.updateProject, { project, enabled }),
+        duplicate: (project: string) => bridge.call<ProjectSummary>(SERVICE_CALLS.duplicateProject, { project }),
+        remove: (project: string) => bridge.call<{ deleted: boolean }>(SERVICE_CALLS.deleteProject, { project }),
         /** a new project left without a block is not kept; the service checks it still is a draft */
-        discardDraft: (project: string) => bridge.call<{ deleted: boolean }>(SERVICE_ACTIONS.deleteProject, { project, onlyDraft: true }),
+        discardDraft: (project: string) => bridge.call<{ deleted: boolean }>(SERVICE_CALLS.deleteProject, { project, onlyDraft: true }),
     };
 }
 

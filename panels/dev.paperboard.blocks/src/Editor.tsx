@@ -37,7 +37,7 @@ import { appendWorkspace } from "./lib/appendWorkspace";
 import { paperDropdowns } from "./lib/dropdownPlacement";
 import { errorMessage } from "./lib/failure";
 import type { SavedWorkspace } from "./lib/interpreter";
-import { SERVICE_ACTIONS, type PanelState, type SavedFlows } from "./panel";
+import { SERVICE_CALLS, type PanelState, type SavedFlows } from "./panel";
 import { bridge, type Notice } from "./bridge";
 import type { CanvasPreview, ProjectSummary } from "./lib/projects";
 import type { ProjectsState } from "./projects/state";
@@ -353,7 +353,7 @@ export default function Editor(props: {
         if (!workspace || loading) return saving;
         const flows = snapshot();
         const preview = canvasPreview(workspace);
-        saving = saving.catch(() => undefined).then(() => bridge.call(SERVICE_ACTIONS.save, { project, flows, preview })).then(() => {
+        saving = saving.catch(() => undefined).then(() => bridge.call(SERVICE_CALLS.save, { project, flows, preview })).then(() => {
             setNotice((shown) => (shown?.title === NOT_SAVED ? null : shown));
         });
         return saving;
@@ -376,7 +376,7 @@ export default function Editor(props: {
         if (!workspace) throw new Error("The canvas isn't drawn yet");
         loading = true;
         try {
-            const flows = await bridge.call<SavedFlows>(SERVICE_ACTIONS.load, { project });
+            const flows = await bridge.call<SavedFlows>(SERVICE_CALLS.load, { project });
             await refreshBlocks(flows.schemas);
             Blockly.serialization.workspaces.load(flows.workspace, workspace);
             markAway();
@@ -478,7 +478,7 @@ export default function Editor(props: {
             });
 
             (async () => {
-                const flows = await bridge.call<SavedFlows>(SERVICE_ACTIONS.load, { project });
+                const flows = await bridge.call<SavedFlows>(SERVICE_CALLS.load, { project });
                 await refreshBlocks(flows.schemas);
                 if (closed) return;
                 Blockly.serialization.workspaces.load(flows.workspace, workspace!);
@@ -564,7 +564,7 @@ export default function Editor(props: {
         for (const block of workspace?.getAllBlocks(false) ?? []) block.setWarningText(null, "run");
         // Run starts what is saved, so the latest edits go first
         saveNow()
-            .then(() => bridge.call<number>(SERVICE_ACTIONS.run, { project }))
+            .then(() => bridge.call<number>(SERVICE_CALLS.run, { project }))
             .catch(fail("Run didn't start"));
     };
 
@@ -708,7 +708,7 @@ export default function Editor(props: {
                                     variant="danger"
                                     icon
                                     disabled={running() === 0}
-                                    onClick={() => bridge.call(SERVICE_ACTIONS.stop, { project }).catch(fail("Stop didn't work"))}
+                                    onClick={() => bridge.call(SERVICE_CALLS.stop, { project }).catch(fail("Stop didn't work"))}
                                     title={running() === 1 ? "Stop the flow running now" : `Stop the ${running()} flows running now`}
                                     aria-label="Stop"
                                 >
@@ -781,7 +781,7 @@ export default function Editor(props: {
                                 </PaperQuote>
                             )}
                         </Show>
-                        <Console entries={log()} onClear={() => bridge.call(SERVICE_ACTIONS.clearLog, { project }).catch(fail("The log wasn't cleared"))} />
+                        <Console entries={log()} onClear={() => bridge.call(SERVICE_CALLS.clearLog, { project }).catch(fail("The log wasn't cleared"))} />
                     </div>
                     <div class={styles.bottomRight}>
                         <PaperFlex direction="column" gap="half">

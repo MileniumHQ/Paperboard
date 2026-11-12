@@ -2,13 +2,13 @@
 // for the events the switched-on projects start from, and runs them, whether
 // or not a window is open. The page edits one project's flows at a time and
 // shows the run log this service keeps.
-import { blockEntry, blocksApi, config, definePanelService, defineAction, type ServiceContext } from "@mileniumhq/paperapi";
+import { blockEntry, blocksApi, config, definePanelService, type ServiceContext } from "@mileniumhq/paperapi";
 import { BlockError, hatInputs, isHat, runHat, type Host, type SavedBlock } from "./lib/interpreter";
 import { BUILTIN, parseEntry, parseRegistryBlockType, registryBlockType } from "./lib/names";
 import { BlocksAnnouncer, FLOW_FAILED_EVENT, blocksPanelBlocks } from "./blocks";
 import { readFlows } from "./lib/flows";
 import { ProjectStore, readPreview } from "./lib/projects";
-import { DEFAULT_STATE, MAX_LOG, PANEL_ID, SERVICE_ACTIONS, type LogEntry, type PanelState, type SavedFlows } from "./panel";
+import { DEFAULT_STATE, MAX_LOG, PANEL_ID, SERVICE_CALLS, type LogEntry, type PanelState, type SavedFlows } from "./panel";
 
 type Ctx = ServiceContext<PanelState>;
 
@@ -189,24 +189,17 @@ const inputsOf = (inputs: unknown): Record<string, unknown> => (isRecord(inputs)
 // settled once the projects are read: with null, or with why they couldn't be
 let settle!: (failure: string | null) => void;
 const read = new Promise<string | null>((resolve) => (settle = resolve));
-/** Every action waits for the projects to be read, and says so if they couldn't be. */
+/** Every call waits for the projects to be read, and says so if they couldn't be. */
 async function opened(): Promise<void> {
     const failure = await read;
     if (failure) throw new Error(`The projects couldn't be read: ${failure}`);
 }
 
-const internal = (id: string, run: (inputs: Record<string, unknown>) => unknown) =>
-    defineAction({
-        id,
-        name: id,
-        description: "",
-        internal: true,
-        inputs: {},
-        run: async (_ctx: unknown, inputs: unknown) => {
-            await opened();
-            return run(inputsOf(inputs));
-        },
-    });
+/** A call the panel's own page makes: it waits for the projects to be read. */
+const call = (run: (inputs: Record<string, unknown>) => unknown) => async (_ctx: unknown, input: unknown) => {
+    await opened();
+    return run(inputsOf(input));
+};
 
 /** A project change, then the list every window shows. */
 const changing = async <T>(work: Promise<T>): Promise<T> => {
@@ -218,25 +211,25 @@ const changing = async <T>(work: Promise<T>): Promise<T> => {
 export default definePanelService({
     id: PANEL_ID,
     state: DEFAULT_STATE,
-    actions: [
-        internal(SERVICE_ACTIONS.load, ({ project }) => store.flows(project)),
-        internal(SERVICE_ACTIONS.save, ({ project, flows, preview }) => changing(store.save(project, readFlows(flows), readPreview(preview)))),
-        internal(SERVICE_ACTIONS.run, ({ project }) => runProject(project)),
-        internal(SERVICE_ACTIONS.stop, ({ project }) => stop(String(project))),
-        internal(SERVICE_ACTIONS.clearLog, ({ project }) => {
+    calls: {
+        [SERVICE_CALLS.load]: call(({ project }) => store.flows(project)),
+        [SERVICE_CALLS.save]: call(({ project, flows, preview }) => changing(store.save(project, readFlows(flows), readPreview(preview)))),
+        [SERVICE_CALLS.run]: call(({ project }) => runProject(project)),
+        [SERVICE_CALLS.stop]: call(({ project }) => stop(String(project))),
+        [SERVICE_CALLS.clearLog]: call(({ project }) => {
             ctx.setState((prev) => ({ log: prev.log.filter((entry) => entry.project !== project) }));
             return true;
         }),
-        internal(SERVICE_ACTIONS.createProject, ({ name }) => changing(store.create(name))),
-        internal(SERVICE_ACTIONS.updateProject, ({ project, name, enabled }) => changing(store.update(project, { name, enabled }))),
-        internal(SERVICE_ACTIONS.duplicateProject, ({ project }) => changing(store.duplicate(project))),
-        internal(SERVICE_ACTIONS.deleteProject, async ({ project, onlyDraft }) => {
+        [SERVICE_CALLS.createProject]: call(({ name }) => changing(store.create(name))),
+        [SERVICE_CALLS.updateProject]: call(({ project, name, enabled }) => changing(store.update(project, { name, enabled }))),
+        [SERVICE_CALLS.duplicateProject]: call(({ project }) => changing(store.duplicate(project))),
+        [SERVICE_CALLS.deleteProject]: call(async ({ project, onlyDraft }) => {
             const deleted = await changing(store.remove(project, onlyDraft === true));
             // a deleted project's flows stop with it
             if (deleted) stop(String(project));
             return { deleted };
         }),
-    ],
+    },
     async onInit(context) {
         ctx = context;
         try {
