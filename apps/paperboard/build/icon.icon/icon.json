@@ -1,0 +1,58 @@
+{
+  "fill": {
+    "linear-gradient": [
+      "srgb:0.42745,0.70196,1.00000,1.00000",
+      "srgb:0.20392,0.53333,0.93725,1.00000"
+    ],
+    "orientation": {
+      "start": {
+        "x": 0,
+        "y": 0
+      },
+      "stop": {
+        "x": 1,
+        "y": 1
+      }
+    }
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "glyph-front.svg",
+          "name": "glyph-front",
+          "glass": true
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.4
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "glyph-back.svg",
+          "name": "glyph-back",
+          "glass": true,
+          "opacity": 0.5
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.4
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}

@@ -52,7 +52,9 @@ mac:
     extendInfo:
         NSMicrophoneUsageDescription: A panel you allowed wants to hear you.
         NSCameraUsageDescription: A panel you allowed wants to see you.
-    icon: build/icon.icns
+    # Icon Composer: Liquid Glass on macOS 26+, and actool derives the .icns
+    # older macOS shows. Compiling it needs Xcode 26 or later.
+    icon: build/icon.icon
     category: public.app-category.utilities
     target:
         # ZIP is both the installer users extract and the payload

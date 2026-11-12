@@ -89,6 +89,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y rpm
       - run: bun install --frozen-lockfile
+      # The macOS icon is an Icon Composer .icon, which only Xcode 26's
+      # actool compiles. Runners keep an older Xcode selected by default.
+      - name: Use Xcode 26 or later
+        if: matrix.target.os == 'macos'
+        run: |
+          xcode=$(for x in /Applications/Xcode_*.app; do
+            v=${x#/Applications/Xcode_}; v=${v%.app}
+            [ "${v%%.*}" -ge 26 ] 2>/dev/null && echo "$v $x"
+          done | sort -V | tail -1 | cut -d' ' -f2-)
+          [ -n "$xcode" ] || { echo "No Xcode 26 or later on this runner:" >&2; ls -d /Applications/Xcode*.app >&2; exit 1; }
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$xcode/Contents/Developer" actool --version
       - name: Build
         run: bun scripts/publish.ts ci-build --target ${{ matrix.target.name }}
       - uses: actions/upload-artifact@v4
