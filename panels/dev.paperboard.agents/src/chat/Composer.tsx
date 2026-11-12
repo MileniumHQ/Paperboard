@@ -4,7 +4,7 @@
 // (the model, the computer) lives in the menu and settings.
 
 import { For, Show, createEffect, createSignal } from "solid-js";
-import { PaperButton, PaperEffect, PaperIcon, PaperQuote } from "@mileniumhq/paperui";
+import { PaperButton, PaperEffect, PaperIcon, PaperQuote, haptic } from "@mileniumhq/paperui";
 import { LIMITS, type ChatEntry } from "../contract";
 import type { Agent } from "../lib/agent";
 import { failure, type Failure } from "../lib/failure";
@@ -41,6 +41,8 @@ export default function Composer(props: {
         if (!ready()) return;
         const text = props.draft.trim();
         setError(null);
+        // felt as the message leaves, not once the service has it
+        haptic("send");
         try {
             await agent.send(text, props.replyTo?.id, tray().ids());
             props.onDraft("");

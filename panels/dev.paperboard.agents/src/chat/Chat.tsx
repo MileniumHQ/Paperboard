@@ -145,6 +145,15 @@ export default function Chat(props: { agent: Agent; face: FaceController; apps: 
         return !!last && last.side === "them" && !!last.entry && Date.now() - last.entry.at < GROUP_MS;
     };
 
+    // a reply that arrives while the chat is open is felt once, like a text coming in; a conversation loading (every id new) is not a reply
+    let known = new Set<string>();
+    createEffect(() => {
+        const ids = agent.entries.map((e) => e.id);
+        const fresh = agent.entries.filter((e) => !known.has(e.id));
+        if (known.size > 0 && fresh.length < ids.length && fresh.some((e) => e.kind === "agent")) haptic("receive");
+        known = new Set(ids);
+    });
+
     // follow the conversation down as it grows, unless the user scrolled up to read
     let list!: HTMLDivElement;
     let pinned = true;
