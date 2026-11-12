@@ -11,6 +11,7 @@ import {
     useContextMenuState,
     getVarCss,
     PaperSlidePage,
+    showToast,
 } from "@mileniumhq/paperui";
 import {
     loadInstalledPanelMedia,
@@ -47,6 +48,7 @@ import ConnectionLostOverlay from "./components/computer/ConnectionLostOverlay";
 import OfflineComputerModal from "./components/computer/OfflineComputerModal";
 import ComputerRail from "./components/computer/ComputerRail";
 import ComputerContextMenu from "./components/computer/ComputerContextMenu";
+import RenameComputerModal from "./components/computer/RenameComputerModal";
 import HomeView from "./components/home/HomeView";
 import AppUpdateModal from "./components/layout/AppUpdateModal";
 import { useAppUpdate } from "./hooks/useAppUpdate";
@@ -55,7 +57,7 @@ import { pendingUpdates } from "../../shared/updateQueue";
 import TopBar from "./components/layout/TopBar";
 import { computerIcon } from "./components/computer/computerIcon";
 import MobileWelcome from "./components/computer/MobileWelcome";
-import { shownComputers, showsWelcome } from "./lib/phoneComputers";
+import { orderWithShown, shownComputers, showsWelcome } from "./lib/phoneComputers";
 import libraryIcon from "./assets/PanelLibrary.png";
 import styles from "./App.module.css";
 import iconStyles from "./components/computer/panelIcon.module.css";
@@ -70,6 +72,7 @@ const App: Component = () => {
     const updateQueue = useUpdateQueue();
     const {
         computers,
+        setComputers,
         activeComputerId,
         setActiveComputerId,
         offlineTarget,
@@ -112,6 +115,7 @@ const App: Component = () => {
     const [isForgetConfirmOpen, setIsForgetConfirmOpen] = createSignal(false);
     const [isForgetting, setIsForgetting] = createSignal(false);
     const [forgetError, setForgetError] = createSignal<string | null>(null);
+    const [renameComputerId, setRenameComputerId] = createSignal<string | null>(null);
     const [isUninstallModalOpen, setIsUninstallModalOpen] =
         createSignal<boolean>(false);
     const [uninstallTarget, setUninstallTarget] =
@@ -471,6 +475,47 @@ const App: Component = () => {
         computerContextMenu.openAtMouse(e);
     };
 
+    // the computer's info page: the same page its header opens
+    const openComputerInfo = (compId: string) => {
+        setRailMode("computer");
+        setComputerTab(compId, "settings");
+        openMobilePage();
+        void handleComputerSelect(compId);
+    };
+
+    const handleInfoFromMenu = () => {
+        computerContextMenu.close();
+        const compId = contextMenuComputerId();
+        setContextMenuComputerId(null);
+        if (compId) openComputerInfo(compId);
+    };
+
+    const handleRenameFromMenu = () => {
+        computerContextMenu.close();
+        setRenameComputerId(contextMenuComputerId());
+        setContextMenuComputerId(null);
+    };
+
+    // the rail moves at once; a failed save says so and puts it back
+    const handleReorderComputers = async (shownIds: string[]) => {
+        const before = computers();
+        const ids = orderWithShown(before.map((c) => c.id), shownIds);
+        const byId = new Map(before.map((c) => [c.id, c]));
+        setComputers(ids.map((id) => byId.get(id)!));
+        try {
+            await computersApi.reorder(ids);
+        } catch (err) {
+            logToMain("error", "Failed to reorder computers:", err);
+            setComputers(before);
+            showToast({
+                variant: "danger",
+                title: "Couldn't move that computer",
+                message: err instanceof Error ? err.message : String(err),
+            });
+            void refreshComputers();
+        }
+    };
+
     const handleForgetFromMenu = () => {
         computerContextMenu.close();
         setForgetError(null);
@@ -625,6 +670,7 @@ const App: Component = () => {
                         onSelect={(val) => handleRailSelect(val)}
                         onAdd={() => setIsSetupOpen(true)}
                         onComputerContextMenu={handleComputerContextMenu}
+                        onReorder={(ids) => void handleReorderComputers(ids)}
                         loadFailed={computersLoadFailed()}
                         onRetryLoad={() => void refreshComputers()}
                         inert={mobilePageOpen()}
@@ -870,6 +916,7 @@ const App: Component = () => {
                                             <ComputerSettings
                                                 computer={comp}
                                                 onRemove={handleRemoveComputer}
+                                                onChangeName={() => setRenameComputerId(comp.id)}
                                             />
                                         </PaperFlex>
                                     );
@@ -1005,7 +1052,15 @@ const App: Component = () => {
 
             <ComputerContextMenu
                 menu={computerContextMenu}
+                isLocal={Boolean(computers().find((c) => c.id === contextMenuComputerId())?.isLocal)}
+                onInfo={handleInfoFromMenu}
+                onRename={handleRenameFromMenu}
                 onForget={handleForgetFromMenu}
+            />
+
+            <RenameComputerModal
+                computer={computers().find((c) => c.id === renameComputerId())}
+                onClose={() => setRenameComputerId(null)}
             />
 
             <LibraryContextMenu

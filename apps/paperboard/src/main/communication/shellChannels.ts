@@ -10,6 +10,7 @@ export const SHELL_INVOKE_CHANNELS = [
     "computer-update",
     "computer-remove",
     "computer-switch",
+    "computer-reorder",
     "discovery-list",
     "open-panel-folder",
     "panel-listing-file",

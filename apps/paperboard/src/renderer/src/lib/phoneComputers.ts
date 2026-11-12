@@ -15,3 +15,13 @@ export function shownComputers<T extends ListedComputer>(computers: T[], mobile:
 export function showsWelcome(computers: ListedComputer[], mobile: boolean): boolean {
     return mobile && shownComputers(computers, mobile).length === 0;
 }
+
+/**
+ * Every computer's id in its new order, after the shown ones were dragged
+ * into `shownOrder`: a computer the phone hides keeps its place.
+ */
+export function orderWithShown(allIds: string[], shownOrder: string[]): string[] {
+    const shown = new Set(shownOrder);
+    const next = [...shownOrder];
+    return allIds.map((id) => (shown.has(id) ? next.shift()! : id));
+}

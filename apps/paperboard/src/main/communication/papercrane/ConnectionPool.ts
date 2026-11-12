@@ -50,6 +50,20 @@ export function classifyProbeError(err: any): string {
     return msg || "Unreachable";
 }
 
+const LOCAL_COMPUTER_NAME = "This Computer";
+export const COMPUTER_NAME_MAX = 64;
+
+// a name is shown on the rail and in every header; blank or huge is refused
+export function checkComputerName(name: unknown): string {
+    if (typeof name !== "string") throw new Error("A computer name must be text.");
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error("A computer needs a name.");
+    if (trimmed.length > COMPUTER_NAME_MAX) {
+        throw new Error(`A computer name can be at most ${COMPUTER_NAME_MAX} characters.`);
+    }
+    return trimmed;
+}
+
 // every computer, including local, is served by a daemon
 export class ConnectionPool extends EventEmitter {
     private computers: Map<string, StoredComputer> = new Map();
@@ -111,7 +125,8 @@ export class ConnectionPool extends EventEmitter {
         const info = await getDetailedOsInfo();
         const localComp: StoredComputer = {
             id: "local",
-            name: "This Computer",
+            // a name the person gave this computer outlives the refresh
+            name: this.computers.get("local")?.name || LOCAL_COMPUTER_NAME,
             host: "127.0.0.1",
             port: DEFAULT_PORT,
             isLocal: true,
@@ -308,6 +323,7 @@ export class ConnectionPool extends EventEmitter {
             logger.warn(`[ConnectionPool] refusing invalid port ${JSON.stringify(updates.port)} for ${id}`);
             return false;
         }
+        if (updates.name !== undefined) updates = { ...updates, name: checkComputerName(updates.name) };
         const comp = this.computers.get(id);
         if (!comp) return false;
         const before = { ...comp };
@@ -319,6 +335,27 @@ export class ConnectionPool extends EventEmitter {
         }
         this.emit("change");
         return true;
+    }
+
+    /**
+     * The rail's order, which is the order of the paired computers file.
+     * The ids must be exactly the stored computers: a list that drops or
+     * invents one is refused, so a stale renderer can never lose a pairing.
+     */
+    public reorderComputers(ids: string[]): void {
+        const current = Array.from(this.computers.keys());
+        const unique = new Set(ids);
+        if (unique.size !== ids.length || ids.length !== current.length || current.some((id) => !unique.has(id))) {
+            throw new Error("The computer list changed while you were reordering it. Try again.");
+        }
+        const before = new Map(this.computers);
+        this.computers = new Map(ids.map((id) => [id, before.get(id)!]));
+        try { this.saveConfig(); }
+        catch (err) {
+            this.computers = before;
+            throw err;
+        }
+        this.emit("change");
     }
 
     public async removeComputer(id: string): Promise<boolean> {

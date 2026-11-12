@@ -1,4 +1,4 @@
-import type { Component } from "solid-js";
+import { type Component, Show } from "solid-js";
 import {
     PaperContextMenu,
     PaperContextMenuItem,
@@ -7,11 +7,14 @@ import {
 
 interface ComputerContextMenuProps {
     menu: ReturnType<typeof useContextMenuState>;
+    /** this computer can't be forgotten (it's the one Paperboard runs on) */
+    isLocal: boolean;
+    onInfo: () => void;
+    onRename: () => void;
     onForget: () => void;
 }
 
-// Right-click menu for non-local computers in the sidebar. Single action:
-// forget the computer without opening its info view first.
+// Right-click menu for a computer on the rail.
 const ComputerContextMenu: Component<ComputerContextMenuProps> = (props) => {
     return (
         <PaperContextMenu
@@ -20,9 +23,17 @@ const ComputerContextMenu: Component<ComputerContextMenuProps> = (props) => {
             placement={props.menu.placement()}
             onClose={() => props.menu.close()}
         >
-            <PaperContextMenuItem icon="delete" danger onClick={() => props.onForget()}>
-                Forget Computer
+            <PaperContextMenuItem icon="info" onClick={() => props.onInfo()}>
+                Computer Info
             </PaperContextMenuItem>
+            <PaperContextMenuItem icon="edit" onClick={() => props.onRename()}>
+                Change Name
+            </PaperContextMenuItem>
+            <Show when={!props.isLocal}>
+                <PaperContextMenuItem icon="delete" danger onClick={() => props.onForget()}>
+                    Forget Computer
+                </PaperContextMenuItem>
+            </Show>
         </PaperContextMenu>
     );
 };

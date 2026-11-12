@@ -25,6 +25,8 @@ interface ComputerRailProps {
     onSelect: (val: string) => void;
     onAdd: () => void;
     onComputerContextMenu?: (compId: string, e: MouseEvent) => void;
+    /** the listed computers' ids, in the order they were dragged into */
+    onReorder?: (ids: string[]) => void;
     // R9: the initial computers-list failed — the rail shows only "local"
     // and the user needs a way to retry instead of a silently broken rail
     loadFailed?: boolean;
@@ -33,7 +35,7 @@ interface ComputerRailProps {
     inert?: boolean;
 }
 
-// Left rail: Home ("__home"), computers, add-computer action, settings entry ("__settings")
+// Left rail: Home ("__home"), computers (drag to reorder), add-computer action, settings entry ("__settings")
 const ComputerRail = (props: ComputerRailProps): JSX.Element => {
     return (
         <PaperRail
@@ -42,6 +44,7 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
             name="computer-selection"
             value={props.value}
             onValueChange={(val) => props.onSelect(String(val))}
+            onReorder={(ids) => props.onReorder?.(ids)}
         >
             <PaperRailItem value="__home" icon="home" label="Home" />
             <PaperSeparator class={styles.separator} />
@@ -51,9 +54,8 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
                         value={comp.id}
                         icon={computerIcon(comp)}
                         label={`${comp.name} (${comp.host})`}
-                        onContextMenu={(e: MouseEvent) => {
-                            if (!comp.isLocal) props.onComputerContextMenu?.(comp.id, e);
-                        }}
+                        reorderable
+                        onContextMenu={(e: MouseEvent) => props.onComputerContextMenu?.(comp.id, e)}
                     />
                 )}
             </For>

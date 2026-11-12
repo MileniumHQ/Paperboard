@@ -124,6 +124,10 @@ export const computersApi = {
     switch: (id: string): Promise<boolean> =>
         requireIpc().invoke<boolean>("computer-switch", id),
 
+    /** every computer's id, in the rail's new order */
+    reorder: (ids: string[]): Promise<void> =>
+        requireIpc().invoke<void>("computer-reorder", { ids }),
+
     onChanged: (
         cb: (data: { computers?: ComputerInfo[]; activeId?: string }) => void,
     ): (() => void) => {

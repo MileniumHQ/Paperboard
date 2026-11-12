@@ -3,6 +3,7 @@ import {
     PaperText,
     PaperButton,
     PaperFlex,
+    PaperIcon,
     PaperModal,
     PaperPage,
     PaperPageHeader,
@@ -17,6 +18,7 @@ export interface ComputerSettingsProps {
     onRemove?: (
         id: string,
     ) => Promise<{ ok: boolean; error?: string } | void> | void;
+    onChangeName: () => void;
 }
 
 const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
@@ -53,7 +55,12 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                 icon={computerIcon({ name: props.computer?.name, isLocal: isLocal() })}
                 title={props.computer?.name || "This Computer"}
                 subtitle={address()}
-            />
+            >
+                <PaperButton onClick={() => props.onChangeName()}>
+                    <PaperIcon>edit</PaperIcon>
+                    Change Name
+                </PaperButton>
+            </PaperPageHeader>
 
             <PaperFlex direction="column" gap="double" fullWidth>
                 <Show when={props.computer}>

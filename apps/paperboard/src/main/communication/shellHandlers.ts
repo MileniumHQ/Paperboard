@@ -36,6 +36,7 @@ export const SHARED_SHELL_INVOKE_CHANNELS = [
     "computer-update",
     "computer-remove",
     "computer-switch",
+    "computer-reorder",
     "discovery-list",
     "open-panel-folder",
     "panel-listing-file",
@@ -105,6 +106,14 @@ export function createShellInvokeHandlers(
         "computer-remove": (id) => connectionPool.removeComputer(requireString(id, "id")),
 
         "computer-switch": (id) => connectionPool.setActive(requireString(id, "id")),
+
+        "computer-reorder": (args) => {
+            const ids = field(args, "ids");
+            if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) {
+                throw new Error("ids must be a list of computer ids");
+            }
+            connectionPool.reorderComputers(ids);
+        },
 
         "discovery-list": () => {
             discovery.refresh();
