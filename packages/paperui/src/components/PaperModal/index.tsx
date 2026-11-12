@@ -128,10 +128,13 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
         setLayer(layer);
 
         // the modal stays mounted, so a field's own autofocus fires once at
-        // mount: the modal hands focus to it on every open instead
+        // mount: the modal hands focus to it on every open instead. Without
+        // scrolling: a sheet is still below the screen as it rises, and
+        // scrolling to show it left the whole page scrolled, the sheet stuck
+        // high above where it belongs.
         const focusFrame = requestAnimationFrame(() => {
             if (!modalRef) return;
-            (modalRef.querySelector<HTMLElement>("[autofocus]") ?? modalRef).focus();
+            (modalRef.querySelector<HTMLElement>("[autofocus]") ?? modalRef).focus({ preventScroll: true });
         });
 
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -147,7 +150,7 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
                 )].filter((el) => !el.matches(":disabled") && !el.hidden && !el.closest('[hidden], [inert], [aria-hidden="true"]') && el.getAttribute("aria-disabled") !== "true" && getComputedStyle(el).display !== "none" && getComputedStyle(el).visibility !== "hidden");
                 if (focusables.length === 0) {
                     e.preventDefault();
-                    modalRef.focus();
+                    modalRef.focus({ preventScroll: true });
                     return;
                 }
 
