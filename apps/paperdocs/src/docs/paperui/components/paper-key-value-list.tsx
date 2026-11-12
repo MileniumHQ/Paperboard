@@ -110,7 +110,7 @@ export function Example() {
                         <td><PaperCode>children</PaperCode></td>
                         <td><PaperCode>JSX.Element</PaperCode></td>
                         <td>No default</td>
-                        <td>The value. It is right-aligned and breaks anywhere in a long word, so a long ID wraps instead of overflowing.</td>
+                        <td>The value. It is right-aligned, or left-aligned under its label in a narrow list, and breaks anywhere in a long word, so a long ID wraps instead of overflowing.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode></td>
@@ -124,7 +124,9 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
                 <li>The markup is a description list: each <PaperCode>dt</PaperCode> and <PaperCode>dd</PaperCode> pair sits in a <PaperCode>div</PaperCode>, which HTML allows inside a <PaperCode>dl</PaperCode>. Assistive technology reads the pairs as terms and details.</li>
-                <li>A row lays out the label and value on one line with the baselines aligned, and the gap between them keeps both readable when the line is narrow.</li>
+                <li>A row lays out the label and value on one line with the baselines aligned, and the gap between them keeps both readable.</li>
+                <li>A list narrower than 30rem stacks each row: the label sits over its value, and both read from the left. The list measures its own width, not the window's, so a narrow card on a wide screen stacks too.</li>
+                <li>Because it measures its own width, the list does not size itself to its rows. Put it in a parent that has a width, such as a card, a column or a page, not in one that shrinks to fit its content.</li>
                 <li>The value can be any element: a badge, a link, a copy button. Values do not truncate.</li>
                 <li>The list is static. It has no selection, hover, or empty state: render a PaperEmptyState when there are no rows.</li>
             </PaperTextList>

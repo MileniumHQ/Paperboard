@@ -1,4 +1,7 @@
 .PaperKeyValueList {
+    /* rows read the list's own width, not the window's: a narrow card on a
+       wide screen stacks too */
+    container-type: inline-size;
     display: flex;
     flex-direction: column;
     gap: var(--paper-uigap-half);
@@ -23,4 +26,18 @@
     margin: 0;
     text-align: right;
     overflow-wrap: anywhere;
+}
+
+/* too narrow for a name and a value side by side: the name sits over its
+   value and both read from the left, so neither breaks mid-word */
+@container (max-width: 30rem) {
+    .PaperKeyValue {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--paper-uigap-onefourth);
+    }
+
+    .value {
+        text-align: left;
+    }
 }

@@ -5,7 +5,9 @@
 #   (b) no global selectors escaping .paperui-root: bare `* {` / `*,` and
 #       top-level `:global(` with no local selector anchoring it
 #   (c) no literal px/rem/em in component CSS: sizes are tokens, and the
-#       token files (src/styles/*.css) are the only place literals live
+#       token files (src/styles/*.css) are the only place literals live.
+#       An @container or @media condition is the exception: a query cannot
+#       read a custom property, so its breakpoint has to be a literal
 # Exits 0 only when all hold.
 set -u
 
@@ -51,6 +53,7 @@ fi
 unit_out="$(grep -rnIE '[0-9.]+(px|rem|em)\b' "$SRC/components" "$SRC/templates" \
     --include='*.css' --exclude-dir=node_modules --exclude-dir=dist 2>/dev/null \
     | grep -vE ':[0-9]+:[[:space:]]*\*' \
+    | grep -vE ':[0-9]+:[[:space:]]*@(container|media)[[:space:]]' \
     | grep -vE '0px')"
 if [ -n "$unit_out" ]; then
     echo "FAIL: literal px/rem/em in component CSS (use tokens from src/styles):" >&2
