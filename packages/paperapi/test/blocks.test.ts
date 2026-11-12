@@ -7,12 +7,13 @@ import { startDaemon, type Daemon, type PanelProcess } from "./helpers/daemon";
 setDefaultTimeout(60_000);
 
 const PANEL = "dev.test.blocks";
+const OTHER = "dev.test.caller";
 let daemon: Daemon;
 let panels: PanelProcess[] = [];
 
 beforeAll(async () => {
     daemon = await startDaemon();
-    panels = [await daemon.startPanel(PANEL, "blocks")];
+    panels = [await daemon.startPanel(PANEL, "blocks"), await daemon.startPanel(OTHER, "caller")];
 });
 
 afterAll(async () => {
@@ -81,6 +82,29 @@ describe("a panel's blocks reach the registry as data", () => {
 
     test("blocks are their own registry: Actions lists none of them", async () => {
         expect(await actionsApi.list(PANEL)).toEqual([]);
+    });
+});
+
+describe("an internal block is its panel's own", () => {
+    test("it is never listed, but the panel's own page runs it by name", async () => {
+        const listed = (await blocksApi.list(PANEL)).map((e) => e.entry);
+        expect(listed).toContain("s1/command.kick");
+        expect(listed).not.toContain("s1/command.reset-kicks");
+        await run("kick", { player: { name: "Steve" } });
+        expect(await run("reset-kicks")).toBe(0);
+        expect(await read("kicks")).toBe(0);
+    });
+
+    test("another panel is refused it by the daemon", async () => {
+        await run("kick", { player: { name: "Steve" } });
+        const answer = await blocksApi.run<string>(OTHER, "reach-in", { panel: PANEL });
+        expect(answer.startsWith("refused: ")).toBe(true);
+        expect(answer).toContain(`internal to panel "${PANEL}"`);
+        expect(await read("kicks")).toBeGreaterThan(0);
+    });
+
+    test("internal must be true or false", () => {
+        expect(() => validateBlockDefinitions({ commands: [{ id: "c", name: "C", internal: "yes" as never, run: () => {} }] }, PANEL)).toThrow('Command "c" internal must be true or false');
     });
 });
 

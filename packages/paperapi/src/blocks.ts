@@ -456,7 +456,7 @@ export interface MemoryBlocks {
     /** the panel's own handle, as blocksApi.panel() gives it */
     readonly panel: BlocksHandle;
     defineProject(project: BlockProjectDefinition): Promise<BlocksProjectHandle>;
-    /** every block registered, as blocksApi.list() lists them */
+    /** every block registered, as blocksApi.list() lists them: internal ones left out */
     list(): BlockInfo[];
     run<T = unknown>(command: string, inputs?: Record<string, unknown>, options?: { project?: string }): Promise<T>;
     read<T = unknown>(value: string, inputs?: Record<string, unknown>, options?: { project?: string }): Promise<T>;
@@ -504,7 +504,7 @@ export function memoryBlocks(panelId: string, listeners: MemoryBlocksListeners =
             for (const entry of [...entries.keys()]) if (entry.startsWith(`${project.id}/`)) entries.delete(entry);
         }),
         list: () =>
-            [...entries].map(([entry, { schema }]) => {
+            [...entries].filter(([, { schema }]) => (schema as { internal?: boolean }).internal !== true).map(([entry, { schema }]) => {
                 const slash = entry.indexOf("/");
                 return { panelId, entry, ...(slash === -1 ? {} : { project: entry.slice(0, slash) }), schema };
             }),

@@ -172,6 +172,12 @@ interface BlockDefinitionBase {
      */
     text?: string;
     inputs?: Record<string, BlockInputDefinition>;
+    /**
+     * The panel's own: its page calls it by name (blocksApi.run, read and
+     * onEvent), but it is never listed, so no flow, toolbox or agent sees
+     * it, and the daemon refuses it to every other panel.
+     */
+    internal?: boolean;
 }
 
 export interface BlockCommandDefinition<I = any, O = any> extends BlockDefinitionBase {
@@ -338,6 +344,7 @@ function assertBase(def: BlockDefinitionBase, kind: BlockKind): string {
     assertOptionalText(def.description, `${label} description`, MAX_DESCRIPTION);
     assertOptionalText(def.category, `${label} category`, MAX_NAME);
     assertOptionalText(def.icon, `${label} icon`, MAX_NAME);
+    if (def.internal !== undefined && typeof def.internal !== "boolean") throw new Error(`${label} internal must be true or false`);
     return label;
 }
 

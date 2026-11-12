@@ -91,7 +91,9 @@ export async function handleBlocks(action: string, id: unknown, params: any, ctx
             return true;
         }
         case "blocks:list": {
-            const entries = blocksRegistry.list(assertOptStr(params?.panelId, "panelId", 128));
+            // an internal block is its panel's own, called by name: never listed,
+            // so no toolbox, flow or agent is offered it
+            const entries = blocksRegistry.list(assertOptStr(params?.panelId, "panelId", 128)).filter((e) => e.schema?.internal !== true);
             reply(id, {
                 entries: entries.map((e) => ({ panelId: e.panelId, entry: e.action, ...(e.project !== undefined ? { project: e.project } : {}), schema: e.schema })),
             });

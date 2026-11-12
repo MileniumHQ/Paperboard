@@ -192,13 +192,15 @@ interface BlockSet {
     output?: TypeRef;
     /** what it gives back is called, such as "Answer"; needed for a core type or a list */
     outputName?: string;
+    /** the panel's own: its page calls it, nothing lists it, and other panels are refused */
+    internal?: boolean;
     run: (inputs, ctx: BlockContext) => unknown;
 }
 
 interface BlockValueDefinition {
     id: string;
     name: string;
-    // description, category, icon, text and inputs as for a command
+    // description, category, icon, text, inputs and internal as for a command
     type: TypeRef;
     /** the panel calls changed(id), so Blocks offers "when it changes" */
     changes?: boolean;
@@ -208,7 +210,7 @@ interface BlockValueDefinition {
 interface BlockEventDefinition {
     id: string;
     name: string;
-    // description, category, icon, text and inputs as for a command
+    // description, category, icon, text, inputs and internal as for a command
     /** what it fires with: each one a typed value in the flow */
     values?: Record<string, { type: TypeRef; name: string; description?: string; optional?: boolean }>;
     /** input -> value: the flow starts only when the value equals the input */
@@ -228,6 +230,7 @@ interface BlockContext {
                 <li>A command is always a step. When it has an <PaperCode>output</PaperCode>, its gear opens a tray of what it gave back: the value, named by <PaperCode>outputName</PaperCode> or its type ("message"), and one block per field of its type ("message ID"). Each reads that one block's result in the run.</li>
                 <li>A block that only reads, with no effect, is a value, not a command, even when it takes inputs: an Embed built from its title and text.</li>
                 <li>A filter's input and the value it compares have one type.</li>
+                <li>An <PaperCode>internal</PaperCode> block is how a panel's page talks to its own service: the page calls it by name with <PaperCode>blocksApi.run</PaperCode>, <PaperCode>read</PaperCode> or <PaperCode>onEvent</PaperCode>. It is never listed, so no toolbox, flow or agent offers it, and the daemon refuses it to every other panel. It is checked like any other block. Use it for what only the panel's own page needs, such as saving a layout. What a person would automate is a normal block.</li>
                 <li>An <PaperCode>optional</PaperCode> event value may be left out of a firing, or be <PaperCode>null</PaperCode>: the channel someone left, when they only joined. Inside the flow it reads as nothing. Don't fire empty text in its place.</li>
             </PaperTextList>
 
@@ -282,7 +285,7 @@ interface BlockInfo {
 }`}
             </PaperCode>
             <PaperTextList>
-                <li>A listed schema is the definition without its code, with every custom type named by its panel: <PaperCode>dev.paperboard.gameserver:player</PaperCode>. A field the panel looks up is marked <PaperCode>resolved: true</PaperCode>.</li>
+                <li>Internal blocks are left out of <PaperCode>list</PaperCode>. A listed schema is the definition without its code, with every custom type named by its panel: <PaperCode>dev.paperboard.gameserver:player</PaperCode>. A field the panel looks up is marked <PaperCode>resolved: true</PaperCode>.</li>
                 <li>A call waits 30 seconds by default and 60 at most. <PaperCode>timeoutMs: null</PaperCode> waits it out.</li>
                 <li>A change says only that the value changed. Read it again for the new one.</li>
                 <li>An input whose choices are a function, and a type with choices, are listed with <PaperCode>dynamicChoices: true</PaperCode> and no choices.</li>

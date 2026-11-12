@@ -112,6 +112,8 @@ async function blocks(): Promise<void> {
                 run: () => ++kicks,
             },
             { id: "lie", name: "Lie", output: "number", outputName: "Lie", run: () => "not a number" },
+            // the panel's own page calls it; no other panel may, and nothing lists it
+            { id: "reset-kicks", name: "Reset Kicks", internal: true, output: "number", outputName: "Kicks", run: () => (kicks = 0) },
             {
                 id: "warp",
                 name: "Warp",
@@ -188,7 +190,27 @@ async function blocks(): Promise<void> {
     });
 }
 
-const scenarios: Record<string, () => Promise<void>> = { inputs, owner, blocks };
+// another panel, which tries to run the blocks panel's internal command
+async function caller(): Promise<void> {
+    await blocksApi.panel().register({
+        commands: [
+            {
+                id: "reach-in",
+                name: "Reach In",
+                inputs: { panel: { type: "text", name: "Panel" } },
+                output: "text",
+                outputName: "Answer",
+                run: ({ panel }: { panel: string }) =>
+                    blocksApi.run(panel, "reset-kicks", {}, { project: "s1" }).then(
+                        (result) => `ran: ${JSON.stringify(result)}`,
+                        (err: Error) => `refused: ${err.message}`,
+                    ),
+            },
+        ],
+    });
+}
+
+const scenarios: Record<string, () => Promise<void>> = { inputs, owner, blocks, caller };
 const scenario = scenarios[process.env.PANEL_SCENARIO ?? ""];
 if (!scenario) throw new Error(`unknown PANEL_SCENARIO ${process.env.PANEL_SCENARIO}`);
 await scenario();
