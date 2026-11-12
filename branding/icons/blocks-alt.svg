@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="875" height="875" viewBox="0 0 875 875" fill="none">
+  <g id="layer-1">
+    <path d="M75 225C75 142.157 142.157 75 225 75H725C807.843 75 875 142.157 875 225V650C875 774.264 774.264 875 650 875H225C142.157 875 75 807.843 75 725V225Z" fill="#848484"/>
+  </g>
+  <g id="layer-2">
+    <rect x="15" y="15" width="770" height="770" rx="135" fill="#CACACA"/>
+    <rect x="15" y="15" width="770" height="770" rx="135" fill="url(#dots)"/>
+    <rect x="15" y="15" width="770" height="770" rx="135" stroke="#0F63C8" stroke-width="30"/>
+  </g>
+  <g id="layer-3">
+    <path d="M153 277V508C153 519.046 161.954 528 173 528H255C266.046 528 275 536.954 275 548V630C275 641.046 283.954 650 295 650H501C512.046 650 521 641.046 521 630V419C521 407.954 512.046 399 501 399H295C283.954 399 275 390.046 275 379V297C275 285.954 283.954 277 295 277H501C512.046 277 521 268.046 521 257V169C521 157.954 529.954 149 541 149H628C639.046 149 648 157.954 648 169V399" stroke-width="70" stroke-miterlimit="3.99393" stroke-linecap="round" stroke="#1491F1"/>
+  </g>
+  <defs>
+    <pattern id="dots" x="376" y="376" width="125.28" height="125.28" patternUnits="userSpaceOnUse">
+      <circle cx="24" cy="24" r="24" fill="#9E9E9E"/>
+    </pattern>
+  </defs>
+</svg>

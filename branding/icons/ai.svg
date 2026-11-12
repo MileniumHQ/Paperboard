@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="875" height="875" viewBox="0 0 875 875" fill="none">
+  <g id="layer-1">
+    <path d="M75 225C75 142.157 142.157 75 225 75H725C807.843 75 875 142.157 875 225V650C875 774.264 774.264 875 650 875H225C142.157 875 75 807.843 75 725V225Z" fill="#00705C"/>
+  </g>
+  <g id="layer-2">
+    <rect width="800" height="800" rx="150" fill="url(#gradient)"/>
+  </g>
+  <g id="layer-3">
+    <circle cx="174" cy="206" r="50" fill="white"/>
+    <circle cx="381" cy="660" r="50" fill="white"/>
+    <circle cx="151" cy="494" r="50" fill="white"/>
+    <circle cx="648" cy="256" r="50" fill="white"/>
+    <circle cx="648" cy="594" r="50" fill="white"/>
+    <circle cx="511" cy="139" r="50" fill="white"/>
+    <line x1="638" y1="588" x2="638" y2="256" stroke-width="20" stroke="white"/>
+    <line x1="650.071" y1="603.783" x2="376.071" y2="661.783" stroke-width="20" stroke="white"/>
+    <line x1="365.777" y1="646.31" x2="639.777" y2="250.31" stroke-width="20" stroke="white"/>
+    <line x1="174.771" y1="198.54" x2="658.771" y2="248.54" stroke-width="15" stroke="white"/>
+    <line x1="643.104" y1="593.681" x2="187.104" y2="200.681" stroke-width="15" stroke="white"/>
+    <line x1="371.929" y1="656.21" x2="164.929" y2="210.21" stroke-width="20" stroke="white"/>
+    <line x1="141.032" y1="493.204" x2="164.032" y2="205.204" stroke-width="20" stroke="white"/>
+    <line x1="146.681" y1="484.981" x2="643.681" y2="246.981" stroke-width="20" stroke="white"/>
+    <line x1="157.302" y1="481.236" x2="380.302" y2="662.236" stroke-width="20" stroke="white"/>
+    <line x1="153.067" y1="479.216" x2="650.067" y2="584.216" stroke-width="20" stroke="white"/>
+    <line x1="518.263" y1="140.87" x2="388.263" y2="645.87" stroke-width="15" stroke="white"/>
+    <line x1="651.198" y1="275.33" x2="512.198" y2="146.33" stroke-width="20" stroke="white"/>
+    <line x1="172.175" y1="185.168" x2="506.175" y2="123.168" stroke-width="20" stroke="white"/>
+    <line x1="145.667" y1="488.726" x2="502.667" y2="127.726" stroke-width="15" stroke="white"/>
+    <line x1="638.389" y1="612.761" x2="501.389" y2="135.761" stroke-width="20" stroke="white"/>
+  </g>
+  <defs>
+    <linearGradient id="gradient" x1="772" y1="774" x2="0" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#61FAC7"/>
+      <stop offset="1" stop-color="#3175D4"/>
+    </linearGradient>
+  </defs>
+</svg>

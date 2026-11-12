@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="875" height="875" viewBox="0 0 875 875" fill="none">
+  <g id="layer-1">
+    <path d="M75 225C75 142.157 142.157 75 225 75H725C807.843 75 875 142.157 875 225V650C875 774.264 774.264 875 650 875H225C142.157 875 75 807.843 75 725V225Z" fill="#848484"/>
+  </g>
+  <g id="layer-2">
+    <rect x="15" y="15" width="770" height="770" rx="135" fill="#CACACA"/>
+    <rect x="15" y="15" width="770" height="770" rx="135" fill="url(#dots)"/>
+    <rect x="15" y="15" width="770" height="770" rx="135" stroke="#0F63C8" stroke-width="30"/>
+  </g>
+  <g id="layer-3">
+    <path d="M150 458H200L232 490H306L338 458H650A20 20 0 0 1 670 478V586A20 20 0 0 1 650 606H338L306 638H232L200 606H150A20 20 0 0 1 130 586V478A20 20 0 0 1 150 458Z" fill="#25C025" stroke="#0B720B" stroke-width="12" stroke-linejoin="round"/>
+    <path d="M150 310H200L232 342H306L338 310H650A20 20 0 0 1 670 330V438A20 20 0 0 1 650 458H338L306 490H232L200 458H150A20 20 0 0 1 130 438V330A20 20 0 0 1 150 310Z" fill="#F6C748" stroke="#A17E0D" stroke-width="12" stroke-linejoin="round"/>
+    <path d="M150 162H200L232 194H306L338 162H650A20 20 0 0 1 670 182V290A20 20 0 0 1 650 310H338L306 342H232L200 310H150A20 20 0 0 1 130 290V182A20 20 0 0 1 150 162Z" fill="#FF4E60" stroke="#AE1414" stroke-width="12" stroke-linejoin="round"/>
+  </g>
+  <defs>
+    <pattern id="dots" x="376" y="376" width="125.28" height="125.28" patternUnits="userSpaceOnUse">
+      <circle cx="24" cy="24" r="24" fill="#9E9E9E"/>
+    </pattern>
+  </defs>
+</svg>

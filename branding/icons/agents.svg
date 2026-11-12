@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="875" height="875" viewBox="0 0 875 875" fill="none">
+  <g id="layer-1">
+    <path d="M75 225C75 142.157 142.157 75 225 75H725C807.843 75 875 142.157 875 225V650C875 774.264 774.264 875 650 875H225C142.157 875 75 807.843 75 725V225Z" fill="#06736C"/>
+  </g>
+  <g id="layer-2">
+    <rect width="800" height="800" rx="150" fill="#43BB79"/>
+  </g>
+  <g id="layer-3">
+    <path d="M217.9 235.8L224.7 336.7M564.8 234.1L580.2 336.7M244.4 473.4Q399.9 658.0 555.4 473.4" stroke="white" stroke-width="72" stroke-linecap="round"/>
+  </g>
+</svg>
