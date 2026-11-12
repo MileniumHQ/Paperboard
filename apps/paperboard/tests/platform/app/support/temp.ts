@@ -11,8 +11,11 @@ const made: string[] = [];
 const SUITE_STARTED = Date.now();
 const children = new Set<ChildProcess>();
 
+// The real path: macOS's temp dir is a link (/var → /private/var), and the
+// app built into one bakes in a relative path to its resources that only
+// resolves from the folder Electron's __dirname reports, the real one.
 export function tempDir(label: string): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), `pb-${label}-`));
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), `pb-${label}-`)));
     made.push(dir);
     return dir;
 }
