@@ -41,7 +41,8 @@ export function PaperToggle(props: PaperToggleProps) {
     const isChecked = () => local.checked ?? listChecked() ?? internalChecked();
 
     const flip = (next: boolean) => {
-        haptic(next ? "medium" : "light");
+        // the knob gathers speed and thumps into the far edge, either way
+        haptic("toggle");
 
         setIsAnimating(true);
         setTimeout(() => setIsAnimating(false), 380);

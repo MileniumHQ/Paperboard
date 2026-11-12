@@ -259,7 +259,7 @@ export function Clock() {
             <PaperText preset="subheader" as="h2" id="haptics">Haptics</PaperText>
             <PaperText preset="body" as="p">
                 A haptic is a short vibration for a touch device.
-                Components ask for one by kind when a switch flips, a slider crosses a step, or a press lifts: <PaperLink href="/docs/paperui/papertoggle/">PaperToggle</PaperLink>, <PaperLink href="/docs/paperui/papercheckbox/">PaperCheckbox</PaperLink>, <PaperLink href="/docs/paperui/paperrange/">PaperRange</PaperLink>, <PaperLink href="/docs/paperui/papercopybutton/">PaperCopyButton</PaperLink>, and <PaperLink href="/docs/paperui/papereffect/">PaperEffect</PaperLink>.
+                Components ask for one by kind when a switch flips, a slider crosses a step, a press lifts, or a loader finishes: <PaperLink href="/docs/paperui/papertoggle/">PaperToggle</PaperLink>, <PaperLink href="/docs/paperui/paperloader/">PaperLoader</PaperLink>, <PaperLink href="/docs/paperui/papercheckbox/">PaperCheckbox</PaperLink>, <PaperLink href="/docs/paperui/paperrange/">PaperRange</PaperLink>, <PaperLink href="/docs/paperui/papercopybutton/">PaperCopyButton</PaperLink>, and <PaperLink href="/docs/paperui/papereffect/">PaperEffect</PaperLink>.
                 A panel that builds only from components already has them.
             </PaperText>
             <PaperText preset="body" as="p">
@@ -292,6 +292,11 @@ export function Clock() {
                         <td>Sets a native host's own feedback, <PaperCode>HapticPlayer</PaperCode> being <PaperCode>(kind: HapticKind) =&gt; boolean</PaperCode>. Pass <PaperCode>null</PaperCode> to use the vibrator again. For app shells, not panels.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>hapticEvents</PaperCode></td>
+                        <td><PaperCode>(kind: HapticKind) =&gt; readonly HapticEvent[]</PaperCode></td>
+                        <td>What a kind feels like, for a native host's haptic engine (Core Haptics on iOS). Each <PaperCode>HapticEvent</PaperCode> is <PaperCode>{"{ at, strength, sharpness, hold? }"}</PaperCode>: a tap at <PaperCode>at</PaperCode> milliseconds, or with <PaperCode>hold</PaperCode> a rumble that lasts that long. <PaperCode>strength</PaperCode> runs from 0 to 1, and <PaperCode>sharpness</PaperCode> from a dull thud (0) to a click (1). For app shells, not panels.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>isHapticKind</PaperCode></td>
                         <td><PaperCode>(value: unknown) =&gt; value is HapticKind</PaperCode></td>
                         <td>Whether the value is a known kind.</td>
@@ -304,7 +309,7 @@ export function Clock() {
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                The kinds, with their vibration patterns in milliseconds (vibrate, pause, vibrate):
+                The kinds, with the vibration patterns a plain vibrator plays in milliseconds (vibrate, pause, vibrate). A native host with a haptic engine plays the shaped version from <PaperCode>hapticEvents</PaperCode> instead:
             </PaperText>
             <PaperTable>
                 <thead>
@@ -326,6 +331,12 @@ export function Clock() {
                     <tr><td><PaperCode>thud</PaperCode></td><td>24, 35, 10</td><td>A danger-colored press: heavier, with an echo.</td></tr>
                     <tr><td><PaperCode>lift</PaperCode></td><td>8, 30, 16</td><td>Something held lifts off the page.</td></tr>
                     <tr><td><PaperCode>land</PaperCode></td><td>16, 40, 6</td><td>Something carried is set down.</td></tr>
+                    <tr><td><PaperCode>toggle</PaperCode></td><td>4, 70, 4, 60, 4, 50, 26</td><td>A switch's knob: a faint rumble building as it slides, then a thump as it hits the far edge. PaperToggle plays it.</td></tr>
+                    <tr><td><PaperCode>loaded</PaperCode></td><td>22, 110, 10, 90, 6</td><td>A loader finished: the check pops and its ripple runs out. PaperLoader plays it.</td></tr>
+                    <tr><td><PaperCode>failed</PaperCode></td><td>30, 90, 30</td><td>A loader failed: two firm knocks. PaperLoader plays it.</td></tr>
+                    <tr><td><PaperCode>typing</PaperCode></td><td>3</td><td>A character typed in front of the person. Barely there.</td></tr>
+                    <tr><td><PaperCode>send</PaperCode></td><td>14, 40, 6</td><td>A message sent: a crisp tap as it leaves.</td></tr>
+                    <tr><td><PaperCode>receive</PaperCode></td><td>10, 90, 18</td><td>A message arrived: two soft knocks, the second firmer.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperCode block language="tsx">

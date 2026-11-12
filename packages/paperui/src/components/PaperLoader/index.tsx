@@ -1,5 +1,6 @@
 import styles from "./index.module.css";
-import { createSignal, onCleanup, splitProps, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, on, onCleanup, splitProps, Show, type JSX } from "solid-js";
+import { haptic } from "../../utils/haptics";
 import { LoaderStatus } from "../../types";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
@@ -26,6 +27,16 @@ export interface PaperLoaderProps extends JSX.HTMLAttributes<HTMLDivElement> {
 export interface PaperLoaderGroupProps extends JSX.HTMLAttributes<HTMLDivElement> {}
 
 const CIRCUMFERENCE = 97.39;
+
+// loaders finishing together (a list of steps) are felt once
+const FINISH_HAPTIC_GAP = 400;
+let lastFinishHaptic = 0;
+function finishHaptic(status: LoaderStatus) {
+    const now = Date.now();
+    if (now - lastFinishHaptic < FINISH_HAPTIC_GAP) return;
+    lastFinishHaptic = now;
+    haptic(status === "success" ? "loaded" : "failed");
+}
 
 export function PaperLoader(props: PaperLoaderProps) {
     const [local, rest] = splitProps(props, [
@@ -56,6 +67,19 @@ export function PaperLoader(props: PaperLoaderProps) {
     const isSuccess = () => local.loaderStatus === "success";
     const isFull = () => isSuccess() || isError();
     const strokeDashoffset = () => CIRCUMFERENCE * (1 - clampedPercent() / 100);
+
+    // finishing in front of the person is felt: the check's pop and ripple,
+    // or a failure's two knocks. A loader that mounts already finished isn't.
+    createEffect(
+        on(
+            () => local.loaderStatus,
+            (status, before) => {
+                if (!due() || status === before) return;
+                if (status === "success" || status === "error") finishHaptic(status);
+            },
+            { defer: true },
+        ),
+    );
 
     return (
         <Show when={due()}>
