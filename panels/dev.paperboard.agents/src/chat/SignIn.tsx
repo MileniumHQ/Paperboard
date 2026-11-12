@@ -106,6 +106,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                                     {(f, i) => (
                                         <PaperInput
                                             name={`sign-in-${i()}`}
+                                            fullWidth
                                             label={`${i() + 1}. ${f.label}`}
                                             type={f.secret ? "password" : "text"}
                                             autocomplete="off"

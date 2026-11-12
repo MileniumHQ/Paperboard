@@ -5,6 +5,7 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import type { BrainState, Harness } from "../src/contract";
 import { AiApp, type AppHost } from "../src/service/app";
+import { loginTail } from "../src/service/brainLogin";
 import { Brains, loginProcessId } from "../src/service/brains";
 import { findExistingBrain, versionFrom } from "../src/service/existingBrains";
 import { CLAUDE_MEMORY_OFF } from "../src/service/harness";
@@ -311,6 +312,18 @@ describe("brain sign-in", () => {
         expect(b.snapshot()["claude-code"]).toMatchObject({ signedIn: true, account: "user@example.com" });
     }, SLOW);
 
+    test("a login never opens a browser on the computer: its page is the panel's to open, on the device in hand", async () => {
+        const { root, b, states } = await brains({ installed: ["claude-code"] });
+        await b.signIn("claude-code");
+        await states.until((s) => !!s.at(-1)?.["claude-code"].login, "Claude's sign-in page");
+        const login = fakeLog(root).filter((e) => e.name === "claude" && e.event === "run" && e.argv[0] === "auth" && e.argv[1] === "login");
+        expect(login).toHaveLength(1);
+        // the program BROWSER names does nothing; the status and logout commands don't need it
+        expect(login[0]!.env.BROWSER).toBe(process.platform === "win32" ? undefined : "true");
+        expect(fakeLog(root).filter((e) => e.name === "claude" && e.event === "run" && e.argv[1] === "status").every((e) => e.env.BROWSER === undefined)).toBe(true);
+        await b.cancelSignIn("claude-code");
+    }, SLOW);
+
     test("Codex's device sign-in shows its one-time code from the captured output", async () => {
         const { b, states } = await brains({ installed: ["codex"] });
         await b.signIn("codex", "code");
@@ -320,6 +333,20 @@ describe("brain sign-in", () => {
         await b.cancelSignIn("codex");
         expect(b.snapshot().codex).toMatchObject({ phase: "installed", login: null, error: null });
     }, SLOW);
+});
+
+// A failed login says why in its own words, not in the sign-in page's one-time address.
+describe("login failures", () => {
+    test("a refused code is reported as the login said it, without the page's address or the code prompt", () => {
+        const said = [
+            "Opening browser to sign in…",
+            "If the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&client_id=x&state=N7jC4UNDeLPHGc16VnwHtDVKuLqgHuherLomLSSAxoM",
+            "Paste code here if prompted > Login failed: That code wasn't accepted. It may be incomplete, expired, already used, or from an earlier sign-in attempt.",
+        ].join("\n");
+        expect(loginTail(said)).toBe("Login failed: That code wasn't accepted. It may be incomplete, expired, already used, or from an earlier sign-in attempt.");
+        // nothing the login said beyond its page: nothing to add
+        expect(loginTail("Opening browser to sign in…\nIf the browser didn't open, visit: https://claude.com/cai/oauth/authorize?state=abc\nPaste code here if prompted >")).toBe("");
+    });
 });
 
 // Failures are shown, not swallowed (brains, models and the service).

@@ -31,7 +31,7 @@ const argv = process.argv.slice(2);
 const planFile = path.join(FAKE_DIR, "plan.json");
 const plan = fs.existsSync(planFile) ? JSON.parse(fs.readFileSync(planFile, "utf8")) : {};
 
-const ENV_KEYS = /^(CODEX_HOME|CLAUDE_CONFIG_DIR|XDG_\w+|DISABLE_\w+|CLAUDE_CODE_\w+|OPENCODE_\w+|PAPERBOARD_COMPUTER_MCP_TOKEN)$/;
+const ENV_KEYS = /^(CODEX_HOME|CLAUDE_CONFIG_DIR|XDG_\w+|DISABLE_\w+|CLAUDE_CODE_\w+|OPENCODE_\w+|BROWSER|PAPERBOARD_COMPUTER_MCP_TOKEN)$/;
 function log(entry) {
     fs.appendFileSync(path.join(FAKE_DIR, "calls.jsonl"), JSON.stringify({ name, ...entry }) + "\n");
 }

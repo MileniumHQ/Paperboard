@@ -8,6 +8,7 @@ import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLo
 import { SIGN_IN_REQUIRED, type BrainState, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import { harnessName } from "../lib/brains";
+import { submitOnPaste } from "../lib/paste";
 import { failure, type Failure } from "../lib/failure";
 
 /** Who a brain is signed in as. An email is who; anything else (ChatGPT, a provider's name) is how. */
@@ -111,17 +112,20 @@ export function BrainStatus(props: { agent: Agent; harness: Harness; actions: Br
 }
 
 /**
- * A sign-in, one thing at a time: the page to continue to, then waiting for
- * the person to finish there. A code field shows only when the brain asks for
- * one. A brain whose page comes back to a loopback address (Codex) gets that
- * address from this device when the brain runs on another computer, so the
- * sign-in finishes there; where it can't be caught (Paperboard in a web
- * browser), the person pastes it.
+ * A sign-in, one thing at a time. First the page to open: one button, which
+ * opens it on the device the person is holding (the computer running the
+ * brain never opens a browser of its own, nobody may be at it). Then what the
+ * page hands back: a code (Claude), pasted here and sent the moment it's
+ * pasted, or nothing (Codex), where the browser comes back by itself. A brain
+ * whose page comes back to a loopback address gets that address from this
+ * device when it runs on another computer, so the sign-in finishes there;
+ * where it can't be caught (Paperboard in a web browser), the person pastes
+ * it. Every row wraps, so a phone shows all of it without scrolling sideways.
  */
 export function SignInSteps(props: { agent: Agent; harness: Harness; actions: BrainActions; cancel?: JSX.Element }) {
     const b = () => props.agent.state.brains[props.harness];
     const name = () => harnessName(props.harness);
-    // the page was opened: waiting is the one thing left to show
+    // the page was opened: what it hands back is the one thing left to show
     const [opened, setOpened] = createSignal(false);
     createEffect(on(() => b().login?.url, () => setOpened(false)));
 
@@ -158,20 +162,26 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
         ),
     );
 
+    // what was pasted is on its way to the brain; the brain says how it went by leaving the sign-in
+    const [sent, setSent] = createSignal(false);
+    createEffect(on(() => b().login?.url, () => setSent(false)));
     const [code, setCode] = createSignal("");
-    const sendCode = async () => {
-        const value = code().trim();
-        if (!value) return;
-        await props.actions.submitCode(props.harness, value);
+    const sendCode = async (value: string) => {
+        if (!value.trim() || sent()) return;
+        setSent(true);
+        await props.actions.submitCode(props.harness, value.trim());
         // the code is used once: it doesn't stay in the field
         setCode("");
+        // a refused one can be pasted again
+        if (props.actions.error()) setSent(false);
     };
     const [address, setAddress] = createSignal("");
-    const sendAddress = async () => {
-        const value = address().trim();
-        if (!value) return;
-        await props.actions.finishAt(props.harness, value);
+    const sendAddress = async (value: string) => {
+        if (!value.trim() || sent()) return;
+        setSent(true);
+        await props.actions.finishAt(props.harness, value.trim());
         if (!props.actions.error()) setAddress("");
+        else setSent(false);
     };
 
     return (
@@ -185,95 +195,91 @@ export function SignInSteps(props: { agent: Agent; harness: Harness; actions: Br
             }
         >
             {(login) => (
-                <Show
-                    when={opened() || !login().url}
-                    fallback={
-                        <PaperFlex gap="full" align="start">
-                            <PaperText preset="body">
-                                Sign in to {name()} with your account in your browser.
-                                {login().code ? " The page asks for this code." : ""}
-                            </PaperText>
-                            <Show when={login().code}>
-                                {(shown) => (
-                                    <PaperFlex direction="row" gap="half" align="center">
-                                        <PaperText preset="title">{shown()}</PaperText>
-                                        <PaperCopyButton text={shown()} label="Copy code" variant="text" />
-                                    </PaperFlex>
-                                )}
-                            </Show>
-                            <PaperFlex direction="row" gap="half" align="center">
-                                <PaperButton variant="primary" href={login().url!} target="_blank" onClick={() => setOpened(true)}>
-                                    Continue in your browser <PaperIcon>open_in_new</PaperIcon>
-                                </PaperButton>
-                                <PaperCopyButton text={login().url!} label="Copy link" variant="text" />
-                                {props.cancel}
-                            </PaperFlex>
-                        </PaperFlex>
-                    }
-                >
-                    <PaperFlex gap="full">
-                        <PaperLoader loaderStatus="indeterminate" label="Waiting for you to finish signing in" />
-                        <Show when={login().expectsCode}>
-                            <PaperFlex gap="half">
-                                <PaperText preset="hint">When you've signed in, the page shows a code. Paste it here.</PaperText>
+                <PaperFlex gap="full">
+                    <Show
+                        when={opened() || !login().url}
+                        fallback={
+                            <>
+                                <PaperText preset="body">Sign in to {name()} with your account.{login().code ? " The page asks for this code." : ""}</PaperText>
+                                <Show when={login().code}>
+                                    {(shown) => (
+                                        <PaperFlex direction="row" gap="half" align="center">
+                                            <PaperText preset="title">{shown()}</PaperText>
+                                            <PaperCopyButton text={shown()} label="Copy code" variant="text" />
+                                        </PaperFlex>
+                                    )}
+                                </Show>
+                                <PaperFlex direction="row" gap="half" align="center" wrap>
+                                    <PaperButton variant="primary" href={login().url!} target="_blank" onClick={() => setOpened(true)}>
+                                        Open sign-in page <PaperIcon>open_in_new</PaperIcon>
+                                    </PaperButton>
+                                    <PaperCopyButton text={login().url!} label="Copy link" variant="text" />
+                                    {props.cancel}
+                                </PaperFlex>
+                            </>
+                        }
+                    >
+                        <Show
+                            when={!sent()}
+                            fallback={<PaperLoader loaderStatus="indeterminate" label="Signing you in" />}
+                        >
+                            <Show
+                                when={login().expectsCode}
+                                fallback={
+                                    <Show
+                                        when={forward() === "paste"}
+                                        fallback={<PaperLoader loaderStatus="indeterminate" label="Waiting for you to finish signing in" />}
+                                    >
+                                        <Show when={forwardError()}>
+                                            {(shown) => (
+                                                <PaperQuote variant="warning" icon="warning" title="Your browser can't come back here by itself">
+                                                    {shown()}
+                                                </PaperQuote>
+                                            )}
+                                        </Show>
+                                        <PaperText preset="body">When you've signed in, your browser ends on a page that doesn't load. Copy its address and paste it here.</PaperText>
+                                        <PaperInput
+                                            label="Address"
+                                            fullWidth
+                                            autocomplete="off"
+                                            spellcheck={false}
+                                            enterkeyhint="go"
+                                            value={address()}
+                                            onInput={(e) => setAddress(e.currentTarget.value)}
+                                            {...submitOnPaste(sendAddress)}
+                                        />
+                                    </Show>
+                                }
+                            >
+                                <PaperText preset="body">Sign in on the page, then paste the code it shows.</PaperText>
                                 <PaperInput
                                     label="Code"
                                     fullWidth
                                     autocomplete="off"
+                                    autocapitalize="off"
+                                    spellcheck={false}
+                                    enterkeyhint="go"
                                     value={code()}
                                     onInput={(e) => setCode(e.currentTarget.value)}
-                                    onKeyDown={(e) => e.key === "Enter" && void sendCode()}
+                                    {...submitOnPaste(sendCode)}
                                 />
-                                <PaperFlex direction="row" gap="half">
-                                    <PaperButton variant="primary" disabled={!code().trim()} onClick={() => void sendCode()}>
-                                        Continue
-                                    </PaperButton>
-                                </PaperFlex>
-                            </PaperFlex>
+                            </Show>
                         </Show>
-                        <Show when={forward() === "paste"}>
-                            <PaperFlex gap="half">
-                                <Show when={forwardError()}>
-                                    {(shown) => (
-                                        <PaperQuote variant="warning" icon="warning" title="Your browser can't come back here by itself">
-                                            {shown()}
-                                        </PaperQuote>
-                                    )}
-                                </Show>
-                                <PaperText preset="hint">When you've signed in, your browser ends on a page that doesn't load. Copy that page's address and paste it here.</PaperText>
-                                <PaperInput
-                                    label="Address"
-                                    fullWidth
-                                    autocomplete="off"
-                                    value={address()}
-                                    onInput={(e) => setAddress(e.currentTarget.value)}
-                                    onKeyDown={(e) => e.key === "Enter" && void sendAddress()}
-                                />
-                                <PaperFlex direction="row" gap="half">
-                                    <PaperButton variant="primary" disabled={!address().trim()} onClick={() => void sendAddress()}>
-                                        Continue
-                                    </PaperButton>
-                                </PaperFlex>
-                            </PaperFlex>
-                        </Show>
-                        {/* the way back to the page, and out: a row that starts where the text above it does */}
+                        {/* the way back to the page, and out: quiet, so the one thing to do above stays the one thing */}
                         <Show when={login().url || props.cancel}>
-                            <PaperFlex direction="row" gap="half" align="center">
+                            <PaperFlex direction="row" gap="half" align="center" wrap>
                                 <Show when={login().url}>
                                     {(url) => (
-                                        <>
-                                            <PaperButton href={url()} target="_blank">
-                                                Open the page again
-                                            </PaperButton>
-                                            <PaperCopyButton text={url()} label="Copy link" variant="text" />
-                                        </>
+                                        <PaperButton variant="text" href={url()} target="_blank">
+                                            Open page
+                                        </PaperButton>
                                     )}
                                 </Show>
                                 {props.cancel}
                             </PaperFlex>
                         </Show>
-                    </PaperFlex>
-                </Show>
+                    </Show>
+                </PaperFlex>
             )}
         </Show>
     );
@@ -363,8 +369,10 @@ export function SignInModal(props: { agent: Agent; harness: Harness | null; acti
 export function BrainButtons(props: { agent: Agent; harness: Harness; actions: BrainActions; onProviders: () => void; onSignIn?: (h: Harness) => void }) {
     const signIn = () => (props.onSignIn ? props.onSignIn(props.harness) : void props.actions.signIn(props.harness));
     const b = () => props.agent.state.brains[props.harness];
+    // signed in (or needing no sign-in) and ready: nothing left to set up
+    const usable = () => b().phase === "ready" && (b().signedIn || !SIGN_IN_REQUIRED[props.harness]);
     return (
-        <PaperFlex direction="row" gap="half" align="center">
+        <PaperFlex direction="row" gap="half" align="center" wrap>
             <Switch>
                 <Match when={(b().phase === "none" || b().phase === "unsupported") && b().found}>
                     <PaperButton variant="primary" onClick={() => void props.actions.useFound(props.harness)}>
@@ -400,8 +408,8 @@ export function BrainButtons(props: { agent: Agent; harness: Harness; actions: B
                     </Show>
                 </Match>
             </Switch>
-            {/* the package, with the version Paperboard pins, stays a click away from a program on the computer: one offered, or one the brain runs */}
-            <Show when={(b().existing && b().phase !== "installing" && b().phase !== "signing-in") || (b().phase === "none" && b().found)}>
+            {/* the package, with the version Paperboard pins, stays a click away from a program on the computer: one offered, or one the brain runs, until it's signed in and in use */}
+            <Show when={!usable() && ((b().existing && b().phase !== "installing" && b().phase !== "signing-in") || (b().phase === "none" && b().found))}>
                 <PaperButton variant="text" onClick={() => void props.actions.installOwn(props.harness)}>
                     Install its own copy
                 </PaperButton>

@@ -1,4 +1,5 @@
 import { createSignal, onCleanup } from "solid-js";
+import { haptic } from "@mileniumhq/paperui";
 import type { FaceController } from "../face/controller";
 import { EXPRESSIONS, type Expression } from "../face/expressions";
 
@@ -27,6 +28,8 @@ export interface Segment {
 const TYPE_MS = 26;
 const PUNCT_MS = 230;
 const BEFORE_FACE_MS = 380;
+/** One faint tap for every few letters typed: the same rhythm the eye reads, without a buzz. */
+const HAPTIC_EVERY = 3;
 /** Matches the bubble's exit transition (half of --paper-medium-transition). */
 const SWAP_MS = 200;
 
@@ -108,8 +111,11 @@ export function createSpeaker(face: FaceController) {
                 } else if (beat.kind === "br") setSegments((s) => [...s, { text: "", bold: false, br: true }]);
                 else {
                     face.talk(true);
+                    let typed = 0;
                     for (const ch of beat.text) {
                         append(ch, beat.bold);
+                        // spaces make no sound; the letters around them do
+                        if (/\S/.test(ch) && ++typed % HAPTIC_EVERY === 0) haptic("typing");
                         if (!(await sleep(/[,.!?:]/.test(ch) ? PUNCT_MS : TYPE_MS, gen))) return false;
                     }
                 }

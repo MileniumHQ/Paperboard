@@ -115,6 +115,34 @@ export function WindowView(props: {
         }
     }
 
+    // ------------------------------------------------------------- the on-screen keyboard
+
+    // A touch screen has no keyboard until a field has focus, and the window's picture isn't a field: so a hidden
+    // one is, and what it receives is sent on. It always holds a zero-width mark, so a Backspace on a phone
+    // (which reports no key, only an input) has something to delete and shows up as the mark going missing.
+    const MARK = "\u200b";
+    const touch = matchMedia("(pointer: coarse)");
+    const [touching, setTouching] = createSignal(touch.matches);
+    const watchTouch = () => setTouching(touch.matches);
+    touch.addEventListener("change", watchTouch);
+    onCleanup(() => touch.removeEventListener("change", watchTouch));
+    const [keyboard, setKeyboard] = createSignal(false);
+    let keys: HTMLInputElement | undefined;
+    const rest = () => {
+        keys!.value = MARK;
+        keys!.setSelectionRange(MARK.length, MARK.length);
+    };
+    // typed text, or a Backspace, since the field was last at rest
+    const readKeys = () => {
+        const typed = keys!.value.replaceAll(MARK, "");
+        const erased = !keys!.value.includes(MARK);
+        rest();
+        if (erased) send({ type: "key", keys: "BackSpace" }, true);
+        if (typed) send({ type: "text", text: typed }, true);
+    };
+    // the button raises the keyboard and lowers it; it has to be the tap itself that focuses the field, or a phone refuses
+    const toggleKeyboard = () => (keyboard() ? keys!.blur() : keys!.focus());
+
     // ------------------------------------------------------------- the address bar and dialogs
 
     const [address, setAddress] = createSignal<string | null>(null);
@@ -179,6 +207,22 @@ export function WindowView(props: {
                     maxLength={2048}
                     onInput={(e) => setAddress(e.currentTarget.value)}
                 />
+                <Show when={touching()}>
+                    <PaperButton
+                        icon
+                        size="small"
+                        variant={keyboard() ? "primary" : "text"}
+                        type="button"
+                        aria-label={keyboard() ? "Hide keyboard" : "Show keyboard"}
+                        aria-pressed={keyboard()}
+                        title={keyboard() ? "Hide keyboard" : "Show keyboard"}
+                        // a tap on the button mustn't take focus off the field it just gave it to
+                        onPointerDown={(e) => e.preventDefault()}
+                        onClick={toggleKeyboard}
+                    >
+                        <PaperIcon>keyboard</PaperIcon>
+                    </PaperButton>
+                </Show>
             </form>
             <Show when={dialog()}>
                 {(d) => (
@@ -235,7 +279,9 @@ export function WindowView(props: {
                             tabindex={0}
                             onPointerDown={(e) => {
                                 e.preventDefault();
-                                img!.focus();
+                                // the keyboard stays up for the next tap
+                                if (keyboard()) keys!.focus();
+                                else img!.focus();
                                 img!.setPointerCapture(e.pointerId);
                                 const button = BUTTONS[e.button];
                                 if (button) send({ type: "down", button, ...point(e) }, true);
@@ -262,6 +308,44 @@ export function WindowView(props: {
                     </Show>
                 </Show>
             </div>
+            <input
+                ref={keys}
+                class={styles.keys}
+                type="text"
+                aria-label="Keyboard input for the window"
+                tabindex={-1}
+                autocomplete="off"
+                autocapitalize="off"
+                autocorrect="off"
+                spellcheck={false}
+                enterkeyhint="enter"
+                value={MARK}
+                onFocus={() => {
+                    rest();
+                    setKeyboard(true);
+                }}
+                onBlur={() => setKeyboard(false)}
+                // Enter and the keys that aren't text are named here; plain characters arrive as input
+                onKeyDown={(e) => {
+                    if (e.isComposing || e.keyCode === 229) return;
+                    const ev = keyEvent(e);
+                    if (!ev || ev.type === "text") return;
+                    e.preventDefault();
+                    send(ev, true);
+                }}
+                // a phone's Enter and Backspace may come as an input and no key
+                onBeforeInput={(e) => {
+                    if (e.inputType === "insertLineBreak" || e.inputType === "insertParagraph") {
+                        e.preventDefault();
+                        send({ type: "key", keys: "Return" }, true);
+                    } else if (e.inputType === "deleteContentBackward" && !e.isComposing) {
+                        e.preventDefault();
+                        send({ type: "key", keys: "BackSpace" }, true);
+                    }
+                }}
+                onInput={(e) => !e.isComposing && readKeys()}
+                onCompositionEnd={readKeys}
+            />
             <Show when={inputError()}>
                 {(shown) => (
                     <PaperFlex paddingX="full" paddingY="half">
