@@ -54,12 +54,8 @@ export function pasteLines(text: string): number {
  * computer (a development server). The app holds the same rule.
  */
 export function linkOpens(uri: string): boolean {
-    let url: URL;
-    try {
-        url = new URL(uri);
-    } catch {
-        return false;
-    }
+    if (!URL.canParse(uri)) return false;
+    const url = new URL(uri);
     if (url.protocol === "https:") return true;
     if (url.protocol !== "http:") return false;
     const host = url.hostname.toLowerCase();

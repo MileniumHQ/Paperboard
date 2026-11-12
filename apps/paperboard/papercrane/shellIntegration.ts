@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { logger } from "./logger";
 import { ensurePrivateDir, getLocalDir } from "./paths";
 import { getDefaultShell } from "./util";
 
@@ -89,7 +90,8 @@ function shellKey(file: string): string | null {
         const real = fs.realpathSync(file);
         if (!fs.statSync(real).isFile()) return null;
         return `${real}\0${path.basename(file).toLowerCase()}`;
-    } catch {
+    } catch (err) {
+        logger.debug(`[shellIntegration] ${file} is not an installed shell:`, err);
         return null;
     }
 }
@@ -259,7 +261,8 @@ export class ShellMarks {
 function decode(text: string): string | null {
     try {
         return decodeURIComponent(text);
-    } catch {
+    } catch (err) {
+        logger.debug("[shellIntegration] a shell report was not valid percent-encoding:", err);
         return null;
     }
 }

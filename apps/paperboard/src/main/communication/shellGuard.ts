@@ -75,12 +75,8 @@ export function assertShellFrame(event: unknown, channel: string): void {
 // Nothing else: file://, javascript: and custom schemes would hand the
 // system a program to run.
 export function opensExternally(url: string): boolean {
-    let parsed: URL;
-    try {
-        parsed = new URL(url);
-    } catch {
-        return false;
-    }
+    if (!URL.canParse(url)) return false;
+    const parsed = new URL(url);
     if (parsed.protocol === "https:") return true;
     if (parsed.protocol !== "http:") return false;
     const host = parsed.hostname.toLowerCase();

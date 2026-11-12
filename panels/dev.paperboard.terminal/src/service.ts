@@ -257,7 +257,8 @@ async function ensureSession(id: string, cols?: number, rows?: number): Promise<
 function isFolder(folder: string): boolean {
     try {
         return fs.statSync(folder).isDirectory();
-    } catch {
+    } catch (err) {
+        console.debug(`[TerminalService] ${folder} is not an open folder:`, err);
         return false;
     }
 }
