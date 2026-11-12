@@ -103,20 +103,28 @@
                 "detail": "Downloading Geyser and Floodgate, and Bedrock players' Xbox accounts and skins"
             },
             {
-                "name": "Re-Logic / Terraria",
-                "detail": "Verified vanilla Terraria server downloads from terraria.org"
+                "name": "Adoptium",
+                "detail": "Downloading the Java that Minecraft servers run on"
             },
             {
-                "name": "tModLoader",
-                "detail": "Verified tModLoader server downloads from GitHub"
+                "name": "Terraria and tModLoader",
+                "detail": "Verified vanilla Terraria servers from terraria.org, and tModLoader servers from GitHub"
+            },
+            {
+                "name": "Microsoft",
+                "detail": ".NET for tModLoader, and the Visual C++ and XNA runtimes Palworld and Terraria need on Windows"
             },
             {
                 "name": "Steam",
-                "detail": "Downloading and updating Palworld and Team Fortress 2 servers, and Workshop items, through SteamCMD"
+                "detail": "Palworld and Team Fortress 2 servers and Workshop items through SteamCMD, and Workshop mods and maps found through Paperboard's modscan"
             },
             {
-                "name": "Steam Workshop",
-                "detail": "Finding tModLoader mods and Team Fortress 2 maps, through Paperboard's modscan"
+                "name": "AlliedModders",
+                "detail": "Downloading SourceMod and Metamod:Source for Team Fortress 2 servers"
+            },
+            {
+                "name": "Arch Linux",
+                "detail": "Downloading the curl library Team Fortress 2 needs on Linux, from the Arch Linux archive"
             },
             {
                 "name": "Team Fortress Wiki",
@@ -125,16 +133,48 @@
         ],
         "credits": [
             {
-                "name": "prismarine-nbt",
-                "detail": "Reading Minecraft world data"
+                "name": "Eclipse Temurin",
+                "detail": "The Java that Minecraft servers run on"
+            },
+            {
+                "name": "Paper, Fabric, NeoForge and Forge",
+                "detail": "The server software Minecraft servers run"
+            },
+            {
+                "name": "Geyser and Floodgate",
+                "detail": "Letting Bedrock players join Minecraft servers"
+            },
+            {
+                "name": "tModLoader",
+                "detail": "Modded Terraria servers"
+            },
+            {
+                "name": "Microsoft .NET",
+                "detail": "The runtime tModLoader runs on"
+            },
+            {
+                "name": "SteamCMD",
+                "detail": "Installing and updating Palworld and Team Fortress 2 servers"
             },
             {
                 "name": "SourceMod and Metamod:Source",
                 "detail": "Plugins for Team Fortress 2 servers"
             },
             {
-                "name": "Microsoft .NET",
-                "detail": "The runtime tModLoader runs on"
+                "name": "prismarine-nbt",
+                "detail": "Reading Minecraft world data"
+            },
+            {
+                "name": "pngjs",
+                "detail": "Drawing world maps, player skins and server icons"
+            },
+            {
+                "name": "fflate",
+                "detail": "Unpacking modpacks and moving worlds"
+            },
+            {
+                "name": "dot-properties",
+                "detail": "Reading and writing server settings"
             }
         ],
         "requirements": [
