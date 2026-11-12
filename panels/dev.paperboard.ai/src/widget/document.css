@@ -1,0 +1,12 @@
+/* The widget document sits on Home's card, so it takes the card's surface;
+ * the theme root (PaperProvider) is made transparent over it. */
+html,
+html[data-paperui-theme],
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--paper-surface-raised);
+}

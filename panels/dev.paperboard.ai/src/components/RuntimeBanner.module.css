@@ -1,0 +1,42 @@
+.RuntimeBanner {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    border-bottom: var(--paper-border-width) solid var(--paper-border-subtle);
+    background-color: var(--paper-surface-inset);
+}
+
+.RuntimeBanner[data-status="error"] {
+    border-bottom-color: var(--paper-danger);
+    color: var(--paper-danger-deep);
+}
+
+.grow {
+    flex: 1;
+    min-width: 0;
+}
+
+.link {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--paper-primary);
+    font-size: var(--paper-text-size-2);
+    cursor: pointer;
+}
+
+.link:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+.detail {
+    max-height: var(--paper-size-panel-height-small);
+    overflow: auto;
+    margin: var(--paper-uigap-half) var(--paper-uigap);
+}
+
+.error {
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+}

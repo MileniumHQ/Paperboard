@@ -1,0 +1,13 @@
+/* The question box and its send button share one line; PaperInput has no
+ * trailing-button slot (reported to PaperUI). */
+.askRow {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+}
+
+.askRow > :first-child {
+    flex: 1;
+    min-width: 0;
+}

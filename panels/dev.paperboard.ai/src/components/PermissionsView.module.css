@@ -1,0 +1,55 @@
+.PermissionsView {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+}
+
+.intro {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap);
+    padding: var(--paper-uigap-half) 0;
+    border-bottom: var(--paper-border-width) solid var(--paper-border-subtle);
+}
+
+/* the card's padding is the list's edge: no row padding or divider past it */
+.row:first-child {
+    padding-top: 0;
+}
+
+.row:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.icon {
+    width: var(--paper-control-size-small);
+    height: var(--paper-control-size-small);
+    border-radius: var(--paper-border-radius-half);
+    object-fit: cover;
+}
+
+.text {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.all {
+    align-self: flex-start;
+}
