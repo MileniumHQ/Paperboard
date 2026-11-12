@@ -11,9 +11,11 @@ import {
     onCleanup,
     splitProps,
     Show,
+    on,
     type ParentProps,
     type JSX,
 } from "solid-js";
+import { contextMenuDismissals } from "../shared/contextMenuDismiss";
 import { Portal } from "solid-js/web";
 import { PaperIcon } from "../PaperIcon";
 
@@ -109,6 +111,11 @@ export function positionFromTarget(
     }
 
     return null;
+}
+
+function pointInside(el: Element, x: number, y: number): boolean {
+    const r = el.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
 }
 
 function elementFromTarget(target: ContextMenuTarget): HTMLElement | null {
@@ -397,6 +404,11 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
         local.onClose?.();
     };
 
+    // the item it was opened on was picked up and carried away
+    createEffect(on(contextMenuDismissals, () => {
+        if (local.open) handleClose();
+    }, { defer: true }));
+
     const scrollHighlightedIntoView = () => {
         const value = highlightedItem();
         if (value === null) return;
@@ -562,6 +574,11 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
                 // menu before the click arrives.
                 const anchor = local.target instanceof HTMLElement ? local.target : null;
                 if (anchor?.contains(target)) return;
+                // A press on the overlay over the trigger is a second tap on
+                // the trigger: the overlay's own click closes the menu. Closing
+                // here would take the overlay away first, and a touch's click
+                // then lands on the trigger beneath and opens it again.
+                if (anchor && local.overlay !== false && pointInside(anchor, e.clientX, e.clientY)) return;
             }
             handleClose();
         };
