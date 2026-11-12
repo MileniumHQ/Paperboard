@@ -61,6 +61,12 @@ export default function PlayerRoster<T extends { name: string }>(props: {
     const [compact, setCompact] = createSignal(false);
     const [detailOpen, setDetailOpen] = createSignal(false);
     const any = () => props.sections.some((section) => section.players.length > 0);
+    // Another player's detail is a new view, built again: it opens at its top,
+    // not scrolled to where the last player's was left.
+    const detail = () => {
+        void props.open;
+        return props.children;
+    };
 
     return (
         <PaperFlex grow minHeight={0} fullWidth>
@@ -148,7 +154,7 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                     </PaperFlex>
                 }
             >
-                <Show when={!compact()}>{props.children}</Show>
+                <Show when={!compact()}>{detail()}</Show>
             </PaperSplit>
             {/* over the whole panel, its own bar in place of the tab's */}
             <PaperSlidePage
@@ -161,7 +167,7 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                 <Show when={compact()}>
                     {/* the detail brings its own margin and scroll */}
                     <PaperFlex direction="column" flex={1} minHeight={0}>
-                        {props.children}
+                        {detail()}
                     </PaperFlex>
                 </Show>
             </PaperSlidePage>

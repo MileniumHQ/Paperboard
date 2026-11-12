@@ -83,12 +83,12 @@ export interface Page {
     close(): Promise<void>;
 }
 
-/** opens `url` in a fresh headless Chrome with a throwaway profile */
-export async function openPage(url: string): Promise<Page> {
+/** opens `url` in a fresh headless Chrome with a throwaway profile; `windowSize` is "width,height" */
+export async function openPage(url: string, windowSize = "1400,900"): Promise<Page> {
     const profile = fs.mkdtempSync(path.join(os.tmpdir(), "gameserver-chrome-"));
     const chrome: ChildProcess = spawn(chromeBinary(), [
         "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check",
-        "--disable-background-networking", "--disable-component-update", "--disable-sync", "--metrics-recording-only", "--window-size=1400,900", "about:blank",
+        "--disable-background-networking", "--disable-component-update", "--disable-sync", "--metrics-recording-only", `--window-size=${windowSize}`, "about:blank",
     ], { stdio: ["ignore", "ignore", "pipe"] });
     const exited = new Promise<void>((resolve) => chrome.once("exit", () => resolve()));
     let stderr = "";
