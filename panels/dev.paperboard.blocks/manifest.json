@@ -2,9 +2,14 @@
     "name": "Blocks",
     "id": "dev.paperboard.blocks",
     "version": "0.1.0",
-    "description": "Build automations from blocks, with every panel's actions",
+    "description": "Build automations from every panel's blocks",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
     "service": "./dist/service.js",
-    "icon": "./branding/icon.png"
+    "icon": "./branding/icon.png",
+    "store": {
+        "credits": [
+            { "name": "Blockly", "detail": "Providing the block editor" }
+        ]
+    }
 }
