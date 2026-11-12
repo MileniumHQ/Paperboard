@@ -15,7 +15,10 @@ export interface MapRegionsResult {
 }
 
 export interface RenderedTile {
-    dataUrl: string;
+    /** the tile's image; null when the `since` that was sent is still this tile */
+    dataUrl: string | null;
+    /** changes when the region file does */
+    version: number;
     dimension: MapDimension;
     rx: number;
     rz: number;
@@ -40,10 +43,13 @@ export async function renderMapTile(
     dimension: MapDimension,
     rx: number,
     rz: number,
+    /** the version of this tile already drawn; the same one comes back with no image */
+    since?: number,
 ): Promise<RenderedTile | null> {
     return serverBridge.call<RenderedTile | null>(CALLS.renderMapTile, {
         dimension,
         rx,
         rz,
+        since,
     });
 }

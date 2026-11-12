@@ -276,18 +276,42 @@ interface CachedTile {
 // the region file's mtime, and the map never grows past CACHE_MAX.
 const CACHE_MAX = 48;
 
-function cacheSet(key: string, value: CachedTile): void {
-    local().tileCache.delete(key);
-    local().tileCache.set(key, value);
-    while (local().tileCache.size > CACHE_MAX) {
-        const oldest = local().tileCache.keys().next().value;
+function cacheSet(tiles: Map<string, CachedTile>, key: string, value: CachedTile): void {
+    tiles.delete(key);
+    tiles.set(key, value);
+    while (tiles.size > CACHE_MAX) {
+        const oldest = tiles.keys().next().value;
         if (oldest === undefined) break;
-        local().tileCache.delete(oldest);
+        tiles.delete(oldest);
     }
 }
 
+// Painting a region parses up to 1024 chunks of NBT: seconds of work on a
+// small server. The service has one event loop, and every other call, state
+// sync and console line waits on it, so a painter gives the loop a turn every
+// few chunks, and regions are painted one at a time, each at most once
+// however many callers ask for it. A whole world asked for at once is then a
+// queue the rest of the panel keeps working beside, not a frozen service.
+const CHUNKS_PER_TURN = 8;
+const loopTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
+let painting: Promise<unknown> = Promise.resolve();
+const paintingNow = new Map<string, Promise<string>>();
+
+export function paintInTurn(key: string, paint: () => Promise<string>): Promise<string> {
+    const running = paintingNow.get(key);
+    if (running) return running;
+    const mine = painting.then(paint).finally(() => paintingNow.delete(key));
+    // the next region waits for this one to settle, whichever way it does
+    painting = mine.catch(() => undefined);
+    paintingNow.set(key, mine);
+    return mine;
+}
+
 export interface RenderedTile {
-    dataUrl: string;
+    /** the tile's image; null when the caller's `since` is still this tile */
+    dataUrl: string | null;
+    /** changes when the region file does; hand it back as `since` */
+    version: number;
     dimension: MapDimension;
     rx: number;
     rz: number;
@@ -298,6 +322,7 @@ export async function renderMapTile(
     dimension: MapDimension,
     rx: number,
     rz: number,
+    since?: number,
 ): Promise<RenderedTile | null> {
     if (!DIMENSION_ORDER.includes(dimension)) {
         throw new Error(`Unknown dimension: ${JSON.stringify(dimension)}`);
@@ -321,16 +346,29 @@ export async function renderMapTile(
         );
     }
 
-    const cached = local().tileCache.get(absolute);
+    // the caller already draws this region as it is on disk: nothing to send
+    if (since === mtimeMs) return { dataUrl: null, version: mtimeMs, dimension, rx, rz };
+
+    const tiles = local().tileCache;
+    const cached = tiles.get(absolute);
     if (cached && cached.mtimeMs === mtimeMs) {
-        return { dataUrl: cached.dataUrl, dimension, rx, rz };
+        return { dataUrl: cached.dataUrl, version: mtimeMs, dimension, rx, rz };
     }
 
-    const { PNG } = await loadPng();
-    const buffer = fs.readFileSync(absolute);
-    const png = new PNG({ width: REGION_BLOCKS, height: REGION_BLOCKS });
+    const name = regionFileName({ x: rx, z: rz });
     const minY = DIMENSION_MIN_BUILD[dimension];
+    const dataUrl = await paintInTurn(`${absolute}@${mtimeMs}`, async () =>
+        paintRegion(fs.readFileSync(absolute), minY, name));
+    cacheSet(tiles, absolute, { mtimeMs, dataUrl });
+    return { dataUrl, version: mtimeMs, dimension, rx, rz };
+}
+
+/** One region file as a PNG data URL, giving the event loop a turn every few chunks. */
+export async function paintRegion(buffer: Buffer, minY: number, name: string): Promise<string> {
+    const { PNG } = await loadPng();
+    const png = new PNG({ width: REGION_BLOCKS, height: REGION_BLOCKS });
     let paintedChunks = 0;
+    let parsedChunks = 0;
     const unsupportedCompression = new Set<number>();
     for (let cx = 0; cx < REGION_CHUNKS; cx++) {
         for (let cz = 0; cz < REGION_CHUNKS; cz++) {
@@ -343,6 +381,7 @@ export async function renderMapTile(
             if (await paintChunk(png, chunk.buffer, cx, cz, minY)) {
                 paintedChunks++;
             }
+            if (++parsedChunks % CHUNKS_PER_TURN === 0) await loopTurn();
         }
     }
     // a tile where every chunk was skipped because the compression is not
@@ -350,13 +389,10 @@ export async function renderMapTile(
     // a transparent tile that reads as "nothing generated here"
     if (paintedChunks === 0 && unsupportedCompression.size > 0) {
         throw new Error(
-            `Region ${regionFileName({ x: rx, z: rz })} uses unsupported chunk compression (type ${[...unsupportedCompression].join(", ")})`,
+            `Region ${name} uses unsupported chunk compression (type ${[...unsupportedCompression].join(", ")})`,
         );
     }
-
-    const dataUrl = `data:image/png;base64,${PNG.sync.write(png).toString("base64")}`;
-    cacheSet(absolute, { mtimeMs, dataUrl });
-    return { dataUrl, dimension, rx, rz };
+    return `data:image/png;base64,${PNG.sync.write(png).toString("base64")}`;
 }
 
 interface ChunkBuffer {

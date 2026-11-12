@@ -322,13 +322,14 @@ export const minecraftCalls: ServerCalls = {
     },
     [CALLS.renderMapTile]: async (
         ctx: ServiceContext<GameServerState>,
-        inputs: { dimension: string; rx: number; rz: number },
+        inputs: { dimension: string; rx: number; rz: number; since?: number },
     ) => {
         return renderMapTile(
             ctx,
             inputs?.dimension as MapDimension,
             Number(inputs?.rx),
             Number(inputs?.rz),
+            typeof inputs?.since === "number" ? inputs.since : undefined,
         );
     },
     [CALLS.listInstalledPlugins]: async (ctx: ServiceContext<GameServerState>) => {

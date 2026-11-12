@@ -45,7 +45,11 @@ const ZOOM_STEP = 1.2;
 // how much of the map the terrain fills when it opens
 const TERRAIN_FILL = 0.8;
 const POSITION_POLL_MS = 2000;
-const TILE_REFRESH_MS = 5000;
+// a region file changes when the server saves the world, minutes apart
+const TILE_REFRESH_MS = 30_000;
+// the service paints one region at a time; asking for a whole world at once
+// only queues work for tiles the view may have left by the time they paint
+const MAX_TILE_REQUESTS = 2;
 // new regions appear while the server generates; re-list on a slower clock
 // so the map can show terrain beyond what existed when the tab opened
 const REGION_REFRESH_MS = 15000;
@@ -55,7 +59,10 @@ const MAX_TILE_CACHE = 256;
 
 interface TileState {
     image: HTMLImageElement;
-    src: string;
+    /** the region file's version this image was painted from */
+    version: number;
+    /** the refresh tick that last asked the service about it */
+    checked: number;
 }
 
 // Full-bleed top-down world map: region tiles rendered by the service,
@@ -120,24 +127,36 @@ export default function MapView() {
     const playerKeys = () =>
         Array.from(new Set([...seenPlayerNames(), ...onlinePlayerNames()])).sort();
 
+    // the tiles the view still wants, nearest its centre first
+    let wanted: { dim: MapDimension; rx: number; rz: number }[] = [];
+    const requestWanted = () => {
+        while (pending.size < MAX_TILE_REQUESTS) {
+            const next = wanted.shift();
+            if (!next) return;
+            requestTile(next.dim, next.rx, next.rz);
+        }
+    };
+
     const requestTile = (dim: MapDimension, rx: number, rz: number) => {
         const key = keyOf(dim, rx, rz);
         const existing = tiles.get(key);
         if (pending.has(key)) return;
         pending.add(key);
         setPendingCount(pending.size);
-        renderMapTile(dim, rx, rz)
+        const asked = tileRefresh();
+        // a tile already drawn is only asked whether it changed
+        renderMapTile(dim, rx, rz, existing?.version)
             .then((result) => {
                 pending.delete(key);
                 setPendingCount(pending.size);
-                if (!result?.dataUrl) return;
-                // unchanged bytes → the service returned its cached tile,
-                // so don't decode the image again
-                if (existing && existing.src === result.dataUrl) return;
+                requestWanted();
+                if (existing) existing.checked = asked;
+                const dataUrl = result?.dataUrl;
+                if (!result || !dataUrl) return;
                 const image = new Image();
                 image.onload = () => {
                     tiles.delete(key);
-                    tiles.set(key, { image, src: result.dataUrl });
+                    tiles.set(key, { image, version: result.version, checked: asked });
                     while (tiles.size > MAX_TILE_CACHE) {
                         const oldest = tiles.keys().next().value;
                         if (oldest === undefined) break;
@@ -148,11 +167,12 @@ export default function MapView() {
                 image.onerror = () => {
                     console.error(`[Map] tile image decode failed for ${key}`);
                 };
-                image.src = result.dataUrl;
+                image.src = dataUrl;
             })
             .catch((err) => {
                 pending.delete(key);
                 setPendingCount(pending.size);
+                requestWanted();
                 console.error(`[Map] Failed to render tile ${key}:`, err);
                 setError({ title: "A map tile didn't render", message: errorMessage(err) });
             });
@@ -453,7 +473,23 @@ export default function MapView() {
         offsetY();
         info();
         dimension();
-        for (const tile of visibleTiles()) requestTile(dimension(), tile.rx, tile.rz);
+        const dim = dimension();
+        const refresh = tileRefresh();
+        const { width, height } = sizeOf();
+        // in region units, like the tiles themselves
+        const centerX = (width / 2 - offsetX()) / scale() / REGION_BLOCKS - 0.5;
+        const centerZ = (height / 2 - offsetY()) / scale() / REGION_BLOCKS - 0.5;
+        const fromCenter = (t: { rx: number; rz: number }) => (t.rx - centerX) ** 2 + (t.rz - centerZ) ** 2;
+        wanted = visibleTiles()
+            .filter((t) => {
+                const key = keyOf(dim, t.rx, t.rz);
+                const have = tiles.get(key);
+                // a drawn tile is asked about again once per refresh
+                return !pending.has(key) && (!have || have.checked !== refresh);
+            })
+            .sort((a, b) => fromCenter(a) - fromCenter(b))
+            .map((t) => ({ dim, rx: t.rx, rz: t.rz }));
+        requestWanted();
     });
 
     // redraw on any view or position change
