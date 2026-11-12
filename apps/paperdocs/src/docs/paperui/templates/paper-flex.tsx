@@ -165,7 +165,8 @@ export function Example() {
             <PaperText preset="subheader" as="h3" id="resizable">Resizable</PaperText>
             <PaperTextList>
                 <li>The handle sits on the trailing edge: right for <PaperCode>row</PaperCode>, bottom for <PaperCode>column</PaperCode>, and the leading edge for the reverse directions.</li>
-                <li>Dragging writes an inline <PaperCode>width</PaperCode> (row) or <PaperCode>height</PaperCode> (column) in pixels. A <PaperCode>width</PaperCode>, <PaperCode>height</PaperCode>, <PaperCode>fullWidth</PaperCode> or <PaperCode>fullHeight</PaperCode> prop on the same element is written after it and wins, so leave those off a resizable container.</li>
+                <li>Before the first drag, the layout props size the container: <PaperCode>flex</PaperCode> starts it as a share of the space, so two <PaperCode>flex</PaperCode> panes start even.</li>
+                <li>Dragging writes a <PaperCode>width</PaperCode> (row) or <PaperCode>height</PaperCode> (column) in pixels that wins over <PaperCode>flex</PaperCode>, <PaperCode>width</PaperCode>, <PaperCode>height</PaperCode>, <PaperCode>fullWidth</PaperCode> and <PaperCode>fullHeight</PaperCode>. The container still shrinks when its parent does.</li>
                 <li>The drag is clamped to the element's computed <PaperCode>min-width</PaperCode> and <PaperCode>max-width</PaperCode> (or heights). Without them it stays between 160px and 80% of the window width (100px and 80% of the height).</li>
                 <li>The handle works with mouse, pen and touch.</li>
                 <li>The size is not remembered. Save the value from <PaperCode>onResize</PaperCode> if the panel should restore it.</li>
@@ -240,6 +241,31 @@ export function Panes() {
         </PaperFlex>
     );
 }`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="resizable-split">Even split</PaperText>
+            <PaperText preset="body" as="p">
+                Two <PaperCode>flex</PaperCode> panes start half and half; the handle on the first moves the line between them.
+            </PaperText>
+            <PaperCard data-docs-demo padding="none" surface="front">
+                <PaperFlex direction="row" fullWidth height="panel-height-small">
+                    <PaperFlex direction="row" flex resizable minWidth="field" padding="full" background="surface-inset">
+                        <PaperText>Left</PaperText>
+                    </PaperFlex>
+                    <PaperFlex flex minWidth="field" padding="full">
+                        <PaperText>Right</PaperText>
+                    </PaperFlex>
+                </PaperFlex>
+            </PaperCard>
+            <PaperCode block language="tsx">
+{`<PaperFlex direction="row" fullWidth>
+    <PaperFlex direction="row" flex resizable minWidth="field" padding="full" background="surface-inset">
+        <PaperText>Left</PaperText>
+    </PaperFlex>
+    <PaperFlex flex minWidth="field" padding="full">
+        <PaperText>Right</PaperText>
+    </PaperFlex>
+</PaperFlex>`}
             </PaperCode>
 
             <PaperText preset="subheader" as="h3" id="neighbors">Choosing a neighbor</PaperText>

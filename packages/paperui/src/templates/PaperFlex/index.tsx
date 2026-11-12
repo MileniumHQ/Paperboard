@@ -175,17 +175,17 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
             "padding-right": paddingXVal,
             "padding-top": paddingYVal,
             "padding-bottom": paddingYVal,
-            width:
-                resizedWidth() !== null
-                    ? `${resizedWidth()}px`
-                    : layoutStyle.width,
-            height:
-                resizedHeight() !== null
-                    ? `${resizedHeight()}px`
-                    : layoutStyle.height,
             background: bgVal,
             ...layoutStyle,
         };
+        // a dragged size wins over the layout props: a flex share or a token
+        // size is where a resizable starts, not where it must stay. It still
+        // shrinks when its parent does.
+        const dragged = isRow() ? resizedWidth() : resizedHeight();
+        if (dragged !== null) {
+            base[isRow() ? "width" : "height"] = `${dragged}px`;
+            base.flex = "0 1 auto";
+        }
 
         return typeof local.style === "object"
             ? { ...base, ...local.style }
