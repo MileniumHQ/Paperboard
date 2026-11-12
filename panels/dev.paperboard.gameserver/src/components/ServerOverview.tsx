@@ -99,21 +99,21 @@ export default function ServerOverview(props: {
     return (
         <>
             <PaperCard shrink={false} padding="full">
-                <PaperFlex direction="row" gap="full" align="center">
+                <PaperFlex direction="row" gap="threefourths" align="center">
                     {props.avatar}
                     <PaperFlex direction="column" gap="onefourth" minWidth={0}>
-                        <PaperFlex direction="row" gap="half" align="center">
-                            <PaperText preset="title">{address()}</PaperText>
+                        <PaperFlex direction="row" gap="half" align="center" wrap>
+                            <PaperText size={4} weight={700}>{address()}</PaperText>
                             <PaperCopyButton text={address()} title="Copy address" />
-                            <PaperBadge variant={badge().variant}>{badge().label}</PaperBadge>
                         </PaperFlex>
                         {props.detail}
                     </PaperFlex>
                 </PaperFlex>
             </PaperCard>
 
-            <PaperFlex justify="space-between" direction="row" align="center" shrink={false}>
-                <PaperFlex gap="half" direction="row" align="center">
+            {/* both groups wrap, so a phone's controls and badges stack instead of leaving the screen */}
+            <PaperFlex justify="space-between" direction="row" align="center" gap="half" wrap shrink={false}>
+                <PaperFlex gap="half" direction="row" align="center" wrap>
                     <Show when={serverStatus() === "offline"}>
                         <PaperEffect>
                             <PaperButton onClick={startServer}>
@@ -142,7 +142,8 @@ export default function ServerOverview(props: {
                         {props.actions}
                     </Show>
                 </PaperFlex>
-                <PaperFlex direction="row" align="center" gap="onefourth">
+                <PaperFlex direction="row" align="center" gap="onefourth" wrap>
+                    <PaperBadge variant={badge().variant}>{badge().label}</PaperBadge>
                     <PaperBadge>{serverVersion()}</PaperBadge>
                     <PaperBadge>{props.software}</PaperBadge>
                 </PaperFlex>

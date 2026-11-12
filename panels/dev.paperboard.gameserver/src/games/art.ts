@@ -8,7 +8,11 @@ const taglines: Readonly<Record<string, string>> = {
     palworld: "Don't worry; there are no labor laws for Pals.",
     rust: "Do whatever it takes to last another night.",
 };
-/** Where scripts/fetch-game-art.ts puts a game's art; the panel never fetches art at runtime. Relative to the panel's document, which a web host serves under a path of its own. */
+/**
+ * Where scripts/fetch-game-art.ts puts a game's art; the panel never fetches art at runtime.
+ * Relative to the panel's folder, not the host's root: a browser host serves the panel from
+ * /_panel/<computer>/<panel>/, where a leading slash would land on the shell's own files.
+ */
 export const gameArt = (id: string): GameArt => ({
     tagline: taglines[id] ?? (() => { throw new Error(`No tagline for game "${id}"`); })(),
     poster: `assets/games/${id}/poster.webp`,

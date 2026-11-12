@@ -18,28 +18,41 @@
     cursor: grabbing;
 }
 
-.topLeft,
-.topRight,
-.bottomLeft {
+/* the controls float over the top edge: the pickers at the left and the
+   coordinates at the right, wrapping into rows when the map is narrow. The
+   strip itself lets the terrain be dragged; only the chips take the pointer. */
+.controls {
     position: absolute;
-    display: flex;
-    gap: var(--paper-uigap-half);
-}
-
-.topLeft {
     top: var(--paper-uigap);
     left: var(--paper-uigap);
-    align-items: center;
+    right: var(--paper-uigap);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--paper-uigap-half);
+    pointer-events: none;
 }
 
-.topRight {
-    top: var(--paper-uigap);
-    right: var(--paper-uigap);
-    flex-direction: column;
-    align-items: flex-end;
+.selects {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    pointer-events: auto;
+}
+
+/* the cursor's position and the go-to fields in one row; narrower than the
+   map, it takes the row and its fields shrink */
+.coords {
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+    max-width: 100%;
+    pointer-events: auto;
 }
 
 .bottomLeft {
+    position: absolute;
     bottom: var(--paper-uigap);
     left: var(--paper-uigap);
     max-width: var(--paper-size-panel-small);
@@ -57,15 +70,13 @@
     backdrop-filter: var(--paper-blur-medium);
 }
 
-.readout {
-    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
-}
-
 .empty {
     position: absolute;
     inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: var(--paper-uigap);
+    text-align: center;
     pointer-events: none;
 }
