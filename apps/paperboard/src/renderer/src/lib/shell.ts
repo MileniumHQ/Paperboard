@@ -36,6 +36,8 @@ export interface ComputerProbeResult {
     reachable: boolean;
     hostname?: string;
     error?: string;
+    // what was typed is no address, so there is no port to name
+    invalidAddress?: boolean;
 }
 
 export interface DiscoveredComputer {
@@ -91,7 +93,7 @@ export const computersApi = {
     list: (): Promise<ComputerListResult> =>
         requireIpc().invoke<ComputerListResult>("computers-list"),
 
-    probe: (host: string, port?: number): Promise<ComputerProbeResult> =>
+    probe: (host: string, port?: number | string): Promise<ComputerProbeResult> =>
         requireIpc().invoke<ComputerProbeResult>("computer-probe", {
             host,
             port,

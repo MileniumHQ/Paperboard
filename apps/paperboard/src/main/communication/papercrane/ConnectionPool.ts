@@ -10,6 +10,7 @@ import {
 import { getLocalDir } from "../../../../papercrane/paths";
 import { logger } from "../../../../papercrane/logger";
 import { pinnedRequest } from "../../../../papercrane/pinnedTls";
+import { bracketHost, checkProbeTarget } from "./probeTarget";
 import { PaperCraneClient } from "./PaperCraneClient";
 import type { ComputerDriver } from "../driver/ComputerDriver";
 import { RemoteComputerDriver } from "../driver/RemoteComputerDriver";
@@ -30,17 +31,9 @@ export interface StoredComputer {
     isLocal?: boolean;
 }
 
-function bracketHost(host: string): string {
-    return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
-}
-
 // timeout = lost in transit, refusal = nothing listening there
 export function classifyProbeError(err: any): string {
     const msg = String(err?.message || "");
-    // a typed address that is no host at all never reached the network
-    if (err?.code === "ERR_INVALID_URL" || /invalid url|failed to parse url/i.test(msg)) {
-        return "That isn't a valid address. Type an IP address or a computer name";
-    }
     if (err?.name === "TimeoutError" || /aborted|timeout/i.test(msg)) {
         return "Timed out with no response. The computer may be offline, on a different network, or its firewall is blocking the Paperboard server daemon";
     }
@@ -221,14 +214,17 @@ export class ConnectionPool extends EventEmitter {
         return Array.from(this.computers.values()).map(({ id, name }) => ({ id, name }));
     }
 
+    // port arrives as typed, so a bad one is an answer, not a quiet default
     public async probe(
         host: string,
-        port = DEFAULT_PORT,
-    ): Promise<{ reachable: boolean; hostname?: string; error?: string }> {
+        port: number | string = DEFAULT_PORT,
+    ): Promise<{ reachable: boolean; hostname?: string; error?: string; invalidAddress?: boolean }> {
+        const checked = checkProbeTarget(host, port);
+        if ("error" in checked) return checked;
         try {
             // reachability only: no credential crosses this request, so the
             // not-yet-pinned certificate is not checked here
-            const res = await pinnedRequest(`https://${bracketHost(host)}:${port}/health`, null, { timeoutMs: 2000 });
+            const res = await pinnedRequest(`https://${bracketHost(host)}:${checked.port}/health`, null, { timeoutMs: 2000 });
             if (res.ok) {
                 // /health carries liveness + version only; hostname arrives
                 // over the authenticated pair/verify handshake instead
