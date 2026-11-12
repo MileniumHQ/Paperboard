@@ -113,7 +113,7 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
             <PaperText preset="subheader" as="h3" id="grid">Under a grid of cards</PaperText>
             <PaperText preset="body" as="p">
-                A browser of cards shows a fixed number of cards per page, then the pagination, then a count.
+                The AI panel's model browser shows a fixed number of cards per page, then the pagination, then a count.
                 Scroll back to the top of the list in the handler if the page is long.
             </PaperText>
             <PaperCode block language="tsx">
