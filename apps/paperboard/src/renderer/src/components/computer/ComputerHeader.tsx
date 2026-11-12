@@ -18,6 +18,8 @@ export interface ComputerHeaderProps {
     onActivateTab?: () => void;
     /** Opens the library's right-click menu (Reload), anchored at the event. */
     onLibraryContextMenu?: (e: MouseEvent) => void;
+    /** the phone layout: what a tab opens covers the list, so none stays highlighted */
+    buttons?: boolean;
 }
 
 export interface OsBrandInfo {
@@ -142,6 +144,7 @@ const ComputerHeader: Component<ComputerHeaderProps> = (props) => {
                 name="computer-system-selection"
                 value={props.selectedTab}
                 onValueChange={(val) => props.onSelectTab(String(val))}
+                buttons={props.buttons}
                 class={styles.tabs}
             >
                 <PaperListItem

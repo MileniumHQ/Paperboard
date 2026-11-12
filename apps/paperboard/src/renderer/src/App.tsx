@@ -771,6 +771,7 @@ const App: Component = () => {
                                                     setComputerTab(comp.id, tab)
                                                 }
                                                 onActivateTab={openMobilePage}
+                                                buttons={mobile()}
                                                 onLibraryContextMenu={(
                                                     e: MouseEvent,
                                                 ) =>
@@ -789,6 +790,7 @@ const App: Component = () => {
                                                         String(val),
                                                     )
                                                 }
+                                                buttons={mobile()}
                                                 class={styles.panelList}
                                             >
                                                 <For each={compPanels()}>
