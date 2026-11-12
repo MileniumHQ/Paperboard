@@ -20,7 +20,7 @@ export default function PaperWidgetDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">PaperWidget</PaperText>
             <PaperText preset="body" as="p">
-                PaperWidget is the tile layout of a Home widget: a one-line header, a body, and an optional footer, all aligned to one left edge.
+                PaperWidget is the tile layout of a Home widget: a header, a body, and an optional footer, all aligned to one left edge.
                 Use it, with PaperWidgetStat, PaperWidgetRows, and PaperWidgetMessage for the body, in every widget a panel registers, so widgets from different panels line up on Home.
                 It fills its tile and sizes its type and spacing from the tile, so one widget reads the same in a small cell and a large one.
             </PaperText>
@@ -73,7 +73,7 @@ export function Widget() {
                         <td><PaperCode>title</PaperCode></td>
                         <td><PaperCode>JSX.Element | string</PaperCode></td>
                         <td>No default</td>
-                        <td>The header's title, bold, one line, ellipsized when long. Omit it only for a widget that is a face, such as a clock: with no title, detail, or action the header is not drawn.</td>
+                        <td>The header's title, bold. A title too long for the tile wraps to a second line and is only ellipsized after that. Omit it only for a widget that is a face, such as a clock: with no title, detail, or action the header is not drawn.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>icon</PaperCode></td>
@@ -146,7 +146,7 @@ export function Widget() {
                         <td><PaperCode>value</PaperCode></td>
                         <td><PaperCode>JSX.Element | string</PaperCode></td>
                         <td>Required</td>
-                        <td>The figure.</td>
+                        <td>The figure. A value too wide for its column wraps to a second line instead of being cut.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>caption</PaperCode></td>
@@ -264,7 +264,7 @@ export function Widget() {
                         <td><PaperCode>title</PaperCode></td>
                         <td><PaperCode>JSX.Element | string</PaperCode></td>
                         <td>Required</td>
-                        <td>What is happening, in a few words.</td>
+                        <td>What is happening, in a few words. It wraps to a second line before it is cut.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>description</PaperCode></td>
@@ -293,6 +293,7 @@ export function Widget() {
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
                 <li>The widget sizes from its tile, not the window. Padding is one gap at every size and the gaps between parts scale with the tile.</li>
+                <li>Text wraps before it is cut: titles, stat values, and message titles take up to two lines. A detail, a caption, and a row stay on one line and are ellipsized, so rows keep an even height.</li>
                 <li>Without <PaperCode>onPress</PaperCode>, the body keeps its own clicks, hovers, and scroll. With it, a button fills the tile behind the content and presses fall through to it, except on buttons, links, and fields inside the tile.</li>
                 <li>A widget is its own document and has no access to the panel's state. Read it through the panel bridge and show the failure in the tile with PaperWidgetMessage, as the create-panel template does.</li>
             </PaperTextList>
