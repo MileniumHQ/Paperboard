@@ -75,7 +75,7 @@
     }
 }
 @media (hover: none) {
-    .row:active {
+    .row:active:not([data-paper-press-out]) {
         background: color-mix(in srgb, var(--paper-contrast) 4%, transparent);
     }
 }

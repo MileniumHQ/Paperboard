@@ -90,7 +90,7 @@
     }
 }
 @media (hover: none) {
-    .PaperRailItem:active {
+    .PaperRailItem:active:not([data-paper-press-out]) {
         background: var(--paper-surface);
     }
 }
@@ -131,7 +131,7 @@
     }
 }
 @media (hover: none) {
-    .PaperRailItem.disabled:active {
+    .PaperRailItem.disabled:active:not([data-paper-press-out]) {
         background: transparent;
     }
 }

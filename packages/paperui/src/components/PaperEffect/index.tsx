@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import { splitProps, type JSX } from "solid-js";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import { haptic } from "../../utils/haptics";
+import { pressedOutside } from "../../utils/pressCancel";
 import type { PaperRole } from "../../types";
 
 export interface PaperEffectProps extends JSX.HTMLAttributes<HTMLDivElement> {
@@ -39,7 +40,8 @@ export function PaperEffect(props: PaperEffectProps) {
             .join(" ");
 
     // a finger lifted where it pressed feels the paper go down and spring
-    // back; a press that became a scroll is cancelled and feels nothing
+    // back; a press that became a scroll, or slid off, is cancelled and
+    // feels nothing
     let pressed: number | null = null;
     const onPress = (e: PointerEvent) => {
         pressed = e.pointerType === "touch" ? e.pointerId : null;
@@ -48,6 +50,7 @@ export function PaperEffect(props: PaperEffectProps) {
         if (pressed !== e.pointerId) return;
         pressed = null;
         const el = e.currentTarget as HTMLElement;
+        if (pressedOutside(el, e.clientX, e.clientY)) return;
         // dressed as disabled (see the stylesheet): no press to feel
         if (local.disabled || el.querySelector(":disabled, [class*='disabled']")) return;
         haptic(local.variant === "danger" ? "thud" : "paper");

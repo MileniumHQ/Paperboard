@@ -103,7 +103,7 @@
         );
     }
 }
-.PaperButton.size-tiny:active {
+.PaperButton.size-tiny:active:not([data-paper-press-out]) {
     background: color-mix(
         in srgb,
         var(--paper-contrast) 12%,
@@ -130,7 +130,7 @@
     }
 }
 
-.PaperButton.size-tiny[aria-pressed="true"]:active {
+.PaperButton.size-tiny[aria-pressed="true"]:active:not([data-paper-press-out]) {
     background: color-mix(
         in srgb,
         var(--paper-contrast) 14%,
@@ -165,7 +165,7 @@
         opacity: 1;
     }
 }
-.PaperButton.text:active {
+.PaperButton.text:active:not([data-paper-press-out]) {
     background: color-mix(
         in srgb,
         var(--paper-contrast) 14%,
@@ -185,7 +185,7 @@
     }
 }
 @media (hover: none) {
-    .PaperButton.size-tiny.text:active {
+    .PaperButton.size-tiny.text:active:not([data-paper-press-out]) {
         color: var(--paper-text);
     }
 }
@@ -213,7 +213,7 @@
         opacity: 1;
     }
 }
-.PaperButton.outline:active {
+.PaperButton.outline:active:not([data-paper-press-out]) {
     color: var(--paper-text);
     background: color-mix(
         in srgb,
@@ -275,11 +275,11 @@
         opacity: 1 !important;
     }
 }
-.PaperButton:not(.size-tiny):not(.text):not(.outline):active {
+.PaperButton:not(.size-tiny):not(.text):not(.outline):active:not([data-paper-press-out]) {
     transform: scale(0.95);
     opacity: 1;
 }
-:global([class*="PaperEffect"]) .PaperButton:active {
+:global([class*="PaperEffect"]) .PaperButton:active:not([data-paper-press-out]) {
     transform: none;
 }
 
@@ -295,8 +295,8 @@
     }
 }
 @media (hover: none) {
-    .PaperButton.disabled:active,
-    .PaperButton:disabled:active {
+    .PaperButton.disabled:active:not([data-paper-press-out]),
+    .PaperButton:disabled:active:not([data-paper-press-out]) {
         opacity: 0.45;
     }
 }
@@ -308,8 +308,8 @@
     }
 }
 @media (hover: none) {
-    .PaperButton.text.disabled:active,
-    .PaperButton.text:disabled:active {
+    .PaperButton.text.disabled:active:not([data-paper-press-out]),
+    .PaperButton.text:disabled:active:not([data-paper-press-out]) {
         background: transparent;
         color: var(--paper-text);
     }

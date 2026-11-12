@@ -26,7 +26,7 @@
     }
 }
 @media (hover: none) {
-    .PaperChip:active {
+    .PaperChip:active:not([data-paper-press-out]) {
         background: var(--paper-surface-inset);
         color: var(--paper-text);
     }

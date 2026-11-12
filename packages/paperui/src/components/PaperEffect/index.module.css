@@ -45,14 +45,14 @@
     }
 }
 
-.PaperEffect:active {
+.PaperEffect:active:not(:has([data-paper-press-out])) {
     transform: translate3d(
         var(--transform-size),
         var(--transform-size),
         0
     );
 }
-.PaperEffect:active::before {
+.PaperEffect:active:not(:has([data-paper-press-out]))::before {
     transform: translate3d(0, 0, 0);
 }
 
@@ -112,7 +112,7 @@
     }
 }
 
-:global([data-paperui-motion="reduced"]) .PaperEffect:active {
+:global([data-paperui-motion="reduced"]) .PaperEffect:active:not(:has([data-paper-press-out])) {
     transform: translate3d(0, 0, 0);
 }
 @media (hover: hover) {
@@ -125,7 +125,7 @@
         transform: translate3d(var(--transform-size), var(--transform-size), 0);
     }
 }
-:global([data-paperui-motion="reduced"]) .PaperEffect:active::before {
+:global([data-paperui-motion="reduced"]) .PaperEffect:active:not(:has([data-paper-press-out]))::before {
     transform: translate3d(var(--transform-size), var(--transform-size), 0);
     opacity: 0;
 }
@@ -140,13 +140,13 @@
 
 @media (prefers-reduced-motion: reduce) {
     .PaperEffect:hover:not(:active),
-    .PaperEffect:active {
+    .PaperEffect:active:not(:has([data-paper-press-out])) {
         transform: translate3d(0, 0, 0);
     }
     .PaperEffect:hover:not(:active)::before {
         transform: translate3d(var(--transform-size), var(--transform-size), 0);
     }
-    .PaperEffect:active::before {
+    .PaperEffect:active:not(:has([data-paper-press-out]))::before {
         transform: translate3d(var(--transform-size), var(--transform-size), 0);
         opacity: 0;
     }

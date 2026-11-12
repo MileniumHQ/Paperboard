@@ -88,7 +88,7 @@
     }
 }
 @media (hover: none) {
-    .item:active {
+    .item:active:not([data-paper-press-out]) {
         background: color-mix(
             in srgb,
             var(--paper-contrast) 6%,
@@ -110,7 +110,7 @@
     }
 }
 @media (hover: none) {
-    .item.danger:active {
+    .item.danger:active:not([data-paper-press-out]) {
         background: color-mix(in srgb, var(--paper-danger) 12%, transparent);
     }
 }
@@ -277,7 +277,7 @@
     }
 }
 @media (hover: none) {
-    .compact .item:active {
+    .compact .item:active:not([data-paper-press-out]) {
         background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
     }
 }

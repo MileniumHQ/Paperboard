@@ -347,6 +347,14 @@ export function Done() {
 }`}
             </PaperCode>
 
+            <PaperText preset="subheader" as="h2" id="press-cancel">Sliding off a press</PaperText>
+            <PaperText preset="body" as="p">
+                A finger that presses a control and slides off it before lifting doesn't press it, like a native button.{" "}
+                <PaperLink href="/docs/paperui/paperprovider/">PaperProvider</PaperLink> installs this for every button, link, label and control role in its document.
+                While the finger is more than <PaperCode>PRESS_SLOP</PaperCode> (24) pixels past the control's edge, the control carries <PaperCode>data-paper-press-out</PaperCode> and PaperUI draws it unpressed; lifting there sends no click, and sliding back presses it again.
+                A component with its own <PaperCode>:active</PaperCode> style adds <PaperCode>:not([data-paper-press-out])</PaperCode> to it, and <PaperCode>pressedOutside(el, x, y)</PaperCode> answers whether a pointer has left a control.
+            </PaperText>
+
             <PaperText preset="subheader" as="h2" id="swipe-back">Swipe back</PaperText>
             <PaperText preset="body" as="p">
                 On a phone layout an open page goes back when it is dragged to the right, like the iOS back swipe.{" "}

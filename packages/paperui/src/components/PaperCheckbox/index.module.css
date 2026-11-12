@@ -56,7 +56,7 @@
     }
 }
 @media (hover: none) {
-    .PaperCheckboxContainer:active:not(.disabled) .box {
+    .PaperCheckboxContainer:active:not([data-paper-press-out]):not(.disabled) .box {
         border-color: var(--paper-border-emphasis);
     }
 }
@@ -73,7 +73,7 @@
     }
 }
 @media (hover: none) {
-    .PaperCheckboxContainer:active:not(.disabled) .checked .box {
+    .PaperCheckboxContainer:active:not([data-paper-press-out]):not(.disabled) .checked .box {
         background: var(--paper-primary);
         border-color: var(--paper-primary);
     }

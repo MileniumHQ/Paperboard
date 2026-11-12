@@ -96,7 +96,7 @@
     }
 }
 @media (hover: none) {
-    .PaperMenuItem:active {
+    .PaperMenuItem:active:not([data-paper-press-out]) {
         color: var(--paper-primary-ink);
         background: color-mix(in srgb, var(--paper-primary) 5%, transparent);
     }
@@ -111,7 +111,7 @@
     }
 }
 @media (hover: none) {
-    .PaperMenuItem:active .menuIcon {
+    .PaperMenuItem:active:not([data-paper-press-out]) .menuIcon {
         color: var(--paper-primary-ink);
     }
 }
@@ -157,7 +157,7 @@
     }
 }
 @media (hover: none) {
-    .sectionHeader:active {
+    .sectionHeader:active:not([data-paper-press-out]) {
         color: var(--paper-text);
         background: color-mix(
             in srgb,

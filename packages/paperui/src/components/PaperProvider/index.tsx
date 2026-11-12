@@ -13,6 +13,7 @@ import {
 import { PaperToastRegion } from "../PaperToast";
 import { installSwipeBack } from "../../utils/swipeBack";
 import { installTouchHold } from "../../utils/touchHold";
+import { installPressCancel } from "../../utils/pressCancel";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -112,6 +113,8 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
     // and holding still opens a context menu
     onCleanup(installSwipeBack());
     onCleanup(installTouchHold());
+    // a press that slides off its control lets go of it, like a native button
+    onCleanup(installPressCancel());
 
     const currentThemeMode = createMemo(() => local.theme ?? internalTheme());
     const resolvedTheme = createMemo(() => {
