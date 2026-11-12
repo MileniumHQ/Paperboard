@@ -23,6 +23,8 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    /* the chat keeps its own place (pinned to the end, or where it was read) as the page resizes for a keyboard; the browser moving it first would read as the reader scrolling away */
+    overflow-anchor: none;
     display: flex;
     flex-direction: column;
     gap: var(--paper-uigap-third);

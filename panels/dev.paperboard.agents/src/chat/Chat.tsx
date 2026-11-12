@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, on, type JSX } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
 import { PaperButton, PaperContextMenu, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPageHeader, PaperProgress, PaperQuote, PaperText, type MarkdownImage } from "@mileniumhq/paperui";
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
@@ -157,12 +157,51 @@ export default function Chat(props: { agent: Agent; face: FaceController; apps: 
     // follow the conversation down as it grows, unless the user scrolled up to read
     let list!: HTMLDivElement;
     let pinned = true;
+    // Going to the end is the chat's own doing: the scroll it causes lands a frame later, when the list may have grown again,
+    // and must not be read as the reader leaving the end.
+    let following = false;
+    const follow = () => {
+        following = true;
+        list.scrollTo({ top: list.scrollHeight });
+        requestAnimationFrame(() => (following = false));
+    };
     createEffect(
         on(
             () => [agent.entries.length, agent.state.chat.waiting.length, agent.state.chat.typing],
-            () => queueMicrotask(() => pinned && list.scrollTo({ top: list.scrollHeight })),
+            () =>
+                queueMicrotask(() => {
+                    watchRows();
+                    if (pinned) follow();
+                }),
         ),
     );
+
+    // The keyboard rising shrinks the page (the shell resizes the panel's frame for it), and the list with it.
+    // A conversation that was at its end stays there; one being read stays where it was, with the focused field in view.
+    // The browser may move the scroll position while it lays the smaller list out; that is the page's doing, not the reader's, so it never unpins.
+    // A row that grows after it's drawn (a sign-in's picture arriving) moves the end too, so rows are watched as well.
+    let listHeight = 0;
+    let readingAt = 0;
+    let watch: ResizeObserver | undefined;
+    const watchRows = () => {
+        for (const row of list.children) watch?.observe(row);
+    };
+    onMount(() => {
+        listHeight = list.clientHeight;
+        watch = new ResizeObserver(() => {
+            const grew = list.clientHeight > listHeight;
+            const resized = list.clientHeight !== listHeight;
+            listHeight = list.clientHeight;
+            if (pinned) follow();
+            else if (resized) {
+                list.scrollTop = readingAt;
+                if (!grew && list.contains(document.activeElement)) document.activeElement?.scrollIntoView({ block: "nearest" });
+            }
+        });
+        watch.observe(list);
+        watchRows();
+        onCleanup(() => watch?.disconnect());
+    });
 
     // more rows above keep what's on screen where it was
     const drawMore = (count = PAGE_ROWS) => {
@@ -217,6 +256,8 @@ export default function Chat(props: { agent: Agent; face: FaceController; apps: 
                 class={styles.list}
                 ref={list}
                 onScroll={() => {
+                    if (following || list.clientHeight !== listHeight) return;
+                    readingAt = list.scrollTop;
                     pinned = list.scrollHeight - list.scrollTop - list.clientHeight < 48;
                     if (list.scrollTop < MORE_AT_PX && drawn() < rows().length) drawMore();
                 }}
