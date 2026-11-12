@@ -155,6 +155,7 @@ paper?.setTheme("dark"); // ThemeMode => void`}
                 A provider installs two gestures for touch screens and removes them when it unmounts.
                 Dragging an open page to the right goes back, like the iOS back swipe, unless the touch started on something with a horizontal gesture of its own, or on an element with <PaperCode>data-paper-no-swipe-back</PaperCode>.
                 Holding a finger still for half a second fires a <PaperCode>contextmenu</PaperCode> event at it, as a right click does, so the same handlers work on touch.
+                Taps don't flash the browser's grey highlight inside the root; components show their own pressed state.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>

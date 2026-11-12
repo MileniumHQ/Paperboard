@@ -57,6 +57,9 @@
     font-family: var(--paper-font-family);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* WebKit flashes a grey box over whatever a finger taps. Components
+       draw their own pressed states, so drop the browser's (inherited). */
+    -webkit-tap-highlight-color: transparent;
 }
 
 .paperui-root,
