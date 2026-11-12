@@ -3,6 +3,7 @@
 import fs from "fs";
 import path from "path";
 import { isPanelId } from "../panelIdentity";
+import { callBlockId } from "../serviceCalls";
 import { HostConnection, DaemonError } from "./daemon";
 import { CliError, EXIT_OK, usageError, type Output } from "./output";
 
@@ -54,36 +55,37 @@ function elapsed(started: number): string {
     return ms < 1000 ? `${ms.toFixed(1)} ms` : `${(ms / 1000).toFixed(2)} s`;
 }
 
-type ListedInputs = Record<string, { type?: string; required?: boolean }>;
+// a block's registry entry: "command.kick" or "server1/command.kick"
+const BLOCK_ENTRY = /^(?:[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/)?(command|value)\.[a-z0-9][a-z0-9-]{0,63}$/;
 
-interface ListedAction {
-    action: string;
-    schema?: { name?: string; internal?: boolean; eventOnly?: boolean; inputs?: ListedInputs };
+type ListedInputs = Record<string, { type?: string; optional?: boolean }>;
+
+interface ListedBlock {
+    entry: string;
+    schema?: { kind?: string; name?: string; inputs?: ListedInputs };
 }
 
 function describeInputs(inputs: ListedInputs | undefined): string {
     if (!inputs || typeof inputs !== "object") return "";
     return Object.entries(inputs)
-        .map(([name, input]) => `${name}${input?.required ? "" : "?"}: ${input?.type ?? "any"}`)
+        .map(([name, input]) => `${name}${input?.optional ? "?" : ""}: ${input?.type ?? "any"}`)
         .join(", ");
 }
 
-async function listActions(connection: HostConnection, panel: string, output: Output): Promise<number> {
-    const { actions } = await connection.request<{ actions: ListedAction[] }>("actions:list", { panelId: panel });
-    const callable = actions.filter((a) => !a.schema?.eventOnly);
-    if (callable.length === 0) {
+async function listBlocks(connection: HostConnection, panel: string, output: Output): Promise<number> {
+    const { entries } = await connection.request<{ entries: ListedBlock[] }>("blocks:list", { panelId: panel });
+    const runnable = entries.filter((e) => BLOCK_ENTRY.test(e.entry));
+    if (runnable.length === 0) {
         throw new CliError(
-            `${panel} has no actions to call right now`,
-            "Actions exist while the panel's service (or an open window) has registered them; run paperapi doctor to check its service.",
+            `${panel} has no blocks to run right now`,
+            "Blocks exist while the panel's service has registered them; run paperapi doctor to check its service. A service's own calls are never listed: name one to run it.",
         );
     }
-    const width = Math.max(...callable.map((a) => a.action.length));
-    output.note(output.err.dim(`${callable.length} ${callable.length === 1 ? "action" : "actions"} on ${panel}:`));
-    for (const entry of callable.sort((a, b) => a.action.localeCompare(b.action))) {
-        const name = entry.schema?.name && entry.schema.name !== entry.action ? entry.schema.name : "";
-        const inputs = describeInputs(entry.schema?.inputs);
-        const tags = entry.schema?.internal ? output.out.dim(" (internal)") : "";
-        output.line(`${output.out.bold(entry.action.padEnd(width))}  ${name}${tags}${inputs ? `  ${output.out.dim(`(${inputs})`)}` : ""}`);
+    const width = Math.max(...runnable.map((e) => e.entry.length));
+    output.note(output.err.dim(`${runnable.length} ${runnable.length === 1 ? "block" : "blocks"} on ${panel}:`));
+    for (const block of runnable.sort((a, b) => a.entry.localeCompare(b.entry))) {
+        const inputs = describeInputs(block.schema?.inputs);
+        output.line(`${output.out.bold(block.entry.padEnd(width))}  ${block.schema?.name ?? ""}${inputs ? `  ${output.out.dim(`(${inputs})`)}` : ""}`);
     }
     return EXIT_OK;
 }
@@ -92,29 +94,47 @@ export interface CallOptions {
     timeout?: string;
 }
 
-export async function runCall(panelArg: string, action: string | undefined, inputsText: string | undefined, options: CallOptions, output: Output): Promise<number> {
+/**
+ * Runs a block ("command.kick", "server1/value.players", inputs an object)
+ * or one of the panel service's own calls ("greet", any JSON input), as
+ * this computer's host. With nothing named, lists the panel's blocks.
+ */
+export async function runCall(panelArg: string, name: string | undefined, inputText: string | undefined, options: CallOptions, output: Output): Promise<number> {
     if (!isPanelId(panelArg)) throw usageError(`"${panelArg}" is not a panel id`);
     const panel = panelArg;
     const timeoutMs = parseTimeout(options.timeout);
-    const inputs = parseInputs(inputsText);
+    const input = parseInputs(inputText);
+    const block = name !== undefined && BLOCK_ENTRY.test(name);
+    if (block && input !== undefined && (typeof input !== "object" || input === null || Array.isArray(input))) {
+        throw usageError("A block's inputs are one JSON object", `Name each input: '{"player":"Steve"}'.`);
+    }
+    let entry: string | undefined;
+    if (name !== undefined) {
+        try {
+            entry = block ? name : `command.${callBlockId(name)}`;
+        } catch (err) {
+            throw usageError((err as Error).message);
+        }
+    }
     const connection = await HostConnection.open();
     try {
-        if (action === undefined) return await listActions(connection, panel, output);
+        if (entry === undefined) return await listBlocks(connection, panel, output);
+        const request = { inputs: block ? (input ?? {}) : input === undefined ? {} : { input } };
         const started = performance.now();
         let answer: { result?: unknown };
         try {
             // the daemon's own deadline answers first; this one only guards a silent socket
-            answer = await connection.request("actions:call", { panelId: panel, action, args: [inputs], timeoutMs }, timeoutMs === null ? null : timeoutMs + 5_000);
+            answer = await connection.request("blocks:call", { panelId: panel, entry, request, timeoutMs }, timeoutMs === null ? null : timeoutMs + 5_000);
         } catch (err) {
             if (!(err instanceof DaemonError)) throw err;
             const missing = /not registered or unavailable/.test(err.message);
             throw new CliError(
-                `${panel} ${action} failed: ${err.message}`,
-                missing ? `See what ${panel} offers: paperapi call ${panel}` : undefined,
+                `${panel} ${name} failed: ${err.message}`,
+                missing ? `See ${panel}'s blocks: paperapi call ${panel}. A call is one its service declares in definePanelService's calls.` : undefined,
             );
         }
-        output.success(`${panel} ${action} ${output.err.dim(`· ${elapsed(started)}`)}`);
-        if (answer?.result !== undefined) output.line(JSON.stringify(answer.result, null, 2));
+        output.success(`${panel} ${name} ${output.err.dim(`· ${elapsed(started)}`)}`);
+        if (answer?.result !== undefined && answer.result !== null) output.line(JSON.stringify(answer.result, null, 2));
         return EXIT_OK;
     } finally {
         connection.close();

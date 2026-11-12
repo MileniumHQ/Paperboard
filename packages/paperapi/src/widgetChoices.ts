@@ -1,7 +1,7 @@
 // Home's side of widget options: asks the service of one panel, on one
 // computer, what an option's dropdown offers. Panel and computer are both
 // explicit; nothing here falls back to "the current panel".
-import { WIDGET_CHOICES_ACTION } from "./channels";
+import { WIDGET_CHOICES_COMMAND } from "./serviceCalls";
 import { getTransport } from "./ipc";
 import { parseWidgetChoices, type WidgetChoice } from "./widgetManifest";
 
@@ -16,8 +16,8 @@ export async function getWidgetChoices(
     const transport = getTransport(computerId);
     await transport.ensureConnected();
     const res = await transport.call(
-        "actions:call",
-        { panelId, action: WIDGET_CHOICES_ACTION, args: [{ widgetId, optionId }, undefined], timeoutMs: WIDGET_CHOICES_TIMEOUT_MS },
+        "blocks:call",
+        { panelId, entry: `command.${WIDGET_CHOICES_COMMAND}`, request: { inputs: { widget: widgetId, option: optionId } }, timeoutMs: WIDGET_CHOICES_TIMEOUT_MS },
         WIDGET_CHOICES_TIMEOUT_MS,
     );
     return parseWidgetChoices(res?.result);

@@ -58,12 +58,23 @@ export async function installPanelFiles(dataDir: string, panel: PanelFixture): P
 
 // A minimal service: registers the given actions source (an object literal
 // of `name: async (ctx, input) => ...` entries) and reports ready.
-export function serviceSource(body: { actions?: string; extra?: string; options?: string } = {}): string {
+export function serviceSource(body: { actions?: string; calls?: string; extra?: string; options?: string } = {}): string {
 	return `import { definePanelService } from ${JSON.stringify(PAPERAPI)};
 ${body.extra ?? ""}
 definePanelService({
-	actions: ${body.actions ?? "{}"},
+	${body.calls !== undefined ? `calls: ${body.calls},` : `actions: ${body.actions ?? "{}"},`}
 	${body.options ?? ""}
 });
 `;
+}
+
+/** A service call's blocks:call params: the internal command a definePanelService call is. */
+export function serviceCall(panelId: string, call: string, input?: unknown, timeoutMs?: number): Record<string, unknown> {
+	const id = call.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+	return { panelId, entry: `command.call-${id}`, request: { inputs: input === undefined ? {} : { input } }, ...(timeoutMs ? { timeoutMs } : {}) };
+}
+
+/** The blocks:call params that read a service's whole state, as a panel's page does when it opens. */
+export function stateRead(panelId: string): Record<string, unknown> {
+	return { panelId, entry: "value.panel-state", request: { inputs: {} } };
 }

@@ -5,7 +5,8 @@ import fs from "fs";
 import path from "path";
 import { requirePanelId } from "../panelIdentity";
 import { validateWidgetDeclarations, WIDGET_ENTRY } from "../widgetManifest";
-import { HostConnection } from "./daemon";
+import { DaemonError, HostConnection } from "./daemon";
+import { STATE_VALUE } from "../serviceCalls";
 import { panelsDir, paperboardDir } from "./paths";
 import { CliError, EXIT_FAILED, EXIT_OK, shownPath, type Output } from "./output";
 
@@ -172,14 +173,16 @@ async function checkDaemon(id: string, manifest: Record<string, any>, linked: bo
             checks.push({ name: "Service", status: "skip", detail: "needs the panel linked" });
             return;
         }
-        const { actions } = await connection.request<{ actions: Array<{ panelId: string }> }>("actions:list", { panelId: id });
-        if (actions.length > 0) {
-            checks.push({ name: "Service", status: "ok", detail: `answering, with ${actions.length} ${actions.length === 1 ? "action" : "actions"} registered` });
-        } else {
+        // a service answers its page's state read once it has started
+        try {
+            await connection.request("blocks:call", { panelId: id, entry: `value.${STATE_VALUE}`, request: { inputs: {} }, timeoutMs: 10_000 }, 15_000);
+            checks.push({ name: "Service", status: "ok", detail: "answering" });
+        } catch (err) {
+            if (!(err instanceof DaemonError)) throw err;
             checks.push({
                 name: "Service",
                 status: "fail",
-                detail: "not answering: it has registered nothing with Paperboard",
+                detail: `not answering: ${err.message}`,
                 fix: `paperapi restart starts it; paperapi monitor --panel ${id} shows why it stops`,
             });
         }

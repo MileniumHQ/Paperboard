@@ -3,6 +3,8 @@
 // registers; it prints READY once every registration is acknowledged.
 import { actionsApi, defineAction, defineType } from "../../src/actions";
 import { blocksApi } from "../../src/blocks";
+import { definePanelService } from "../../src/service";
+import { serviceApi } from "../../src/serviceCalls";
 import { getPanelId } from "../../src/ipc";
 
 const panelId = getPanelId();
@@ -190,7 +192,31 @@ async function blocks(): Promise<void> {
     });
 }
 
-// another panel, which tries to run the blocks panel's internal command
+// a panel service as panels write one: calls its page makes, events it
+// emits, state it keeps, and a widget option's choices
+async function service(): Promise<void> {
+    const service = definePanelService({
+        state: { items: [] as string[] },
+        calls: {
+            addItem: (ctx, input: { name: string }) => {
+                const items = [...ctx.state.items, input.name];
+                ctx.setState({ items });
+                ctx.emit("item:added", { name: input.name, count: items.length });
+                return items.length;
+            },
+            forget: () => undefined,
+            fail: () => {
+                throw new Error("the service said no");
+            },
+        },
+        widgetChoices: {
+            pinned: { item: (ctx) => ctx.state.items.map((name) => ({ label: name, value: name })) },
+        },
+    });
+    await service.ready;
+}
+
+// another panel, which tries its neighbour's blocks and service calls
 async function caller(): Promise<void> {
     await blocksApi.panel().register({
         commands: [
@@ -206,11 +232,23 @@ async function caller(): Promise<void> {
                         (err: Error) => `refused: ${err.message}`,
                     ),
             },
+            {
+                id: "reach-call",
+                name: "Reach Call",
+                inputs: { panel: { type: "text", name: "Panel" } },
+                output: "text",
+                outputName: "Answer",
+                run: ({ panel }: { panel: string }) =>
+                    serviceApi.call(panel, "addItem", { name: "intruder" }).then(
+                        (result) => `ran: ${JSON.stringify(result)}`,
+                        (err: Error) => `refused: ${err.message}`,
+                    ),
+            },
         ],
     });
 }
 
-const scenarios: Record<string, () => Promise<void>> = { inputs, owner, blocks, caller };
+const scenarios: Record<string, () => Promise<void>> = { inputs, owner, blocks, caller, service };
 const scenario = scenarios[process.env.PANEL_SCENARIO ?? ""];
 if (!scenario) throw new Error(`unknown PANEL_SCENARIO ${process.env.PANEL_SCENARIO}`);
 await scenario();

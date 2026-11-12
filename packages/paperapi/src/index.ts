@@ -26,6 +26,7 @@ export * from "./system";
 export * from "./actions";
 export * from "./blocks";
 export * from "./service";
+export * from "./serviceCalls";
 export * from "./bridge";
 export * from "./channels";
 export * from "./protocol";

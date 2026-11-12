@@ -8,7 +8,7 @@ import { PaperCraneAuth } from "../../../papercrane/auth";
 import { PanelServicesManager } from "../../../papercrane/panelServices";
 import { killWorkloads, startCrane, workloadRecords, type CraneProcess } from "../../daemon/support/crane";
 import { dataDir, tempDir } from "../../daemon/support/fs";
-import { installPanelFiles, serviceSource } from "../../daemon/support/panels";
+import { installPanelFiles, serviceCall, serviceSource, stateRead } from "../../daemon/support/panels";
 import { Rpc } from "../../daemon/support/rpc";
 import { isAlive, TEST_TIMEOUT_MS, waitFor } from "../../daemon/support/wait";
 
@@ -391,31 +391,31 @@ describe("a terminal says what it runs", () => {
 
 // Panel services start and hydrate.
 describe("panel services start and hydrate", () => {
-	test("a compiled crane on a network address runs services, and __getState waits for onInit or rejects with its error", async () => {
+	test("a compiled crane on a network address runs services, and reading a service's state waits for onInit or rejects with its error", async () => {
 		const dir = dataDir();
 		await installPanelFiles(dir, {
 			id: "test.hydrate",
 			service: serviceSource({
 				extra: "let release: () => void = () => {}; const gate = new Promise<void>((r) => { release = r; });",
-				actions: "{ open: async () => { release(); return true; } }",
+				calls: "{ ping: () => true, open: async () => { release(); return true; } }",
 				options: "state: { phase: 'initial' }, onInit: async (ctx) => { await gate; ctx.setState({ phase: 'ready' }); },",
 			}),
 		});
 		await installPanelFiles(dir, {
 			id: "test.broken",
-			service: serviceSource({ options: "onInit: async () => { throw new Error('init exploded'); }," }),
+			service: serviceSource({ calls: "{ ping: () => true }", options: "onInit: async () => { throw new Error('init exploded'); }," }),
 		});
 		const started = await startCrane({ dataDir: dir, host: "0.0.0.0" });
 		cranes.push(started);
 		dirs.push(dir);
 		const rpc = await started.rpc();
-		await waitFor("the hydrate service to register", async () => (await rpc.ok("actions:list", { panelId: "test.hydrate" })).actions.length >= 2);
-		const state = rpc.call("actions:call", { panelId: "test.hydrate", action: "__getState", args: [] });
-		await rpc.ok("actions:call", { panelId: "test.hydrate", action: "open", args: [] });
+		await waitFor("the hydrate service to register", async () => !(await rpc.call("blocks:call", serviceCall("test.hydrate", "ping"))).error);
+		const state = rpc.call("blocks:call", stateRead("test.hydrate"));
+		await rpc.ok("blocks:call", serviceCall("test.hydrate", "open"));
 		expect((await state).result).toEqual({ result: { phase: "ready" } });
 
-		await waitFor("the broken service to register", async () => (await rpc.ok("actions:list", { panelId: "test.broken" })).actions.length >= 1);
-		expect((await rpc.fail("actions:call", { panelId: "test.broken", action: "__getState", args: [] })).error).toContain("init exploded");
+		await waitFor("the broken service to register", async () => !(await rpc.call("blocks:call", serviceCall("test.broken", "ping"))).error);
+		expect((await rpc.fail("blocks:call", stateRead("test.broken"))).error).toContain("init exploded");
 		await rpc.close();
 	});
 
@@ -438,14 +438,14 @@ describe("panel services start and hydrate", () => {
 		const dir = dataDir();
 		await installPanelFiles(dir, {
 			id: "test.chatty",
-			service: serviceSource({ actions: "{ burst: async (ctx) => { for (let i = 1; i <= 200; i++) ctx.setState({ n: i }); return true; } }", options: "state: { n: 0 }," }),
+			service: serviceSource({ calls: "{ burst: async (ctx) => { for (let i = 1; i <= 200; i++) ctx.setState({ n: i }); return true; } }", options: "state: { n: 0 }," }),
 		});
 		const c = await crane(dir);
 		const rpc = await c.rpc();
-		await waitFor("the chatty service to register", async () => (await rpc.ok("actions:list", { panelId: "test.chatty" })).actions.length >= 2);
+		await waitFor("the chatty service to register", async () => !(await rpc.call("blocks:call", stateRead("test.chatty"))).error);
 		await rpc.ok("events:subscribe", { events: ["*"] });
-		await rpc.ok("actions:call", { panelId: "test.chatty", action: "burst", args: [] });
-		const syncs = () => rpc.frames.filter((f) => f.type === "event" && String(f.event).startsWith("actions:test.chatty:"));
+		await rpc.ok("blocks:call", serviceCall("test.chatty", "burst"));
+		const syncs = () => rpc.frames.filter((f) => f.type === "event" && f.event === "blocks:test.chatty:event.panel-state-changed");
 		await waitFor("the final state to sync", () => syncs().some((f) => f.payload?.state?.n === 200));
 		expect(syncs().length).toBeLessThanOrEqual(2);
 		await rpc.close();

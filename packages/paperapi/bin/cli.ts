@@ -147,11 +147,11 @@ program
     }));
 
 program
-    .command("call <panel-id> [action] [inputs]")
-    .description("Call a panel's action and print its result as JSON; with no action, list its actions")
+    .command("call <panel-id> [name] [input]")
+    .description("Run a panel's block (command.x, value.x, project/command.x) or one of its service's calls, and print the result as JSON; with no name, list its blocks")
     .option("-t, --timeout <ms>", "how long to wait, up to 60000, or \"none\" (default 30000)")
-    .action(command((panelId: string, action: string | undefined, inputs: string | undefined, opts: { timeout?: string }) =>
-        runCall(panelId, action, inputs, opts, output)));
+    .action(command((panelId: string, name: string | undefined, input: string | undefined, opts: { timeout?: string }) =>
+        runCall(panelId, name, input, opts, output)));
 
 program
     .command("restart [panel]")

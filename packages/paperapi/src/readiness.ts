@@ -1,6 +1,6 @@
-import { actionsApi } from "./actions";
+import { blocksApi } from "./blocks";
 import { resolvePanelId } from "./identity";
-import { STATE_GET_ACTION } from "./channels";
+import { STATE_VALUE } from "./serviceCalls";
 import { getTransport } from "./ipc";
 import { hydratePanelBridges } from "./panelHydration";
 import { waitForContentPainted } from "./paintReady";
@@ -22,7 +22,7 @@ if (typeof window !== "undefined" && window.parent !== window) {
             // connection; one with a service proves the service answers.
             // Only the shell says there is none (from the daemon's manifest).
             if (event.data.service === false) await getTransport().ensureConnected();
-            else await actionsApi.call(panelId, STATE_GET_ACTION);
+            else await blocksApi.read(panelId, STATE_VALUE);
             // A widget frame is the same challenge plus one more fact: the
             // widget the shell asked for is mounted before hydration runs.
             if (event.data.widget !== undefined) {

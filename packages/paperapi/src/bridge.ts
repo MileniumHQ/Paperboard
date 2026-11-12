@@ -1,6 +1,6 @@
-import { actionsApi } from "./actions";
+import { blocksApi } from "./blocks";
 import { getPanelId } from "./ipc";
-import { STATE_GET_ACTION, STATE_SYNC_EVENT } from "./channels";
+import { STATE_EVENT, STATE_VALUE, serviceApi } from "./serviceCalls";
 import { registerPanelHydrator } from "./panelHydration";
 
 export interface PanelBridgeOptions<TState extends Record<string, any>> {
@@ -10,9 +10,9 @@ export interface PanelBridgeOptions<TState extends Record<string, any>> {
 
 export function createPanelBridge<
     TState extends Record<string, any> = Record<string, any>,
-    TActions extends Record<string, (...args: any[]) => Promise<any>> = Record<
+    TCalls extends Record<string, (input?: any) => Promise<any>> = Record<
         string,
-        (...args: any[]) => Promise<any>
+        (input?: any) => Promise<any>
     >,
 >(options: PanelBridgeOptions<TState> = {}) {
     const panelId = options.panelId || getPanelId();
@@ -21,7 +21,7 @@ export function createPanelBridge<
     let status: { ready: boolean; error?: string } = { ready: false };
 
     // the subscription is tearable: createPanelBridge returns dispose()
-    const unsubscribeSync = actionsApi.on(panelId, STATE_SYNC_EVENT, (payload: any) => {
+    const unsubscribeSync = blocksApi.onEvent(panelId, STATE_EVENT, (payload: any) => {
         if (payload?.state) {
             localState = { ...localState, ...payload.state };
             for (const cb of listeners) {
@@ -32,10 +32,7 @@ export function createPanelBridge<
 
     const refreshState = async (): Promise<TState> => {
         try {
-            const fetched = await actionsApi.call<TState>(
-                panelId,
-                STATE_GET_ACTION,
-            );
+            const fetched = await blocksApi.read<TState>(panelId, STATE_VALUE);
             if (fetched && typeof fetched === "object") {
                 status = { ready: true };
                 localState = { ...localState, ...fetched };
@@ -63,14 +60,14 @@ export function createPanelBridge<
         return () => listeners.delete(cb);
     };
 
-    // proxy so bridge.actions.name(args) works
-    const actionsProxy = new Proxy({} as TActions, {
+    // proxy so bridge.calls.name(input) works
+    const callsProxy = new Proxy({} as TCalls, {
         get(_target, prop) {
             // Promise-protocol inspection (`then`, symbol props like
-            // toPrimitive/asyncIterator) must not fire a bogus action call —
-            // only real string action names proxy through
+            // toPrimitive/asyncIterator) must not fire a bogus call —
+            // only real string call names proxy through
             if (prop === "then" || typeof prop !== "string") return undefined;
-            return (...args: any[]) => actionsApi.call(panelId, prop, ...args);
+            return (input?: unknown) => serviceApi.call(panelId, prop, input);
         },
     });
 
@@ -89,9 +86,10 @@ export function createPanelBridge<
         getState: () => localState,
         refreshState,
         onStateChange,
-        actions: actionsProxy,
-        call: <R = unknown>(actionName: string, ...args: any[]): Promise<R> =>
-            actionsApi.call<R>(panelId, actionName, ...args),
+        calls: callsProxy,
+        call: <R = unknown>(name: string, input?: unknown): Promise<R> => serviceApi.call<R>(panelId, name, input),
+        /** hears an event the service emits */
+        on: <T = unknown>(event: string, callback: (payload: T) => void): (() => void) => serviceApi.on<T>(panelId, event, callback),
         dispose,
     };
 }

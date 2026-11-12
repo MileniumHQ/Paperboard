@@ -1,31 +1,11 @@
 import { actionsApi } from "./actions";
+import { blocksApi } from "./blocks";
 import { getPanelId } from "./ipc";
-import { STATE_GET_ACTION, STATE_SYNC_EVENT, WIDGET_CHOICES_ACTION } from "./channels";
+import type { ActionDefinition, ActionCategoryDefinition, CustomTypeDefinition } from "./schema";
+import { defineType } from "./schema";
+import { STATE_EVENT, STATE_VALUE, WIDGET_CHOICES_COMMAND, callBlockId, eventBlockId } from "./serviceCalls";
 import { parseWidgetChoices, type WidgetChoice } from "./widgetManifest";
 import type { BackupEnded } from "./backups";
-import {
-    type ActionCategory,
-    type ActionCategoryDefinition,
-    type ActionDefinition,
-    type CustomTypeDefinition,
-    defineType,
-} from "./schema";
-
-/**
- * Resolves an item's category string against the panel's declared category
- * array, so a panel writes the metadata (icon, order) once and each action
- * only names the category.
- */
-export function resolveItemCategory(
-    category: ActionCategory | undefined,
-    categories: ActionCategoryDefinition[] | undefined,
-): ActionCategory | undefined {
-    if (typeof category !== "string" || !categories || categories.length === 0) {
-        return category;
-    }
-    const match = categories.find((entry) => entry.name === category);
-    return match ? { ...match } : category;
-}
 
 export interface ServiceContext<TState> {
     state: TState;
@@ -34,28 +14,33 @@ export interface ServiceContext<TState> {
             | Partial<TState>
             | ((prev: TState) => Partial<TState>),
     ) => void;
+    /** Tells the panel's page something happened (serviceApi.on); other panels can't hear it. */
     emit: (event: string, payload?: unknown) => void;
+    /** @deprecated Actions is being removed: fire a block event (blocksApi) instead. Kept only while Agents moves to Blocks. */
     emitTrigger: <T = any>(triggerId: string, output: T) => void;
 }
 
+/** A call the panel's page makes to its own service (serviceApi.call): one input, any JSON back. */
+export type ServiceCall<TState> = (ctx: ServiceContext<TState>, input?: any) => unknown | Promise<unknown>;
+
 export interface DefinePanelServiceOptions<
     TState extends Record<string, any>,
-    TActions extends
-        | Record<
-              string,
-              (ctx: ServiceContext<TState>, ...args: any[]) => Promise<any> | any
-          >
-        | ActionDefinition[],
+    TCalls extends Record<string, ServiceCall<TState>>,
 > {
     id?: string;
     state?: TState;
-    actions?: TActions;
-    types?: CustomTypeDefinition[];
     /**
-     * Section metadata for the Actions library. An action/trigger names a
-     * category with `category: "Messages"`; this array supplies the icon and
-     * sort order for that name.
+     * What the panel's own page asks its service, by name. Each is an
+     * internal block: the page calls it with serviceApi.call or the
+     * bridge, no other panel may, and nothing lists it. What a person would
+     * automate is a block of its own (blocksApi).
      */
+    calls?: TCalls;
+    /** @deprecated Actions is being removed: use `calls` and blocks. Kept only while Agents moves to Blocks. */
+    actions?: ActionDefinition[] | Record<string, (ctx: ServiceContext<TState>, ...args: any[]) => any>;
+    /** @deprecated with `actions` */
+    types?: CustomTypeDefinition[];
+    /** @deprecated with `actions` */
     categories?: ActionCategoryDefinition[];
     /**
      * What each widget option's dropdown offers in Home's gallery, by widget
@@ -119,41 +104,52 @@ export interface UpdateEnded {
 
 export function definePanelService<
     TState extends Record<string, any>,
-    TActions extends
-        | Record<
-              string,
-              (ctx: ServiceContext<TState>, ...args: any[]) => Promise<any> | any
-          >
-        | ActionDefinition[],
->(options: DefinePanelServiceOptions<TState, TActions>) {
+    TCalls extends Record<string, ServiceCall<TState>> = Record<string, ServiceCall<TState>>,
+>(options: DefinePanelServiceOptions<TState, TCalls>) {
     const panelId = options.id || getPanelId();
     // identity is threaded as a parameter everywhere; writing it back to
     // process.env gives two services in one process the same name
     let currentState = { ...(options.state || {}) } as TState;
+    // the page and its service talk over internal blocks of the panel
+    const blocks = blocksApi.panel(panelId);
 
-    if (options.types) {
-        for (const typeDef of options.types) {
-            defineType(typeDef);
+    // an event is registered the first time it is emitted, then fired
+    const events = new Map<string, Promise<void>>();
+    const registerEvent = (id: string, event: string): Promise<void> => {
+        let registered = events.get(id);
+        if (!registered) {
+            registered = blocks.register({
+                events: [{ id, name: event, internal: true, values: { payload: { type: "any", name: "Payload", optional: true } } }],
+            });
+            events.set(id, registered);
         }
-    }
-
+        return registered;
+    };
     const emit = (event: string, payload?: unknown) => {
-        actionsApi.emit(event, payload, panelId).catch((err) => {
-            console.error(
-                `[Service:${panelId}] Failed to emit event '${event}':`,
-                err,
-            );
-        });
+        // a name that can't be an id is the panel's mistake: thrown where it was made
+        const id = eventBlockId(event);
+        void registerEvent(id, event)
+            .then(() => blocks.fire(id, payload === undefined ? {} : { payload }))
+            .catch((err) => console.error(`[Service:${panelId}] Failed to emit event '${event}':`, err));
+        // TRANSITIONAL (Actions removal): a page still listening with actionsApi.on hears it too
+        if (options.actions) {
+            actionsApi.emit(event, payload, panelId).catch((err) => console.error(`[Service:${panelId}] Failed to emit event '${event}':`, err));
+        }
     };
 
-    const emitTrigger = <T = any>(triggerId: string, output: T) => {
-        actionsApi.emitTrigger(triggerId, output, panelId).catch((err) => {
-            console.error(
-                `[Service:${panelId}] Failed to emit trigger '${triggerId}':`,
-                err,
-            );
-        });
-    };
+    // the page's state travels on two internal blocks: a value it reads
+    // whole when it opens, and an event each change after that fires on
+    let ready!: Promise<void>;
+    const internals = blocks.register({
+        values: [{
+            id: STATE_VALUE,
+            name: "Panel State",
+            internal: true,
+            type: "any",
+            read: async () => { await ready; return currentState; },
+        }],
+        events: [{ id: STATE_EVENT, name: "Panel State Changed", internal: true, values: { state: { type: "any", name: "State" } } }],
+    });
 
     let unsynced: Partial<TState> | null = null;
     let syncing = false;
@@ -162,8 +158,8 @@ export function definePanelService<
         unsynced = null;
         syncing = state !== null;
         if (!state) return;
-        actionsApi
-            .emit(STATE_SYNC_EVENT, { state }, panelId)
+        internals
+            .then(() => blocks.fire(STATE_EVENT, { state }))
             .catch((err) => {
                 console.error(
                     `[Service:${panelId}] Failed to sync state:`,
@@ -196,79 +192,77 @@ export function definePanelService<
         },
         setState,
         emit,
-        emitTrigger,
+        emitTrigger: (triggerId, output) => {
+            actionsApi.emitTrigger(triggerId, output, panelId).catch((err) => console.error(`[Service:${panelId}] Failed to emit trigger '${triggerId}':`, err));
+        },
     };
 
-    const registrations: Promise<void>[] = [];
-    // internal hydration action: callable by the bridge, never a block
-    registrations.push(actionsApi.register(
-        STATE_GET_ACTION,
-        async () => { await ready; return currentState; },
-        panelId,
-        {
-            internal: true,
-            name: "Get Panel State",
-            description: "Hydrates the panel bridge with the service's state",
-        },
-    ));
+    const registrations: Promise<void>[] = [internals];
 
     if (options.widgetChoices) {
         const widgetChoices = options.widgetChoices;
-        // internal: Home's gallery calls it, never a block
-        registrations.push(actionsApi.register(
-            WIDGET_CHOICES_ACTION,
-            async (inputs: { widgetId?: unknown; optionId?: unknown } | undefined) => {
-                await ready;
-                const widgetId = String(inputs?.widgetId);
-                const optionId = String(inputs?.optionId);
-                const supply = Object.hasOwn(widgetChoices, widgetId) && Object.hasOwn(widgetChoices[widgetId], optionId)
-                    ? widgetChoices[widgetId][optionId]
-                    : undefined;
-                if (!supply) throw new Error(`This panel's service offers no choices for widget "${widgetId}" option "${optionId}"`);
-                return parseWidgetChoices(await supply(ctx));
-            },
-            panelId,
-            {
+        // Home's gallery asks it; the daemon lets the shell in, never another panel
+        registrations.push(blocks.register({
+            commands: [{
+                id: WIDGET_CHOICES_COMMAND,
+                name: "Widget Choices",
                 internal: true,
-                name: "Get Widget Choices",
-                description: "Lists what a widget option offers in Home's gallery",
-            },
-        ));
+                inputs: { widget: { type: "text", name: "Widget" }, option: { type: "text", name: "Option" } },
+                output: "any",
+                outputName: "Choices",
+                run: async ({ widget, option }: { widget: string; option: string }) => {
+                    await ready;
+                    const supply = Object.hasOwn(widgetChoices, widget) && Object.hasOwn(widgetChoices[widget], option)
+                        ? widgetChoices[widget][option]
+                        : undefined;
+                    if (!supply) throw new Error(`This panel's service offers no choices for widget "${widget}" option "${option}"`);
+                    return parseWidgetChoices(await supply(ctx));
+                },
+            }],
+        }));
     }
 
-    if (options.actions) {
-        if (Array.isArray(options.actions)) {
-            for (const actionDef of options.actions) {
-                const wrapped: ActionDefinition = {
-                    ...actionDef,
-                    category: resolveItemCategory(
-                        actionDef.category,
-                        options.categories,
-                    ),
-                    run: actionDef.run
-                        ? (_c: any, inputs: any) => actionDef.run!(ctx, inputs)
-                        : undefined,
-                    listen: actionDef.listen
-                        ? (_c: any, emitFn: (output: any) => void) =>
-                              actionDef.listen!(ctx, emitFn)
-                        : undefined,
-                };
-                registrations.push(actionsApi.register(wrapped, undefined, panelId));
-            }
-        } else {
-            const registeredActions: Record<
-                string,
-                (...args: any[]) => Promise<any> | any
-            > = {};
-            for (const [actionName, actionFn] of Object.entries(options.actions)) {
-                registeredActions[actionName] = (...args: any[]) =>
-                    actionFn(ctx, ...args);
-            }
-            registrations.push(actionsApi.registerMultiple(registeredActions, panelId));
+    if (options.calls) {
+        const seen = new Map<string, string>();
+        const commands = Object.entries(options.calls).map(([name, call]) => {
+            const id = callBlockId(name);
+            const clash = seen.get(id);
+            if (clash !== undefined) throw new Error(`[Service:${panelId}] the calls "${clash}" and "${name}" share the name ${id}`);
+            seen.set(id, name);
+            return {
+                id,
+                name,
+                internal: true,
+                inputs: { input: { type: "any", name: "Input", optional: true } },
+                output: "any",
+                outputName: "Result",
+                // nothing given back reads as null, so the page always hears an answer
+                run: async ({ input }: { input?: unknown }) => (await call(ctx, input)) ?? null,
+            };
+        });
+        registrations.push(blocks.register({ commands }));
+    }
+
+    // TRANSITIONAL (Actions removal): a service still declaring v1 actions
+    // registers them as before. Deleted with actionsApi once Agents moved.
+    if (options.types) for (const typeDef of options.types) defineType(typeDef);
+    if (Array.isArray(options.actions)) {
+        for (const def of options.actions) {
+            const category = typeof def.category === "string" ? options.categories?.find((c) => c.name === def.category) ?? def.category : def.category;
+            registrations.push(actionsApi.register({
+                ...def,
+                category,
+                run: def.run ? (_c: any, inputs: any) => def.run!(ctx, inputs) : undefined,
+                listen: def.listen ? (_c: any, emitFn: (output: any) => void) => def.listen!(ctx, emitFn) : undefined,
+            }, undefined, panelId));
         }
+    } else if (options.actions) {
+        const fns: Record<string, (...args: any[]) => any> = {};
+        for (const [name, fn] of Object.entries(options.actions)) fns[name] = (...args: any[]) => fn(ctx, ...args);
+        registrations.push(actionsApi.registerMultiple(fns, panelId));
     }
 
-    const ready = Promise.all(registrations).then(async () => {
+    ready = Promise.all(registrations).then(async () => {
         await options.onInit?.(ctx);
         if (typeof process !== "undefined" && typeof process.send === "function") {
             for (const operation of ["backup", "restore"] as const) {
