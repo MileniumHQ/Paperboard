@@ -1,0 +1,87 @@
+.PaperCollapsible {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    width: fit-content;
+    max-width: 100%;
+    margin: 0;
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    border: none;
+    border-radius: var(--paper-border-radius);
+    background: transparent;
+    color: var(--paper-text-subtle);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+    transition:
+        background var(--paper-short-transition),
+        color var(--paper-short-transition);
+}
+
+@media (hover: hover) {
+    .header:hover {
+        color: var(--paper-text);
+        background: color-mix(in srgb, var(--paper-contrast) 4%, transparent);
+    }
+}
+@media (hover: none) {
+    .header:active {
+        color: var(--paper-text);
+        background: color-mix(in srgb, var(--paper-contrast) 4%, transparent);
+    }
+}
+
+.header:focus-visible {
+    outline: var(--paper-thickest-border-width) solid var(--paper-primary);
+    outline-offset: var(--paper-border-width);
+}
+
+.chevron,
+.icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.chevron {
+    color: var(--paper-text-faint);
+    transition: transform var(--paper-short-transition) var(--paper-ease-standard);
+}
+
+.chevron.open {
+    transform: rotate(90deg);
+}
+
+/* the rows grow from nothing to the content's own height */
+.body {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--paper-mid-transition) var(--paper-ease-standard);
+}
+
+.body.open {
+    grid-template-rows: 1fr;
+}
+
+.inner {
+    min-height: 0;
+    overflow: hidden;
+}
+
+.content {
+    padding-top: var(--paper-uigap-half);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chevron,
+    .body {
+        transition: none;
+    }
+}

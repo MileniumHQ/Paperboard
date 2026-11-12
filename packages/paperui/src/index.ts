@@ -10,6 +10,7 @@ export * from "./components/PaperCheckbox";
 export * from "./components/PaperChip";
 export * from "./components/PaperCopyButton";
 export * from "./components/PaperCode";
+export * from "./components/PaperCollapsible";
 export * from "./components/PaperConsole";
 export * from "./components/PaperContextMenu";
 export * from "./components/PaperEditor";

@@ -93,6 +93,10 @@
                     "name": "PaperCode",
                     "file": "paper-code"
                 },
+                "papercollapsible": {
+                    "name": "PaperCollapsible",
+                    "file": "paper-collapsible"
+                },
                 "paperconsole": {
                     "name": "PaperConsole",
                     "file": "paper-console"
