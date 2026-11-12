@@ -107,7 +107,8 @@ export default function ServersHome(props: { state: ServersState }) {
                             {(server) => (
                                 <PaperMediaCard
                                     effect={false}
-                                    icon={server.icon ?? gameFor(server.game).art.icon}
+                                    // the card takes a picture only as an absolute URL; the art is relative to the panel
+                                    icon={new URL(server.icon ?? gameFor(server.game).art.icon, document.baseURI).href}
                                     title={server.name}
                                     subtitle={serverSubtitle(gameFor(server.game), { software: server.state.serverSoftware, version: server.state.serverVersion })}
                                     description={

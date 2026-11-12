@@ -60,6 +60,6 @@ export const TMODLOADER_ENTRYPOINT = "tModLoader.dll";
 
 /** each software's logo beside its name, as Minecraft's software is shown */
 export const SOFTWARE_ICON: Record<TerrariaSoftware, string> = {
-    vanilla: "/assets/games/terraria/icon.webp",
-    tmodloader: "/assets/games/terraria/tmodloader.webp",
+    vanilla: "assets/games/terraria/icon.webp",
+    tmodloader: "assets/games/terraria/tmodloader.webp",
 };
