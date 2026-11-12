@@ -19,14 +19,14 @@ export default function PaperSplitDoc() {
             <PaperText preset="header" as="h1">PaperSplit</PaperText>
             <PaperText preset="body" as="p">
                 PaperSplit is a master-detail layout: a list pane of fixed width beside a detail pane that takes the rest.
-                When the container is too narrow, the list fills the space and the detail opens as a modal.
+                When the container is too narrow, the list fills the space and the detail slides in over it as a page.
                 A panel works at Paperboard's smallest window without any media query of its own.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
             <PaperText preset="body" as="p">
                 Pass the list as <PaperCode>side</PaperCode> and the detail as children.
-                Track which item is selected, and pass <PaperCode>detailActive</PaperCode> and <PaperCode>onDetailClose</PaperCode> so the collapsed layout can open and close the modal.
+                Track which item is selected, and pass <PaperCode>detailActive</PaperCode> and <PaperCode>onDetailClose</PaperCode> so the collapsed layout can open and close the page.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="back" height="panel-height">
                 <PaperSplit
@@ -122,19 +122,19 @@ export function Example() {
                         <td><PaperCode>detailActive</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td>No default (closed)</td>
-                        <td>Whether the detail modal is open. Used only while collapsed.</td>
+                        <td>Whether the detail page is open. Used only while collapsed.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>onDetailClose</PaperCode></td>
                         <td><PaperCode>() =&gt; void</PaperCode></td>
                         <td>No default</td>
-                        <td>Called when the modal asks to close. Set your selection state back in it, or the modal stays open.</td>
+                        <td>Called when the detail closes. Collapsed, it comes once the page has slid away, so the detail keeps what it showed until then. Set your selection state back in it, or the page opens again.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>detailTitle</PaperCode></td>
-                        <td><PaperCode>JSX.Element | string</PaperCode></td>
+                        <td><PaperCode>string</PaperCode></td>
                         <td>No default</td>
-                        <td>The modal's title while collapsed.</td>
+                        <td>The page's title while collapsed. In a Paperboard panel it is the last crumb in the app's top bar.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>onCollapsedChange</PaperCode></td>
@@ -156,7 +156,7 @@ export function Example() {
                 <li>The root is 100% wide and tall. Give it a parent with a height, such as a page item with the <PaperCode>fill</PaperCode> variant.</li>
                 <li>The layout is chosen from the root's own width, measured with a resize observer, not from the screen. The first render is side by side, and it collapses once the width is below <PaperCode>collapseWidth</PaperCode>.</li>
                 <li>Side by side, the panes are a row with a <PaperCode>full</PaperCode> gap. The side pane is fixed, the detail pane flexes. <PaperCode>detailActive</PaperCode> is ignored and the detail always shows, so draw an empty state in it when nothing is selected.</li>
-                <li>Collapsed, the side pane fills the root and the detail is a <PaperLink href="/docs/paperui/papermodal/">PaperModal</PaperLink> of size <PaperCode>medium</PaperCode>, open while <PaperCode>detailActive</PaperCode> is true. The modal's close button, backdrop, Escape and Back all call <PaperCode>onDetailClose</PaperCode>.</li>
+                <li>Collapsed, the side pane fills the root and the detail is a fixed <PaperLink href="/docs/paperui/paperslidepage/">PaperSlidePage</PaperLink> (in a panel, it covers the panel), open while <PaperCode>detailActive</PaperCode> is true. Its back button, the system Back action and the back swipe slide it away, then call <PaperCode>onDetailClose</PaperCode>.</li>
                 <li>Crossing the breakpoint rebuilds the panes, so state held inside the side or detail content is lost. Keep selection and drafts in signals outside the split.</li>
                 <li>Each pane is a flex box. Give a card that should fill its pane <PaperCode>fullHeight</PaperCode>, as the samples do.</li>
             </PaperTextList>
@@ -165,7 +165,7 @@ export function Example() {
             <PaperText preset="subheader" as="h3" id="selection">Selection that follows the layout</PaperText>
             <PaperText preset="body" as="p">
                 Side by side, picking an item shows it in the detail pane.
-                Collapsed, picking an item opens the modal, and closing it clears the selection.
+                Collapsed, picking an item opens the page, and closing it clears the selection once the page is gone.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { createSignal, For, Show } from "solid-js";

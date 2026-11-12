@@ -176,8 +176,9 @@
 }
 
 /* inside PaperSplit's modal the pane has no height of its own */
-.viewerInModal {
-    height: 70vh;
+.viewerInPage {
+    flex: 1;
+    min-height: 0;
 }
 
 .toolbar {

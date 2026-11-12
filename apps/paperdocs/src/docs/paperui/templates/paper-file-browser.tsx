@@ -258,7 +258,7 @@ interface PaperFileReveal {
 
             <PaperText preset="subheader" as="h3" id="narrow">Narrow panels</PaperText>
             <PaperText preset="body" as="p">
-                The tree and viewer sit in a <PaperLink href="/docs/paperui/papersplit/">PaperSplit</PaperLink>. In a narrow panel the tree fills the space and the open file shows as a modal over it.
+                The tree and viewer sit in a <PaperLink href="/docs/paperui/papersplit/">PaperSplit</PaperLink>. In a narrow panel the tree fills the space and the open file slides in over it as a page.
             </PaperText>
 
             <PaperText preset="subheader" as="h3" id="security">Paths and security</PaperText>

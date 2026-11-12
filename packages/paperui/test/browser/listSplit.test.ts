@@ -5,25 +5,25 @@ import { type Page, useBrowser } from "./support/chrome";
 const browser = useBrowser();
 let page: Page;
 
-const DIALOG = '[role="dialog"][aria-modal="true"]';
+// the detail's page, once collapsed
+const PAGE = `document.querySelector('#detail')?.closest('[role="region"]')`;
 const row = (name: string) => `label[data-value="${name}"]`;
 
 async function openDetail(name: string) {
     await page.click(row(name));
     await page.waitFor(
-        `document.querySelector('${DIALOG}')?.textContent.includes(${JSON.stringify(name)}) && document.querySelector('[aria-label="Close modal"]')?.getBoundingClientRect().width > 0`,
-        `${name}'s detail to open`,
+        `(() => { const p = ${PAGE}; return p && !p.inert && document.querySelector('#detail').textContent === ${JSON.stringify(name)}
+            && new DOMMatrix(getComputedStyle(p).transform).m41 === 0; })()`,
+        `${name}'s detail page to slide in`,
     );
 }
 
-async function closeDetail() {
-    await page.waitFor(
-        `(() => { const b = document.querySelector('${DIALOG} [aria-label="Close modal"]'); if (!b) return false; const r = b.getBoundingClientRect();
-            return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest("button") === b; })()`,
-        "the close button to take presses",
-    );
-    await page.click(`${DIALOG} [aria-label="Close modal"]`);
-    await page.waitFor(`!document.querySelector('[role="dialog"]')`, "the detail modal to leave");
+async function closeDetail(name: string) {
+    const closes = await page.eval<number>("t.closes");
+    await page.click(`#split [role="region"] [aria-label="Back"]`);
+    // it slides away still showing who it was about; the selection clears after
+    expect(await page.eval(`document.querySelector('#detail').textContent`)).toBe(name);
+    await page.waitFor(`t.closes === ${closes + 1} && ${PAGE}.inert`, "the detail page to slide away and close");
 }
 
 // Inventory: Layout and navigation — Compact list rows reopen.
@@ -34,7 +34,7 @@ describe("PaperList rows in a collapsed PaperSplit", () => {
 
         await page.eval("t.setWidth(900)");
         await page.waitFor("t.collapsed.at(-1) === false", "the 900px split to report side by side");
-        expect(await page.eval(`document.querySelector('#split #detail') !== null && !document.querySelector('[role="dialog"]')`)).toBe(true);
+        expect(await page.eval(`document.querySelector('#split #detail') !== null && !${PAGE}`)).toBe(true);
 
         await page.eval("t.setWidth(400)");
         await page.waitFor("t.collapsed.at(-1) === true", "the split to collapse again");
@@ -46,11 +46,11 @@ describe("PaperList rows in a collapsed PaperSplit", () => {
 
         for (let round = 1; round <= 3; round++) {
             await openDetail("Alex");
-            await closeDetail();
+            await closeDetail("Alex");
             expect(await page.eval("t.closes")).toBe(round);
         }
         await openDetail("Sam");
-        await closeDetail();
+        await closeDetail("Sam");
         await openDetail("Alex");
 
         expect(await page.eval("t.opens")).toEqual(["Alex", "Alex", "Alex", "Sam", "Alex"]);

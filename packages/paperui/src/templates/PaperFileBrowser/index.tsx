@@ -569,7 +569,7 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
     );
 
     const viewer = (
-        <section class={styles.viewer} classList={{ [styles.viewerInModal]: collapsed() }} aria-label="File">
+        <section class={styles.viewer} classList={{ [styles.viewerInPage]: collapsed() }} aria-label="File">
             <header class={styles.toolbar}>
                 <nav class={styles.crumbs} aria-label="Path">
                     <For each={crumbs()}>

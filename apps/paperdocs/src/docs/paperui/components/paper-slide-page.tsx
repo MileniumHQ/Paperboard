@@ -93,6 +93,12 @@ export function Drilldown(props: { phone: boolean }) {
                         <td>Called by the back button, the system Back action, and a rightward swipe. It does not close the page itself.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>onClosed</PaperCode></td>
+                        <td><PaperCode>() =&gt; void</PaperCode></td>
+                        <td>No default</td>
+                        <td>Called once a close has finished sliding the page away, or at once with motion off. Clear what the page showed here, so it never changes while still in view.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>onMore</PaperCode></td>
                         <td><PaperCode>(e: MouseEvent) =&gt; void</PaperCode></td>
                         <td>No default (no button)</td>

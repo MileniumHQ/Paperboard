@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import {
     createEffect,
     createSignal,
+    on,
     onCleanup,
     onMount,
     Show,
@@ -10,7 +11,7 @@ import {
     type ParentProps,
 } from "solid-js";
 import { getVarCss } from "../../utils/theme";
-import { PaperModal } from "../../components/PaperModal";
+import { PaperSlidePage } from "../../components/PaperSlidePage";
 
 export interface PaperSplitProps {
     /** the list/roster pane, held at a fixed width beside the detail */
@@ -21,14 +22,18 @@ export interface PaperSplitProps {
     sideWidth?: number | string;
     /** container width (px) below which the panes collapse to one */
     collapseWidth?: number;
-    /** when collapsed, presents the detail as a modal over the side */
+    /** when collapsed, slides the detail in over the side as a page */
     detailActive?: boolean;
+    /**
+     * The detail was closed. Collapsed, this comes once its page has slid
+     * away, so the detail keeps showing what it showed until it's gone.
+     */
     onDetailClose?: () => void;
-    /** collapsed modal title */
-    detailTitle?: JSX.Element | string;
+    /** the collapsed page's title */
+    detailTitle?: string;
     /**
      * Notified whenever the layout crosses between side-by-side and collapsed.
-     * The detail pane is a modal only while collapsed, so a consumer that
+     * The detail pane is a page only while collapsed, so a consumer that
      * needs to change its interaction for the single-pane layout (for example
      * a list whose selection must not toggle) can track this instead of
      * re-measuring the same width itself.
@@ -42,9 +47,10 @@ const DEFAULT_COLLAPSE_WIDTH = 680;
 
 /**
  * Master-detail layout. Side by side when there is room; below
- * `collapseWidth` the side pane fills the space and the detail presents as a
- * modal, so a panel works at Paperboard's minimum window size without any
- * per-panel media queries.
+ * `collapseWidth` the side pane fills the space and the detail slides in over
+ * it as a page with a back bar (and the back swipe), so a panel works at
+ * Paperboard's minimum window size and on a phone without any per-panel
+ * media queries.
  */
 export function PaperSplit(props: ParentProps<PaperSplitProps>) {
     let rootRef: HTMLDivElement | undefined;
@@ -68,6 +74,10 @@ export function PaperSplit(props: ParentProps<PaperSplitProps>) {
     createEffect(() => {
         props.onCollapsedChange?.(collapsed());
     });
+
+    // Back slides the page away first; the consumer hears of it after
+    const [closing, setClosing] = createSignal(false);
+    createEffect(on(() => props.detailActive, () => setClosing(false)));
 
     const sideStyle = () => ({
         width:
@@ -101,14 +111,19 @@ export function PaperSplit(props: ParentProps<PaperSplitProps>) {
                 fallback={
                     <>
                         <div class={styles.single}>{local.side}</div>
-                        <PaperModal
-                            open={Boolean(local.detailActive)}
-                            onClose={() => local.onDetailClose?.()}
-                            title={local.detailTitle}
-                            size="medium"
+                        {/* over the whole panel: in a frame, fixed is the panel's own screen */}
+                        <PaperSlidePage
+                            enabled
+                            position="fixed"
+                            open={Boolean(local.detailActive) && !closing()}
+                            title={local.detailTitle ?? ""}
+                            onBack={() => setClosing(true)}
+                            onClosed={() => {
+                                if (closing()) local.onDetailClose?.();
+                            }}
                         >
                             {local.children}
-                        </PaperModal>
+                        </PaperSlidePage>
                     </>
                 }
             >

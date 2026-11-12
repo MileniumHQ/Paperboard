@@ -95,7 +95,7 @@
 
 /* the shell holding this panel draws its pages' bars, with their titles as
    crumbs, so a page in the frame shows none of its own */
-.page:not(.fixed) > .bar:where(:global([data-paper-host-bars]) *) {
+.page > .bar:where(:global([data-paper-host-bars]) *) {
     display: none;
 }
 

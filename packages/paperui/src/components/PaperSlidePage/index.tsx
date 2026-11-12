@@ -1,4 +1,4 @@
-import { type JSX, For, Show, createEffect, on } from "solid-js";
+import { type JSX, For, Show, createEffect, on, onCleanup } from "solid-js";
 import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
@@ -24,6 +24,12 @@ export interface PaperSlidePageProps {
     /** a Material icon name, or an element (an app's own icon) */
     icon?: JSX.Element;
     onBack: () => void;
+    /**
+     * Called once a close has finished sliding the page away (at once with
+     * motion off): the moment to clear what the page showed, so it never
+     * changes while still in view.
+     */
+    onClosed?: () => void;
     /** the open page's own menu, if it has one, opened from a ⋮ button */
     onMore?: (e: MouseEvent) => void;
     moreLabel?: string;
@@ -61,8 +67,10 @@ export interface PaperSlidePageProps {
  */
 export function PaperSlidePage(props: PaperSlidePageProps) {
     createNavigationBack(() => props.enabled && props.open, () => props.onBack());
-    // a page inside a panel names itself to the shell's bar
-    createPageCrumb(() => props.enabled && props.open && props.position !== "fixed", () => props.title);
+    // a page inside a panel names itself to the shell's bar; a fixed one too,
+    // which in a frame covers the panel, not the screen
+    const framed = typeof window !== "undefined" && window.parent !== window;
+    createPageCrumb(() => props.enabled && props.open && (props.position !== "fixed" || framed), () => props.title);
     let pageRef: HTMLDivElement | undefined;
     const swipe = createSwipeBack({
         width: () => pageRef?.clientWidth ?? window.innerWidth,
@@ -82,6 +90,28 @@ export function PaperSlidePage(props: PaperSlidePageProps) {
                 pageRef.style.transition = "none";
                 void pageRef.offsetWidth;
                 pageRef.style.transition = "";
+            },
+            { defer: true },
+        ),
+    );
+
+    createEffect(
+        on(
+            () => props.open,
+            (open) => {
+                const el = pageRef;
+                if (open || !props.enabled || !props.onClosed) return;
+                if (!el || !parseFloat(getComputedStyle(el).transitionDuration)) {
+                    props.onClosed();
+                    return;
+                }
+                const done = (e: TransitionEvent) => {
+                    if (e.target !== el || e.propertyName !== "transform") return;
+                    el.removeEventListener("transitionend", done);
+                    props.onClosed?.();
+                };
+                el.addEventListener("transitionend", done);
+                onCleanup(() => el.removeEventListener("transitionend", done));
             },
             { defer: true },
         ),
