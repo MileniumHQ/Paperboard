@@ -60,7 +60,7 @@ interface TileState {
 
 // Full-bleed top-down world map: region tiles rendered by the service,
 // online players drawn as markers, per-dimension. Pans by drag, zooms on
-// the cursor, and refreshes both tiles and positions on its own.
+// the cursor, pinches on touch, and refreshes both tiles and positions on its own.
 export default function MapView() {
     const [info, setInfo] = createSignal<MapRegionsResult | null>(null);
     const [error, setError] = createSignal<Outcome | null>(null);
@@ -188,6 +188,7 @@ export default function MapView() {
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
         const { width, height } = sizeOf();
+        ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
         ctx.clearRect(0, 0, width, height);
         const s = scale();
         const size = REGION_BLOCKS * s;
@@ -326,17 +327,17 @@ export default function MapView() {
     onMount(() => {
         const resize = () => {
             if (!canvas || !wrapper) return;
-            canvas.width = wrapper.clientWidth;
-            canvas.height = wrapper.clientHeight;
+            // a phone's screen has more pixels than CSS px; drawing at 1:1 would blur
+            canvas.width = Math.round(wrapper.clientWidth * devicePixelRatio);
+            canvas.height = Math.round(wrapper.clientHeight * devicePixelRatio);
             setRevision((v) => v + 1);
         };
         resize();
         const observer = new ResizeObserver(resize);
         if (wrapper) observer.observe(wrapper);
 
-        let dragging = false;
-        let lastX = 0;
-        let lastY = 0;
+        // every finger (or the mouse) on the map, by pointer id: one pans, two pinch
+        const touches = new Map<number, { x: number; y: number }>();
 
         const worldAt = (clientX: number, clientY: number) => {
             const rect = canvas?.getBoundingClientRect();
@@ -349,40 +350,64 @@ export default function MapView() {
             };
         };
 
+        // zooms to `next`, keeping the world point under (mouseX, mouseY) where it is
+        const zoomAt = (mouseX: number, mouseY: number, next: number) => {
+            const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, next));
+            const worldX = (mouseX - offsetX()) / scale();
+            const worldY = (mouseY - offsetY()) / scale();
+            setScale(clamped);
+            setOffsetX(mouseX - worldX * clamped);
+            setOffsetY(mouseY - worldY * clamped);
+        };
+
+        // the two fingers' midpoint (relative to the map) and their distance
+        const pinchOf = () => {
+            const rect = canvas?.getBoundingClientRect();
+            const [a, b] = [...touches.values()];
+            if (!rect || !a || !b) return null;
+            return {
+                x: (a.x + b.x) / 2 - rect.left,
+                y: (a.y + b.y) / 2 - rect.top,
+                distance: Math.hypot(a.x - b.x, a.y - b.y),
+            };
+        };
+
         const onPointerDown = (e: PointerEvent) => {
-            dragging = true;
-            lastX = e.clientX;
-            lastY = e.clientY;
+            touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
             setGrabbing(true);
             canvas?.setPointerCapture(e.pointerId);
         };
         const onPointerMove = (e: PointerEvent) => {
             setCursor(worldAt(e.clientX, e.clientY));
-            if (!dragging) return;
-            setOffsetX((v) => v + (e.clientX - lastX));
-            setOffsetY((v) => v + (e.clientY - lastY));
-            lastX = e.clientX;
-            lastY = e.clientY;
+            const before = touches.get(e.pointerId);
+            if (!before) return;
+            if (touches.size >= 2) {
+                const start = pinchOf();
+                touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                const now = pinchOf();
+                if (!start || !now || start.distance === 0) return;
+                // the fingers' midpoint pans, their spread zooms around it
+                setOffsetX((v) => v + (now.x - start.x));
+                setOffsetY((v) => v + (now.y - start.y));
+                zoomAt(now.x, now.y, scale() * (now.distance / start.distance));
+                return;
+            }
+            setOffsetX((v) => v + (e.clientX - before.x));
+            setOffsetY((v) => v + (e.clientY - before.y));
+            touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
         };
         const onPointerUp = (e: PointerEvent) => {
-            dragging = false;
-            setGrabbing(false);
-            canvas?.releasePointerCapture(e.pointerId);
+            touches.delete(e.pointerId);
+            setGrabbing(touches.size > 0);
+            if (canvas?.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
         };
         const onPointerLeave = () => setCursor(null);
         const onWheel = (e: WheelEvent) => {
             e.preventDefault();
             const rect = canvas?.getBoundingClientRect();
             if (!rect) return;
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
             const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
-            const next = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale() * factor));
-            const worldX = (mouseX - offsetX()) / scale();
-            const worldY = (mouseY - offsetY()) / scale();
-            setScale(next);
-            setOffsetX(mouseX - worldX * next);
-            setOffsetY(mouseY - worldY * next);
+            zoomAt(e.clientX - rect.left, e.clientY - rect.top, scale() * factor);
         };
 
         canvas?.addEventListener("pointerdown", onPointerDown);
@@ -446,7 +471,7 @@ export default function MapView() {
 
     return (
         <div ref={wrapper} class={styles.map}>
-            <canvas ref={canvas} class={styles.canvas} classList={{ [styles.grabbing]: grabbing() }} />
+            <canvas ref={canvas} class={styles.canvas} data-paper-no-swipe-back classList={{ [styles.grabbing]: grabbing() }} />
 
             <div class={styles.controls}>
                 <div class={styles.selects}>
