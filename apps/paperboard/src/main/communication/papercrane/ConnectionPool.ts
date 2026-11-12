@@ -10,6 +10,7 @@ import {
 import { getLocalDir } from "../../../../papercrane/paths";
 import { logger } from "../../../../papercrane/logger";
 import { pinnedRequest } from "../../../../papercrane/pinnedTls";
+import { bracketHost, checkProbeTarget } from "./probeTarget";
 import { PaperCraneClient } from "./PaperCraneClient";
 import type { ComputerDriver } from "../driver/ComputerDriver";
 import { RemoteComputerDriver } from "../driver/RemoteComputerDriver";
@@ -28,26 +29,6 @@ export interface StoredComputer {
     distroName?: string;
     arch?: string;
     isLocal?: boolean;
-}
-
-function bracketHost(host: string): string {
-    return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
-}
-
-const INVALID_ADDRESS = "That isn't a valid address. Type an IP address or a computer name";
-const INVALID_PORT = "That isn't a valid port. Type a whole number from 1 to 65535";
-
-// the host alone: a bad port must never be blamed on it
-function isValidHost(host: string): boolean {
-    return URL.canParse(`https://${bracketHost(host)}/`);
-}
-
-// what was typed, or null unless it is a whole number from 1 to 65535
-function parseProbePort(port: number | string): number | null {
-    const text = String(port).trim();
-    if (!/^\d{1,5}$/.test(text)) return null;
-    const n = Number(text);
-    return n >= 1 && n <= 65535 ? n : null;
 }
 
 // timeout = lost in transit, refusal = nothing listening there
@@ -238,13 +219,12 @@ export class ConnectionPool extends EventEmitter {
         host: string,
         port: number | string = DEFAULT_PORT,
     ): Promise<{ reachable: boolean; hostname?: string; error?: string; invalidAddress?: boolean }> {
-        if (!isValidHost(host)) return { reachable: false, error: INVALID_ADDRESS, invalidAddress: true };
-        const portNumber = parseProbePort(port);
-        if (portNumber === null) return { reachable: false, error: INVALID_PORT };
+        const checked = checkProbeTarget(host, port);
+        if ("error" in checked) return checked;
         try {
             // reachability only: no credential crosses this request, so the
             // not-yet-pinned certificate is not checked here
-            const res = await pinnedRequest(`https://${bracketHost(host)}:${portNumber}/health`, null, { timeoutMs: 2000 });
+            const res = await pinnedRequest(`https://${bracketHost(host)}:${checked.port}/health`, null, { timeoutMs: 2000 });
             if (res.ok) {
                 // /health carries liveness + version only; hostname arrives
                 // over the authenticated pair/verify handshake instead
