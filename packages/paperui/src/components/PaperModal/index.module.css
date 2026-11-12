@@ -22,8 +22,13 @@
     transform: translateZ(0);
 }
 
+/* A sheet is never taller than the screen and scrolls inside its own body,
+   so its backdrop is no scroller. Left as one, WebKit kept the sheet's
+   slide-in start (a sheet's height below the screen) as room to scroll, and
+   a drag on a short sheet pulled it up off the top into empty space. */
 .bottom {
     align-items: flex-end;
+    overflow-y: clip;
 }
 
 .concealed {
