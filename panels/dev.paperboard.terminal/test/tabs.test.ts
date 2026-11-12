@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { terminalApi } from "@mileniumhq/paperapi";
 import { clearWorkloads } from "./helpers/crane";
-import { call, panelFiles, startService, stopServices } from "./helpers/service";
+import { panelFiles, readBlock, runBlock, serviceState, startService, stopServices } from "./helpers/service";
 import { within } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
@@ -53,19 +53,19 @@ describe("keystrokes never go to the wrong shell", () => {
         const one = watchOutput("tab1");
         const two = watchOutput("tab2");
         try {
-            await expect(call("write-to-terminal", { tabId: "tab3", text: "echo REFUSED-unknown\n" })).rejects.toThrow("Unknown terminal tab: tab3");
+            await expect(runBlock("type-in-tab", { tab: "tab3", text: "echo REFUSED-unknown\n" })).rejects.toThrow("Unknown terminal tab: tab3");
             // a renamed tab's old label is not its id either
-            await expect(call("write-to-terminal", { tabId: "One", text: "echo REFUSED-label\n" })).rejects.toThrow("Unknown terminal tab: One");
-            await expect(call("write-to-terminal", { tabId: "", text: "echo REFUSED-empty\n" })).rejects.toThrow("Terminal tab id required");
-            await expect(call("write-to-terminal", { tabId: "   ", text: "echo REFUSED-blank\n" })).rejects.toThrow("Terminal tab id required");
-            // no id at all is not "the active tab"
-            await expect(call("write-to-terminal", { text: "echo REFUSED-none\n" })).rejects.toThrow("Terminal tab id required");
-            await expect(call("read-terminal-buffer", { tabId: "tab3" })).rejects.toThrow("Unknown terminal tab: tab3");
+            await expect(runBlock("type-in-tab", { tab: "One", text: "echo REFUSED-label\n" })).rejects.toThrow("Unknown terminal tab: One");
+            await expect(runBlock("type-in-tab", { tab: "", text: "echo REFUSED-empty\n" })).rejects.toThrow('"Tab" is required');
+            await expect(runBlock("type-in-tab", { tab: "   ", text: "echo REFUSED-blank\n" })).rejects.toThrow("Terminal tab id required");
+            // no id at all is not "the active tab": the block refuses it before the service
+            await expect(runBlock("type-in-tab", { text: "echo REFUSED-none\n" })).rejects.toThrow('"Tab" is required');
+            await expect(readBlock("output", { tab: "tab3", lines: 100 })).rejects.toThrow("Unknown terminal tab: tab3");
 
             // each shell answers its own keystrokes, in order: a refused write
             // that had landed anyway would print before these
-            await call("write-to-terminal", { tabId: "tab1", text: "echo done-$((40+1))\n" });
-            await call("write-to-terminal", { tabId: "tab2", text: "echo done-$((40+2))\n" });
+            await runBlock("type-in-tab", { tab: "tab1", text: "echo done-$((40+1))\n" });
+            await runBlock("type-in-tab", { tab: "tab2", text: "echo done-$((40+2))\n" });
             await one.until("done-41");
             await two.until("done-42");
             expect(one.text()).not.toContain("REFUSED");
@@ -88,7 +88,7 @@ describe("saved tabs survive the move to named tabs", () => {
             "tabs.json": { tabs: [{ id: "tab1", label: "Server" }, { id: "tab2", label: "Tab 2" }], activeTabId: "tab2" },
         });
         await startService();
-        const first = await call<any[]>("list-tabs");
+        const first = (await serviceState<{ tabs: any[] }>()).tabs;
         expect(first.map((t) => [t.id, t.label, Boolean(t.named)])).toEqual([
             ["tab1", "Server", true],
             ["tab2", "Tab 2", false],
@@ -98,7 +98,7 @@ describe("saved tabs survive the move to named tabs", () => {
         const saved = JSON.parse(fs.readFileSync(path.join(dir, "tabs.json"), "utf8"));
         expect(saved.activeTabId).toBe("tab2");
         await startService();
-        const again = await call<any[]>("list-tabs");
+        const again = (await serviceState<{ tabs: any[] }>()).tabs;
         expect(again.map((t) => [t.id, t.label, Boolean(t.named)])).toEqual([
             ["tab1", "Server", true],
             ["tab2", "Tab 2", false],

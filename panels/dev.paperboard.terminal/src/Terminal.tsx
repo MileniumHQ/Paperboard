@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { copyText, getVar, pasteText } from "@mileniumhq/paperui";
-import { terminalApi, actions as actionsApi } from "@mileniumhq/paperapi";
+import { serviceApi, terminalApi } from "@mileniumhq/paperapi";
 import { terminalKeyAction, type TerminalKeyAction } from "./keys";
 import { errorMessage, type Outcome } from "./lib/failure";
 import { joinScrollback } from "./lib/scrollback";
@@ -252,7 +252,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 offData();
                 offExit();
             };
-            actionsApi
+            serviceApi
                 .call<string>(TERMINAL_PANEL_ID, "open-tab", { id, cols: term.cols, rows: term.rows })
                 .then((scrollback) => {
                     if (current !== attempt) return;

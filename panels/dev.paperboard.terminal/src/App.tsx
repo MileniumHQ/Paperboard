@@ -26,7 +26,7 @@ import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 import TerminalComponent, { activeTerminals, copySelection, pasteClipboard } from "./Terminal";
 import styles from "./Terminal.module.css";
-import { actions as actionsApi, createPanelBridge, terminalApi, type TerminalShell } from "@mileniumhq/paperapi";
+import { createPanelBridge, serviceApi, terminalApi, type TerminalShell } from "@mileniumhq/paperapi";
 import { onMount } from "solid-js";
 import SavedCommandsModal from "./SavedCommands";
 import type { CommandRun, SavedCommand } from "./lib/savedCommands";
@@ -246,7 +246,7 @@ export default function App() {
         // the tab leaves when the service says it closed; a failed close
         // leaves it in place, where closing it again retries
         setFailure(null);
-        actionsApi
+        serviceApi
             .call(TERMINAL_PANEL_ID, "close-tab", { id: closedId })
             .catch(report("Tab not closed"));
     };
@@ -255,7 +255,7 @@ export default function App() {
         setFailure(null);
         try {
             const besides = currentSession();
-            const id = await actionsApi.call<string>(
+            const id = await serviceApi.call<string>(
                 TERMINAL_PANEL_ID,
                 "create-tab",
                 { ...(besides ? { besides } : {}), ...(shell ? { shell } : {}) },
@@ -286,27 +286,27 @@ export default function App() {
     const handleSwitchTab = (id: string) => {
         setActiveTab(id);
         // the last used tab is what the next window opens on
-        actionsApi
+        serviceApi
             .call(TERMINAL_PANEL_ID, "touch-tab", { id })
             .catch(report("Tab not remembered", ". The next window may open on another tab."));
     };
     const split = (tabId: string, direction: SplitDirection) => {
         setFailure(null);
-        actionsApi
+        serviceApi
             .call<string>(TERMINAL_PANEL_ID, "split-tab", { id: tabId, direction })
             .then((pane) => setFocusedPane(tabId, pane))
             .catch(report("Tab not split"));
     };
     const unsplit = (tabId: string) => {
         setFailure(null);
-        actionsApi.call(TERMINAL_PANEL_ID, "unsplit-tab", { id: tabId }).catch(report("Split not closed"));
+        serviceApi.call(TERMINAL_PANEL_ID, "unsplit-tab", { id: tabId }).catch(report("Split not closed"));
     };
     const toggleLayout = () => {
         setFailure(null);
         const next: TabLayout = vertical() ? "horizontal" : "vertical";
         // shown at once; the service's layout is the truth
         setMirror("layout", next);
-        actionsApi.call(TERMINAL_PANEL_ID, "set-tab-layout", { layout: next }).catch((err) => {
+        serviceApi.call(TERMINAL_PANEL_ID, "set-tab-layout", { layout: next }).catch((err) => {
             setMirror("layout", next === "vertical" ? "horizontal" : "vertical");
             report("Layout not saved")(err);
         });
@@ -394,7 +394,7 @@ export default function App() {
     const runSaved = async (id: string) => {
         setSavedRunError("");
         try {
-            await actionsApi.call(TERMINAL_PANEL_ID, "run-saved-command", { id });
+            await serviceApi.call(TERMINAL_PANEL_ID, "run-saved-command", { id });
         } catch (err) {
             setSavedRunError(errorMessage(err));
             setIsSavedOpen(true);
@@ -423,7 +423,7 @@ export default function App() {
         setRenaming(true);
         try {
             // the new label arrives through the service's state
-            await actionsApi.call(TERMINAL_PANEL_ID, "rename-tab", { id: tid, label: renameValue().trim() });
+            await serviceApi.call(TERMINAL_PANEL_ID, "rename-tab", { id: tid, label: renameValue().trim() });
             closeRename();
         } catch (err) {
             setRenameError(errorMessage(err));
@@ -538,7 +538,7 @@ export default function App() {
                         // failed reorder pulls it back
                         setMirror("tabs", reordered);
                         setFailure(null);
-                        actionsApi
+                        serviceApi
                             .call(
                                 TERMINAL_PANEL_ID,
                                 "reorder-tabs",

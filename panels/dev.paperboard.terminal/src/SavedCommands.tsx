@@ -13,7 +13,7 @@ import {
     PaperText,
     type PaperColor,
 } from "@mileniumhq/paperui";
-import { actions as actionsApi } from "@mileniumhq/paperapi";
+import { serviceApi } from "@mileniumhq/paperapi";
 import type { CommandRun, SavedCommand } from "./lib/savedCommands";
 import { MAX_LABEL_LENGTH, MAX_SAVED_COMMANDS } from "./lib/savedCommands";
 import { describeRun, type RunTone } from "./lib/runStatus";
@@ -43,11 +43,11 @@ export default function SavedCommandsModal(props: {
     const [error, setError] = createSignal<Outcome | null>(null);
     const [busy, setBusy] = createSignal(false);
 
-    const call = async (title: string, action: string, inputs: Record<string, unknown>) => {
+    const call = async (title: string, name: string, input: Record<string, unknown>) => {
         setError(null);
         setBusy(true);
         try {
-            return await actionsApi.call(PANEL_ID, action, inputs);
+            return await serviceApi.call(PANEL_ID, name, input);
         } catch (err) {
             setError({ title, message: errorMessage(err) });
             return undefined;

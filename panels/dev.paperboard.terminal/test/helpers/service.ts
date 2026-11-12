@@ -6,7 +6,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { actionsApi, getTransport } from "@mileniumhq/paperapi";
+import { blocksApi, getTransport, serviceApi, STATE_VALUE } from "@mileniumhq/paperapi";
 import { testDaemon } from "./crane";
 import { within } from "./wait";
 
@@ -92,9 +92,20 @@ export async function startService(): Promise<ServiceProcess> {
 
 /** The service's state, as a panel window hydrates it. */
 export function serviceState<T = any>(): Promise<T> {
-    return actionsApi.call<T>(PANEL_ID, "__getState", {});
+    return blocksApi.read<T>(PANEL_ID, STATE_VALUE);
 }
 
-export function call<T = any>(action: string, inputs: Record<string, unknown> = {}): Promise<T> {
-    return actionsApi.call<T>(PANEL_ID, action, inputs);
+/** One of the calls the panel's own page makes. */
+export function call<T = any>(name: string, input: Record<string, unknown> = {}): Promise<T> {
+    return serviceApi.call<T>(PANEL_ID, name, input);
+}
+
+/** A command block, as a person's flow runs it. */
+export function runBlock<T = any>(command: string, inputs: Record<string, unknown> = {}): Promise<T> {
+    return blocksApi.run<T>(PANEL_ID, command, inputs);
+}
+
+/** A value block, as a person's flow reads it. */
+export function readBlock<T = any>(value: string, inputs: Record<string, unknown> = {}): Promise<T> {
+    return blocksApi.read<T>(PANEL_ID, value, inputs);
 }

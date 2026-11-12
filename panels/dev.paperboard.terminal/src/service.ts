@@ -1,6 +1,5 @@
 import {
     definePanelService,
-    defineAction,
     config,
     terminalApi,
     processApi,
@@ -132,7 +131,6 @@ export function subscribeSession(id: string, ctx: Ctx | null) {
                 const owner = findSession(tabs, id);
                 // a split's shell ending is not the tab's
                 if (owner && owner.tab.id !== id) return;
-                ctx?.emitTrigger("terminal-exit", { tabId: id, exitCode });
                 announcer.fire("terminal-exit", exitPayload(id, exitCode));
             }),
             terminalApi.onForeground(id, (program) => {
@@ -189,7 +187,6 @@ export function __terminalTestState() {
         // module-level tab list; never used by the runtime paths above
         tabIds: () => tabs.map((t) => t.id),
         registerTabForTest: (id: string) => tabs.push({ id, label: id }),
-        actionForTest: (id: string) => actions.find((a) => a.id === id),
         clearTabsForTest: () => {
             const prior = tabs;
             tabs = [];
@@ -537,305 +534,42 @@ function savedCommand(id: string): SavedCommand {
     return command;
 }
 
-const actions = [
-    defineAction({
-        id: "list-tabs",
-        name: "List Terminal Tabs",
-        category: "Sessions",
-        description: "Lists persistent terminal sessions",
-        template: "List terminal tabs",
-        inputs: {},
-        output: { type: "object", label: "Tabs" },
-        icon: "terminal",
-        run: async () => structuredClone(tabs),
-    }),
-
-    defineAction({
-        id: "create-tab",
-        name: "Create Terminal Tab",
-        category: "Sessions",
-        description: "Creates a persistent terminal session",
-        template: "Create terminal tab {label} in {cwd}",
-        inputs: {
-            label: { type: "string", label: "Label", placeholder: "Label" },
-            cwd: { type: "string", label: "Folder", placeholder: "Folder" },
-            shell: { type: "string", label: "Shell", placeholder: "Shell" },
-            besides: { type: "string", label: "Beside Tab", placeholder: "Tab ID" },
-        },
-        output: { type: "string", label: "Tab ID" },
-        icon: "add",
-        run: async (ctx: Ctx, inputs: { label?: string; cwd?: string; shell?: string; besides?: string }) =>
-            createTab(ctx, inputs?.label, { cwd: inputs?.cwd, shell: inputs?.shell, besides: inputs?.besides }),
-    }),
-
-    defineAction({
-        id: "split-tab",
-        name: "Split Terminal Tab",
-        category: "Sessions",
-        description: "Opens a second shell beside the tab's, in the same folder",
-        template: "Split terminal tab {id} {direction}",
-        inputs: {
-            id: { type: "string", label: "Tab ID", placeholder: "Tab ID", required: true },
-            direction: { type: "string", label: "Direction", placeholder: "Direction", options: [{ label: "Right", value: "right" }, { label: "Down", value: "down" }], default: "right" },
-        },
-        output: { type: "string", label: "Pane ID" },
-        icon: "vertical_split",
-        run: async (ctx: Ctx, inputs: { id: string; direction?: SplitDirection }) => splitTab(ctx, inputs?.id, inputs?.direction ?? "right"),
-    }),
-
-    defineAction({
-        id: "unsplit-tab",
-        name: "Close Terminal Split",
-        category: "Sessions",
-        description: "Ends the second shell of a split tab",
-        template: "Close the split of terminal tab {id}",
-        inputs: {
-            id: { type: "string", label: "Tab ID", placeholder: "Tab ID", required: true },
-        },
-        output: { type: "boolean", label: "Success" },
-        icon: "close_fullscreen",
-        run: async (ctx: Ctx, inputs: { id: string }) => {
-            await unsplitTab(ctx, inputs?.id);
-            return true;
-        },
-    }),
-
-    defineAction({
-        id: "set-tab-layout",
-        name: "Set Terminal Tab Layout",
-        category: "Sessions",
-        // the panel's layout button drives this
-        internal: true,
-        description: "Lays the tabs out along the top or down the side",
-        template: "Lay out terminal tabs {layout}",
-        inputs: {
-            layout: { type: "string", label: "Layout", placeholder: "Layout", options: [{ label: "Along the top", value: "horizontal" }, { label: "Down the side", value: "vertical" }], required: true },
-        },
-        output: { type: "boolean", label: "Success" },
-        icon: "view_sidebar",
-        run: async (ctx: Ctx, inputs: { layout: TabLayout }) => {
-            await setLayout(ctx, inputs?.layout);
-            return true;
-        },
-    }),
-
-    defineAction({
-        id: "open-tab",
-        name: "Open Terminal Tab",
-        category: "Sessions",
-        description: "Attaches to a session and returns its scrollback",
-        template: "Open terminal tab {id}",
-        inputs: {
-            id: { type: "string", label: "Tab ID", placeholder: "Tab ID", required: true },
-            cols: { type: "number", label: "Columns", placeholder: "Columns" },
-            rows: { type: "number", label: "Rows", placeholder: "Rows" },
-        },
-        output: { type: "string", label: "Scrollback" },
-        icon: "open_in_new",
-        run: async (ctx: Ctx, inputs: { id: string; cols?: number; rows?: number }) => {
-            const id = (inputs?.id || "").trim();
-            const owner = findSession(tabs, id);
-            if (!owner) {
-                throw new Error(`Unknown terminal tab "${inputs?.id}"`);
-            }
-            activeTabId = owner.tab.id;
-            await ensureSession(id, inputs?.cols, inputs?.rows);
-            subscribeSession(id, ctx);
-            await persistTabs(ctx);
-            return buffers.get(id) || "";
-        },
-    }),
-
-    defineAction({
-        id: "rename-tab",
-        name: "Rename Terminal Tab",
-        category: "Sessions",
-        description: "Renames a persistent terminal session",
-        template: "Rename terminal tab to {label}",
-        inputs: {
-            id: { type: "string", label: "Tab ID", placeholder: "Tab ID", required: true },
-            label: { type: "string", label: "Label", placeholder: "Label", required: true },
-        },
-        output: { type: "boolean", label: "Success" },
-        icon: "edit",
-        run: async (ctx: Ctx, inputs: { id: string; label: string }) => {
-            await renameTab(ctx, inputs?.id, inputs?.label);
-            return true;
-        },
-    }),
-
-    defineAction({
-        id: "close-tab",
-        name: "Close Terminal Tab",
-        category: "Sessions",
-        description: "Destroys a terminal session and its scrollback",
-        template: "Close terminal tab {id}",
-        inputs: {
-            id: { type: "string", label: "Tab ID", placeholder: "Tab ID", required: true },
-        },
-        output: { type: "boolean", label: "Success" },
-        icon: "close",
-        run: async (ctx: Ctx, inputs: { id: string }) => {
-            await closeTab(ctx, inputs?.id);
-            return true;
-        },
-    }),
-
-    defineAction({
-        id: "reorder-tabs",
-        name: "Reorder Terminal Tabs",
-        category: "Sessions",
-        // the tab bar drives this; flows should never see it
-        internal: true,
-        description: "Persists a new tab order (drag / rearrange)",
-        template: "Reorder terminal tabs as {orderedIds}",
-        inputs: {
-            orderedIds: { type: "array", label: "Ordered tab ids" },
-        },
-        output: { type: "boolean", label: "Success" },
-        icon: "reorder",
-        run: async (ctx: Ctx, inputs: { orderedIds?: string[] }) => {
-            await reorderTabs(ctx, inputs?.orderedIds);
-            return true;
-        },
-    }),
-
-    defineAction({
-        id: "touch-tab",
-        name: "Touch Terminal Tab",
-        category: "Sessions",
-        description: "Marks a tab as most recently used",
-        template: "Touch terminal tab {id}",
-        inputs: {
-            id: { type: "string", label: "Tab ID", placeholder: "Tab ID", required: true },
-        },
-        output: { type: "boolean", label: "Success" },
-        icon: "touch_app",
-        run: async (ctx: Ctx, inputs: { id: string }) => {
-            const id = (inputs?.id || "").trim();
-            if (!tabs.some((t) => t.id === id)) return false;
-            activeTabId = id;
-            await persistTabs(ctx);
-            return true;
-        },
-    }),
-
-    defineAction({
-        id: "write-to-terminal",
-        name: "Write to Terminal",
-        category: "Input",
-        description: "Sends keystrokes to a live terminal session",
-        template: "Write {text} to terminal {tabId}",
-        inputs: {
-            tabId: { type: "string", label: "Tab", placeholder: "Tab" },
-            text: { type: "string", label: "Text", placeholder: "Text", required: true },
-        },
-        output: { type: "boolean", label: "Success" },
-        icon: "keyboard",
-        run: async (_ctx: Ctx, inputs: { tabId?: string; text: string }) => writeToTerminal(_ctx, inputs),
-    }),
-
-    defineAction({
-        id: "read-terminal-buffer",
-        name: "Read Terminal Output",
-        category: "Output",
-        description: "Returns the last lines of a terminal session",
-        template: "Read last {lines} lines of terminal {tabId}",
-        inputs: {
-            tabId: { type: "string", label: "Tab", placeholder: "Tab" },
-            lines: { type: "number", label: "Lines", placeholder: "Lines" },
-        },
-        output: { type: "string", label: "Output" },
-        icon: "article",
-        run: async (_ctx: Ctx, inputs: { tabId?: string; lines?: number }) => readOutput(inputs?.tabId, inputs?.lines),
-    }),
-
-    defineAction({
-        id: "run-terminal-command",
-        name: "Run Shell Command",
-        category: "Input",
-        description: "Runs a one-shot shell command and returns its standard output; fails if the command exits with an error",
-        template: "Run shell command {command}",
-        inputs: {
-            command: { type: "string", label: "Command", placeholder: "Command", required: true },
-        },
-        output: { type: "string", label: "Output" },
-        icon: "terminal",
-        run: async (_ctx: Ctx, inputs: { command: string }) => runShellCommand(inputs?.command),
-    }),
-
-    defineAction({
-        id: "list-saved-commands",
-        name: "List Saved Commands",
-        category: "Saved commands",
-        description: "Lists the commands saved in the Terminal panel",
-        template: "List saved commands",
-        inputs: {},
-        output: { type: "object", label: "Commands" },
-        icon: "bookmarks",
-        run: async () => savedCommands.view().savedCommands,
-    }),
-
-    defineAction({
-        id: "save-command",
-        name: "Save Command",
-        category: "Saved commands",
-        description: "Saves a shell command to run later from the panel or Home",
-        template: "Save command {command} as {label}",
-        inputs: {
-            label: { type: "string", label: "Name", placeholder: "Name" },
-            command: { type: "string", label: "Command", placeholder: "Command", required: true },
-        },
-        output: { type: "string", label: "Command ID" },
-        icon: "bookmark_add",
-        run: async (_ctx: Ctx, inputs: { label?: string; command?: string }) =>
-            savedCommands.add(inputs?.label, inputs?.command),
-    }),
-
-    defineAction({
-        id: "remove-saved-command",
-        name: "Remove Saved Command",
-        category: "Saved commands",
-        description: "Removes a saved command; widgets that run it show it as gone",
-        template: "Remove saved command {id}",
-        inputs: {
-            id: { type: "string", label: "Command ID", placeholder: "Command ID", required: true },
-        },
-        output: { type: "boolean", label: "Success" },
-        icon: "bookmark_remove",
-        run: async (_ctx: Ctx, inputs: { id?: string }) => {
-            await savedCommands.remove(inputs?.id);
-            return true;
-        },
-    }),
-
-    defineAction({
-        id: "run-saved-command",
-        name: "Run Saved Command",
-        category: "Saved commands",
-        description: "Starts a saved command; its exit status arrives when the process exits",
-        template: "Run saved command {id}",
-        inputs: {
-            id: { type: "string", label: "Command ID", placeholder: "Command ID", required: true },
-        },
-        output: { type: "object", label: "Run" },
-        icon: "play_arrow",
-        run: async (_ctx: Ctx, inputs: { id?: string }) => savedCommands.run(inputs?.id),
-    }),
-];
-
-// event actions fire as events and start flows; they are not callable
-const eventActions = [
-    defineAction({
-        id: "terminal-exit",
-        name: "When Terminal Session Ends",
-        category: "Events",
-        description: "Fires when a terminal shell process exits",
-        template: "When terminal session ends",
-        output: { type: "object", label: "Session" },
-        icon: "logout",
-    }),
-];
+// what the panel's own page asks the service; the same things a person
+// automates are blocks (blocks.ts)
+const calls = {
+    "create-tab": (ctx: Ctx, input: { label?: string; cwd?: string; shell?: string; besides?: string }) =>
+        createTab(ctx, input?.label, { cwd: input?.cwd, shell: input?.shell, besides: input?.besides }),
+    "split-tab": (ctx: Ctx, input: { id: string; direction?: SplitDirection }) => splitTab(ctx, input?.id, input?.direction ?? "right"),
+    "unsplit-tab": (ctx: Ctx, input: { id: string }) => unsplitTab(ctx, input?.id),
+    "set-tab-layout": (ctx: Ctx, input: { layout: TabLayout }) => setLayout(ctx, input?.layout),
+    // attaches the page to a session and gives back its scrollback
+    "open-tab": async (ctx: Ctx, input: { id: string; cols?: number; rows?: number }) => {
+        const id = (input?.id || "").trim();
+        const owner = findSession(tabs, id);
+        if (!owner) {
+            throw new Error(`Unknown terminal tab "${input?.id}"`);
+        }
+        activeTabId = owner.tab.id;
+        await ensureSession(id, input?.cols, input?.rows);
+        subscribeSession(id, ctx);
+        await persistTabs(ctx);
+        return buffers.get(id) || "";
+    },
+    "rename-tab": (ctx: Ctx, input: { id: string; label: string }) => renameTab(ctx, input?.id, input?.label),
+    "close-tab": (ctx: Ctx, input: { id: string }) => closeTab(ctx, input?.id),
+    "reorder-tabs": (ctx: Ctx, input: { orderedIds?: string[] }) => reorderTabs(ctx, input?.orderedIds),
+    // the tab the page last showed is the one a new window opens on
+    "touch-tab": async (ctx: Ctx, input: { id: string }) => {
+        const id = (input?.id || "").trim();
+        if (!tabs.some((t) => t.id === id)) return false;
+        activeTabId = id;
+        await persistTabs(ctx);
+        return true;
+    },
+    "save-command": (_ctx: Ctx, input: { label?: string; command?: string }) => savedCommands.add(input?.label, input?.command),
+    "remove-saved-command": (_ctx: Ctx, input: { id?: string }) => savedCommands.remove(input?.id),
+    "run-saved-command": (_ctx: Ctx, input: { id?: string }) => savedCommands.run(input?.id),
+};
 
 export const terminalService = definePanelService({
     id: "dev.paperboard.terminal",
@@ -855,14 +589,7 @@ export const terminalService = definePanelService({
             command: () => savedCommands.choices(),
         },
     },
-    categories: [
-        { name: "Sessions", icon: "terminal", order: 1 },
-        { name: "Input", icon: "keyboard", order: 2 },
-        { name: "Output", icon: "output", order: 3 },
-        { name: "Saved commands", icon: "bookmarks", order: 4 },
-        { name: "Events", icon: "bolt", order: 5 },
-    ],
-    actions: [...actions, ...eventActions],
+    calls,
     async onInit(ctx: Ctx) {
         serviceCtx = ctx;
         await savedCommands.init();

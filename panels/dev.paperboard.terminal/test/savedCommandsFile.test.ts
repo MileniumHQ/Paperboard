@@ -73,6 +73,6 @@ describe("the saved-commands file is never overwritten blindly", () => {
         }
         expect(fs.readFileSync(path.join(dir, FILE), "utf8")).toBe(before);
         expect((await serviceState()).savedCommands.map((c: any) => c.label)).toEqual(["Keep"]);
-        expect((await call<any[]>("list-saved-commands")).map((c) => c.id)).toEqual([kept]);
+        expect((await serviceState<{ savedCommands: any[] }>()).savedCommands.map((c) => c.id)).toEqual([kept]);
     });
 });

@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { clearWorkloads, testDaemon } from "./helpers/crane";
 import { openPage, servePanel, type Page } from "./helpers/browser";
-import { call, panelFiles, startService, stopServices } from "./helpers/service";
+import { call, panelFiles, runBlock, startService, stopServices } from "./helpers/service";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
@@ -39,7 +39,7 @@ describe("failures are shown", () => {
     test("a write into a session that couldn't be created and an open that failed reject with the daemon's reason", async () => {
         await panelFiles({ "tabs.json": TABS });
         await startService();
-        const write = call("write-to-terminal", { tabId: REFUSED, text: "echo hi\n" });
+        const write = runBlock("type-in-tab", { tab: REFUSED, text: "echo hi\n" });
         await expect(write).rejects.toThrow(`Terminal session "${REFUSED}" could not be created; keystrokes were not sent:`);
         await expect(write).rejects.toThrow(DAEMON_REASON);
         await expect(call("open-tab", { id: REFUSED, cols: 80, rows: 24 })).rejects.toThrow(DAEMON_REASON);
