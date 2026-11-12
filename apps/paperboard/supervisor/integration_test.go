@@ -449,8 +449,13 @@ func TestATerminalIsATerminal(t *testing.T) {
 // the latest
 func TestATerminalNamesTheProgramInFront(t *testing.T) {
 	shell, run, program := "/bin/sh", "sleep 2\n", "sleep"
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		shell, run, program = "cmd.exe", "ping -n 3 127.0.0.1 > NUL\r\n", "ping"
+	case "darwin":
+		// macOS's /bin/sh is a stub that execs bash, so the shell is truly
+		// named sh and then bash; a shell that is its own program keeps one name
+		shell = "/bin/bash"
 	}
 	s := supervise(t, "front", map[string]any{"isPty": true, "command": shell})
 	s.status()
