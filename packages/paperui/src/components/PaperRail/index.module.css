@@ -146,6 +146,18 @@
     cursor: grabbing;
 }
 
+/* picked up: it rises off the rail under the finger or pointer */
+.PaperRailItem.lifted {
+    z-index: 1;
+    scale: 1.1;
+    background: var(--paper-surface);
+    box-shadow: var(--paper-element-shadow);
+    transition:
+        scale var(--paper-short-transition) var(--paper-ease-standard),
+        outline var(--paper-short-transition),
+        background var(--paper-tiny-transition);
+}
+
 .PaperRailItem.isSibling {
     transition:
         transform 0.22s var(--paper-ease-standard),

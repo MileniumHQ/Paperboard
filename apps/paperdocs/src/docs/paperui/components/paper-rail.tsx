@@ -164,7 +164,7 @@ export function Example() {
                         <td><PaperCode>reorderable</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td>No default (off)</td>
-                        <td>Lets the item be dragged among the rail's other reorderable items.</td>
+                        <td>Lets the item be dragged among the rail's other reorderable items: at once with a mouse or pen, after a hold with a finger.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>onClick</PaperCode></td>
@@ -234,7 +234,8 @@ export function Example() {
             <PaperText preset="subheader" as="h3" id="reordering">Reordering</PaperText>
             <PaperTextList>
                 <li>Mark the items that may move with <PaperCode>reorderable</PaperCode>. They move only among each other, so fixed items such as Home and Settings stay where they are. Keep the reorderable items next to each other.</li>
-                <li>Press a reorderable item with the primary mouse button or a pen and drag it up or down. A drag starts after 6 pixels of movement; shorter movement is a click. Touch does not drag, so a finger still scrolls the rail.</li>
+                <li>Press a reorderable item with the primary mouse button or a pen and drag it up or down. A drag starts after 6 pixels of movement; shorter movement is a click.</li>
+                <li>A finger holds the item still for half a second first, and the item lifts. Moving sooner scrolls the rail instead. The hold is the same one that opens the item's context menu: let go and the menu stays open, move and the menu closes as the item follows the finger.</li>
                 <li>On drop, the rail's <PaperCode>onReorder</PaperCode> gets the reorderable items' values in their new order, as strings. The rail does not reorder its own children: reorder your data, and the items follow.</li>
                 <li>A drop where the drag began does not call <PaperCode>onReorder</PaperCode>. The click that ends a drag does not select the item.</li>
             </PaperTextList>

@@ -11,7 +11,7 @@ import { haptic } from "./haptics";
 /** how long a still finger is held before it opens the context menu */
 export const HOLD_MS = 500;
 /** px a finger may wander and still be holding still */
-const HOLD_SLOP = 8;
+export const HOLD_SLOP = 8;
 
 interface Hold {
     id: number;

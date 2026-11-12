@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { createContext, useContext, splitProps, Show, type ParentProps, type JSX } from "solid-js";
+import { createContext, useContext, splitProps, onCleanup, onMount, Show, type ParentProps, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import {
     SelectionProvider,
@@ -7,6 +7,7 @@ import {
     type SingleSelectionProviderProps,
 } from "../contexts/selection";
 import { createReorder, type Reorder } from "../shared/reorder";
+import { HOLD_MS } from "../../utils/touchHold";
 
 const RailContext = createContext<{ showLabels?: boolean; reorder: Reorder }>();
 
@@ -40,6 +41,18 @@ export function PaperRail(props: ParentProps<PaperRailProps>) {
         valueAttribute: REORDER_ATTRIBUTE,
         horizontal: () => false,
         onReorder: () => local.onReorder,
+    });
+
+    // a finger carrying a held item must move it, not scroll the rail; only
+    // a non-passive listener there when the touch starts can stop the scroll
+    onMount(() => {
+        const rail = railRef;
+        if (!rail) return;
+        const holdScroll = (e: TouchEvent) => {
+            if (reorder.blocksScroll() && e.cancelable) e.preventDefault();
+        };
+        rail.addEventListener("touchmove", holdScroll, { passive: false });
+        onCleanup(() => rail.removeEventListener("touchmove", holdScroll));
     });
 
     const className = () =>
@@ -77,8 +90,9 @@ export interface PaperRailItemProps
     label?: JSX.Element | string;
     showLabel?: boolean;
     disabled?: boolean;
-    /** drag with a mouse or pen to move it among the rail's other
-     *  reorderable items; the rail's onReorder reports the new order */
+    /** drag with a mouse or pen, or hold with a finger and then drag, to
+     *  move it among the rail's other reorderable items; the rail's
+     *  onReorder reports the new order */
     reorderable?: boolean;
 }
 
@@ -119,6 +133,7 @@ export function PaperRailItem(props: PaperRailItemProps) {
             local.disabled ? styles.disabled : "",
             local.reorderable ? styles.reorderable : "",
             isDragging() ? styles.dragging : "",
+            railCtx?.reorder.isLifted(local.value) ? styles.lifted : "",
             railCtx?.reorder.isDropping() ? styles.dropping : "",
             railCtx?.reorder.hasActiveDrag() && !isDragging() ? styles.isSibling : "",
             local.class,
@@ -126,10 +141,11 @@ export function PaperRailItem(props: PaperRailItemProps) {
             .filter(Boolean)
             .join(" ");
 
-    // touch keeps its drag for scrolling the rail
+    // a finger holds first, so a quick swipe still scrolls the rail; the
+    // hold is the same one that opens the item's context menu
     const handlePointerDown = (e: PointerEvent) => {
-        if (local.reorderable && !local.disabled && e.pointerType !== "touch") {
-            railCtx?.reorder.start(local.value, e);
+        if (local.reorderable && !local.disabled) {
+            railCtx?.reorder.start(local.value, e, e.pointerType === "touch" ? { holdMs: HOLD_MS } : {});
         }
         if (typeof local.onPointerDown === "function") {
             (local.onPointerDown as (e: PointerEvent) => void)(e);
