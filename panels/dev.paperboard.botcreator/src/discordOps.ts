@@ -1,6 +1,6 @@
 // One implementation for every "reach a channel, then operate on a message"
-// and "answer a pending interaction" operation. The flow actions in
-// service.ts stay thin: they parse inputs and call these classes — channel
+// and "answer a pending interaction" operation. The blocks in
+// blocks.ts stay thin: they parse inputs and call these classes — channel
 // resolution, embed/component payload building, and the Discord
 // not-text-based errors live here once, not per action.
 import type {
@@ -145,7 +145,7 @@ export const BUTTON_STYLES = [
 ] as const;
 
 // Discord's per-value limits (lengths, counts, item caps) are declared on
-// the actions' inputs and refused by the SDK before these builders run, and
+// the blocks' inputs and refused by the SDK before these builders run, and
 // shown on the block before the flow does; the builders check what a single
 // input can't say: presence, kinds, and how inputs relate.
 function checkCustomId(customId: string, what: string): string {
@@ -709,91 +709,6 @@ export async function resolveMember(
 }
 
 // ─── message operations ─────────────────────────────────────────────────────
-
-/**
- * The shared input vocabulary for flow blocks. Every action that writes a
- * Discord message (send, DM, respond, follow-up, edit) names the same body
- * fields through these specs — Content, Embeds, Components are defined once
- * — and every placeholder is a descriptor, never an example value.
- */
-export const INPUTS = {
-    channel: {
-        type: "discord-channel",
-        label: "Channel",
-        placeholder: "Channel",
-        typeName: "Channel",
-        required: true,
-    },
-    message: {
-        type: "discord-message",
-        label: "Message",
-        placeholder: "Message",
-        typeName: "Message",
-        required: true,
-    },
-    user: {
-        type: "discord-user",
-        label: "User",
-        placeholder: "User",
-        typeName: "User",
-        required: true,
-    },
-    role: {
-        type: "discord-role",
-        label: "Role",
-        placeholder: "Role",
-        typeName: "Role",
-        required: true,
-    },
-    interaction: {
-        type: "discord-interaction",
-        label: "Interaction",
-        placeholder: "Interaction",
-        typeName: "Interaction",
-        required: true,
-    },
-    guildId: { type: "string", label: "Server ID", placeholder: "Server ID" },
-    content: { type: "string", label: "Content", placeholder: "Content" },
-    embeds: {
-        type: "list<discord-embed>",
-        label: "Embeds",
-        placeholder: "Embed",
-        typeName: "Embed",
-    },
-    components: {
-        type: "list<discord-component>",
-        label: "Components",
-        placeholder: "Component",
-        typeName: "Component",
-    },
-    ephemeral: { type: "boolean", label: "Only visible to the user", default: false },
-    emoji: { type: "string", label: "Emoji", placeholder: "Emoji", required: true },
-    reason: { type: "string", label: "Reason", placeholder: "Reason" },
-    name: { type: "string", label: "Name", placeholder: "Name", required: true },
-    color: { type: "color", label: "Color", placeholder: "Color" },
-    count: { type: "number", label: "Count", placeholder: "Count" },
-    minutes: { type: "number", label: "Minutes", placeholder: "Duration" },
-    maxUses: { type: "number", label: "Max uses", placeholder: "Uses" },
-    topic: { type: "string", label: "Topic", placeholder: "Topic" },
-    slowmode: { type: "number", label: "Slowmode seconds", placeholder: "Seconds" },
-    kind: {
-        type: "string",
-        label: "Kind",
-        placeholder: "Channel kind",
-        default: "text",
-        options: [
-            { label: "Text", value: "text" },
-            { label: "Voice", value: "voice" },
-            { label: "Announcement", value: "announcement" },
-            { label: "Category", value: "category" },
-        ],
-    },
-    deleteDays: {
-        type: "number",
-        label: "Delete message days",
-        placeholder: "Days",
-    },
-};
 
 // Every message action routes through this class instead of re-fetching the
 // channel and message inline: one place owns the typed "not text-based"

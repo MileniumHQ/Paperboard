@@ -1,5 +1,5 @@
 // Bots: each one a Discord application with its own token, commands and
-// Actions project, listed on the Bot Creator home screen. The panel config
+// Blocks project, listed on the Bot Creator home screen. The panel config
 // holds the list; each token is its own vault secret. Pure, so the service,
 // the panel and their tests share one implementation.
 import { normalizeCommandDefinitions, type SlashCommandDefinition } from "./types";
@@ -12,7 +12,7 @@ export const MAX_BOTS = 50;
 export const LEGACY_TOKEN_NAME = "bot-token";
 
 export interface StoredBot {
-    /** stable, never shown; doubles as the bot's project id in the Actions API */
+    /** stable, never shown; doubles as the bot's project id in Blocks */
     id: string;
     /** the bot's Discord username, as of its last login */
     name: string;
@@ -29,13 +29,6 @@ export interface StoredBot {
 export interface BotsConfig {
     version: number;
     bots: StoredBot[];
-    /**
-     * The bot that was the only one before Bot Creator ran several. Flows
-     * from then name its actions without a project; deprecated forwarders
-     * keep them running against this bot.
-     * TODO(remove after v0.5): with the forwarders.
-     */
-    legacyBot?: string;
 }
 
 /** What every window sees of a bot: its saved identity and its live state. */
@@ -61,7 +54,7 @@ export interface BotsServiceState {
     botsError: string | null;
 }
 
-// the Actions API's project id rule (papercrane PROJECT_ID_PATTERN)
+// the Blocks project id rule (papercrane PROJECT_ID_PATTERN)
 const BOT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 export function isBotId(id: unknown): id is string {
@@ -133,7 +126,6 @@ export function readBotsConfig(saved: unknown):
         config: {
             version: BOTS_VERSION,
             bots,
-            ...(isBotId(config.legacyBot) && seen.has(config.legacyBot) ? { legacyBot: config.legacyBot } : {}),
         },
     };
 }

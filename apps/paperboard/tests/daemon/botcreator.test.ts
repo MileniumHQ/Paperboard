@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { REPO_DIR } from "./support/crane";
 import { dataDir } from "./support/fs";
 import { type InProcessDaemon, startDaemon } from "./support/inproc";
+import { serviceCall } from "./support/panels";
 import type { Rpc } from "./support/rpc";
 import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
 
@@ -32,8 +33,11 @@ async function installBotCreator(dir: string) {
 }
 
 const config = () => JSON.parse(fs.readFileSync(path.join(daemon.dataDir, "configs", `${PANEL}.json`), "utf8"));
-const listed = async () => (await host.ok("actions:list")).actions as Array<{ panelId: string; action: string; schema?: { deprecated?: unknown } }>;
-const call = (action: string, input: Record<string, unknown>) => host.call("actions:call", { panelId: PANEL, action, args: [input], timeoutMs: 30_000 });
+const listed = async () => (await host.ok("blocks:list", { panelId: PANEL })).entries as Array<{ panelId: string; entry: string }>;
+// one of the service's own calls, as Bot Creator's page makes it
+const call = (name: string, input: Record<string, unknown>) => host.call("blocks:call", serviceCall(PANEL, name, input, 30_000));
+// one of a bot's blocks
+const run = (entry: string, inputs: Record<string, unknown>) => host.call("blocks:call", { panelId: PANEL, entry, request: { inputs }, timeoutMs: 30_000 });
 const vaulted = async (name: string) => (await host.ok("secrets:get", { name, panelId: PANEL })).found as boolean;
 
 beforeAll(async () => {
@@ -54,11 +58,11 @@ beforeAll(async () => {
 	host = await daemon.rpc();
 	await waitFor("Bot Creator to migrate its legacy bot", () => {
 		const saved = config();
-		return saved.bots?.length === 1 && saved.legacyBot;
+		return saved.bots?.length === 1;
 	}, { timeoutMs: 60_000 });
-	botId = config().legacyBot;
-	// the legacy forwarders register last, after the bot's own project
-	await waitFor("the migrated bot's legacy forwarders to register", async () => (await listed()).some((a) => a.panelId === PANEL && a.action === "send-message"), { timeoutMs: 30_000 });
+	botId = config().bots[0].id;
+	// the bot's blocks register in order, its commands' events last
+	await waitFor("the migrated bot's blocks to register", async () => (await listed()).some((b) => b.entry.startsWith(`${botId}/event.slash-ping-`)), { timeoutMs: 30_000 });
 });
 afterAll(async () => {
 	await host?.close();
@@ -67,48 +71,47 @@ afterAll(async () => {
 
 // Bot Creator migrates its legacy bot and guards tokens and files.
 describe("Bot Creator through the daemon", () => {
-	test("a pre-multi-bot config becomes one bot with the same commands, and the old action ids stay as forwarders", async () => {
+	test("a pre-multi-bot config becomes one bot with the same commands, in its own Blocks project", async () => {
 		const saved = config();
 		expect(saved.bots[0]).toMatchObject({ id: botId, applicationId: APP_ID });
 		expect(saved.bots[0].commands.map((c: { name: string }) => c.name)).toEqual(["ping"]);
 		expect(saved.theme).toBe("kept");
-		const actions = await listed();
-		const forwarders = actions.filter((a) => a.panelId === PANEL && a.schema?.deprecated && !a.action.includes("/"));
-		expect(forwarders.length).toBeGreaterThan(0);
-		for (const forwarder of forwarders) {
-			expect({ forwarder: forwarder.action, inBot: actions.some((a) => a.action === `${botId}/${forwarder.action}`) }).toEqual({ forwarder: forwarder.action, inBot: true });
-		}
+		expect(saved.legacyBot).toBeUndefined();
+		const entries = (await listed()).map((b) => b.entry);
+		expect(entries).toContain(`${botId}/command.send-message`);
+		// the migrated command is an event of the bot's project
+		expect(entries.filter((entry) => entry.startsWith(`${botId}/event.slash-ping-`))).toHaveLength(1);
+		// the bot's blocks live in its project, not beside the panel's own
+		expect(entries).not.toContain("command.send-message");
 	});
 
-	test("add-bot refuses a non-bot token and a duplicate bot before any login, deleting that vault entry", async () => {
+	test("addBot refuses a non-bot token and a duplicate bot before any login, deleting that vault entry", async () => {
 		for (const [id, token, message] of [
 			["b-aaaaaaaaaaaa", "not a bot token", "isn't a Discord bot token"],
 			["b-bbbbbbbbbbbb", tokenFor(APP_ID), "already uses this bot"],
 		] as const) {
 			await host.ok("secrets:set", { name: `bot-token.${id}`, value: token, panelId: PANEL });
-			const answer = await call("add-bot", { bot: id });
+			const answer = await call("addBot", { bot: id });
 			expect({ id, error: answer.error ?? null }).toEqual({ id, error: expect.stringContaining(message) });
 			expect({ id, vaulted: await vaulted(`bot-token.${id}`) }).toEqual({ id, vaulted: false });
 		}
 		expect(config().bots).toHaveLength(1);
 	});
 
-	test("send-file refuses addresses that are not web URLs", async () => {
+	test("Send File refuses addresses that are not web URLs", async () => {
 		for (const url of ["/etc/passwd", "file:///etc/passwd", "ftp://example.invalid/x"]) {
-			const answer = await host.call("actions:call", { panelId: PANEL, action: `${botId}/send-file`, args: [{ channel: "1", url }], timeoutMs: 30_000 });
+			const answer = await run(`${botId}/command.send-file`, { channel: "222222222222222222", url });
 			expect({ url, refused: /web address|http or https/.test(answer.error ?? "") }).toEqual({ url, refused: true });
 		}
 	});
 
-	test("delete-bot removes its project, its actions and its vaulted token", async () => {
+	test("deleteBot removes its project, its blocks and its vaulted token", async () => {
 		await host.ok("secrets:set", { name: `bot-token.${botId}`, value: tokenFor(APP_ID), panelId: PANEL });
-		const answer = await call("delete-bot", { bot: botId });
+		const answer = await call("deleteBot", { bot: botId });
 		expect(answer.error ?? null).toBeNull();
 		expect(answer.result).toEqual({ result: { deleted: botId } });
-		const actions = await listed();
-		expect(actions.filter((a) => a.action.startsWith(`${botId}/`))).toEqual([]);
-		expect(actions.filter((a) => a.panelId === PANEL && a.schema?.deprecated)).toEqual([]);
-		expect((await host.ok("actions:projects")).projects.map((p: { id: string }) => p.id)).not.toContain(botId);
+		expect((await listed()).filter((b) => b.entry.startsWith(`${botId}/`))).toEqual([]);
+		expect((await host.ok("blocks:projects", { panelId: PANEL })).projects.map((p: { id: string }) => p.id)).not.toContain(botId);
 		expect(await vaulted(`bot-token.${botId}`)).toBe(false);
 		expect(config().bots).toEqual([]);
 	});

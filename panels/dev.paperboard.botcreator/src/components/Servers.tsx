@@ -19,7 +19,7 @@ import {
     PaperTable,
     PaperCopyButton,
 } from "@mileniumhq/paperui";
-import { actionsApi, projectActionId } from "@mileniumhq/paperapi";
+import { serviceApi } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
 import {
     CHANNEL_KIND_LABELS,
@@ -99,8 +99,8 @@ export default function Servers(props: { bot: () => BotSummary }) {
         setLoadingList(true);
         setListError("");
         try {
-            const list = await actionsApi.call<GuildSummary[]>(PANEL_ID, "list-guilds", { bot: bot() });
-            if (!Array.isArray(list)) throw new Error("list-guilds returned no server list");
+            const list = await serviceApi.call<GuildSummary[]>(PANEL_ID, "listGuilds", { bot: bot() });
+            if (!Array.isArray(list)) throw new Error("listGuilds returned no server list");
             setGuilds(list);
         } catch (err) {
             console.error("[Servers] guild list read failed:", err);
@@ -111,9 +111,9 @@ export default function Servers(props: { bot: () => BotSummary }) {
 
         setHealthError("");
         try {
-            const health = await actionsApi.call<Health>(PANEL_ID, "get-health", { bot: bot() });
+            const health = await serviceApi.call<Health>(PANEL_ID, "getHealth", { bot: bot() });
             if (!health || typeof health !== "object") {
-                throw new Error("get-health returned no health payload");
+                throw new Error("getHealth returned no health payload");
             }
             setConnected(Boolean(health.connected));
         } catch (err) {
@@ -142,9 +142,9 @@ export default function Servers(props: { bot: () => BotSummary }) {
         setSentTo("");
         setDetailLoading(true);
         try {
-            const next = await actionsApi.call<GuildDetail>(
+            const next = await serviceApi.call<GuildDetail>(
                 PANEL_ID,
-                "get-guild-detail",
+                "getGuildDetail",
                 { bot: bot(), guildId },
             );
             setDetail(next);
@@ -169,12 +169,12 @@ export default function Servers(props: { bot: () => BotSummary }) {
         setMembersLoading(true);
         setMembersError("");
         try {
-            const found = await actionsApi.call<MemberSummary[]>(
+            const found = await serviceApi.call<MemberSummary[]>(
                 PANEL_ID,
-                "search-guild-members",
+                "searchGuildMembers",
                 { bot: bot(), guildId: id, query: memberQuery() },
             );
-            if (!Array.isArray(found)) throw new Error("search-guild-members returned no member list");
+            if (!Array.isArray(found)) throw new Error("searchGuildMembers returned no member list");
             setMembers(found);
         } catch (err) {
             console.error("[Servers] member search failed:", err);
@@ -198,7 +198,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
         }
         setSending(true);
         try {
-            await actionsApi.call(PANEL_ID, projectActionId(bot(), "send-message"), {
+            await serviceApi.call(PANEL_ID, "sendMessage", {
                 channel: channelId(),
                 content: content().trim(),
             });

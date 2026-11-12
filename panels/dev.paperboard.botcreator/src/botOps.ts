@@ -1,6 +1,6 @@
 // What a bot does in Discord, once: each operation takes the bot's client
-// and plain inputs. Actions (service.ts) and Blocks (blocks.ts) both call
-// these, so the two APIs never drift; each only shapes what it returns.
+// and plain inputs. Blocks (blocks.ts) calls these and only shapes what it
+// returns.
 import type {
     Client,
     ColorResolvable,

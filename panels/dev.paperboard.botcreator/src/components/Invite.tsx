@@ -10,7 +10,7 @@ import {
     PaperQuote,
     PaperSeparator,
 } from "@mileniumhq/paperui";
-import { actionsApi } from "@mileniumhq/paperapi";
+import { serviceApi } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
 import {
     PERMISSION_DEFINITIONS,
@@ -33,12 +33,12 @@ export default function Invite(props: { bot: () => BotSummary }) {
         const request = ++inviteRequest;
         setInviteError("");
         try {
-            const url = await actionsApi.call<string>(
+            const url = await serviceApi.call<string>(
                 PANEL_ID,
-                "get-invite-url",
+                "getInviteUrl",
                 { bot: props.bot().id, permissions: perms },
             );
-            if (!url) throw new Error("get-invite-url returned no link");
+            if (!url) throw new Error("getInviteUrl returned no link");
             if (request === inviteRequest) setInviteUrl(url);
         } catch (err) {
             console.error("[Invite] invite URL generation failed:", err);
@@ -52,12 +52,12 @@ export default function Invite(props: { bot: () => BotSummary }) {
     const updateUserInstallUrl = async () => {
         setUserInstallError("");
         try {
-            const url = await actionsApi.call<string>(
+            const url = await serviceApi.call<string>(
                 PANEL_ID,
-                "get-user-install-url",
+                "getUserInstallUrl",
                 { bot: props.bot().id },
             );
-            if (!url) throw new Error("get-user-install-url returned no link");
+            if (!url) throw new Error("getUserInstallUrl returned no link");
             setUserInstallUrl(url);
         } catch (err) {
             console.error("[Invite] user install URL generation failed:", err);

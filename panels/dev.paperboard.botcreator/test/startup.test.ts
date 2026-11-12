@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { actionsApi } from "@mileniumhq/paperapi";
+import { blocksApi, serviceApi } from "@mileniumhq/paperapi";
 import type { BotsServiceState } from "../src/bots";
 import { startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
@@ -29,8 +29,8 @@ describe("ready doesn't wait for Discord", () => {
         const service = await startService({ discordApi: discord.api });
         // ready came while Discord still holds the stuck bot's login
         await discord.request((r) => r.path === "/gateway/bot" && r.bot === stuck.token, "the stuck bot's login");
-        const registered = (await actionsApi.list(PANEL_ID)).map((a) => a.action);
-        expect(registered).toContain("b-stuck/send-message");
+        const registered = (await blocksApi.list(PANEL_ID)).map((b) => b.entry);
+        expect(registered).toContain("b-stuck/command.send-message");
 
         const state = await stateWhere<BotsServiceState>(
             PANEL_ID,
@@ -47,6 +47,6 @@ describe("ready doesn't wait for Discord", () => {
         expect(byId["b-tokenless"]).toMatchObject({ connected: false, connecting: false, hasToken: false, lastError: "No token is saved for this bot. Replace its token in Configuration." });
         expect(service.output()).toContain("Bot b-broken didn't connect: Discord login failed: An invalid token was provided.");
         // the stuck bot is still connecting: its login is Discord's to finish
-        expect(await actionsApi.call(PANEL_ID, "get-bot-info", { bot: "b-stuck" })).toMatchObject({ connected: false, lastError: null });
+        expect(await serviceApi.call(PANEL_ID, "getBotInfo", { bot: "b-stuck" })).toMatchObject({ connected: false, lastError: null });
     });
 });

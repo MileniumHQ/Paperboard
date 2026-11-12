@@ -11,7 +11,7 @@ import {
     PaperCopyButton,
     PaperToggle,
 } from "@mileniumhq/paperui";
-import { actionsApi, projectActionId } from "@mileniumhq/paperapi";
+import { serviceApi } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
 import {
     appendCapped,
@@ -64,8 +64,8 @@ export default function Overview(props: OverviewProps) {
     const loadBotInfo = async () => {
         setInfoError("");
         try {
-            const info = await actionsApi.call<any>(PANEL_ID, "get-bot-info", { bot: props.bot().id });
-            if (!info || typeof info !== "object") throw new Error("get-bot-info returned no bot details");
+            const info = await serviceApi.call<any>(PANEL_ID, "getBotInfo", { bot: props.bot().id });
+            if (!info || typeof info !== "object") throw new Error("getBotInfo returned no bot details");
             setTag(typeof info.tag === "string" ? info.tag : "");
             if (Array.isArray(info.recentMessages)) setRecent(info.recentMessages);
         } catch (err) {
@@ -76,9 +76,9 @@ export default function Overview(props: OverviewProps) {
 
     const loadHealth = async () => {
         try {
-            const next = await actionsApi.call<Health>(PANEL_ID, "get-health", { bot: props.bot().id });
+            const next = await serviceApi.call<Health>(PANEL_ID, "getHealth", { bot: props.bot().id });
             if (!next || typeof next !== "object") {
-                throw new Error("get-health returned no health payload");
+                throw new Error("getHealth returned no health payload");
             }
             setHealth(next);
             setHealthError("");
@@ -104,12 +104,12 @@ export default function Overview(props: OverviewProps) {
         }
     }, { defer: true }));
 
-    // live session truth: the service emits each message as the bot's
-    // event; the subscription is cleaned up with the component (bounded: no
-    // listener outlives it)
+    // live session truth: the service emits each message with the bot it
+    // came to; the subscription is cleaned up with the component (bounded:
+    // no listener outlives it)
     onCleanup(
-        actionsApi.onTrigger(PANEL_ID, projectActionId(props.bot().id, "on-message"), (msg: any) => {
-            if (!msg || typeof msg !== "object") return;
+        serviceApi.on(PANEL_ID, "message", (msg: any) => {
+            if (!msg || typeof msg !== "object" || msg.bot !== props.bot().id) return;
             setRecent((prev) =>
                 appendCapped(
                     prev,

@@ -1,4 +1,4 @@
-// Bot Creator's blocks (Actions API v2), used the way the Blocks panel uses
+// Bot Creator's blocks, used the way the Blocks panel uses
 // them: through the real daemon, from the service, against a loopback Discord.
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { blocksApi, memoryBlocks, type BlockEventDefinition } from "@mileniumhq/paperapi";
@@ -48,7 +48,7 @@ const EVENTS = [
     "role-deleted", "role-removed", "thread-created", "voice-changed",
 ];
 
-// every static trigger a session fires (session.ts attachListeners), as Actions names them
+// every static trigger a session fires (session.ts attachListeners), by the name the session gives it
 const TRIGGERS = [
     "on-message", "on-member-join", "on-member-leave", "on-reaction-add", "on-connection-error", "interaction-triggered",
     "modal-submitted", "on-message-edited", "on-message-deleted", "on-reaction-removed", "on-member-banned", "on-role-added",
@@ -219,7 +219,7 @@ describe("a bot is a Blocks project, used through the daemon", () => {
     });
 
     test("a slash command made in the panel is an event, fired with its options, and gone once deleted", async () => {
-        const created = await call("create-command", { bot: BOT, name: "roll", description: "Roll a die", options: [{ name: "sides", description: "How many sides", type: "integer", required: true }] });
+        const created = await call("createCommand", { bot: BOT, name: "roll", description: "Roll a die", options: [{ name: "sides", description: "How many sides", type: "integer", required: true }] });
         expect(created).toMatchObject({ registered: true, triggerError: null });
         const event = commandEventId({ scope: GLOBAL_SCOPE, name: "roll" });
         const listed = (await blocksApi.list(PANEL_ID)).find((b) => b.entry === `${BOT}/event.${event}`);
@@ -231,7 +231,7 @@ describe("a bot is a Blocks project, used through the daemon", () => {
         discord.dispatch(fake, "INTERACTION_CREATE", interaction);
         expect(await used.payload).toMatchObject({ interaction: interaction.id, channel: home.channels[0].id, server: home.id, "option-sides": 20 });
 
-        await call("delete-command", { bot: BOT, id: created.command.id });
+        await call("deleteCommand", { bot: BOT, id: created.command.id });
         expect((await blocksApi.list(PANEL_ID)).some((b) => b.entry === `${BOT}/event.${event}`)).toBe(false);
     });
 
@@ -239,7 +239,7 @@ describe("a bot is a Blocks project, used through the daemon", () => {
         expect(await read("status")).toBe("online");
         expect(await read<number>("uptime")).toBeGreaterThan(0);
 
-        const created = await call("create-command", { bot: BOT, name: "ping", description: "Ping the bot", options: [] });
+        const created = await call("createCommand", { bot: BOT, name: "ping", description: "Ping the bot", options: [] });
         const event = commandEventId({ scope: GLOBAL_SCOPE, name: "ping" });
         try {
             expect(await blocksApi.choices(PANEL_ID, `${BOT}/value.command-uses`, "command")).toEqual([{ label: "/ping", value: event }]);
@@ -259,7 +259,7 @@ describe("a bot is a Blocks project, used through the daemon", () => {
             expect(last).toBeLessThanOrEqual(Date.now());
             expect(await read("commands-last-day")).toBe(today + 1);
         } finally {
-            await call("delete-command", { bot: BOT, id: created.command.id });
+            await call("deleteCommand", { bot: BOT, id: created.command.id });
         }
     });
 

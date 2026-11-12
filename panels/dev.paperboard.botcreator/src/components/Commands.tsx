@@ -19,7 +19,7 @@ import {
     PaperCheckbox,
     PaperCopyButton,
 } from "@mileniumhq/paperui";
-import { actionsApi } from "@mileniumhq/paperapi";
+import { serviceApi } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
 import {
     GLOBAL_SCOPE,
@@ -87,7 +87,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
         setGuildsError("");
         setHealthError("");
         try {
-            const saved = await actionsApi.call<unknown>(PANEL_ID, "list-commands", { bot: bot() });
+            const saved = await serviceApi.call<unknown>(PANEL_ID, "listCommands", { bot: bot() });
             setCommands(normalizeCommandDefinitions(saved));
         } catch (err) {
             console.error("[Commands] saved commands read failed:", err);
@@ -95,8 +95,8 @@ export default function Commands(props: { bot: () => BotSummary }) {
         }
 
         try {
-            const list = await actionsApi.call<GuildSummary[]>(PANEL_ID, "list-guilds", { bot: bot() });
-            if (!Array.isArray(list)) throw new Error("list-guilds returned no server list");
+            const list = await serviceApi.call<GuildSummary[]>(PANEL_ID, "listGuilds", { bot: bot() });
+            if (!Array.isArray(list)) throw new Error("listGuilds returned no server list");
             setGuilds(list);
         } catch (err) {
             console.error("[Commands] guild list read failed:", err);
@@ -104,9 +104,9 @@ export default function Commands(props: { bot: () => BotSummary }) {
         }
 
         try {
-            const health = await actionsApi.call<Health>(PANEL_ID, "get-health", { bot: bot() });
+            const health = await serviceApi.call<Health>(PANEL_ID, "getHealth", { bot: bot() });
             if (!health || typeof health !== "object") {
-                throw new Error("get-health returned no health payload");
+                throw new Error("getHealth returned no health payload");
             }
             setConnected(Boolean(health.connected));
             if (health.commandSyncError) setActionError(syncProblem(health.commandSyncError));
@@ -228,9 +228,9 @@ export default function Commands(props: { bot: () => BotSummary }) {
         setFormError("");
         setActionError(null);
         try {
-            const result = await actionsApi.call<CommandMutationResult>(
+            const result = await serviceApi.call<CommandMutationResult>(
                 PANEL_ID,
-                "create-command",
+                "createCommand",
                 {
                     bot: bot(),
                     name: name(),
@@ -244,7 +244,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
             setCreateOpen(false);
             setActionError(mutationProblem(result));
         } catch (err) {
-            console.error("[Commands] create-command failed:", err);
+            console.error("[Commands] createCommand failed:", err);
             setFormError(errorToMessage(err));
         } finally {
             setBusy(false);
@@ -258,15 +258,15 @@ export default function Commands(props: { bot: () => BotSummary }) {
         setBusy(true);
         setActionError(null);
         try {
-            const result = await actionsApi.call<CommandMutationResult>(
+            const result = await serviceApi.call<CommandMutationResult>(
                 PANEL_ID,
-                "delete-command",
+                "deleteCommand",
                 { bot: bot(), id: target.id },
             );
             setCommands((prev) => prev.filter((c) => c.id !== target.id));
             setActionError(mutationProblem(result));
         } catch (err) {
-            console.error("[Commands] delete-command failed:", err);
+            console.error("[Commands] deleteCommand failed:", err);
             setActionError({ title: `/${target.name} not deleted`, message: errorToMessage(err) });
         } finally {
             setBusy(false);

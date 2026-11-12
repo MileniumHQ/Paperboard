@@ -1,6 +1,6 @@
 // Home widgets for Bot Creator. One page draws every widget; the shell says
 // which one this frame shows. Both read the panel's own service through its
-// internal actions, poll only while the widget can be seen, and show a
+// own calls, poll only while the widget can be seen, and show a
 // failed read as a failure with Retry, never as an empty or offline bot.
 // Layout comes from PaperWidget so these line up with every other widget.
 import "@mileniumhq/paperui/style.css";
@@ -19,7 +19,7 @@ import {
     PaperWidgetMessage,
     PaperWidgetStat,
 } from "@mileniumhq/paperui";
-import { actionsApi, defineWidgets, type WidgetContext } from "@mileniumhq/paperapi";
+import { serviceApi, defineWidgets, type WidgetContext } from "@mileniumhq/paperapi";
 import type { CommandActivity } from "./commandActivity";
 import { DEFAULT_DISCORD_AVATAR, errorToMessage } from "./types";
 import { PANEL_ID } from "./bots";
@@ -84,12 +84,11 @@ function createSize(widget: WidgetContext) {
     return size;
 }
 
-// the bot chosen in the gallery; a widget placed before several bots has
-// none, and the service answers for the bot there was then
+// the bot chosen in the gallery; the service refuses a widget with none
 const chosenBot = (widget: WidgetContext) => ({ bot: widget.options.bot ?? "" });
 
 async function readStatus(widget: WidgetContext): Promise<BotWidgetStatus> {
-    const status = await actionsApi.call<BotWidgetStatus>(PANEL_ID, "get-widget-status", chosenBot(widget));
+    const status = await serviceApi.call<BotWidgetStatus>(PANEL_ID, "getWidgetStatus", chosenBot(widget));
     if (!status || typeof status !== "object" || typeof status.connected !== "boolean") {
         throw new Error("Bot Creator returned no status");
     }
@@ -97,7 +96,7 @@ async function readStatus(widget: WidgetContext): Promise<BotWidgetStatus> {
 }
 
 async function readActivity(widget: WidgetContext): Promise<CommandActivity> {
-    const activity = await actionsApi.call<CommandActivity>(PANEL_ID, "get-command-activity", chosenBot(widget));
+    const activity = await serviceApi.call<CommandActivity>(PANEL_ID, "getCommandActivity", chosenBot(widget));
     if (!activity || !Array.isArray(activity.counts)) {
         throw new Error("Bot Creator returned no command activity");
     }
@@ -131,7 +130,7 @@ function BotStatus(props: { widget: WidgetContext }) {
         setConnecting(true);
         setConnectError(null);
         try {
-            await actionsApi.call(PANEL_ID, "connect-bot", chosenBot(props.widget));
+            await serviceApi.call(PANEL_ID, "connectBot", chosenBot(props.widget));
         } catch (err) {
             setConnectError(errorToMessage(err));
         } finally {

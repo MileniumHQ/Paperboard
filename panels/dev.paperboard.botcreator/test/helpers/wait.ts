@@ -1,6 +1,6 @@
 // Waiting on real signals, each with an upper bound that fails saying what
 // never happened.
-import { actionsApi, STATE_SYNC_EVENT } from "@mileniumhq/paperapi";
+import { blocksApi, STATE_EVENT, STATE_VALUE } from "@mileniumhq/paperapi";
 
 export function within<T>(what: string, promise: Promise<T>, ms = 20_000, context?: () => string): Promise<T> {
     let timer: ReturnType<typeof setTimeout>;
@@ -20,11 +20,11 @@ export function stateWhere<T>(panelId: string, accept: (state: T) => boolean, wh
     const found = new Promise<T>((resolve, reject) => {
         let last: T | undefined;
         const check = () =>
-            actionsApi.call<T>(panelId, "__getState", {}).then((state) => {
+            blocksApi.read<T>(panelId, STATE_VALUE).then((state) => {
                 last = state;
                 if (accept(state)) resolve(state);
             }, reject);
-        off = actionsApi.on(panelId, STATE_SYNC_EVENT, () => void check());
+        off = blocksApi.onEvent(panelId, STATE_EVENT, () => void check());
         void check();
         timer = setTimeout(() => reject(new Error(`Timed out after ${ms} ms waiting for ${what}; last state: ${JSON.stringify(last)}`)), ms);
     });

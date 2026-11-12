@@ -3,7 +3,7 @@
 // change goes through the service, which saves the list and announces it.
 import { createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { actions as actionsApi, createPanelBridge, secretsApi } from "@mileniumhq/paperapi";
+import { createPanelBridge, secretsApi } from "@mileniumhq/paperapi";
 import { byCreation, createBotId, PANEL_ID, tokenName, type BotSummary, type BotsServiceState } from "./bots";
 
 const DEFAULT_STATE: BotsServiceState = { bots: [], botsError: null };
@@ -35,7 +35,7 @@ export function createBots() {
     };
     void load();
 
-    const call = <T>(action: string, inputs: Record<string, unknown>) => actionsApi.call<T>(PANEL_ID, action, inputs);
+    const call = <T>(name: string, input: Record<string, unknown>) => bridge.call<T>(name, input);
 
     return {
         state: () => state,
@@ -52,14 +52,14 @@ export function createBots() {
         add: async (token: string) => {
             const id = createBotId();
             await secretsApi.set(tokenName(id), token, PANEL_ID);
-            return call<BotSummary>("add-bot", { bot: id });
+            return call<BotSummary>("addBot", { bot: id });
         },
         /** saves a new token for the same bot, then reconnects it if it is on */
         replaceToken: async (bot: string, token: string) => {
             await secretsApi.set(tokenName(bot), token, PANEL_ID);
-            return call<boolean>("replace-token", { bot });
+            return call<boolean>("replaceToken", { bot });
         },
-        setEnabled: (bot: string, enabled: boolean) => call<boolean>(enabled ? "connect-bot" : "disconnect-bot", { bot }),
-        remove: (bot: string) => call<{ deleted: string }>("delete-bot", { bot }),
+        setEnabled: (bot: string, enabled: boolean) => call<boolean>(enabled ? "connectBot" : "disconnectBot", { bot }),
+        remove: (bot: string) => call<{ deleted: string }>("deleteBot", { bot }),
     };
 }

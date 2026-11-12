@@ -1,4 +1,4 @@
-// Bot Creator opens on its bots, like Actions on its projects; opening one
+// Bot Creator opens on its bots, like Blocks on its projects; opening one
 // shows its pages. A bot deleted while it is open returns here.
 import { createEffect, createSignal, Show } from "solid-js";
 import {

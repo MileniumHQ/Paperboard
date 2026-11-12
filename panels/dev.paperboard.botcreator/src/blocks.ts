@@ -1,4 +1,4 @@
-// Bot Creator's blocks for the Blocks panel (Actions API v2). Each bot is a
+// Bot Creator's blocks for the Blocks panel. Each bot is a
 // Blocks project of its own, with its commands, values and events; the
 // panel's own handle holds the types every bot shares (a Channel, a User,
 // a Message...), the builders that never reach Discord (embeds, buttons),
@@ -7,8 +7,8 @@
 // replaced, in Bot Creator only: a token typed into a flow would be saved in
 // it as plain text.
 //
-// What the blocks do is botOps.ts and discordOps.ts, the same code the
-// Actions blocks run; this file only says what each block takes and gives.
+// What the blocks do is botOps.ts and discordOps.ts; this file only says
+// what each block takes and gives.
 import { createHash } from "node:crypto";
 import type { Client } from "discord.js";
 import type {
@@ -530,7 +530,7 @@ export const builderValues: BlockValueDefinition[] = [
         },
         type: "component",
         read: (inputs: { style: string; label: string; "component-id"?: string; url?: string; emoji?: string; disabled: boolean }) => {
-            // the builder's own message names Actions' "Interaction ID"
+            // the shared builder's own message says "Interaction ID"
             if (inputs.style !== "link" && !inputs["component-id"]?.trim()) {
                 throw new Error(`The ${inputs.style} button "${inputs.label}" needs a Component ID, so a flow can react to it`);
             }
@@ -1730,21 +1730,8 @@ const maybe = (value: unknown) => (value === undefined || value === null ? null 
 const maybeId = (value: unknown) => (value === undefined || value === null || value === "" ? null : String(value));
 const at = (id: unknown, channelId: unknown): MessageRef => ({ id: text(id), channel: text(channelId) });
 
-/** The triggers a session fires that came after Actions: they are Blocks events only. */
-export const BLOCKS_ONLY_TRIGGERS: ReadonlySet<string> = new Set([
-    "on-guild-joined",
-    "on-guild-left",
-    "on-channel-created",
-    "on-channel-deleted",
-    "on-role-created",
-    "on-role-deleted",
-    "on-member-roles-changed",
-    "on-member-unbanned",
-    "on-nickname-changed",
-]);
-
 /**
- * One of the session's triggers (its Actions event and payload) as the
+ * One of the session's triggers (its name and payload) as the
  * bot's Blocks event. Every trigger a session fires has one.
  */
 export function blockEvent(trigger: string, output: any, commands: SlashCommandDefinition[]): { event: string; payload: Record<string, unknown> } {

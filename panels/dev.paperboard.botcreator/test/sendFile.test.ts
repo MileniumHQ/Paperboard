@@ -2,10 +2,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, te
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { blocksApi } from "@mileniumhq/paperapi";
 import type { BotsServiceState } from "../src/bots";
 import { fileFromUrl } from "../src/discordOps";
 import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
-import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
+import { PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
@@ -27,6 +28,7 @@ afterAll(() => {
 afterEach(stopServices);
 
 const BOT = "b-files";
+const run = <T = any>(command: string, inputs: Record<string, unknown>) => blocksApi.run<T>(PANEL_ID, command, inputs, { project: BOT });
 
 // Files are sent from web addresses only.
 describe("files are sent from web addresses only", () => {
@@ -51,13 +53,13 @@ describe("files are sent from web addresses only", () => {
         const channel = home.channels[0].id;
         const messages = () => discord.requests.filter((r) => r.method === "POST" && r.path === `/channels/${channel}/messages`);
 
-        await expect(call(`${BOT}/send-file`, { channel, url: secret })).rejects.toThrow(`"${secret}" isn't a web address`);
-        await expect(call(`${BOT}/send-file`, { channel, url: `file://${secret}` })).rejects.toThrow("A file is sent from an http or https address");
+        await expect(run("send-file", { channel, url: secret })).rejects.toThrow("expected a web address");
+        await expect(run("send-file", { channel, url: `file://${secret}` })).rejects.toThrow("A file is sent from an http or https address");
         expect(messages()).toEqual([]);
 
         // a web address is fetched and uploaded as the file
-        const messageId = await call<string>(`${BOT}/send-file`, { channel, url: `http://127.0.0.1:${web.port}/cat.png`, name: "cat.png", content: "a cat" });
-        expect(messageId).toMatch(/^\d+$/);
+        const sentMessage = await run<{ id: string; channel: string }>("send-file", { channel, url: `http://127.0.0.1:${web.port}/cat.png`, name: "cat.png", content: "a cat" });
+        expect(sentMessage).toEqual({ id: expect.stringMatching(/^\d+$/), channel });
         const [sent] = messages();
         expect(sent.body).toMatchObject({ content: "a cat", attachments: [{ id: "0" }] });
         expect(sent.files).toEqual([{ name: "cat.png", bytes: PICTURE }]);

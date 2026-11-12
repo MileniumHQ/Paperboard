@@ -1,6 +1,6 @@
 // The first thing Bot Creator shows: every bot as a card, whether it is
 // online and how many servers it is in, and a way to add another. Each bot
-// runs on its own, with its own token, commands and Actions project.
+// runs on its own, with its own token, commands and Blocks project.
 import { createSignal, For, Show } from "solid-js";
 import {
     PaperBadge,
@@ -96,7 +96,7 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
                     <Show
                         when={bots.list().length > 0}
                         fallback={
-                            <PaperEmptyState icon="smart_toy" title="No bots yet" description="All a bot needs is a token from the Discord Developer Portal. Then decide what it does in Actions.">
+                            <PaperEmptyState icon="smart_toy" title="No bots yet" description="All a bot needs is a token from the Discord Developer Portal. Then decide what it does in Blocks.">
                                 {newBot()}
                             </PaperEmptyState>
                         }
