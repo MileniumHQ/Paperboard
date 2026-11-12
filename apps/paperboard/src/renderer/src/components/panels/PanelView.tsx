@@ -1,6 +1,6 @@
 import { PaperFlex, playHaptic, swipeFromFrame } from "@mileniumhq/paperui";
 import { backupApi, backupProgressFraction, backupProgressText, HAPTIC_MESSAGE, SWIPE_BACK_MESSAGE, type BackupProgress } from "@mileniumhq/paperapi";
-import { type Component, createEffect, createSignal, For, Show, onCleanup, onMount } from "solid-js";
+import { type Component, type JSX, createEffect, createSignal, For, Show, onCleanup, onMount } from "solid-js";
 import { recordUse, liveKeys, recordAway, withoutIdle, MAX_LIVE_IFRAMES, IDLE_UNLOAD_MS } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";
 import styles from "./frame.module.css";
@@ -14,6 +14,10 @@ import { BACKUP_LOCATION_REQUEST, BACKUP_LOCATION_RESULT, parseBackupLocationReq
 export type RestartState = { kind: "restarting" } | { kind: "updating" } | { kind: "failed"; message: string };
 
 export interface PanelViewProps {
+    /** each panel's icon and name, headed on its loader */
+    panelHeading: (key: string) => { icon: JSX.Element; name: string };
+    /** the phone layout: the loader's heading draws smaller */
+    mobile: boolean;
     activePanel: string;
     activeComputerId: string;
     /** what the shell calls each computer; a panel is told its own */
@@ -25,7 +29,7 @@ export interface PanelViewProps {
     onRestartPanel?: (key: string) => void;
 }
 
-const PanelFrame: Component<{ panelKey: string; computerName: string; current: boolean; reload: number; retry: () => void; restart?: RestartState; retryRestart: () => void }> = (props) => {
+const PanelFrame: Component<{ panelKey: string; heading: { icon: JSX.Element; name: string }; mobile: boolean; computerName: string; current: boolean; reload: number; retry: () => void; restart?: RestartState; retryRestart: () => void }> = (props) => {
     const [computerId, panelId] = props.panelKey.split("::");
     const [ready, setReady] = createSignal(false);
     const [failure, setFailure] = createSignal("");
@@ -137,6 +141,8 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
         }} />
         <Show when={props.restart}>{(restart) => (
             <LoadingOverlay
+                heading={props.heading}
+                compact={props.mobile}
                 label={restart().kind === "failed" ? undefined : restart().kind === "updating" ? "Updating panel…" : "Restarting panel service…"}
                 error={restart().kind === "failed" ? (restart() as { message: string }).message : undefined}
                 retryLabel="Restart panel"
@@ -145,6 +151,8 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
         )}</Show>
         <Show when={!props.restart && held()}>{(hold) => (
             <LoadingOverlay
+                heading={props.heading}
+                compact={props.mobile}
                 label={hold().kind === "create" ? "Backing up" : "Restoring a backup"}
                 value={backupProgressFraction(hold()) ?? undefined}
                 title={hold().kind === "create" ? "Backing up" : "Restoring a backup"}
@@ -153,6 +161,8 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
         )}</Show>
         <Show when={!props.restart && !held() && (!ready() || failure())}>
             <LoadingOverlay
+                heading={props.heading}
+                compact={props.mobile}
                 label={failure() ? undefined : "Connecting panel…"}
                 error={failure() || undefined}
                 retryLabel="Reload panel"
@@ -181,7 +191,7 @@ const PanelView: Component<PanelViewProps> = (props) => {
     const live = () => withoutIdle(liveKeys(props.openedPanels, usageOrder(), currentKey(), MAX_LIVE_IFRAMES), away(), currentKey(), now(), IDLE_UNLOAD_MS);
     return <PaperFlex fullWidth fullHeight background="surface-raised" flex={1} overflow="hidden" class={styles.area}>
         <For each={props.openedPanels}>{(key) => <Show when={live().has(key)}>
-            <PanelFrame panelKey={key} computerName={props.computerName(key.split("::")[0])} current={key === currentKey()} reload={props.reloadTokens?.[key] || 0} retry={() => props.onReloadPanel?.(key)}
+            <PanelFrame panelKey={key} heading={props.panelHeading(key)} mobile={props.mobile} computerName={props.computerName(key.split("::")[0])} current={key === currentKey()} reload={props.reloadTokens?.[key] || 0} retry={() => props.onReloadPanel?.(key)}
                 restart={props.restartStates?.[key]} retryRestart={() => props.onRestartPanel?.(key)} />
         </Show>}</For>
     </PaperFlex>;

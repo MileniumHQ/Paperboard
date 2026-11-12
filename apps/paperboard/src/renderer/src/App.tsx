@@ -8,6 +8,7 @@ import {
     PaperButton,
     PaperQuote,
     PaperText,
+    PaperIcon,
     useContextMenuState,
     getVarCss,
     PaperSlidePage,
@@ -585,6 +586,18 @@ const App: Component = () => {
         return panel.icon || "dashboard";
     };
 
+    // a panel's loader heads itself with the panel's icon and name
+    const panelHeading = (key: string): { icon: JSX.Element; name: string } => {
+        const [compId, panelId] = key.split("::");
+        const panel = panelsByComputer()[compId]?.find((p) => p.id === panelId);
+        if (!panel) return { icon: <PaperIcon>dashboard</PaperIcon>, name: panelId };
+        const src = panel.iconUrl ?? (panel.icon?.includes(".") ? panelUrl(compId, panel.id, panel.icon) : undefined);
+        return {
+            icon: <PaperIcon src={src} alt="">{src ? undefined : panel.icon || "dashboard"}</PaperIcon>,
+            name: panel.name,
+        };
+    };
+
     const showTopBar = () =>
         !mobile() ||
         pendingUpdates(updateQueue.state()).length > 0 ||
@@ -933,6 +946,8 @@ const App: Component = () => {
                                 classList={{ [styles.away]: isShellTab(getSelectedTab(activeComputerId())) }}
                             >
                                 <PanelView
+                                    panelHeading={panelHeading}
+                                    mobile={mobile()}
                                     activePanel={getSelectedTab(
                                         activeComputerId(),
                                     )}

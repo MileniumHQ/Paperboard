@@ -56,3 +56,8 @@
     width: var(--paper-size-field);
     max-width: 100%;
 }
+
+/* a long panel name ends in an ellipsis instead of leaving the overlay */
+.overlayHeading {
+    max-width: 100%;
+}
