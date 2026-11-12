@@ -104,6 +104,15 @@ describe("other games' files", () => {
         expect(fs.readFileSync(path.join(root, "banlist.txt"), "utf8")).toBe("//Mallory\n203.0.113.7\n192.0.2.44\n//Eve\n2001:db8::1\n");
     });
 
+    test("a Terraria ban made right after a player is seen waits for that sighting to be written", async () => {
+        const store = new PlayerStore(tempDir());
+        // the service records sightings without waiting, then lets a ban through
+        void store.remember("Bob", "203.0.113.7:50000");
+        void store.remember("Bob");
+        await store.banOffline("bob");
+        expect(await store.bans()).toEqual([{ name: "Bob", address: "203.0.113.7" }]);
+    });
+
     test("deleting a Terraria world moves it, its .twld and their backups to the trash and leaves every other world", async () => {
         const root = tempDir();
         writeTree(root, {

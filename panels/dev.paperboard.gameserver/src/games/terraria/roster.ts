@@ -132,7 +132,8 @@ export class PlayerStore {
     /** Bans a player who is not online by the last address they joined from. */
     banOffline(name: string): Promise<void> {
         return serial(this.banFile, async () => {
-            const player = (await this.readSeen()).find((p) => sameName(p.name, name));
+            // through the sightings' queue: a join or leave still being written counts
+            const player = (await this.seen()).find((p) => sameName(p.name, name));
             if (!player) throw new Error(`${name} has never joined this server`);
             if (!player.address) throw new Error(`Paperboard has no address for ${player.name} yet; ban them while they are online`);
             const address = hostOf(player.address);
