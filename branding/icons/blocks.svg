@@ -8,13 +8,13 @@
     <rect x="15" y="15" width="770" height="770" rx="135" stroke="#0F63C8" stroke-width="30"/>
   </g>
   <g id="layer-3">
-    <path d="M150 458H200L232 490H306L338 458H650A20 20 0 0 1 670 478V586A20 20 0 0 1 650 606H338L306 638H232L200 606H150A20 20 0 0 1 130 586V478A20 20 0 0 1 150 458Z" fill="#25C025" stroke="#0B720B" stroke-width="12" stroke-linejoin="round"/>
-    <path d="M150 310H200L232 342H306L338 310H650A20 20 0 0 1 670 330V438A20 20 0 0 1 650 458H338L306 490H232L200 458H150A20 20 0 0 1 130 438V330A20 20 0 0 1 150 310Z" fill="#F6C748" stroke="#A17E0D" stroke-width="12" stroke-linejoin="round"/>
-    <path d="M150 162H200L232 194H306L338 162H650A20 20 0 0 1 670 182V290A20 20 0 0 1 650 310H338L306 342H232L200 310H150A20 20 0 0 1 130 290V182A20 20 0 0 1 150 162Z" fill="#FF4E60" stroke="#AE1414" stroke-width="12" stroke-linejoin="round"/>
+    <path d="M165.5 460L204 460L236 492L308 492L340 460L634.5 460Q670 460 670 495.5L670 573.5Q670 609 634.5 609L340 609L308 641L236 641L204 609L165.5 609Q130 609 130 573.5L130 495.5Q130 460 165.5 460Z" fill="#25C025" stroke="#0B720B" stroke-width="12" stroke-linejoin="round"/>
+    <path d="M165.5 310L204 310L236 342L308 342L340 310L634.5 310Q670 310 670 345.5L670 423.5Q670 459 634.5 459L340 459L308 491L236 491L204 459L165.5 459Q130 459 130 423.5L130 345.5Q130 310 165.5 310Z" fill="#F6C748" stroke="#A17E0D" stroke-width="12" stroke-linejoin="round"/>
+    <path d="M165.5 159L204 159L236 191L308 191L340 159L634.5 159Q670 159 670 194.5L670 272.5Q670 308 634.5 308L340 308L308 340L236 340L204 308L165.5 308Q130 308 130 272.5L130 194.5Q130 159 165.5 159Z" fill="#FF4E60" stroke="#AE1414" stroke-width="12" stroke-linejoin="round"/>
   </g>
   <defs>
-    <pattern id="dots" x="376" y="376" width="125.28" height="125.28" patternUnits="userSpaceOnUse">
-      <circle cx="24" cy="24" r="24" fill="#9E9E9E"/>
+    <pattern id="dots" x="375.88" y="375.88" width="124.84" height="124.84" patternUnits="userSpaceOnUse">
+      <circle cx="23.69" cy="23.69" r="23.69" fill="#9E9E9E"/>
     </pattern>
   </defs>
 </svg>
