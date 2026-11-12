@@ -520,7 +520,7 @@ export default function Players() {
                 icon="group"
                 title="Players"
             >
-                <PaperFlex direction="row" gap="half" align="center">
+                <PaperFlex direction="row" gap="half" align="center" wrap>
                     <PaperFlex minWidth="field">
                         <PaperSelectMenu
                             name="playersSort"

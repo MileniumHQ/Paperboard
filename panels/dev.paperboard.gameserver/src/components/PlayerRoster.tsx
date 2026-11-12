@@ -9,6 +9,7 @@ import {
     PaperListLabel,
     PaperQuote,
     PaperSeparator,
+    PaperSlidePage,
     PaperSplit,
     PaperSwatch,
     PaperText,
@@ -54,20 +55,19 @@ export default function PlayerRoster<T extends { name: string }>(props: {
     onOpen(name: string | undefined): void;
     children: JSX.Element;
 }) {
-    // PaperSplit presents the detail as a modal while collapsed. In that single
-    // pane layout the roster's radio selection is invisible behind the modal,
-    // so letting a row toggle it strands the selection and a second click on
-    // the same player fires no change event. Rows open the detail directly
-    // instead; side-by-side keeps its normal selection.
+    // Collapsed, the detail is a page that slides in over the roster (a modal
+    // takes no back swipe). The page opens from a row and closes with its back
+    // action, and the open player stays set while it slides out so the page
+    // doesn't change under the animation; rows open the detail directly,
+    // because the roster's radio selection is invisible behind it.
     const [compact, setCompact] = createSignal(false);
+    const [detailOpen, setDetailOpen] = createSignal(false);
     const any = () => props.sections.some((section) => section.players.length > 0);
 
     return (
         <PaperFlex grow minHeight={0} fullWidth>
             <PaperSplit
-                detailActive={props.open !== undefined}
-                onDetailClose={() => props.onOpen(undefined)}
-                detailTitle={props.open}
+                detailActive={false}
                 onCollapsedChange={setCompact}
                 side={
                     <PaperCard fullHeight>
@@ -108,7 +108,7 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                             <PaperList
                                 name="playersList"
                                 background="surface-raised"
-                                value={props.open}
+                                value={compact() ? undefined : props.open}
                                 onValueChange={(val) => props.onOpen(String(val))}
                                 borderless
                                 fullWidth
@@ -130,6 +130,7 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                                                             // selection nobody can see.
                                                             if (compact()) e.preventDefault();
                                                             props.onOpen(player.name);
+                                                            setDetailOpen(true);
                                                         }}
                                                         icon={props.icon(player)}
                                                         description={props.description(player)}
@@ -152,8 +153,18 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                     </PaperCard>
                 }
             >
-                {props.children}
+                <Show when={!compact()}>{props.children}</Show>
             </PaperSplit>
+            {/* over the whole panel, its own bar in place of the tab's */}
+            <PaperSlidePage
+                position="fixed"
+                enabled={compact()}
+                open={detailOpen() && props.open !== undefined}
+                title={props.open ?? ""}
+                onBack={() => setDetailOpen(false)}
+            >
+                <Show when={compact()}>{props.children}</Show>
+            </PaperSlidePage>
         </PaperFlex>
     );
 }
