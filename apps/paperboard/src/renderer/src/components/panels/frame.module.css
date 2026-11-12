@@ -47,8 +47,12 @@
 .overlay {
     position: absolute;
     inset: 0;
+    box-sizing: border-box;
+    padding: var(--paper-uigap-double);
+    text-align: center;
 }
 
 .overlayProgress {
     width: var(--paper-size-field);
+    max-width: 100%;
 }

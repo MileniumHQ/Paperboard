@@ -22,6 +22,12 @@ export interface PaperLoaderProps extends JSX.HTMLAttributes<HTMLDivElement> {
      * makes way for the check or cross when the loader finishes.
      */
     children?: JSX.Element;
+    /**
+     * Fills its container and sits in the middle of it, with room from every
+     * edge and the label centered under the ring: the way to show that a
+     * whole page or area is loading.
+     */
+    centered?: boolean;
 }
 
 export interface PaperLoaderGroupProps extends JSX.HTMLAttributes<HTMLDivElement> {}
@@ -49,6 +55,7 @@ export function PaperLoader(props: PaperLoaderProps) {
         "style",
         "delay",
         "children",
+        "centered",
     ]);
 
     const [due, setDue] = createSignal(!local.delay);
@@ -88,6 +95,7 @@ export function PaperLoader(props: PaperLoaderProps) {
             class={styles.elWrapper}
             classList={{
                 [styles.waiting]: isWaiting(),
+                [styles.centered]: Boolean(local.centered),
                 [styles[local.size ?? "medium"]]: true,
                 ...local.classList,
             }}

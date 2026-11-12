@@ -201,11 +201,28 @@
     }
 }
 
+/* a whole area loading: the ring and its label in the middle of it, never
+   against an edge, the label centered and wrapping under the ring */
+.elWrapper.centered {
+    flex: 1;
+    align-self: stretch;
+    width: 100%;
+    min-height: 100%;
+    box-sizing: border-box;
+    flex-direction: column;
+    justify-content: center;
+    padding: var(--paper-uigap-double);
+    text-align: center;
+}
+
+/* never wider than the room it has: a phone keeps a margin either side */
 .PaperLoaderGroup {
     display: flex;
     flex-direction: column;
     gap: var(--paper-uigap);
     width: var(--paper-size-loader);
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 /* reduced motion zeroes within THIS component only — the global media

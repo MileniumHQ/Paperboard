@@ -91,6 +91,12 @@ export function Example() {
                         <td>Something short inside the ring, such as how many steps are left. It is sized from the ring, and makes way for the check or close mark when the loader finishes.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>centered</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Fills its container and sits in the middle of it, with a double gap from every edge, the label centered and wrapping under the ring. The way to show that a whole page or area is loading.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>delay</PaperCode></td>
                         <td><PaperCode>number</PaperCode></td>
                         <td>No default (shows at once)</td>
@@ -157,7 +163,9 @@ type PaperLoaderSize = "small" | "medium" | "large";`}
                 <li>The timer is cleared when the loader is removed. A later change to <PaperCode>delay</PaperCode> does not restart it.</li>
                 <li>Pick a delay of a few hundred milliseconds for a request that is usually fast. The gameserver panel uses 400 for its server list.</li>
                 <li>The loader fades in when it appears, with or without a delay, so it never pops onto an empty page. Under reduced motion it appears at once.</li>
-                <li>The loader is not centred on its own. To centre it in a panel, wrap it in <PaperCode>{`<PaperFlex fullWidth fullHeight align="center" justify="center">`}</PaperCode>.</li>
+                <li>To show that a whole page or area is loading, give the loader <PaperCode>centered</PaperCode>: it fills its container and sits in the middle, never against an edge, on a phone as on a desktop. Without it, the loader sits inline where it's placed.</li>
+                <li>A <PaperCode>PaperLoaderGroup</PaperCode> is never wider than the room it has.</li>
+                <li>A loader that finishes in front of the person is felt where the device supports it: the <PaperCode>loaded</PaperCode> haptic with the check's pop and ripple, or <PaperCode>failed</PaperCode>'s two knocks. Loaders finishing together are felt once.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="accessibility">Accessibility</PaperText>
