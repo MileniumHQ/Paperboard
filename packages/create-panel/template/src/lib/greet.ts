@@ -1,4 +1,4 @@
-// Pure greeting validation + formatting. Pure so the service action stays a
+// Pure greeting validation + formatting. Pure so the service's call and block stay a
 // thin wire and the boundary rules are unit-tested without a daemon.
 export function buildGreeting(rawName: unknown): string {
     const name = String(rawName ?? "").trim();

@@ -1,6 +1,6 @@
 // A page backed by the panel's service. The service owns the state; the page
 // mirrors it through the bridge, so a greeting given in one window (or by
-// another panel's action) shows up in every window at once.
+// another panel's Greet block) shows up in every window at once.
 import { createSignal, onCleanup, Show } from "solid-js";
 import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperIcon, PaperInput, PaperPageHeader, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { createPanelBridge } from "@mileniumhq/paperapi";
@@ -44,7 +44,7 @@ export default function ServicePage() {
         try {
             // the service refuses a bad name with a reason; the new count
             // arrives through its state, not through this answer
-            setGreeting((await bridge.call<string>("greet", { name: name() })) ?? "");
+            setGreeting((await bridge.call<string>("greet", name())) ?? "");
         } catch (err) {
             console.error("[Service] greet failed:", err);
             setFailure(errorMessage(err));

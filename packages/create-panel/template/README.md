@@ -22,9 +22,10 @@ restart the panel from its menu in Paperboard) to run the new build.
 - `bunx paperapi monitor --panel __PANEL_ID__` shows every call the panel
   makes and receives as it happens: how long it took and how it went.
 <!-- @if service -->
-- `bunx paperapi call __PANEL_ID__ greet '{"name":"Ada"}'` calls one of the
-  service's actions from the terminal; `bunx paperapi call __PANEL_ID__`
-  lists them.
+- `bunx paperapi call __PANEL_ID__ greet '"Ada"'` runs one of the service's
+  calls from the terminal, `bunx paperapi call __PANEL_ID__ command.greet
+  '{"name":"Ada"}'` runs one of its blocks, and `bunx paperapi call
+  __PANEL_ID__` lists its blocks.
 <!-- @endif -->
 - `bun test` runs the unit tests and the UI standards guard.
 
@@ -36,9 +37,9 @@ The guides for building panels are at <https://paperboard.dev/docs/developers/>.
 - `src/App.tsx` is the panel's menu and pages, in `src/pages/`.
 - `src/panel.ts` holds what the page, the service and the widget share.
 <!-- @if service -->
-- `src/service.ts` is the background service. Its actions are what other
-  panels and the Actions panel can call, and its state is what every window
-  mirrors.
+- `src/service.ts` is the background service. Its calls are what the
+  panel's own page asks it, its blocks are what the Blocks panel and other
+  panels can use, and its state is what every window mirrors.
 <!-- @endif -->
 <!-- @if widget -->
 - `src/widget.tsx` is the Home widget declared under `widgets` in the manifest.

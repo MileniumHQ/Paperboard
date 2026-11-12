@@ -34,7 +34,7 @@ export type ScaffoldMode = "workspace" | "standalone";
 
 /** The choices that shape a panel; each defaults to on, as in first-party panels. */
 export interface PanelFeatures {
-    /** a background service: state, actions other panels can call, work with no window open */
+    /** a background service: state, blocks other panels can use, work with no window open */
     service: boolean;
     /** a Home widget mirroring the service's state; needs the service */
     widget: boolean;
@@ -367,7 +367,7 @@ async function promptChoices(
 
     log("");
     log("A background service keeps the panel's state and runs its work whether or not a window is open.");
-    log("Other panels and the Actions panel call what it offers. Without one, the panel is only UI.");
+    log("The Blocks panel and other panels use the blocks it offers. Without one, the panel is only UI.");
     const service = await askYesNo(ask, "Include a background service?", true);
     let widget = false;
     if (service) {

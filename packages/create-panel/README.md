@@ -11,7 +11,7 @@ Run with no arguments and it asks about the choices that shape the panel:
 
 - the panel's id, name and description, and its publisher
 - a **background service**, which keeps state and runs work whether or not a
-  window is open, and which other panels and the Actions panel can call
+  window is open, and whose blocks the Blocks panel and other panels can use
 - a **Home widget**, a small live tile that mirrors the service's state
 - a **store listing** starter for the panel's page in the panel library
 
