@@ -323,6 +323,10 @@ export class ConnectionPool extends EventEmitter {
             logger.warn(`[ConnectionPool] refusing invalid port ${JSON.stringify(updates.port)} for ${id}`);
             return false;
         }
+        // an absent field is not a change: assigning undefined would drop
+        // it from the saved record, and a record without its port is skipped
+        // on the next load, which loses the pairing
+        updates = Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined));
         if (updates.name !== undefined) updates = { ...updates, name: checkComputerName(updates.name) };
         const comp = this.computers.get(id);
         if (!comp) return false;

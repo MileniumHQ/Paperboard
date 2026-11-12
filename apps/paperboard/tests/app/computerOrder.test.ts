@@ -64,6 +64,18 @@ describe("computer order and names", () => {
         expect(reopened.getComputer("local")?.isLocal).toBe(true);
     });
 
+    // computer-update forwards every field it knows, sent or not
+    test("renaming a paired computer keeps its pairing across launches", async () => {
+        const pool = await openPool();
+        expect(pool.updateComputer("remote-a", { name: "Game Box", port: undefined })).toBe(true);
+        const saved = stored().computers.find((c) => c.id === "remote-a") as Record<string, unknown> | undefined;
+        expect(saved).toMatchObject({ name: "Game Box", port: 45464, token: "token-remote-a", cert: "cert-remote-a" });
+        const reopened = await openPool();
+        expect(reopened.getComputer("remote-a")).toMatchObject({ name: "Game Box", port: 45464, token: "token-remote-a" });
+        expect(reopened.updateComputer("local", { name: "Workstation", port: undefined })).toBe(true);
+        expect((await openPool()).getComputer("local")?.name).toBe("Workstation");
+    });
+
     test("a blank or overlong name is refused and the old one kept", async () => {
         const pool = await openPool();
         expect(() => pool.updateComputer("remote-a", { name: "   " })).toThrow("A computer needs a name.");

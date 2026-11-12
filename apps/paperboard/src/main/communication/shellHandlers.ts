@@ -94,12 +94,13 @@ export function createShellInvokeHandlers(
             );
         },
 
+        // only the fields the caller sent change
         "computer-update": (args) => {
             const id = requireString(field(args, "id"), "id");
-            return connectionPool.updateComputer(id, {
-                name: field(args, "name") as string | undefined,
-                port: field(args, "port") as number | undefined,
-            });
+            const updates: { name?: string; port?: number } = {};
+            if (field(args, "name") !== undefined) updates.name = field(args, "name") as string;
+            if (field(args, "port") !== undefined) updates.port = field(args, "port") as number;
+            return connectionPool.updateComputer(id, updates);
         },
 
         // renderer input is validated here, not trusted from the caller's types
