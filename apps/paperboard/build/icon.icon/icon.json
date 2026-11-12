@@ -1,16 +1,16 @@
 {
   "fill": {
     "linear-gradient": [
-      "srgb:0.42745,0.70196,1.00000,1.00000",
-      "srgb:0.20392,0.53333,0.93725,1.00000"
+      "srgb:1.00000,1.00000,1.00000,1.00000",
+      "srgb:0.89804,0.92549,0.96078,1.00000"
     ],
     "orientation": {
       "start": {
-        "x": 0,
+        "x": 0.5,
         "y": 0
       },
       "stop": {
-        "x": 1,
+        "x": 0.5,
         "y": 1
       }
     }
@@ -19,8 +19,8 @@
     {
       "layers": [
         {
-          "image-name": "glyph-front.svg",
-          "name": "glyph-front",
+          "image-name": "logo-glyph.svg",
+          "name": "logo-glyph",
           "glass": true
         }
       ],
@@ -36,8 +36,8 @@
     {
       "layers": [
         {
-          "image-name": "glyph-back.svg",
-          "name": "glyph-back",
+          "image-name": "logo-glyph-wedge.svg",
+          "name": "logo-glyph-wedge",
           "glass": true,
           "opacity": 0.5
         }
@@ -48,6 +48,40 @@
       },
       "translucency": {
         "enabled": true,
+        "value": 0.4
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "logo-front.svg",
+          "name": "logo-front",
+          "glass": true
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.4
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "logo-back.svg",
+          "name": "logo-back",
+          "glass": true
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
         "value": 0.4
       }
     }
