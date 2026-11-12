@@ -448,47 +448,47 @@ export default function MapView() {
         <div ref={wrapper} class={styles.map}>
             <canvas ref={canvas} class={styles.canvas} classList={{ [styles.grabbing]: grabbing() }} />
 
-            <div class={styles.topLeft}>
-                <Show when={availableDimensions().length > 1}>
-                    <PaperFlex minWidth="field">
-                        <PaperSelectMenu
-                            name="mapDimension"
-                            value={dimension()}
-                            onValueChange={(val) =>
-                                switchDimension(String(val) as MapDimension)
-                            }
-                        >
-                            <For each={availableDimensions()}>
-                                {(dim) => (
-                                    <PaperSelectMenuItem value={dim}>
-                                        {DIMENSION_LABELS[dim]}
-                                    </PaperSelectMenuItem>
-                                )}
-                            </For>
-                        </PaperSelectMenu>
-                    </PaperFlex>
-                </Show>
-                <Show when={playerKeys().length > 0}>
-                    <PaperFlex minWidth="field">
-                        <PaperSelectMenu
-                            name="mapPlayer"
-                            value={selectedPlayer()}
-                            onValueChange={(val) => goToPlayer(String(val))}
-                        >
-                            <For each={playerKeys()}>
-                                {(name) => (
-                                    <PaperSelectMenuItem value={name}>
-                                        {name}
-                                    </PaperSelectMenuItem>
-                                )}
-                            </For>
-                        </PaperSelectMenu>
-                    </PaperFlex>
-                </Show>
-            </div>
+            <div class={styles.controls}>
+                <div class={styles.selects}>
+                    <Show when={availableDimensions().length > 1}>
+                        <PaperFlex minWidth="field">
+                            <PaperSelectMenu
+                                name="mapDimension"
+                                value={dimension()}
+                                onValueChange={(val) =>
+                                    switchDimension(String(val) as MapDimension)
+                                }
+                            >
+                                <For each={availableDimensions()}>
+                                    {(dim) => (
+                                        <PaperSelectMenuItem value={dim}>
+                                            {DIMENSION_LABELS[dim]}
+                                        </PaperSelectMenuItem>
+                                    )}
+                                </For>
+                            </PaperSelectMenu>
+                        </PaperFlex>
+                    </Show>
+                    <Show when={playerKeys().length > 0}>
+                        <PaperFlex minWidth="field">
+                            <PaperSelectMenu
+                                name="mapPlayer"
+                                value={selectedPlayer()}
+                                onValueChange={(val) => goToPlayer(String(val))}
+                            >
+                                <For each={playerKeys()}>
+                                    {(name) => (
+                                        <PaperSelectMenuItem value={name}>
+                                            {name}
+                                        </PaperSelectMenuItem>
+                                    )}
+                                </For>
+                            </PaperSelectMenu>
+                        </PaperFlex>
+                    </Show>
+                </div>
 
-            <div class={styles.topRight}>
-                <div class={[styles.glass, styles.readout].join(" ")}>
+                <div class={[styles.glass, styles.coords].join(" ")}>
                     <PaperIcon>my_location</PaperIcon>
                     <PaperText size={2} color="text-subtle">
                         {Math.round((cursor() ?? centerCoords()).x)},{" "}
@@ -500,10 +500,7 @@ export default function MapView() {
                             {pendingCount()}
                         </PaperText>
                     </Show>
-                </div>
-
-                <div class={styles.glass}>
-                    <PaperFlex minWidth="field-small">
+                    <PaperFlex flex minWidth={0}>
                         <PaperInput
                             placeholder="X"
                             size={9}
@@ -517,7 +514,7 @@ export default function MapView() {
                             }}
                         />
                     </PaperFlex>
-                    <PaperFlex minWidth="field-small">
+                    <PaperFlex flex minWidth={0}>
                         <PaperInput
                             placeholder="Z"
                             size={9}
