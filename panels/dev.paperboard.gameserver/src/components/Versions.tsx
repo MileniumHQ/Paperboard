@@ -172,6 +172,8 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                         <PaperFlex direction="column" gap="half" padding="full">
                             <PaperFlex
                                 direction="row"
+                                wrap
+                                gap="onefourth"
                                 justify="space-between"
                                 align="center"
                                 fullWidth

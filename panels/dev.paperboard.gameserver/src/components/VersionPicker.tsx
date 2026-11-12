@@ -80,112 +80,97 @@ export default function VersionPicker(props: {
 
     return (
         <PaperFlex
-            direction="row"
-            gap="full"
-            align="stretch"
+            direction="column"
+            gap="half"
             fullWidth
             flex={props.fill || undefined}
-            height={props.fill ? undefined : "panel-height-small"}
+            height={props.fill ? undefined : "panel-height-large"}
+            minWidth={0}
             minHeight={0}
         >
-            <PaperFlex
-                direction="column"
-                gap="half"
+            <PaperInput
                 fullWidth
-                flex
-                minWidth={0}
-                minHeight={0}
-            >
-                <PaperInput
-                    fullWidth
-                    icon="search"
-                    placeholder="Search versions..."
-                    value={searchQuery()}
-                    onInput={(e) => setSearchQuery(e.currentTarget.value)}
+                icon="search"
+                placeholder="Search versions..."
+                value={searchQuery()}
+                onInput={(e) => setSearchQuery(e.currentTarget.value)}
+            />
+
+            <PaperFlex direction="row" wrap gap="full" shrink={false}>
+                <PaperCheckbox
+                    checked={includeReleases()}
+                    onChange={setIncludeReleases}
+                    disabled={loading() || !allVersions().some((v) => v.type === "release")}
+                    label="Releases"
                 />
+                <PaperCheckbox
+                    checked={includeSnapshots()}
+                    onChange={setIncludeSnapshots}
+                    disabled={loading() || !allVersions().some((v) => v.type === "snapshot")}
+                    label="Snapshots"
+                />
+            </PaperFlex>
 
-                <PaperQuote variant="warning" icon="info" title="Compatibility">
-                    Paperboard works best on the latest Minecraft version. Full
-                    feature support for older versions may vary.
+            <Show when={error()}>
+                <PaperQuote variant="danger" title="Could not load versions">
+                    {error()}
+                    <PaperButton onClick={() => void loadVersions()}>Retry loading versions</PaperButton>
                 </PaperQuote>
+            </Show>
 
-                <Show when={error()}>
-                    <PaperQuote variant="danger" title="Could not load versions">
-                        {error()}
-                        <PaperButton onClick={() => void loadVersions()}>Retry loading versions</PaperButton>
-                    </PaperQuote>
-                </Show>
-
-                <PaperCard grow minHeight={0}>
+            <PaperCard grow minHeight={0}>
+                <Show
+                    when={!loading()}
+                    fallback={
+                        <PaperFlex padding="full" center>
+                            <PaperText preset="body" color="text-subtle">
+                                Loading versions...
+                            </PaperText>
+                        </PaperFlex>
+                    }
+                >
                     <Show
-                        when={!loading()}
+                        when={filteredVersions().length > 0}
                         fallback={
                             <PaperFlex padding="full" center>
                                 <PaperText preset="body" color="text-subtle">
-                                    Loading versions...
+                                    No versions matching your filters.
                                 </PaperText>
                             </PaperFlex>
                         }
                     >
-                        <Show
-                            when={filteredVersions().length > 0}
-                            fallback={
-                                <PaperFlex padding="full" center>
-                                    <PaperText preset="body" color="text-subtle">
-                                        No versions matching your filters.
-                                    </PaperText>
-                                </PaperFlex>
-                            }
+                        <PaperList
+                            name="minecraftVersion"
+                            value={props.selectedVersion}
+                            onValueChange={(val) => props.onSelectVersion(String(val))}
+                            fullWidth
+                            borderless
+                            flex
+                            background="transparent"
                         >
-                            <PaperList
-                                name="minecraftVersion"
-                                value={props.selectedVersion}
-                                onValueChange={(val) => props.onSelectVersion(String(val))}
-                                fullWidth
-                                borderless
-                                flex
-                                background="transparent"
-                            >
-                                <For each={filteredVersions()}>
-                                    {(item) => (
-                                        <PaperListItem
-                                            value={item.id}
-                                            description={
-                                                item.type && item.type !== "release"
-                                                    ? item.type.replace("old_", "")
-                                                    : undefined
-                                            }
-                                        >
-                                            {item.id}
-                                        </PaperListItem>
-                                    )}
-                                </For>
-                            </PaperList>
-                        </Show>
+                            <For each={filteredVersions()}>
+                                {(item) => (
+                                    <PaperListItem
+                                        value={item.id}
+                                        description={
+                                            item.type && item.type !== "release"
+                                                ? item.type.replace("old_", "")
+                                                : undefined
+                                        }
+                                    >
+                                        {item.id}
+                                    </PaperListItem>
+                                )}
+                            </For>
+                        </PaperList>
                     </Show>
-                </PaperCard>
-            </PaperFlex>
-
-            <PaperCard shrink={false} scrollable="y" fullWidth={false}>
-                    <PaperFlex direction="column" gap="full" padding="full">
-                        <PaperText preset="title">Version Types</PaperText>
-                        <PaperFlex direction="column" gap="threefourths">
-                            <PaperCheckbox
-                                checked={includeReleases()}
-                                onChange={setIncludeReleases}
-                                disabled={loading() || !allVersions().some((v) => v.type === "release")}
-                                label="Releases"
-                                description="Full releases"
-                            />
-                            <PaperCheckbox
-                                checked={includeSnapshots()}
-                                onChange={setIncludeSnapshots}
-                                disabled={loading() || !allVersions().some((v) => v.type === "snapshot")}
-                                label="Snapshots"
-                            />
-                        </PaperFlex>
-                    </PaperFlex>
+                </Show>
             </PaperCard>
+
+            <PaperQuote variant="warning" icon="info" title="Compatibility">
+                Paperboard works best on the latest Minecraft version. Full
+                feature support for older versions may vary.
+            </PaperQuote>
         </PaperFlex>
     );
 }
