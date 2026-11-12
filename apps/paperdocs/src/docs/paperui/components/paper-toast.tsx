@@ -17,7 +17,8 @@ export default function PaperToastDoc() {
             <PaperText preset="body" as="p">
                 A toast is a short message in the bottom right corner of the window: something failed or finished, said where it will be seen.
                 Call <PaperCode>showToast</PaperCode> from anywhere inside a <PaperLink href="/docs/paperui/paperprovider/">PaperProvider</PaperLink>, which renders the corner the toasts stack in.
-                Use it for a failure no other part of the page can show, such as a background task. A failure tied to a form or a field belongs next to it.
+                It is the way to show a failure: any button, menu item or call that fails catches the error and passes it here, with no signal to keep and no place in the layout to find.
+                A failure that stays true until something changes, such as settings that can't be read, belongs in the page with a <PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink>.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>

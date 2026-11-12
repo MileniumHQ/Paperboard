@@ -258,7 +258,7 @@ export default function CounterPage() {
                 <li>Cancel is a text button. Next to a confirm that is not destructive, Cancel is <PaperCode>variant="text"</PaperCode> so the confirm is the clear choice. A destructive confirm uses <PaperCode>variant="danger"</PaperCode>.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
-                Failures are shown, never swallowed: a handler that can fail catches the error and renders it with <PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> where the result would have been.
+                Failures are shown, never swallowed: a handler that can fail catches the error and passes it to <PaperLink href="/docs/paperui/papertoast/">showToast</PaperLink>, one line in the <PaperCode>catch</PaperCode>.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="run">Build and open it</PaperText>

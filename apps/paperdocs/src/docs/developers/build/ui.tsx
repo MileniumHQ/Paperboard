@@ -50,22 +50,21 @@ import {
     PaperPageHeader,
     PaperQuote,
     PaperStatTile,
+    showToast,
 } from "@mileniumhq/paperui";
 import { bridge, errorMessage, weather } from "../weather";
 
 export default function ForecastPage(props: { openSettings: () => void }) {
     const [city, setCity] = createSignal("");
     const [busy, setBusy] = createSignal(false);
-    const [failure, setFailure] = createSignal("");
 
     const follow = async () => {
         setBusy(true);
-        setFailure("");
         try {
             await bridge.call<boolean>("followCity", { city: city() });
             setCity("");
         } catch (err) {
-            setFailure(errorMessage(err));
+            showToast({ variant: "danger", title: "City not added", message: errorMessage(err) });
         } finally {
             setBusy(false);
         }
@@ -106,11 +105,6 @@ export default function ForecastPage(props: { openSettings: () => void }) {
                         Follow
                     </PaperButton>
                 </PaperFlex>
-                <Show when={failure()}>
-                    <PaperQuote variant="danger" icon="warning" title="City not added" role="alert" onDismiss={() => setFailure("")}>
-                        {failure()}
-                    </PaperQuote>
-                </Show>
                 <PaperGrid min="field">
                     <For each={weather().settings.cities}>
                         {(name) => (
@@ -221,7 +215,8 @@ export default function UiGuideDoc() {
                     <tr><td>A row of fields and a button</td><td><PaperLink href="/docs/paperui/paperflex/">PaperFlex</PaperLink> with <PaperCode>direction="row"</PaperCode></td><td><PaperCode>align="center"</PaperCode> lines the button up with the field.</td></tr>
                     <tr><td>Text input</td><td><PaperLink href="/docs/paperui/paperinput/">PaperInput</PaperLink></td><td>The <PaperCode>label</PaperCode> names the field. The sample also follows the city on Enter.</td></tr>
                     <tr><td>One number per thing</td><td><PaperLink href="/docs/paperui/paperstattile/">PaperStatTile</PaperLink> in a <PaperLink href="/docs/paperui/papergrid/">PaperGrid</PaperLink></td><td>The grid fits as many tiles in a row as the width allows.</td></tr>
-                    <tr><td>A failure</td><td><PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> with <PaperCode>variant="danger"</PaperCode></td><td>Shows where the person was looking, with the reason. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</td></tr>
+                    <tr><td>A press that failed</td><td><PaperLink href="/docs/paperui/papertoast/">showToast</PaperLink> with <PaperCode>variant="danger"</PaperCode></td><td>One line in the <PaperCode>catch</PaperCode> shows the reason, and it stays until it is closed. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</td></tr>
+                    <tr><td>A failure that stays, from the state</td><td><PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> with <PaperCode>variant="danger"</PaperCode></td><td>Shows in every window until the next check fixes it.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">

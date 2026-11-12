@@ -62,24 +62,19 @@ const FOLLOW_RUN = `followCity: async (ctx: Ctx, input?: { city?: string }) => {
     return true;
 },`;
 
-const PAGE_CALL = `const follow = async () => {
+const PAGE_CALL = `import { showToast } from "@mileniumhq/paperui";
+
+const follow = async () => {
     setBusy(true);
-    setFailure("");
     try {
         await bridge.call<boolean>("followCity", { city: city() });
         setCity("");
     } catch (err) {
-        setFailure(errorMessage(err));
+        showToast({ variant: "danger", title: "City not added", message: errorMessage(err) });
     } finally {
         setBusy(false);
     }
 };`;
-
-const PAGE_QUOTE = `<Show when={failure()}>
-    <PaperQuote variant="danger" icon="warning" title="City not added" role="alert" onDismiss={() => setFailure("")}>
-        {failure()}
-    </PaperQuote>
-</Show>`;
 
 const REFRESH_CITY = `async function refreshCity(ctx: Ctx, city: string): Promise<void> {
     try {
@@ -149,7 +144,7 @@ export default function ErrorsGuideDoc() {
             <PaperTextList>
                 <li>Never catch a failure and carry on as if it worked. A button that does nothing, with no way to know why, is the worst thing a panel can do.</li>
                 <li>Show the reason, not only that something failed. <PaperCode>OpenWeather refused Oslo: city not found</PaperCode> tells the person what to change. <PaperCode>Something went wrong</PaperCode> doesn't.</li>
-                <li>Show it where it happened: next to the button, on the city's tile, in the widget. A message in the log alone is a failure nobody sees.</li>
+                <li>Show it where it will be seen: a toast for a button press, the city's tile for its last check, the widget for the widget. A message in the log alone is a failure nobody sees.</li>
                 <li>Never show a placeholder in place of something missing. A city with no reading says <PaperCode>No reading</PaperCode> and why, never <PaperCode>0°C</PaperCode>.</li>
             </PaperTextList>
 
@@ -180,20 +175,20 @@ export default function ErrorsGuideDoc() {
 
             <PaperText preset="subheader" as="h2" id="on-the-page">Show it on the page</PaperText>
             <PaperText preset="body" as="p">
-                Every handler that calls something catches the error and puts its message in a signal.
-                Weather's Follow button runs this handler, with <PaperCode>city</PaperCode>, <PaperCode>busy</PaperCode> and <PaperCode>failure</PaperCode> as <PaperCode>createSignal</PaperCode> signals of the page:
+                Every handler that calls something catches the error and shows it with <PaperLink href="/docs/paperui/papertoast/">showToast</PaperLink>.
+                There is no failure signal to keep and no quote to place: one line in the <PaperCode>catch</PaperCode> and the failure is shown.
+                Weather's Follow button runs this handler, with <PaperCode>city</PaperCode> and <PaperCode>busy</PaperCode> as <PaperCode>createSignal</PaperCode> signals of the page:
             </PaperText>
             <PaperCode block language="tsx">{PAGE_CALL}</PaperCode>
-            <PaperText preset="body" as="p">
-                The page shows the signal with a <PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> under the form. The title says what didn't happen, and the body is the reason:
-            </PaperText>
-            <PaperCode block language="tsx">{PAGE_QUOTE}</PaperCode>
             <PaperTextList>
-                <li>Clear the failure when the person tries again, so an old message never sits next to a new result.</li>
-                <li><PaperCode>role="alert"</PaperCode> makes a screen reader read it out. <PaperCode>onDismiss</PaperCode> gives the quote a close button.</li>
+                <li>The title says what didn't happen, and the message is the reason.</li>
+                <li>A danger toast stays until it is closed and a screen reader reads it out, so the failure is never missed.</li>
+                <li>Give the toast a Retry <PaperCode>action</PaperCode> when trying again is what the person would do next.</li>
                 <li><PaperCode>finally</PaperCode> turns the button back on whether the call worked or not.</li>
-                <li>Each place that can fail gets its own signal and quote. A failure shown under the wrong button points the person at the wrong thing.</li>
             </PaperTextList>
+            <PaperText preset="body" as="p">
+                Use a <PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> instead only for a failure that stays true until something changes, such as the background failures and settings below. Those live in the state, so they show in every window and go away when they are fixed.
+            </PaperText>
 
             <PaperText preset="subheader" as="h2" id="in-the-background">Failures in the background</PaperText>
             <PaperText preset="body" as="p">
@@ -223,11 +218,12 @@ export default function ErrorsGuideDoc() {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td>A button or form</td><td><PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> with <PaperCode>variant="danger"</PaperCode> next to it.</td></tr>
+                    <tr><td>A button, form, menu item or anything else the person pressed</td><td><PaperLink href="/docs/paperui/papertoast/">showToast</PaperLink> with <PaperCode>variant="danger"</PaperCode>.</td></tr>
+                    <tr><td>Something that stays wrong, such as settings that can't be read</td><td><PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> with <PaperCode>variant="danger"</PaperCode>, from the state.</td></tr>
                     <tr><td>Something the panel needs and doesn't have yet, such as an API key</td><td><PaperLink href="/docs/paperui/paperemptystate/">PaperEmptyState</PaperLink> with the button that fixes it.</td></tr>
                     <tr><td>One item in a list or grid</td><td>The item's own error state, such as <PaperCode>tone="danger"</PaperCode> on a <PaperLink href="/docs/paperui/paperstattile/">PaperStatTile</PaperLink>, and the reason below.</td></tr>
                     <tr><td>A Home widget</td><td><PaperCode>PaperWidgetMessage</PaperCode> with <PaperCode>tone="danger"</PaperCode> and the reason as its hint. See <PaperLink href="/docs/developers/widgets/#failures">Add a Home widget</PaperLink>.</td></tr>
-                    <tr><td>Inside a modal</td><td>A PaperQuote in the modal. Keep it open, so the person can fix the input.</td></tr>
+                    <tr><td>Inside a modal</td><td>A toast, which shows above the modal. Keep the modal open, so the person can fix the input.</td></tr>
                 </tbody>
             </PaperTable>
 
@@ -241,7 +237,7 @@ export default function ErrorsGuideDoc() {
             <PaperText preset="subheader" as="h2" id="check-it">Check it</PaperText>
             <PaperTextList>
                 <li>Run every block and call with input it must refuse, with <PaperCode>bunx paperapi call</PaperCode>, and read the message as the person would.</li>
-                <li>Leave <PaperCode>bunx paperapi monitor --panel &lt;panel-id&gt;</PaperCode> running and press every button. A call marked <PaperCode>✗</PaperCode> must show on the page too.</li>
+                <li>Leave <PaperCode>bunx paperapi monitor --panel &lt;panel-id&gt;</PaperCode> running and press every button. A call marked <PaperCode>✗</PaperCode> must show a toast too.</li>
                 <li>Stop the network or remove the API key and look at every page and widget. Each says what is wrong.</li>
             </PaperTextList>
 

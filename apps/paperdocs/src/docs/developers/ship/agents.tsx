@@ -17,7 +17,7 @@ Read these before you write code:
 Rules:
 - Make the panel with npm create @mileniumhq/panel and keep the scaffold's tests and preload.
 - Build every page from PaperUI components and props. No inline styles and no CSS values of your own.
-- Show every failure to the person, with the real reason, where they were looking. No placeholders in place of missing data.
+- Show every failure to the person, with the real reason. A press that fails calls showToast from PaperUI in its catch. No placeholders in place of missing data.
 - Keep keys, tokens and passwords in secretsApi, never in config, state, block inputs or logs.
 - Never run code or commands the panel receives over the network.
 - Never touch ~/.paperboard. Run a test Paperboard with its own data folder and set PAPERBOARD_DIR to it for every paperapi command.

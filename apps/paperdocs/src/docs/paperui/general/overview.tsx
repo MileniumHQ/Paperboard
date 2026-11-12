@@ -94,7 +94,7 @@ export default function PaperUiOverviewDoc() {
                 <li>Never write pixels or rem for a size. Pick a size token, or a component's own <PaperCode>size</PaperCode> prop.</li>
                 <li>Keep a modal mounted and drive it with <PaperCode>open</PaperCode>. Never put it inside <PaperCode>Show</PaperCode>.</li>
                 <li>Next to a confirm that is not destructive, Cancel is <PaperCode>variant="text"</PaperCode>.</li>
-                <li>Show every failure, in the place it happened, with <PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> or the component's own error state. Never swallow one.</li>
+                <li>Show every failure. A press that fails calls <PaperLink href="/docs/paperui/papertoast/">showToast</PaperLink> in its <PaperCode>catch</PaperCode>; a failure that stays shows with <PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink> or the component's own error state. Never swallow one.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
                 The panel template ships a test that fails when a page writes an inline style.

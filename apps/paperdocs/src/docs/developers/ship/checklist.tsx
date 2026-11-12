@@ -50,7 +50,7 @@ export default function ChecklistDoc() {
 
             <PaperText preset="subheader" as="h2" id="failures">Failures</PaperText>
             <PaperTextList>
-                <li>Every button, form, call and block shows its failure with the reason, where the person was looking. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</li>
+                <li>Every button, form, call and block shows its failure with the reason. A press that fails shows a <PaperLink href="/docs/paperui/papertoast/">toast</PaperLink>. See <PaperLink href="/docs/developers/errors/">Show every failure</PaperLink>.</li>
                 <li>Work in the background puts its failures in the state, and the page shows them.</li>
                 <li>A service that can't load its settings keeps running and says so on the page.</li>
                 <li>Nothing shows a placeholder or a zero in place of something missing.</li>

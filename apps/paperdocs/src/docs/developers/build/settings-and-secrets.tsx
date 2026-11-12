@@ -44,12 +44,12 @@ import {
     PaperModal,
     PaperPage,
     PaperPageHeader,
-    PaperQuote,
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperSettingItem,
     PaperSettingList,
     PaperText,
+    showToast,
 } from "@mileniumhq/paperui";
 import { secretsApi } from "@mileniumhq/paperapi";
 import { API_KEY_SECRET, PANEL_ID } from "../panel";
@@ -57,51 +57,40 @@ import { bridge, errorMessage, weather } from "../weather";
 
 export default function SettingsPage() {
     const [key, setKey] = createSignal("");
-    const [failure, setFailure] = createSignal<{ title: string; message: string } | null>(null);
     const [confirmRemove, setConfirmRemove] = createSignal(false);
 
     const setUnits = async (units: string | number) => {
-        setFailure(null);
         try {
             await bridge.call<boolean>("setUnits", { units });
         } catch (err) {
-            setFailure({ title: "Units not changed", message: errorMessage(err) });
+            showToast({ variant: "danger", title: "Units not changed", message: errorMessage(err) });
         }
     };
 
     const saveKey = async () => {
-        setFailure(null);
         try {
             // the key goes to the vault; the service reads it from there
             await secretsApi.set(API_KEY_SECRET, key(), PANEL_ID);
             setKey("");
             await bridge.call<boolean>("keyChanged");
         } catch (err) {
-            setFailure({ title: "API key not saved", message: errorMessage(err) });
+            showToast({ variant: "danger", title: "API key not saved", message: errorMessage(err) });
         }
     };
 
     const removeKey = async () => {
         setConfirmRemove(false);
-        setFailure(null);
         try {
             await secretsApi.delete(API_KEY_SECRET, PANEL_ID);
             await bridge.call<boolean>("keyChanged");
         } catch (err) {
-            setFailure({ title: "API key not removed", message: errorMessage(err) });
+            showToast({ variant: "danger", title: "API key not removed", message: errorMessage(err) });
         }
     };
 
     return (
         <PaperPage>
             <PaperPageHeader icon="settings" title="Settings" />
-            <Show when={failure()}>
-                {(shown) => (
-                    <PaperQuote variant="danger" icon="warning" title={shown().title} role="alert" onDismiss={() => setFailure(null)}>
-                        {shown().message}
-                    </PaperQuote>
-                )}
-            </Show>
             <PaperSettingList autoHeight>
                 <PaperSettingItem title="Units" description="How temperatures are shown and sent to flows">
                     <PaperSelectMenu name="units" value={weather().settings.units} onValueChange={(units) => void setUnits(units)}>

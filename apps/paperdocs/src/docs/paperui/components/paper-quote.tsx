@@ -19,7 +19,7 @@ export default function PaperQuoteDoc() {
             <PaperText preset="header" as="h1">PaperQuote</PaperText>
             <PaperText preset="body" as="p">
                 PaperQuote is a callout box with an optional icon and title, for a message that sits in the page: a failure, a warning, a tip, or a note.
-                Use it to show errors where they happened, in any role color, and give it <PaperCode>onDismiss</PaperCode> when the message should outlive the moment.
+                Use it for a failure that stays true until something changes, such as settings that can't be read. For a press that fails, call <PaperLink href="/docs/paperui/papertoast/">showToast</PaperLink>: it needs no signal and no place in the layout.
                 When a region has no content yet, use <PaperLink href="/docs/paperui/paperemptystate/">PaperEmptyState</PaperLink> instead.
             </PaperText>
 
@@ -116,44 +116,34 @@ export function Example() {
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
-            <PaperText preset="subheader" as="h3" id="failure">Show a failure where it happened</PaperText>
+            <PaperText preset="subheader" as="h3" id="failure">Show a view that couldn't load</PaperText>
             <PaperText preset="body" as="p">
-                A failed action shows its reason in the page, never silently.
-                When a failure covers a whole view, such as a load that failed, put a quote at the top with <PaperCode>onDismiss</PaperCode> and an action to retry.
+                When a failure covers a whole view, such as a load that failed, put a quote where the view would be, with a button to retry.
+                It stays until the load works. A press that fails, such as a Save button, shows a <PaperLink href="/docs/paperui/papertoast/">toast</PaperLink> instead.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { createSignal, Show } from "solid-js";
-import { PaperButton, PaperFlex, PaperQuote } from "@mileniumhq/paperui";
+{`import { createResource, For, Show } from "solid-js";
+import { PaperButton, PaperFlex, PaperQuote, PaperText } from "@mileniumhq/paperui";
 
-export function Save(props: { save: () => Promise<void> }) {
-    const [failure, setFailure] = createSignal<string>();
-
-    async function save() {
-        setFailure(undefined);
-        try {
-            await props.save();
-        } catch (error) {
-            setFailure(error instanceof Error ? error.message : String(error));
-        }
-    }
+export function Backups(props: { load: () => Promise<string[]> }) {
+    const [backups, { refetch }] = createResource(props.load);
 
     return (
-        <PaperFlex direction="column" gap="full">
-            <Show when={failure()}>
-                {(message) => (
-                    <PaperQuote
-                        variant="danger"
-                        icon="warning"
-                        title="Not saved"
-                        role="alert"
-                        onDismiss={() => setFailure(undefined)}
-                    >
-                        {message()}
-                    </PaperQuote>
-                )}
-            </Show>
-            <PaperButton variant="primary" onClick={() => void save()}>Save</PaperButton>
-        </PaperFlex>
+        <Show
+            when={!backups.error}
+            fallback={
+                <PaperQuote variant="danger" icon="warning" title="Backups not loaded" role="alert">
+                    <PaperFlex direction="column" gap="half" align="flex-start">
+                        {backups.error instanceof Error ? backups.error.message : String(backups.error)}
+                        <PaperButton size="small" onClick={() => void refetch()}>Retry</PaperButton>
+                    </PaperFlex>
+                </PaperQuote>
+            }
+        >
+            <PaperFlex direction="column" gap="half">
+                <For each={backups()}>{(name) => <PaperText preset="body">{name}</PaperText>}</For>
+            </PaperFlex>
+        </Show>
     );
 }`}
             </PaperCode>
