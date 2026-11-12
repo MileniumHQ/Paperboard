@@ -7,7 +7,6 @@
     flex-direction: column;
     border-right: var(--paper-border-width) solid var(--paper-border);
     background: var(--paper-surface-inset);
-    touch-action: pan-y;
 }
 
 .PaperList.borderless {
