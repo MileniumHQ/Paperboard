@@ -6,8 +6,9 @@
 
 import { Show, createEffect, createSignal, on, onCleanup } from "solid-js";
 import { catchLoopbackRedirect, LoopbackRedirectError } from "@mileniumhq/paperapi";
-import { PaperButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { errorText } from "../lib/failure";
+import { submitOnPaste } from "../lib/paste";
 import type { Tools } from "./api";
 
 export default function SignInSteps(props: { tools: Tools; name: string }) {
@@ -57,11 +58,11 @@ export default function SignInSteps(props: { tools: Tools; name: string }) {
         }
     };
 
-    const send = () => {
-        const value = address().trim();
-        if (!value) return;
+    // the address is used once: pasting it sends it, and a refused one can be pasted again
+    const send = (value: string) => {
+        if (!value.trim() || busy()) return;
         void run(async () => {
-            await props.tools.finishSignIn(props.name, value);
+            await props.tools.finishSignIn(props.name, value.trim());
             setAddress("");
         });
     };
@@ -77,7 +78,7 @@ export default function SignInSteps(props: { tools: Tools; name: string }) {
                                 <PaperQuote variant="danger" icon="error" title="Not signed in" role="alert">
                                     {p().error}
                                 </PaperQuote>
-                                <PaperFlex direction="row" gap="half" wrap>
+                                <PaperFlex direction="row" gap="half" align="center" wrap>
                                     <PaperButton variant="primary" disabled={busy()} onClick={() => void run(() => props.tools.signIn(props.name))}>
                                         <PaperIcon>refresh</PaperIcon> Start again
                                     </PaperButton>
@@ -88,38 +89,33 @@ export default function SignInSteps(props: { tools: Tools; name: string }) {
                             </PaperFlex>
                         }
                     >
-                        <PaperText preset="hint">Sign in to {props.name} in your browser, then come back here.</PaperText>
+                        <PaperText preset="body">Sign in to {props.name} in your browser, then come back here.</PaperText>
                         <PaperFlex direction="row" gap="half" align="center" wrap>
                             <PaperButton variant="primary" href={p().url} target="_blank">
-                                <PaperIcon>open_in_new</PaperIcon> Continue in browser
+                                Open sign-in page <PaperIcon>open_in_new</PaperIcon>
                             </PaperButton>
+                            <PaperCopyButton text={p().url} label="Copy link" variant="text" />
                             <PaperButton variant="text" disabled={busy()} onClick={() => void run(() => props.tools.cancelSignIn(props.name))}>
                                 Cancel
                             </PaperButton>
-                            <PaperLoader loaderStatus="indeterminate" label="Waiting for you to sign in" />
                         </PaperFlex>
-                        <Show when={paste()}>
-                            <form
-                                onSubmit={(e) => {
-                                    e.preventDefault();
-                                    send();
-                                }}
-                            >
-                                <PaperFlex direction="row" gap="half" align="end">
-                                    <PaperFlex flex minWidth={0}>
-                                        <PaperInput
-                                            fullWidth
-                                            label="If the page you end on doesn't load, paste its address"
-                                            placeholder="Address"
-                                            value={address()}
-                                            onInput={(e) => setAddress(e.currentTarget.value)}
-                                        />
-                                    </PaperFlex>
-                                    <PaperButton type="submit" disabled={busy() || !address().trim()}>
-                                        Finish
-                                    </PaperButton>
-                                </PaperFlex>
-                            </form>
+                        <Show
+                            when={paste()}
+                            fallback={<PaperLoader loaderStatus="indeterminate" label="Waiting for you to sign in" />}
+                        >
+                            <Show when={!busy()} fallback={<PaperLoader loaderStatus="indeterminate" label="Finishing the sign-in" />}>
+                                <PaperInput
+                                    fullWidth
+                                    label="Address"
+                                    autocomplete="off"
+                                    spellcheck={false}
+                                    enterkeyhint="go"
+                                    value={address()}
+                                    onInput={(e) => setAddress(e.currentTarget.value)}
+                                    {...submitOnPaste(send)}
+                                />
+                                <PaperText preset="hint">If the page you end on doesn't load, copy its address and paste it here.</PaperText>
+                            </Show>
                         </Show>
                     </Show>
                     <Show when={error()}>

@@ -24,6 +24,17 @@ export function loginCommand(harness: Exclude<Harness, "opencode">, method: Logi
     return { args: ["auth", "login", "--claudeai"], needsInput: true };
 }
 
+/**
+ * What keeps a login from opening its page in a browser on this computer. The page opens on the device the
+ * person holds, from the link the panel shows; a login that opened it here would put a tab on a screen nobody
+ * is at (the person is on their phone, or the computer is a server). Claude Code runs the program named by
+ * BROWSER instead of the system's opener, so a program that does nothing gets the address and leaves it to the
+ * panel; Codex's opener honors it where the system's does. Windows has no such program to name.
+ */
+export function loginEnv(platform: NodeJS.Platform): Record<string, string> {
+    return platform === "win32" ? {} : { BROWSER: "true" };
+}
+
 /** the commands that tell whether a harness is signed in, and that sign it out */
 export const STATUS_COMMAND: Record<Exclude<Harness, "opencode">, string[]> = {
     codex: ["login", "status"],
@@ -44,6 +55,24 @@ export function outputTail(text: string, lines = 4): string {
         .split(/\r?\n/)
         .map((l) => l.trim())
         .filter(Boolean)
+        .slice(-lines)
+        .join(" | ")
+        .slice(-400);
+}
+
+const URL_ANYWHERE = /https?:\/\/\S+/g;
+// what a login says around its page, which says nothing about how it ended
+const LOGIN_NOISE = [/^opening browser to sign in/i, /^if the browser didn't open, visit:?$/i];
+
+/**
+ * What a login said before it ended, for an error: its own words, without the sign-in page's address (a long,
+ * one-time link that would bury them) or the prompt that waits for the code.
+ */
+export function loginTail(text: string, lines = 3): string {
+    return stripAnsi(text)
+        .split(/\r?\n/)
+        .map((l) => l.replace(URL_ANYWHERE, "").replace(/paste code here if prompted\s*>/i, "").trim())
+        .filter((l) => l && !LOGIN_NOISE.some((noise) => noise.test(l)))
         .slice(-lines)
         .join(" | ")
         .slice(-400);

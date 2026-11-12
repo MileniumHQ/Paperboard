@@ -21,7 +21,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { SIGN_IN_REQUIRED, type BrainState, type Harness, type LoginPrompt } from "../contract";
 import { errorText } from "../lib/failure";
-import { LOGOUT_COMMAND, STATUS_COMMAND, callbackAddress, loginCommand, outputTail, readLoginOutput, readStatus, type LoginMethod } from "./brainLogin";
+import { LOGOUT_COMMAND, STATUS_COMMAND, callbackAddress, loginCommand, loginEnv, loginTail, outputTail, readLoginOutput, readStatus, type LoginMethod } from "./brainLogin";
 import type { PackageHost, StartOptions } from "./browser";
 import { findExistingBrain, PROGRAMS, versionFrom } from "./existingBrains";
 
@@ -222,7 +222,7 @@ export class Brains {
             this.logins.set(harness, login);
             this.set(harness, { phase: "signing-in", login: null, error: null });
             try {
-                await this.deps.host.start({ id, command: exe, args, cwd: this.home(harness), env: this.env(harness), ...(needsInput ? {} : { stdin: false }) });
+                await this.deps.host.start({ id, command: exe, args, cwd: this.home(harness), env: { ...this.env(harness), ...loginEnv(this.platform) }, ...(needsInput ? {} : { stdin: false }) });
             } catch (e) {
                 for (const off of offs) off();
                 this.logins.delete(harness);
@@ -483,7 +483,7 @@ export class Brains {
 }
 
 const tail = (output: string) => {
-    const t = outputTail(output);
+    const t = loginTail(output);
     return t ? `: ${t}` : ".";
 };
 
