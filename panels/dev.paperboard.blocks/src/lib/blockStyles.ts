@@ -197,8 +197,23 @@ const BLOCK_SYMBOLS: Record<string, string> = {
     variables_set_dynamic: "edit",
 };
 
+/**
+ * The style each drop preview had before it became one. As a block is
+ * dragged near where it would snap on, Blockly shows a copy of it there, and
+ * colours the copy by giving it a style named for the colour: the copy's own
+ * style, which says what icon it shows, is kept here.
+ */
+const previewStyles = new WeakMap<Blockly.Block, string>();
+const setInsertionMarker = Blockly.BlockSvg.prototype.setInsertionMarker;
+
+Blockly.BlockSvg.prototype.setInsertionMarker = function (this: Blockly.BlockSvg, insertionMarker: boolean): void {
+    if (insertionMarker && !this.isInsertionMarker()) previewStyles.set(this, this.getStyleName());
+    setInsertionMarker.call(this, insertionMarker);
+};
+
 export function blockIcon(block: Blockly.Block): BlockIcon {
-    const name = block.getStyleName();
+    // a drop preview shows its block's icon, so it's the size of the block it stands for
+    const name = previewStyles.get(block) ?? block.getStyleName();
     if (name.startsWith(PANEL_STYLE_PREFIX)) {
         if (!panelIcon) throw new Error("The panels' icons aren't known yet");
         return panelIcon(panelOf(block.type));
