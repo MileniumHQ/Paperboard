@@ -184,7 +184,7 @@
         "requirements": [
             {
                 "name": "Computer",
-                "detail": "Minecraft on Linux, macOS or Windows. Terraria, Palworld and Team Fortress 2 on Linux or Windows, x64. Garry's Mod and Rust on Linux, x64"
+                "detail": "Minecraft on Linux, macOS or Windows. Terraria, Palworld, Team Fortress 2, Garry's Mod and Rust on Linux or Windows, x64"
             },
             {
                 "name": "Storage",

@@ -141,11 +141,12 @@ A `SourceGameSpec` on `src/games/source/`, with what its server needed added the
 - Launch: TF2's arguments, then `+gamemode <mode> +host_workshop_collection <id>` (`SourceGameSpec.launchArgs`, in `gmod/service.ts`). A game mode is a folder name; one not in `gamemodes/` or an add-on folder is refused at the start unless a Workshop collection is set, which may bring it. The server downloads a collection's add-ons itself, with no key: 7 of 7 mounted from a public collection in the measured run.
 - Steam ids: the server writes and bans by `STEAM_0:1:12345`, and answers `Can't ban users with ID "[U"` to TF2's `[U:1:…]` form (`SourceGameSpec.steamIds: "steam2"`).
 - RCON: the server drops a connection whose packet begins with byte 0x16, taking it for a TLS hello ("tried to get banned using the HTTP(S) request to RCON"). A packet begins with its size, so that is every 12-byte command (`sbox_godmode`, `mapcyclefile`) and every 12-byte password. `SourceRcon` sends such a command a space longer, which every Source console ignores; a 12-byte RCON password can't be padded and is refused when it is set (`rconReadsTls`). The server also drops the packet that ends a reply when another connection to the port closes in the same instant: a reply that has begun and then goes quiet for two seconds is taken as whole. A reply lost entirely still fails that command.
-- Data: add-ons, what they save and the players' database (`garrysmod/addons`, `data`, `sv.db`) live in the server folder, linked into the install (`SourceGameSpec.keeps`, `linkFile`), so backups carry them and an update leaves them. Because of the database, a backup stops the server for the copy and starts it again (`offlineBackups`), where TF2's files copy as it runs.
+- Data: add-ons, what they save and the players' database (`garrysmod/addons`, `data`, `sv.db`) live in the server folder (`SourceGameSpec.keeps`), so backups carry them and an update leaves them. The folders are linked into the install. The file is linked too (`keptFile`), except on Windows, where an ordinary account can make no file link: there it is moved into the install for a start and taken back once the server is gone (on stop, on a crash, and when Paperboard next starts). Because of the database, a backup stops the server for the copy and starts it again (`offlineBackups`), where TF2's files copy as it runs.
 - Console: the server colours some lines with ANSI codes, which are taken out, and lists two dozen shader libraries a dedicated server never uses as "#Failed to load …shader….so: (null)" at every start, which are left out (`isShaderNoise`; any other failure stays).
 - No map rotation: Garry's Mod reads no map cycle (its own `mapcycle.txt` says so), so it has no Maps tab and setup ends with the download. The Overview's Change map lists the installed maps; the server ships `gm_construct` and `gm_flatgrass`.
 - A Source server can't open a file whose path passes 260 characters: from a deep folder its own Lua fails to load ("AddCSLuaFile: Couldn't find…"). A server folder under `~/.paperboard` is nowhere near that; a smoke run needs a short `TMPDIR`.
-- Not yet: Windows (the `x86-64` branch's Windows server was not run, so the host is refused there), Workshop search, ULX or other admin add-ons as a screen of their own, a verified join from a client, and a verified GSLT login.
+- Windows: `srcds_win64.exe` with the same arguments and `consoleInput`, as TF2. The whole smoke passed on Windows 11 x64 on 2026-11-12 (build 26623757).
+- Not yet: Workshop search, ULX or other admin add-ons as a screen of their own, a verified join from a client, and a verified GSLT login.
 
 ```text
 install: app 4020 branch x86-64, build 26623757; host linux/x64
@@ -196,7 +197,9 @@ stop: quit over RCON; process absent; state OFFLINE
 - Data: the install's `server/` folder links to `server/` in the server folder; this server's map, saves and lists are in `server/paperboard/`. Save is `server.save`, waited for until "Saving complete" and until the newest `.sav` changes. Stop is `quit`, which saves, writes the lists and ends the process itself (exit 137). Backups are offline.
 - Bans: `banid <id> "<name>" "<reason>"`, `unban <id>` and `banlistex` on the running server, followed by `server.writecfg` so the ban is in `cfg/bans.cfg` at once (`banid 7656… "Name" "reason" -1` a line). While stopped the list is read from that file, and changing it waits for the server.
 - The server registers itself with Steam and uploads its map to Facepunch's `files.facepunch.com` for players to download; both are the game's own doing.
-- Not yet: Windows (not run, so the host is refused there), Oxide/Carbon plugins, a wipe button (a new seed is a new map), Rust+ pairing checked from a phone, and a verified join from a client. `playerlist` answered `[]` on the real server; its rows (`SteamID`, `DisplayName`, `Ping`, `ConnectedSeconds`, `Health`) are read as Rust's admin tools document them and have not been seen with a player on.
+- Wipe (the Map tab, `rust-wipe`): on a stopped server the map and what was on it (`proceduralmap.*`, `player.states.*`, `player.deaths.*`, `sv.files.*`, and `player.blueprints.*` when asked) move to a `.trash-<time>` folder in the server folder, never deleted, and the server gets a new random seed, so its next start makes a new map. Who the players are, the ban list and the options stay.
+- Windows: `RustDedicated.exe` with the same arguments and no environment of its own; it needs no runtime Windows lacks (run on a VM with the Visual C++ runtime uninstalled). The whole smoke passed on Windows 11 x64 on 2026-11-12 (build 26498655, 168 fps on a 1000 m map).
+- Not yet: Oxide/Carbon plugins, Rust+ pairing checked from a phone, and a verified join from a client. `playerlist` answered `[]` on the real server; its rows (`SteamID`, `DisplayName`, `Ping`, `ConnectedSeconds`, `Health`) are read as Rust's admin tools document them and have not been seen with a player on.
 
 ```text
 install: app 258550, build 26498655; host linux/x64
@@ -233,9 +236,9 @@ These are intended certification targets, not already-tested claims. Unsupported
 | Terraria tModLoader | Native target | Native; server verified | Supported-release .NET/Intel target | Release-specific runtime/Rosetta target; block until certified | Unsupported initially |
 | TF2 | Native target; SteamCMD i386 libs | Native; server verified | Unsupported | Unsupported | Unsupported |
 | CS2 | Native target | Native target | Unsupported | Unsupported | Unsupported |
-| GMod | Native; server verified (`x86-64` branch) | Unsupported until its server is run | Unsupported | Unsupported | Unsupported |
+| GMod | Native; server verified (`x86-64` branch) | Native; server verified (`x86-64` branch) | Unsupported | Unsupported | Unsupported |
 | Palworld | Native target | Native; server verified | Unsupported | Unsupported | Unsupported |
-| Rust | Native; server verified | Unsupported until its server is run | Unsupported | Unsupported | Unsupported |
+| Rust | Native; server verified | Native; server verified | Unsupported | Unsupported | Unsupported |
 
 The concurrent Origami packages are prerequisites, not game support: `steamcmd` targets linux-x64 (32-bit bootstrap), macos-x64 and windows-x64; `proton` targets linux-x64/arm64 and stays published for future Windows-only games; no selected game uses it, and an ARM64 Proton package would not translate an x64 server's CPU instructions. No Box64/FEX route is planned. macOS SteamCMD availability does not create macOS game depots.
 
