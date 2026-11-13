@@ -15,8 +15,45 @@
     z-index: 1;
 }
 
+/* ---- the top bar: the agent's face and name in the middle, round buttons on the sides */
+
 .header {
-    padding: var(--paper-uigap) var(--paper-uigap) 0;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: start;
+    gap: var(--paper-uigap);
+    padding: var(--paper-uigap) var(--paper-uigap-double) var(--paper-uigap-half);
+}
+
+.side {
+    display: flex;
+    gap: var(--paper-uigap-half);
+    /* level with the middle of the face */
+    padding-top: var(--paper-uigap);
+}
+
+.end {
+    justify-content: flex-end;
+}
+
+.who {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+}
+
+/* the name tucks up under the face, over its edge */
+.name {
+    position: relative;
+    max-width: 100%;
+    margin-top: calc(var(--paper-uigap) * -1);
+}
+
+.nameText {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .list {
@@ -37,7 +74,8 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    max-width: min(80%, var(--paper-size-panel-medium));
+    /* both sides' bubbles take the same width: the text beside its reply button */
+    max-width: min(100%, var(--paper-size-panel-large));
     /* a vertical drag still scrolls the chat; a sideways one is the bubble's, to reply */
     touch-action: pan-y;
 }
@@ -47,11 +85,9 @@
     align-items: flex-end;
 }
 
-/* the agent's replies run longer than the user's texts: its bubble takes the width, beside its reply button */
 .them {
     align-self: flex-start;
     align-items: flex-start;
-    max-width: min(100%, var(--paper-size-panel-large));
 }
 
 /* the row before is the same side, close in time: sit tight against it */
@@ -108,6 +144,7 @@
     border-top-left-radius: var(--bubble-join);
 }
 
+/* the user's text is body text, like the agent's markdown, so both sides' bubbles are the same size */
 .plain {
     white-space: pre-wrap;
 }

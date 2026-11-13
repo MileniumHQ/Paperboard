@@ -8,3 +8,35 @@
 .ink {
     fill: var(--face-ink);
 }
+
+/* ---- the hologram sphere (the hologram prop) */
+
+/* the sphere glows past its edge */
+.hologram {
+    filter: drop-shadow(0 0 var(--paper-uigap-half) var(--paper-face-hologram));
+}
+
+/* the features glow over the sphere like light, not paint */
+.face:has(.hologram) .ink {
+    fill: var(--paper-face-hologram-ink);
+    filter: drop-shadow(0 0 var(--paper-uigap-onefourth) var(--paper-face-hologram));
+}
+
+.core {
+    stop-color: var(--paper-face-hologram-deep);
+}
+
+.glow {
+    stop-color: var(--paper-face-hologram);
+}
+
+.scanline {
+    fill: var(--paper-face-hologram-deep);
+    opacity: var(--paper-opacity-faint);
+}
+
+.rim {
+    fill: none;
+    stroke: var(--paper-face-hologram-ink);
+    opacity: var(--paper-opacity-muted);
+}

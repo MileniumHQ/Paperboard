@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
+import { For, Show, createEffect, createSignal, createUniqueId, on, onCleanup, onMount } from "solid-js";
 import type { FaceController } from "./controller";
 import { EXPRESSIONS } from "./expressions";
 import { FEATURES, arrayToPose, faceBasis, poseToArray, strokePath, type Orientation } from "./geometry";
@@ -7,6 +7,9 @@ import type { FaceSkin } from "./skins";
 
 const R = 80;
 const BLINK_MS = 170;
+/** the hologram's scanline pitch and rim, in the sphere's own units */
+const SCAN = 6;
+const RIM = 3;
 /** Below this size strokes thicken so the face still reads as an icon. */
 const WEIGHT_SIZE = 96;
 /** Below this size the view crops to the face itself instead of its whole sphere. */
@@ -33,6 +36,8 @@ export function Face(props: {
     frame?: "face" | "sphere";
     /** a painted sphere and features (see skins.ts); a painted face is always shown whole */
     skin?: FaceSkin | null;
+    /** the sphere drawn as the Agent's hologram: a glowing cyan ball with scanlines and a bright rim; a skin wins over it */
+    hologram?: boolean;
     class?: string;
 }) {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -62,6 +67,7 @@ export function Face(props: {
         );
     };
 
+    const id = createUniqueId();
     const size = () => props.size ?? 160;
     // a painted sphere cropped to the features would be a yellow square: it's always shown whole
     const cropped = () => !props.skin && (props.frame ? props.frame === "face" : size() < CROP_SIZE);
@@ -146,6 +152,23 @@ export function Face(props: {
         >
             <Show when={props.skin}>
                 {(skin) => <circle cx={frame().dx} cy={-frame().dy} r={R} fill={skin().sphere} />}
+            </Show>
+            <Show when={props.hologram && !props.skin}>
+                {/* a dark core brightening to the rim, scanlines across it, and the rim itself; it bobs with the face */}
+                <defs>
+                    <radialGradient id={`${id}-glow`}>
+                        <stop offset="0.35" class={styles.core} />
+                        <stop offset="1" class={styles.glow} />
+                    </radialGradient>
+                    <pattern id={`${id}-lines`} width={SCAN} height={SCAN} patternUnits="userSpaceOnUse">
+                        <rect width={SCAN} height={SCAN / 2} class={styles.scanline} />
+                    </pattern>
+                </defs>
+                <g class={styles.hologram} transform={`translate(${frame().dx} ${-frame().dy})`}>
+                    <circle r={R} fill={`url(#${id}-glow)`} />
+                    <circle r={R} fill={`url(#${id}-lines)`} />
+                    <circle r={R - RIM / 2} class={styles.rim} stroke-width={RIM} />
+                </g>
             </Show>
             <g class={styles.ink} opacity={frame().facing} transform={`translate(${frame().dx} ${-frame().dy})`}>
                 <For each={FEATURES}>{(_, i) => <path d={frame().paths[i()]} />}</For>

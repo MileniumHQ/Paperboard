@@ -1,5 +1,6 @@
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
-import { PaperButton, PaperContextMenu, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPageHeader, PaperProgress, PaperQuote, PaperText, type MarkdownImage } from "@mileniumhq/paperui";
+import { For, Show, createComputed, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
+import { PAPER_PANEL_COMPACT_WIDTH, PaperButton, PaperContextMenu, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPresence, PaperProgress, PaperQuote, PaperText, type MarkdownImage } from "@mileniumhq/paperui";
+import { createStore, reconcile } from "solid-js/store";
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import type { FaceController } from "../face/controller";
@@ -31,6 +32,8 @@ const STAMP_MS = 30 * 60_000;
 const PAGE_ROWS = 60;
 /** this close to the top, the next rows are drawn */
 const MORE_AT_PX = 200;
+/** the agent's face at the top of the chat */
+const AVATAR_PX = 80;
 
 interface Row {
     key: string;
@@ -82,6 +85,24 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     const [notice, setNotice] = createSignal<Failure | null>(null);
     const [historyOpen, setHistoryOpen] = createSignal(false);
     const [startingNew, setStartingNew] = createSignal(false);
+    const canStartNew = () => !startingNew() && agent.entries.length > 0;
+    const startNew = () => {
+        setNotice(null);
+        setStartingNew(true);
+        agent
+            .newConversation()
+            .catch((e) => setNotice(failure("Conversation not started", e)))
+            .finally(() => setStartingNew(false));
+    };
+    // the header's three buttons fold into one menu when the chat is narrow: a phone, or a page open beside it
+    const headerMenu = useContextMenuState();
+    let header!: HTMLDivElement;
+    const [compact, setCompact] = createSignal(false);
+    onMount(() => {
+        const measure = new ResizeObserver(() => setCompact(header.clientWidth < PAPER_PANEL_COMPACT_WIDTH));
+        measure.observe(header);
+        onCleanup(() => measure.disconnect());
+    });
     // a bubble's menu, on a right click: answer it, or copy what's selected in it (or all of it)
     const menu = useContextMenuState();
     const [menuOn, setMenuOn] = createSignal<{ said: Said | null; text: string } | null>(null);
@@ -132,10 +153,23 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
             };
         });
     });
+    // Each row stays one object for as long as it's in the conversation, its fields updated in place, so the list keeps its bubble
+    // (and a bubble popping in finishes) instead of drawing it again whenever anything in the conversation changes.
+    const [kept, setKept] = createStore<Row[]>([]);
+    createComputed(() => setKept(reconcile(rows(), { key: "key" })));
 
     // the latest rows; scrolling up to the top draws the ones before them
     const [drawn, setDrawn] = createSignal(PAGE_ROWS);
-    const visible = createMemo(() => rows().slice(-drawn()));
+    const visible = createMemo(() => kept.slice(-drawn()));
+    // Rows that arrive while the chat is open pop in. A conversation loading (every row new at once) and older rows drawn above don't:
+    // the older ones are already in rows(), only drawn later, so they are never new.
+    let seen = new Set<string>();
+    const arriving = createMemo(() => {
+        const keys = rows().map((r) => r.key);
+        const fresh = keys.filter((k) => !seen.has(k));
+        seen = new Set(keys);
+        return new Set(fresh.length === keys.length && keys.length > 1 ? [] : fresh);
+    });
     // another conversation starts drawn from its end again
     createEffect(on(() => agent.entries.length === 0, (empty) => empty && setDrawn(PAGE_ROWS)));
 
@@ -224,33 +258,73 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
             <Show when={agent.state.chat.compacting}>
                 <PaperProgress class={styles.compacting} aria-label={`${name()} is compacting the conversation`} title="Compacting the conversation to save space" />
             </Show>
-            <div class={styles.header}>
-                <PaperPageHeader icon={<Face face={face} size={40} frame="sphere" skin={skinFor(agent.state.settings?.name)} />} title={name()} subtitle={status()} centerWhenStacked>
-                    <PaperButton icon variant="text" aria-label="Past conversations" title="Past conversations" onClick={() => setHistoryOpen(true)}>
-                        history
+            {/* who this is, in the middle; the conversation's buttons on the sides, or one menu when the chat is narrow */}
+            <div class={styles.header} ref={header}>
+                <div class={styles.side}>
+                    <Show when={!compact()}>
+                        <PaperButton icon round variant="surface" aria-label="Past conversations" title="Past conversations" onClick={() => setHistoryOpen(true)}>
+                            history
+                        </PaperButton>
+                    </Show>
+                </div>
+                <div class={styles.who}>
+                    <Face face={face} size={AVATAR_PX} frame="sphere" hologram skin={skinFor(agent.state.settings?.name)} />
+                    <PaperButton round variant="surface" size="small" class={styles.name} title="Open the menu" onClick={() => props.onMenu()}>
+                        <span class={styles.nameText}>{name()}</span>
+                        <PaperIcon>chevron_right</PaperIcon>
                     </PaperButton>
-                    <PaperButton
-                        icon
-                        variant="text"
-                        aria-label="New conversation"
-                        title="New conversation"
-                        disabled={startingNew() || agent.entries.length === 0}
-                        onClick={() => {
-                            setNotice(null);
-                            setStartingNew(true);
-                            agent
-                                .newConversation()
-                                .catch((e) => setNotice(failure("Conversation not started", e)))
-                                .finally(() => setStartingNew(false));
-                        }}
+                    <Show when={status()}>
+                        <PaperText preset="hint">{status()}</PaperText>
+                    </Show>
+                </div>
+                <div class={`${styles.side} ${styles.end}`}>
+                    <Show
+                        when={!compact()}
+                        fallback={
+                            <PaperButton icon round variant="surface" aria-label="Conversation menu" title="Conversation menu" onClick={(e) => headerMenu.openBelow(e.currentTarget, { align: "right" })}>
+                                more_horiz
+                            </PaperButton>
+                        }
                     >
-                        add
-                    </PaperButton>
-                    <PaperButton icon variant="text" aria-label="Menu" title="Menu" onClick={() => props.onMenu()}>
-                        more_horiz
-                    </PaperButton>
-                </PaperPageHeader>
+                        <PaperButton icon round variant="surface" aria-label="New conversation" title="New conversation" disabled={!canStartNew()} onClick={startNew}>
+                            add
+                        </PaperButton>
+                        <PaperButton icon round variant="surface" aria-label="Menu" title="Menu" onClick={() => props.onMenu()}>
+                            more_horiz
+                        </PaperButton>
+                    </Show>
+                </div>
             </div>
+            <PaperContextMenu open={headerMenu.isOpen()} target={headerMenu.target()} placement={headerMenu.placement()} onClose={() => headerMenu.close()}>
+                <PaperContextMenuItem
+                    icon="history"
+                    onClick={() => {
+                        headerMenu.close();
+                        setHistoryOpen(true);
+                    }}
+                >
+                    Past conversations
+                </PaperContextMenuItem>
+                <PaperContextMenuItem
+                    icon="add"
+                    disabled={!canStartNew()}
+                    onClick={() => {
+                        headerMenu.close();
+                        startNew();
+                    }}
+                >
+                    New conversation
+                </PaperContextMenuItem>
+                <PaperContextMenuItem
+                    icon="tune"
+                    onClick={() => {
+                        headerMenu.close();
+                        props.onMenu();
+                    }}
+                >
+                    Computer and settings
+                </PaperContextMenuItem>
+            </PaperContextMenu>
 
             <div
                 class={styles.list}
@@ -308,22 +382,25 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                                 <PageCard entry={row.entry as PageEntry} pages={props.pages} />
                             </Show>
                             <Show when={row.side === "me" || row.side === "them"}>
-                                <Bubble
-                                    files={agent.files}
-                                    renderImage={agentImage}
-                                    row={row}
-                                    quoted={(id) => byId(id)}
-                                    nameOf={(m) => (m.kind === "user" ? "You" : name())}
-                                    onReply={(m) => setReplyTo(m)}
-                                    onJump={jumpTo}
-                                    onMenu={openMenu}
-                                />
+                                <PaperPresence when appear={arriving().has(row.key)} motion="pop">
+                                    <Bubble
+                                        files={agent.files}
+                                        renderImage={agentImage}
+                                        row={row}
+                                        quoted={(id) => byId(id)}
+                                        nameOf={(m) => (m.kind === "user" ? "You" : name())}
+                                        onReply={(m) => setReplyTo(m)}
+                                        onJump={jumpTo}
+                                        onMenu={openMenu}
+                                    />
+                                </PaperPresence>
                             </Show>
                         </>
                     )}
                 </For>
                 {/* only while it writes: working with its tools shows on its face, not as typing */}
-                <Show when={agent.state.chat.typing}>
+                {/* it pops in like a bubble, and goes at once: the reply it turns into takes its place */}
+                <PaperPresence when={agent.state.chat.typing} appear motion="pop" exitClass="">
                     <div class={styles.row} classList={{ [styles.them!]: true, [styles.joinsPrev!]: typingJoins() }} role="status" aria-label={`${name()} is typing`}>
                         <div class={`${styles.bubble} ${styles.typing}`} classList={{ [styles.joinsPrev!]: typingJoins() }} aria-hidden="true">
                             <span class={styles.dot} />
@@ -331,7 +408,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                             <span class={styles.dot} />
                         </div>
                     </div>
-                </Show>
+                </PaperPresence>
             </div>
 
             <Show when={notice()}>
@@ -464,7 +541,9 @@ function Bubble(props: {
                             <AttachmentList class={styles.attachments} files={props.files} list={attachments()} />
                         </Show>
                         <Show when={text()}>
-                            <span class={styles.plain}>{text()}</span>
+                            <PaperText preset="body" class={styles.plain}>
+                                {text()}
+                            </PaperText>
                         </Show>
                     </Show>
                 </div>
