@@ -2,6 +2,7 @@ import { PaperButton, PaperText, playHaptic } from "@mileniumhq/paperui";
 import { type Component, createEffect, createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import { HAPTIC_MESSAGE, type WidgetOptionValues, type WidgetSize } from "@mileniumhq/paperapi";
 import { panelUrl } from "../../lib/shell";
+import { MOBILE_MODE_MESSAGE, mobileMode, requireMobileMode } from "../../lib/mobileMode";
 import type { LoadQueue } from "../../lib/loadQueue";
 import styles from "./Home.module.css";
 
@@ -106,6 +107,9 @@ const PanelWidgetFrame: Component<PanelWidgetFrameProps> = (props) => {
     const revision = createMemo(() => props.revision);
     createEffect(on(revision, start, { defer: true }));
 
+    // mobile mode turning on or off reaches a widget already challenged
+    createEffect(on(mobileMode, (mobile) => { if (mobile !== null && attempt?.initialized) post({ type: MOBILE_MODE_MESSAGE, mobile }); }, { defer: true }));
+
     // the shell owns size and visibility; the widget follows
     createEffect(() => {
         const size = props.size;
@@ -132,6 +136,7 @@ const PanelWidgetFrame: Component<PanelWidgetFrameProps> = (props) => {
                         type: "paperboard:initialize",
                         service: props.service,
                         computerName: props.computerName,
+                        mobile: requireMobileMode(),
                         widget: {
                             id: props.widgetId,
                             instanceId: props.instanceId,

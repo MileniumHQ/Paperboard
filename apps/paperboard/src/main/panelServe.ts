@@ -17,7 +17,8 @@ import {
     buildPanelCsp,
     remotePanelHtmlCsp,
 } from "./panelAssets";
-import { injectCraneBootstrap, injectCspNonce, injectUnselectable } from "../shared/panelDocument";
+import { injectCraneBootstrap, injectCspNonce, injectMobileMode, injectUnselectable } from "../shared/panelDocument";
+import { launchOptionsFromArgv } from "../shared/launchOptions";
 
 export { parsePanelHost } from "./panelAssets";
 
@@ -102,12 +103,15 @@ export async function servePanelAsset(
                             headers["Content-Security-Policy"] =
                                 buildPanelCsp(nonce);
                             const html = injectCspNonce(
-                                injectUnselectable(
-                                    await injectCraneCreds(
-                                        buffer.toString("utf8"),
-                                        comp,
-                                        cleanPanelId,
+                                injectMobileMode(
+                                    injectUnselectable(
+                                        await injectCraneCreds(
+                                            buffer.toString("utf8"),
+                                            comp,
+                                            cleanPanelId,
+                                        ),
                                     ),
+                                    launchOptionsFromArgv(process.argv).mobile,
                                 ),
                                 nonce,
                             );
@@ -164,12 +168,15 @@ export async function servePanelAsset(
             const nonce = panelCspNonce();
             headers["Content-Security-Policy"] = remotePanelHtmlCsp(served, nonce);
             responseBody = injectCspNonce(
-                injectUnselectable(
-                    await injectCraneCreds(
-                        new TextDecoder().decode(buffer),
-                        comp,
-                        cleanPanelId,
+                injectMobileMode(
+                    injectUnselectable(
+                        await injectCraneCreds(
+                            new TextDecoder().decode(buffer),
+                            comp,
+                            cleanPanelId,
+                        ),
                     ),
+                    launchOptionsFromArgv(process.argv).mobile,
                 ),
                 nonce,
             );

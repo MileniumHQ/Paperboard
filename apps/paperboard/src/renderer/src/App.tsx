@@ -29,6 +29,7 @@ import {
     type ComputerInfo as ComputerItem,
 } from "./lib/shell";
 import type { LaunchOptions } from "../../shared/launchOptions";
+import { setMobileMode } from "./lib/mobileMode";
 import AppSettings from "./components/settings/AppSettings";
 import PanelPermissionPrompt from "./components/panels/PanelPermissionPrompt";
 import PanelView from "./components/panels/PanelView";
@@ -323,10 +324,13 @@ const App: Component = () => {
             options = await shellApi.getLaunchOptions();
         } catch (err) {
             logToMain("error", "Couldn't read the launch options; the layout is the desktop one until restart:", err);
+            // panels follow the shell: the desktop's behavior too
+            setMobileMode(false);
             setLayoutKnown(true);
             return;
         }
         setMobile(options.mobile);
+        setMobileMode(options.mobile);
         setLayoutKnown(true);
     });
 
@@ -947,6 +951,8 @@ const App: Component = () => {
                                 class={styles.frameLayer}
                                 classList={{ [styles.away]: isShellTab(getSelectedTab(activeComputerId())) }}
                             >
+                                {/* a frame is told mobile mode as it loads, so it waits for the launch options */}
+                                <Show when={layoutKnown()}>
                                 <PanelView
                                     panelHeading={panelHeading}
                                     mobile={mobile()}
@@ -965,6 +971,7 @@ const App: Component = () => {
                                         void restartPanel(compId, panelId, name);
                                     }}
                                 />
+                                </Show>
                             </PaperFlex>
                         </PaperFlex>
                         </PaperSlidePage>

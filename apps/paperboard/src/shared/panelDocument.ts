@@ -78,3 +78,17 @@ export function injectCraneBootstrap(html: string, payload: string): string {
     // no <head> — prepend; scripts run before body anyway
     return `${bootstrap}${html}`;
 }
+
+/** PaperUI's MOBILE_ATTRIBUTE */
+const MOBILE_ATTRIBUTE = "data-paper-mobile";
+
+// Mobile mode (PaperUI's paperMobile) is stamped on the document before any
+// of its own scripts or styles run, so a panel's first paint is already right.
+// The shell tells the frame again if it changes (PaperAPI's MOBILE_MODE_MESSAGE).
+export function injectMobileMode(html: string, mobile: boolean): string {
+    const stamp = `<script>document.documentElement.setAttribute("${MOBILE_ATTRIBUTE}","${mobile}");</script>`;
+    if (/<head[^>]*>/i.test(html)) {
+        return html.replace(/<head[^>]*>/i, (m) => `${m}${stamp}`);
+    }
+    return `${stamp}${html}`;
+}

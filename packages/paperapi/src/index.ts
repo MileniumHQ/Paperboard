@@ -3,6 +3,7 @@ import "./readiness";
 import "./swipeBack";
 import "./haptics";
 import "./pageCrumbs";
+import "./mobileMode";
 
 export * from "./ipc";
 export * from "./config";
@@ -20,6 +21,7 @@ export * from "./loopback";
 export { SWIPE_BACK_MESSAGE, swipeBackMessage, type SwipeBackMessage } from "./swipeBack";
 export { HAPTIC_MESSAGE, hapticMessage, type HapticMessage } from "./haptics";
 export { PAGE_BACK_MESSAGE, PAGE_BARS_MESSAGE, PAGE_CRUMBS_MESSAGE, pageCrumbsMessage, type PageCrumbsMessage } from "./pageCrumbs";
+export { MOBILE_MODE_MESSAGE } from "./mobileMode";
 export { FRAME_BACKGROUND_MESSAGE, frameBackgroundMessage, isFrameBackgroundColor, type FrameBackgroundMessage } from "./frameBackground";
 export * from "./package";
 export * from "./file";
