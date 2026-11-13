@@ -17,6 +17,8 @@ export default function Composer(props: {
     onDraft: (text: string) => void;
     /** the bubble being answered */
     replyTo: Extract<ChatEntry, { kind: "user" | "agent" }> | null;
+    /** a message is leaving: the chat goes to its end to show it */
+    onSend: () => void;
     replyAuthor: (m: Extract<ChatEntry, { kind: "user" | "agent" }>) => string;
     onCancelReply: () => void;
     tray: Tray;
@@ -43,6 +45,7 @@ export default function Composer(props: {
         setError(null);
         // felt as the message leaves, not once the service has it
         haptic("send");
+        props.onSend();
         try {
             await agent.send(text, props.replyTo?.id, tray().ids());
             props.onDraft("");
@@ -53,15 +56,22 @@ export default function Composer(props: {
         }
     };
 
-    // grows with the text up to its max-height, then scrolls; a sent message clears it from outside
+    // Grows with the text up to its max-height, then scrolls; a sent message clears it from outside.
+    // Measuring collapses the field for a moment, which loses its scroll: it's put back, and typing at the end keeps the end in view.
     const resize = () => {
+        const top = field.scrollTop;
         field.style.height = ""; // its own height again, to measure the text
         field.style.height = `${field.scrollHeight}px`;
+        field.scrollTop = field.selectionEnd === field.value.length ? field.scrollHeight : top;
     };
     createEffect(() => {
         void props.draft;
         queueMicrotask(resize);
     });
+    // a button pressed beside the box leaves the cursor in it, so a phone's keyboard stays up
+    const keepFocus = (e: PointerEvent) => {
+        if (document.activeElement === field) e.preventDefault();
+    };
     // choosing to reply puts the cursor in the box
     createEffect(() => {
         if (props.replyTo) field.focus();
@@ -133,7 +143,7 @@ export default function Composer(props: {
                         e.currentTarget.value = "";
                     }}
                 />
-                <PaperButton icon size="small" variant="text" aria-label="Attach files" title="Attach files" onClick={() => picker.click()}>
+                <PaperButton icon size="small" variant="text" aria-label="Attach files" title="Attach files" onPointerDown={keepFocus} onClick={() => picker.click()}>
                     attach_file
                 </PaperButton>
                 <textarea
@@ -144,10 +154,7 @@ export default function Composer(props: {
                     maxLength={LIMITS.message}
                     placeholder={`Message ${name()}`}
                     aria-label={`Message ${name()}`}
-                    onInput={(e) => {
-                        props.onDraft(e.currentTarget.value);
-                        resize();
-                    }}
+                    onInput={(e) => props.onDraft(e.currentTarget.value)}
                     onPaste={(e) => {
                         const files = [...(e.clipboardData?.files ?? [])];
                         if (!files.length) return;
@@ -155,8 +162,8 @@ export default function Composer(props: {
                         attach(files);
                     }}
                     onKeyDown={(e) => {
-                        // Enter sends, Shift+Enter breaks the line
-                        if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+                        // Enter breaks the line, like a phone's keyboard; the send button sends, and so does Ctrl or Cmd+Enter
+                        if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.isComposing) {
                             e.preventDefault();
                             void send();
                         }
@@ -169,6 +176,7 @@ export default function Composer(props: {
                         size="small"
                         variant="primary"
                         disabled={!ready()}
+                        onPointerDown={keepFocus}
                         onClick={() => void send()}
                         aria-label="Send"
                         title={tray().uploading() ? "Waiting for files to upload" : tray().failed() ? "Remove the files that didn't upload" : "Send"}

@@ -351,6 +351,11 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                 replyTo={replyTo()}
                 replyAuthor={(m) => (m.kind === "user" ? "yourself" : name())}
                 onCancelReply={() => setReplyTo(null)}
+                onSend={() => {
+                    // what's sent is shown, even to someone who had scrolled up to read
+                    pinned = true;
+                    follow();
+                }}
                 tray={tray}
             />
             <PaperContextMenu open={menu.isOpen()} target={menu.target()} placement={menu.placement()} onClose={() => menu.close()}>

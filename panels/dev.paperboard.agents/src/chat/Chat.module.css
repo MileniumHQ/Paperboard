@@ -47,9 +47,11 @@
     align-items: flex-end;
 }
 
+/* the agent's replies run longer than the user's texts: its bubble takes the width, beside its reply button */
 .them {
     align-self: flex-start;
     align-items: flex-start;
+    max-width: min(100%, var(--paper-size-panel-large));
 }
 
 /* the row before is the same side, close in time: sit tight against it */

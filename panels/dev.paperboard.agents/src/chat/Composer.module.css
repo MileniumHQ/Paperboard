@@ -10,10 +10,10 @@
 }
 
 /* the text field and send button share one rounded box */
-/* the clip and the send button sit centered beside the text, however many lines it has */
+/* the clip and the send button sit at the bottom beside the text, by its last line */
 .box {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: var(--paper-uigap-half);
     min-width: 0;
     padding: var(--paper-uigap-half);
