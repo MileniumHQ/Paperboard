@@ -42,7 +42,15 @@ export const PLAYER_NAME_PATTERN = CORE_PLAYER_NAME_PATTERN;
 
 export const [serverStatus, setServerStatus] = createSignal<ServerStatus>("offline");
 export const [serverEntries, setServerEntries] = createSignal<PaperConsoleEntry[]>([]);
-export const [chatMessages, setChatMessages] = createSignal<ChatMessage[]>([]);
+const [chatMessages, setChatList] = createSignal<ChatMessage[]>([]);
+export { chatMessages };
+/** Each state patch carries fresh copies of every message. Keeping the ones
+ * already shown lets the chat add only the new rows, instead of redrawing
+ * every row and its player head. */
+export function setChatMessages(next: ChatMessage[]): void {
+    const shown = new Map(chatMessages().map((m) => [m.id, m]));
+    setChatList(next.map((m) => shown.get(m.id) ?? m));
+}
 export const [localIp, setLocalIp] = createSignal("127.0.0.1");
 export const [serverPort, setServerPort] = createSignal("25565");
 export const [serverMotd, setServerMotd] = createSignal(DEFAULT_MOTD);

@@ -1,7 +1,7 @@
 import { minecraftSoftware } from "./index";
 import stripAnsi from "strip-ansi";
 import { processApi, type ServiceContext } from "../../service/api";
-import { parseChatMessage, parseLogLine } from "../../lib/logs";
+import { chatId, parseChatMessage, parseLogLine } from "../../lib/logs";
 import { parseGameruleValue } from "../../core/gamerules";
 import { resolveVersionProfile } from "../../lib/versionProfile";
 import { trackPlayerActivity, handleStatResponse, handlePositionResponse, queryOnlinePlayers } from "../../service/players";
@@ -53,7 +53,7 @@ export async function sendChatMessage(
         const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
         ctx.setState({
             chatMessages: appendCapped(ctx.state.chatMessages, {
-                id: `chat-${Date.now()}`,
+                id: chatId(),
                 text: "Cannot send message: server is offline.",
                 timestamp: timeStr,
             }),
