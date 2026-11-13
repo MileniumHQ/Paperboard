@@ -29,6 +29,7 @@ export default function Composer(props: {
     const [error, setError] = createSignal<Failure | null>(null);
     const [dragging, setDragging] = createSignal(false);
     let field!: HTMLTextAreaElement;
+    let sizer!: HTMLTextAreaElement;
     let picker!: HTMLInputElement;
 
     const tray = () => props.tray;
@@ -57,12 +58,15 @@ export default function Composer(props: {
     };
 
     // Grows with the text up to its max-height, then scrolls; a sent message clears it from outside.
-    // Measuring collapses the field for a moment, which loses its scroll: it's put back, and typing at the end keeps the end in view.
+    // The text is measured in the field's twin, which sits outside the layout. Measuring in the field itself means collapsing it first:
+    // for that moment the chat above is taller, the browser moves the chat's scroll to fit, and it doesn't come back.
+    // The field's height only ever goes from one length to the next, so it can be eased.
     const resize = () => {
-        const top = field.scrollTop;
-        field.style.height = ""; // its own height again, to measure the text
-        field.style.height = `${field.scrollHeight}px`;
-        field.scrollTop = field.selectionEnd === field.value.length ? field.scrollHeight : top;
+        sizer.style.width = getComputedStyle(field).width;
+        sizer.value = field.value;
+        field.style.height = `${sizer.scrollHeight}px`;
+        // typing at the end keeps the end in view, once the field is as tall as it gets
+        if (field.selectionEnd === field.value.length) field.scrollTop = field.scrollHeight;
     };
     createEffect(() => {
         void props.draft;
@@ -170,6 +174,7 @@ export default function Composer(props: {
                         if (e.key === "Escape" && props.replyTo) props.onCancelReply();
                     }}
                 />
+                <textarea ref={sizer} class={`${styles.field} ${styles.sizer}`} aria-hidden="true" tabIndex={-1} readOnly />
                 <PaperEffect variant="primary" disabled={!ready()}>
                     <PaperButton
                         icon

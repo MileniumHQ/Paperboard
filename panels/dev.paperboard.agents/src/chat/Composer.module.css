@@ -41,6 +41,8 @@
     resize: none;
     max-height: var(--agents-composer-max);
     overflow-y: auto;
+    /* it grows and shrinks to each new line, like Discord's message box; the chat above follows it frame by frame */
+    transition: height var(--paper-tiny-transition) var(--paper-ease-standard);
     background: transparent;
     color: var(--paper-text);
     font-family: inherit;
@@ -51,6 +53,15 @@
 
 .field::placeholder {
     color: var(--paper-text-subtle);
+}
+
+/* the field's twin, where its text is measured: as wide as the field (set as it's measured), out of sight and outside the layout */
+.sizer {
+    position: absolute;
+    visibility: hidden;
+    height: 0;
+    min-height: 0;
+    overflow: hidden;
 }
 
 /* what the message being written answers */
@@ -89,7 +100,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .box {
+    .box,
+    .field {
         transition: none;
     }
 }
