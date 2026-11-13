@@ -13,6 +13,11 @@ export interface PaperLoaderProps extends JSX.HTMLAttributes<HTMLDivElement> {
     size?: PaperLoaderSize;
     label?: JSX.Element | string;
     /**
+     * A short uppercase line under the label, such as how much of a download
+     * has arrived ("5.6 / 6 GB", from formatByteProgress).
+     */
+    subtitle?: JSX.Element | string;
+    /**
      * Milliseconds to wait before appearing. A wait that ends sooner never
      * flashes a loader on screen.
      */
@@ -50,6 +55,7 @@ export function PaperLoader(props: PaperLoaderProps) {
         "loaderStatus",
         "size",
         "label",
+        "subtitle",
         "class",
         "classList",
         "style",
@@ -162,11 +168,16 @@ export function PaperLoader(props: PaperLoaderProps) {
                     </Show>
                 </span>
             </span>
-            <Show when={local.label}>
-                {/* a small loader sits in lists of many steps: its label shrinks with it */}
-                <PaperText size={local.size === "small" ? 2 : 4} class={styles.labelWrapper}>
-                    {local.label}
-                </PaperText>
+            <Show when={local.label || local.subtitle}>
+                <span class={styles.text}>
+                    <Show when={local.label}>
+                        {/* a small loader sits in lists of many steps: its label shrinks with it */}
+                        <PaperText size={local.size === "small" ? 2 : 4}>{local.label}</PaperText>
+                    </Show>
+                    <Show when={local.subtitle}>
+                        <PaperText preset="section" class={styles.subtitle}>{local.subtitle}</PaperText>
+                    </Show>
+                </span>
             </Show>
         </div>
         </Show>

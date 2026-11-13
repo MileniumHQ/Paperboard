@@ -85,6 +85,12 @@ export function Example() {
                         <td>Text beside the ring. Without it only the ring shows.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>subtitle</PaperCode></td>
+                        <td><PaperCode>JSX.Element | string</PaperCode></td>
+                        <td>No default</td>
+                        <td>A short uppercase line under the label, in subtle text. Use it for how much a download has done, written with <PaperLink href="/docs/paperui/utilities/#byte-progress">formatByteProgress</PaperLink>. See Subtitle.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>children</PaperCode></td>
                         <td><PaperCode>JSX.Element</PaperCode></td>
                         <td>No default</td>
@@ -214,6 +220,29 @@ type PaperLoaderSize = "small" | "medium" | "large";`}
 </PaperFlex>`}
             </PaperCode>
 
+            <PaperText preset="subheader" as="h3" id="subtitle">Subtitle</PaperText>
+            <PaperText preset="body" as="p">
+                Anything that downloads shows how much has arrived under its label, with the <PaperCode>section</PaperCode> text preset.
+                Give the amount only while the step is running and the download reports its size, so the line never reads zero or guesses.
+            </PaperText>
+            <PaperCard data-docs-demo padding="double" surface="front">
+                <PaperLoaderGroup>
+                    <PaperLoader loaderStatus="success" label="Downloading Java..." />
+                    <PaperLoader loaderStatus="loading" percent={93} label="Downloading Counter-Strike 2 from Steam..." subtitle="5.6 / 6 GB" />
+                    <PaperLoader loaderStatus="waiting" label="Setting up server..." />
+                </PaperLoaderGroup>
+            </PaperCard>
+            <PaperCode block language="tsx">
+{`import { formatByteProgress, PaperLoader } from "@mileniumhq/paperui";
+
+<PaperLoader
+    loaderStatus="loading"
+    percent={progress().percent}
+    label="Downloading Counter-Strike 2 from Steam..."
+    subtitle={progress().bytes ? formatByteProgress(progress().bytes.done, progress().bytes.total) : undefined}
+/>`}
+            </PaperCode>
+
             <PaperText preset="subheader" as="h3" id="count">A count inside the ring</PaperText>
             <PaperText preset="body" as="p">
                 Children sit in the middle of the ring. Paperboard's update button shows how many updates are left this way, and the count gives way to the check when they finish.
@@ -273,7 +302,7 @@ export function Servers() {
             <PaperText preset="subheader" as="h3" id="install-steps">Install steps</PaperText>
             <PaperText preset="body" as="p">
                 One loader per step in a <PaperCode>PaperLoaderGroup</PaperCode>, each bound to its own signals.
-                The gameserver panel's install screen works this way, with the amount downloaded in the label.
+                The gameserver panel's install screen works this way, with the amount downloaded in each download's subtitle.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { For, type Accessor } from "solid-js";
@@ -281,6 +310,7 @@ import { PaperLoader, PaperLoaderGroup, type LoaderStatus } from "@mileniumhq/pa
 
 interface Step {
     label: string;
+    subtitle?: Accessor<string | undefined>;
     percent: Accessor<number>;
     status: Accessor<LoaderStatus>;
 }
@@ -294,6 +324,7 @@ export function InstallSteps(props: { steps: Step[] }) {
                         percent={step.percent()}
                         loaderStatus={step.status()}
                         label={step.label}
+                        subtitle={step.subtitle?.()}
                     />
                 )}
             </For>

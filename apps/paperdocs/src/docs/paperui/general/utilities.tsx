@@ -130,6 +130,20 @@ const width = getVarCss("size-panel-small");`}
 const className = cx("card", props.active && "active", props.class);`}
             </PaperCode>
 
+            <PaperText preset="subheader" as="h2" id="byte-progress">formatByteProgress</PaperText>
+            <PaperText preset="body" as="p">
+                <PaperCode>formatByteProgress(done: number, total: number): string</PaperCode> says how much of a download has arrived, with both numbers in the total's unit, such as <PaperCode>"5.6 / 6 GB"</PaperCode>.
+                Every download in Paperboard uses this wording, as a <PaperLink href="/docs/paperui/paperloader/#subtitle">PaperLoader subtitle</PaperLink>.
+                Amounts under ten keep one decimal, and a whole number drops its <PaperCode>.0</PaperCode>.
+                It throws when the total is not a positive number, so show no amount until the download reports its size.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { formatByteProgress } from "@mileniumhq/paperui";
+
+formatByteProgress(6_012_954_214, 6_442_450_944); // "5.6 / 6 GB"
+formatByteProgress(48_234_496, 196_083_712);      // "46 / 187 MB"`}
+            </PaperCode>
+
             <PaperText preset="subheader" as="h2" id="clipboard">Clipboard</PaperText>
             <PaperText preset="body" as="p">
                 Both functions use the async clipboard API first and fall back to a temporary <PaperCode>textarea</PaperCode> with <PaperCode>document.execCommand</PaperCode>.

@@ -194,6 +194,18 @@
     animation: loaderEnter var(--paper-mid-transition) var(--paper-ease-standard) backwards;
 }
 
+/* the label with its subtitle under it */
+.text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* numbers that change every moment keep their width */
+.subtitle {
+    font-variant-numeric: tabular-nums;
+}
+
 @keyframes loaderEnter {
     from {
         opacity: 0;
