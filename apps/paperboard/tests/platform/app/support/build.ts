@@ -70,8 +70,8 @@ export interface BuiltApp {
 }
 
 // electron-vite's production build, laid out like the packaged app: the
-// app's package.json beside out/, and its dependencies reachable the way
-// the asar's node_modules are
+// app's package.json beside out/, its dependencies reachable the way the
+// asar's node_modules are, and the workload supervisor in its resources
 export const buildApp = once(async (): Promise<BuiltApp> => {
     const dir = tempDir("app");
     const viteBin = path.join(APP_DIR, "node_modules", "electron-vite", "bin", "electron-vite.js");
@@ -79,6 +79,10 @@ export const buildApp = once(async (): Promise<BuiltApp> => {
     const { name, productName, version, main } = APP_PACKAGE;
     fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name, productName, version, main }));
     linkDependencies(dir);
+    const supervisor = buildSupervisor();
+    const shipped = path.join(dir, "resources", "supervisor", path.basename(path.dirname(supervisor)), path.basename(supervisor));
+    fs.mkdirSync(path.dirname(shipped), { recursive: true });
+    fs.copyFileSync(supervisor, shipped);
     for (const entry of ["out/main/index.js", "out/preload/index.js", "out/renderer/index.html"]) {
         if (!fs.existsSync(path.join(dir, entry))) throw new Error(`electron-vite build produced no ${entry}`);
     }

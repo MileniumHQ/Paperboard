@@ -59,10 +59,11 @@ func sealInheritedFiles() {
 
 func listen(address string) (net.Listener, error) {
 	// A socket's path has a kernel limit (103 bytes on macOS, 107 on Linux)
-	// that a deep data folder passes, but only bind reads the path as a
-	// whole: it binds by its name from inside its own folder, and connect and
-	// unlink take the full path as usual. The workload has its own folder
-	// already, and nothing else here uses a relative path meanwhile.
+	// that a deep data folder passes, so the socket is bound by its name from
+	// inside its own folder; the daemon connects the same way
+	// (papercrane/supervisor.ts: connectEndpoint), and unlink takes the full
+	// path as usual. The workload has its own folder already, and nothing
+	// else here uses a relative path meanwhile.
 	previous, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("could not read the working folder before listening on %s: %w", address, err)

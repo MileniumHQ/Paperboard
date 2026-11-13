@@ -130,6 +130,28 @@ describe("stopping the daemon never stops its workloads", () => {
 
 // Supervised workloads are adopted, reported and stopped faithfully.
 describe("supervised workloads are reported faithfully", () => {
+	// A unix socket path has a short limit (103 bytes on macOS, 107 on Linux)
+	// that a deep data folder passes: macOS's temporary folders, a long home.
+	test("a data folder deeper than a socket path may be long runs its workloads, and the next daemon adopts them", async () => {
+		const dir = path.join(tempDir("pb-deep-"), "d".repeat(60), "e".repeat(60));
+		for (const sub of ["local", "logs", "sockets"]) fs.mkdirSync(path.join(dir, sub), { recursive: true });
+		expect(Buffer.byteLength(path.join(dir, "sockets", `${supervisorEndpointName("deep")}.sock`))).toBeGreaterThan(108);
+		const first = await crane(dir);
+		const rpc = await first.rpc();
+		await rpc.ok("process:run", { id: "deep", ...js("console.log('from the deep'); process.stdin.resume(); setInterval(() => {}, 1000)") });
+		await waitFor("the workload's output", () => dataOf(rpc, "deep").includes("from the deep"));
+		await rpc.close();
+		await stopped(first);
+
+		const next = await crane(dir);
+		const again = await next.rpc();
+		expect(await again.ok("process:exists", { id: "deep" })).toEqual({ running: true });
+		await again.ok("process:attach", { id: "deep" });
+		await again.ok("process:kill", { id: "deep" });
+		await exitOf(again, "deep");
+		await again.close();
+	});
+
 	test("output printed between a socket's connect and its attach arrives once, in the replay", async () => {
 		const dir = dataDir();
 		const c = await crane(dir);

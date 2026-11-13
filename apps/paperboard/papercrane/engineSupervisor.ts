@@ -145,10 +145,14 @@ export async function spawnSupervisedClient(
     }
 
     if (!client.isConnected()) {
-        client.destroy(); clientsMap.delete(id);
         // read before the stop below: that one's own exit is not the cause
         const failure = spawnFailure as Error | null;
-        const cause = failure ? `${launch.command} could not be run: ${failure.message}` : supervisorExited ? exitDescription(supervisorProc) : "it did not answer within 5 s";
+        // read before the destroy below. A supervisor still running that was
+        // never reached says why by the last connect's error: a missing
+        // socket is one that never listened, anything else is the reason
+        const unreached = `it did not answer within 5 s${client.connectError ? ` (${client.connectError})` : ""}`;
+        const cause = failure ? `${launch.command} could not be run: ${failure.message}` : supervisorExited ? exitDescription(supervisorProc) : unreached;
+        client.destroy(); clientsMap.delete(id);
         let stderr: string;
         try { stderr = startupStderr.tail(); }
         catch (err) { stderr = `(its stderr could not be read: ${err instanceof Error ? err.message : String(err)})`; }

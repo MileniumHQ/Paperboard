@@ -111,6 +111,27 @@ export function supervisorPresent(
         : fs.existsSync(getSupervisorSocketPath(procId));
 }
 
+// The longest unix socket path a connect takes, in bytes: the kernel's
+// address field less its closing zero.
+const SOCKET_PATH_MAX = process.platform === "darwin" ? 103 : 107;
+
+// Opens the connection to an endpoint. A data folder can be deeper than a
+// socket path may be long (macOS's temporary folders, a long home folder),
+// and the desktop app's runtime refuses such a path outright. The supervisor
+// binds by the socket's name from inside its folder (supervisor/proc_unix.go:
+// listen); this connects the same way. The connect itself is made before
+// net.connect returns, so the working folder is only changed for that call.
+function connectEndpoint(socketPath: string): net.Socket {
+    if (process.platform === "win32" || Buffer.byteLength(socketPath) <= SOCKET_PATH_MAX) return net.connect(socketPath);
+    const previous = process.cwd();
+    process.chdir(path.dirname(socketPath));
+    try {
+        return net.connect(path.basename(socketPath));
+    } finally {
+        process.chdir(previous);
+    }
+}
+
 // client for a detached supervisor over IPC socket
 export class SupervisedProcessClient {
     private socket: net.Socket | null = null;
@@ -124,6 +145,8 @@ export class SupervisedProcessClient {
     private listeners = new Map<string, Function[]>();
     private status: { error?: string } | null = null;
 
+    /** why the last connect did not succeed; null once one has */
+    public connectError: string | null = null;
     public pid = 0;
     public childPid = 0;
     public isPty = false;
@@ -167,11 +190,20 @@ export class SupervisedProcessClient {
 
     public connect(): Promise<boolean> {
         return new Promise((resolve) => {
-            const socket = net.connect(this.socketPath);
+            let socket: net.Socket;
+            try {
+                socket = connectEndpoint(this.socketPath);
+            } catch (err) {
+                logger.debug(`[supervisor] could not open a connection to ${this.socketPath}:`, err);
+                this.connectError = err instanceof Error ? err.message : String(err);
+                resolve(false);
+                return;
+            }
             this.socket = socket;
 
             const connectTimeout = setTimeout(() => {
                 if (!this.isConnectedState) {
+                    this.connectError = `no answer on ${this.socketPath} within 1.5 s`;
                     socket.destroy();
                     resolve(false);
                 }
@@ -183,6 +215,7 @@ export class SupervisedProcessClient {
                 clearTimeout(connectTimeout);
                 this.isConnectedState = true;
                 this.hasConnectedOnce = true;
+                this.connectError = null;
                 this.send({ type: "attach" });
                 while (this.messageQueue.length > 0) {
                     socket.write(this.messageQueue.shift()!);
@@ -206,9 +239,12 @@ export class SupervisedProcessClient {
                 }
             });
 
-            socket.on("error", () => {
+            socket.on("error", (err) => {
                 clearTimeout(connectTimeout);
-                if (!this.isConnectedState) resolve(false);
+                if (!this.isConnectedState) {
+                    this.connectError = err.message;
+                    resolve(false);
+                }
             });
 
             socket.on("close", () => {

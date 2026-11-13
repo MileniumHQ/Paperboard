@@ -33,7 +33,7 @@ func TestListensUnderADataFolderTooDeepForASocketPath(t *testing.T) {
 	if info, err := os.Stat(address); err != nil || info.Mode()&os.ModeSocket == 0 {
 		t.Fatalf("no socket at %s: %v", address, err)
 	}
-	// a client reaches it the way the daemon does, by the full path
+	// a client reaches it the way the daemon does, by its name from inside the folder
 	accepted := make(chan error, 1)
 	go func() {
 		conn, err := listener.Accept()
@@ -42,7 +42,7 @@ func TestListensUnderADataFolderTooDeepForASocketPath(t *testing.T) {
 		}
 		accepted <- err
 	}()
-	t.Chdir(sockets) // Go's own dial has the same limit; Bun's has not
+	t.Chdir(sockets)
 	conn, err := dialEndpoint(filepath.Base(address))
 	if err != nil {
 		t.Fatal(err)

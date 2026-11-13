@@ -67,6 +67,30 @@ describe("desktop app boot", () => {
         expect(await electron.quit()).toEqual({ code: 0, signal: null });
         expect(errorLines(dataDir)).toEqual([]);
     }, WAIT_MS * 3);
+
+    // The app's own daemon reaches a supervisor by its socket's path, and a
+    // unix socket path has a short limit (103 bytes on macOS, 107 on Linux)
+    // that a deep data folder passes.
+    test("runs a workload from a data folder deeper than a socket path may be long", async () => {
+        const dataDir = path.join(tempDir("app-deep"), "d".repeat(60), "e".repeat(60));
+        fs.mkdirSync(dataDir, { recursive: true });
+        expect(Buffer.byteLength(path.join(dataDir, "sockets", `${"0".repeat(32)}.sock`))).toBeGreaterThan(108);
+        const electron = await launchElectron({ appDir: app.dir, dataDir, args: ["--skip-update"] });
+        await electron.waitEvent("shell page", (e) => e.event === "loaded" && e.url === `${SHELL}index.html`);
+        await electron.evalIn(SHELL, domCondition(`document.body.innerText.includes("This Computer")`));
+        const handshake = readHandshake(dataDir);
+        expect(handshake.pid).toBe(electron.child.pid!);
+        const socket = await CraneSocket.authed(handshake.port, handshake.token);
+        await socket.call("process:run", { id: "deep-workload", command: process.execPath, args: ["-e", "console.log('from the deep'); setInterval(() => {}, 1000)"] });
+        await socket.waitFrame("the workload's output", (f) => f.type === "event" && f.event === "process:data" && f.payload.id === "deep-workload" && String(f.payload.data).includes("from the deep"));
+        expect(await socket.call("process:exists", { id: "deep-workload" })).toEqual({ running: true });
+        await socket.call("process:kill", { id: "deep-workload" });
+        await socket.waitFrame("the workload's exit", (f) => f.type === "event" && f.event === "process:exit" && f.payload.id === "deep-workload");
+        socket.close();
+        expect(electron.failures()).toEqual([]);
+        expect(await electron.quit()).toEqual({ code: 0, signal: null });
+        expect(errorLines(dataDir)).toEqual([]);
+    }, WAIT_MS * 3);
 });
 
 // what the app and daemon logged as errors
