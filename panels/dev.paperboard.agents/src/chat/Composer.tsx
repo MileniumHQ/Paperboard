@@ -3,7 +3,7 @@
 // with the clip, pasted or dropped wait in a tray above it. Everything else
 // (the model, the computer) lives in the menu and settings.
 
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { PaperButton, PaperEffect, PaperIcon, PaperQuote, haptic } from "@mileniumhq/paperui";
 import { LIMITS, type ChatEntry } from "../contract";
 import type { Agent } from "../lib/agent";
@@ -72,10 +72,27 @@ export default function Composer(props: {
         void props.draft;
         queueMicrotask(resize);
     });
-    // a button pressed beside the box leaves the cursor in it, so a phone's keyboard stays up
-    const keepFocus = (e: PointerEvent) => {
+    // A button pressed beside the box leaves the cursor in it, so a phone's keyboard stays up.
+    // The cursor moves on mousedown, and a finger's tap makes one too; stopping pointerdown only holds it for a mouse.
+    const keepFocus = (e: MouseEvent) => {
         if (document.activeElement === field) e.preventDefault();
     };
+    // The clip opens the system's picker, which on a phone takes the whole screen. If the cursor was in the box and the picker took it,
+    // it goes back in once the picker has closed, with files or without, and the page is in front again.
+    let typing = false;
+    const resume = () => field.focus();
+    const pick = () => {
+        typing = document.activeElement === field;
+        picker.click();
+    };
+    const picked = () => {
+        if (!typing) return;
+        typing = false;
+        // a phone can report its picker closed before the page is in front again
+        if (document.hasFocus()) resume();
+        else window.addEventListener("focus", resume, { once: true });
+    };
+    onCleanup(() => window.removeEventListener("focus", resume));
     // choosing to reply puts the cursor in the box
     createEffect(() => {
         if (props.replyTo) field.focus();
@@ -145,9 +162,11 @@ export default function Composer(props: {
                     onChange={(e) => {
                         attach([...(e.currentTarget.files ?? [])]);
                         e.currentTarget.value = "";
+                        picked();
                     }}
+                    on:cancel={picked}
                 />
-                <PaperButton icon size="small" variant="text" aria-label="Attach files" title="Attach files" onPointerDown={keepFocus} onClick={() => picker.click()}>
+                <PaperButton icon size="small" variant="text" aria-label="Attach files" title="Attach files" onMouseDown={keepFocus} onClick={pick}>
                     attach_file
                 </PaperButton>
                 <textarea
@@ -181,7 +200,7 @@ export default function Composer(props: {
                         size="small"
                         variant="primary"
                         disabled={!ready()}
-                        onPointerDown={keepFocus}
+                        onMouseDown={keepFocus}
                         onClick={() => void send()}
                         aria-label="Send"
                         title={tray().uploading() ? "Waiting for files to upload" : tray().failed() ? "Remove the files that didn't upload" : "Send"}
