@@ -12,15 +12,16 @@ import {
     splitProps,
     type JSX,
 } from "solid-js";
-import { Portal } from "solid-js/web";
-import { PaperButton } from "../PaperButton";
-import { PaperRange } from "../PaperRange";
 import {
-    PaperContextMenu,
-    PaperContextMenuItem,
-    PaperContextMenuSub,
-    useContextMenuState,
-} from "../PaperContextMenu";
+    createMediaPlayer,
+    formatMediaTime,
+    MediaActions,
+    MediaError,
+    MediaPlayButton,
+    MediaSeek,
+    MediaTime,
+    PAPER_MEDIA_RATES,
+} from "../shared/media";
 import { DEFAULT_WAVEFORM_MAX_BYTES, loadWaveform } from "./waveform";
 
 export { computePeaks, loadWaveform, WAVEFORM_RESOLUTION, DEFAULT_WAVEFORM_MAX_BYTES } from "./waveform";
@@ -59,11 +60,7 @@ export function waveformFillWidth(
     return layout.offset + index * layout.pitch + (along - index * bar);
 }
 
-export const PAPER_AUDIO_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
-
-const SEEK_STEP_SECONDS = 5;
-const VOLUME_STEP = 0.05;
-const VOLUME_CLOSE_DELAY_MS = 150;
+export const PAPER_AUDIO_RATES = PAPER_MEDIA_RATES;
 
 export type PaperAudioWaveformState = "loading" | "ready" | "unavailable" | "off";
 
@@ -88,14 +85,8 @@ export interface PaperAudioProps
     onError?: (message: string) => void;
 }
 
-export function formatAudioTime(seconds: number): string {
-    if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
-    const whole = Math.floor(seconds);
-    const h = Math.floor(whole / 3600);
-    const m = Math.floor((whole % 3600) / 60);
-    const s = String(whole % 60).padStart(2, "0");
-    return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
-}
+/** "1:05", or "1:02:05" past an hour. */
+export const formatAudioTime = formatMediaTime;
 
 /** Resamples peaks to `count` bars by taking the peak of each bucket. */
 export function resamplePeaks(peaks: readonly number[], count: number): number[] {
@@ -115,22 +106,6 @@ export function resamplePeaks(peaks: readonly number[], count: number): number[]
     return out;
 }
 
-function mediaErrorMessage(error: MediaError | null): string {
-    switch (error?.code) {
-        case 1:
-            return "Loading stopped";
-        case 2:
-            return "Network error";
-        case 3:
-            return "Can't decode audio";
-        case 4:
-            // also what browsers report for a 404 or an unreachable URL
-            return "Can't load audio";
-        default:
-            return "Audio unavailable";
-    }
-}
-
 export function PaperAudio(props: PaperAudioProps) {
     const [local, rest] = splitProps(props, [
         "src",
@@ -145,31 +120,15 @@ export function PaperAudio(props: PaperAudioProps) {
         "classList",
     ]);
 
-    let audio: HTMLAudioElement | undefined;
     let track: HTMLDivElement | undefined;
 
-    const [playing, setPlaying] = createSignal(false);
-    const [currentTime, setCurrentTime] = createSignal(0);
-    const [duration, setDuration] = createSignal(Number.NaN);
-    const [muted, setMuted] = createSignal(false);
-    const [volume, setVolume] = createSignal(1);
-    const [rate, setRate] = createSignal(1);
-    const [loop, setLoop] = createSignal(false);
-    const [error, setError] = createSignal<string | null>(null);
+    const player = createMediaPlayer({ noun: "audio", onError: (message) => local.onError?.(message) });
     // measured track box and the bar token in px; before measurement (or
     // without layout) the bar is 2, the token's shipped value
     const [trackBox, setTrackBox] = createSignal({ width: 0, height: 0, bar: 2 });
     const clipId = `paper-audio-wave-${createUniqueId()}`;
     const [decoded, setDecoded] = createSignal<number[] | null>(null);
     const [waveformState, setWaveformState] = createSignal<PaperAudioWaveformState>("loading");
-
-    const menu = useContextMenuState("below");
-
-    const fail = (message: string) => {
-        setError(message);
-        setPlaying(false);
-        local.onError?.(message);
-    };
 
     // Waveform: caller peaks win; otherwise decode the source, cancelling the
     // previous decode whenever the source changes or the player unmounts.
@@ -238,167 +197,10 @@ export function PaperAudio(props: PaperAudioProps) {
         onCleanup(() => observer.disconnect());
     });
 
-    // timeupdate fires about four times a second; follow the playhead per
-    // frame while playing so the bars fill smoothly
-    let frame: number | undefined;
-    const stopFrames = () => {
-        if (frame !== undefined) cancelAnimationFrame(frame);
-        frame = undefined;
-    };
-    const tick = () => {
-        if (!audio || audio.paused) {
-            frame = undefined;
-            return;
-        }
-        setCurrentTime(audio.currentTime);
-        frame = requestAnimationFrame(tick);
-    };
-    createEffect(() => {
-        if (playing() && frame === undefined && typeof requestAnimationFrame === "function") {
-            frame = requestAnimationFrame(tick);
-        } else if (!playing()) {
-            stopFrames();
-        }
-    });
-
-    onCleanup(() => {
-        stopFrames();
-        audio?.pause();
-    });
-
-    const hasDuration = () => Number.isFinite(duration()) && duration() > 0;
-    const progress = () =>
-        hasDuration() ? Math.min(1, Math.max(0, currentTime() / duration())) : 0;
-    const started = () => playing() || currentTime() > 0;
-    // Before playback starts the readout is the length; after, the position.
-    const readout = () => formatAudioTime(started() ? currentTime() : duration());
-    const effectiveVolume = () => (muted() ? 0 : volume());
-
-    const togglePlay = async () => {
-        if (!audio) return;
-        if (!audio.paused) {
-            audio.pause();
-            return;
-        }
-        try {
-            await audio.play();
-        } catch (err) {
-            // A pause() while play() is pending rejects with AbortError: the
-            // listener asked to stop, which is not a playback failure.
-            if (err instanceof DOMException && err.name === "AbortError") return;
-            fail(
-                err instanceof DOMException && err.name === "NotAllowedError"
-                    ? "Playback blocked"
-                    : mediaErrorMessage(audio.error),
-            );
-        }
-    };
-
-    const retry = () => {
-        if (!audio) return;
-        setError(null);
-        audio.load();
-    };
-
-    const seekTo = (seconds: number) => {
-        if (!audio || !hasDuration()) return;
-        audio.currentTime = Math.min(duration(), Math.max(0, seconds));
-        setCurrentTime(audio.currentTime);
-    };
-
-    const onSeekKey: JSX.EventHandler<HTMLInputElement, KeyboardEvent> = (e) => {
-        const step =
-            e.key === "ArrowRight" || e.key === "ArrowUp"
-                ? SEEK_STEP_SECONDS
-                : e.key === "ArrowLeft" || e.key === "ArrowDown"
-                  ? -SEEK_STEP_SECONDS
-                  : null;
-        if (step !== null) {
-            e.preventDefault();
-            seekTo(currentTime() + step);
-        } else if (e.key === "Home" || e.key === "End") {
-            e.preventDefault();
-            seekTo(e.key === "Home" ? 0 : duration());
-        }
-    };
-
-    const setVolumeLevel = (value: number) => {
-        if (!audio) return;
-        audio.volume = Math.min(1, Math.max(0, value));
-        audio.muted = value === 0;
-    };
-
-    const toggleMute = () => {
-        if (!audio) return;
-        // unmuting from a dragged-to-zero volume would otherwise stay silent
-        if (audio.muted && audio.volume === 0) audio.volume = 1;
-        audio.muted = !audio.muted;
-    };
-
-    // The volume slider lives in a portal so a clipping ancestor (a card, a
-    // scroll pane) cannot cut it off. Being outside the row's tab order, its
-    // keyboard path is the volume button itself: arrows change the level.
-    let volumeButton: HTMLButtonElement | undefined;
-    let volumePopover: HTMLDivElement | undefined;
-    let volumeCloseTimer: number | undefined;
-    const [volumeOpen, setVolumeOpen] = createSignal(false);
-    const [volumePos, setVolumePos] = createSignal({ left: 0, top: 0, below: false });
-
-    const cancelVolumeClose = () => {
-        if (volumeCloseTimer !== undefined) clearTimeout(volumeCloseTimer);
-        volumeCloseTimer = undefined;
-    };
-    const openVolume = () => {
-        cancelVolumeClose();
-        if (!volumeButton) return;
-        setVolumeOpen(true);
-        const r = volumeButton.getBoundingClientRect();
-        const below = r.top - (volumePopover?.offsetHeight ?? 0) < 0;
-        setVolumePos({ left: r.left + r.width / 2, top: below ? r.bottom : r.top, below });
-    };
-    const scheduleVolumeClose = () => {
-        cancelVolumeClose();
-        volumeCloseTimer = window.setTimeout(() => {
-            volumeCloseTimer = undefined;
-            setVolumeOpen(false);
-        }, VOLUME_CLOSE_DELAY_MS);
-    };
-    createEffect(() => {
-        if (!volumeOpen()) return;
-        // a fixed popover would drift from its button; close instead
-        const close = () => setVolumeOpen(false);
-        window.addEventListener("scroll", close, true);
-        window.addEventListener("resize", close);
-        onCleanup(() => {
-            window.removeEventListener("scroll", close, true);
-            window.removeEventListener("resize", close);
-        });
-    });
-    onCleanup(cancelVolumeClose);
-
-    const onVolumeKey: JSX.EventHandler<HTMLButtonElement, KeyboardEvent> = (e) => {
-        const step =
-            e.key === "ArrowUp" || e.key === "ArrowRight"
-                ? VOLUME_STEP
-                : e.key === "ArrowDown" || e.key === "ArrowLeft"
-                  ? -VOLUME_STEP
-                  : null;
-        if (step === null) return;
-        e.preventDefault();
-        openVolume();
-        setVolumeLevel(Math.round((effectiveVolume() + step) * 100) / 100);
-    };
-
-    const toggleMenu = (e: MouseEvent) => {
-        if (menu.isOpen()) menu.close();
-        else menu.openBelow(e);
-    };
-
     const className = () =>
         [
             styles.PaperAudio,
             local.fullWidth ? styles.fullWidth : "",
-            error() ? styles.failed : "",
             local.class,
         ]
             .filter(Boolean)
@@ -413,57 +215,16 @@ export function PaperAudio(props: PaperAudioProps) {
             classList={local.classList}
         >
             <audio
-                ref={audio}
+                {...player.element}
                 src={local.src}
                 preload={local.preload ?? "metadata"}
-                loop={loop()}
-                onLoadStart={() => setError(null)}
-                onEmptied={() => {
-                    setPlaying(false);
-                    setCurrentTime(0);
-                    setDuration(Number.NaN);
-                }}
-                onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-                onDurationChange={(e) => setDuration(e.currentTarget.duration)}
-                onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-                onSeeked={(e) => setCurrentTime(e.currentTarget.currentTime)}
-                onPlay={() => setPlaying(true)}
-                onPause={(e) => {
-                    setPlaying(false);
-                    setCurrentTime(e.currentTarget.currentTime);
-                }}
-                onEnded={() => setPlaying(false)}
-                onVolumeChange={(e) => {
-                    setMuted(e.currentTarget.muted);
-                    setVolume(e.currentTarget.volume);
-                }}
-                onRateChange={(e) => setRate(e.currentTarget.playbackRate)}
-                onError={(e) => fail(mediaErrorMessage(e.currentTarget.error))}
+                loop={player.loop()}
             />
 
-            <PaperButton
-                icon
-                size="small"
-                class={styles.play}
-                aria-label={playing() ? "Pause" : "Play"}
-                disabled={error() !== null}
-                onClick={() => void togglePlay()}
-            >
-                {playing() ? "pause" : "play_arrow"}
-            </PaperButton>
+            <MediaPlayButton player={player} />
 
             <div class={styles.track} ref={track} data-waveform={waveformState()}>
-                <Show
-                    when={error() === null}
-                    fallback={
-                        <div class={styles.error} role="alert">
-                            <span class={styles.errorText}>{error()}</span>
-                            <PaperButton size="tiny" onClick={retry}>
-                                Retry
-                            </PaperButton>
-                        </div>
-                    }
-                >
+                <Show when={player.error() === null} fallback={<MediaError player={player} />}>
                     {/* The bars are a clip path; one fill rect slides underneath
                         them, advanced through bars only (waveformFillWidth) so
                         it never idles unseen in a gap. */}
@@ -497,123 +258,18 @@ export function PaperAudio(props: PaperAudioProps) {
                             <rect
                                 class={styles.waveFill}
                                 data-progress=""
-                                width={waveformFillWidth(progress(), layout(), trackBox().bar)}
+                                width={waveformFillWidth(player.progress(), layout(), trackBox().bar)}
                                 height={waveHeight()}
                             />
                         </g>
                     </svg>
-                    <input
-                        class={styles.range}
-                        type="range"
-                        min={0}
-                        max={hasDuration() ? duration() : 0}
-                        step="any"
-                        value={currentTime()}
-                        disabled={!hasDuration()}
-                        aria-label="Seek"
-                        aria-valuetext={`${formatAudioTime(currentTime())} of ${formatAudioTime(duration())}`}
-                        onInput={(e) => seekTo(Number(e.currentTarget.value))}
-                        onKeyDown={onSeekKey}
-                    />
+                    <MediaSeek player={player} />
                 </Show>
             </div>
 
-            <Show when={error() === null}>
-                <span class={styles.time}>{readout()}</span>
-            </Show>
+            <MediaTime player={player} />
 
-            {/* volume and options sit together, tighter than the row gap */}
-            <div class={styles.actions}>
-                <PaperButton
-                    ref={volumeButton}
-                    icon
-                    size="small"
-                    variant="text"
-                    aria-label={muted() ? "Unmute" : "Mute"}
-                    aria-description={`Volume ${Math.round(effectiveVolume() * 100)}%. Arrow keys change it.`}
-                    onClick={toggleMute}
-                    onKeyDown={onVolumeKey}
-                    onPointerEnter={openVolume}
-                    onPointerLeave={scheduleVolumeClose}
-                    onFocus={openVolume}
-                    onBlur={scheduleVolumeClose}
-                >
-                    {effectiveVolume() === 0
-                        ? "volume_off"
-                        : effectiveVolume() < 0.5
-                          ? "volume_down"
-                          : "volume_up"}
-                </PaperButton>
-                <Show when={volumeOpen()}>
-                    <Portal>
-                        <div
-                            ref={volumePopover}
-                            class={styles.volumePopover}
-                            classList={{ [styles.below]: volumePos().below }}
-                            style={{ left: `${volumePos().left}px`, top: `${volumePos().top}px` }}
-                            onPointerEnter={cancelVolumeClose}
-                            onPointerLeave={scheduleVolumeClose}
-                        >
-                            <div class={styles.volumeBox}>
-                                <PaperRange
-                                        orientation="vertical"
-                                    min={0}
-                                    max={1}
-                                    step={VOLUME_STEP}
-                                    value={effectiveVolume()}
-                                    tabIndex={-1}
-                                    aria-label="Volume"
-                                    valueText={(v) => `${Math.round(v * 100)}%`}
-                                    onInput={setVolumeLevel}
-                                />
-                            </div>
-                        </div>
-                    </Portal>
-                </Show>
-
-                <PaperButton
-                    icon
-                    size="small"
-                    variant="text"
-                    aria-label="Audio options"
-                    aria-haspopup="menu"
-                    aria-expanded={menu.isOpen()}
-                    onClick={toggleMenu}
-                >
-                    more_vert
-                </PaperButton>
-            </div>
-
-            <PaperContextMenu
-                open={menu.isOpen()}
-                target={menu.target()}
-                placement={menu.placement()}
-                onClose={menu.close}
-            >
-                <PaperContextMenuSub label="Playback speed" icon="speed">
-                    <For each={PAPER_AUDIO_RATES}>
-                        {(r) => (
-                            <PaperContextMenuItem
-                                value={`speed-${r}`}
-                                checked={rate() === r}
-                                onClick={() => {
-                                    if (audio) audio.playbackRate = r;
-                                }}
-                            >
-                                {r === 1 ? "Normal" : `${r}x`}
-                            </PaperContextMenuItem>
-                        )}
-                    </For>
-                </PaperContextMenuSub>
-                <PaperContextMenuItem
-                    value="loop"
-                    icon="repeat"
-                    checked={loop()}
-                    onClick={() => setLoop(!loop())}
-                >
-                    Loop
-                </PaperContextMenuItem>
-            </PaperContextMenu>
+            <MediaActions player={player} label="Audio options" />
         </div>
     );
 }

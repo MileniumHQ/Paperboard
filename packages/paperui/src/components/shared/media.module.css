@@ -1,0 +1,77 @@
+/* PaperAudio's and PaperVideo's shared controls */
+
+.actions {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.play {
+    flex-shrink: 0;
+}
+
+/* over the whole seek track, unseen: it takes the pointer and the keys */
+.range {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.range:disabled {
+    cursor: default;
+}
+
+.time {
+    flex-shrink: 0;
+    min-width: 4ch;
+    text-align: right;
+    font-size: var(--paper-text-size-2);
+    font-variant-numeric: tabular-nums;
+    color: var(--paper-text-subtle);
+}
+
+/* portaled and fixed to the volume button; the padding bridges the gap so
+   the pointer can travel from the button to the slider */
+.volumePopover {
+    position: fixed;
+    z-index: 2000;
+    transform: translate(-50%, -100%);
+    padding-bottom: var(--paper-uigap-onefourth);
+}
+
+.volumePopover.below {
+    transform: translateX(-50%);
+    padding-bottom: 0;
+    padding-top: var(--paper-uigap-onefourth);
+}
+
+.volumeBox {
+    display: flex;
+    justify-content: center;
+    padding: var(--paper-uigap-half) var(--paper-uigap-onefourth);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border-subtle);
+    border-radius: var(--paper-border-radius);
+}
+
+.error {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap-half);
+}
+
+.errorText {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--paper-text-size-2);
+    color: var(--paper-danger);
+}

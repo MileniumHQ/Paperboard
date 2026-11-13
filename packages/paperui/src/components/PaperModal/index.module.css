@@ -48,13 +48,13 @@
     pointer-events: none;
 }
 
-.covered .modalBox {
+.covered .dialog {
     opacity: 0;
     transform: scale(0.96);
     transition: opacity var(--paper-short-transition) ease-in, transform var(--paper-short-transition) ease-in;
 }
 
-.backdrop:not(.covered) .modalBox {
+.backdrop:not(.covered) .dialog {
     transition: opacity var(--paper-short-transition) ease-out, transform var(--paper-short-transition) var(--paper-ease-emphasized);
 }
 
@@ -62,6 +62,17 @@
    belongs to the page underneath, not the backdrop on its way out */
 .closing {
     pointer-events: none;
+}
+
+/* every dialog: PaperModal's box, PaperPreview's file */
+.dialog {
+    position: relative;
+    transform: translateZ(0);
+    /* The dialog element is focused to trap focus and as the fallback when it
+       has no focusable children. It is not an actionable control, so it must
+       not paint the UA focus ring: on Linux that ring follows the system
+       accent (orange on Ubuntu), which wrapped the whole modal. */
+    outline: none;
 }
 
 .modalBox {
@@ -74,13 +85,6 @@
     width: 100%;
     max-height: 85vh;
     overflow: hidden;
-    position: relative;
-    transform: translateZ(0);
-    /* The dialog element is focused to trap focus and as the fallback when it
-       has no focusable children. It is not an actionable control, so it must
-       not paint the UA focus ring: on Linux that ring follows the system
-       accent (orange on Ubuntu), which wrapped the whole modal. */
-    outline: none;
 }
 
 .small {
@@ -195,7 +199,7 @@
     animation: backdropFadeIn var(--paper-short-transition) ease-out both;
 }
 
-.backdropTransitionIn .modalBox {
+.backdropTransitionIn .dialog {
     animation: modalScaleIn var(--paper-short-transition) var(--paper-ease-emphasized) both;
 }
 
@@ -203,16 +207,16 @@
     animation: backdropFadeOut var(--paper-short-transition) ease-in both;
 }
 
-.backdropTransitionOut .modalBox {
+.backdropTransitionOut .dialog {
     animation: modalScaleOut var(--paper-short-transition) ease-in both;
 }
 
 /* a sheet rises from the bottom edge and sinks back into it */
-.bottom.backdropTransitionIn .modalBox {
+.bottom.backdropTransitionIn .dialog {
     animation: sheetIn var(--paper-mid-transition) var(--paper-ease-emphasized) both;
 }
 
-.bottom.backdropTransitionOut .modalBox {
+.bottom.backdropTransitionOut .dialog {
     animation: sheetOut var(--paper-short-transition) ease-in both;
 }
 
@@ -276,8 +280,8 @@
 @media (prefers-reduced-motion: reduce) {
     .backdropTransitionIn,
     .backdropTransitionOut,
-    .backdropTransitionIn .modalBox,
-    .backdropTransitionOut .modalBox {
+    .backdropTransitionIn .dialog,
+    .backdropTransitionOut .dialog {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
