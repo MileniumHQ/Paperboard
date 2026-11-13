@@ -9,7 +9,7 @@ export interface SourcePlayerRef {
     name: string;
     /** the server's id for this connection; kickid takes it */
     userId: number;
-    /** "[U:1:123]", "BOT" or "Console" */
+    /** "[U:1:123]" ("STEAM_0:1:123" on older engine branches), "BOT" or "Console" */
     steamId: string;
     team: string;
 }
@@ -155,8 +155,28 @@ export function isErrorLine(line: string): boolean {
     return workshop !== null && WORKSHOP_FAILURE.test(workshop[1]!);
 }
 
-/** Steam ids as Source writes them: "[U:1:<account>]". */
-export function steamId(value: unknown): string {
-    if (typeof value !== "string" || !/^\[U:1:\d{1,10}\]$/.test(value)) throw new Error("Choose a player by their Steam id");
+/**
+ * A line a dedicated server prints for a graphics library it has no use for:
+ * Garry's Mod's lists two dozen shader libraries as "#Failed to load …" at
+ * every start, each twice. They are left out of the console, where they read
+ * as a broken install.
+ */
+export const isShaderNoise = (line: string) => /^#Failed to load \S*shader\w*\.so: \(null\)$/.test(line.trim());
+
+/**
+ * How a Source server writes a player's Steam id, in its log, in `status` and
+ * for `banid`: "[U:1:<account>]" on the current engine ("steam3"), and
+ * "STEAM_0:<0 or 1>:<number>" on older branches of it such as Garry's Mod's
+ * ("steam2"), which refuses the other form.
+ */
+export type SteamIdForm = "steam3" | "steam2";
+const STEAM_ID: Readonly<Record<SteamIdForm, RegExp>> = { steam3: /^\[U:1:\d{1,10}\]$/, steam2: /^STEAM_[0-5]:[01]:\d{1,10}$/ };
+
+/** Whether a log or status id is a person's, not "BOT" or "Console". */
+export const isSteamId = (value: string, form: SteamIdForm = "steam3") => STEAM_ID[form].test(value);
+
+/** A player's Steam id as the game's server writes it; anything else is refused. */
+export function steamId(value: unknown, form: SteamIdForm = "steam3"): string {
+    if (typeof value !== "string" || !isSteamId(value, form)) throw new Error("Choose a player by their Steam id");
     return value;
 }

@@ -28,9 +28,12 @@ describe("other games' inputs", () => {
         }
     });
 
-    test("Steam ids must be [U:1:n], and cvars hold no quotes, semicolons or line breaks", () => {
+    test("Steam ids must be in the form the game's server writes, and cvars hold no quotes, semicolons or line breaks", () => {
         expect(steamId("[U:1:123456]")).toBe("[U:1:123456]");
         for (const bad of ["STEAM_0:1:1", "[U:1:1]; quit", "[U:1:1]\nquit", "[U:1:]", "[U:2:1]", 7]) expect(() => steamId(bad)).toThrow("Steam id");
+        // Garry's Mod's server writes and bans by the older form, and refuses the newer one
+        expect(steamId("STEAM_0:1:12345", "steam2")).toBe("STEAM_0:1:12345");
+        for (const bad of ["[U:1:24691]", "STEAM_0:1:1; quit", "STEAM_0:2:1", "STEAM_0:1:", "STEAM_0:1:1\nquit", "BOT"]) expect(() => steamId(bad, "steam2")).toThrow("Steam id");
         for (const bad of ['x"; rcon_password y', "a;b", "a\nb", "a\0b"]) expect(() => cvarValue(bad, "Hostname")).toThrow();
         expect(cvarValue("My Server", "Hostname")).toBe('"My Server"');
     });

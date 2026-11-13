@@ -19,6 +19,14 @@ const TIMEOUT_MS = 30 * 60_000;
 /** a dedicated server is gigabytes; a slow connection takes hours */
 const APP_TIMEOUT_MS = 6 * 60 * 60_000;
 const ID = /^[1-9]\d{0,19}$/;
+/** the branch every Steam app has, and SteamCMD installs unless told another */
+const PUBLIC_BRANCH = "public";
+/** A branch as SteamCMD's `-beta` takes it; unset is the public one. */
+function branchName(branch: string | undefined): string {
+    if (branch === undefined) return PUBLIC_BRANCH;
+    if (!/^[A-Za-z0-9._-]{1,64}$/.test(branch)) throw new Error(`Not a Steam branch name: ${branch}`);
+    return branch;
+}
 
 let queue: Promise<unknown> = Promise.resolve();
 function serialized<T>(work: () => Promise<T>): Promise<T> {
@@ -229,27 +237,30 @@ function parseVdfBlock(text: string): Map<string, VdfNode> {
 }
 
 /**
- * The newest public build of an app, from what `+app_info_print` printed: the
- * block named for the app (SteamCMD's own log lines surround it), and in it
- * depots, branches, public, buildid. Throws when the output holds none.
+ * The newest build of an app on a branch, from what `+app_info_print`
+ * printed: the block named for the app (SteamCMD's own log lines surround
+ * it), and in it depots, branches, the branch, buildid. Throws when the
+ * output holds none.
  */
-export function parseLatestBuild(lines: readonly string[], appId: number): string {
+export function parseLatestBuild(lines: readonly string[], appId: number, branch = PUBLIC_BRANCH): string {
     const clean = lines.map(l => l.replace(ANSI, ""));
     const start = clean.findIndex((l, i) => l.trim() === `"${appId}"` && clean[i + 1]?.trim() === "{");
     if (start < 0) throw new Error(`SteamCMD printed no information for app ${appId}`);
     const info = parseVdfBlock(clean.slice(start + 1).join("\n"));
     const child = (node: VdfNode | undefined, key: string) => (node instanceof Map ? node.get(key) : undefined);
-    const id = child(child(child(info.get("depots"), "branches"), "public"), "buildid");
-    if (typeof id !== "string" || !/^\d+$/.test(id)) throw new Error(`Steam lists no public build for app ${appId}`);
+    const id = child(child(child(info.get("depots"), "branches"), branch), "buildid");
+    if (typeof id !== "string" || !/^\d+$/.test(id)) throw new Error(`Steam lists no ${branch} build for app ${appId}`);
     return id;
 }
 
 /**
- * The newest public build of a Steam app, asked of Steam anonymously. It
- * waits for any install in progress: SteamCMD's state is not shareable.
+ * The newest build of a Steam app on a branch (the public one unless named),
+ * asked of Steam anonymously. It waits for any install in progress:
+ * SteamCMD's state is not shareable.
  */
-export function latestBuild(appId: number, options: { runner?: Runner; workspace?: string } = {}): Promise<string> {
+export function latestBuild(appId: number, options: { runner?: Runner; workspace?: string; branch?: string } = {}): Promise<string> {
     if (!Number.isInteger(appId) || appId <= 0) throw new Error(`Not a Steam app id: ${appId}`);
+    const branch = branchName(options.branch);
     return serialized(async () => {
         const { command, home } = await prepare(options.workspace);
         if (!options.runner) await stopLeftoverInstaller(undefined, undefined, undefined, STEAMCMD_PROC_ID);
@@ -267,7 +278,7 @@ export function latestBuild(appId: number, options: { runner?: Runner; workspace
         });
         try {
             if (result.exitCode !== 0) throw new Error(`SteamCMD exited with ${result.exitCode}`);
-            return parseLatestBuild(lines, appId);
+            return parseLatestBuild(lines, appId, branch);
         } catch (err) {
             const tail = result.tail.map(l => l.replace(ANSI, "")).slice(-8).join("\n");
             throw new Error(`Could not read the newest build of app ${appId}: ${(err as Error).message}${tail ? `\n${tail}` : ""}`);
@@ -277,11 +288,13 @@ export function latestBuild(appId: number, options: { runner?: Runner; workspace
 
 /**
  * Installs or updates a Steam dedicated server anonymously into `dir` and
- * returns the build installed. Only SteamCMD's own success line counts; a
- * download it does not confirm fails, quoting its last lines.
+ * returns the build installed: the public branch's, or the named branch's
+ * (`-beta`). Only SteamCMD's own success line counts; a download it does not
+ * confirm fails, quoting its last lines.
  */
-export function installApp(appId: number, dir: string, options: { onProgress?: (progress: AppProgress) => void; onLine?: (line: string) => void; runner?: Runner; workspace?: string } = {}): Promise<string> {
+export function installApp(appId: number, dir: string, options: { onProgress?: (progress: AppProgress) => void; onLine?: (line: string) => void; runner?: Runner; workspace?: string; branch?: string } = {}): Promise<string> {
     if (!Number.isInteger(appId) || appId <= 0) throw new Error(`Not a Steam app id: ${appId}`);
+    const branch = branchName(options.branch);
     if (!path.isAbsolute(dir)) throw new Error("A Steam app installs into an absolute folder");
     return serialized(async () => {
         const { command, home } = await prepare(options.workspace);
@@ -294,7 +307,7 @@ export function installApp(appId: number, dir: string, options: { onProgress?: (
             const result = await run({
                 id: STEAMCMD_PROC_ID,
                 command,
-                args: ["+force_install_dir", dir, "+login", "anonymous", "+app_update", String(appId), "validate", "+quit"],
+                args: ["+force_install_dir", dir, "+login", "anonymous", "+app_update", String(appId), ...(branch === PUBLIC_BRANCH ? [] : ["-beta", branch]), "validate", "+quit"],
                 cwd: path.dirname(command),
                 env: { HOME: home },
                 timeoutMs: APP_TIMEOUT_MS,

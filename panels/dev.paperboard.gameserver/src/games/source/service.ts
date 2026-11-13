@@ -9,28 +9,28 @@ import { validateOptions } from "../options";
 import { installedBuild, steamClientLibrary } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import {
-    ConsoleBuffer, assertHost, exists, isLinked, linkFolder, pushChat, readSettings, redact, report,
-    serverRoot, serverSecret, settingPort, settled, singleLine, unlinkFolder, updateSettings, writePrivate, type Context,
+    ConsoleBuffer, assertHost, exists, isLinked, linkFile, linkFolder, offlineBackup, pushChat, readSettings, redact, report,
+    resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, unlinkFolder, updateSettings, writePrivate, type Context,
 } from "../serviceKit";
 import type { GameDefinition } from "../types";
 import type { GameService } from "../serviceTypes";
 import { addonStageDir } from "../../core/addonUpload";
-import { SOURCEMOD_PACKAGES, sourceCalls, type SourceGameSpec, type SourceMapCycle, type SourceModView } from "./index";
+import { rotatesMaps, SOURCEMOD_PACKAGES, sourceCalls, type SourceGameSpec, type SourceMapCycle, type SourceModView } from "./index";
 import { pluginFile, SourceMod, SOURCEMOD_MISSING } from "./sourcemod";
 import { cvarValue, mapName, optionValue, secretsCfg, serverCfg } from "./config";
 import { cfgMapCycleFile, checkRotation, DEFAULT_MAPCYCLE, findMap, installedMaps, mapCycleFile, PAPERBOARD_MAPCYCLE, readServerCycle } from "./mapcycle";
 import { mapPictures } from "./mapPictures";
 import { playModes } from "./modes";
 import { canonicalMap, findWorkshopMaps, readWorkshopMaps, workshopId, workshopMapToAdd, workshopName, type SourceWorkshopMap } from "./workshop";
-import { consoleLine, isErrorLine, linePlayer, parseLogLine, parseStatus, steamId, type SourceLogEvent } from "./log";
-import { SourceRcon, RconError, RconNoAnswer } from "./rcon";
+import { consoleLine, isErrorLine, isShaderNoise, isSteamId, linePlayer, parseLogLine, parseStatus, steamId as checkedSteamId, type SourceLogEvent } from "./log";
+import { passwordReadAsTls, SourceRcon, RconError, RconNoAnswer } from "./rcon";
 import { bannedUserCfg, noStats, SourceRoster, type SourceStats } from "./roster";
 
 /** A player on the running server, by the server's user id for their connection. */
 export interface SourceOnline {
     userId: number;
     name: string;
-    /** "[U:1:…]", or "BOT" */
+    /** "[U:1:…]" ("STEAM_0:…" where the game writes that form), or "BOT" */
     steamId: string;
     team: string;
     /** "medic", once they have picked a class */
@@ -42,6 +42,8 @@ export interface SourceOnline {
 
 const DEFAULT_CLIENT_PORT = 27005;
 const STDBUF = ["/usr/bin/stdbuf", "/bin/stdbuf"];
+/** the colours some servers (Garry's Mod's) write into their console lines */
+const ANSI = /\x1b\[[0-9;]*m/g;
 /** how long stats gather before they are written to the roster */
 const STATS_FLUSH_MS = 15_000;
 
@@ -56,6 +58,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
     const ids = sourceCalls(spec.id);
     const PROC = `${spec.id}-server`;
     const options = spec.options;
+    const steamId = (value: unknown) => checkedSteamId(value, spec.steamIds);
 
     const local = serverLocal(() => ({
         busy: false,
@@ -174,9 +177,16 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
     const secretsFile = async () => path.join(await cfgDir(), "paperboard_secrets.cfg");
     async function removeSecrets() { await fs.rm(await secretsFile(), { force: true }); }
 
-    /** Points the game's logs folder at logs/ in the server folder, where Logs reads them and backups keep them. */
+    /**
+     * Points the game's logs folder at logs/ in the server folder, where Logs
+     * reads them and backups keep them, and with it what the game keeps of
+     * the owner's (spec.keeps).
+     */
     async function linkLogs() {
-        await linkFolder(path.join(await gameDir(), "logs"), path.join(await root(), "logs"));
+        const game = await gameDir();
+        const home = await root();
+        for (const folder of ["logs", ...(spec.keeps?.folders ?? [])]) await linkFolder(path.join(game, folder), path.join(home, folder));
+        for (const file of spec.keeps?.files ?? []) await linkFile(path.join(game, file), path.join(home, file));
     }
 
     // SourceMod: its folders live in the server folder and are linked into
@@ -207,6 +217,8 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
     }
     /** Links SourceMod's folders into the game's while it is on, and takes them out while it is off. */
     async function placeMods() {
+        // a game without SourceMod has no links of its to make or take out; its own addons folder stays as it is
+        if (!spec.sourcemod) return false;
         const links = [path.join(await gameDir(), "addons"), path.join(await cfgDir(), "sourcemod")] as const;
         if (!(await modsOn())) {
             for (const link of links) await unlinkFolder(link);
@@ -260,7 +272,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             seenPlayers: humans.reduce((seen, p) => (seen.includes(p.name) ? seen : appendCapped(seen, p.name)), prev.seenPlayers),
         }));
     }
-    const isPlayer = (id: string) => /^\[U:1:\d+\]$/.test(id);
+    const isPlayer = (id: string) => isSteamId(id, spec.steamIds);
 
     function observeEvent(ctx: Context, event: SourceLogEvent) {
         const online = local().online;
@@ -389,11 +401,11 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
 
     const online = (ctx: Context) => settled(ctx, spec.name);
     const steam: SteamInstallSpec = {
-        game, appId: spec.appId, ids: { info: ids.info, latest: ids.latest, install: ids.install },
+        game, appId: spec.appId, branch: spec.branch, ids: { info: ids.info, latest: ids.latest, install: ids.install },
         installDir, flag: local, loadOptions,
         async afterInstall() { await linkLogs(); await writeConfigs(); },
-        // setup ends with how the server plays (ids.play)
-        setupAfterInstall: true,
+        // a game with a map rotation ends setup with how the server plays (ids.play)
+        setupAfterInstall: rotatesMaps(spec),
     };
 
     return {
@@ -429,6 +441,8 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 const next = validateOptions(options, spec.name, patch, await settings());
                 // the starting map is chosen from the installed ones; the Overview offers only those
                 if (Object.hasOwn(patch, "map") && !(await mapAvailable(mapName(patch.map)))) throw new Error(`${patch.map} is not installed`);
+                if (spec.rconReadsTls && typeof patch.rconPassword === "string" && passwordReadAsTls(patch.rconPassword))
+                    throw new Error(`${spec.name}'s server takes an RCON password of exactly ${Buffer.byteLength(patch.rconPassword, "utf8")} characters for a web request and drops it. Make it longer or shorter.`);
                 // refuse what a console line can't hold before anything is saved
                 for (const option of options) if (Object.hasOwn(patch, option.id) && (option.cvar || option.kind === "secret") && patch[option.id] !== "") cvarValue(patch[option.id], option.label);
                 const live: string[] = [];
@@ -607,6 +621,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 local().modsActive = (await modsOn()) && (await isLinked(path.join(await gameDir(), "addons")));
                 await readStatus(ctx).catch((err) => report(ctx, `Could not read who is on ${spec.name}`, err));
             } else await removeSecrets().catch((err) => report(ctx, `Could not remove ${spec.name}'s start passwords`, err));
+            if (spec.offlineBackups) await resumeAfterBackup(ctx, spec.id, running);
         },
         async beforeRemove() { if (local().busy) throw new Error(`Wait for ${spec.name}'s current operation`); },
         async dispose() {
@@ -661,7 +676,8 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             local().online.clear();
             local().modsActive = modsActive;
             const internet = optionValue(options.find((o) => o.id === "internet")!, saved) !== false;
-            const args = ["-game", spec.gameDir, "-console", "-ip", "0.0.0.0", "-port", String(port), "+clientport", String(Number(saved.clientPort ?? DEFAULT_CLIENT_PORT)), "-nohltv", "+maxplayers", String(Number(optionValue(options.find((o) => o.id === "maxplayers")!, saved))), "+sv_lan", internet ? "0" : "1", "+exec", "paperboard_secrets.cfg", "+map", map];
+            const own = (await spec.launchArgs?.(saved, await gameDir())) ?? [];
+            const args = ["-game", spec.gameDir, "-console", "-ip", "0.0.0.0", "-port", String(port), "+clientport", String(Number(saved.clientPort ?? DEFAULT_CLIENT_PORT)), "-nohltv", "+maxplayers", String(Number(optionValue(options.find((o) => o.id === "maxplayers")!, saved))), "+sv_lan", internet ? "0" : "1", "+exec", "paperboard_secrets.cfg", ...own, "+map", map];
             return {
                 message: `Starting ${spec.name}${saved.build ? ` build ${saved.build}` : ""}…`,
                 command: linux
@@ -706,14 +722,14 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             await rcon().exec(`say ${singleLine(message, "Message")}`);
         },
         observeLine(ctx, raw) {
-            const line = redact(raw.replace(/\r/g, ""), local().secrets);
+            const line = redact(raw.replace(/\r/g, "").replace(ANSI, ""), local().secrets);
             // every line about a player names their team, kills and objectives too; status doesn't
             const subject = linePlayer(line);
             const known = subject?.team && subject.team !== "Unassigned" ? local().online.get(subject.userId) : undefined;
             if (known) known.team = subject!.team;
             const event = parseLogLine(line);
             if (event) observeEvent(ctx, event);
-            if (!line.trim()) return;
+            if (!line.trim() || isShaderNoise(line)) return;
             local().console.push(ctx, consoleLine(line));
         },
         async assertFileAccess(_ctx, file, write) {
@@ -729,6 +745,14 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             yield settingPort({ name: "game", label: spec.name, protocol: "tcp+udp", key: "port", fallback: spec.defaultPort, onWrite: (port) => ctx.setState({ serverPort: String(port) }) }, saved);
             yield settingPort({ name: "client", label: `${spec.name} client`, protocol: "udp", key: "clientPort", fallback: DEFAULT_CLIENT_PORT }, saved);
         },
-        backup: { mode: "quiesce", before: async () => {}, recover: async () => {}, withConsistentData: async (_ctx, work) => work() },
+        backup: spec.offlineBackups
+            ? offlineBackup({
+                gameId: spec.id, name: spec.name, processId: PROC, flag: local,
+                announce: async () => { await rcon().exec("say The server is stopping for a backup and will be back shortly."); },
+                // the server writes what it keeps as it goes, and closes it as it quits
+                save: async () => {},
+                clean: removeSecrets,
+            })
+            : { mode: "quiesce", before: async () => {}, recover: async () => {}, withConsistentData: async (_ctx, work) => work() },
     };
 }

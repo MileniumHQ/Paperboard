@@ -6,6 +6,8 @@ import type { GameDefinition } from "../types";
 export interface SteamInstallSpec {
     game: GameDefinition;
     appId: number;
+    /** The Steam branch the server is installed from, when it is not the public one. */
+    branch?: string;
     /** Call names: the install's facts, its newest build on Steam, and install or update. */
     ids: { info: string; latest: string; install: string };
     installDir(): Promise<string>;
@@ -22,12 +24,13 @@ export interface SteamInstallSpec {
 }
 
 /** Downloads one Steam app with the install's progress in state; any failure shows as an error stage, then throws. */
-export async function installWithProgress(ctx: Context, appId: number, dir: string, after: () => Promise<void>): Promise<string> {
+export async function installWithProgress(ctx: Context, appId: number, dir: string, after: () => Promise<void>, branch?: string): Promise<string> {
     // SteamCMD updates itself and signs in before it says anything about the app
     ctx.setState({ installProgress: { stage: "preparing", percent: 0 } });
     let last = "";
     try {
         const build = await installApp(appId, dir, {
+            branch,
             onProgress: ({ stage, percent, bytes }) => {
                 const next = { stage, percent: Math.floor(percent), bytes };
                 // a big game moves a percent in minutes; its bytes, a tenth of a megabyte at a time, show it moving
@@ -51,16 +54,16 @@ export async function installWithProgress(ctx: Context, appId: number, dir: stri
 export interface SteamUpdateStatus {
     /** the installed build; null before an install */
     installed: string | null;
-    /** Steam's newest public build */
+    /** Steam's newest build on the branch the server is installed from */
     latest: string;
     /** true only for an install that is behind; a server not installed has nothing to update */
     updateAvailable: boolean;
 }
 
 /** Asks Steam for the newest build and compares it with the install. Throws when Steam cannot be asked. */
-export async function steamUpdateStatus(spec: Pick<SteamInstallSpec, "appId" | "installDir">, steam: Parameters<typeof latestBuild>[1] = {}): Promise<SteamUpdateStatus> {
+export async function steamUpdateStatus(spec: Pick<SteamInstallSpec, "appId" | "branch" | "installDir">, steam: Parameters<typeof latestBuild>[1] = {}): Promise<SteamUpdateStatus> {
     const installed = await installedBuild(spec.appId, await spec.installDir());
-    const latest = await latestBuild(spec.appId, steam);
+    const latest = await latestBuild(spec.appId, { branch: spec.branch, ...steam });
     return { installed, latest, updateAvailable: installed !== null && installed !== latest };
 }
 
@@ -76,7 +79,7 @@ export function steamInstall(spec: SteamInstallSpec): (ctx: Context) => Promise<
         if (current) return current;
         const install = exclusive(ctx, flag, name, async () => {
             assertHost(spec.game);
-            const build = await installWithProgress(ctx, spec.appId, await spec.installDir(), spec.afterInstall);
+            const build = await installWithProgress(ctx, spec.appId, await spec.installDir(), spec.afterInstall, spec.branch);
             await updateSettings(spec.setupAfterInstall ? { build } : { configured: true, build });
             await spec.loadOptions(ctx);
         }).finally(() => running.delete(flag));

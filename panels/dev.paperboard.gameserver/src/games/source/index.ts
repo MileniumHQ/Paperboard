@@ -4,6 +4,7 @@ import { gameArt } from "../art";
 import { AUTOMATION_CALLS, AUTOMATION_TAB } from "../automation";
 import { hostRoutes } from "../host";
 import type { ModscanGame } from "../steam/modscan";
+import type { SteamIdForm } from "./log";
 import type { SourcePlugin } from "./sourcemod";
 import type { SourceWorkshopMap } from "./workshop";
 
@@ -22,6 +23,8 @@ export interface SourceGameSpec {
     icon: string;
     /** Steam's id for the dedicated server; SteamCMD downloads it anonymously. */
     appId: number;
+    /** The Steam branch the server is installed from, when it is not the public one. */
+    branch?: string;
     /** The mod folder under the install, passed as -game. */
     gameDir: string;
     /**
@@ -29,6 +32,33 @@ export interface SourceGameSpec {
      * the install; on Linux, with the folder of the libraries it ships.
      */
     binaries: { linux?: { executable: string; libraryDir: string }; win32?: { executable: string } };
+    /** How the server writes a player's Steam id, and takes it for a ban; "steam3" unless said. */
+    steamIds?: SteamIdForm;
+    /**
+     * The server drops an RCON packet whose first byte is a TLS hello's, as
+     * Garry's Mod's does (rcon.ts): commands are padded past that length by
+     * themselves, and an RCON password of that length is refused when it is set.
+     */
+    rconReadsTls?: boolean;
+    /**
+     * The game's own launch arguments, from its saved options, after the ones
+     * every Source server takes and before `+map`. It refuses a value the
+     * server could not start with; `gameDir` is the installed game folder.
+     */
+    launchArgs?(saved: Record<string, unknown>, gameDir: string): Promise<string[]>;
+    /**
+     * What the game writes into its game folder that is the server owner's:
+     * folders and files, relative to it. They live in the server folder, where
+     * backups keep them and an update leaves them, and are linked into the
+     * install.
+     */
+    keeps?: { folders?: readonly string[]; files?: readonly string[] };
+    /**
+     * The game keeps data that a copy taken while it runs could tear, such as
+     * a database: a backup stops the server for the copy and starts it again.
+     * Otherwise its files copy as it runs.
+     */
+    offlineBackups?: boolean;
     /**
      * System libraries the Linux server links that Origami can supply, by
      * file name: the package is installed and put on the library path only
@@ -46,7 +76,12 @@ export interface SourceGameSpec {
     options: readonly SourceOption[];
     /** Class names where the game log's differ from what players call them ("heavyweapons" is the Heavy). */
     roleNames?: Readonly<Record<string, string>>;
-    /** Game mode names by map prefix ("ctf" for ctf_2fort), shown beside each map; prefixes of one mode share its name. */
+    /**
+     * Game mode names by map prefix ("ctf" for ctf_2fort), shown beside each
+     * map; prefixes of one mode share its name. A game with them plays a map
+     * rotation: it has the Maps tab, and setup asks for a mode and a starting
+     * map. A game without plays one map until it is changed.
+     */
     mapModes?: Readonly<Record<string, string>>;
     /**
      * A wiki page listing the game's maps with a picture each, read at runtime
@@ -77,6 +112,9 @@ export interface SourceMapPictures {
     /** the maps' real names ("2Fort" for ctf_2fort), by file name in lower case; a map the wiki names by its file name has none */
     titles: Record<string, string>;
 }
+
+/** Whether the game plays a rotation of maps by mode: the Maps tab and setup's questions are for those that do. */
+export const rotatesMaps = (spec: Pick<SourceGameSpec, "mapModes">) => spec.mapModes !== undefined;
 
 /** The game mode a map's prefix names, if the game lists it. */
 export function mapMode(spec: Pick<SourceGameSpec, "mapModes">, map: string): string | undefined {
@@ -151,7 +189,7 @@ export function sourceGame(spec: SourceGameSpec): GameDefinition {
         { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
         { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },
         { id: "players", label: "Players", icon: "group", group: "Play", owner: "game", variant: "fill", width: "full" },
-        { id: "maps", label: "Maps", icon: "map", group: "Play", owner: "game" },
+        ...(rotatesMaps(spec) ? [{ id: "maps", label: "Maps", icon: "map", group: "Play", owner: "game" } as const] : []),
         { id: "versions", label: "Updates", icon: "update", group: "Software", owner: "game" },
         ...(spec.sourcemod ? [{ id: "mods", label: "Mods", icon: "extension", group: "Software", owner: "game" } as const] : []),
         { id: "options", label: "Options", icon: "tune", group: "Server", owner: "shared" },
@@ -169,8 +207,8 @@ export function sourceGame(spec: SourceGameSpec): GameDefinition {
             return {
                 options: spec.options,
                 optionsWhileRunning: "next-start",
-                // a Source server keeps no world; its files copy as it runs
-                backupWhileRunning: "quiesce",
+                // most Source servers keep no world, and their files copy as they run
+                backupWhileRunning: spec.offlineBackups ? "offline" : "quiesce",
                 control: { kind: "rcon" },
                 widgets: ["status", "console"],
                 packages: [{ id: "steamcmd", purpose: `Downloads and updates the ${spec.name} dedicated server from Steam` }, ...Object.values(spec.libraryPackages ?? {}), ...(spec.sourcemod ? SOURCEMOD_PACKAGES : [])],

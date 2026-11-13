@@ -52,6 +52,23 @@ describe("Steam and Terraria installs", () => {
         expect(() => parseLatestBuild(lines, 440)).toThrow("SteamCMD printed no information for app 440");
     });
 
+    test("a game on a Steam branch is installed from it, and its updates are that branch's builds", async () => {
+        const GMOD = 4020;
+        const info = path.join(STEAM_FIXTURES, "gmod-app-info.txt");
+        const steam = fakeSteamcmd({ appInfo: { [GMOD]: info }, install: { [GMOD]: { mode: "ok", build: "26623757" } } });
+        const dir = tempDir();
+        expect(await installApp(GMOD, dir, { branch: "x86-64" })).toBe("26623757");
+        expect(appUpdates(steam.runs())).toEqual([["+force_install_dir", dir, "+login", "anonymous", "+app_update", String(GMOD), "-beta", "x86-64", "validate", "+quit"]]);
+        // the public branch has another build: an install from x86-64 is not behind it
+        expect(await latestBuild(GMOD)).toBe("25375525");
+        expect(await steamUpdateStatus({ appId: GMOD, branch: "x86-64", installDir: async () => dir })).toEqual({ installed: "26623757", latest: "26623757", updateAvailable: false });
+        await expect(latestBuild(GMOD, { branch: "no-such-branch" })).rejects.toThrow("Steam lists no no-such-branch build for app 4020");
+        for (const bad of ["x86-64 +quit", "", "a/b", "-validate x"]) {
+            expect(() => installApp(GMOD, dir, { branch: bad })).toThrow("Not a Steam branch name");
+            expect(() => latestBuild(GMOD, { branch: bad })).toThrow("Not a Steam branch name");
+        }
+    });
+
     test("output cut short, or a manifest without a build, throws instead of guessing", async () => {
         fakeSteamcmd({ appInfo: { [PALWORLD_APP_ID]: PALWORLD_INFO }, truncateInfo: true });
         await expect(latestBuild(PALWORLD_APP_ID)).rejects.toThrow(`Could not read the newest build of app ${PALWORLD_APP_ID}`);

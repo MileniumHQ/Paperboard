@@ -2,8 +2,9 @@ import Chat from "../../components/Chat";
 import PlayerAvatar from "../../components/PlayerAvatar";
 import type { GameDefinition } from "../types";
 import type { GameUI } from "../uiTypes";
+import SteamSetup from "../steam/SteamSetup";
 import SteamVersions from "../steam/SteamVersions";
-import { sourceCalls, type SourceGameSpec } from "./index";
+import { rotatesMaps, sourceCalls, type SourceGameSpec } from "./index";
 import SourceOverview from "./Overview";
 import SourcePlayers from "./Players";
 import SourceSetup from "./Setup";
@@ -15,7 +16,10 @@ export function sourceUI(spec: SourceGameSpec, game: GameDefinition): GameUI {
     return {
         create(ctx) {
             return {
-                setup: (props) => <SourceSetup spec={spec} onComplete={props.onComplete} />,
+                // a game with a map rotation asks how it plays; another is set up once it is downloaded
+                setup: (props) => (rotatesMaps(spec)
+                    ? <SourceSetup spec={spec} onComplete={props.onComplete} />
+                    : <SteamSetup name={spec.name} infoAction={ids.info} installAction={ids.install} onComplete={props.onComplete} />),
                 tab(id) {
                     switch (id) {
                         case "overview": return <SourceOverview spec={spec} game={game} />;

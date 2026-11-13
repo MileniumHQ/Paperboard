@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { gameServer } from "./helpers/game";
 import { readTree, tempDir, writeTree } from "./helpers/tmp";
-import { linkFolder } from "../src/games/serviceKit";
+import { linkFile, linkFolder } from "../src/games/serviceKit";
 import { tf2Service } from "../src/games/tf2/service";
 import { PlayerStore, formatBanlist, parseBanlist } from "../src/games/terraria/roster";
 import { importUpload, inspectUpload, trashWorld, UPLOAD_DIR } from "../src/games/terraria/worldStore";
@@ -57,6 +57,31 @@ describe("other games' files", () => {
         await expect(linkFolder(path.join(clash, "game", "Saved"), path.join(clash, "saved"))).rejects.toThrow("World.sav is in both Saved in the game's folder and saved; move one aside in Files");
         expect(readTree(clash)).toMatchObject({ "game/Saved/World.sav": "from the game", "saved/World.sav": "from a backup" });
         expect(fs.lstatSync(path.join(clash, "game", "Saved")).isDirectory()).toBe(true);
+    });
+
+    test("linking a game's file moves the one already there first, works before the game has made it, and refuses when it is on both sides", async () => {
+        const root = tempDir();
+        writeTree(root, { "install/garrysmod/sv.db": "players' data" });
+        const link = path.join(root, "install", "garrysmod", "sv.db");
+        const target = path.join(root, "sv.db");
+        await linkFile(link, target);
+        expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+        expect(fs.readFileSync(target, "utf8")).toBe("players' data");
+        // what the game writes through the link lands in the server folder; a second link is a no-op
+        fs.writeFileSync(link, "more data");
+        await linkFile(link, target);
+        expect(fs.readFileSync(target, "utf8")).toBe("more data");
+
+        // before the game's first run there is no file on either side: the game makes it through the link
+        const fresh = tempDir();
+        await linkFile(path.join(fresh, "install", "garrysmod", "sv.db"), path.join(fresh, "sv.db"));
+        fs.writeFileSync(path.join(fresh, "install", "garrysmod", "sv.db"), "first run");
+        expect(fs.readFileSync(path.join(fresh, "sv.db"), "utf8")).toBe("first run");
+
+        const clash = tempDir();
+        writeTree(clash, { "install/garrysmod/sv.db": "from the game", "sv.db": "from a backup" });
+        await expect(linkFile(path.join(clash, "install", "garrysmod", "sv.db"), path.join(clash, "sv.db"))).rejects.toThrow("sv.db is in both the game's folder and the server folder; move one aside in Files");
+        expect(readTree(clash)).toMatchObject({ "install/garrysmod/sv.db": "from the game", "sv.db": "from a backup" });
     });
 
     test("a TF2 rotation is written to Paperboard's own cycle file; the user's mapcycle.txt is never touched, and their server.cfg wins", async () => {
