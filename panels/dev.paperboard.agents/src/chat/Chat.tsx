@@ -1,5 +1,5 @@
 import { For, Show, createComputed, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
-import { PAPER_PANEL_COMPACT_WIDTH, PaperButton, PaperContextMenu, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPresence, PaperProgress, PaperQuote, PaperText, type MarkdownImage } from "@mileniumhq/paperui";
+import { PaperButton, PaperContextMenu, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPresence, PaperProgress, PaperQuote, PaperText, type MarkdownImage } from "@mileniumhq/paperui";
 import { createStore, reconcile } from "solid-js/store";
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
@@ -94,15 +94,6 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
             .catch((e) => setNotice(failure("Conversation not started", e)))
             .finally(() => setStartingNew(false));
     };
-    // the header's three buttons fold into one menu when the chat is narrow: a phone, or a page open beside it
-    const headerMenu = useContextMenuState();
-    let header!: HTMLDivElement;
-    const [compact, setCompact] = createSignal(false);
-    onMount(() => {
-        const measure = new ResizeObserver(() => setCompact(header.clientWidth < PAPER_PANEL_COMPACT_WIDTH));
-        measure.observe(header);
-        onCleanup(() => measure.disconnect());
-    });
     // a bubble's menu, on a right click: answer it, or copy what's selected in it (or all of it)
     const menu = useContextMenuState();
     const [menuOn, setMenuOn] = createSignal<{ said: Said | null; text: string } | null>(null);
@@ -259,36 +250,6 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
             <Show when={agent.state.chat.compacting}>
                 <PaperProgress class={styles.compacting} aria-label={`${name()} is compacting the conversation`} title="Compacting the conversation to save space" />
             </Show>
-            <PaperContextMenu open={headerMenu.isOpen()} target={headerMenu.target()} placement={headerMenu.placement()} onClose={() => headerMenu.close()}>
-                <PaperContextMenuItem
-                    icon="history"
-                    onClick={() => {
-                        headerMenu.close();
-                        setHistoryOpen(true);
-                    }}
-                >
-                    Past conversations
-                </PaperContextMenuItem>
-                <PaperContextMenuItem
-                    icon="add"
-                    disabled={!canStartNew()}
-                    onClick={() => {
-                        headerMenu.close();
-                        startNew();
-                    }}
-                >
-                    New conversation
-                </PaperContextMenuItem>
-                <PaperContextMenuItem
-                    icon="tune"
-                    onClick={() => {
-                        headerMenu.close();
-                        props.onMenu();
-                    }}
-                >
-                    Computer and settings
-                </PaperContextMenuItem>
-            </PaperContextMenu>
 
             <div
                 class={styles.list}
@@ -300,41 +261,25 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                     if (list.scrollTop < MORE_AT_PX && drawn() < rows().length) drawMore();
                 }}
             >
-                {/* who this is, in the middle; the conversation's buttons on the sides, or one menu when the chat is narrow.
-                    It stays at the top of the list, and the conversation scrolls on under it, fading into a blur */}
-                <div class={styles.header} ref={header}>
+                {/* who this is, in the middle, and tapping their name opens their computer and settings; the conversation's buttons on the left.
+                    It stays at the top of the list, over the conversation scrolling under it */}
+                <div class={styles.header}>
                     <div class={styles.side}>
-                        <Show when={!compact()}>
-                            <PaperButton icon variant="text" aria-label="Past conversations" title="Past conversations" onClick={() => setHistoryOpen(true)}>
-                                history
-                            </PaperButton>
-                        </Show>
+                        <PaperButton icon variant="text" aria-label="Past conversations" title="Past conversations" onClick={() => setHistoryOpen(true)}>
+                            history
+                        </PaperButton>
+                        <PaperButton icon variant="text" aria-label="New conversation" title="New conversation" disabled={!canStartNew()} onClick={startNew}>
+                            add
+                        </PaperButton>
                     </div>
                     <Face class={styles.face} face={face} size={AVATAR_PX} frame="sphere" hologram skin={skinFor(agent.state.settings?.name)} />
                     <div class={styles.who}>
-                        <PaperButton variant="text" size="small" class={styles.name} title="Open the menu" onClick={() => props.onMenu()}>
+                        <PaperButton variant="text" size="small" class={styles.name} aria-label={`${name()}: computer and settings`} title="Computer and settings" onClick={() => props.onMenu()}>
                             <span class={styles.nameText}>{name()}</span>
                             <PaperIcon>chevron_right</PaperIcon>
                         </PaperButton>
                         <Show when={status()}>
                             <PaperText preset="hint">{status()}</PaperText>
-                        </Show>
-                    </div>
-                    <div class={`${styles.side} ${styles.end}`}>
-                        <Show
-                            when={!compact()}
-                            fallback={
-                                <PaperButton icon variant="text" aria-label="Conversation menu" title="Conversation menu" onClick={(e) => headerMenu.openBelow(e.currentTarget, { align: "right" })}>
-                                    more_horiz
-                                </PaperButton>
-                            }
-                        >
-                            <PaperButton icon variant="text" aria-label="New conversation" title="New conversation" disabled={!canStartNew()} onClick={startNew}>
-                                add
-                            </PaperButton>
-                            <PaperButton icon variant="text" aria-label="Menu" title="Menu" onClick={() => props.onMenu()}>
-                                more_horiz
-                            </PaperButton>
                         </Show>
                     </div>
                 </div>

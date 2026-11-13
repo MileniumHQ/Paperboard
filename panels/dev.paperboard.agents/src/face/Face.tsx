@@ -35,7 +35,7 @@ export function Face(props: {
     frame?: "face" | "sphere";
     /** a painted sphere and features (see skins.ts); a painted face is always shown whole */
     skin?: FaceSkin | null;
-    /** the sphere drawn as the Agent's hologram: a glowing cyan ball with a bright rim; a skin wins over it */
+    /** the sphere drawn as the Agent's hologram: a ball glowing in the panel's color, with a bright rim; a skin wins over it */
     hologram?: boolean;
     class?: string;
 }) {
