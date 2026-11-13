@@ -11,7 +11,7 @@ export default function DaemonCliDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">Server daemon reference</PaperText>
             <PaperText preset="body" as="p">
-                Every command, option, environment variable and exit code of <PaperCode>papercrane</PaperCode>, the Paperboard server daemon, version 0.3.0.
+                Every command, option, environment variable and exit code of <PaperCode>papercrane</PaperCode>, the Paperboard server daemon, version 0.4.0.
                 The same list is printed by <PaperCode>papercrane --help</PaperCode>, and the options of one command by <PaperCode>papercrane &lt;command&gt; --help</PaperCode>.
             </PaperText>
 
@@ -104,7 +104,7 @@ papercrane --host 127.0.0.1             # only accept this computer`}
             </PaperTable>
             <PaperCode block language="text">
 {`The Paperboard server daemon is running.
-  Version    0.3.0
+  Version    0.4.0
   PID        48211
   Listening  https://192.168.1.50:45464
   Data       /home/ada/.paperboard
@@ -117,7 +117,7 @@ papercrane --host 127.0.0.1             # only accept this computer`}
 {`{
   "running": true,
   "dataDir": "/home/ada/.paperboard",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "hostname": "homeserver",
   "pid": 48211,
   "listen": {

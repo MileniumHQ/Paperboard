@@ -14,7 +14,7 @@
     },
     "apps/origami": {
       "name": "origami",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "devDependencies": {
         "@cloudflare/workers-types": "^5.20261005.1",
         "@types/bun": "latest",
@@ -26,7 +26,7 @@
     },
     "apps/origami/library": {
       "name": "paperboard-panel-library",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "dependencies": {
         "@mileniumhq/paperui": "workspace:*",
         "solid-js": "^1.9.17",
@@ -57,7 +57,7 @@
     },
     "apps/paperboard": {
       "name": "paperboard",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "dependencies": {
         "@electron-toolkit/preload": "^3.0.2",
         "@electron-toolkit/utils": "^4.0.0",
@@ -92,7 +92,7 @@
     },
     "apps/paperdocs": {
       "name": "paperdocs",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "dependencies": {
         "@mileniumhq/paperui": "workspace:*",
         "solid-js": "^1.9.17",
@@ -110,7 +110,7 @@
     },
     "apps/pbd": {
       "name": "pbd",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "devDependencies": {
         "@cloudflare/workers-types": "^5.20261005.1",
         "@types/bun": "latest",
@@ -122,7 +122,7 @@
     },
     "packages/crane-launcher": {
       "name": "@mileniumhq/paperboard",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "bin": {
         "paperboard": "./dist/cli.js",
       },
@@ -137,7 +137,7 @@
     },
     "packages/create-panel": {
       "name": "@mileniumhq/create-panel",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "bin": {
         "create-panel": "./dist/cli.js",
       },
@@ -151,7 +151,7 @@
     },
     "packages/paperapi": {
       "name": "@mileniumhq/paperapi",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "bin": {
         "paperapi": "./dist/cli.js",
       },
@@ -171,7 +171,7 @@
     },
     "packages/paperui": {
       "name": "@mileniumhq/paperui",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "dependencies": {
         "anser": "^2.3.5",
         "marked": "^18.0.14",

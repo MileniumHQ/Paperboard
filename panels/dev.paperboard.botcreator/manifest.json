@@ -1,7 +1,7 @@
 {
     "name": "Bot Creator",
     "id": "dev.paperboard.botcreator",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Create and manage interactive Discord bots",
     "publisher": "Paperboard",
     "base": "./dist/index.html",

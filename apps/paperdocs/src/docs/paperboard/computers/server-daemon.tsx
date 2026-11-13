@@ -25,7 +25,7 @@ export default function ServerDaemonDoc() {
                 <li>Paperboard is installed on the computer you will manage it from. See <PaperLink href="/docs/paperboard/install/">Install Paperboard</PaperLink>.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
-                These pages describe version 0.3.0 of the server daemon. Older versions do not have the <PaperCode>pair</PaperCode>, <PaperCode>status</PaperCode> and <PaperCode>install-service</PaperCode> commands.
+                These pages describe version 0.4.0 of the server daemon. Older versions do not have the <PaperCode>pair</PaperCode>, <PaperCode>status</PaperCode> and <PaperCode>install-service</PaperCode> commands.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="download">Download</PaperText>
@@ -152,7 +152,7 @@ Paired Computers (0):
                 With no command, the package opens the desktop app instead; see <PaperLink href="/docs/paperboard/install/#terminal">Install from a terminal</PaperLink>.
             </PaperText>
             <PaperText preset="body" as="p">
-                The package runs server daemon 0.3.0 or newer. If the newest published daemon is older, it stops with an error that names both versions, and downloads nothing.
+                The package runs server daemon 0.4.0 or newer. If the newest published daemon is older, it stops with an error that names both versions, and downloads nothing.
                 A service installed through npx keeps running the version it was installed with. After a new release, run <PaperCode>npx @mileniumhq/paperboard install-service</PaperCode> again to move the service to it.
             </PaperText>
 

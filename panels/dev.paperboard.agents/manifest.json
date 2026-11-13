@@ -1,7 +1,7 @@
 {
     "name": "Agent",
     "id": "dev.paperboard.agents",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "An agent you text, with a computer of its own",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
