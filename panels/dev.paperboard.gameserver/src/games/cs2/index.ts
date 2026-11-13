@@ -53,6 +53,8 @@ export const CS2: SourceGameSpec = {
     mapModes: { de: "Bomb Defusal", cs: "Hostage Rescue", ar: "Arms Race" },
     // it plays the map it is on, round after round; there is no map cycle file
     rotation: false,
+    // the 640×360 screenshot the game's map picker shows
+    installPictures: { archive: "pak01_dir.vpk", path: "panorama/images/map_icons/screenshots/360p/{map}_png.vtex_c" },
 };
 
 export const cs2 = sourceGame(CS2);

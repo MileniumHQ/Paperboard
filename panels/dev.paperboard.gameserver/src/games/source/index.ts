@@ -98,6 +98,8 @@ export interface SourceGameSpec {
      * (the dedicated server ships none). Maps without one are shown without.
      */
     mapPictures?: SourceMapPictureSource;
+    /** Map pictures the game ships in its own install, read on the computer that runs the server. */
+    installPictures?: SourceInstallPictures;
     /**
      * The server loads Steam Workshop maps itself, as `workshop/<id>`: the
      * Maps tab searches the Workshop for them and a server can start on, change
@@ -113,6 +115,20 @@ export interface SourceMapPictureSource {
     name: string;
     /** the page, an https address */
     page: string;
+}
+
+/**
+ * Where a game's install keeps its map pictures, from the folder its files
+ * are in (gameDir), with {map} for a map's name. Each is a PNG, or a Source 2
+ * texture (.vtex_c) that holds one.
+ */
+export interface SourceInstallPictures {
+    /** the VPK directory file holding them: "garrysmod_dir.vpk" */
+    archive: string;
+    /** a map's picture inside it: "maps/thumb/{map}.png" */
+    path: string;
+    /** a map's picture as a file of its own, which a map someone adds brings: "maps/thumb/{map}.png" */
+    loose?: string;
 }
 
 /** The pictures a game's wiki shows, by map name, and where they came from. */
@@ -144,6 +160,7 @@ export const sourceCalls = (id: string) => ({
     changeMap: `${id}-change-map`,
     maps: `${id}-maps`,
     mapPictures: `${id}-map-pictures`,
+    mapPicture: `${id}-map-picture`,
     mapCycle: `${id}-map-cycle`,
     mapCycleSet: `${id}-map-cycle-set`,
     play: `${id}-play`,
@@ -171,6 +188,7 @@ export function describedCalls(spec: SourceGameSpec): string[] {
     return [
         ids.info, ids.latest, ids.install, ids.players, ids.metrics, ids.kick, ids.ban, ids.unban, ids.changeMap, ids.maps,
         ...(spec.mapPictures ? [ids.mapPictures] : []),
+        ...(spec.installPictures ? [ids.mapPicture] : []),
         ...(rotatesMaps(spec) ? [ids.mapCycle, ids.mapCycleSet, ids.play] : []),
         ...(spec.workshop ? [ids.workshopMaps, ids.workshopFind, ids.workshopAdd, ids.workshopRemove] : []),
         ...(spec.sourcemod ? [ids.sourcemod, ids.sourcemodSet, ids.plugin, ids.pluginRemove, ids.pluginUpload, ids.admin] : []),
@@ -215,7 +233,7 @@ export const SOURCEMOD_PACKAGES = [
 export function sourceGame(spec: SourceGameSpec): GameDefinition {
     const ids = sourceCalls(spec.id);
     const tabs: GameTab[] = [
-        { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
+        { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill", compactVariant: "page" },
         { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },
         { id: "players", label: "Players", icon: "group", group: "Play", owner: "game", variant: "fill", width: "full" },
         ...(rotatesMaps(spec) ? [{ id: "maps", label: "Maps", icon: "map", group: "Play", owner: "game" } as const] : []),

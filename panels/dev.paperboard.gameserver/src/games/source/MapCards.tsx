@@ -6,6 +6,7 @@ import {
     PaperIcon,
     PaperInput,
     PaperLink,
+    PaperLoader,
     PaperMediaCard,
     PaperMediaCardGroup,
     PaperQuote,
@@ -59,6 +60,15 @@ export function MapPicturesCredit(props: { pictures: MapPicturesState }) {
                 </PaperText>
             )}
         </Show>
+    );
+}
+
+/** A map whose picture is still coming from the server. */
+function PictureLoading() {
+    return (
+        <PaperFlex center fullWidth fullHeight>
+            <PaperLoader loaderStatus="indeterminate" delay={400} label="Loading the map's picture" />
+        </PaperFlex>
     );
 }
 
@@ -152,7 +162,7 @@ export default function MapCards(props: {
                             const names = () => mapNames(map, props.pictures);
                             return (
                                 <PaperMediaCard
-                                    banner={map.picture ?? props.pictures.of(map.name) ?? <NoPicture />}
+                                    banner={map.picture ?? props.pictures.of(map.name) ?? (props.pictures.loading(map.name) ? <PictureLoading /> : <NoPicture />)}
                                     bannerAlt={names().title}
                                     title={breakable(names().title)}
                                     subtitle={names().file ? breakable(names().file!) : undefined}

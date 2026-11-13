@@ -20,6 +20,7 @@ import { pluginFile, SourceMod, SOURCEMOD_MISSING } from "./sourcemod";
 import { cvarValue, mapName, optionValue, secretsCfg, serverCfg } from "./config";
 import { cfgMapCycleFile, checkRotation, DEFAULT_MAPCYCLE, findMap, installedMaps, mapCycleFile, PAPERBOARD_MAPCYCLE, readServerCycle } from "./mapcycle";
 import { mapPictures } from "./mapPictures";
+import { installMapPicture } from "./installPictures";
 import { playModes } from "./modes";
 import { canonicalMap, findWorkshopMaps, readWorkshopMaps, workshopId, workshopMapToAdd, workshopName, type SourceWorkshopMap } from "./workshop";
 import { consoleLine, isErrorLine, isShaderNoise, isSteamId, linePlayer, parseLogLine, parseStatus, steamId as checkedSteamId, type SourceLogEvent } from "./log";
@@ -556,6 +557,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 if (!spec.mapPictures) throw new Error(`${spec.name} has no source of map pictures`);
                 return mapPictures(spec.mapPictures);
             },
+            ...(spec.installPictures ? { [ids.mapPicture]: async (_ctx: unknown, { map }: { map?: unknown }) => installMapPicture(await gameDir(), spec.installPictures!, String(map ?? "")) } : {}),
             [ids.workshopMaps]: () => workshopLibrary(),
             [ids.workshopFind]: async (_ctx, { query }) => {
                 if (typeof query !== "string") throw new Error("Type what to search the Steam Workshop for");

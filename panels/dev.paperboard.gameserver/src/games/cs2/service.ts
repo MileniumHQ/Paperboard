@@ -18,6 +18,7 @@ import { cvarValue, mapName, optionValue } from "../source/config";
 import { consoleLine, logBody, parseLogLine, steamId, isSteamId, type SourceLogEvent } from "../source/log";
 import { noStats, SourceRoster, type SourceStats } from "../source/roster";
 import type { SourceOnline } from "../source/service";
+import { installMapPicture } from "../source/installPictures";
 import { cs2, CS2, MODES, type Cs2Mode } from "./index";
 import { activatedMap, consoleSaid, isErrorLine, parseStatusPlayers, STATUS_END, STATUS_PLAYERS, withoutPositions } from "./console";
 
@@ -317,6 +318,7 @@ export const cs2Service: GameService = {
             return true;
         },
         [ids.maps]: async () => installedMaps(await gameDir()),
+        [ids.mapPicture]: async (_ctx, { map }) => installMapPicture(await gameDir(), CS2.installPictures!, String(map ?? "")),
         [ids.changeMap]: async (ctx, { map: raw }) => {
             const map = mapName(raw);
             if (!(await mapAvailable(map))) throw new Error(`${map} is not installed`);

@@ -35,6 +35,8 @@ export const GMOD: SourceGameSpec = {
     // either branch join a server on either.
     branch: "x86-64",
     gameDir: "garrysmod",
+    // the game's thumbnails, and those a map someone adds brings
+    installPictures: { archive: "garrysmod_dir.vpk", path: "maps/thumb/{map}.png", loose: "maps/thumb/{map}.png" },
     binaries: { linux: { executable: "bin/linux64/srcds", libraryDir: "bin/linux64" }, win32: { executable: "srcds_win64.exe" } },
     steamIds: "steam2",
     rconReadsTls: true,
