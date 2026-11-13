@@ -1,0 +1,59 @@
+/* One line of the text it sits in, never taller: the font, size and line
+   height are the paragraph's, the padding is only to the sides, and it hangs
+   from the top of its line, so the line box keeps the height it had. */
+.PaperInlineChip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    vertical-align: top;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0 var(--paper-uigap-onefourth);
+    border: 0;
+    border-radius: var(--paper-border-radius-half);
+    background: color-mix(in srgb, var(--paper-primary) 12%, transparent);
+    color: var(--paper-primary-ink);
+    font: inherit;
+    line-height: inherit;
+    font-weight: 600;
+    text-align: start;
+    cursor: pointer;
+    transition: background var(--paper-tiny-transition) ease;
+}
+
+@media (hover: hover) {
+    .PaperInlineChip:hover {
+        background: color-mix(in srgb, var(--paper-primary) 20%, transparent);
+    }
+}
+@media (hover: none) {
+    .PaperInlineChip:active:not([data-paper-press-out]) {
+        background: color-mix(in srgb, var(--paper-primary) 20%, transparent);
+    }
+}
+
+.PaperInlineChip:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+.PaperInlineChip:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+/* the icon is the text's size, and no taller than its line */
+.PaperInlineChip .icon {
+    flex-shrink: 0;
+    margin: 0;
+    font-size: var(--paper-inline-icon-scale);
+    line-height: 1;
+}
+
+.label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

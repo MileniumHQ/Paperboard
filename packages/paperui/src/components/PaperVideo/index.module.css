@@ -1,0 +1,114 @@
+/* as wide as its picture, up to its container; never too narrow for its controls */
+.PaperVideo {
+    display: flex;
+    flex-direction: column;
+    width: fit-content;
+    max-width: 100%;
+    min-width: min(100%, var(--paper-size-card-min));
+    box-sizing: border-box;
+    overflow: hidden;
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border-subtle);
+    border-radius: var(--paper-border-radius);
+    color: var(--paper-text);
+    font-family: var(--paper-font-family-rounded);
+}
+
+/* a picture narrower than the controls sits in the middle */
+.stage {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    min-height: 0;
+    background: var(--paper-surface-inset);
+    cursor: pointer;
+}
+
+/* the picture keeps its shape: scaled down to fit both the width and the
+   height a caller allows with --paper-video-max-height */
+.video {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: var(--paper-video-max-height, var(--paper-size-panel-height-large));
+}
+
+.bigPlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--paper-on-color);
+    font-size: var(--paper-icon-size-large);
+    pointer-events: none;
+}
+
+.bigPlay > * {
+    aspect-ratio: 1;
+    padding: var(--paper-uigap-half);
+    border-radius: 50%;
+    background: var(--paper-scrim);
+}
+
+.bar {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-onefourth);
+    border-top: var(--paper-border-width) solid var(--paper-border-subtle);
+}
+
+.track {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    height: var(--paper-control-size-small);
+    display: flex;
+    align-items: center;
+    margin-left: var(--paper-uigap-onefourth);
+    border-radius: var(--paper-border-radius-half);
+}
+
+/* the range input carries focus; the ring belongs on the visible track */
+@media (hover: hover) {
+    .track:has(input[type="range"]:focus-visible) {
+        outline: var(--paper-focus-ring);
+        outline-offset: var(--paper-focus-offset);
+    }
+}
+
+/* PaperAudio's colours, as one line instead of bars */
+.rail {
+    position: relative;
+    width: 100%;
+    height: var(--paper-thick-border-width);
+    border-radius: var(--paper-thick-border-width);
+    background: var(--paper-border-strong);
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.fill {
+    height: 100%;
+    background: var(--paper-primary);
+}
+
+/* full screen: the picture takes the screen, the bar stays under it */
+.fullscreen {
+    width: 100%;
+    border: none;
+    border-radius: 0;
+}
+
+.fullscreen .stage {
+    flex: 1 1 auto;
+}
+
+.fullscreen .video {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    object-fit: contain;
+}

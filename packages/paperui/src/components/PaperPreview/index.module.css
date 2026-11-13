@@ -1,0 +1,127 @@
+/* the file and its Close button above it, as one column on the scrim */
+.PaperPreview {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    width: 100%;
+    max-width: var(--paper-size-panel-wide);
+    max-height: 100%;
+    min-height: 0;
+}
+
+/* a picture or a film gets the whole screen to fill */
+.PaperPreview[data-kind="image"],
+.PaperPreview[data-kind="video"] {
+    max-width: 100%;
+    height: 100%;
+}
+
+.PaperPreview[data-kind="audio"] {
+    max-width: var(--paper-size-panel-small);
+}
+
+.PaperPreview[data-kind="markdown"] {
+    max-width: var(--paper-size-panel-large);
+}
+
+.top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap);
+    flex-shrink: 0;
+}
+
+/* on the scrim, which is dark in both themes */
+.name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--paper-on-color);
+    font-size: var(--paper-text-size-3);
+    font-weight: 600;
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.frame {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.image {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    min-height: 0;
+    object-fit: contain;
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-inset);
+}
+
+/* the screen's height, short of the scrim's rim, the Close row and the controls */
+.video {
+    --paper-video-max-height: calc(100dvh - var(--paper-control-size-medium) * 4);
+}
+
+.audio {
+    flex-shrink: 0;
+}
+
+/* markdown and messages read on a page of their own */
+.sheet {
+    box-sizing: border-box;
+    width: 100%;
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--paper-uigap-double);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    box-shadow: var(--paper-element-shadow);
+}
+
+.document {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+}
+
+/* code scrolls both ways inside its own block, so its copy button stays put */
+.code {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    width: 100%;
+    max-height: 100%;
+    min-height: 0;
+}
+
+.code > :first-child {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    box-shadow: var(--paper-element-shadow);
+}
+
+/* a copyable block centres a short line beside its button; a file starts at its top */
+.PaperPreview .codeBlock {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: flex-start;
+    overflow: auto;
+    overscroll-behavior: contain;
+}

@@ -255,6 +255,8 @@ body[data-unselectable="true"],
     --paper-code-padding-x: 0.35em;
     --paper-badge-font-scale: 0.88em;
     --paper-link-font-scale: 0.85em;
+    /* an icon in a line of text, like a PaperInlineChip's: a little over the text's size, still inside its line */
+    --paper-inline-icon-scale: 1.15em;
     --paper-console-prefix-scale: 1.15em;
     --paper-console-line-height: 1.45em;
     --paper-media-icon-size: 3em;

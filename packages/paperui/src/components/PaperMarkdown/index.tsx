@@ -49,8 +49,26 @@ export interface PaperMarkdownProps {
      * `![a cat](attachment:abc123)`.
      */
     renderImage?: (image: MarkdownImage) => JSX.Element | undefined;
+    /**
+     * Render a link yourself: called for every `[text](href "title")`, and
+     * an HTML `<a>` under `allowHtml`, before the default, with the href as
+     * written, any scheme (refusing an unsafe one is yours to do). Return
+     * undefined for the default rendering. This is how a panel turns its own
+     * links into something else, such as `[notes.md](attachment:abc123)`
+     * into a PaperInlineChip that opens the file.
+     */
+    renderLink?: (link: MarkdownLink) => JSX.Element | undefined;
     class?: string;
     classList?: JSX.HTMLAttributes<HTMLDivElement>["classList"];
+}
+
+export interface MarkdownLink {
+    href: string;
+    title: string | null;
+    /** what the link reads as, with no markup */
+    text: string;
+    /** the link's content, drawn as PaperMarkdown would */
+    children: () => JSX.Element;
 }
 
 export interface MarkdownImage {
@@ -170,6 +188,7 @@ export function PaperMarkdown(props: PaperMarkdownProps) {
         "allowImages",
         "allowHtml",
         "renderImage",
+        "renderLink",
         "class",
         "classList",
     ]);
@@ -275,6 +294,13 @@ export function PaperMarkdown(props: PaperMarkdownProps) {
             case "br":
                 return <br />;
             case "a": {
+                const custom = local.renderLink?.({
+                    href: el.attrs.href ?? "",
+                    title: el.attrs.title ?? null,
+                    text: textOf(el.children, leafText),
+                    children,
+                });
+                if (custom !== undefined) return custom;
                 const href = safeHref(el.attrs.href);
                 if (!href) return children();
                 return <PaperLink href={href} title={el.attrs.title}>{children()}</PaperLink>;
@@ -461,6 +487,13 @@ export function PaperMarkdown(props: PaperMarkdownProps) {
                 );
             case "link": {
                 const link = token as Tokens.Link;
+                const custom = local.renderLink?.({
+                    href: link.href,
+                    title: link.title ?? null,
+                    text: plainText(link.tokens),
+                    children: () => <Inline tokens={link.tokens} />,
+                });
+                if (custom !== undefined) return custom;
                 const href = safeHref(link.href);
                 if (!href) return <Inline tokens={link.tokens} />;
                 return (
