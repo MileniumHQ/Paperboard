@@ -52,6 +52,9 @@ function MessageContent(props: { message: ChatMessage; avatar: (name: string) =>
     return <PaperText size={3} breakWord>{m.text}</PaperText>;
 }
 
+/** how near its end, in pixels, the chat still counts as read at its end */
+const END_SLACK_PX = 24;
+
 /** The game's in-game chat. Each game draws its own small player avatar. */
 export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
     let scrollRef: HTMLDivElement | undefined;
@@ -60,12 +63,18 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
 
     onMount(() => initServerListeners());
 
+    // the chat follows new messages only while it's read at its end; someone
+    // scrolled up to read stays where they are
+    let atEnd = true;
+    const onScroll = () => {
+        if (scrollRef) atEnd = scrollRef.scrollHeight - scrollRef.scrollTop - scrollRef.clientHeight < END_SLACK_PX;
+    };
     const scrollToBottom = () => {
         if (scrollRef) scrollRef.scrollTop = scrollRef.scrollHeight;
     };
 
     createEffect(() => {
-        if (chatMessages().length > 0) setTimeout(scrollToBottom, 0);
+        if (chatMessages().length > 0 && atEnd) setTimeout(scrollToBottom, 0);
     });
 
     const handleSend = (e: Event) => {
@@ -74,6 +83,8 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
         if (!text) return;
         setSendError("");
         setInputVal("");
+        // what you send is what you want to see
+        atEnd = true;
         // a message that did not go out comes back to the field, with why
         sendChatMessage(text).catch((err) => {
             setInputVal(text);
@@ -88,6 +99,7 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
             <PaperCard grow minHeight={0}>
                 <PaperFlex
                     ref={(el) => (scrollRef = el)}
+                    onScroll={onScroll}
                     direction="column"
                     fullWidth
                     grow
@@ -107,7 +119,7 @@ export default function Chat(props: { avatar: (name: string) => JSX.Element }) {
                     >
                         <For each={chatMessages()}>
                             {(msg) => (
-                                <PaperFlex minWidth={0}>
+                                <PaperFlex minWidth={0} data-selectable="true">
                                     <MessageContent message={msg} avatar={props.avatar} />
                                 </PaperFlex>
                             )}
