@@ -6,9 +6,6 @@
 /** the project index, in the panel's files */
 export const PROJECTS_FILE = "projects.json";
 export const PROJECTS_VERSION = 1;
-/** the one canvas from before projects; read once to become "My flows" */
-export const LEGACY_CANVAS_FILE = "canvas.json";
-export const MIGRATED_PROJECT_NAME = "My flows";
 export const NEW_PROJECT_NAME = "Untitled project";
 export const MAX_PROJECT_NAME = 128;
 /** a project is a canvas a person keeps; more than this is not a workspace */
@@ -86,13 +83,6 @@ export function readProjectIndex(saved: unknown): ProjectMeta[] | null {
 
 export function projectIndexDocument(projects: ProjectMeta[]): ProjectIndex {
     return { version: PROJECTS_VERSION, projects };
-}
-
-/** True when a stored pre-projects canvas holds anything worth keeping. */
-export function legacyCanvasHasContent(saved: unknown): boolean {
-    const doc = saved as any;
-    if (!doc || typeof doc !== "object") return false;
-    return ["flows", "notes", "functions"].some((key) => Array.isArray(doc[key]) && doc[key].length > 0);
 }
 
 /** Most recently edited first, as the home screen lists them. */

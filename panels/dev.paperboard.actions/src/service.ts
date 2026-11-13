@@ -28,13 +28,10 @@ import { ACTIONS_PANEL_ID } from "./panelId";
 import { isBlankMatchInput, matchHolds, payloadFieldValue } from "./lib/runtime";
 import { findManualFlow, flowLabels, isManualFlow, MAX_FLOW_CHOICES, recordRun, type FlowChoice, type FlowRun } from "./lib/widgetFlows";
 import {
-    LEGACY_CANVAS_FILE,
     MAX_PROJECTS,
-    MIGRATED_PROJECT_NAME,
     PROJECTS_FILE,
     cleanProjectName,
     createProjectId,
-    legacyCanvasHasContent,
     nextProjectName,
     projectCanvasPath,
     projectIndexDocument,
@@ -562,10 +559,6 @@ function projectDocument(projectId: string) {
             }
             await config.set(saved, ACTIONS_PANEL_ID, projectCanvasPath(projectId));
         },
-        // TODO(remove after v0.4): with the update in removedSteps.ts
-        backup: async (saved) => {
-            await config.set(saved, ACTIONS_PANEL_ID, `projects/${projectId}.before-0.3.json`);
-        },
         validate: validateCanvas,
         apply: async (canvas) => {
             const project = projects.get(projectId);
@@ -615,25 +608,12 @@ function keepDraft(project: Project): Promise<void> {
     });
 }
 
-/**
- * The stored project list. Before projects there was one canvas: the first
- * read turns it into a project named "My flows", and canvas.json is left as
- * it was, as the backup.
- */
+/** The stored project list; none yet is an empty one. */
 async function readIndex(): Promise<ProjectMeta[]> {
     const stored = readProjectIndex(await config.get(ACTIONS_PANEL_ID, PROJECTS_FILE));
     if (stored) return stored;
-    const legacy = await config.get(ACTIONS_PANEL_ID, LEGACY_CANVAS_FILE);
-    const metas: ProjectMeta[] = [];
-    if (legacyCanvasHasContent(legacy)) {
-        const now = Date.now();
-        const meta: ProjectMeta = { id: createProjectId(), name: MIGRATED_PROJECT_NAME, enabled: true, createdAt: now, editedAt: now };
-        await config.set(legacy, ACTIONS_PANEL_ID, projectCanvasPath(meta.id));
-        metas.push(meta);
-        console.log(`[ActionsService] moved the canvas into the project "${MIGRATED_PROJECT_NAME}"; canvas.json stays as it was`);
-    }
-    await config.set(projectIndexDocument(metas), ACTIONS_PANEL_ID, PROJECTS_FILE);
-    return metas;
+    await config.set(projectIndexDocument([]), ACTIONS_PANEL_ID, PROJECTS_FILE);
+    return [];
 }
 
 /**
