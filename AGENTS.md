@@ -10,6 +10,7 @@ Paperboard is a dashboard for self-hostable programs. Panels are like the apps. 
 - **App keys live in `.env.local`:** Third-party app keys (like the Google Drive OAuth client) go in gitignored `apps/paperboard/.env.local`. Release builds need that file. The privacy page (`apps/paperdocs/src/site/pages/privacy.md`) must list every backup provider and every outbound service.
 - **Fail loudly:** Never let Paperboard swallow a failure. The worst thing that could happen is a button not working and there's no way to know why. Always show errors when they occur.
 - **Don't run remote code:** Panels can run any code they want, but that doesn't mean they should run network code. Don't make it possible for a panel to run code or commands from outside the panel unless directed.
+- **Don't load untrusted URLs in a page:** A page never loads a URL that came from untrusted content (model output, a web page, a tool result), not even an image. The service fetches it under a network policy and hands the page the bytes, or it isn't loaded.
 - **No weird fallbacks:** Don't create a placeholder if something isn't available, throw an error and handle it.
 - **Changelogs are suspended:** No changelogs right now. I'm figuring that out.
 - **Nothing ships that is unfinished:** Don't write experimental code, write production-ready code.
