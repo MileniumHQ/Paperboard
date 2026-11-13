@@ -10,7 +10,8 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { LIMITS, PANEL_ID, type Harness, type Settings } from "../contract";
 import { AcpTurn, type AcpEvent } from "./acp";
-import { askLaunch, HARNESS_NAMES, parseTurnLine } from "./harness";
+import { askInstructions, askLaunch, HARNESS_NAMES, parseTurnLine } from "./harness";
+import type { TurnLog } from "./turnLog";
 import { writeLine } from "./mcpClient";
 import type { TurnHost } from "./conversation";
 
@@ -31,6 +32,8 @@ export interface AskDeps {
     /** an empty folder to run in: no project files or instruction files for the harness to pick up */
     workdir: string;
     askMs?: number;
+    /** the developer's log of every turn (turnLog.ts), when it's switched on */
+    log?: TurnLog | null;
 }
 
 export class Asker {
@@ -57,8 +60,16 @@ export class Asker {
         if (this.running.size >= MAX_ASKING) throw new Error(`the agent is already answering ${MAX_ASKING} questions; ask again once one is done`);
         const id = `${PANEL_ID}.ask.${randomUUID()}`;
         this.running.add(id);
+        const log = this.deps.log ?? null;
+        const started = Date.now();
+        const lines: string[] = [];
         try {
-            return await this.run(id, settings, command, text, custom);
+            const answer = await this.run(id, settings, command, text, custom, log ? lines : null);
+            log?.ask({ harness: settings.harness, model: settings.model, question: text, instructions: askInstructions(settings.name, custom), answer, ms: Date.now() - started, lines });
+            return answer;
+        } catch (e) {
+            log?.ask({ harness: settings.harness, model: settings.model, question: text, instructions: askInstructions(settings.name, custom), error: e instanceof Error ? e.message : String(e), ms: Date.now() - started, lines });
+            throw e;
         } finally {
             this.running.delete(id);
         }
@@ -69,7 +80,7 @@ export class Asker {
         await Promise.allSettled([...this.running].map((id) => this.deps.host.kill(id, "SIGKILL")));
     }
 
-    private async run(id: string, settings: Settings, command: string, question: string, instructions: string | null): Promise<string> {
+    private async run(id: string, settings: Settings, command: string, question: string, instructions: string | null, lines: string[] | null): Promise<string> {
         const { host } = this.deps;
         const launch = askLaunch({ harness: settings.harness, command, model: settings.model, name: settings.name, question, instructions });
         const messages: string[] = [];
@@ -101,6 +112,7 @@ export class Asker {
                   })
                 : null;
         const onLine = (line: string) => {
+            lines?.push(line);
             if (acp) acp.line(line);
             else for (const ev of parseTurnLine(settings.harness, line)) onEvent(ev);
         };

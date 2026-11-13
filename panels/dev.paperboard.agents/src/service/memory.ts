@@ -211,7 +211,7 @@ export class Memory {
     // ------------------------------------------------------- the agent's view
 
     toolset(): Toolset {
-        return { id: "memory", tools: () => MEMORY_TOOLS, call: (name, args) => this.call(name, args), instructions: () => this.instructions() };
+        return { id: "memory", tools: () => MEMORY_TOOLS, call: (name, args) => this.call(name, args), instructions: () => MEMORY_INSTRUCTIONS, context: () => this.context() };
     }
 
     private async call(name: string, args: Record<string, unknown>): Promise<ToolResult> {
@@ -242,7 +242,7 @@ export class Memory {
     }
 
     /** Facts and the notes' index, read fresh each turn so edits (the user's too) are seen. */
-    async instructions(): Promise<string> {
+    async context(): Promise<string> {
         let list: MemoryList;
         try {
             list = await this.list();
@@ -251,17 +251,11 @@ export class Memory {
         }
         const facts = list.facts.length ? list.facts.map((f) => `- [${f.id}] ${f.text}`).join("\n") : "(nothing yet)";
         const notes = list.notes.length ? list.notes.map((n) => `- ${n.key}: ${n.when}`).join("\n") : "(none yet)";
-        return `**Memory:** your only one, shared with the user, who can read and edit it.
-Facts, always with you:
-${facts}
-Notes, read one with \`read_note\` when its description applies:
-${notes}
-- **Facts:** \`remember\` short, durable things about the user and their world.
-- **Notes:** \`save_note\` (key, when it's needed, markdown body) anything long or only sometimes relevant.
-- **Forget:** \`forget\` what's stale.
-- **No secrets:** never store tokens, passwords or keys.`;
+        return `What you remember:\n${facts}\nYour notes (\`read_note\` one when its description applies):\n${notes}`;
     }
 }
+
+export const MEMORY_INSTRUCTIONS = `**Memory:** shared with the user, who can read and edit it. \`remember\` short, lasting facts about them and their world; \`save_note\` anything long or only sometimes needed; \`forget\` what's stale. Never store passwords, tokens or keys.`;
 
 function oneLine(v: unknown, what: string, max: number): string {
     if (typeof v !== "string") throw new MemoryError(`${what} must be text`);

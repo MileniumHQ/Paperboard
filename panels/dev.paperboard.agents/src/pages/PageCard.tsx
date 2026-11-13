@@ -1,44 +1,44 @@
-// An app the agent showed the user: its picture, its name and what it's for,
+// A page the agent showed the user: its picture, its name and what it's for,
 // and Open, which puts it beside the chat. It is never a link.
 
 import { Show, createSignal } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
-import type { AppEntry } from "../contract";
+import type { PageEntry } from "../contract";
 import { failure, type Failure } from "../lib/failure";
 import type { Launcher } from "./launcher";
 import Picture from "./Picture";
-import styles from "./AppCard.module.css";
+import styles from "./PageCard.module.css";
 
-export default function AppCard(props: { entry: AppEntry; apps: Launcher }) {
+export default function PageCard(props: { entry: PageEntry; pages: Launcher }) {
     const e = () => props.entry;
-    const there = () => props.apps.exists(e().app);
+    const there = () => props.pages.exists(e().app);
     const [error, setError] = createSignal<Failure | null>(null);
     const [busy, setBusy] = createSignal(false);
 
     const open = () => {
         setError(null);
         setBusy(true);
-        props.apps
+        props.pages
             .open(e().app)
-            .catch((err) => setError(failure("App not opened", err)))
+            .catch((err) => setError(failure("Page not opened", err)))
             .finally(() => setBusy(false));
     };
 
     return (
         <PaperFlex direction="row">
             <PaperCard fullWidth={false} shrink maxWidth="panel-small" padding="full" gap="half" role="region" aria-label={e().title} data-message={e().id}>
-                {/* in the narrow column beside an open app, Open wraps under the
+                {/* in the narrow column beside an open page, Open wraps under the
                     text instead of squeezing it to a word per line */}
                 <PaperFlex direction="row" align="center" gap="full" wrap>
                     <Show when={there()} fallback={<PaperIcon>delete</PaperIcon>}>
-                        <Picture apps={props.apps} name={e().app} title={e().title} taken />
+                        <Picture pages={props.pages} name={e().app} title={e().title} taken />
                     </Show>
                     <PaperFlex class={styles.text} gap="onefourth">
                         <PaperText preset="label">
                             {e().title}
                         </PaperText>
                         <PaperText preset="hint">
-                            {there() ? e().description : "This app was deleted."}
+                            {there() ? e().description : "This page was deleted."}
                         </PaperText>
                     </PaperFlex>
                     <Show when={there()}>

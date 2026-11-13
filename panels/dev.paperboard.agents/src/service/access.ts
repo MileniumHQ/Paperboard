@@ -34,18 +34,40 @@ const LIST_ENTRIES = 500;
 /** folders a search doesn't go into unless it's asked to start there */
 const SEARCH_SKIPS = new Set([".git", "node_modules"]);
 
-export const ACCESS_INSTRUCTIONS = `**The user's computer:** your own computer (your home folder, your browser) is yours: do your work there, freely. The user's own computer is theirs; reach it only when they want something on it fixed or changed (their files, their projects, their programs), with the \`user_computer_\` tools, after they allow it.
-- **Ask once, for the whole task:** \`request_access\` with every folder and command the task needs, up to ${L.items}, and a \`reason\` that says plainly what you'll do, where, and why. Then finish your turn; their answer starts the next one.
-- **Ask for no more than you need:** the smallest folder that holds the work (a project's folder, not their home). For a command, the exact program and arguments; set \`anyArguments\` only when what follows will vary (\`npm install\` and any package name). Never a shell line: one program and its arguments, run in an allowed folder.
-- **A folder** lets you list, read, search and write files in it. Deleting, moving, installing or building is a command, and is asked for.
-- **Already allowed** is listed below; use it without asking again. If they say no, don't ask again for the same thing unless they bring it up.`;
+export const ACCESS_INSTRUCTIONS = `**The user's computer:** yours is for your work; theirs is only for when they want something on it fixed or changed (their files, projects or programs), with the \`user_computer_\` tools. \`request_access\` once per task, for everything it needs at the smallest scope that works (a project's folder, not their home), then end your turn: their answer starts the next. Use what's already allowed without asking again, and never ask again for something they refused unless they bring it up.`;
+
+/**
+ * The user's computer as the agent needs to know it: which system, which version and which processor, since
+ * commands, downloads and paths all depend on them. Read when asked, from what the system itself says.
+ */
+export function describeComputer(platform: NodeJS.Platform = process.platform, arch: string = process.arch, read: (file: string) => string = (f) => fs.readFileSync(f, "utf8")): string {
+    const cpu = ({ x64: "x86-64", arm64: "ARM64", ia32: "x86 (32-bit)", arm: "ARM (32-bit)" } as Record<string, string>)[arch] ?? arch;
+    let system: string;
+    if (platform === "linux") {
+        // the distribution names itself in os-release; the kernel is the same on all of them
+        const release = read("/etc/os-release");
+        const name = release.match(/^PRETTY_NAME="?([^"\n]+)"?$/m)?.[1] ?? release.match(/^NAME="?([^"\n]+)"?$/m)?.[1];
+        system = `${name ?? "Linux"} (Linux kernel ${os.release()})`;
+    } else if (platform === "darwin") {
+        const plist = read("/System/Library/CoreServices/SystemVersion.plist");
+        const version = plist.match(/<key>ProductVersion<\/key>\s*<string>([^<]+)<\/string>/)?.[1];
+        if (!version) throw new Error("macOS didn't say its version in SystemVersion.plist");
+        system = `macOS ${version}`;
+    } else if (platform === "win32") {
+        system = `${os.version()} (build ${os.release()})`;
+    } else {
+        system = `${platform} ${os.release()}`;
+    }
+    return `The user's computer runs ${system} on ${cpu}. Pick commands, programs and downloads for it.`;
+}
 
 export const ACCESS_TOOLS: ToolSpec[] = [
     {
         name: "request_access",
         description:
             `Ask the user for access to folders and commands on their own computer, all a task needs in one request (1 to ${L.items}). ` +
-            "They answer on a card in the chat: for this time, always, or no. Returns right away; their answer starts your next turn.",
+            "They answer on a card in the chat: for this time, always, or no. Returns right away; their answer starts your next turn. " +
+            "A folder lets you list, read, search and write files in it. Deleting, moving, installing or building is a command, and is asked for: one program and its arguments, never a shell line.",
         inputSchema: {
             type: "object",
             properties: {
@@ -60,7 +82,7 @@ export const ACCESS_TOOLS: ToolSpec[] = [
                             kind: { type: "string", enum: ["folder", "command"] },
                             path: { type: "string", description: "For a folder: its full path on the user's computer (~ is their home folder)." },
                             command: { type: "array", items: { type: "string" }, description: 'For a command: the program and its arguments, like ["npm", "install"].' },
-                            anyArguments: { type: "boolean", description: "For a command: it also covers more arguments after these. Leave it off to allow exactly this command." },
+                            anyArguments: { type: "boolean", description: "For a command: it also covers more arguments after these, for when what follows will vary (`npm install` and any package name). Leave it off to allow exactly this command." },
                         },
                         required: ["kind"],
                     },
@@ -150,6 +172,18 @@ export class Access {
     private pending: { entry: AccessEntry; timer: ReturnType<typeof setTimeout> } | null = null;
 
     constructor(private deps: AccessDeps) {}
+
+    private described: string | null = null;
+
+    /** The user's computer, read once: it doesn't change under a running service. */
+    private computer(): string {
+        try {
+            this.described ??= describeComputer();
+        } catch (e) {
+            return `Which system the user's computer runs couldn't be read (${e instanceof Error ? e.message : String(e)}). Check before running anything that depends on it.`;
+        }
+        return this.described;
+    }
 
     /** Read access.json. One that can't be read grants nothing and is never written over. */
     load() {
@@ -261,7 +295,8 @@ export class Access {
             id: "access",
             // a flow has no one to answer a request, but may use what's allowed
             tools: (mode) => (mode.fromFlow ? ACCESS_TOOLS.filter((t) => t.name !== "request_access") : ACCESS_TOOLS),
-            instructions: (mode) => `${ACCESS_INSTRUCTIONS}\n\nAllowed on the user's computer now:\n${this.summary()}${mode.fromFlow ? "\nThis turn answers an automation: you can't ask for more." : ""}`,
+            instructions: () => ACCESS_INSTRUCTIONS,
+            context: (mode) => `${this.computer()}\nAllowed on it:\n${this.summary()}${mode.fromFlow ? "\nThis turn answers an automation: you can't ask for more." : ""}`,
             call: async (name, args) => {
                 try {
                     switch (name) {

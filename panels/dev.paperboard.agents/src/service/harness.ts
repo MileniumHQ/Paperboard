@@ -23,6 +23,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { characterOf, type Character, type Harness } from "../contract";
+import type { Sections } from "./toolsets";
 import { MCP_TOKEN_ENV } from "./computerMcp";
 
 export const HARNESS_NAMES: Record<Harness, string> = { codex: "Codex", "claude-code": "Claude", opencode: "OpenCode" };
@@ -41,20 +42,62 @@ const VOICES: Record<Character, string> = {
  */
 export function modelNote(harness: Harness, model: string | null): string {
     const which = model ?? `the model ${HARNESS_NAMES[harness]} is set to use by default`;
-    return `**Your model:** you think with ${which}. The user can switch your model during the conversation. A note naming the model you run on was true when it was added: the latest one is current, and an earlier one naming another model is from before a switch, not a conflict.`;
+    return `You think with ${which}. The user can switch models mid-conversation: of the notes naming your model, the latest is current.`;
 }
 
-export function instructions(name: string, sections: string[] = [], brain: { harness: Harness; model: string | null } | null = null): string {
+const HOW_YOU_WORK = `## How you work
+- **When the user asks for something, do it.** Use your tools to get the real answer or make the real thing; don't describe how they could. Search the web for facts; use the browser to do things on sites.
+- **Do it yourself before asking them to.** Before you hand the user a step (download this, sign up there, run that, look it up), check whether your own tools can do it. Ask them only for what truly needs them: a decision that's theirs, a detail only they know, or a sign-in.
+- **Finish what you start.** When a choice is yours to make, pick the sensible option and say which.
+- **Check before you claim.** Never say something worked until you've seen it work: look at the page, read the file, open the page you made.
+- **When something fails,** read the error and try one fix. If it still fails, tell the user what broke and what you'd try next. Never hide a failure.
+- **Clean up after yourself.** Before your last text, close the browser windows you're done with and delete scratch files and downloads you no longer need. On the user's computer, leave nothing behind they didn't ask for: no stray files, installs or programs left running.
+- **Not everything needs a tool.** Small talk, opinions and what you already know just need a text.`;
+
+const TEXTING = `## Texting
+- **\`send_message\` is the only way they hear you.** Plain output is never shown, and they never see your tool calls.
+- **Warm, friendly and fun.** Text like a good friend would: short and plain, never stiff or formal.
+- **Match their vibe closely:** their length, tone, slang, emoji and energy. When they ask for a different tone, switch at once and keep it.
+- **One thought per text.** Several short texts beat one long one.
+- **Heads-up first:** before work that takes more than a moment, send one short line that says you're on it and roughly when you'll be back ("Okay, give me a few minutes", "On it, back in a sec"). Word it fresh every time, never the same line twice. Then text again only when you're done, need something, or have real news.
+- **Their new message stops your work.** Answer it, then carry on unless they changed the plan.
+- **Never write an em dash (—) or an en dash (–).** They read as machine-written.`;
+
+const REPLYING_TO_A_FLOW = `## Replying to an automation
+This message came from one of the user's Paperboard automations, not from them. Your reply goes back to it as data, and the user may read it too.
+- **Reply once:** one \`send_message\` with the result. No heads-up, narration or questions.
+- **Plain text:** files go in \`files\` by id (\`share_file\` gives one), never in the text.
+- **Stuck:** reply with what's in the way.
+- **Never write an em dash (—) or an en dash (–).**`;
+
+// Claude Code only. Codex keeps multi_agent off (CODEX_FEATURES_OFF): nothing here
+// proves its subagents inherit the read-only sandbox, the disabled shell and the
+// single MCP server, and a subagent that escaped them would hand the model a shell.
+const CLAUDE_SUBAGENT_TOOL = "Agent";
+const SUBAGENT_NOTE = `**Subagents:** \`${CLAUDE_SUBAGENT_TOOL}\` hands off self-contained work, on a faster model when that helps. It can't ask the user anything: give it everything it needs, and check what it brings back.`;
+
+export interface Brain {
+    harness: Harness;
+    model: string | null;
+    /** the turn answers one of the user's automations, not the user */
+    fromFlow?: boolean;
+}
+
+/**
+ * The agent's instructions: who it is and how it works, how it talks, its tools (when to reach for each), and
+ * what's true now. Tools are one short part each; how a tool works is in its own description.
+ */
+export function instructions(name: string, sections: Sections = { tools: [], now: [] }, brain: Brain | null = null): string {
     const character = characterOf(name);
+    const tools = [...sections.tools, ...(brain?.harness === "claude-code" ? [SUBAGENT_NOTE] : [])];
+    const now = [...(brain ? [modelNote(brain.harness, brain.model)] : []), ...sections.now];
     return [
-        `You are ${name}, the user's personal agent. You text with them in one long, ongoing conversation.
-- **Text like a friend:** short, warm and plain. Match how they text (length, tone, slang, emoji), and switch when they ask.
-- **Do, don't explain:** you have your own computer, a web browser. Use it to actually do things. It isn't the user's machine, so you can't see their files.
-- **They see only your texts:** never your tool calls. Say what you're about to do, then what came of it.
-- **No dashes:** never write an em dash (—) or an en dash (–) in a text. They read as machine-written.`,
+        `You are ${name}, the user's personal agent. You text with them in one long, ongoing conversation, and you have a computer of your own to do things on.`,
+        HOW_YOU_WORK,
+        brain?.fromFlow ? REPLYING_TO_A_FLOW : TEXTING,
         ...(character ? [VOICES[character]] : []),
-        ...(brain ? [modelNote(brain.harness, brain.model)] : []),
-        ...sections,
+        ...(tools.length ? [`## Tools\n${tools.join("\n\n")}`] : []),
+        ...(now.length ? [`## Now\n${now.join("\n\n")}`] : []),
     ].join("\n\n");
 }
 
@@ -67,12 +110,6 @@ const CODEX_FEATURES_OFF = [
     "image_generation", "multi_agent", "multi_agent_v2", "in_app_browser", "goals", "tool_suggest", "skill_search",
     "hooks", "sleep_tool", "view_image",
 ];
-
-// Claude Code only. Codex keeps multi_agent off (CODEX_FEATURES_OFF): nothing here
-// proves its subagents inherit the read-only sandbox, the disabled shell and the
-// single MCP server, and a subagent that escaped them would hand the model a shell.
-const CLAUDE_SUBAGENT_TOOL = "Agent";
-const SUBAGENT_NOTE = `**Subagents:** the ${CLAUDE_SUBAGENT_TOOL} tool hands self-contained work to a subagent, on a faster model when that helps. Subagents have your tools but can't ask the user anything: give them everything they need, and check what they bring back.`;
 
 // The harnesses' own memories and instruction files are off: the panel's memory (memory.ts) is the only one.
 // Codex: its memories feature, and AGENTS.md project docs (a zero byte budget). Both are config keys that
@@ -93,8 +130,10 @@ export interface TurnSpec {
     thread: string | null;
     message: string;
     mcpUrl: string;
-    /** each toolset's part of the instructions, in order */
-    sections: string[];
+    /** each toolset's parts of the instructions, in order */
+    sections: Sections;
+    /** the turn answers one of the user's automations */
+    fromFlow: boolean;
 }
 
 export interface TurnLaunch {
@@ -109,7 +148,7 @@ export interface TurnLaunch {
 }
 
 /** OpenCode's config for a turn: the panel's MCP endpoint as plain tools, and nothing else but web search. */
-export function openCodeConfig(spec: Pick<TurnSpec, "name" | "sections" | "mcpUrl" | "model">): Record<string, unknown> {
+export function openCodeConfig(spec: Pick<TurnSpec, "name" | "sections" | "mcpUrl" | "model" | "fromFlow">): Record<string, unknown> {
     return {
         share: "disabled",
         autoupdate: false,
@@ -120,7 +159,7 @@ export function openCodeConfig(spec: Pick<TurnSpec, "name" | "sections" | "mcpUr
                 [MCP_SERVER]: { type: "remote", url: spec.mcpUrl, oauth: false, codemode: false, headers: { Authorization: `Bearer {env:${MCP_TOKEN_ENV}}` } },
             },
         },
-        agents: { build: { system: instructions(spec.name, spec.sections, { harness: "opencode", model: spec.model }) } },
+        agents: { build: { system: instructions(spec.name, spec.sections, { harness: "opencode", model: spec.model, fromFlow: spec.fromFlow }) } },
         // the last matching rule wins; denying "*" denies `execute`, which turns Code Mode (and its fetch) off
         permissions: [
             { action: "*", resource: "*", effect: "deny" },
@@ -146,7 +185,7 @@ export function turnLaunch(spec: TurnSpec): TurnLaunch {
             `sandbox_mode="read-only"`,
             `web_search="live"`,
             CODEX_NO_UPDATE_CHECK,
-            `developer_instructions=${toml(instructions(spec.name, spec.sections, { harness: "codex", model: spec.model }))}`,
+            `developer_instructions=${toml(instructions(spec.name, spec.sections, { harness: "codex", model: spec.model, fromFlow: spec.fromFlow }))}`,
             `mcp_servers.${MCP_SERVER}.url=${toml(spec.mcpUrl)}`,
             `mcp_servers.${MCP_SERVER}.bearer_token_env_var=${toml(MCP_TOKEN_ENV)}`,
             `mcp_servers.${MCP_SERVER}.tool_timeout_sec=660`,
@@ -183,7 +222,7 @@ export function turnLaunch(spec: TurnSpec): TurnLaunch {
         // rendered afresh each turn, not the conversation's first one again: a model switch, a new name or a
         // toolset's changed section reaches a resumed conversation too
         "--system-prompt-snapshot", "off",
-        "--append-system-prompt", `${instructions(spec.name, spec.sections, { harness: "claude-code", model: spec.model })}\n\n${SUBAGENT_NOTE}`,
+        "--append-system-prompt", instructions(spec.name, spec.sections, { harness: "claude-code", model: spec.model, fromFlow: spec.fromFlow }),
         ...(spec.thread ? ["--resume", spec.thread] : ["--session-id", session]),
         spec.message,
     ];

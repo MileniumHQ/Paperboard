@@ -25,28 +25,22 @@ const START_MS = 20_000;
 /** tool names told back per server */
 const NAMES_TOLD = 20;
 
-export const SERVER_INSTRUCTIONS = `**Your tool servers (MCP):** a tool server gives you more tools, like a service's issues, files or messages. When the user asks you to connect a service, add its server yourself.
-- **Only add what the user asked for,** and say plainly what you're adding and why: which server, whose it is, and what it lets you do.
-- **Find the real one:** search the web and read the service's own docs for its official MCP server: a hosted address (\`url\`) is best; a program (\`command\`) when there's none. Prefer the service's own over someone else's.
-- **Keys:** put \`{ "secret": "<name>" }\` as the header or env value, then ask for the key with \`ask_user\`, a secret field for that server and name. Never put a key in the config or ask for it in plain chat.
-- **Signing in:** a server that signs the user in (OAuth) is added with \`oauth: true\`. The user signs in on a card in the chat; their sign-in starts your next turn.
-- **A program runs on the user's computer:** they allow it on a card first, and its tools are yours once they do. One program and its arguments, like \`npx\` and \`["-y", "@scope/server"]\`, never a shell line.
-- **Change or remove one only when the user asks.** \`list_tool_servers\` shows what you have and how each is doing.`;
+export const SERVER_INSTRUCTIONS = `**Tool servers (MCP):** when the user asks you to connect a service, find its official MCP server in the service's own docs and \`add_tool_server\`, saying which server, whose it is and what it lets you do. Prefer a hosted \`url\`; a \`command\` runs on their computer. Add only what they asked for, and change or remove one only when they ask.`;
 
 const VALUES = {
     type: "object",
-    description: 'Names and values. A key or token is `{ "secret": "<name>" }`, never the key itself.',
+    description: 'Names and values. A key or token is `{ "secret": "<name>" }`, never the key itself: then ask for it with `ask_user`, a secret field for this server and name.',
     additionalProperties: { oneOf: [{ type: "string" }, { type: "object", properties: { secret: { type: "string" } }, required: ["secret"] }] },
 };
 
 const SERVER_FIELDS = {
     name: { type: "string", description: "Its name: lowercase letters, digits and dashes, like `linear`." },
     url: { type: "string", description: "A server on the web: its MCP address." },
-    oauth: { type: "boolean", description: "With url: it signs the user in (OAuth)." },
+    oauth: { type: "boolean", description: "With url: it signs the user in (OAuth). They sign in on a card in the chat; their sign-in starts your next turn." },
     sse: { type: "boolean", description: "With url: it uses the older HTTP+SSE transport." },
     headers: { ...VALUES, description: `With url: headers to send. ${VALUES.description}` },
     command: { type: "string", description: "A program on the user's computer: the program alone, like `npx`." },
-    args: { type: "array", items: { type: "string" }, description: "With command: its arguments, one per item." },
+    args: { type: "array", items: { type: "string" }, description: "With command: its arguments, one per item, like `[\"-y\", \"@scope/server\"]`. Never a shell line." },
     env: { ...VALUES, description: `With command: its environment. ${VALUES.description}` },
     reason: { type: "string", description: `With command: what it is and why you're adding it, for the card the user allows it on. Up to ${L.reasonChars} characters.` },
 };

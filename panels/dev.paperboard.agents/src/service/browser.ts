@@ -106,8 +106,8 @@ export interface BrowserDeps {
     /** the same folder relative to the panel's storage, for downloads */
     storagePath: string;
     onState: (s: ComputerState) => void;
-    /** the agent's apps, the one thing on this computer its browser may open */
-    apps?: (host: string, port: number) => boolean;
+    /** the agent's pages, the one thing on this computer its browser may open */
+    pages?: (host: string, port: number) => boolean;
     platform?: NodeJS.Platform;
     arch?: string;
     controlLeaseMs?: number;
@@ -438,7 +438,7 @@ export class BrowserComputer {
         const portFile = path.join(this.profileDir(), "DevToolsActivePort");
         fs.rmSync(portFile, { force: true });
         this.stderrTail = "";
-        this.proxy = await startProxy({ local: this.deps.apps });
+        this.proxy = await startProxy({ local: this.deps.pages });
         const args = [
             "--headless",
             `--user-data-dir=${this.profileDir()}`,
@@ -1005,6 +1005,15 @@ export class BrowserComputer {
         };
     }
 
+    /** What's open as a turn starts, for the agent's instructions: windows it left open are its to close. */
+    async openWindowsNote(): Promise<string> {
+        if (this.state.phase !== "ready" || !this.cdp?.open) return `Your browser isn't running (${this.state.phase}).`;
+        await this.refreshAll();
+        const list = [...this.tabs.values()].sort((a, b) => a.id - b.id);
+        if (!list.length) return "No browser windows are open.";
+        return `Browser windows open now (close the ones you're done with):\n${list.map((t) => `- ${t.id}: ${t.title || "(untitled)"} <${t.url}>`).join("\n")}`;
+    }
+
     async open(args: Record<string, unknown>): Promise<ToolResult> {
         const url = webAddress(args.what, true);
         const before = this.ids();
@@ -1223,12 +1232,28 @@ export class BrowserComputer {
 
     /** A JPEG of a page, taken in a window opened for it and closed again: an app's picture on its card. */
     async picture(url: string): Promise<string> {
-        if (this.state.phase !== "ready" || !this.cdp?.open) throw new Error("your computer is off, and an app's picture is taken in its browser");
+        if (this.state.phase !== "ready" || !this.cdp?.open) throw new Error("your computer is off, and a page's picture is taken in its browser");
         const { tab } = await this.openWindow(url);
         try {
             const s = await this.session(tab);
             const { data } = await this.connection().send<{ data: string }>("Page.captureScreenshot", { format: "jpeg", quality: 80 }, s, 10_000);
             return data;
+        } finally {
+            await this.connection().send("Target.closeTarget", { targetId: tab.targetId });
+            this.untrack(tab.targetId);
+        }
+    }
+
+    /** A page printed to a PDF, as its own print CSS lays it out: in a window of its own, closed after. */
+    async pdf(url: string): Promise<Buffer> {
+        if (this.state.phase !== "ready" || !this.cdp?.open) throw new Error("the agent's computer is off, and a page is saved as a PDF in its browser. Start it in the agent's Computer page");
+        const { tab } = await this.openWindow(url);
+        try {
+            const s = await this.session(tab);
+            // its fonts first: a PDF made before they've loaded is set in the fallback
+            await this.connection().send("Runtime.evaluate", { expression: "document.fonts.ready.then(() => true)", awaitPromise: true }, s, 10_000);
+            const { data } = await this.connection().send<{ data: string }>("Page.printToPDF", { printBackground: true, preferCSSPageSize: true }, s, 30_000);
+            return Buffer.from(data, "base64");
         } finally {
             await this.connection().send("Target.closeTarget", { targetId: tab.targetId });
             this.untrack(tab.targetId);

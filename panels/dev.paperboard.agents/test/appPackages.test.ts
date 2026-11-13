@@ -5,7 +5,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import zlib from "node:zlib";
-import { Apps } from "../src/service/apps";
+import { Pages } from "../src/service/pages";
 import { HomeFolder } from "../src/service/homeFolder";
 import { tempDir } from "./support/host";
 
@@ -78,12 +78,12 @@ async function app(registryUrl: string) {
     cleanups.push(() => fs.rmSync(root, { recursive: true, force: true }));
     const home = new HomeFolder(path.join(root, "home"));
     home.ensure();
-    const apps = new Apps({ home, portFile: path.join(root, "apps.json"), infoFile: path.join(root, "info.json"), picturesDir: path.join(root, "pics"), registry: registryUrl, picture: async () => "", post: () => {}, onChange: () => {} });
-    cleanups.push(() => apps.close());
-    const tools = apps.toolset();
-    await tools.call("start_app", { name: "planner", title: "Planner", description: "plans" }, { fromFlow: false });
-    const dir = path.join(home.root, "Apps", "planner");
-    const add = (packages: string[]) => tools.call("add_package", { app: "planner", packages }, { fromFlow: false });
+    const pages = new Pages({ home, portFile: path.join(root, "apps.json"), infoFile: path.join(root, "info.json"), picturesDir: path.join(root, "pics"), exportsDir: path.join(root, "exports"), registry: registryUrl, picture: async () => "", pdf: async () => Buffer.alloc(0), post: () => {}, onChange: () => {} });
+    cleanups.push(() => pages.close());
+    const tools = pages.toolset();
+    await tools.call("start_page", { name: "planner", kind: "app", title: "Planner", description: "plans" }, { fromFlow: false });
+    const dir = path.join(home.root, "Pages", "planner");
+    const add = (packages: string[]) => tools.call("add_package", { page: "planner", packages }, { fromFlow: false });
     /** every file under the temp root, for "nothing was written" */
     const everything = () => (fs.readdirSync(root, { recursive: true }) as string[]).map(String).sort();
     return { root, dir, add, everything };

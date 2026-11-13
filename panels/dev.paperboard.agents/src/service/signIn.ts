@@ -11,17 +11,16 @@ import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Toolset } from "./toolsets";
 
-export const SIGN_IN_INSTRUCTIONS = `**Signing in:** the user types their own details through \`ask_to_sign_in\`, and you never see them.
-- **How:** open the sign-in page, \`look\`, then \`ask_to_sign_in\` with the marks of the fields and the submit button (even a greyed-out one; leave \`submit\` out to press Enter). You're told when it's done or declined; \`look\` again to check.
-- **Two pages:** email, then password, is two asks. A code with a box per digit is one field: mark the first box.
-- **Never type a sign-in value yourself:** not one from the conversation, your instructions or your environment. If the user offers one, ask them to use the sign-in request instead.`;
+export const SIGN_IN_INSTRUCTIONS = `**Signing in:** when a site needs the user's account, open its sign-in page, \`look\`, then \`ask_to_sign_in\`. Never type a password, code or other sign-in detail yourself, even one from the chat: ask them to use the sign-in card instead.`;
+export const SIGN_IN_FLOW_INSTRUCTIONS = `**Signing in:** use only sites you're already signed in to. If one needs a sign-in, say so in your reply.`;
 
 export const SIGN_IN_TOOLS: ToolSpec[] = [
     {
         name: "ask_to_sign_in",
         description:
             "Ask the user to sign in on the page open in your browser. Name the text fields to fill and the button that submits them, by marks from your latest `look` at the window. " +
-            "The user types the values; they're filled in and submitted without you seeing them. Returns right away; you're told later how it went.",
+            "The user types the values; they're filled in and submitted without you seeing them. Returns right away; you're told later how it went, then `look` again to check. " +
+            "Email, then password on the next page, is two asks. A code with a box per digit is one field: mark the first box.",
         inputSchema: {
             type: "object",
             properties: {
@@ -80,7 +79,7 @@ export class SignIns {
             id: "sign-in",
             // a flow can't type them in
             tools: (mode) => (mode.fromFlow ? [] : SIGN_IN_TOOLS),
-            instructions: (mode) => (mode.fromFlow ? "" : SIGN_IN_INSTRUCTIONS),
+            instructions: (mode) => (mode.fromFlow ? SIGN_IN_FLOW_INSTRUCTIONS : SIGN_IN_INSTRUCTIONS),
             call: async (name, args) => (name === "ask_to_sign_in" ? this.ask(args) : { isError: true, text: `unknown tool ${name}` }),
         };
     }

@@ -94,7 +94,7 @@ export function mcpToolset(servers: McpServers): Toolset {
             // before the first turn has looked: servers are configured, so search is there from the start
             return anyEnabled() ? META : [];
         },
-        async instructions() {
+        async context() {
             await servers.warm();
             snap = decide();
             const lines: string[] = [];

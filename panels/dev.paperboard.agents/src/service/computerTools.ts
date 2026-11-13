@@ -15,14 +15,7 @@ const where = {
 };
 
 /** The computer's part of the agent's instructions. */
-export const COMPUTER_INSTRUCTIONS = `**Your computer** is a web browser (Helium); each window is a tab.
-- **Go places:** \`open\` an address; \`go\` to another, or back, forward, reload.
-- **Act:** \`look\`, act on a numbered mark (\`click\`, then \`type\`/\`key\`), then \`look\` again. Marks last until the next look.
-- **Unmarked or tiny things:** \`zoom\` in and click the x/y its grid shows. \`hover\` opens menus; \`drag\` moves sliders.
-- **Files:** downloads land in ~/Downloads. To upload, click the page's upload button, then \`upload\` from your home folder.
-- **Internet only:** it can't reach this computer or its local network. You can also search the web directly.
-- **Tidy up:** \`close\` each window you're done with.
-- **Check:** never claim you did something you didn't verify.`;
+export const COMPUTER_INSTRUCTIONS = `**Browser:** your computer is a web browser on the internet, not the user's computer or their local network. \`look\` before you act on a page, and again after anything changes. \`close\` each window you're done with.`;
 
 export const COMPUTER_TOOLS: ToolSpec[] = [
     {
@@ -34,7 +27,7 @@ export const COMPUTER_TOOLS: ToolSpec[] = [
         name: "open",
         description:
             "Open a web address in a new window, e.g. `https://example.com` or `example.com`; `browser` opens a blank one. " +
-            "Returns the new window's id. Clicks and keys also report windows that open or close, downloads, and dialogs.",
+            "Returns the new window's id. The browser reaches the internet only, never this computer or its local network. Clicks and keys also report windows that open or close, downloads (they land in ~/Downloads), and dialogs.",
         inputSchema: { type: "object", properties: { what: { type: "string" } }, required: ["what"] },
     },
     {

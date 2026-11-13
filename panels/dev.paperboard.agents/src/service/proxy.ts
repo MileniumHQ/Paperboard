@@ -4,8 +4,8 @@
 // name's owner could answer differently). The browser is told to send
 // loopback through it too (`--proxy-bypass-list=<-loopback>`), so this
 // machine, its local network and their services are refused here, by name
-// or by number. The one exception is the agent's own apps (apps.ts): plain
-// HTTP to <name>.localhost on the apps' port goes to that server, and only
+// or by number. The one exception is the agent's own pages (pages.ts): plain
+// HTTP to <name>.localhost on the pages' port goes to that server, and only
 // there.
 //
 // HTTPS and WebSockets arrive as CONNECT tunnels, plain HTTP as requests in
@@ -63,7 +63,7 @@ function target(authority: string): { host: string; port: number } | null {
 export async function startProxy(
     o: {
         lookup?: (h: string) => Promise<{ address: string }[]>;
-        /** a host and port on this computer the browser may open: the agent's apps */
+        /** a host and port on this computer the browser may open: the agent's pages */
         local?: (host: string, port: number) => boolean;
     } = {},
 ): Promise<Proxy> {

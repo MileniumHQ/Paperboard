@@ -26,14 +26,22 @@ export interface Toolset {
     tools(mode: TurnMode): ToolSpec[] | Promise<ToolSpec[]>;
     /** only ever called with a name this toolset listed for the same mode */
     call(name: string, args: Record<string, unknown>, mode: TurnMode): Promise<ToolResult>;
-    /** a section of the agent's instructions, read at the start of every turn */
+    /** when to use its tools, and when not: a short part of the instructions' Tools, read at the start of every turn */
     instructions?(mode: TurnMode): string | Promise<string>;
+    /** what's true right now (the memory, the routines, what's allowed): a part of the instructions' Now */
+    context?(mode: TurnMode): string | Promise<string>;
+}
+
+/** Each toolset's parts of the agent's instructions, in toolset order. */
+export interface Sections {
+    tools: string[];
+    now: string[];
 }
 
 export interface Toolbox {
     list(): Promise<ToolSpec[]>;
     call(name: string, args: Record<string, unknown>): Promise<ToolResult>;
-    instructions(): Promise<string[]>;
+    instructions(): Promise<Sections>;
 }
 
 /**
@@ -64,10 +72,12 @@ export function toolbox(sets: Toolset[], mode: () => TurnMode = () => USER_TURN)
         },
         instructions: async () => {
             const m = mode();
-            const out: string[] = [];
+            const out: Sections = { tools: [], now: [] };
             for (const set of sets) {
-                const s = await set.instructions?.(m);
-                if (s?.trim()) out.push(s.trim());
+                const tools = await set.instructions?.(m);
+                if (tools?.trim()) out.tools.push(tools.trim());
+                const now = await set.context?.(m);
+                if (now?.trim()) out.now.push(now.trim());
             }
             return out;
         },

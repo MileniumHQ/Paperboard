@@ -48,7 +48,7 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
             env: o.env ?? ((h): Record<string, string> => (h === "codex" ? { CODEX_HOME: codexHome } : {})),
             problem: o.problem,
             mcp: () => ({ url: mcp.url, token: mcp.token, onToolsListed: (cb) => mcp.onToolsListed(cb) }),
-            instructions: async () => ["**Test:** a section"],
+            instructions: async () => ({ tools: ["**Test:** a section"], now: [] }),
             emit: entries.push,
             onState: states.push,
             codexHome,

@@ -1,10 +1,10 @@
-// Every app the agent made, newest first: open one beside the chat, or
-// delete it after saying so. The list follows the service's apps revision,
-// so an app the agent makes or deletes shows up live.
+// Every page the agent made, newest first: open one beside the chat, or
+// delete it after saying so. The list follows the service's pages revision,
+// so a page the agent makes or deletes shows up live.
 
 import { For, Match, Show, Switch, createSignal } from "solid-js";
 import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
-import type { AppInfo } from "../contract";
+import type { PageInfo } from "../contract";
 import { errorText, failure, type Failure } from "../lib/failure";
 import type { Launcher } from "./launcher";
 import Picture from "./Picture";
@@ -12,12 +12,12 @@ import Picture from "./Picture";
 // a button inside a list item answers for itself, and doesn't choose the item
 const own = (e: PointerEvent) => e.stopPropagation();
 
-export default function Apps(props: { apps: Launcher; name: string; onOpened: () => void }) {
-    const { apps } = props;
+export default function Pages(props: { pages: Launcher; name: string; onOpened: () => void }) {
+    const { pages } = props;
     const [openError, setOpenError] = createSignal<Failure | null>(null);
     const [deleteError, setDeleteError] = createSignal<string | null>(null);
     const [busy, setBusy] = createSignal(false);
-    const [deleting, setDeleting] = createSignal<AppInfo | null>(null);
+    const [deleting, setDeleting] = createSignal<PageInfo | null>(null);
     // one being opened is marked until it's open (then it's the one shown) or wasn't
     const [chosen, setChosen] = createSignal<string | null>(null);
 
@@ -26,17 +26,17 @@ export default function Apps(props: { apps: Launcher; name: string; onOpened: ()
         setBusy(true);
         setOpenError(null);
         try {
-            await apps.open(name);
+            await pages.open(name);
             props.onOpened();
         } catch (e) {
-            setOpenError(failure("App not opened", e));
+            setOpenError(failure("Page not opened", e));
         } finally {
             setChosen(null);
             setBusy(false);
         }
     };
 
-    const askDelete = (a: AppInfo) => {
+    const askDelete = (a: PageInfo) => {
         setDeleteError(null);
         setDeleting(a);
     };
@@ -45,7 +45,7 @@ export default function Apps(props: { apps: Launcher; name: string; onOpened: ()
         setBusy(true);
         setDeleteError(null);
         try {
-            await apps.remove(deleting()!.name);
+            await pages.remove(deleting()!.name);
             setDeleting(null);
         } catch (e) {
             setDeleteError(errorText(e));
@@ -57,23 +57,23 @@ export default function Apps(props: { apps: Launcher; name: string; onOpened: ()
     return (
         <>
             <Switch>
-                <Match when={apps.list() === null && apps.listError()}>
+                <Match when={pages.list() === null && pages.listError()}>
                     {(why) => (
                         <PaperFlex padding="double">
-                            <PaperEmptyState icon="error" title="The apps can't be read" description={why()}>
-                                <PaperButton onClick={() => apps.reload()}>Try again</PaperButton>
+                            <PaperEmptyState icon="error" title="The pages can't be read" description={why()}>
+                                <PaperButton onClick={() => pages.reload()}>Try again</PaperButton>
                             </PaperEmptyState>
                         </PaperFlex>
                     )}
                 </Match>
-                <Match when={apps.list() === null}>
+                <Match when={pages.list() === null}>
                     <PaperFlex padding="double">
-                        <PaperLoader loaderStatus="indeterminate" label="Reading the apps" />
+                        <PaperLoader loaderStatus="indeterminate" label="Reading the pages" />
                     </PaperFlex>
                 </Match>
-                <Match when={apps.list()!.length === 0}>
+                <Match when={pages.list()!.length === 0}>
                     <PaperFlex padding="double">
-                        <PaperEmptyState icon="apps" title="No apps yet" description={`Ask ${props.name} for one, like a planner for your assignments, and it shows up here.`} />
+                        <PaperEmptyState icon="web" title="No pages yet" description={`Ask ${props.name} for one, like a planner for your assignments or a birthday card, and it shows up here.`} />
                     </PaperFlex>
                 </Match>
                 <Match when={true}>
@@ -87,22 +87,22 @@ export default function Apps(props: { apps: Launcher; name: string; onOpened: ()
                                 </PaperFlex>
                             )}
                         </Show>
-                        {/* the app open beside the chat is marked */}
+                        {/* the page open beside the chat is marked */}
                         <PaperList
-                            name="agents-apps"
-                            value={chosen() ?? apps.shown()?.name ?? ""}
+                            name="agents-pages"
+                            value={chosen() ?? pages.shown()?.name ?? ""}
                             onValueChange={(v) => void open(String(v))}
                             borderless
                             fullWidth
                             fullHeight
                         >
-                            <For each={apps.list()}>
+                            <For each={pages.list()}>
                                 {(a) => (
                                     <PaperListItem
                                         value={a.name}
                                         disabled={busy()}
-                                        icon={<Picture apps={apps} name={a.name} title={a.title} taken={a.picture} />}
-                                        description={a.description || `~/Apps/${a.name}`}
+                                        icon={<Picture pages={pages} name={a.name} title={a.title} taken={a.picture} />}
+                                        description={a.description || `~/Pages/${a.name}`}
                                         actions={
                                             <PaperFlex direction="row" align="center" gap="onefourth">
                                                 <PaperButton size="small" variant="text" disabled={busy()} onPointerDown={own} onClick={() => void open(a.name)}>
@@ -125,7 +125,7 @@ export default function Apps(props: { apps: Launcher; name: string; onOpened: ()
             <PaperModal
                 open={deleting() !== null}
                 onClose={() => !busy() && setDeleting(null)}
-                title="Delete this app?"
+                title="Delete this page?"
                 size="small"
                 footer={
                     <>
@@ -140,10 +140,10 @@ export default function Apps(props: { apps: Launcher; name: string; onOpened: ()
             >
                 <PaperFlex gap="full">
                     <PaperText preset="text">
-                        “{deleting()?.title}” and its folder, ~/Apps/{deleting()?.name}, are deleted. A checkpoint from before now still has it.
+                        “{deleting()?.title}” and its folder, ~/Pages/{deleting()?.name}, are deleted. A checkpoint from before now still has it.
                     </PaperText>
                     <Show when={deleteError()}>
-                        <PaperQuote variant="danger" icon="error" title="App not deleted" role="alert">
+                        <PaperQuote variant="danger" icon="error" title="Page not deleted" role="alert">
                             {deleteError()}
                         </PaperQuote>
                     </Show>

@@ -12,11 +12,9 @@ import { USER_TURN, type Toolset, type TurnMode } from "./toolsets";
 
 const TEXT_BYTES = 64 * 1024;
 
-export const FILES_INSTRUCTIONS = `**Files:** messages can come with files, listed like "(attached: [file a1b2c3d4e5f6] cat.jpg, image, 1.2 MB)". \`open_file\` shows you an image or a text file; \`put_file_on_computer\` copies any file to your computer. Files go up to ${LIMITS.attachments.fileBytes / 1024 / 1024} MB.
-- **Show one:** put \`![a short caption](attachment:<id>)\` on its own line in \`send_message\`. Any file in the conversation works; one on your computer, \`share_file\` first.
-- **From the web:** an https image shows the same way, and \`![its title](https://www.youtube.com/watch?v=...)\` shows a YouTube video.`;
-
-export const FILES_FLOW_INSTRUCTIONS = FILES_INSTRUCTIONS.split("\n")[0]!;
+const FILES_WHEN = `**Files:** files the user sends show as [file <id>]. \`open_file\` to look at one, \`put_file_on_computer\` to work on it.`;
+export const FILES_INSTRUCTIONS = `${FILES_WHEN} To show a file in a text, put \`![a short caption](attachment:<id>)\` on its own line; \`share_file\` first for one on your computer. An https image, or a YouTube link, shows the same way.`;
+export const FILES_FLOW_INSTRUCTIONS = FILES_WHEN;
 
 export const FILE_TOOLS: ToolSpec[] = [
     {
@@ -38,14 +36,14 @@ export const FILE_TOOLS: ToolSpec[] = [
     },
     {
         name: "share_file",
-        description: "Add a file from your computer's home folder to the conversation, so a message can show it with ![caption](attachment:<id>). Returns its id.",
+        description: `Add a file from your computer's home folder to the conversation, up to ${LIMITS.attachments.fileBytes / 1024 / 1024} MB, so a message can show it with ![caption](attachment:<id>). Returns its id.`,
         inputSchema: { type: "object", properties: { path: { type: "string", description: "the file, e.g. ~/Downloads/clip.mp4" } }, required: ["path"] },
     },
 ];
 
 // the same tools, but a shared file goes with a reply rather than inside it
 const FILE_FLOW_TOOLS: ToolSpec[] = FILE_TOOLS.map((t) =>
-    t.name === "share_file" ? { ...t, description: "Add a file from your computer's home folder to the conversation, so a reply can send it in send_message's files. Returns its id." } : t,
+    t.name === "share_file" ? { ...t, description: `Add a file from your computer's home folder to the conversation, up to ${LIMITS.attachments.fileBytes / 1024 / 1024} MB, so a reply can send it in send_message's files. Returns its id.` } : t,
 );
 
 /** What the toolset needs: the conversation's files, and the computer to move them to and from. */

@@ -6,20 +6,7 @@ import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import { USER_TURN, type Toolset } from "./toolsets";
 
-export const MESSAGES_INSTRUCTIONS = `**Texting:** \`send_message\` is the only way the user hears you. Each call is one bubble, shown at once.
-- **One thought per bubble:** several short ones beat one long one.
-- **Replies:** messages have ids like [k3x9f2]. Pass one as \`reply_to\` when answering one of several, or something said earlier.
-- **Heads-up first:** before any other tool, send one short line ("On it, checking the trains"). Silence looks like being ignored. A quick answer you already know needs none.
-- **No narration:** do the work, then text what came of it. Text mid-task only when you need something or have real news.
-- **They can interrupt:** their message stops your work. Answer it; change course if they want, otherwise pick up where you left off.
-- **Always send:** a final answer goes through \`send_message\`, never plain output.`;
-
-export const MESSAGES_FLOW_INSTRUCTIONS = `**Replying to a flow:** this message came from one of the user's Paperboard automations, not from them. Your reply goes back to it as data, and the user may read it in the chat too.
-- **Reply once:** one \`send_message\` with the result. No heads-up, narration or questions.
-- **Plain text:** files go in \`files\` by id (\`share_file\` gives one), never in the text.
-- **No sign-ins:** use sites you're already signed in to. If one needs a sign-in, reply saying so.
-- **No showing apps:** say an app's title; the user opens it from their apps.
-- **Stuck:** reply with what's in the way.`;
+// How the agent texts is in the core of its instructions (harness.ts); this is only the tool.
 
 export const MESSAGE_TOOLS: ToolSpec[] = [
     {
@@ -29,7 +16,7 @@ export const MESSAGE_TOOLS: ToolSpec[] = [
             type: "object",
             properties: {
                 text: { type: "string", description: "The message. Markdown works." },
-                reply_to: { type: "string", description: "Id of an earlier message (theirs or yours) this one answers. Optional." },
+                reply_to: { type: "string", description: "Id of an earlier message (theirs or yours), like k3x9f2 from [k3x9f2], when this answers one of several or something said earlier. Optional." },
             },
             required: ["text"],
         },
@@ -62,7 +49,6 @@ export function messagesToolset(texter: Texter): Toolset {
     return {
         id: "messages",
         tools: (mode) => (mode.fromFlow ? MESSAGE_FLOW_TOOLS : MESSAGE_TOOLS),
-        instructions: (mode) => (mode.fromFlow ? MESSAGES_FLOW_INSTRUCTIONS : MESSAGES_INSTRUCTIONS),
         call: async (name, args, mode = USER_TURN): Promise<ToolResult> => {
             if (name !== "send_message") return { text: `unknown tool ${name}`, isError: true };
             if (typeof args.text !== "string") return { text: "text must be a string", isError: true };

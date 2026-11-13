@@ -6,7 +6,7 @@
     background: var(--paper-surface);
 }
 
-/* the app takes everything below the bar, edge to edge */
+/* the page takes everything below the bar, edge to edge */
 .frame {
     flex: 1;
     min-height: 0;

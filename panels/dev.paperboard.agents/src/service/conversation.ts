@@ -26,13 +26,14 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type AppEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
+import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type PageEntry, type PromptEntry, type ToolServerEntry, type ToolSignInEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./browser";
 import { Attachments, sizeText } from "./attachments";
 import { AcpTurn, type AcpEvent } from "./acp";
-import { HARNESS_NAMES, codexContext, parseTurnLine, turnLaunch } from "./harness";
+import { HARNESS_NAMES, codexContext, instructions, parseTurnLine, turnLaunch, type TurnLaunch } from "./harness";
+import type { TurnLog } from "./turnLog";
 import { writeLine } from "./mcpClient";
-import type { TurnMode } from "./toolsets";
+import type { Sections, TurnMode } from "./toolsets";
 
 export const TURN_PROC_ID = `${PANEL_ID}.turn`;
 const TRANSCRIPT = "transcript.jsonl";
@@ -108,7 +109,9 @@ export interface ConversationDeps {
     /** the computer's MCP endpoint for this service generation */
     mcp: () => { url: string; token: string; onToolsListed(cb: () => void): () => void };
     /** every toolset's part of the agent's instructions, read at the start of each turn */
-    instructions: () => Promise<string[]>;
+    instructions: () => Promise<Sections>;
+    /** the developer's log of every turn (turnLog.ts), when it's switched on */
+    log?: TurnLog | null;
     emit: (entry: ChatEntry) => void;
     /** a turn ended without doing what it was for: its error, as the conversation shows it */
     onTurnFailed?: (error: string) => void;
@@ -231,7 +234,7 @@ export class Conversation {
     }
 
     /** Add or update a card: a sign-in, access or prompt request (signIn.ts, access.ts and prompts.ts own them; this only shows them) or an app shown to the user. */
-    post(entry: SignInEntry | AccessEntry | PromptEntry | ToolServerEntry | ToolSignInEntry | AppEntry) {
+    post(entry: SignInEntry | AccessEntry | PromptEntry | ToolServerEntry | ToolSignInEntry | PageEntry) {
         if (this.closed) return;
         this.put(entry);
     }
@@ -597,9 +600,34 @@ export class Conversation {
             message,
             mcpUrl: mcp.url,
             sections,
+            fromFlow: this.turnFromFlow,
         });
         if (launch.thread) this.saveThread(settings.harness, launch.thread);
+        const log = this.deps.log ?? null;
+        if (!log) return this.launched(settings, launch, mcp, message);
+        log.begin({
+            harness: settings.harness,
+            model: settings.model,
+            name: settings.name,
+            fromFlow: this.turnFromFlow,
+            thread,
+            message,
+            instructions: instructions(settings.name, sections, { harness: settings.harness, model: settings.model, fromFlow: this.turnFromFlow }),
+            command: launch.command,
+            args: launch.args,
+        });
+        try {
+            await this.launched(settings, launch, mcp, message);
+            log.end({ outcome: this.stopRequested ? "stopped" : "done", context: { used: this.context?.used ?? null, size: this.context?.size ?? null } });
+        } catch (e) {
+            log.end({ outcome: "failed", error: e instanceof Error ? e.message : String(e), context: { used: this.context?.used ?? null, size: this.context?.size ?? null } });
+            throw e;
+        }
+    }
 
+    /** A turn whose harness is ready to start, run until it's over. */
+    private async launched(settings: Settings, launch: TurnLaunch, mcp: ReturnType<ConversationDeps["mcp"]>, message: string) {
+        const log = this.deps.log ?? null;
         let buf = "";
         let stderr = "";
         const failures: string[] = [];
@@ -656,11 +684,15 @@ export class Conversation {
                       model: settings.model,
                       message,
                       ready,
-                      write: (line) => writeLine(this.deps.host.write, TURN_PROC_ID, line),
+                      write: (line) => {
+                          log?.line("stdin", line);
+                          return writeLine(this.deps.host.write, TURN_PROC_ID, line);
+                      },
                       emit: onEvent,
                   })
                 : null;
         const onLine = (line: string) => {
+            log?.line("stdout", line);
             if (acp) acp.line(line);
             else for (const ev of parseTurnLine(settings.harness, line)) onEvent(ev);
         };
@@ -675,6 +707,7 @@ export class Conversation {
                     if (buf.length > MAX_LINE) buf = ""; // a line past the cap is dropped, not buffered forever
                 }),
                 this.deps.host.onStderr(TURN_PROC_ID, (data) => {
+                    log?.line("stderr", data);
                     stderr = (stderr + data).slice(-4000);
                 }),
             ];

@@ -2,7 +2,7 @@
 // (v1, flowActions.ts) stay as they are; both run the same FlowHost.
 
 import type { BlockSet } from "@mileniumhq/paperapi";
-import { DEFAULT_MODEL, HARNESSES, LIMITS, SIGN_IN_REQUIRED, type AppInfo, type BrainModel, type BrainState, type Harness, type Routine } from "../contract";
+import { DEFAULT_MODEL, HARNESSES, LIMITS, SIGN_IN_REQUIRED, type PageInfo, type BrainModel, type BrainState, type Harness, type Routine } from "../contract";
 import type { ServerStatus } from "../toolsContract";
 import { DAY_NAMES, describeSchedule, localStamp } from "../routineText";
 import type { FlowHost, MessageReceived } from "./flowActions";
@@ -62,8 +62,8 @@ export interface BlocksHost extends FlowHost {
         setEnabled(name: string, on: boolean): Promise<unknown>;
         restart(name: string): Promise<unknown>;
     };
-    apps: {
-        list(): AppInfo[];
+    pages: {
+        list(): PageInfo[];
         remove(name: string): unknown;
     };
 }
@@ -79,7 +79,7 @@ export interface MessageFacts {
     from: "user" | "agent";
 }
 
-export const CATEGORY = { agent: "Agent", brain: "Brain", memory: "Memory", routines: "Routines", computer: "Computer", tools: "Tool Servers", apps: "Apps" };
+export const CATEGORY = { agent: "Agent", brain: "Brain", memory: "Memory", routines: "Routines", computer: "Computer", tools: "Tool Servers", pages: "Pages" };
 
 const L = LIMITS.memory;
 
@@ -146,9 +146,9 @@ export function flowBlocks(host: BlocksHost): BlockSet {
         if (!found) throw new Error(`the agent has no tool server "${name}"; add it on the agent's Tools page`);
         return found;
     };
-    const app = (name: string): AppInfo => {
-        const found = host.apps.list().find((a) => a.name === name);
-        if (!found) throw new Error(`the agent has no app "${name}"; it may have been deleted`);
+    const page = (name: string): PageInfo => {
+        const found = host.pages.list().find((a) => a.name === name);
+        if (!found) throw new Error(`the agent has no page "${name}"; it may have been deleted`);
         return found;
     };
     const serverInput = { type: "tool-server", name: "Tool Server" } as const;
@@ -162,7 +162,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
             { name: CATEGORY.routines, icon: "schedule" },
             { name: CATEGORY.computer, icon: "computer" },
             { name: CATEGORY.tools, icon: "handyman" },
-            { name: CATEGORY.apps, icon: "apps" },
+            { name: CATEGORY.pages, icon: "web" },
         ],
         types: [
             {
@@ -282,16 +282,18 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                     tools: { type: "number", name: "Tools", description: "How many tools it offers while it's running", resolve: (name: string) => ready(() => toolServer(name).tools) },
                 },
             },
+            // pages were called apps: the ids flows know them by stay
             {
                 id: "app",
-                name: "App",
+                name: "Page",
                 icon: "web",
                 description: "A web page the agent made for the user, by its name",
                 base: "text",
-                choices: () => ready(() => host.apps.list().map((a) => ({ label: a.title, value: a.name }))),
+                choices: () => ready(() => host.pages.list().map((a) => ({ label: a.title, value: a.name }))),
                 fields: {
-                    title: { type: "text", name: "Title", resolve: (name: string) => ready(() => app(name).title) },
-                    description: { type: "text", name: "Description", optional: true, resolve: (name: string) => ready(() => app(name).description || null) },
+                    title: { type: "text", name: "Title", resolve: (name: string) => ready(() => page(name).title) },
+                    description: { type: "text", name: "Description", optional: true, resolve: (name: string) => ready(() => page(name).description || null) },
+                    kind: { type: "text", name: "Kind", description: "app (something to use) or document (something to read, print or keep)", resolve: (name: string) => ready(() => page(name).kind) },
                 },
             },
             {
@@ -421,13 +423,13 @@ export function flowBlocks(host: BlocksHost): BlockSet {
             },
             {
                 id: "apps",
-                name: "Apps",
-                category: CATEGORY.apps,
+                name: "Pages",
+                category: CATEGORY.pages,
                 icon: "web",
-                description: "The apps the agent made, newest first",
+                description: "The pages the agent made, newest first",
                 type: "list<app>",
                 changes: true,
-                read: () => ready(() => host.apps.list().map((a) => a.name)),
+                read: () => ready(() => host.pages.list().map((a) => a.name)),
             },
             {
                 id: "computer-running",
@@ -487,7 +489,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 category: CATEGORY.agent,
                 icon: "send",
                 description:
-                    "Texts the agent in its current conversation and goes on without waiting; its reply starts When the Agent Replies. Answering a flow, the agent can't sign in anywhere or show apps.",
+                    "Texts the agent in its current conversation and goes on without waiting; its reply starts When the Agent Replies. Answering a flow, the agent can't sign in anywhere or show pages.",
                 text: "text the agent {message} following {instructions}",
                 inputs: {
                     message: { type: "text", name: "Message", maxLength: LIMITS.message },
@@ -722,13 +724,13 @@ export function flowBlocks(host: BlocksHost): BlockSet {
             },
             {
                 id: "delete-app",
-                name: "Delete App",
-                category: CATEGORY.apps,
+                name: "Delete Page",
+                category: CATEGORY.pages,
                 icon: "delete",
-                description: "Deletes one of the agent's apps for good: its folder and its picture. Cards that showed it can't open it anymore.",
+                description: "Deletes one of the agent's pages for good: its folder and its picture. Cards that showed it can't open it anymore.",
                 text: "delete {app}",
-                inputs: { app: { type: "app", name: "App" } },
-                run: ({ app: name }: { app: string }) => ready(() => void host.apps.remove(app(name).name)),
+                inputs: { app: { type: "app", name: "Page" } },
+                run: ({ app: name }: { app: string }) => ready(() => void host.pages.remove(page(name).name)),
             },
             {
                 id: "start-computer",

@@ -246,7 +246,8 @@ export class Routines {
             id: "routines",
             tools: () => ROUTINE_TOOLS,
             call: (name, args) => this.call(name, args),
-            instructions: () => this.instructions(),
+            instructions: () => ROUTINE_INSTRUCTIONS,
+            context: () => this.context(),
         };
     }
 
@@ -272,19 +273,18 @@ export class Routines {
         throw new RoutineError(`unknown routine tool ${name}`);
     }
 
-    private instructions(): string {
+    private context(): string {
         const now = this.now();
         const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         const day = new Date(now).toLocaleDateString("en-US", { weekday: "long" });
         const head = `It's ${day} ${localStamp(now)} (${zone}) on the user's computer.`;
         if (this.broken) return `${head}\nYour routines are unavailable right now (${this.broken}).`;
         const all = this.list();
-        const listed = all.length ? all.map(line).join("\n") : "(none)";
-        return `${head}
-**Routines:** things you do on a schedule. When one is due, you get a turn that says so. \`add_routine\` when the user wants something later or regularly ("text me at 9 every weekday"); \`remove_routine\` to stop one. Yours:
-${listed}`;
+        return `${head}\nYour routines:\n${all.length ? all.map(line).join("\n") : "(none)"}`;
     }
 }
+
+export const ROUTINE_INSTRUCTIONS = `**Routines:** \`add_routine\` when the user wants something done later or regularly ("text me at 9 every weekday"); when one is due, you get a turn that says so. \`remove_routine\` to stop one.`;
 
 const line = (r: Routine) =>
     `- [${r.id}] ${describeSchedule(r.schedule)}${r.next ? `, next ${localStamp(r.next)}` : ""}: ${r.what.length > 120 ? r.what.slice(0, 119) + "…" : r.what}` +

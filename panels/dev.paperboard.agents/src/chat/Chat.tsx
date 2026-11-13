@@ -3,11 +3,11 @@ import { PaperButton, PaperContextMenu, PaperContextMenuItem, PaperEmptyState, P
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import type { FaceController } from "../face/controller";
-import type { AccessEntry, AppEntry, ChatEntry, PromptEntry, SignInEntry, ToolServerEntry, ToolSignInEntry, WaitingMessage } from "../contract";
+import type { AccessEntry, ChatEntry, PageEntry, PromptEntry, SignInEntry, ToolServerEntry, ToolSignInEntry, WaitingMessage } from "../contract";
 import type { Agent } from "../lib/agent";
 import type { Files } from "../lib/files";
-import AppCard from "../apps/AppCard";
-import type { Launcher } from "../apps/launcher";
+import PageCard from "../pages/PageCard";
+import type { Launcher } from "../pages/launcher";
 import Composer from "./Composer";
 import { AttachmentList, renderAgentImage } from "./Media";
 import { createTray } from "./tray";
@@ -51,7 +51,7 @@ const stampText = (at: number) => {
 };
 
 /** One conversation, like texting a friend. */
-export default function Chat(props: { agent: Agent; face: FaceController; apps: Launcher; onMenu: () => void }) {
+export default function Chat(props: { agent: Agent; face: FaceController; pages: Launcher; onMenu: () => void }) {
     const { agent, face } = props;
     const name = () => agent.state.settings?.name ?? "Your agent";
 
@@ -111,7 +111,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; apps: 
         for (const id of drafts.keys()) if (!agent.entries.some((e) => e.id === id)) drafts.delete(id);
     });
 
-    // Old transcripts held tool-call entries; only messages, errors, the agent's requests and apps are shown.
+    // Old transcripts held tool-call entries; only messages, errors, the agent's requests and pages are shown.
     const rows = createMemo<Row[]>(() => {
         const shown = agent.entries.filter((e) => e.kind === "user" || e.kind === "agent" || e.kind === "error" || e.kind === "sign-in" || e.kind === "access" || e.kind === "prompt" || e.kind === "tool-server" || e.kind === "tool-sign-in" || e.kind === "app");
         const items: Pick<Row, "key" | "entry" | "waiting" | "side">[] = [
@@ -305,7 +305,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; apps: 
                                 <ToolSignIn entry={row.entry as ToolSignInEntry} name={name()} />
                             </Show>
                             <Show when={row.side === "app"}>
-                                <AppCard entry={row.entry as AppEntry} apps={props.apps} />
+                                <PageCard entry={row.entry as PageEntry} pages={props.pages} />
                             </Show>
                             <Show when={row.side === "me" || row.side === "them"}>
                                 <Bubble

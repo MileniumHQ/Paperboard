@@ -13,10 +13,7 @@ import type { Toolset } from "./toolsets";
 
 const L = LIMITS.prompt;
 
-export const PROMPT_INSTRUCTIONS = `**Asking the user for something:** \`ask_user\` puts a form in the chat for what only they know: a name, a choice, an address, an API key.
-- **Ask once, for everything you need,** with a short \`title\` and a \`reason\` saying what it's for.
-- **A key, token or password is a secret field:** give the tool server it's for and the name of the secret in that server's config (add the server first). It goes into the vault and you never see it; you're told it was saved. Never ask for one in plain chat, and never ask for a site's sign-in here (that's \`ask_to_sign_in\`).
-- **A header that holds more than the key,** like \`Authorization: Bearer <key>\`: give the field a \`prefix\` ("Bearer ") so the user types only the key.`;
+export const PROMPT_INSTRUCTIONS = `**Asking:** \`ask_user\` for what only the user knows (a choice, an address, an API key), everything at once. A key, token or password goes in a secret field, never plain chat; a site's sign-in is \`ask_to_sign_in\`.`;
 
 export const PROMPT_TOOLS: ToolSpec[] = [
     {
@@ -40,11 +37,11 @@ export const PROMPT_TOOLS: ToolSpec[] = [
                             label: { type: "string", description: `What to type there, like "Workspace name" or "API key". Up to ${L.labelChars} characters.` },
                             secret: {
                                 type: "object",
-                                description: "For a key, token or password: the tool server it's for and the secret's name in its config. Leave it out for a plain answer.",
+                                description: "For a key, token or password: the tool server it's for (add the server first) and the secret's name in its config. It goes into the vault and you never see it. Leave it out for a plain answer.",
                                 properties: {
                                     server: { type: "string" },
                                     name: { type: "string" },
-                                    prefix: { type: "string", description: `Saved in front of what the user types, like "Bearer ". Up to ${L.prefixChars} characters.` },
+                                    prefix: { type: "string", description: `Saved in front of what the user types, like "Bearer " for an \`Authorization: Bearer <key>\` header, so they type only the key. Up to ${L.prefixChars} characters.` },
                                 },
                                 required: ["server", "name"],
                             },

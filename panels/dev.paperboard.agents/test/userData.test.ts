@@ -48,7 +48,7 @@ describe("memory", () => {
         expect(fs.readFileSync(index, "utf8")).toBe('{"version":1,"facts":[{"id":"f-1","text":"the user is Ada"}');
         expect(changes.at(-1)!.error).toMatch(/unreadable/);
         // and the agent is told, not shown an empty memory
-        expect(await memory.instructions()).toMatch(/^Your memory is unavailable right now/);
+        expect(await memory.context()).toMatch(/^Your memory is unavailable right now/);
     });
 });
 
@@ -133,24 +133,24 @@ describe("checkpoints", () => {
 
     test("a restore brings the home folder back, and checkpoints first so it can be undone", async () => {
         const { call, file } = setup();
-        fs.mkdirSync(file("Apps/planner"), { recursive: true });
-        fs.writeFileSync(file("Apps/planner/index.html"), "v1");
+        fs.mkdirSync(file("Pages/planner"), { recursive: true });
+        fs.writeFileSync(file("Pages/planner/index.html"), "v1");
         fs.writeFileSync(file("notes.txt"), "keep me");
         expect((await call("checkpoint", { note: "planner works" })).text).toMatch(/^Kept checkpoint 1/);
 
-        fs.writeFileSync(file("Apps/planner/index.html"), "v2 broken");
+        fs.writeFileSync(file("Pages/planner/index.html"), "v2 broken");
         fs.rmSync(file("notes.txt"));
         fs.writeFileSync(file("stray.txt"), "new");
         const restored = await call("restore", { checkpoint: 1 });
         expect(restored.isError).toBeFalsy();
         expect(restored.text).toContain("Checkpoint 2 has how it was before");
-        expect(fs.readFileSync(file("Apps/planner/index.html"), "utf8")).toBe("v1");
+        expect(fs.readFileSync(file("Pages/planner/index.html"), "utf8")).toBe("v1");
         expect(fs.readFileSync(file("notes.txt"), "utf8")).toBe("keep me");
         expect(fs.existsSync(file("stray.txt"))).toBe(false);
 
         // the restore is undone by the checkpoint it made
         await call("restore", { checkpoint: 2 });
-        expect(fs.readFileSync(file("Apps/planner/index.html"), "utf8")).toBe("v2 broken");
+        expect(fs.readFileSync(file("Pages/planner/index.html"), "utf8")).toBe("v2 broken");
         expect(fs.existsSync(file("notes.txt"))).toBe(false);
         expect(fs.readFileSync(file("stray.txt"), "utf8")).toBe("new");
     });

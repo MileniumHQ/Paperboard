@@ -47,15 +47,12 @@ interface Changes {
     removed: string[];
 }
 
-export const CHECKPOINT_INSTRUCTIONS = `**Checkpoints:** \`checkpoint\` keeps your whole home folder as it is now, with a note. node_modules isn't kept; \`add_package\` reinstalls it.
-- **When:** before a change that could go wrong, and once something works.
-- **Undo:** \`checkpoints\` lists them and what's changed since; \`restore\` brings back everything or one path.
-- **Undoable:** a restore checkpoints first.`;
+export const CHECKPOINT_INSTRUCTIONS = `**Checkpoints:** \`checkpoint\` before a change that could go wrong, and once something works. \`restore\` undoes back to one.`;
 
 export const CHECKPOINT_TOOLS: ToolSpec[] = [
     {
         name: "checkpoint",
-        description: "Keep what every file in your home folder is now, with a note, so it can be restored later.",
+        description: "Keep what every file in your home folder is now, with a note, so it can be restored later. node_modules isn't kept; `add_package` reinstalls it.",
         inputSchema: {
             type: "object",
             properties: { note: { type: "string", description: "What it is, e.g. `planner works: week view and due dates`." } },
@@ -77,7 +74,7 @@ export const CHECKPOINT_TOOLS: ToolSpec[] = [
             type: "object",
             properties: {
                 checkpoint: { type: "integer", description: "The checkpoint's number." },
-                path: { type: "string", description: "Only this file or folder, e.g. ~/Apps/planner. All of ~ when left out." },
+                path: { type: "string", description: "Only this file or folder, e.g. ~/Pages/planner. All of ~ when left out." },
             },
             required: ["checkpoint"],
         },
@@ -300,7 +297,7 @@ export class Checkpoints {
         const home = this.o.home;
         let scope = "";
         if (where !== undefined) {
-            if (typeof where !== "string") throw new Error("path is a file or folder in your home folder, e.g. ~/Apps/planner");
+            if (typeof where !== "string") throw new Error("path is a file or folder in your home folder, e.g. ~/Pages/planner");
             const full = home.resolve(where);
             scope = path.relative(fs.realpathSync(home.root), full).split(path.sep).join("/");
         }
@@ -340,9 +337,9 @@ export class Checkpoints {
 
         const parts = describe({ changed: undo.changed, added: undo.added, removed: undo.removed }, { changed: "changed back", added: "removed", removed: "brought back" });
         const packages = [...undo.changed, ...undo.removed]
-            .map((p) => p.match(/^Apps\/([^/]+)\/package\.json$/)?.[1])
+            .map((p) => p.match(/^Pages\/([^/]+)\/package\.json$/)?.[1])
             .filter((a): a is string => a !== undefined)
-            .map((a) => ` ~/Apps/${a}'s package.json changed: add_package for ${a}, with no packages, installs what it lists.`)
+            .map((a) => ` ~/Pages/${a}'s package.json changed: add_package for ${a}, with no packages, installs what it lists.`)
             .join("");
         const undoNote = saved ? `Checkpoint ${kept.id} has how it was before` : `${this.name(kept)} already has how it was before`;
         return `${shownScope} is back to ${this.name(target)}${parts ? `: ${parts}` : ""}. ${undoNote}, to undo this.${packages}`;

@@ -84,11 +84,13 @@ export const UI_ACTION_IDS = {
     revokeAccess: "ui-revoke-access",
     // a program the agent asks to run as one of its tool servers: allowed or not
     answerToolServer: "ui-answer-tool-server",
-    // the apps the agent made: list them, open one (its address), its picture, or delete it
-    apps: "ui-apps",
-    openApp: "ui-open-app",
-    appPicture: "ui-app-picture",
-    deleteApp: "ui-delete-app",
+    // the pages the agent made: list them, open one (its address), its picture, save one as a PDF, or delete it
+    pages: "ui-pages",
+    openPage: "ui-open-page",
+    pagePicture: "ui-page-picture",
+    pagePdf: "ui-page-pdf",
+    discardPagePdf: "ui-discard-page-pdf",
+    deletePage: "ui-delete-page",
 } as const;
 
 export const EVENTS = {
@@ -171,7 +173,7 @@ export const LIMITS = {
         /** what the agent can look at directly; bigger images go to its computer */
         viewBytes: 4 * 1024 * 1024,
     },
-    apps: {
+    pages: {
         titleChars: 60,
         descriptionChars: 200,
     },
@@ -270,8 +272,8 @@ export interface RoutinesState {
     error: string | null;
 }
 
-export interface AppsState {
-    /** counts every change to the apps (made, shown, retitled, deleted), so open lists know to read again */
+export interface PagesState {
+    /** counts every change to the pages (made, shown, retitled, deleted), so open lists know to read again */
     revision: number;
 }
 
@@ -477,7 +479,7 @@ export interface AiState {
     chat: ChatState;
     memory: MemoryState;
     routines: RoutinesState;
-    apps: AppsState;
+    pages: PagesState;
 }
 
 /** A file in the conversation: one the user attached, or one the agent shared from its computer. */
@@ -507,27 +509,39 @@ export type ChatEntry =
     | PromptEntry
     | ToolServerEntry
     | ToolSignInEntry
-    | AppEntry;
+    | PageEntry;
 
-/** An app the agent made, as the user's list shows it. */
-export interface AppInfo {
-    /** its folder in ~/Apps, and its address */
+/**
+ * What a page is: an app is something to use (a planner, a tracker); a document is something to read, print or
+ * keep (a birthday card, a letter, a report), and its view has Print and Save as PDF.
+ */
+export const PAGE_KINDS = ["app", "document"] as const;
+export type PageKind = (typeof PAGE_KINDS)[number];
+
+/** A page the agent made, as the user's list shows it. */
+export interface PageInfo {
+    /** its folder in ~/Pages, and its address */
     name: string;
     /** what the agent calls it, like "Assignment planner" */
     title: string;
     /** one line on what it's for */
     description: string;
+    kind: PageKind;
     /** a picture of it was taken when the agent last showed it */
     picture: boolean;
 }
 
-/** The agent showing the user one of its apps: a card with its picture that opens it beside the chat. */
-export interface AppEntry {
+/**
+ * The agent showing the user one of its pages: a card with its picture that opens it beside the chat. Pages were
+ * called apps, and conversations keep these entries: the stored kind and field keep that name.
+ */
+export interface PageEntry {
     id: string;
     at: number;
     kind: "app";
+    /** the page's name */
     app: string;
-    /** its title and description when it was shown; the app may have changed or gone since */
+    /** its title and description when it was shown; the page may have changed or gone since */
     title: string;
     description: string;
 }
@@ -645,5 +659,5 @@ export const DEFAULT_STATE: AiState = {
     chat: { busy: false, typing: false, waiting: [], compacting: false },
     memory: { revision: 0, error: null },
     routines: { revision: 0, error: null },
-    apps: { revision: 0 },
+    pages: { revision: 0 },
 };

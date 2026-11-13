@@ -173,7 +173,7 @@ describe("the agent's blocks", () => {
         expect(await rig.blocks.read("facts")).toEqual([fact]);
         expect(await rig.blocks.property("fact", "text", fact)).toBe("likes tea");
         await rig.blocks.changes.until((c) => c.includes("facts"), "Facts to announce the change");
-        expect(await rig.app.memory.instructions()).toContain("likes tea");
+        expect(await rig.app.memory.context()).toContain("likes tea");
 
         expect(await rig.blocks.run("edit-fact", { fact, text: "likes coffee" })).toBe(fact);
         expect(await rig.blocks.property("fact", "text", fact)).toBe("likes coffee");
@@ -335,22 +335,23 @@ describe("the agent's blocks", () => {
         expect(await rig.blocks.property("tool-server", "error", "whoami")).toBeString();
     }, SLOW);
 
-    test("the agent's apps are listed with their titles, deleted for good, and announced", async () => {
+    test("the agent's pages are listed with their titles and kinds, deleted for good, and announced", async () => {
         rig = await appRig();
         expect(await rig.blocks.read("apps")).toEqual([]);
-        const made = await rig.app.apps.toolset().call("start_app", { name: "planner", title: "Assignment planner", description: "Due dates, at a glance" });
+        const made = await rig.app.pages.toolset().call("start_page", { name: "planner", kind: "app", title: "Assignment planner", description: "Due dates, at a glance" });
         expect(made.isError).toBeFalsy();
         expect(await rig.blocks.read("apps")).toEqual(["planner"]);
-        await rig.blocks.changes.until((c) => c.includes("apps"), "Apps to announce the change");
+        await rig.blocks.changes.until((c) => c.includes("apps"), "Pages to announce the change");
         expect(await rig.blocks.property("app", "title", "planner")).toBe("Assignment planner");
         expect(await rig.blocks.property("app", "description", "planner")).toBe("Due dates, at a glance");
+        expect(await rig.blocks.property("app", "kind", "planner")).toBe("app");
 
-        const folder = path.join(rig.root, "storage", "home", "Apps", "planner");
+        const folder = path.join(rig.root, "storage", "home", "Pages", "planner");
         expect(fs.existsSync(path.join(folder, "package.json"))).toBe(true);
         await rig.blocks.run("delete-app", { app: "planner" });
         expect(await rig.blocks.read("apps")).toEqual([]);
         expect(fs.existsSync(folder)).toBe(false);
-        await expect(rig.blocks.property("app", "title", "planner")).rejects.toThrow('the agent has no app "planner"');
-        await rig.blocks.changes.until((c) => c.filter((v) => v === "apps").length >= 2, "Apps to announce the removal");
+        await expect(rig.blocks.property("app", "title", "planner")).rejects.toThrow('the agent has no page "planner"');
+        await rig.blocks.changes.until((c) => c.filter((v) => v === "apps").length >= 2, "Pages to announce the removal");
     }, SLOW);
 });

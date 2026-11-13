@@ -3,8 +3,8 @@
     height: var(--agents-workspace-height);
 }
 
-/* the chat, and an app beside it: the chat steps aside to a column as the app
-   slides in from the right, and off to the left when the app takes it all */
+/* the chat, and a page beside it: the chat steps aside to a column as the page
+   slides in from the right, and off to the left when the page takes it all */
 .split {
     display: flex;
     height: 100%;
@@ -28,7 +28,7 @@
     height: 100%;
 }
 
-.appPane {
+.pagePane {
     flex: 1 1 0;
     min-width: 0;
     transform: translateX(100%);
@@ -39,7 +39,7 @@
     flex-basis: var(--paper-size-split-side);
 }
 
-.open .appPane {
+.open .pagePane {
     transform: none;
     border-left: var(--paper-border-width) solid var(--paper-border);
 }
@@ -48,13 +48,13 @@
     flex-basis: 0;
 }
 
-.extended .appPane {
+.extended .pagePane {
     border-left: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
     .chatPane,
-    .appPane {
+    .pagePane {
         transition: none;
     }
 }

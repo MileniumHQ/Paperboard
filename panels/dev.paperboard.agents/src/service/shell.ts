@@ -58,18 +58,17 @@ const DEFENSE: DefenseInDepthConfig = {
 // loopback and the local network out even with full internet access
 const NETWORK: NetworkConfig = { dangerouslyAllowFullInternetAccess: true, denyPrivateRanges: true };
 
-export const SHELL_INSTRUCTIONS = `**Your shell:** \`bash\` runs in your home folder (~, which is ${SHELL_HOME}), the folder the browser downloads to and the file tools use.
-- **Tools:** ls, cat, grep, rg, sed, awk, find, jq, yq, xan (CSV), tar and more; any command takes --help.
-- **JavaScript:** \`js-exec -c '...'\` or \`js-exec script.mjs\` for math, data and web APIs. It has fetch, top-level await, fs and path; imports go by file path, not package.
-- **Internet only:** fetch and curl never reach this computer or its local network.
-- **Not a whole computer:** no installing, and no node, npm, python, git or sqlite3.
-- **Fresh each call:** cd and variables don't carry over, files do. Chain one job's steps with &&.
-- **Only ~ is kept:** anything written elsewhere, like /tmp, is gone when the command ends.`;
+export const SHELL_INSTRUCTIONS = `**Shell:** \`bash\` for files, data and quick scripts in your home folder (~), which your browser and file tools share. It's not a whole computer: no installing, and no node, npm, python or git.`;
 
 export const SHELL_TOOLS: ToolSpec[] = [
     {
         name: "bash",
-        description: `Run a bash command in your home folder (~ is ${SHELL_HOME}) and get what it printed and its exit code. For files, JavaScript (js-exec) and the web (curl); no programs beyond the shell's own.`,
+        description:
+            `Run a bash command in your home folder (~ is ${SHELL_HOME}) and get what it printed and its exit code. ` +
+            "Has ls, cat, grep, rg, sed, awk, find, jq, yq, xan (CSV), tar, curl and more; any command takes --help. " +
+            "`js-exec -c '...'` or `js-exec script.mjs` runs JavaScript with fetch, top-level await, fs and path; imports go by file path, not package. " +
+            "No installing, and no node, npm, python, git or sqlite3. curl and fetch reach the internet only, never this computer or its local network. " +
+            "Each call is a fresh shell: cd and variables don't carry over, so chain one job's steps with &&. Only ~ is kept; anything written elsewhere, like /tmp, is gone when the command ends.",
         inputSchema: {
             type: "object",
             properties: { command: { type: "string", description: "The command, e.g. `ls -la ~/Downloads` or `grep -rn invoice ~ | head`." } },

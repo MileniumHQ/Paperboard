@@ -23,7 +23,7 @@ import {
 import { HomeFolder, moveHomeFolder } from "./homeFolder";
 import { Checkpoints } from "./checkpoints";
 import { shellToolset } from "./shell";
-import { Apps } from "./apps";
+import { Pages } from "./pages";
 import { BrowserComputer, type ComputerHost } from "./browser";
 import { Brains, type BrainPackages } from "./brains";
 import { errorText } from "../lib/failure";
@@ -55,6 +55,7 @@ import { flowBlocks, replyPayload, type ConversationFacts } from "./flowBlocks";
 import type { ActionDefinition, BlocksHandle } from "@mileniumhq/paperapi";
 export { findProgram } from "./which";
 import type { Launch } from "./which";
+import { openTurnLog, type TurnLog } from "./turnLog";
 
 /** What the tool servers and the actions toolset need from the daemon. */
 export interface ToolsHost {
@@ -108,8 +109,10 @@ export class AiApp {
     prompts!: Prompts;
     serverTools!: ServerTools;
     private mcp: ComputerMcp | null = null;
-    apps!: Apps;
+    pages!: Pages;
     private tools: Toolbox | null = null;
+    /** the developer's log of every turn, when PAPERBOARD_AGENT_LOG=1 */
+    private turnLog: TurnLog | null = null;
     servers!: McpServers;
     asker!: Asker;
     /** the empty folder Claude runs in when it's asked for its models */
@@ -248,26 +251,31 @@ export class AiApp {
         moveHomeFolder(path.join(root, "browser", "home"), path.join(root, "home"));
         const home = new HomeFolder(path.join(root, "home"));
         home.ensure();
-        const apps = new Apps({
+        this.turnLog = openTurnLog(path.join(root, "debug"));
+        // the service's own files for the pages keep the names they had when pages were apps
+        const pages = new Pages({
             home,
             portFile: path.join(root, "apps.json"),
             infoFile: path.join(root, "app-info.json"),
             picturesDir: path.join(root, "app-pictures"),
+            exportsDir: path.join(root, "page-exports"),
             picture: (url) => this.computer.picture(url),
+            pdf: (url) => this.computer.pdf(url),
             post: (entry) => this.conversation.post(entry),
             onChange: () => {
-                this.ctx.setState({ apps: { revision: this.ctx.state.apps.revision + 1 } });
+                this.ctx.setState({ pages: { revision: this.ctx.state.pages.revision + 1 } });
+                // the Blocks list keeps its id from when pages were apps
                 this.announce("apps");
             },
         });
-        this.apps = apps;
-        apps.watch();
+        this.pages = pages;
+        pages.watch();
         const checkpoints = new Checkpoints({ home, dir: path.join(root, "checkpoints") });
         const tools = toolbox([
-            { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },
+            { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS, context: () => this.computer.openWindowsNote() },
             messagesToolset({ say: (text, replyTo, files) => this.conversation.say(text, replyTo, files) }),
             shellToolset(home),
-            apps.toolset(),
+            pages.toolset(),
             checkpoints.toolset(),
             filesToolset({
                 files: () => this.conversation.attachments,
@@ -291,13 +299,22 @@ export class AiApp {
                 const own = await tools.instructions();
                 const mode = this.conversation?.mode();
                 const custom = mode?.fromFlow ? (mode.instructions ?? this.ctx.state.settings?.automationInstructions ?? null) : null;
-                return custom ? [...own, customSection(custom)] : own;
+                return custom ? { ...own, now: [...own.now, customSection(custom)] } : own;
             },
             call: async (name, args) => {
                 // a summary is written from what it already knows: no texting, no work
                 if (this.conversation?.compacting) return { text: "You're writing a summary of the conversation: no texts and no tools until it's done.", isError: true };
                 if (name !== "send_message") this.conversation?.working();
-                return tools.call(name, args);
+                if (!this.turnLog) return tools.call(name, args);
+                const started = Date.now();
+                try {
+                    const result = await tools.call(name, args);
+                    this.turnLog.tool({ name, args, result, ms: Date.now() - started, isError: result.isError === true });
+                    return result;
+                } catch (e) {
+                    this.turnLog.tool({ name, args, result: { thrown: e instanceof Error ? e.message : String(e) }, ms: Date.now() - started, isError: true });
+                    throw e;
+                }
             },
         };
         this.mcp = await startComputerMcp(this.tools);
@@ -307,7 +324,7 @@ export class AiApp {
             dir: path.join(root, "browser"),
             home,
             storagePath: "browser",
-            apps: (host, port) => apps.serves(host, port),
+            pages: (host, port) => pages.serves(host, port),
             onState: (computer) => {
                 this.ctx.setState({ computer });
                 this.announce("computer-running");
@@ -316,6 +333,7 @@ export class AiApp {
         this.conversation = new Conversation({
             host: { ...this.host, write: this.host.tools.write },
             dir: path.join(root, "conversation"),
+            log: this.turnLog,
             settings: () => this.ctx.state.settings,
             resolve: (h) => this.brains.resolve(h),
             env: (h) => this.brains.env(h),
@@ -351,6 +369,7 @@ export class AiApp {
             env: (h) => this.brains.env(h),
             problem: (h) => this.brainProblem(h),
             workdir: path.join(root, "ask"),
+            log: this.turnLog,
         });
         // after the conversation exists: a one-off missed while the service was down runs as soon as it's read
         await this.routines.load();
@@ -377,7 +396,7 @@ export class AiApp {
             this.providers?.stop(),
         ]);
         for (const r of stops) if (r.status === "rejected") console.error("[ai] shutdown:", String(r.reason));
-        await Promise.all([this.mcp?.close(), this.apps?.close()]);
+        await Promise.all([this.mcp?.close(), this.pages?.close()]);
     }
 
     // ------------------------------------------------------------- actions
@@ -598,7 +617,7 @@ export class AiApp {
                 setEnabled: (name, on) => this.servers.setEnabled(name, on),
                 restart: (name) => this.servers.restart(name),
             },
-            apps: this.apps,
+            pages: this.pages,
         });
     }
 
@@ -652,7 +671,7 @@ export class AiApp {
             "current-brain": () => this.ctx.state.settings?.harness ?? null,
             "current-model": () => (this.ctx.state.settings ? (this.ctx.state.settings.model ?? DEFAULT_MODEL) : null),
             "tool-servers": () => this.servers.config.servers.map((s) => s.name),
-            apps: () => this.apps.list().map((a) => a.name),
+            apps: () => this.pages.list().map((a) => a.name),
         };
     }
 
