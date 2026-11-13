@@ -396,6 +396,8 @@ export interface SetupStep {
     status: StepStatus;
     /** 0–100 when measurable, null otherwise */
     percent: number | null;
+    /** how much has downloaded, while a download says */
+    bytes: { done: number; total: number } | null;
 }
 
 export type ComputerPhase =

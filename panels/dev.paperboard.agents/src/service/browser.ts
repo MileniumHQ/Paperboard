@@ -86,7 +86,7 @@ export interface ComputerHost {
 
 export interface PackageHost {
     isInstalled(name: string): Promise<boolean>;
-    download(name: string, onProgress?: (p: { stage: string; percent: number }) => void): Promise<unknown>;
+    download(name: string, onProgress?: (p: { stage: string; percent: number; bytesLoaded?: number; bytesTotal?: number }) => void): Promise<unknown>;
     getPath(name: string): Promise<string>;
 }
 
@@ -305,7 +305,7 @@ export class BrowserComputer {
             this.home.erase();
         }
         const abort = (this.abort = new AbortController());
-        const steps: SetupStep[] = SETUP_STEPS.map((id) => ({ id, status: "waiting", percent: null }));
+        const steps: SetupStep[] = SETUP_STEPS.map((id) => ({ id, status: "waiting", percent: null, bytes: null }));
         const step = (id: SetupStepId, patch: Partial<SetupStep>) => {
             const s = steps.find((x) => x.id === id)!;
             Object.assign(s, patch);
@@ -340,14 +340,17 @@ export class BrowserComputer {
         step("download", { status: "running", percent: 0 });
         let unpacking = false;
         await this.deps.host.packages.download(HELIUM_PACKAGE, (p) => {
-            if (p.stage === "downloading") step("download", { percent: Math.round(p.percent) });
+            if (p.stage === "downloading") {
+                const bytes = p.bytesLoaded !== undefined && p.bytesTotal ? { done: p.bytesLoaded, total: p.bytesTotal } : null;
+                step("download", { percent: Math.round(p.percent), bytes });
+            }
             else if (p.stage === "extracting" && !unpacking) {
                 unpacking = true;
-                step("download", { status: "done", percent: 100 });
+                step("download", { status: "done", percent: 100, bytes: null });
                 step("unpack", { status: "running" });
             }
         });
-        step("download", { status: "done", percent: 100 });
+        step("download", { status: "done", percent: 100, bytes: null });
         step("unpack", { status: "done" });
         if (signal.aborted) throw new Error("setup was stopped");
         if (!(await this.executable())) throw new Error("The browser package has no program in it.");

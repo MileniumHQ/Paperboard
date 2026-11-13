@@ -2,7 +2,7 @@
 // from the service's state.
 
 import { Index, Show } from "solid-js";
-import { PaperFlex, PaperLoader, PaperLoaderGroup, PaperQuote, type LoaderStatus } from "@mileniumhq/paperui";
+import { formatByteProgress, PaperFlex, PaperLoader, PaperLoaderGroup, PaperQuote, type LoaderStatus } from "@mileniumhq/paperui";
 import { type ComputerState, type SetupStepId, type StepStatus } from "../contract";
 
 const LABELS: Record<SetupStepId, string> = {
@@ -23,7 +23,13 @@ function loaderStatus(s: { status: StepStatus; percent?: number | null }): Loade
     }
 }
 
-const rows = (c: ComputerState) => c.steps.map((s) => ({ label: LABELS[s.id], status: s.status, percent: s.percent }));
+const rows = (c: ComputerState) =>
+    c.steps.map((s) => ({
+        label: LABELS[s.id],
+        subtitle: s.status === "running" && s.bytes && s.bytes.done > 0 ? formatByteProgress(s.bytes.done, s.bytes.total) : undefined,
+        status: s.status,
+        percent: s.percent,
+    }));
 
 /** The setup's steps as the service reports them, and its error when it stopped. */
 export function SetupProgress(props: { computer: ComputerState }) {
@@ -33,7 +39,7 @@ export function SetupProgress(props: { computer: ComputerState }) {
                 {/* each update is a new list of new rows, so the loaders are kept by position: recreating them would
                     replay every finished one's success animation and skip the running one's transition */}
                 <Index each={rows(props.computer)}>
-                    {(row) => <PaperLoader percent={row().percent ?? 0} loaderStatus={loaderStatus(row())} label={row().label} />}
+                    {(row) => <PaperLoader percent={row().percent ?? 0} loaderStatus={loaderStatus(row())} label={row().label} subtitle={row().subtitle} />}
                 </Index>
             </PaperLoaderGroup>
             <Show when={props.computer.phase === "failed" || props.computer.phase === "unsupported"}>
