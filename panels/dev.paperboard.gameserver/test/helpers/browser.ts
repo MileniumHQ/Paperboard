@@ -29,7 +29,6 @@ let built: string | null = null;
 export function panelUi(): string {
     if (built) return built;
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "gameserver-ui-"));
-    process.once("exit", () => fs.rmSync(out, { recursive: true, force: true }));
     const build = spawnSync(process.execPath, ["x", "vite", "build", "--outDir", out, "--emptyOutDir", "--logLevel", "error"], { cwd: PANEL, encoding: "utf8" });
     if (build.status !== 0 || !fs.existsSync(path.join(out, "index.html"))) {
         throw new Error(`Building the panel UI failed (exit ${build.status}):\n${build.stdout}\n${build.stderr}`);

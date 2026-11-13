@@ -15,7 +15,6 @@ export function standIn(main: string, name: string): string {
     const done = built.get(key);
     if (done) return done;
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), `gameserver-${main}-`));
-    process.once("exit", () => fs.rmSync(dir, { recursive: true, force: true }));
     const out = path.join(dir, exe(name));
     const build = spawnSync(process.execPath, ["build", "--compile", path.join(import.meta.dir, `${main}.main.ts`), "--outfile", out], { encoding: "utf8" });
     if (build.status !== 0 || !fs.existsSync(out)) {
