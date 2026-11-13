@@ -1,8 +1,8 @@
 import { createSignal } from "solid-js";
-import type { LoaderStatus } from "@mileniumhq/paperui";
+import { formatByteProgress, type LoaderStatus } from "@mileniumhq/paperui";
 import type { InstallLoaderItem } from "../../components/InstallLoaders";
 import { installProgress, serverBridge } from "../../lib/server";
-import { ensureJavaRuntime } from "../../lib/ensureJava";
+import { ensureJavaRuntime, type DownloadedBytes } from "../../lib/ensureJava";
 import { createInstallFlow } from "../installFlow";
 import { softwareName, tmodloaderReleaseFor, type TerrariaSoftware } from "./catalog";
 
@@ -16,16 +16,25 @@ export function createTerrariaInstall() {
     const { error, installed, running } = flow;
     const [runtimePercent, setRuntimePercent] = createSignal(0);
     const [runtimeReady, setRuntimeReady] = createSignal(false);
+    // the runtime's download, until unpacking takes over the row
+    const [runtimeBytes, setRuntimeBytes] = createSignal<DownloadedBytes | undefined>();
 
     const run = (software: TerrariaSoftware, version: string): Promise<boolean> =>
         flow.run(async () => {
             setRuntimeReady(false);
             setRuntimePercent(0);
+            setRuntimeBytes(undefined);
             if (software === "tmodloader") {
                 // the same package ensure Minecraft's Java uses: download, then unpack
                 await ensureJavaRuntime(tmodloaderReleaseFor(version).runtime, {
-                    onDownload: (percent) => setRuntimePercent(percent * 0.9),
-                    onExtract: (percent) => setRuntimePercent(90 + percent * 0.1),
+                    onDownload: (percent, bytes) => {
+                        setRuntimePercent(percent * 0.9);
+                        setRuntimeBytes(bytes);
+                    },
+                    onExtract: (percent) => {
+                        setRuntimePercent(90 + percent * 0.1);
+                        setRuntimeBytes(undefined);
+                    },
                 });
                 setRuntimeReady(true);
             }
@@ -40,16 +49,22 @@ export function createTerrariaInstall() {
         if (software === "tmodloader" && !runtimeReady()) return "waiting";
         return error() && !downloaded() ? "error" : downloaded() ? "success" : stage() ? "loading" : "waiting";
     };
+    const amount = (status: () => LoaderStatus, bytes: () => DownloadedBytes | undefined) => () => {
+        const b = bytes();
+        return status() === "loading" && b && b.done > 0 ? formatByteProgress(b.done, b.total) : undefined;
+    };
+    const downloadBytes = () => (stage() === "downloading" ? installProgress()?.bytes : undefined);
     const setupStatus = (): LoaderStatus =>
         error() && downloaded() ? "error" : installed() ? "success" : downloaded() ? "indeterminate" : "waiting";
 
     const rows = (software: TerrariaSoftware, version: string): InstallLoaderItem[] => [
         ...(software === "tmodloader"
-            ? [{ label: `Installing the .NET ${tmodloaderReleaseFor(version).runtime.replace(/^dotnet-/, "")} runtime...`, percent: () => (runtimeReady() ? 100 : runtimePercent()), status: runtimeStatus }]
+            ? [{ label: `Installing the .NET ${tmodloaderReleaseFor(version).runtime.replace(/^dotnet-/, "")} runtime...`, percent: () => (runtimeReady() ? 100 : runtimePercent()), subtitle: amount(runtimeStatus, runtimeBytes), status: runtimeStatus }]
             : []),
         {
             label: `Downloading ${software === "tmodloader" ? softwareName(software) : "Terraria"} ${version}...`,
             percent: () => (downloaded() ? 100 : installProgress()?.percent ?? 0),
+            subtitle: amount(downloadStatus(software), downloadBytes),
             status: downloadStatus(software),
         },
         { label: "Setting up server...", percent: () => (installed() ? 100 : 0), status: setupStatus },

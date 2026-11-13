@@ -12,15 +12,23 @@ export type { InstallProgress };
 export function toInstallProgress(payload: {
     stage?: unknown;
     percent?: unknown;
+    bytesLoaded?: unknown;
+    bytesTotal?: unknown;
 }): InstallProgress | null {
     const raw = payload?.percent;
     const percent =
         typeof raw === "number" && Number.isFinite(raw)
             ? Math.min(100, Math.max(0, Math.round(raw)))
             : 0;
+    const { bytesLoaded: done, bytesTotal: total } = payload ?? {};
+    const bytes =
+        typeof done === "number" && typeof total === "number" && total > 0
+            ? { bytes: { done, total } }
+            : {};
     switch (payload?.stage) {
         case "downloading":
         case "verifying":
+            return { stage: payload.stage, percent, ...bytes };
         case "completed":
         case "error":
             return { stage: payload.stage, percent };

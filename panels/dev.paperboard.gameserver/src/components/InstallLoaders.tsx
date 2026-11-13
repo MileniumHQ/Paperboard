@@ -7,8 +7,8 @@ import {
 
 export interface InstallLoaderItem {
     label: string;
-    /** what the step has done so far ("1.2 GB of 11.8 GB"), beside the label */
-    detail?: Accessor<string | undefined>;
+    /** how much the step has downloaded ("5.6 / 6 GB"), under the label */
+    subtitle?: Accessor<string | undefined>;
     percent: Accessor<number>;
     status: Accessor<LoaderStatus>;
 }
@@ -24,7 +24,8 @@ export default function InstallLoaders(props: { items: InstallLoaderItem[] }) {
                     <PaperLoader
                         percent={item.percent()}
                         loaderStatus={item.status()}
-                        label={item.detail?.() ? `${item.label} ${item.detail()}` : item.label}
+                        label={item.label}
+                        subtitle={item.subtitle?.()}
                     />
                 )}
             </For>

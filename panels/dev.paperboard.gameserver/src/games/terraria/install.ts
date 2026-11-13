@@ -81,7 +81,7 @@ export async function install(ctx: ServiceContext<GameServerState>, software: Te
     let lastProgress = -1;
     let lastStage = "";
     try {
-        await files.download({ appId: PANEL_ID, targetPath: archive, url: release.url, sha256: release.sha256, onProgress: p => { const percent = Math.floor(p.percent); if (percent === lastProgress && p.stage === lastStage) return; lastProgress = percent; lastStage = p.stage; ctx.setState({ installProgress: { stage: p.stage === "starting" ? "downloading" : p.stage, percent } }); } });
+        await files.download({ appId: PANEL_ID, targetPath: archive, url: release.url, sha256: release.sha256, onProgress: p => { const percent = Math.floor(p.percent); if (percent === lastProgress && p.stage === lastStage) return; lastProgress = percent; lastStage = p.stage; const bytes = p.bytesLoaded !== undefined && p.bytesTotal ? { bytes: { done: p.bytesLoaded, total: p.bytesTotal } } : {}; ctx.setState({ installProgress: { stage: p.stage === "starting" ? "downloading" : p.stage, percent, ...bytes } }); } });
         await fs.rm(staging, { recursive: true, force: true });
         const bytes = await fs.readFile(path.join(root, archive));
         if (software === "tmodloader") await unpackTmodloader(bytes, staging, version);

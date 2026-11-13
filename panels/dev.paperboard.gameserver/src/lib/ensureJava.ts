@@ -1,7 +1,13 @@
 import { packageApi, type PackageProgress } from "./api";
 
+/** how much of how much has downloaded, when the download says */
+export interface DownloadedBytes {
+    done: number;
+    total: number;
+}
+
 export interface JavaInstallStages {
-    onDownload?: (percent: number) => void;
+    onDownload?: (percent: number, bytes?: DownloadedBytes) => void;
     onExtract?: (percent: number) => void;
 }
 
@@ -16,7 +22,10 @@ export async function ensureJavaRuntime(
     if (present) return { downloaded: false };
     await packageApi.download(javaPkg, (progress: PackageProgress) => {
         if (progress.stage === "downloading") {
-            stages?.onDownload?.(progress.percent);
+            const bytes = progress.bytesLoaded !== undefined && progress.bytesTotal
+                ? { done: progress.bytesLoaded, total: progress.bytesTotal }
+                : undefined;
+            stages?.onDownload?.(progress.percent, bytes);
         } else if (progress.stage === "extracting") {
             stages?.onExtract?.(progress.percent);
         }

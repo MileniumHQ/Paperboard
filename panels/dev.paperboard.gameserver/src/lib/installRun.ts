@@ -1,10 +1,10 @@
 import { createEffect, createSignal } from "solid-js";
-import type { LoaderStatus } from "@mileniumhq/paperui";
+import { formatByteProgress, type LoaderStatus } from "@mileniumhq/paperui";
 import { CALLS } from "../service/contract";
 import type { InstallOutcome } from "../games/minecraft/softwareInstall";
 import { providerFor } from "../games/minecraft/providers";
 import { SOFTWARE_NAMES, getRequiredJavaVersion, type ServerSoftwareType } from "./software";
-import { ensureJavaRuntime } from "./ensureJava";
+import { ensureJavaRuntime, type DownloadedBytes } from "./ensureJava";
 import { installProgress, serverBridge, setInstallProgress } from "./server";
 import type { InstallLoaderItem } from "../components/InstallLoaders";
 
@@ -28,6 +28,13 @@ export function createInstallRun() {
     const download = row();
     const installer = row();
     const [active, setActive] = createSignal(false);
+    const [javaBytes, setJavaBytes] = createSignal<DownloadedBytes | undefined>();
+    /** how much has arrived, while the row is the one downloading */
+    const amount = (r: Row, bytes: () => DownloadedBytes | undefined) => () => {
+        const b = bytes();
+        return r.status() === "loading" && b && b.done > 0 ? formatByteProgress(b.done, b.total) : undefined;
+    };
+    const jarBytes = () => (active() && installProgress()?.stage === "downloading" ? installProgress()?.bytes : undefined);
 
     // map the service's published progress while this run owns it;
     // terminal failure stays with run()'s catch
@@ -58,6 +65,7 @@ export function createInstallRun() {
     const reset = () => {
         javaDownload.setPercent(0);
         javaDownload.setStatus("loading");
+        setJavaBytes(undefined);
         for (const r of [javaExtract, download, installer]) {
             r.setPercent(0);
             r.setStatus("waiting");
@@ -67,9 +75,9 @@ export function createInstallRun() {
     const rows = (software: ServerSoftwareType): InstallLoaderItem[] => {
         const name = SOFTWARE_NAMES[software];
         const items: InstallLoaderItem[] = [
-            { label: "Downloading Java...", percent: javaDownload.percent, status: javaDownload.status },
+            { label: "Downloading Java...", subtitle: amount(javaDownload, javaBytes), percent: javaDownload.percent, status: javaDownload.status },
             { label: "Installing Java...", percent: javaExtract.percent, status: javaExtract.status },
-            { label: `Downloading ${name}...`, percent: download.percent, status: download.status },
+            { label: `Downloading ${name}...`, subtitle: amount(download, jarBytes), percent: download.percent, status: download.status },
         ];
         if (providerFor(software).install.type === "installer") {
             items.push({ label: `Installing ${name}...`, percent: installer.percent, status: installer.status });
@@ -87,9 +95,10 @@ export function createInstallRun() {
         try {
             try {
                 await ensureJavaRuntime(javaPkg, {
-                    onDownload: (percent) => {
+                    onDownload: (percent, bytes) => {
                         javaDownload.setStatus("loading");
                         javaDownload.setPercent(percent);
+                        setJavaBytes(bytes);
                     },
                     onExtract: (percent) => {
                         javaDownload.setStatus("success");
