@@ -366,6 +366,10 @@ const scenarios: Record<string, () => JSX.Element> = {
         );
     },
 
+    uncaught() {
+        return shell(<p id="page">A page that fails.</p>);
+    },
+
     provider() {
         const [theme, setTheme] = createSignal<ThemeMode | undefined>((query.get("theme") as ThemeMode | null) ?? undefined);
         window.t = { setTheme };

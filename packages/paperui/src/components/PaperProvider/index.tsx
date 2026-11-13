@@ -16,6 +16,7 @@ import { installTouchHold } from "../../utils/touchHold";
 import { installPressCancel } from "../../utils/pressCancel";
 import { installFrameBackground } from "../../utils/frameBackground";
 import { installPageZoomLock } from "../../utils/pageZoom";
+import { installUncaughtErrors } from "../../utils/uncaughtErrors";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -121,6 +122,8 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
     onCleanup(installFrameBackground());
     // a pinch is for a panel's own gestures, not for zooming the document
     onCleanup(installPageZoomLock());
+    // what nothing caught is said in a toast, not only in the console
+    onCleanup(installUncaughtErrors());
 
     const currentThemeMode = createMemo(() => local.theme ?? internalTheme());
     const resolvedTheme = createMemo(() => {

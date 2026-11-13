@@ -12,7 +12,7 @@ export default function PaperProviderDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">PaperProvider</PaperText>
             <PaperText preset="body" as="p">
-                PaperProvider is the root of every PaperUI interface: it applies the theme, scopes the PaperUI styles, and sets up touch gestures.
+                PaperProvider is the root of every PaperUI interface: it applies the theme, scopes the PaperUI styles, sets up touch gestures, and shows errors nothing caught.
                 Wrap a panel's whole interface in one, once, at the entry point.
                 The theme colors are keyed to the attribute the provider sets, so components outside one lose them.
             </PaperText>
@@ -148,6 +148,20 @@ paper?.setTheme("dark"); // ThemeMode => void`}
                 <li>Icons are glyphs in a font. The provider keeps the interface invisible, though still focusable, until the font has loaded, so icons never paint blank and shift their rows.</li>
                 <li>Rendering a provider without the stylesheet throws <PaperCode>--paper-icon-font-family is not set: import @mileniumhq/paperui/style.css</PaperCode>. Import <PaperCode>@mileniumhq/paperui/style.css</PaperCode> before rendering.</li>
                 <li>If the font fails to load, the interface is shown anyway and an error saying <PaperCode>PaperUI's icon font failed to load</PaperCode>, with the reason, is thrown.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h3" id="uncaught-errors">Uncaught errors</PaperText>
+            <PaperText preset="body" as="p">
+                What nothing caught is shown, never left only in the console.
+                While a provider is mounted, an error thrown with no <PaperCode>catch</PaperCode> around it, such as one in an event handler, and a rejected promise nobody handled each show as a danger <PaperLink href="/docs/paperui/papertoast/">toast</PaperLink> titled "Something went wrong", with the error's message under it.
+                A panel gets this from its provider and writes nothing for it.
+            </PaperText>
+            <PaperTextList>
+                <li>The console still gets the error. The provider doesn't prevent the event's default.</li>
+                <li>The same message is one toast while it shows, so a failure thrown on every pointer move doesn't fill the corner. Once that toast is closed, the next time it's thrown it shows again.</li>
+                <li>An <PaperCode>error</PaperCode> event that carries no error isn't shown. The browser sends its own notes that way, such as a ResizeObserver loop that ran over.</li>
+                <li>A failure the panel catches and shows itself, in a toast or in place, never reaches the provider, so it isn't said twice. The provider is the last resort: catch what can fail and give it a title that says what didn't work.</li>
+                <li>A provider inside another, or a second one in the same document, adds no second listener.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="touch">Touch gestures</PaperText>

@@ -20,6 +20,12 @@ export interface PaperToastOptions {
      * closed. Danger toasts stay by default, so a failure is never missed.
      */
     duration?: number | null;
+    /**
+     * Names what the toast is about: while a toast with the same key is
+     * showing, another isn't added, and that toast's id is returned. A
+     * failure that repeats says so once.
+     */
+    key?: string;
 }
 
 interface ToastEntry extends PaperToastOptions {
@@ -45,6 +51,8 @@ let nextId = 0;
  * finished, said where it will be seen. Returns its id, for dismissToast.
  */
 export function showToast(options: PaperToastOptions): string {
+    const showing = options.key === undefined ? undefined : toasts().find((toast) => toast.key === options.key);
+    if (showing) return showing.id;
     const id = `toast-${++nextId}`;
     const variant = options.variant ?? "info";
     setToasts((list) => {

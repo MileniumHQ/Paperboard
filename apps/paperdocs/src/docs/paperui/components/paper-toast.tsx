@@ -97,6 +97,12 @@ try {
                         <td>6000, or <PaperCode>null</PaperCode> for danger</td>
                         <td>Milliseconds before it goes by itself. <PaperCode>null</PaperCode> keeps it until it is closed.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>key</PaperCode></td>
+                        <td><PaperCode>string</PaperCode></td>
+                        <td>No default</td>
+                        <td>Names what the toast is about. While a toast with the same key is showing, no other is added and that toast's id is returned, so a failure that repeats says so once.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
@@ -107,6 +113,7 @@ try {
                 <li>A danger toast has the <PaperCode>alert</PaperCode> role, so screen readers announce it. Others have the <PaperCode>status</PaperCode> role.</li>
                 <li>Only the outermost PaperProvider renders the corner, so a provider inside another doesn't show a toast twice. Outside a PaperProvider, render <PaperCode>{"<PaperToastRegion />"}</PaperCode> yourself.</li>
                 <li>A panel's toasts appear in the bottom right of the panel, inside its own window.</li>
+                <li>An error nothing caught shows as a danger toast by itself. See <PaperLink href="/docs/paperui/paperprovider/#uncaught-errors">PaperProvider</PaperLink>.</li>
             </PaperTextList>
         </PaperFlex>
     );
