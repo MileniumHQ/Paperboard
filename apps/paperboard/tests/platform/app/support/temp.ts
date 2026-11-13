@@ -8,14 +8,24 @@ import * as path from "node:path";
 import type { ChildProcess } from "node:child_process";
 
 const made: string[] = [];
+// folders made to hold temp dirs off the temp dir's drive, removed once empty
+const bases = new Set<string>();
 const SUITE_STARTED = Date.now();
 const children = new Set<ChildProcess>();
 
 // The real path: macOS's temp dir is a link (/var → /private/var), and the
 // app built into one bakes in a relative path to its resources that only
 // resolves from the folder Electron's __dirname reports, the real one.
-export function tempDir(label: string): string {
-    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), `pb-${label}-`)));
+// `near` puts it on that path's drive instead of the temp dir's: on Windows
+// a relative path can't cross drives (a CI runner's temp dir is on C:, its
+// checkout on D:), so an app built onto another drive points at nothing.
+export function tempDir(label: string, near?: string): string {
+    const base = near && path.parse(near).root.toLowerCase() !== path.parse(os.tmpdir()).root.toLowerCase() ? path.join(path.parse(near).root, "pb-test-tmp") : os.tmpdir();
+    if (base !== os.tmpdir() && !fs.existsSync(base)) {
+        fs.mkdirSync(base, { recursive: true });
+        bases.add(base);
+    }
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(base, `pb-${label}-`)));
     made.push(dir);
     return dir;
 }
@@ -68,4 +78,5 @@ export function cleanupSuite(): void {
     }
     for (const dir of made) endWorkloads(dir);
     for (const dir of made) fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    for (const base of bases) if (fs.readdirSync(base).length === 0) fs.rmdirSync(base);
 }

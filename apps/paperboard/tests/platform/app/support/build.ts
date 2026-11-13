@@ -73,7 +73,8 @@ export interface BuiltApp {
 // app's package.json beside out/, its dependencies reachable the way the
 // asar's node_modules are, and the workload supervisor in its resources
 export const buildApp = once(async (): Promise<BuiltApp> => {
-    const dir = tempDir("app");
+    // on the app's own drive: the build bakes in relative paths to its resources
+    const dir = tempDir("app", APP_DIR);
     const viteBin = path.join(APP_DIR, "node_modules", "electron-vite", "bin", "electron-vite.js");
     await run([process.execPath, viteBin, "build", "--outDir", path.join(dir, "out"), "--logLevel", "error"], APP_DIR);
     const { name, productName, version, main } = APP_PACKAGE;
