@@ -116,7 +116,11 @@
             },
             {
                 "name": "Steam",
-                "detail": "Palworld and Team Fortress 2 servers and Workshop items through SteamCMD, and Workshop mods and maps found through Paperboard's modscan"
+                "detail": "Palworld, Team Fortress 2, Garry's Mod and Rust servers and Workshop items through SteamCMD, Workshop mods and maps found through Paperboard's modscan, and the Workshop collection a Garry's Mod server is given"
+            },
+            {
+                "name": "Facepunch",
+                "detail": "A Rust server lists itself in Rust's server browser and uploads its map for players to download"
             },
             {
                 "name": "AlliedModders",
@@ -154,7 +158,7 @@
             },
             {
                 "name": "SteamCMD",
-                "detail": "Installing and updating Palworld and Team Fortress 2 servers"
+                "detail": "Installing and updating Palworld, Team Fortress 2, Garry's Mod and Rust servers"
             },
             {
                 "name": "SourceMod and Metamod:Source",
@@ -180,7 +184,7 @@
         "requirements": [
             {
                 "name": "Computer",
-                "detail": "Minecraft on Linux, macOS or Windows. Terraria, Palworld and Team Fortress 2 on Linux or Windows, x64"
+                "detail": "Minecraft on Linux, macOS or Windows. Terraria, Palworld and Team Fortress 2 on Linux or Windows, x64. Garry's Mod and Rust on Linux, x64"
             },
             {
                 "name": "Storage",
@@ -188,7 +192,7 @@
             },
             {
                 "name": "RAM",
-                "detail": "8 GB, 16 GB for Palworld"
+                "detail": "8 GB, 16 GB for Palworld and Rust"
             },
             {
                 "name": "CPU",

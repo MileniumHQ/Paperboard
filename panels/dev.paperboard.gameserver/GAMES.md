@@ -1,6 +1,6 @@
 # Game modules
 
-Minecraft Java, Terraria, Palworld and Team Fortress 2 are registered modules. Terraria uses a pinned publisher ZIP, stdin control, generated settings, a vault join password and offline backups. Minecraft retains its installers, launch arguments, readiness markers, console parsing, port names, tabs, call names and widgets. Terraria's `software: "tmodloader"` (phase 1b) is registered too: a pinned tModLoader GitHub release run on Origami's `dotnet-8` package, with a Mods tab over the Steam Workshop.
+Minecraft Java, Terraria, Palworld, Team Fortress 2, Garry's Mod and Rust are registered modules. Terraria uses a pinned publisher ZIP, stdin control, generated settings, a vault join password and offline backups. Minecraft retains its installers, launch arguments, readiness markers, console parsing, port names, tabs, call names and widgets. Terraria's `software: "tmodloader"` (phase 1b) is registered too: a pinned tModLoader GitHub release run on Origami's `dotnet-8` package, with a Mods tab over the Steam Workshop.
 
 ## Module contract
 
@@ -58,7 +58,8 @@ L/W/M = native dedicated server on Linux/Windows/macOS. Compatibility routes are
 
 Notes:
 - **Bedrock** is its own game id (`minecraft-bedrock`); Geyser stays a Java-server bridge.
-- **Selected scope:** Terraria (including tModLoader), TF2, CS2, GMod, Palworld, then Rust. Other rows are future candidates, not commitments.
+- **Selected scope:** Terraria (including tModLoader), TF2, CS2, GMod, Palworld, then Rust. Other rows are future candidates, not commitments. All but CS2 are registered. CS2 is not: its server is app 730's whole 75 GB download (measured 2026-11-12: depot 2347770 alone is 65 GB), which the certification machine had no room to install, and nothing ships that was not run.
+- **Hytale** was looked at on 2026-11-12 and is not a candidate yet: every way to get its server files (the launcher's folder, the Hytale Downloader, `--bootstrap`) needs a signed-in Hytale account, there is no anonymous download, and a server only takes players once an account has authenticated it (`/auth login device`, or session tokens from the same device flow). Its module would be Java 25, `java -jar HytaleServer.jar --assets Assets.zip`, UDP 5520 (QUIC), a device-code sign-in in setup and the built-in updater's exit code 8; none of it can be certified without an account that has the game.
 - **Valheim** needs linked ports (base, base+1); the Port API's independent "next free" can't keep that, so the linked allocation is added with Valheim, the first game that needs it.
 - **DST** needs multi-server orchestration (surface + caves) and whole-cluster backups; defer that until DST. Descendant process supervision for launch wrappers is a separate requirement.
 - **Enshrouded, V Rising** are Windows-first; they wait for a pinned, tested Wine/Proton runner (the `proton` Origami package exists, but nothing in the selected scope uses it). ARK: Survival Ascended was dropped from the plan as too troublesome; Rust replaced it.
@@ -132,6 +133,35 @@ Original plan notes:
 - `tf/cfg/server.cfg`, `mapcycle.txt`, ban lists: expose hostname, map/map rotation, maxplayers, LAN/public, password, RCON password, GSLT, and common match settings (timelimit, friendly fire). Secrets use private generated config; do not put GSLT into logged CLI. Execute `sv_setsteamaccount` early enough for login and confirm registration. Admin via Source RCON; players via `status` identities, A2S_INFO counts/cap and A2S_PLAYER names only when returned.
 - Readiness: valid loaded map via A2S plus authenticated RCON `status`; public mode also requires Steam registration, not just a bound socket. Stop with RCON `quit`, await exit (30s initial budget). No persistent world save; offline backups include cfg, ban lists, maps/custom/addons and required manifests, not replaceable base VPKs. Tabs: Overview, Players, Maps, Options, Versions and shared tabs. Widgets: status, players, console.
 
+**Garry's Mod (`garrys-mod`), registered**
+
+A `SourceGameSpec` on `src/games/source/`, with what its server needed added there for any game that needs the same. Verified against the real server, build 26623757 (branch `x86-64`), on Arch Linux x64 on 2026-11-12, through the daemon (`scripts/source-smoke.ts garrys-mod`):
+
+- Branch: the public branch's Linux server is a 32-bit `srcds_linux`. It needs 32-bit system libraries, and `stdbuf` (a 64-bit preload) can't reach it, so its console stays in a buffer: 333 bytes in a minute, measured. The module installs the `x86-64` branch instead (`SourceGameSpec.branch`, SteamCMD's `-beta`): `bin/linux64/srcds`, libraries in `bin/linux64`. Updates compare against that branch's build, not the public one's. Players on either branch join a server on either.
+- Launch: TF2's arguments, then `+gamemode <mode> +host_workshop_collection <id>` (`SourceGameSpec.launchArgs`, in `gmod/service.ts`). A game mode is a folder name; one not in `gamemodes/` or an add-on folder is refused at the start unless a Workshop collection is set, which may bring it. The server downloads a collection's add-ons itself, with no key: 7 of 7 mounted from a public collection in the measured run.
+- Steam ids: the server writes and bans by `STEAM_0:1:12345`, and answers `Can't ban users with ID "[U"` to TF2's `[U:1:…]` form (`SourceGameSpec.steamIds: "steam2"`).
+- RCON: the server drops a connection whose packet begins with byte 0x16, taking it for a TLS hello ("tried to get banned using the HTTP(S) request to RCON"). A packet begins with its size, so that is every 12-byte command (`sbox_godmode`, `mapcyclefile`) and every 12-byte password. `SourceRcon` sends such a command a space longer, which every Source console ignores; a 12-byte RCON password can't be padded and is refused when it is set (`rconReadsTls`). The server also drops the packet that ends a reply when another connection to the port closes in the same instant: a reply that has begun and then goes quiet for two seconds is taken as whole. A reply lost entirely still fails that command.
+- Data: add-ons, what they save and the players' database (`garrysmod/addons`, `data`, `sv.db`) live in the server folder, linked into the install (`SourceGameSpec.keeps`, `linkFile`), so backups carry them and an update leaves them. Because of the database, a backup stops the server for the copy and starts it again (`offlineBackups`), where TF2's files copy as it runs.
+- Console: the server colours some lines with ANSI codes, which are taken out, and lists two dozen shader libraries a dedicated server never uses as "#Failed to load …shader….so: (null)" at every start, which are left out (`isShaderNoise`; any other failure stays).
+- No map rotation: Garry's Mod reads no map cycle (its own `mapcycle.txt` says so), so it has no Maps tab and setup ends with the download. The Overview's Change map lists the installed maps; the server ships `gm_construct` and `gm_flatgrass`.
+- A Source server can't open a file whose path passes 260 characters: from a deep folder its own Lua fails to load ("AddCSLuaFile: Couldn't find…"). A server folder under `~/.paperboard` is nowhere near that; a smoke run needs a short `TMPDIR`.
+- Not yet: Windows (the `x86-64` branch's Windows server was not run, so the host is refused there), Workshop search, ULX or other admin add-ons as a screen of their own, a verified join from a client, and a verified GSLT login.
+
+```text
+install: app 4020 branch x86-64, build 26623757; host linux/x64
+update check: Steam's newest x86-64 build is 26623757; none available
+start: ONLINE on 44818 (occupied 44817 relocated), map gm_construct, 16 players max, version Build 26623757
+kept data: sv.db, addons, data live in the server folder, linked into the install
+roster: bot Bot01 joined through the game log, kicked by user id, not counted as a player
+chat: say delivered and read back from the game log
+bans: STEAM_0:1:12345 banned and unbanned on the running server
+options: sbox_godmode applied at once (a 12-character command)
+map: changed to gm_flatgrass while running
+backup: 18493371 bytes, SHA-256 b2635f3d4505563621a4fa8c235d944f4d5f42a57366eb505106455d4c37ffa9; stopped for the copy and restarted
+restore: files replaced, install kept, vault kept, restarted ONLINE
+stop: quit over RCON; process absent; state OFFLINE
+```
+
 **Counter-Strike 2 (`cs2`)**
 
 - SteamCMD app 730, anonymous, public; **not** old CS:GO app 740. Linux `game/bin/linuxsteamrt64/cs2 -dedicated -console -usercon -port P +game_type 0 +game_mode 1 +map de_dust2`; Windows `game/bin/win64/cs2.exe` with the same arguments. This is Source 2, not `srcds`; maintain its library/Steam-runtime environment separately.
@@ -152,7 +182,39 @@ Original plan notes:
 - REST Basic auth, local `/v1/api/info` readiness and `/v1/api/players` roster/count (retain platform ids and Unicode names). Typed Actions for announce/kick/ban/save/shutdown; no shell commands. Use REST Save then Shutdown with bounded wait, and await process exit (initial 120s budget). Offline-only backup of `Pal/Saved` including SaveGames, config and bans; successful Save response does not freeze world writes. REST errors/auth failures must be visible; restrict admin access locally with binding/firewall checks where the game cannot bind loopback.
 - Tabs: Overview, Players, World Settings, Options, Versions and shared tabs; no v1 mods installer. Widgets: status and players; console only after a tested typed command adapter exists, otherwise Logs stays readable with no command input.
 
-**Rust (`rust`)**
+**Rust (`rust`), registered**
+
+`src/games/rust/`. Verified against the real server, build 26498655 (protocol 2636.290.1), on Arch Linux x64 on 2026-11-12, through the daemon (`scripts/rust-smoke.ts`):
+
+- Launch: `RustDedicated -batchmode -nographics -logfile - +server.ip 0.0.0.0 +server.port P +server.queryport Q +rcon.ip 127.0.0.1 +rcon.port R +rcon.web 1 +rcon.password <vault> +app.port A +server.identity paperboard +server.level "Procedural Map"`, then each option's `+convar value`, with `LD_LIBRARY_PATH` at `RustDedicated_Data/Plugins` and its `x86_64` folder and HOME in the server's `profile/`. `-logfile -` puts the log on stdout as it is written. The server ships its own `steamclient.so`.
+- Arguments: Rust reads an argument that begins with `+` or `-` as the next setting's name (`+app.port -1` became `app.port "1"`), and ends a value at a quote (`A test; with "quotes"` became `A test; with`), so text options refuse both (`argValue`). An empty description is left off.
+- The RCON password has to be on the command line: one in `cfg/server.cfg` is read after the remote console starts, which then turns itself off ("RCON password is very insecure, RCON is disabled"). The server prints its whole command line as it starts, so the console hides the password there. It is 8 to 64 letters, digits, `-` and `_`: Rust warns below 8 characters, and the password travels in the WebSocket address. Anyone who can list this computer's processes can read it; the remote console listens on 127.0.0.1 only.
+- WebRCON (`webrcon.ts`): a frame `{ Identifier, Message, Name }` is answered by frames carrying that Identifier. The last is the reply and any before it the log lines the command wrote (`server.save` answers "Invalidate Network Cache…", "Saved 984 ents…", "Saving complete", then an empty one). A command Rust doesn't know gets no frame at all, so the console reports that after five seconds. Log lines arrive unasked as Identifier 0 and chat as Type "Chat", Identifier -1, with a JSON message (`Channel`, `Message`, `UserId`, `Username`; the console's own `say` is `UserId` "0", `Username` "SERVER"). A wrong password ends the connection before it opens. No new `Control` kind was needed: the console line is "rcon", sent by the service.
+- Readiness: the remote console answers long before the map is loaded, so the server's own "Server startup complete" line is waited for first, then `serverinfo`. The deadline is 30 minutes: a 1000 m map starts in 40 seconds here, a large one takes many minutes to make the first time. Players are `playerlist` every five seconds; joins and leaves are the difference.
+- Ports: game UDP 28015, query UDP 28017, remote console TCP 28016 and the Rust+ app's TCP 28082 (`app.port`, which otherwise picks one itself), all four claimed.
+- Options: name, description, player cap, PvE and autosave apply at once over the remote console (`server.maxplayers 12` answers `server.maxplayers: "12"`); port, game mode (vanilla, softcore, hardcore: each was started), map size and seed at the next start. A new server gets a random seed of its own. Changing size or seed makes a new map and leaves the old one's files.
+- Data: the install's `server/` folder links to `server/` in the server folder; this server's map, saves and lists are in `server/paperboard/`. Save is `server.save`, waited for until "Saving complete" and until the newest `.sav` changes. Stop is `quit`, which saves, writes the lists and ends the process itself (exit 137). Backups are offline.
+- Bans: `banid <id> "<name>" "<reason>"`, `unban <id>` and `banlistex` on the running server, followed by `server.writecfg` so the ban is in `cfg/bans.cfg` at once (`banid 7656… "Name" "reason" -1` a line). While stopped the list is read from that file, and changing it waits for the server.
+- The server registers itself with Steam and uploads its map to Facepunch's `files.facepunch.com` for players to download; both are the game's own doing.
+- Not yet: Windows (not run, so the host is refused there), Oxide/Carbon plugins, a wipe button (a new seed is a new map), Rust+ pairing checked from a phone, and a verified join from a client. `playerlist` answered `[]` on the real server; its rows (`SteamID`, `DisplayName`, `Ping`, `ConnectedSeconds`, `Health`) are read as Rust's admin tools document them and have not been seen with a player on.
+
+```text
+install: app 258550, build 26498655; host linux/x64
+update check: Steam's newest build is 26498655; none available
+start: ONLINE on 57896 (occupied 57895 relocated), version 2636.290.1, 50 players max; map and saves in the server folder; password out of the console
+health: 19 fps, 1857 entities, 0/50 players
+console: status answered into the console; an unknown command and quit refused out loud
+chat: say delivered and pushed back by the server
+bans: 76561198000000001 banned on the running server and written to bans.cfg
+options: maximum players applied at once
+save: Rust confirmed it and the save file changed
+backup: 5582450 bytes, SHA-256 96e1e0c09ce6005c9d28d20d61062185253937196366e78c5aa29b94dded0ba4; stopped for the copy and restarted
+restore: files replaced, install kept, the backup's ban list back, restarted ONLINE
+stop: saved and quit over the remote console; process absent; state OFFLINE; bans readable while stopped
+game mode: hardcore started and stopped
+```
+
+Original plan notes:
 
 - SteamCMD app **258550** (dedicated server), anonymous, public branch; the Steam store/client app is 252490 and is the id for any client-facing link, not for the download. Linux `RustDedicated -batchmode -nographics +server.port P +rcon.port R +server.queryport Q +rcon.web 1 +server.identity <id> ...`; Windows `RustDedicated.exe` with the same arguments. Verify the entrypoint, the Linux library path (the server ships its own native libraries) and each argument against the installed build; build the argument array from validated values, never a shell string. No macOS dedicated build.
 - Game UDP P=28015, query UDP Q=28017, WebRCON TCP R=28016: three independent endpoints, so no linked allocation. Claim all three through the Port API and pass the final values on the command line (see the port-preparation note above). Confirm the actual listeners after launch and refuse an advertised endpoint that does not match.
@@ -171,9 +233,9 @@ These are intended certification targets, not already-tested claims. Unsupported
 | Terraria tModLoader | Native target | Native; server verified | Supported-release .NET/Intel target | Release-specific runtime/Rosetta target; block until certified | Unsupported initially |
 | TF2 | Native target; SteamCMD i386 libs | Native; server verified | Unsupported | Unsupported | Unsupported |
 | CS2 | Native target | Native target | Unsupported | Unsupported | Unsupported |
-| GMod | Native target; public branch i386 libs | Native target | Unsupported | Unsupported | Unsupported |
+| GMod | Native; server verified (`x86-64` branch) | Unsupported until its server is run | Unsupported | Unsupported | Unsupported |
 | Palworld | Native target | Native; server verified | Unsupported | Unsupported | Unsupported |
-| Rust | Native target | Native target | Unsupported | Unsupported | Unsupported |
+| Rust | Native; server verified | Unsupported until its server is run | Unsupported | Unsupported | Unsupported |
 
 The concurrent Origami packages are prerequisites, not game support: `steamcmd` targets linux-x64 (32-bit bootstrap), macos-x64 and windows-x64; `proton` targets linux-x64/arm64 and stays published for future Windows-only games; no selected game uses it, and an ARM64 Proton package would not translate an x64 server's CPU instructions. No Box64/FEX route is planned. macOS SteamCMD availability does not create macOS game depots.
 
@@ -228,6 +290,10 @@ Decided by the owner on 2026-10-30:
    - Import from the user's local Steam install: subscribed Workshop items and tModLoader's `enabled.json`.
    - Pasting Workshop links or ids, resolved through modscan.
 4. ARK: Survival Ascended was dropped from the plan as too troublesome; Rust (SteamCMD 258550) replaced it as the last phase. Proton is no longer part of the first-games plan; the `proton` Origami package stays published for future Windows-only games.
+
+### Operator smoke scripts
+
+`scripts/scenarioDaemon.ts` starts the compiled daemon with the panel's built service on a disposable `PAPERBOARD_DIR`, as the test suite does but with the network open, and removes it afterwards (`SMOKE_KEEP=1` leaves it for a look). `scripts/source-smoke.ts <game>` and `scripts/rust-smoke.ts` drive a real server through it; their output is quoted under each game above. `SMOKE_INSTALL=<folder>` starts from a folder SteamCMD already installed the server into, so a rerun only checks the files. Run them with a short `TMPDIR` (see Garry's Mod's path note). `scripts/terraria-smoke.ts` predates the Go supervisor and no longer starts (`runSupervisor` is gone from `papercrane/supervisor.ts`); it wants moving onto `scenarioDaemon.ts` before it is used again.
 
 ### Phase 1a operator verification
 

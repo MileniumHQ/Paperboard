@@ -1,4 +1,4 @@
-Host your own game servers without learning a terminal. Game Server runs Minecraft, Terraria, Palworld and Team Fortress 2 servers on your computer, and brings their console, players, worlds and settings into one place.
+Host your own game servers without learning a terminal. Game Server runs Minecraft, Terraria, Palworld, Team Fortress 2, Garry's Mod and Rust servers on your computer, and brings their console, players, worlds and settings into one place.
 
 - **All your servers** - Run several servers side by side, of any game. The Servers home takes you to each one, and each has its own blocks, backup schedule and widgets.
 - **No setup required** - Paperboard downloads the server and everything it runs on. Pick a game and a version and you're good to go.
@@ -13,3 +13,7 @@ Host your own game servers without learning a terminal. Game Server runs Minecra
 **Palworld** - Set up a dedicated server and change its settings without editing files.
 
 **Team Fortress 2** - Choose how the server plays, pick maps from pictures, set the map rotation, add maps from the Steam Workshop, and turn on SourceMod for plugins.
+
+**Garry's Mod** - Run Sandbox or any other game mode, and give the server a Steam Workshop collection to download its add-ons from.
+
+**Rust** - Set the map's size and seed, pick the game mode, and watch the server's health while it runs.
