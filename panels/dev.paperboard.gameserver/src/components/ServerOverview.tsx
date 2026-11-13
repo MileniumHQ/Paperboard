@@ -58,8 +58,8 @@ export function EditableDetail(props: { edit: string; onEdit(): void; children: 
  * running server and its notices.
  *
  * The console takes what height is left. A phone has none left under the
- * rest, so there the Overview scrolls and the console keeps a height of its
- * own.
+ * rest, so there the Overview is a page that scrolls as a whole (its tab's
+ * compactVariant) and the console keeps a height of its own.
  */
 export default function ServerOverview(props: {
     avatar: JSX.Element;
@@ -109,7 +109,7 @@ export default function ServerOverview(props: {
     const address = () => `${localIp()}:${serverPort()}`;
 
     return (
-        <PaperFlex direction="column" gap="full" grow minHeight={0} fullWidth scrollable={compact() ? "y" : undefined}>
+        <PaperFlex direction="column" gap="full" grow minHeight={0} fullWidth>
             <PaperCard shrink={false} padding="full">
                 <PaperFlex direction="row" gap="threefourths" align="center">
                     {props.avatar}

@@ -23,6 +23,12 @@ export interface GameTab {
     group?: string;
     owner: "shared" | "game";
     variant?: "fill" | "full";
+    /**
+     * The variant on a phone, where it differs: "page" for a tab that fills
+     * the screen beside a menu but is too tall for a phone's, such as an
+     * Overview with its console, so it scrolls as a whole there.
+     */
+    compactVariant?: "page";
     width?: "full";
 }
 type OptionBase = {

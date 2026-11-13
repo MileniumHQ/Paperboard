@@ -28,7 +28,7 @@ export const minecraft: GameDefinition = {
         const software = minecraftSoftware(raw);
         const ready = (cap: CapabilityName) => !semver.coerce(version) || versionSupports(version, cap);
         const tabs: GameTab[] = [
-            tab("overview", "Overview", "dashboard", undefined, { variant: "fill" }),
+            tab("overview", "Overview", "dashboard", undefined, { variant: "fill", compactVariant: "page" }),
             tab("chat", "Chat", "chat", "Play", { variant: "fill" }),
             ...(ready("playerStats") ? [tab("players", "Players", "group", "Play", { variant: "fill", width: "full" })] : []),
             ...(ready("mapRendering") ? [tab("map", "Map", "map", "Play", { variant: "full" })] : []),

@@ -82,7 +82,7 @@ export const palworld: GameDefinition = {
             packages: [{ id: "steamcmd", purpose: "Downloads and updates the Palworld dedicated server from Steam" }, VISUAL_CPP_X64.package],
             calls: [A.startServer, A.stopServer, A.restartServer, A.loadConfig, A.sayChat, A.saveWorld, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, "palworld-install", "palworld-info", "palworld-latest", "palworld-metrics", "palworld-players", "palworld-kick", "palworld-ban", "palworld-unban", ...AUTOMATION_CALLS],
             tabs: [
-                { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
+                { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill", compactVariant: "page" },
                 { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },
                 { id: "players", label: "Players", icon: "group", group: "Play", owner: "game", variant: "fill", width: "full" },
                 { id: "versions", label: "Updates", icon: "update", group: "Software", owner: "game" },

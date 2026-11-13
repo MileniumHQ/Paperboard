@@ -217,7 +217,7 @@ export default function App() {
                         {(id) => {
                             const tab = () => features().tabs.find((t) => t.id === id)!;
                             const owner = untrack(() => tab().owner);
-                            return <PaperInterfaceItem value={id} variant={tab().variant} width={tab().width}>
+                            return <PaperInterfaceItem value={id} variant={(compact() && tab().compactVariant) || tab().variant} width={tab().width}>
                                 {/* made once; its props follow the features, so a state change never remounts the tab */}
                                 {untrack(() => renderTab(id, owner))}
                             </PaperInterfaceItem>;

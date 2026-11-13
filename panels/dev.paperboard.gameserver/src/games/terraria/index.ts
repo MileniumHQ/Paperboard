@@ -52,7 +52,7 @@ export const terraria: GameDefinition = {
             packages: modded ? [{ id: runtime, purpose: ".NET runtime for tModLoader" }] : [XNA_4.package],
             calls: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", A.saveWorld, "terraria-motd", "terraria-players", "terraria-kick", "terraria-ban", "terraria-unban", ...AUTOMATION_CALLS, ...(modded ? MOD_CALLS : [])],
             tabs: [
-                { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
+                { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill", compactVariant: "page" },
                 { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },
                 { id: "players", label: "Players", icon: "group", group: "Play", owner: "game", variant: "fill", width: "full" },
                 { id: "worlds", label: "Worlds", icon: "public", group: "World", owner: "game" },
