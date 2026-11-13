@@ -4,22 +4,25 @@ import * as os from "node:os";
 import * as path from "node:path";
 // Discovery must not even read the developer's .paperboard before the
 // no-network guard below refuses a connection.
-const RUN_PREFIX = "gameserver-unit-";
-const systemTemp = os.tmpdir();
-const processAlive = (pid: number): boolean => {
+const alive = (pid: number): boolean => {
     try {
         process.kill(pid, 0);
         return true;
     } catch (err) {
-        return (err as NodeJS.ErrnoException).code === "EPERM";
+        if ((err as NodeJS.ErrnoException).code === "ESRCH") return false;
+        // another user's process: it is there, only not ours to signal
+        if ((err as NodeJS.ErrnoException).code === "EPERM") return true;
+        throw err;
     }
 };
+const RUN_PREFIX = "gameserver-unit-";
+const systemTemp = os.tmpdir();
 // A run that was killed never reached its cleanup: what it left is removed
 // by the next run, once the process that owned it is gone.
 for (const name of fs.readdirSync(systemTemp).filter((n) => n.startsWith(RUN_PREFIX))) {
     const stale = path.join(systemTemp, name);
     const owner = Number(fs.existsSync(path.join(stale, "owner.pid")) ? fs.readFileSync(path.join(stale, "owner.pid"), "utf8") : NaN);
-    if (Number.isInteger(owner) && !processAlive(owner)) fs.rmSync(stale, { recursive: true, force: true });
+    if (Number.isInteger(owner) && !alive(owner)) fs.rmSync(stale, { recursive: true, force: true });
 }
 // Everything a test file makes in the temp dir lands in this one folder, and
 // so does what the daemon, the stand-ins and Chrome it starts make there: the
@@ -35,15 +38,6 @@ process.env.PAPERBOARD_DIR = testData;
 const SUITE_STARTED = Date.now();
 const DAEMON_BUILDS = Symbol.for("paperboard.gameserver.test.daemonBuilds");
 
-const alive = (pid: number): boolean => {
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ESRCH") return false;
-        throw err;
-    }
-};
 
 // The supervisors (and workloads) the test daemons started outlive them by
 // design. They are this process's, so they end here, from the records the
