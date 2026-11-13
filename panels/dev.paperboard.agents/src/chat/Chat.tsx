@@ -32,6 +32,8 @@ const STAMP_MS = 30 * 60_000;
 const PAGE_ROWS = 60;
 /** this close to the top, the next rows are drawn */
 const MORE_AT_PX = 200;
+/** this close to the end, the chat stays at its end as it grows */
+const END_PX = 48;
 /** the agent's face at the top of the chat */
 const AVATAR_PX = 56;
 
@@ -158,9 +160,10 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     const [kept, setKept] = createStore<Row[]>([]);
     createComputed(() => setKept(reconcile(rows(), { key: "key" })));
 
-    // the latest rows; scrolling up to the top draws the ones before them
-    const [drawn, setDrawn] = createSignal(PAGE_ROWS);
-    const visible = createMemo(() => kept.slice(-drawn()));
+    // Rows are drawn from this one on: the latest at first, and scrolling up to the top draws the ones before them.
+    // It counts from the conversation's start, so a row arriving at the end takes none away at the top, where someone may be reading.
+    const [from, setFrom] = createSignal(0);
+    const visible = createMemo(() => kept.slice(from()));
     // Rows that arrive while the chat is open pop in. A conversation loading (every row new at once) and older rows drawn above don't:
     // the older ones are already in rows(), only drawn later, so they are never new.
     let seen = new Set<string>();
@@ -170,8 +173,24 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
         seen = new Set(keys);
         return new Set(fresh.length === keys.length && keys.length > 1 ? [] : fresh);
     });
-    // another conversation starts drawn from its end again
-    createEffect(on(() => agent.entries.length === 0, (empty) => empty && setDrawn(PAGE_ROWS)));
+
+    // The chat is held in one of two places: at its end, or at the row someone scrolled up to read.
+    let list!: HTMLDivElement;
+    let messages!: HTMLDivElement;
+    let pinned = true;
+    /** the row at the top of the view while someone reads, and how far down the view it sits */
+    let reading: { row: Element; top: number } | null = null;
+
+    // A conversation only grows at its end, so another first row is another conversation (or this one's history arriving):
+    // it is drawn from its end again, and shown there.
+    const firstRow = createMemo(() => rows()[0]?.key);
+    createComputed(
+        on(firstRow, () => {
+            setFrom(Math.max(0, rows().length - PAGE_ROWS));
+            pinned = true;
+            reading = null;
+        }),
+    );
 
     // The typing bubble sits at the end, grouped with the agent's last bubble when that was just now.
     const typingJoins = () => {
@@ -188,69 +207,61 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
         known = new Set(ids);
     });
 
-    // follow the conversation down as it grows, unless the user scrolled up to read
-    let list!: HTMLDivElement;
-    let pinned = true;
-    // Going to the end is the chat's own doing: the scroll it causes lands a frame later, when the list may have grown again,
-    // and must not be read as the reader leaving the end.
-    let following = false;
-    const follow = () => {
-        following = true;
-        list.scrollTo({ top: list.scrollHeight });
-        requestAnimationFrame(() => (following = false));
+    // Whatever changes size (a bubble arriving or leaving, a picture loading in one, the message box growing, the keyboard rising,
+    // older rows drawn above) the chat is put back in its place before the frame is painted: the end stays at the bottom,
+    // or the row being read stays where it was. Nothing else moves the chat, so nothing has to know what might resize.
+    /** the sizes the chat was last placed for */
+    let viewHeight = 0;
+    let contentHeight = 0;
+    const resized = () => list.getBoundingClientRect().height !== viewHeight || messages.getBoundingClientRect().height !== contentHeight;
+    const look = () => {
+        pinned = list.scrollHeight - list.scrollTop - list.clientHeight < END_PX;
+        reading = null;
+        if (pinned) return;
+        const top = list.getBoundingClientRect().top;
+        for (const row of messages.children) {
+            const box = row.getBoundingClientRect();
+            if (box.bottom <= top) continue;
+            reading = { row, top: box.top - top };
+            break;
+        }
     };
-    createEffect(
-        on(
-            () => [agent.entries.length, agent.state.chat.waiting.length, agent.state.chat.typing],
-            () =>
-                queueMicrotask(() => {
-                    watchRows();
-                    if (pinned) follow();
-                }),
-        ),
-    );
-
-    // The keyboard rising shrinks the page (the shell resizes the panel's frame for it), and the list with it.
-    // A conversation that was at its end stays there; one being read stays where it was, with the focused field in view.
-    // The browser may move the scroll position while it lays the smaller list out; that is the page's doing, not the reader's, so it never unpins.
-    // A row that grows after it's drawn (a sign-in's picture arriving) moves the end too, so rows are watched as well.
-    let listHeight = 0;
-    let readingAt = 0;
-    let watch: ResizeObserver | undefined;
-    let messages!: HTMLDivElement;
-    const watchRows = () => {
-        for (const row of messages.children) watch?.observe(row);
+    const place = () => {
+        const height = list.getBoundingClientRect().height;
+        const shrank = height < viewHeight;
+        viewHeight = height;
+        contentHeight = messages.getBoundingClientRect().height;
+        if (pinned) return void (list.scrollTop = list.scrollHeight);
+        // only a row that moved is put back: setting the same place again would stop a jump on its way to a quoted message
+        const moved = reading?.row.isConnected ? reading.row.getBoundingClientRect().top - list.getBoundingClientRect().top - reading.top : 0;
+        if (moved) list.scrollTop += moved;
+        // the keyboard rose over a field in the conversation (a sign-in's, a question's): it stays in view
+        if (shrank && list.contains(document.activeElement)) document.activeElement?.scrollIntoView({ block: "nearest" });
+        look();
     };
     onMount(() => {
-        listHeight = list.clientHeight;
-        watch = new ResizeObserver(() => {
-            const grew = list.clientHeight > listHeight;
-            const resized = list.clientHeight !== listHeight;
-            listHeight = list.clientHeight;
-            if (pinned) follow();
-            else if (resized) {
-                list.scrollTop = readingAt;
-                if (!grew && list.contains(document.activeElement)) document.activeElement?.scrollIntoView({ block: "nearest" });
-            }
-        });
+        const watch = new ResizeObserver(() => resized() && place());
         watch.observe(list);
-        watchRows();
-        onCleanup(() => watch?.disconnect());
+        watch.observe(messages);
+        onCleanup(() => watch.disconnect());
     });
 
-    // more rows above keep what's on screen where it was
+    // more rows above; what's on screen stays where it was
     const drawMore = (count = PAGE_ROWS) => {
-        const below = list.scrollHeight - list.scrollTop;
-        setDrawn((n) => n + count);
-        list.scrollTop = list.scrollHeight - below;
+        setFrom((n) => Math.max(0, n - count));
+        place();
     };
 
     const jumpTo = (id: string) => {
         // a quoted message not drawn yet is drawn first, with a few around it
-        const i = rows().findIndex((r) => r.key === id);
-        if (i >= 0 && rows().length - i > drawn()) drawMore(rows().length - i - drawn() + PAGE_ROWS / 4);
-        const el = list.querySelector<HTMLElement>(`[data-message="${CSS.escape(id)}"]`);
-        el?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+        const i = kept.findIndex((r) => r.key === id);
+        if (i >= 0 && i < from()) drawMore(from() - i + PAGE_ROWS / 4);
+        const el = messages.querySelector<HTMLElement>(`[data-message="${CSS.escape(id)}"]`);
+        // in the middle of the view, or from its first line when it's taller than the view
+        el?.scrollIntoView({
+            block: el.offsetHeight > list.clientHeight ? "start" : "center",
+            behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        });
     };
 
     return (
@@ -282,47 +293,47 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                 </PaperContextMenuItem>
             </PaperContextMenu>
 
+            {/* who this is, in the middle, and tapping their name opens their computer and settings; the conversation's buttons on the right,
+                folded into one menu when the chat is narrow */}
+            <div class={styles.header} ref={header}>
+                <Face class={styles.face} face={face} size={AVATAR_PX} frame="sphere" hologram skin={skinFor(agent.state.settings?.name)} />
+                <div class={styles.who}>
+                    <PaperButton variant="text" size="small" class={styles.name} aria-label={`${name()}: computer and settings`} title="Computer and settings" onClick={() => props.onMenu()}>
+                        <span class={styles.nameText}>{name()}</span>
+                        <PaperIcon>chevron_right</PaperIcon>
+                    </PaperButton>
+                    <Show when={status()}>
+                        <PaperText preset="hint">{status()}</PaperText>
+                    </Show>
+                </div>
+                <div class={styles.side}>
+                    <Show
+                        when={!compact()}
+                        fallback={
+                            <PaperButton icon variant="text" aria-label="Conversation menu" title="Conversation menu" onClick={(e) => headerMenu.openBelow(e.currentTarget, { align: "right" })}>
+                                more_horiz
+                            </PaperButton>
+                        }
+                    >
+                        <PaperButton icon variant="text" aria-label="Past conversations" title="Past conversations" onClick={() => setHistoryOpen(true)}>
+                            history
+                        </PaperButton>
+                        <PaperButton icon variant="text" aria-label="New conversation" title="New conversation" disabled={!canStartNew()} onClick={startNew}>
+                            add
+                        </PaperButton>
+                    </Show>
+                </div>
+            </div>
             <div
                 class={styles.list}
                 ref={list}
                 onScroll={() => {
-                    if (following || list.clientHeight !== listHeight) return;
-                    readingAt = list.scrollTop;
-                    pinned = list.scrollHeight - list.scrollTop - list.clientHeight < 48;
-                    if (list.scrollTop < MORE_AT_PX && drawn() < rows().length) drawMore();
+                    // a size changed and the chat is about to be placed for it: this is the browser fitting the scroll to the new size, not the reader
+                    if (resized()) return;
+                    look();
+                    if (list.scrollTop < MORE_AT_PX && from() > 0) drawMore();
                 }}
             >
-                {/* who this is, in the middle, and tapping their name opens their computer and settings; the conversation's buttons on the right,
-                    folded into one menu when the chat is narrow. It stays at the top of the list, over the conversation scrolling under it */}
-                <div class={styles.header} ref={header}>
-                    <Face class={styles.face} face={face} size={AVATAR_PX} frame="sphere" hologram skin={skinFor(agent.state.settings?.name)} />
-                    <div class={styles.who}>
-                        <PaperButton variant="text" size="small" class={styles.name} aria-label={`${name()}: computer and settings`} title="Computer and settings" onClick={() => props.onMenu()}>
-                            <span class={styles.nameText}>{name()}</span>
-                            <PaperIcon>chevron_right</PaperIcon>
-                        </PaperButton>
-                        <Show when={status()}>
-                            <PaperText preset="hint">{status()}</PaperText>
-                        </Show>
-                    </div>
-                    <div class={styles.side}>
-                        <Show
-                            when={!compact()}
-                            fallback={
-                                <PaperButton icon variant="text" aria-label="Conversation menu" title="Conversation menu" onClick={(e) => headerMenu.openBelow(e.currentTarget, { align: "right" })}>
-                                    more_horiz
-                                </PaperButton>
-                            }
-                        >
-                            <PaperButton icon variant="text" aria-label="Past conversations" title="Past conversations" onClick={() => setHistoryOpen(true)}>
-                                history
-                            </PaperButton>
-                            <PaperButton icon variant="text" aria-label="New conversation" title="New conversation" disabled={!canStartNew()} onClick={startNew}>
-                                add
-                            </PaperButton>
-                        </Show>
-                    </div>
-                </div>
                 <div class={styles.messages} ref={messages} aria-live="polite">
                     <Show when={rows().length === 0}>
                         <PaperFlex flex center>
@@ -419,7 +430,8 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                 onSend={() => {
                     // what's sent is shown, even to someone who had scrolled up to read
                     pinned = true;
-                    follow();
+                    reading = null;
+                    place();
                 }}
                 tray={tray}
             />
