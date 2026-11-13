@@ -713,7 +713,10 @@ function watchFolder(root: string, changed: () => void, gone: () => void): Folde
         let entries: fs.Dirent[];
         try {
             entries = fs.readdirSync(dir, { withFileTypes: true });
-        } catch {
+        } catch (e) {
+            if (dir === root) throw e;
+            // a folder gone between being listed and followed is expected; anything else leaves part of the page unfollowed
+            if ((e as NodeJS.ErrnoException).code !== "ENOENT") console.error(`[ai] ${dir} can't be followed for page changes:`, String(e));
             return;
         }
         for (const e of entries) if (e.isDirectory() && e.name !== "node_modules") walk(path.join(dir, e.name));
