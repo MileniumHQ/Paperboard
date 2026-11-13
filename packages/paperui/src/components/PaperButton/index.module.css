@@ -190,35 +190,6 @@
     }
 }
 
-/* surface: a neutral fill, for controls that sit on a page without
-   asking to be pressed first, like a chat's round header buttons. It's
-   one step off the page and darkens as it's pointed at and pressed. */
-.PaperButton.surface {
-    background: var(--paper-surface-inset);
-    color: var(--paper-text);
-    transition:
-        background var(--paper-short-transition),
-        transform var(--paper-tiny-transition);
-}
-@media (hover: hover) {
-    .PaperButton.surface:hover {
-        background: color-mix(
-            in srgb,
-            var(--paper-contrast) 8%,
-            var(--paper-surface-inset)
-        );
-        opacity: 1;
-    }
-}
-.PaperButton.surface:active:not([data-paper-press-out]) {
-    background: color-mix(
-        in srgb,
-        var(--paper-contrast) 14%,
-        var(--paper-surface-inset)
-    );
-    transform: scale(0.98);
-}
-
 /* outline: a quiet alternative beside a primary action, such as signing
    in with another service. No fill, subtle text, a hairline drawn inside
    so it stays the same size as the buttons next to it. */
@@ -292,11 +263,6 @@
     width: var(--paper-control-size-tiny);
     font-size: var(--paper-icon-size-small);
     border-radius: var(--paper-border-radius-half);
-}
-
-/* a circle for an icon, a pill for a label, at every size */
-.PaperButton.round {
-    border-radius: var(--paper-border-radius-pill);
 }
 
 @media (hover: hover) {

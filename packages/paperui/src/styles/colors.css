@@ -41,10 +41,6 @@
     /* the AI panel's Verity face: a yellow sphere with black features, the same in every theme */
     --paper-face-verity: #ffd60a;
     --paper-face-verity-ink: #000000;
-    /* the Agent's own face: a cyan hologram sphere with a dark core and white features, the same in every theme */
-    --paper-face-hologram: #7fe0ff;
-    --paper-face-hologram-deep: #04202c;
-    --paper-face-hologram-ink: #ffffff;
 
     /* text and icons on a colored fill */
     --paper-on-color: #ffffff;

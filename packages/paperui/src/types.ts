@@ -137,7 +137,6 @@ export type PaperTextPreset = (typeof textPresets)[number];
 
 export const buttonVariants = [
     ...paperRoles,
-    "surface",
     "text",
     "outline",
 ] as const;

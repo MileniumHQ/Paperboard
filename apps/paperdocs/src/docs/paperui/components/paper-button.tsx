@@ -24,14 +24,13 @@ export default function PaperButtonDoc() {
             <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
             <PaperText preset="body" as="p">
                 Put the label in the children.
-                A button with no <PaperCode>variant</PaperCode> is a primary button. <PaperCode>"surface"</PaperCode> is the neutral one.
+                A button with no <PaperCode>variant</PaperCode> is the neutral surface button.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">
                 <PaperFlex direction="row" gap="full" align="center" wrap>
                     <PaperButton>Button</PaperButton>
                     <PaperButton variant="primary">Primary</PaperButton>
                     <PaperButton variant="danger">Danger</PaperButton>
-                    <PaperButton variant="surface">Surface</PaperButton>
                     <PaperButton variant="outline">Outline</PaperButton>
                     <PaperButton variant="text">Text</PaperButton>
                     <PaperButton disabled>Disabled</PaperButton>
@@ -47,7 +46,6 @@ export function Example() {
                 <PaperButton>Button</PaperButton>
                 <PaperButton variant="primary">Primary</PaperButton>
                 <PaperButton variant="danger">Danger</PaperButton>
-                <PaperButton variant="surface">Surface</PaperButton>
                 <PaperButton variant="outline">Outline</PaperButton>
                 <PaperButton variant="text">Text</PaperButton>
                 <PaperButton disabled>Disabled</PaperButton>
@@ -75,7 +73,7 @@ export function Example() {
                         <td><PaperCode>variant</PaperCode></td>
                         <td><PaperCode>PaperButtonVariant</PaperCode></td>
                         <td>No default</td>
-                        <td>Without it the button is filled with <PaperCode>primary</PaperCode>. A role fills the button: <PaperCode>primary</PaperCode>, <PaperCode>brand</PaperCode>, <PaperCode>success</PaperCode>, <PaperCode>danger</PaperCode>, <PaperCode>warning</PaperCode>, <PaperCode>attention</PaperCode>, <PaperCode>extra-1</PaperCode>, <PaperCode>extra-2</PaperCode>, <PaperCode>extra-3</PaperCode>. <PaperCode>"surface"</PaperCode> fills it with the neutral inset surface and full-contrast text. <PaperCode>"outline"</PaperCode> draws a border with no fill. <PaperCode>"text"</PaperCode> draws no border or fill until hovered.</td>
+                        <td>Without it the button is the neutral surface button. A role fills the button: <PaperCode>primary</PaperCode>, <PaperCode>brand</PaperCode>, <PaperCode>success</PaperCode>, <PaperCode>danger</PaperCode>, <PaperCode>warning</PaperCode>, <PaperCode>attention</PaperCode>, <PaperCode>extra-1</PaperCode>, <PaperCode>extra-2</PaperCode>, <PaperCode>extra-3</PaperCode>. <PaperCode>"outline"</PaperCode> draws a border with no fill. <PaperCode>"text"</PaperCode> draws no border or fill until hovered.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>size</PaperCode></td>
@@ -94,12 +92,6 @@ export function Example() {
                         <td><PaperCode>boolean</PaperCode></td>
                         <td>No default (off)</td>
                         <td>Stretches the button across its container, as PaperInput's <PaperCode>fullWidth</PaperCode> does.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>round</PaperCode></td>
-                        <td><PaperCode>boolean</PaperCode></td>
-                        <td>No default (off)</td>
-                        <td>Rounds the ends fully: an icon button becomes a circle, a labelled one a pill. Use it for floating controls over a header or media, like a chat's top bar.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>disabled</PaperCode></td>

@@ -290,7 +290,6 @@ export default function ColorsDoc() {
                     <tr><td><PaperCode>--paper-panel-agents</PaperCode></td><td><PaperCode>#43bb79</PaperCode></td></tr>
                     <tr><td><PaperCode>--paper-marketing-ink</PaperCode></td><td><PaperCode>#080c12</PaperCode></td></tr>
                     <tr><td><PaperCode>--paper-face-verity</PaperCode></td><td><PaperCode>#ffd60a</PaperCode>, with <PaperCode>--paper-face-verity-ink</PaperCode> <PaperCode>#000000</PaperCode> for its features</td></tr>
-                    <tr><td><PaperCode>--paper-face-hologram</PaperCode></td><td><PaperCode>#7fe0ff</PaperCode>, the glow, with <PaperCode>--paper-face-hologram-deep</PaperCode> <PaperCode>#04202c</PaperCode> for its core and <PaperCode>--paper-face-hologram-ink</PaperCode> <PaperCode>#ffffff</PaperCode> for its features</td></tr>
                 </tbody>
             </PaperTable>
 
