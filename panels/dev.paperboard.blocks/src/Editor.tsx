@@ -427,11 +427,33 @@ export default function Editor(props: {
             if (!named) throw new Error(`${saved.schema.name} has no input ${input}`);
             return named;
         });
+        // what nothing caught, say Blockly failing as a block is dragged, is said here: never only in the console
+        const uncaught = fail("Blocks ran into a problem");
+        const onError = (event: ErrorEvent) => {
+            // the browser's own notes (a ResizeObserver that ran over) carry no error
+            if (event.error) uncaught(event.error);
+        };
+        const onRejection = (event: PromiseRejectionEvent) => uncaught(event.reason);
+        window.addEventListener("error", onError);
+        window.addEventListener("unhandledrejection", onRejection);
+        onCleanup(() => {
+            window.removeEventListener("error", onError);
+            window.removeEventListener("unhandledrejection", onRejection);
+        });
         let closed = false;
         let offRegistry: (() => void) | undefined;
         let offTooltips: (() => void) | undefined;
         let offCulling: (() => void) | undefined;
-        const resize = new ResizeObserver(() => workspace && Blockly.svgResize(workspace));
+        // The canvas is laid out again when its size changes, but not under a
+        // block being dragged: Blockly would scroll to fit the block where it
+        // was picked up, and it would leave the pointer. That waits for the drop.
+        let fitWaiting = false;
+        const fit = () => {
+            if (!workspace) return;
+            fitWaiting = workspace.isDragging();
+            if (!fitWaiting) Blockly.svgResize(workspace);
+        };
+        const resize = new ResizeObserver(fit);
         const offState = bridge.onStateChange((_patch, full) => {
             setState(full);
             showErrors(full);
@@ -464,6 +486,7 @@ export default function Editor(props: {
             followTheme();
 
             workspace.addChangeListener((event: Blockly.Events.Abstract) => {
+                if (fitWaiting) fit();
                 if (event.type === Blockly.Events.VAR_CREATE || event.type === Blockly.Events.VAR_DELETE || event.type === Blockly.Events.VAR_RENAME) {
                     setVariablesVersion((v) => v + 1);
                 }
