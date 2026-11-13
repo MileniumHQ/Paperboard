@@ -9,7 +9,7 @@ import { PaperIcon } from "../PaperIcon";
 import { PaperLoader } from "../PaperLoader";
 import { PaperMarkdown } from "../PaperMarkdown";
 import { PaperText } from "../PaperText";
-import { PaperVideo } from "../PaperVideo";
+import { PaperVideo, prefersNativeVideo } from "../PaperVideo";
 import { grammarFor } from "../../utils/highlight";
 
 /** How a file is shown: what PaperPreview draws it with. */
@@ -90,7 +90,8 @@ export interface PaperPreviewProps extends Omit<JSX.HTMLAttributes<HTMLDivElemen
 
 /**
  * A file, shown over the page the way PaperModal shows a dialog: an image
- * as itself, a video in PaperVideo, audio in PaperAudio, markdown in
+ * as itself, a video in PaperVideo (on a phone or tablet, straight in the
+ * system's own player), audio in PaperAudio, markdown in
  * PaperMarkdown, and code and plain text in PaperCode. Its Close button
  * sits above it.
  */
@@ -173,7 +174,14 @@ export function PaperPreview(props: PaperPreviewProps) {
                                 <img class={styles.image} src={local.src} alt={local.name} />
                             </Match>
                             <Match when={kind() === "video"}>
-                                <PaperVideo class={styles.video} src={local.src!} label={local.name} />
+                                {/* a phone goes straight to its own player, and leaving it closes the preview */}
+                                <PaperVideo
+                                    class={styles.video}
+                                    src={local.src!}
+                                    label={local.name}
+                                    nativePlayer={prefersNativeVideo()}
+                                    onNativePlayerClose={() => local.onClose?.()}
+                                />
                             </Match>
                             <Match when={kind() === "audio"}>
                                 <PaperAudio class={styles.audio} fullWidth src={local.src!} label={local.name} />

@@ -27,7 +27,7 @@ export default function PaperPreviewDoc() {
             <PaperText preset="header" as="h1">PaperPreview</PaperText>
             <PaperText preset="body" as="p">
                 PaperPreview shows a file over the page, the way <PaperLink href="/docs/paperui/papermodal/">PaperModal</PaperLink> shows a dialog.
-                An image is shown as itself, a video in <PaperLink href="/docs/paperui/papervideo/">PaperVideo</PaperLink>, audio in <PaperLink href="/docs/paperui/paperaudio/">PaperAudio</PaperLink>, Markdown in <PaperLink href="/docs/paperui/papermarkdown/">PaperMarkdown</PaperLink>, and code and plain text in <PaperLink href="/docs/paperui/papercode/">PaperCode</PaperLink>.
+                An image is shown as itself, a video in <PaperLink href="/docs/paperui/papervideo/">PaperVideo</PaperLink> (on a phone or tablet, straight in the system's own full-screen player, and leaving it closes the preview), audio in <PaperLink href="/docs/paperui/paperaudio/">PaperAudio</PaperLink>, Markdown in <PaperLink href="/docs/paperui/papermarkdown/">PaperMarkdown</PaperLink>, and code and plain text in <PaperLink href="/docs/paperui/papercode/">PaperCode</PaperLink>.
                 Use it for a file the user picked or an attachment in a message.
             </PaperText>
 

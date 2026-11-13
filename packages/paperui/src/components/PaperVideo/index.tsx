@@ -20,10 +20,22 @@ export interface PaperVideoProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>
     preload?: "none" | "metadata" | "auto";
     /** Called with the message shown in the player when playback fails. */
     onError?: (message: string) => void;
+    /**
+     * Opens in the system's own full-screen player and plays at once, the
+     * way a phone shows a video: mount it from a tap. The player stays here
+     * underneath, and is what shows if the system refuses.
+     */
+    nativePlayer?: boolean;
+    /** Called when the system's player is left, with `nativePlayer`. */
+    onNativePlayerClose?: () => void;
 }
 
 // WebKit on the iPhone has no element fullscreen; its video element has its own
-type WebKitVideo = HTMLVideoElement & { webkitEnterFullscreen?: () => void; webkitSupportsFullscreen?: boolean };
+type WebKitVideo = HTMLVideoElement & { webkitEnterFullscreen?: () => void };
+
+/** A phone or a tablet: a touch screen is how it's used, with no pointer to hover. */
+export const prefersNativeVideo = () =>
+    typeof matchMedia === "function" && matchMedia("(hover: none) and (pointer: coarse)").matches;
 
 /**
  * A video with PaperAudio's controls under it: play, a seek track, the
@@ -32,7 +44,17 @@ type WebKitVideo = HTMLVideoElement & { webkitEnterFullscreen?: () => void; webk
  * its container, and never taller than `--paper-video-max-height`.
  */
 export function PaperVideo(props: PaperVideoProps) {
-    const [local, rest] = splitProps(props, ["src", "label", "poster", "preload", "onError", "class", "classList"]);
+    const [local, rest] = splitProps(props, [
+        "src",
+        "label",
+        "poster",
+        "preload",
+        "onError",
+        "nativePlayer",
+        "onNativePlayerClose",
+        "class",
+        "classList",
+    ]);
 
     let root: HTMLDivElement | undefined;
     let video: WebKitVideo | undefined;
@@ -40,11 +62,55 @@ export function PaperVideo(props: PaperVideoProps) {
     const [fullscreen, setFullscreen] = createSignal(false);
     const [canFullscreen, setCanFullscreen] = createSignal(false);
 
+    // In the system's player: the video's own controls show, and leaving it is
+    // reported. Leaving counts only once it was shown, so the events of the
+    // way in can't close it.
+    let native = false;
+    let shown = false;
+    const nativeShown = () => {
+        if (native) shown = true;
+    };
+    const leaveNative = () => {
+        if (!native || !shown || !video) return;
+        native = shown = false;
+        video.controls = false;
+        local.onNativePlayerClose?.();
+    };
+
+    // The iPhone plays a video that isn't marked inline in its own full-screen
+    // player, so playing it is the way in. Elsewhere the video itself goes full
+    // screen, with its own controls. Refused, it stays in this player.
+    const openNative = async () => {
+        if (!video) return;
+        native = true;
+        if (!video.webkitEnterFullscreen) {
+            try {
+                video.controls = true;
+                await video.requestFullscreen();
+            } catch {
+                native = false;
+                video.controls = false;
+            }
+        }
+        await player.togglePlay();
+    };
+
     onMount(() => {
         setCanFullscreen((!!root?.requestFullscreen && document.fullscreenEnabled !== false) || !!video?.webkitEnterFullscreen);
-        const follow = () => setFullscreen(document.fullscreenElement === root);
+        const follow = () => {
+            setFullscreen(document.fullscreenElement === root);
+            if (document.fullscreenElement === video) nativeShown();
+            else leaveNative();
+        };
         document.addEventListener("fullscreenchange", follow);
-        onCleanup(() => document.removeEventListener("fullscreenchange", follow));
+        video?.addEventListener("webkitbeginfullscreen", nativeShown);
+        video?.addEventListener("webkitendfullscreen", leaveNative);
+        onCleanup(() => {
+            document.removeEventListener("fullscreenchange", follow);
+            video?.removeEventListener("webkitbeginfullscreen", nativeShown);
+            video?.removeEventListener("webkitendfullscreen", leaveNative);
+        });
+        if (local.nativePlayer) void openNative();
     });
 
     const toggleFullscreen = async () => {
@@ -85,7 +151,7 @@ export function PaperVideo(props: PaperVideoProps) {
                     poster={local.poster}
                     preload={local.preload ?? "metadata"}
                     loop={player.loop()}
-                    playsinline
+                    playsinline={!local.nativePlayer}
                 />
                 <Show when={notStarted()}>
                     <span class={styles.bigPlay} aria-hidden="true">

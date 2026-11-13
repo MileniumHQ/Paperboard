@@ -90,6 +90,18 @@ export function Example() {
                         <td>Called with the message the player shows when loading or playback fails.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>nativePlayer</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>No default (off)</td>
+                        <td>Opens in the system's own full-screen player and plays at once, the way a phone shows a video. Mount it from a tap: browsers only allow this right after one. On the iPhone the video plays in its own player; elsewhere the video element goes full screen with its own controls. If the system refuses, the player shows as usual. <PaperCode>prefersNativeVideo()</PaperCode> is true on touch screens with no hover, where this is the expected way to watch.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>onNativePlayerClose</PaperCode></td>
+                        <td><PaperCode>() =&gt; void</PaperCode></td>
+                        <td>No default</td>
+                        <td>Called when the system's player is left, with <PaperCode>nativePlayer</PaperCode>.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode></td>
                         <td>Solid class props</td>
                         <td>No default</td>
