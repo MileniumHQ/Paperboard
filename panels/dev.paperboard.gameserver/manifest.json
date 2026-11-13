@@ -116,23 +116,19 @@
             },
             {
                 "name": "Steam",
-                "detail": "Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod and Rust servers and Workshop items through SteamCMD, Workshop mods and maps found through Paperboard's modscan, and the Workshop collection a Garry's Mod server is given"
+                "detail": "Palworld, TF2, CS2, Garry's Mod and Rust servers and Workshop items through SteamCMD, Workshop search through Paperboard's modscan, and Garry's Mod collections"
             },
             {
                 "name": "Facepunch",
                 "detail": "A Rust server lists itself in Rust's server browser and uploads its map for players to download"
             },
             {
-                "name": "AlliedModders",
-                "detail": "Downloading SourceMod and Metamod:Source for Team Fortress 2 servers"
+                "name": "AlliedModders and Team Fortress Wiki",
+                "detail": "SourceMod and Metamod:Source for Team Fortress 2 servers, and pictures of Team Fortress 2's maps"
             },
             {
                 "name": "Arch Linux",
                 "detail": "Downloading the curl library Team Fortress 2 needs on Linux, from the Arch Linux archive"
-            },
-            {
-                "name": "Team Fortress Wiki",
-                "detail": "Map pictures for Team Fortress 2"
             }
         ],
         "credits": [
