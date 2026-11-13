@@ -1,4 +1,8 @@
+/* text to read is text to copy, wherever it sits: PaperUI's pages and
+   panels turn selection off by default, as an app's chrome does */
 .PaperProse {
+    -webkit-user-select: text;
+    user-select: text;
     font-size: var(--paper-text-size-3);
     line-height: var(--paper-console-line-height);
     overflow-wrap: break-word;

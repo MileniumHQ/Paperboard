@@ -1,4 +1,8 @@
+/* text to read is text to copy, wherever it sits: PaperUI's pages and
+   panels turn selection off by default, as an app's chrome does */
 .PaperMarkdown {
+    -webkit-user-select: text;
+    user-select: text;
     display: flex;
     flex-direction: column;
     gap: var(--paper-uigap-half);
