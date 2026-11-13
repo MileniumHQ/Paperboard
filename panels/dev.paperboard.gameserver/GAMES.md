@@ -1,6 +1,6 @@
 # Game modules
 
-Minecraft Java, Terraria, Palworld, Team Fortress 2, Garry's Mod and Rust are registered modules. Terraria uses a pinned publisher ZIP, stdin control, generated settings, a vault join password and offline backups. Minecraft retains its installers, launch arguments, readiness markers, console parsing, port names, tabs, call names and widgets. Terraria's `software: "tmodloader"` (phase 1b) is registered too: a pinned tModLoader GitHub release run on Origami's `dotnet-8` package, with a Mods tab over the Steam Workshop.
+Minecraft Java, Terraria, Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod and Rust are registered modules. Terraria uses a pinned publisher ZIP, stdin control, generated settings, a vault join password and offline backups. Minecraft retains its installers, launch arguments, readiness markers, console parsing, port names, tabs, call names and widgets. Terraria's `software: "tmodloader"` (phase 1b) is registered too: a pinned tModLoader GitHub release run on Origami's `dotnet-8` package, with a Mods tab over the Steam Workshop.
 
 ## Module contract
 
@@ -58,7 +58,7 @@ L/W/M = native dedicated server on Linux/Windows/macOS. Compatibility routes are
 
 Notes:
 - **Bedrock** is its own game id (`minecraft-bedrock`); Geyser stays a Java-server bridge.
-- **Selected scope:** Terraria (including tModLoader), TF2, CS2, GMod, Palworld, then Rust. Other rows are future candidates, not commitments. All but CS2 are registered. CS2 is not: its server is app 730's whole 75 GB download (measured 2026-11-12: depot 2347770 alone is 65 GB), which the certification machine had no room to install, and nothing ships that was not run.
+- **Selected scope:** Terraria (including tModLoader), TF2, CS2, GMod, Palworld, then Rust. Other rows are future candidates, not commitments. All of them are registered.
 - **Hytale** was looked at on 2026-11-12 and is not a candidate yet: every way to get its server files (the launcher's folder, the Hytale Downloader, `--bootstrap`) needs a signed-in Hytale account, there is no anonymous download, and a server only takes players once an account has authenticated it (`/auth login device`, or session tokens from the same device flow). Its module would be Java 25, `java -jar HytaleServer.jar --assets Assets.zip`, UDP 5520 (QUIC), a device-code sign-in in setup and the built-in updater's exit code 8; none of it can be certified without an account that has the game.
 - **Valheim** needs linked ports (base, base+1); the Port API's independent "next free" can't keep that, so the linked allocation is added with Valheim, the first game that needs it.
 - **DST** needs multi-server orchestration (surface + caves) and whole-cluster backups; defer that until DST. Descendant process supervision for launch wrappers is a separate requirement.
@@ -163,11 +163,39 @@ restore: files replaced, install kept, vault kept, restarted ONLINE
 stop: quit over RCON; process absent; state OFFLINE
 ```
 
-**Counter-Strike 2 (`cs2`)**
+**Counter-Strike 2 (`counter-strike-2`), registered**
 
-- SteamCMD app 730, anonymous, public; **not** old CS:GO app 740. Linux `game/bin/linuxsteamrt64/cs2 -dedicated -console -usercon -port P +game_type 0 +game_mode 1 +map de_dust2`; Windows `game/bin/win64/cs2.exe` with the same arguments. This is Source 2, not `srcds`; maintain its library/Steam-runtime environment separately.
-- Game/query UDP P=27015 and RCON TCP P; SourceTV disabled until explicitly supported. `game/csgo/cfg/server.cfg` and mode cfg: expose hostname, map/rotation, game type/mode, player cap, LAN/public, join password, RCON password, GSLT and optional Workshop map id. Maps/Steam tab owns map selection and GSLT setup/status. Public listing requires a valid per-server GSLT for app 730; a token is not a successful-registration signal. Store it in the vault and materialize private config, not logs.
-- RCON command execution and `status` roster, A2S counts; certify CS2's actual RCON behavior on the pinned build before advertising control. Readiness/stop/offline backup follow TF2's policy with CS2-specific map/Steam signals and cfg/addons/maps ownership. No world-save command; preserve configs, custom maps/addons and chosen demos, not the large base depot. Tabs: Overview, Players, Maps/Steam, Options, Versions, shared tabs. Widgets: status, players, console. No plugin marketplace in v1.
+`src/games/cs2/`: a `SourceGameSpec` for the definition and the shared Source screens, with a service of its own, because a Source 2 server is driven differently. Verified against the real server, build 26598758 (version 1.41.9.7), on Arch Linux x64 on 2026-11-12, through the daemon (`scripts/source-smoke.ts counter-strike-2`):
+
+- Download: app 730 is the whole game, 69 GB on disk (depot 2347770 alone is 65 GB); there is no smaller server download.
+- Launch: `stdbuf -oL -eL game/bin/linuxsteamrt64/cs2 -dedicated -console -ip 0.0.0.0 -port P -maxplayers N +game_type T +game_mode M +sv_lan 0|1 +exec paperboard_secrets.cfg +map <map>`, `LD_LIBRARY_PATH` at `game/bin/linuxsteamrt64`, HOME in the server's `profile/` with SteamCMD's `steamclient.so` in `~/.steam/sdk64`. It ran on plain Arch with no Steam runtime container. It binds its port on UDP and TCP.
+- Control is stdin (`SourceGameSpec.control: "stdin"`): the server reads console commands on a pipe and prints their answers. Its remote console runs a command but answers every one with nothing (`status`, `listid` and a cvar query all came back empty, and their output is printed nowhere), so `-usercon` is not passed and no RCON password exists.
+- Readiness: the server's own `Host activate: Loading (<map>)` line; `Host activate: Changelevel (<map>)` follows a map change. Stop is `quit` on stdin, exit code 0.
+- Settings: the game runs `server.cfg`, then the mode's `gamemode_<mode>.cfg`, then `gamemode_<mode>_server.cfg`. Measured: `mp_maxrounds 7`, `bot_quota 3` and `mp_friendlyfire 0` in `server.cfg` came out 24, 1 and true in Competitive. So `server.cfg` only turns the game log on (`log on`, `sv_logecho 1`) and the options are written to `gamemode_<mode>_server.cfg`, which the game runs last; the user's own `server.cfg` in the server folder is run from there as `paperboard_user.cfg`. Options that apply at once are typed into the console. Game modes are Competitive, Casual, Wingman, Deathmatch and Arms Race (`MODES`: `game_type`, `game_mode` and the config name).
+- Passwords: the join password and login token are run once from a 0600 `paperboard_secrets.cfg` that is removed when the server is up. Asked for `sv_password`, the server prints the password; the console hides it.
+- Players: joins, leaves and chat are the game log lines, as TF2's. Kill lines carry positions (`"A<2><[U:1:1]><CT>" [-100 20 3] killed …`), which are taken out before they are read; the console's own `say` is logged as `"Console<0>" say "…"`. `status` lists `id time ping loss state rate adr 'name'` between `---------players--------` and `#end`, with no Steam ids, so a server found already running lists who is on by name, and a person's Steam id (for a ban) is known once the game log names them. The player cap shown is the Maximum players option: `status` says "(0 max)".
+- Bans are Paperboard's own list: `banid` and `listid` print nothing, so whether the game holds a ban cannot be seen. A banned player is kicked (`kickid`) the moment their connect line appears, and at once when banned while on.
+- Maps are the `.vpk` files in `game/csgo/maps` that are places to play (`*_vanity`, `lobby_mapveto` and `graphics_settings` are not). The game reads no map cycle file (`rotation: false`), so there is no Maps tab and setup ends with the download; the Overview's Change map sends `changelevel`.
+- Not yet: Windows (the VM has no room for 69 GB, so the host is refused there), Workshop maps (`host_workshop_map`), a verified join from a client, a verified GSLT login, and the human rows of `status` and human log lines, which are read as the bot ones were measured and Valve's log standard documents.
+
+```text
+install: app 730, build 26598758; host linux/x64
+update check: Steam's newest build is 26598758; none available
+start: ONLINE on 33938 (occupied 33937 relocated), map de_dust2, 10 players max, version Build 26598758
+roster: bot Comb joined through the game log, kicked by user id, not counted as a player
+chat: say delivered and read back from the game log
+bans: [U:1:24691] banned and unbanned on the running server (Paperboard's own list; the game shows none)
+options: mp_autoteambalance applied at once
+map: changed to de_inferno while running
+backup: 18493178 bytes, SHA-256 e7e4367aad117c7d1ef304407101785ae5398e97b33cffc1b4b6aab719e9dc12; copied while running
+restore: files replaced, install kept, vault kept, restarted ONLINE
+stop: quit through its console; process absent; state OFFLINE
+```
+
+Original plan notes:
+
+- SteamCMD app 730, anonymous, public; **not** old CS:GO app 740. This is Source 2, not `srcds`.
+- Public listing requires a valid per-server GSLT for app 730; a token is not a successful-registration signal.
 
 **Garry's Mod (`gmod`)**
 
@@ -235,7 +263,7 @@ These are intended certification targets, not already-tested claims. Unsupported
 | Terraria vanilla | Native target | Native; server verified | Publisher Intel build target | Unsupported: no certification machine | Unsupported |
 | Terraria tModLoader | Native target | Native; server verified | Supported-release .NET/Intel target | Release-specific runtime/Rosetta target; block until certified | Unsupported initially |
 | TF2 | Native target; SteamCMD i386 libs | Native; server verified | Unsupported | Unsupported | Unsupported |
-| CS2 | Native target | Native target | Unsupported | Unsupported | Unsupported |
+| CS2 | Native; server verified | Unsupported until its server is run | Unsupported | Unsupported | Unsupported |
 | GMod | Native; server verified (`x86-64` branch) | Native; server verified (`x86-64` branch) | Unsupported | Unsupported | Unsupported |
 | Palworld | Native target | Native; server verified | Unsupported | Unsupported | Unsupported |
 | Rust | Native; server verified | Native; server verified | Unsupported | Unsupported | Unsupported |

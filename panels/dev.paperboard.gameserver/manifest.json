@@ -116,7 +116,7 @@
             },
             {
                 "name": "Steam",
-                "detail": "Palworld, Team Fortress 2, Garry's Mod and Rust servers and Workshop items through SteamCMD, Workshop mods and maps found through Paperboard's modscan, and the Workshop collection a Garry's Mod server is given"
+                "detail": "Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod and Rust servers and Workshop items through SteamCMD, Workshop mods and maps found through Paperboard's modscan, and the Workshop collection a Garry's Mod server is given"
             },
             {
                 "name": "Facepunch",
@@ -158,7 +158,7 @@
             },
             {
                 "name": "SteamCMD",
-                "detail": "Installing and updating Palworld, Team Fortress 2, Garry's Mod and Rust servers"
+                "detail": "Installing and updating Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod and Rust servers"
             },
             {
                 "name": "SourceMod and Metamod:Source",
@@ -184,11 +184,11 @@
         "requirements": [
             {
                 "name": "Computer",
-                "detail": "Minecraft on Linux, macOS or Windows. Terraria, Palworld, Team Fortress 2, Garry's Mod and Rust on Linux or Windows, x64"
+                "detail": "Minecraft on Linux, macOS or Windows. Terraria, Palworld, Team Fortress 2, Garry's Mod and Rust on Linux or Windows, x64. Counter-Strike 2 on Linux, x64"
             },
             {
                 "name": "Storage",
-                "detail": "4 GB, plus the server's own download"
+                "detail": "4 GB, plus the server's own download (70 GB for Counter-Strike 2)"
             },
             {
                 "name": "RAM",
