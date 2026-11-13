@@ -9,7 +9,7 @@ import { validateOptions } from "../options";
 import { installedBuild, steamClientLibrary } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import {
-    ConsoleBuffer, assertHost, exists, isLinked, linkFile, linkFolder, offlineBackup, pushChat, readSettings, redact, report,
+    ConsoleBuffer, assertHost, exists, isLinked, keptFile, linkFolder, offlineBackup, pushChat, readSettings, redact, report,
     resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, unlinkFolder, updateSettings, writePrivate, type Context,
 } from "../serviceKit";
 import type { GameDefinition } from "../types";
@@ -179,14 +179,24 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
 
     /**
      * Points the game's logs folder at logs/ in the server folder, where Logs
-     * reads them and backups keep them, and with it what the game keeps of
-     * the owner's (spec.keeps).
+     * reads them and backups keep them, and with it the folders the game
+     * keeps of the owner's (spec.keeps).
      */
     async function linkLogs() {
         const game = await gameDir();
         const home = await root();
         for (const folder of ["logs", ...(spec.keeps?.folders ?? [])]) await linkFolder(path.join(game, folder), path.join(home, folder));
-        for (const file of spec.keeps?.files ?? []) await linkFile(path.join(game, file), path.join(home, file));
+    }
+    /** The files the game keeps of the owner's (spec.keeps), each between the game's folder and the server folder. */
+    async function keptFiles() {
+        const game = await gameDir();
+        const home = await root();
+        return (spec.keeps?.files ?? []).map((file) => keptFile(path.join(game, file), path.join(home, file)));
+    }
+    /** Once the server is gone its kept files are the server folder's again, and the start's passwords are off the disk. */
+    async function release() {
+        await removeSecrets();
+        for (const file of await keptFiles()) await file.takeBack();
     }
 
     // SourceMod: its folders live in the server folder and are linked into
@@ -621,7 +631,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 // the links are what the server started with: placeMods makes them only at a start
                 local().modsActive = (await modsOn()) && (await isLinked(path.join(await gameDir(), "addons")));
                 await readStatus(ctx).catch((err) => report(ctx, `Could not read who is on ${spec.name}`, err));
-            } else await removeSecrets().catch((err) => report(ctx, `Could not remove ${spec.name}'s start passwords`, err));
+            } else await release().catch((err) => report(ctx, `Could not put ${spec.name}'s files back after its last run`, err));
             if (spec.offlineBackups) await resumeAfterBackup(ctx, spec.id, running);
         },
         async beforeRemove() { if (local().busy) throw new Error(`Wait for ${spec.name}'s current operation`); },
@@ -666,6 +676,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
             const join = await joinPassword.value();
             const token = await loginToken.value();
             await linkLogs();
+            for (const file of await keptFiles()) await file.place();
             const modsActive = await placeMods();
             await writeConfigs();
             await writePrivate(await secretsFile(), secretsCfg({ rcon: rconSecret, join, token }));
@@ -687,6 +698,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                     : { executable, args, cwd: install, env: {}, consoleInput: true },
             };
         },
+        afterStop: release,
         isMutating: () => local().busy,
         readiness: { timeoutMs: 300_000, async probe(ctx) {
             try { await readStatus(ctx); }
@@ -752,7 +764,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 announce: async () => { await rcon().exec("say The server is stopping for a backup and will be back shortly."); },
                 // the server writes what it keeps as it goes, and closes it as it quits
                 save: async () => {},
-                clean: removeSecrets,
+                clean: release,
             })
             : { mode: "quiesce", before: async () => {}, recover: async () => {}, withConsistentData: async (_ctx, work) => work() },
     };

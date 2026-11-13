@@ -25,6 +25,7 @@ const game = GAMES[process.argv[2] ?? ""];
 if (!game) throw new Error(`Name a game: ${Object.keys(GAMES).join(", ")}`);
 const { spec } = game;
 const ids = sourceCalls(spec.id);
+const windows = process.platform === "win32";
 
 await withScenarioDaemon(`${spec.id}-real`, async ({ addServer }) => {
     const { backupApi, backupLocationsApi, processApi, secretsApi } = await import("@mileniumhq/paperapi");
@@ -79,11 +80,13 @@ await withScenarioDaemon(`${spec.id}-real`, async ({ addServer }) => {
         assert(!fs.existsSync(secrets), "The start's passwords file is still there once the server is up");
         assert(!JSON.stringify(await server.console()).includes("wire-secret"), "The join password is in the console");
         for (const file of game.kept) {
-            assert(fs.lstatSync(path.join(server.directory, "install", spec.gameDir, file)).isSymbolicLink(), `${file} in the install is not a link`);
-            assert(fs.statSync(path.join(server.directory, file)).isFile(), `${file} is not in the server folder`);
+            // a link to the server folder's file; on Windows the file itself, there for the run
+            const placed = fs.lstatSync(path.join(server.directory, "install", spec.gameDir, file));
+            if (windows) assert(placed.isFile() && !fs.existsSync(path.join(server.directory, file)), `${file} was not moved into the install for the run`);
+            else assert(placed.isSymbolicLink() && fs.statSync(path.join(server.directory, file)).isFile(), `${file} in the install is not a link to the server folder's`);
         }
         for (const folder of spec.keeps?.folders ?? []) assert(fs.lstatSync(path.join(server.directory, "install", spec.gameDir, folder)).isSymbolicLink(), `${folder} in the install is not a link`);
-        if (game.kept.length) console.log(`kept data: ${[...game.kept, ...(spec.keeps?.folders ?? [])].join(", ")} live in the server folder, linked into the install`);
+        if (game.kept.length) console.log(`kept data: ${[...game.kept, ...(spec.keeps?.folders ?? [])].join(", ")} live in the server folder, ${windows ? "the folders linked into the install and the files moved in for the run" : "linked into the install"}`);
 
         await server.call("run-command", { command: game.bot });
         await until(async () => (await server.call<{ online: { steamId: string }[] }>(ids.players)).online.some((p) => p.steamId === "BOT"), "a bot in the roster", 20_000);
@@ -123,13 +126,14 @@ await withScenarioDaemon(`${spec.id}-real`, async ({ addServer }) => {
         await api.restore(record.id);
         await online("restart after restore");
         assert(!fs.existsSync(path.join(server.directory, "after-backup.txt")), "Restore did not replace the server's files");
-        assert(fs.existsSync(path.join(server.directory, "install", spec.binaries.linux!.executable)), "Restore removed the install, which backups leave out");
+        assert(fs.existsSync(path.join(server.directory, "install", spec.binaries[windows ? "win32" : "linux"]!.executable)), "Restore removed the install, which backups leave out");
         assert((await secretsApi.get(`${server.id}-${spec.id}-join-password`, PANEL)).value === "wire-secret", "Restore lost the vault's join password");
         console.log("restore: files replaced, install kept, vault kept, restarted ONLINE");
 
         await server.call("stop-server");
         await offline("stop");
         assert(!fs.existsSync(secrets), "The start's passwords file was left behind");
+        for (const file of game.kept) assert(fs.statSync(path.join(server.directory, file)).isFile(), `${file} is not in the server folder once the server has stopped`);
         console.log("stop: quit over RCON; process absent; state OFFLINE");
     } finally { blocker.close(); }
 });

@@ -35,7 +35,7 @@ export const GMOD: SourceGameSpec = {
     // either branch join a server on either.
     branch: "x86-64",
     gameDir: "garrysmod",
-    binaries: { linux: { executable: "bin/linux64/srcds", libraryDir: "bin/linux64" } },
+    binaries: { linux: { executable: "bin/linux64/srcds", libraryDir: "bin/linux64" }, win32: { executable: "srcds_win64.exe" } },
     steamIds: "steam2",
     rconReadsTls: true,
     // add-ons and what they save, and the database the game keeps players' data in

@@ -290,23 +290,45 @@ export async function linkFolder(link: string, target: string): Promise<void> {
 }
 
 /**
- * Points `link` at `target`, a file in the server folder that need not be
- * there yet: a file the game left at `link` moves to `target` first, refusing
- * to overwrite one. The game then reads and writes the server folder's file.
+ * A file the game keeps in its own folder (`link`) that is the server
+ * owner's, so it lives in the server folder (`target`), where backups carry
+ * it and an update leaves it. Elsewhere `link` is a link to it, made when
+ * the file is placed. Windows has no file link an ordinary account can make,
+ * so there the file itself is moved in for a start and taken back once the
+ * server is gone. Neither side need exist yet; a file on both sides is
+ * refused, never guessed between.
  */
-export async function linkFile(link: string, target: string): Promise<void> {
-    const stat = await fs.lstat(link).catch((err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return null; throw err; });
-    if (stat?.isSymbolicLink()) {
-        if (path.resolve(path.dirname(link), await fs.readlink(link)) === path.resolve(target)) return;
-        await fs.unlink(link);
-    } else if (stat?.isFile()) {
-        if (await exists(target)) throw new Error(`${path.basename(link)} is in both the game's folder and the server folder; move one aside in Files`);
-        await fs.mkdir(path.dirname(target), { recursive: true });
-        await fs.rename(link, target);
-    } else if (stat) throw new Error(`${path.basename(link)} in the game's folder is a folder; remove it in Files`);
-    await fs.mkdir(path.dirname(link), { recursive: true });
-    await fs.mkdir(path.dirname(target), { recursive: true });
-    await fs.symlink(process.platform === "win32" ? path.resolve(target) : path.relative(path.dirname(link), target), link, "file");
+export function keptFile(link: string, target: string, platform = process.platform) {
+    const both = () => new Error(`${path.basename(link)} is in both the game's folder and the server folder; move one aside in Files`);
+    const stat = (file: string) => fs.lstat(file).catch((err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return null; throw err; });
+    const move = async (from: string, to: string) => {
+        if (await exists(to)) throw both();
+        await fs.mkdir(path.dirname(to), { recursive: true });
+        await fs.rename(from, to);
+    };
+    return {
+        /** Before a start: the game finds the server folder's file at `link`. */
+        async place(): Promise<void> {
+            const there = await stat(link);
+            if (there?.isDirectory()) throw new Error(`${path.basename(link)} in the game's folder is a folder; remove it in Files`);
+            if (platform === "win32") {
+                if (await exists(target)) await move(target, link);
+                return;
+            }
+            if (there?.isSymbolicLink()) {
+                if (path.resolve(path.dirname(link), await fs.readlink(link)) === path.resolve(target)) return;
+                await fs.unlink(link);
+            } else if (there) await move(link, target);
+            await fs.mkdir(path.dirname(link), { recursive: true });
+            await fs.mkdir(path.dirname(target), { recursive: true });
+            await fs.symlink(path.relative(path.dirname(link), target), link, "file");
+        },
+        /** Once the server is gone: the file is in the server folder again. Nothing to do where `link` is a link. */
+        async takeBack(): Promise<void> {
+            if (platform !== "win32") return;
+            if ((await stat(link))?.isFile()) await move(link, target);
+        },
+    };
 }
 
 /** Removes a link linkFolder made; a real folder there is the user's and stays. */
