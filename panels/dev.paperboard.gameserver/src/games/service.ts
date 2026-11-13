@@ -10,10 +10,12 @@ import { tf2 } from "./tf2";
 import { tf2Service } from "./tf2/service";
 import { gmod } from "./gmod";
 import { gmodService } from "./gmod/service";
+import { cs2 } from "./cs2";
+import { cs2Service } from "./cs2/service";
 import { rust } from "./rust";
 import { rustService } from "./rust/service";
 import type { GameService } from "./serviceTypes";
-const services: Readonly<Record<string, GameService>> = { [minecraft.id]: minecraftService, [terraria.id]: terrariaService, [palworld.id]: palworldService, [tf2.id]: tf2Service, [gmod.id]: gmodService, [rust.id]: rustService };
+const services: Readonly<Record<string, GameService>> = { [minecraft.id]: minecraftService, [terraria.id]: terrariaService, [palworld.id]: palworldService, [tf2.id]: tf2Service, [gmod.id]: gmodService, [rust.id]: rustService, [cs2.id]: cs2Service };
 export function gameServiceFor(id: string): GameService {
     const game = gameFor(id);
     const service = services[game.id];

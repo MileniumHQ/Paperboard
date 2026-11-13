@@ -13,12 +13,20 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { sourceCalls, type SourceGameSpec } from "../src/games/source";
+import { CS2 } from "../src/games/cs2";
 import { GMOD } from "../src/games/gmod";
 import { assert, PANEL, until, withScenarioDaemon } from "./scenarioDaemon";
 
-/** What differs between the games this script knows: a console command that adds a bot, a second installed map, an option a running server takes at once, and a Steam id in the form the game bans by. */
-const GAMES: Record<string, { spec: SourceGameSpec; bot: string; otherMap: string; live: { option: string; value: boolean; cvar: string }; steamId: string; kept: string[] }> = {
-    "garrys-mod": { spec: GMOD, bot: "bot", otherMap: "gm_flatgrass", live: { option: "sbox_godmode", value: true, cvar: "sbox_godmode" }, steamId: "STEAM_0:1:12345", kept: ["sv.db"] },
+/**
+ * What differs between the games this script knows: a console command that
+ * adds a bot, a second installed map, an option a running server takes at
+ * once with what the server prints when asked for it, a Steam id in the form
+ * the game bans by, the files it keeps, and whether the server holds the ban
+ * list itself (`listid` shows it) or Paperboard does.
+ */
+const GAMES: Record<string, { spec: SourceGameSpec; bot: string; otherMap: string; live: { option: string; value: unknown; cvar: string; printed: RegExp }; steamId: string; kept: string[]; serverBans: boolean }> = {
+    "garrys-mod": { spec: GMOD, bot: "bot", otherMap: "gm_flatgrass", live: { option: "sbox_godmode", value: true, cvar: "sbox_godmode", printed: /"sbox_godmode" = "1"/ }, steamId: "STEAM_0:1:12345", kept: ["sv.db"], serverBans: true },
+    "counter-strike-2": { spec: CS2, bot: "bot_add", otherMap: "de_inferno", live: { option: "mp_autoteambalance", value: false, cvar: "mp_autoteambalance", printed: /^mp_autoteambalance = false/ }, steamId: "[U:1:24691]", kept: [], serverBans: false },
 };
 
 const game = GAMES[process.argv[2] ?? ""];
@@ -101,17 +109,23 @@ await withScenarioDaemon(`${spec.id}-real`, async ({ addServer }) => {
         console.log("chat: say delivered and read back from the game log");
 
         await server.call(ids.ban, { steamId: game.steamId });
-        await server.call("run-command", { command: "listid" });
-        await said(new RegExp(`${game.steamId.replace(/[[\]]/g, "\\$&")} : permanent`), "the ban in the server's own list");
+        assert((await server.call<{ bans: { steamId: string }[] }>(ids.players)).bans.some((ban) => ban.steamId === game.steamId), "The ban is not in the Players tab's list");
+        if (game.serverBans) {
+            await server.call("run-command", { command: "listid" });
+            await said(new RegExp(`${game.steamId.replace(/[[\]]/g, "\\$&")} : permanent`), "the ban in the server's own list");
+        }
         await server.call(ids.unban, { steamId: game.steamId });
-        await server.call("run-command", { command: "listid" });
-        await said(/ID filter list: empty/, "the ban gone from the server's own list");
-        console.log(`bans: ${game.steamId} banned and unbanned on the running server`);
+        if (game.serverBans) {
+            await server.call("run-command", { command: "listid" });
+            await said(/ID filter list: empty/, "the ban gone from the server's own list");
+        }
+        assert(!(await server.call<{ bans: { steamId: string }[] }>(ids.players)).bans.some((ban) => ban.steamId === game.steamId), "The ban is still listed after the unban");
+        console.log(`bans: ${game.steamId} banned and unbanned on the running server${game.serverBans ? "" : " (Paperboard's own list; the game shows none)"}`);
 
         await server.call("write-game-options", { patch: { [game.live.option]: game.live.value } });
         await server.call("run-command", { command: game.live.cvar });
-        await said(new RegExp(`"${game.live.cvar}" = "${game.live.value ? 1 : 0}"`), `${game.live.cvar} set on the running server`);
-        console.log(`options: ${game.live.cvar} applied at once (a ${game.live.cvar.length}-character command)`);
+        await said(game.live.printed, `${game.live.cvar} set on the running server`);
+        console.log(`options: ${game.live.cvar} applied at once`);
 
         await server.call(ids.changeMap, { map: game.otherMap });
         await until(async () => (await server.state()).serverLevel === game.otherMap, "the map change", 60_000);
@@ -124,7 +138,8 @@ await withScenarioDaemon(`${spec.id}-real`, async ({ addServer }) => {
         console.log(`backup: ${record.size} bytes, SHA-256 ${record.sha256}; ${spec.offlineBackups ? "stopped for the copy and restarted" : "copied while running"}`);
         fs.writeFileSync(path.join(server.directory, "after-backup.txt"), "must disappear on restore");
         await api.restore(record.id);
-        await online("restart after restore");
+        // a restore stops the server to put its files back, then starts it again
+        await until(async () => (await server.state()).serverStatus === "online", "restart after restore", 600_000);
         assert(!fs.existsSync(path.join(server.directory, "after-backup.txt")), "Restore did not replace the server's files");
         assert(fs.existsSync(path.join(server.directory, "install", spec.binaries[windows ? "win32" : "linux"]!.executable)), "Restore removed the install, which backups leave out");
         assert((await secretsApi.get(`${server.id}-${spec.id}-join-password`, PANEL)).value === "wire-secret", "Restore lost the vault's join password");
@@ -134,6 +149,6 @@ await withScenarioDaemon(`${spec.id}-real`, async ({ addServer }) => {
         await offline("stop");
         assert(!fs.existsSync(secrets), "The start's passwords file was left behind");
         for (const file of game.kept) assert(fs.statSync(path.join(server.directory, file)).isFile(), `${file} is not in the server folder once the server has stopped`);
-        console.log("stop: quit over RCON; process absent; state OFFLINE");
+        console.log("stop: quit through its console; process absent; state OFFLINE");
     } finally { blocker.close(); }
 });

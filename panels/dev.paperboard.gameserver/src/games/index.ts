@@ -1,4 +1,5 @@
 import { terraria } from "./terraria";
+import { cs2 } from "./cs2";
 import { gmod } from "./gmod";
 import { minecraft } from "./minecraft";
 import { palworld } from "./palworld";
@@ -7,7 +8,7 @@ import { tf2 } from "./tf2";
 import type { GameDefinition } from "./types";
 export type * from "./types";
 
-export const games: readonly GameDefinition[] = [minecraft, terraria, palworld, tf2, gmod, rust];
+export const games: readonly GameDefinition[] = [minecraft, terraria, palworld, tf2, cs2, gmod, rust];
 export const defaultGame = minecraft;
 /** Never interpret an unknown stored id as another game's files or commands. */
 export function gameFor(id: string): GameDefinition {

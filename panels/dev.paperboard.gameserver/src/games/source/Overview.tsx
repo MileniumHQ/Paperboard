@@ -26,8 +26,13 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
     const pictures = createMapPictures(props.spec);
     const uptime = createUptime();
     const metrics = createMetrics<SourceMetrics>(ids.metrics);
-    /** how the server plays: its map's mode, or the game mode it was started in; a map of no listed mode is a custom one */
-    const mode = () => label(map()) ?? (typeof gameSettings().gamemode === "string" ? humanizeIdentifier(String(gameSettings().gamemode)) : "Custom");
+    /** how the server plays: the game mode it was started in, or its map's; a map of no listed mode is a custom one */
+    const mode = () => {
+        const chosen = gameSettings().gamemode;
+        if (typeof chosen !== "string") return label(map()) ?? "Custom";
+        const option = props.spec.options.find((o) => o.id === "gamemode");
+        return (option?.kind === "select" ? option.choices.find((c) => c.value === chosen)?.label : undefined) ?? humanizeIdentifier(chosen);
+    };
     const workshop = createWorkshopMaps(props.spec);
 
     const edit = async () => {

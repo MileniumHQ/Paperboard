@@ -116,7 +116,8 @@ await withScenarioDaemon("rust-real", async ({ addServer }) => {
         await server.call("rust-unban", { steamId: id });
         fs.writeFileSync(path.join(server.directory, "after-backup.txt"), "must disappear on restore");
         await api.restore(record.id);
-        await online("restart after restore");
+        // a restore stops the server to put its files back, then starts it again
+        await until(async () => (await server.state()).serverStatus === "online", "restart after restore", 600_000);
         assert(!fs.existsSync(path.join(server.directory, "after-backup.txt")), "Restore did not replace the server's files");
         assert(fs.existsSync(path.join(server.directory, "install", process.platform === "win32" ? "RustDedicated.exe" : "RustDedicated")), "Restore removed the install, which backups leave out");
         roster = await server.call<{ bans: RustBan[] }>("rust-players");

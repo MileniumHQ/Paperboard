@@ -32,6 +32,13 @@ export interface SourceGameSpec {
      * the install; on Linux, with the folder of the libraries it ships.
      */
     binaries: { linux?: { executable: string; libraryDir: string }; win32?: { executable: string } };
+    /**
+     * How console commands reach the server. "rcon" (unless said): over its
+     * remote console, which is how a Source server run without a terminal is
+     * reached. "stdin": written to its input, which a Source 2 server reads,
+     * and whose remote console answers nothing.
+     */
+    control?: "rcon" | "stdin";
     /** How the server writes a player's Steam id, and takes it for a ban; "steam3" unless said. */
     steamIds?: SteamIdForm;
     /**
@@ -79,10 +86,13 @@ export interface SourceGameSpec {
     /**
      * Game mode names by map prefix ("ctf" for ctf_2fort), shown beside each
      * map; prefixes of one mode share its name. A game with them plays a map
-     * rotation: it has the Maps tab, and setup asks for a mode and a starting
-     * map. A game without plays one map until it is changed.
+     * rotation, unless `rotation` says it has none: it has the Maps tab, and
+     * setup asks for a mode and a starting map. A game without plays one map
+     * until it is changed.
      */
     mapModes?: Readonly<Record<string, string>>;
+    /** false for a game whose maps have modes but which reads no map cycle file, as Counter-Strike 2. */
+    rotation?: false;
     /**
      * A wiki page listing the game's maps with a picture each, read at runtime
      * (the dedicated server ships none). Maps without one are shown without.
@@ -114,7 +124,7 @@ export interface SourceMapPictures {
 }
 
 /** Whether the game plays a rotation of maps by mode: the Maps tab and setup's questions are for those that do. */
-export const rotatesMaps = (spec: Pick<SourceGameSpec, "mapModes">) => spec.mapModes !== undefined;
+export const rotatesMaps = (spec: Pick<SourceGameSpec, "mapModes" | "rotation">) => spec.mapModes !== undefined && spec.rotation !== false;
 
 /** The game mode a map's prefix names, if the game lists it. */
 export function mapMode(spec: Pick<SourceGameSpec, "mapModes">, map: string): string | undefined {
@@ -153,6 +163,18 @@ export const sourceCalls = (id: string) => ({
 export interface SourceMetrics {
     /** bots on the server; they are not counted as players */
     bots: number;
+}
+
+/** The calls a game's server answers: every game's, and those of what the game has (a map rotation, Workshop maps, SourceMod). */
+export function describedCalls(spec: SourceGameSpec): string[] {
+    const ids = sourceCalls(spec.id);
+    return [
+        ids.info, ids.latest, ids.install, ids.players, ids.metrics, ids.kick, ids.ban, ids.unban, ids.changeMap, ids.maps,
+        ...(spec.mapPictures ? [ids.mapPictures] : []),
+        ...(rotatesMaps(spec) ? [ids.mapCycle, ids.mapCycleSet, ids.play] : []),
+        ...(spec.workshop ? [ids.workshopMaps, ids.workshopFind, ids.workshopAdd, ids.workshopRemove] : []),
+        ...(spec.sourcemod ? [ids.sourcemod, ids.sourcemodSet, ids.plugin, ids.pluginRemove, ids.pluginUpload, ids.admin] : []),
+    ];
 }
 
 /** What the Mods tab shows. */
@@ -216,10 +238,10 @@ export function sourceGame(spec: SourceGameSpec): GameDefinition {
                 optionsWhileRunning: "next-start",
                 // most Source servers keep no world, and their files copy as they run
                 backupWhileRunning: spec.offlineBackups ? "offline" : "quiesce",
-                control: { kind: "rcon" },
+                control: { kind: spec.control ?? "rcon" },
                 widgets: ["status", "console"],
                 packages: [{ id: "steamcmd", purpose: `Downloads and updates the ${spec.name} dedicated server from Steam` }, ...Object.values(spec.libraryPackages ?? {}), ...(spec.sourcemod ? SOURCEMOD_PACKAGES : [])],
-                calls: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, ...Object.values(ids), A.discardAddonUpload, ...AUTOMATION_CALLS],
+                calls: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, ...describedCalls(spec), ...(spec.sourcemod ? [A.discardAddonUpload] : []), ...AUTOMATION_CALLS],
                 tabs,
             };
         },
