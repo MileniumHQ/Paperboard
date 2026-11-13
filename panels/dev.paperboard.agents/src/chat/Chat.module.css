@@ -29,19 +29,19 @@
         ". who .";
     align-items: center;
     column-gap: var(--paper-uigap);
-    padding: var(--paper-uigap) var(--paper-uigap-double) var(--paper-uigap-half);
+    padding: var(--paper-uigap) var(--paper-uigap-double);
 }
 
-/* behind the bar, and a little past its bottom: the page tinted and blurred, fading out into the conversation */
+/* behind the bar: the page, so nothing shows through the face, name or buttons. Past its bottom edge
+   the conversation comes out from under it, through a blur that fades away. */
 .header::before {
     content: "";
     position: absolute;
-    inset: 0 0 calc(var(--paper-uigap-double) * -1);
+    inset: 0 0 calc(var(--paper-uigap-triple) * -1);
     z-index: -1;
-    background: color-mix(in srgb, var(--paper-surface-app) calc(var(--paper-opacity-muted) * 100%), transparent);
-    backdrop-filter: var(--paper-blur-medium);
-    /* solid behind the bar itself, fading only past its bottom edge */
-    mask-image: linear-gradient(to bottom, black calc(100% - var(--paper-uigap-double)), transparent);
+    background: var(--paper-surface-app);
+    backdrop-filter: var(--paper-blur-heavy);
+    mask-image: linear-gradient(to bottom, black calc(100% - var(--paper-uigap-triple)), transparent);
     pointer-events: none;
 }
 
@@ -58,6 +58,7 @@
 
 .face {
     grid-area: face;
+    justify-self: center;
 }
 
 .who {
