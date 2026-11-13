@@ -129,6 +129,10 @@
                     "name": "PaperIcon",
                     "file": "paper-icon"
                 },
+                "paperinlinechip": {
+                    "name": "PaperInlineChip",
+                    "file": "paper-inline-chip"
+                },
                 "paperinput": {
                     "name": "PaperInput",
                     "file": "paper-input"
@@ -188,6 +192,10 @@
                 "paperpresence": {
                     "name": "PaperPresence",
                     "file": "paper-presence"
+                },
+                "paperpreview": {
+                    "name": "PaperPreview",
+                    "file": "paper-preview"
                 },
                 "paperprogress": {
                     "name": "PaperProgress",
@@ -260,6 +268,10 @@
                 "papertoggle": {
                     "name": "PaperToggle",
                     "file": "paper-toggle"
+                },
+                "papervideo": {
+                    "name": "PaperVideo",
+                    "file": "paper-video"
                 },
                 "paperslidepage": {
                     "name": "PaperSlidePage",

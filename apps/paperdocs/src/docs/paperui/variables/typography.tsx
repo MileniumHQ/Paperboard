@@ -255,6 +255,7 @@ export default function TypographyDoc() {
                     <tr><td><PaperCode>--paper-code-font-scale</PaperCode></td><td>0.88em</td></tr>
                     <tr><td><PaperCode>--paper-badge-font-scale</PaperCode></td><td>0.88em</td></tr>
                     <tr><td><PaperCode>--paper-link-font-scale</PaperCode></td><td>0.85em</td></tr>
+                    <tr><td><PaperCode>--paper-inline-icon-scale</PaperCode></td><td>1.15em</td></tr>
                     <tr><td><PaperCode>--paper-icon-font-scale</PaperCode></td><td>0.72em</td></tr>
                     <tr><td><PaperCode>--paper-kbd-min-width</PaperCode></td><td>1.6em</td></tr>
                     <tr><td><PaperCode>--paper-code-padding-x</PaperCode></td><td>0.35em</td></tr>

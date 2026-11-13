@@ -110,6 +110,12 @@ export function Example() {
                         <td>Draws images yourself. See Custom images.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>renderLink</PaperCode></td>
+                        <td><PaperCode>(link: MarkdownLink) =&gt; JSX.Element | undefined</PaperCode></td>
+                        <td>No default</td>
+                        <td>Draws links yourself. See Custom links.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode></td>
                         <td>Solid props</td>
                         <td>No default</td>
@@ -128,6 +134,19 @@ export function Example() {
     alt: string;          // the text in the brackets
     title: string | null; // the quoted title after the address, if any
     block: boolean;       // true for an image alone in its paragraph
+}`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="markdown-link">MarkdownLink</PaperText>
+            <PaperText preset="body" as="p">
+                The object <PaperCode>renderLink</PaperCode> receives. It is exported from <PaperCode>@mileniumhq/paperui</PaperCode>.
+            </PaperText>
+            <PaperCode block language="ts">
+{`interface MarkdownLink {
+    href: string;          // the address as written in the Markdown, any scheme
+    title: string | null;  // the quoted title after the address, if any
+    text: string;          // what the link reads as, with no markup
+    children: () => JSX.Element; // the link's content, drawn as PaperMarkdown would
 }`}
             </PaperCode>
 
@@ -245,6 +264,18 @@ export function Example() {
                 <li>Use it to show files that live in your panel, such as <PaperCode>![a cat](attachment:abc123)</PaperCode>, through your own components.</li>
             </PaperTextList>
 
+            <PaperText preset="subheader" as="h3" id="custom-links">Custom links</PaperText>
+            <PaperTextList>
+                <li><PaperCode>renderLink</PaperCode> runs for every link before the defaults, including an HTML <PaperCode>a</PaperCode> when <PaperCode>allowHtml</PaperCode> is on. It sees the address as written with any scheme, so refusing an unsafe address is your job.</li>
+                <li>Return an element to draw the link yourself, or <PaperCode>undefined</PaperCode> to use the default.</li>
+                <li>Use <PaperCode>children()</PaperCode> to draw the link's content, or <PaperCode>text</PaperCode> when you only need a label.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h3" id="selection">Selection</PaperText>
+            <PaperText preset="body" as="p">
+                The text is selectable, even inside panels that turn text selection off.
+            </PaperText>
+
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>
             <PaperText preset="subheader" as="h3" id="streamed-reply">Streamed reply</PaperText>
             <PaperText preset="body" as="p">
@@ -302,6 +333,32 @@ export function Message(props: { text: string; urlOf: (id: string) => string }) 
     }
 
     return <PaperMarkdown text={props.text} renderImage={renderAttachment} />;
+}`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="panel-links">Panel-owned links</PaperText>
+            <PaperText preset="body" as="p">
+                Turn <PaperCode>[notes.md](attachment:abc123)</PaperCode> into a <PaperLink href="/docs/paperui/paperinlinechip/">PaperInlineChip</PaperLink> that opens your own viewer.
+                Return <PaperCode>undefined</PaperCode> for every other link, so it keeps the default.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { PaperInlineChip, PaperMarkdown, type MarkdownLink } from "@mileniumhq/paperui";
+import type { JSX } from "solid-js";
+
+const SCHEME = "attachment:";
+
+export function Message(props: { text: string; onOpen: (id: string) => void }) {
+    function renderAttachment(link: MarkdownLink): JSX.Element | undefined {
+        if (!link.href.startsWith(SCHEME)) return undefined;
+        const id = link.href.slice(SCHEME.length);
+        return (
+            <PaperInlineChip icon="description" onClick={() => props.onOpen(id)}>
+                {link.text}
+            </PaperInlineChip>
+        );
+    }
+
+    return <PaperMarkdown text={props.text} renderLink={renderAttachment} />;
 }`}
             </PaperCode>
 

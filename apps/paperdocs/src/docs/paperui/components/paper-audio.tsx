@@ -19,6 +19,7 @@ export default function PaperAudioDoc() {
                 PaperAudio is a compact audio player that draws the clip's waveform as its seek bar.
                 Use it when a panel plays back a recording, a voice message, or a generated clip.
                 It brings its own play button, time readout, volume, playback speed, and loop.
+                <PaperLink href="/docs/paperui/papervideo/">PaperVideo</PaperLink> shares these controls.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>

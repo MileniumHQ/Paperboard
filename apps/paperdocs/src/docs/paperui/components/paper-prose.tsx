@@ -65,6 +65,7 @@ export function Example() {
                 <li><PaperCode>code</PaperCode> and <PaperCode>pre</PaperCode> use the code font on a tinted background, and wrap long lines.</li>
                 <li><PaperCode>blockquote</PaperCode> has a left border and subdued text.</li>
                 <li><PaperCode>table</PaperCode> scrolls sideways when wider than the container. <PaperCode>img</PaperCode> never grows past it. <PaperCode>hr</PaperCode> is a thin divider.</li>
+                <li>The text is selectable, even inside panels that turn text selection off.</li>
                 <li>Elements outside this list keep the browser's defaults.</li>
             </PaperTextList>
 

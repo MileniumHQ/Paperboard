@@ -18,7 +18,7 @@ const CHOICES: { need: string; items: { name: string; key: string }[] }[] = [
     { need: "Tell the user something", items: [{ name: "PaperQuote", key: "paperquote" }, { name: "PaperEmptyState", key: "paperemptystate" }, { name: "PaperModal", key: "papermodal" }] },
     { need: "Navigate", items: [{ name: "PaperMenu", key: "papermenu" }, { name: "PaperRail", key: "paperrail" }, { name: "PaperMenuBar", key: "papermenubar" }, { name: "PaperContextMenu", key: "papercontextmenu" }] },
     { need: "Show code, logs, or rich text", items: [{ name: "PaperCode", key: "papercode" }, { name: "PaperConsole", key: "paperconsole" }, { name: "PaperMarkdown", key: "papermarkdown" }, { name: "PaperProse", key: "paperprose" }, { name: "PaperKbd", key: "paperkbd" }] },
-    { need: "Show a picture, an icon, or sound", items: [{ name: "PaperIcon", key: "papericon" }, { name: "PaperAvatar", key: "paperavatar" }, { name: "PaperAudio", key: "paperaudio" }] },
+    { need: "Show a picture, an icon, or sound", items: [{ name: "PaperIcon", key: "papericon" }, { name: "PaperAvatar", key: "paperavatar" }, { name: "PaperAudio", key: "paperaudio" }, { name: "PaperVideo", key: "papervideo" }, { name: "PaperPreview", key: "paperpreview" }] },
     { need: "Add motion", items: [{ name: "PaperEffect", key: "papereffect" }, { name: "PaperPresence", key: "paperpresence" }] },
 ];
 
