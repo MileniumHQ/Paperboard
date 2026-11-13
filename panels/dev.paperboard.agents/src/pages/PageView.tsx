@@ -21,7 +21,9 @@ export default function PageView(props: { page: OpenPage; pages: Launcher; exten
     const [error, setError] = createSignal<Failure | null>(null);
 
     // a frame from another origin can't be printed from here: the page's own script prints it when asked
-    const print = () => frame?.contentWindow?.postMessage({ type: "paperboard:print" }, new URL(props.page.url).origin);
+    const print = () => {
+        frame?.contentWindow?.postMessage({ type: "paperboard:print" }, new URL(props.page.url).origin);
+    };
 
     const savePdf = async () => {
         setSaving(true);
