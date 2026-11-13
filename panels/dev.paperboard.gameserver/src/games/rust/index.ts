@@ -34,21 +34,32 @@ export const options: readonly RustOption[] = [
     { id: "rconPassword", label: "RCON password", description: "Lets RCON tools manage the server: 8 to 64 letters, digits, - and _. Paperboard manages it through RCON too, so it makes a random one when none is set.", kind: "secret", restartRequired: true, ...advanced },
 ];
 
+/** What the Map tab shows: the map the server makes and plays, and whether it has been made yet. */
+export interface RustMapView {
+    size: number;
+    seed: number;
+    /** the map's files are in the server folder: the server has started on it */
+    made: boolean;
+    /** players' learned blueprints are in the server folder */
+    blueprints: boolean;
+}
+
 export const rust: GameDefinition = {
     id: "rust", name: "Rust", icon: "forest", art: gameArt("rust"),
     softwareLabel: ({ version }) => (version ? `Rust ${version}` : "Rust"),
-    hostSupport: hostRoutes("Rust dedicated server", { os: ["linux"], arch: ["x64"] }),
+    hostSupport: hostRoutes("Rust dedicated server", { os: ["linux", "win32"], arch: ["x64"] }),
     describe() {
         return {
             options, optionsWhileRunning: "next-start", backupWhileRunning: "offline",
             // Rust reads no console input; commands go over its WebSocket remote console
             control: { kind: "rcon" }, widgets: ["status", "console"],
             packages: [{ id: "steamcmd", purpose: "Downloads and updates the Rust dedicated server from Steam" }],
-            calls: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.saveWorld, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, "rust-install", "rust-info", "rust-latest", "rust-metrics", "rust-players", "rust-kick", "rust-ban", "rust-unban", ...AUTOMATION_CALLS],
+            calls: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.saveWorld, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, A.readGameOptions, A.writeGameOptions, "rust-install", "rust-info", "rust-latest", "rust-metrics", "rust-players", "rust-kick", "rust-ban", "rust-unban", "rust-map", "rust-wipe", ...AUTOMATION_CALLS],
             tabs: [
                 { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
                 { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },
                 { id: "players", label: "Players", icon: "group", group: "Play", owner: "game", variant: "fill", width: "full" },
+                { id: "map", label: "Map", icon: "map", group: "Play", owner: "game" },
                 { id: "versions", label: "Updates", icon: "update", group: "Software", owner: "game" },
                 { id: "options", label: "Options", icon: "tune", group: "Server", owner: "shared" },
                 { id: "files", label: "Files", icon: "folder", group: "Server", owner: "shared", variant: "fill" },

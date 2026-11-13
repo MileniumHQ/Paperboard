@@ -6,7 +6,7 @@
 // a test started.
 import * as path from "node:path";
 import { RUST_APP_ID } from "../../src/games/rust";
-import { placeStandIn } from "./standIn";
+import { exe, placeStandIn } from "./standIn";
 import { fakeSteamcmd, STEAM_FIXTURES } from "./steamcmd";
 import { writeTree } from "./tmp";
 
@@ -26,5 +26,5 @@ export function installRust(dir: string, plan?: Record<string, unknown>): void {
         [`install/steamapps/appmanifest_${RUST_APP_ID}.acf`]: `"AppState"\n{\n\t"appid"\t\t"${RUST_APP_ID}"\n\t"buildid"\t\t"${RUST_BUILD}"\n}\n`,
         ...(plan ? { "install/fake-rust.json": JSON.stringify(plan) } : {}),
     });
-    placeStandIn("fakeRust", path.join(dir, "install", "RustDedicated"));
+    placeStandIn("fakeRust", path.join(dir, "install", exe("RustDedicated")));
 }

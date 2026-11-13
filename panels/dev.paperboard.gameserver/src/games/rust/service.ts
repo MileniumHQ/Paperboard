@@ -10,10 +10,11 @@ import { installedBuild } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import type { GameService } from "../serviceTypes";
 import {
-    ConsoleBuffer, assertHost, exists, fileStamp, linkFolder, offlineBackup, pushChat, readSettings, redact, report,
+    ConsoleBuffer, assertHost, exclusive, exists, fileStamp, linkFolder, offlineBackup, pushChat, readSettings, redact, report,
     resumeAfterBackup, serverRoot, serverSecret, settingPort, settled, singleLine, updateSettings, waitUntil, type Context,
 } from "../serviceKit";
-import { rust, options, RUST_APP_ID, type RustOption } from "./index";
+import { trashDirName } from "../../service/trash";
+import { rust, options, RUST_APP_ID, type RustMapView, type RustOption } from "./index";
 import { parseInfo, parsePlayers, RustRcon, RustRconSilent, type RustChat, type RustInfo, type RustPlayer } from "./webrcon";
 import { parseBanList, parseBansCfg, RustRoster, steamId, type RustBan } from "./roster";
 
@@ -193,6 +194,49 @@ export async function save(ctx: Context) {
     await waitUntil(async () => { const now = await saveStamp(); return now !== null && now !== before; }, 60_000, "Rust to write its save");
 }
 
+/**
+ * What a wipe takes away. The map and everything placed on it: the map
+ * itself and its saves (`proceduralmap.<size>.<seed>.…`), where players were
+ * and what they carried (`player.states`, `player.deaths`) and what they drew
+ * and wrote on signs (`sv.files`). `blueprints` adds what players have
+ * learned to craft (`player.blueprints`). Each database comes with the
+ * `-wal` and `-shm` files SQLite keeps beside it.
+ */
+export function wipedFiles(names: readonly string[], blueprints: boolean): string[] {
+    const prefixes = ["proceduralmap.", "player.states.", "player.deaths.", "sv.files.", ...(blueprints ? ["player.blueprints."] : [])];
+    return names.filter((name) => prefixes.some((prefix) => name.startsWith(prefix))).sort();
+}
+
+async function mapView(): Promise<RustMapView> {
+    const saved = await settings();
+    const dir = await identityDir();
+    const names = (await exists(dir)) ? await fs.readdir(dir) : [];
+    const size = Number(optionValue(options.find((o) => o.id === "worldsize")!, saved));
+    return {
+        size, seed: Number(saved.seed),
+        made: names.some((name) => name.startsWith(`proceduralmap.${size}.${saved.seed}.`)),
+        blueprints: names.some((name) => name.startsWith("player.blueprints.")),
+    };
+}
+
+/**
+ * Wipes a stopped server: the map's files (and the blueprints, when asked)
+ * move to a trash folder in the server folder, never deleted, and the server
+ * gets a new seed, so its next start makes a new map.
+ */
+async function wipe(blueprints: boolean): Promise<RustMapView> {
+    const dir = await identityDir();
+    const names = (await exists(dir)) ? await fs.readdir(dir) : [];
+    const files = wipedFiles(names, blueprints);
+    if (files.length > 0) {
+        const trash = path.join(await serverRoot(), trashDirName(), "server", IDENTITY);
+        await fs.mkdir(trash, { recursive: true });
+        for (const file of files) await fs.rename(path.join(dir, file), path.join(trash, file));
+    }
+    await updateSettings({ seed: randomInt(1, 2147483647) });
+    return mapView();
+}
+
 /** The bans: the running server's own list, or the file it keeps them in while it is stopped. */
 async function bans(ctx: Context): Promise<RustBan[]> {
     if (ctx.state.serverStatus === "online") return parseBanList(await rcon().exec("banlistex"));
@@ -252,6 +296,13 @@ export const rustService: GameService = {
         },
         ...steamInstallCalls(steam),
         ["rust-metrics"]: () => info(),
+        ["rust-map"]: () => mapView(),
+        ["rust-wipe"]: (ctx, { blueprints }) => exclusive(ctx, local(), "Rust", async () => {
+            if (typeof blueprints !== "boolean") throw new Error("Choose whether blueprints are wiped too");
+            const view = await wipe(blueprints);
+            await loadOptions(ctx);
+            return view;
+        }),
         ["rust-players"]: async (ctx) => ({ seen: await roster().seen(), bans: await bans(ctx), online: local().online }),
         ["rust-kick"]: async (ctx, { steamId: raw }) => {
             const id = steamId(raw);
@@ -312,8 +363,9 @@ export const rustService: GameService = {
         const saved = await settings();
         const install = await installDir();
         if (!(await installedBuild(RUST_APP_ID, install))) throw new Error("Install Rust in Updates first");
-        const executable = path.join(install, "RustDedicated");
-        await fs.access(executable, fs.constants.X_OK);
+        const windows = process.platform === "win32";
+        const executable = path.join(install, windows ? "RustDedicated.exe" : "RustDedicated");
+        await fs.access(executable, windows ? fs.constants.F_OK : fs.constants.X_OK);
         await linkData();
         const password = await rconPassword.ensure();
         const rconPort = Number(saved.rconPort ?? DEFAULT_RCON_PORT);
@@ -336,13 +388,18 @@ export const rustService: GameService = {
             if (value === undefined || value === "") continue;
             args.push(`+${option.convar}`, argValue(value, option.label));
         }
-        // the game's own files stay out of the user's home folder; it ships Steam's client library itself
-        const home = path.join(await serverRoot(), "profile");
-        await fs.mkdir(home, { recursive: true });
-        const plugins = path.join(install, "RustDedicated_Data", "Plugins");
+        // Linux: the game's own files stay out of the user's home folder, and its libraries are
+        // beside it; it ships Steam's client library itself
+        const env: Record<string, string> = {};
+        if (!windows) {
+            const home = path.join(await serverRoot(), "profile");
+            await fs.mkdir(home, { recursive: true });
+            const plugins = path.join(install, "RustDedicated_Data", "Plugins");
+            Object.assign(env, { HOME: home, XDG_DATA_HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), LD_LIBRARY_PATH: [plugins, path.join(plugins, "x86_64")].join(":") });
+        }
         return {
             message: `Starting Rust${saved.version ? ` ${saved.version}` : ""}…`,
-            command: { executable, args, cwd: install, env: { HOME: home, XDG_DATA_HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), LD_LIBRARY_PATH: [plugins, path.join(plugins, "x86_64")].join(":") } },
+            command: { executable, args, cwd: install, env },
         };
     },
     isMutating: () => local().busy,

@@ -11,7 +11,7 @@
 import dgram from "node:dgram";
 import fs from "node:fs";
 import path from "node:path";
-import { RUST_APP_ID } from "../src/games/rust";
+import { RUST_APP_ID, type RustMapView } from "../src/games/rust";
 import type { RustBan } from "../src/games/rust/roster";
 import type { RustInfo } from "../src/games/rust/webrcon";
 import { assert, PANEL, until, withScenarioDaemon } from "./scenarioDaemon";
@@ -118,7 +118,7 @@ await withScenarioDaemon("rust-real", async ({ addServer }) => {
         await api.restore(record.id);
         await online("restart after restore");
         assert(!fs.existsSync(path.join(server.directory, "after-backup.txt")), "Restore did not replace the server's files");
-        assert(fs.existsSync(path.join(server.directory, "install", "RustDedicated")), "Restore removed the install, which backups leave out");
+        assert(fs.existsSync(path.join(server.directory, "install", process.platform === "win32" ? "RustDedicated.exe" : "RustDedicated")), "Restore removed the install, which backups leave out");
         roster = await server.call<{ bans: RustBan[] }>("rust-players");
         assert(roster.bans.some((ban) => ban.steamId === id), "Restore did not bring back the ban list of the backup");
         const generated = (await server.console()).filter((line) => /Generating procedural map/.test(line)).length;
@@ -140,5 +140,19 @@ await withScenarioDaemon("rust-real", async ({ addServer }) => {
         await server.call("stop-server");
         await offline("second stop");
         console.log("game mode: hardcore started and stopped");
+
+        const before = await server.call<RustMapView>("rust-map");
+        assert(before.made && before.seed === 12345, `The map tab does not show the map the server made: ${JSON.stringify(before)}`);
+        const wiped = await server.call<RustMapView>("rust-wipe", { blueprints: true });
+        assert(!wiped.made && !wiped.blueprints && wiped.seed !== 12345, `The wipe left ${JSON.stringify(wiped)}`);
+        const trash = fs.readdirSync(server.directory).find((name) => name.startsWith(".trash-"));
+        assert(trash && fs.readdirSync(path.join(server.directory, trash, "server", "paperboard")).some((name) => name.endsWith(".sav")), "The old map's save is not in the trash");
+        await server.call("start-server");
+        await online("start after the wipe");
+        await said(new RegExp(`Generating procedural map of size 1000 with seed ${wiped.seed}`), "the new map's seed");
+        assert((await server.call<RustMapView>("rust-map")).made, "The new map was not made");
+        await server.call("stop-server");
+        await offline("stop after the wipe");
+        console.log(`wipe: old map and blueprints in the trash, new map made from seed ${wiped.seed}`);
     } finally { blocker.close(); }
 });

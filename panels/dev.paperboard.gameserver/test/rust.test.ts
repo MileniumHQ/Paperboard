@@ -99,6 +99,41 @@ describe("Rust", () => {
         await expect(call(server, "rust-unban", { steamId: BANNED })).rejects.toThrow("Start the server to ban or unban players");
     });
 
+    test("a wipe moves the map and what was on it to the trash, keeps blueprints unless asked, gives a new seed, and never runs on a running server", async () => {
+        const server = await rustServer();
+        await online(server);
+        await call(server, CALLS.saveWorld);
+        await expect(call(server, "rust-wipe", { blueprints: false })).rejects.toThrow("Stop Rust");
+        await stop(server);
+        const identity = path.join(server.dir, "server", "paperboard");
+        for (const name of ["proceduralmap.1000.12345.290.map", "player.states.290.db", "player.states.290.db-wal", "player.deaths.19.db", "sv.files.290.db", "player.blueprints.19.db", "player.blueprints.19.db-wal", "player.identities.19.db", "player.tokens.db"]) fs.writeFileSync(path.join(identity, name), name);
+        expect(await call(server, "rust-map")).toEqual({ size: 1000, seed: 12345, made: true, blueprints: true });
+        await expect(call(server, "rust-wipe", {})).rejects.toThrow("Choose whether blueprints are wiped too");
+
+        const wiped = await call(server, "rust-wipe", { blueprints: false }) as { seed: number; made: boolean; blueprints: boolean };
+        expect(wiped).toMatchObject({ size: 1000, made: false, blueprints: true });
+        expect(wiped.seed).not.toBe(12345);
+        expect(server.scope.server.settings.seed).toBe(wiped.seed);
+        const left = () => fs.readdirSync(identity).filter((name) => name !== "cfg").sort();
+        // who the players are, their blueprints and the ban list stay
+        expect(left()).toEqual(["player.blueprints.19.db", "player.blueprints.19.db-wal", "player.identities.19.db", "player.tokens.db"]);
+        expect(fs.existsSync(path.join(identity, "cfg", "bans.cfg"))).toBe(true);
+        const trash = fs.readdirSync(server.dir).filter((name) => name.startsWith(".trash-"));
+        expect(trash.length).toBe(1);
+        expect(fs.readdirSync(path.join(server.dir, trash[0]!, "server", "paperboard")).sort()).toEqual(["player.deaths.19.db", "player.states.290.db", "player.states.290.db-wal", "proceduralmap.1000.12345.290.map", "proceduralmap.1000.12345.290.sav", "sv.files.290.db"]);
+        // nothing was deleted: the old map is whole in the trash
+        expect(fs.readFileSync(path.join(server.dir, trash[0]!, "server", "paperboard", "proceduralmap.1000.12345.290.map"), "utf8")).toBe("proceduralmap.1000.12345.290.map");
+
+        await Bun.sleep(5);
+        expect(await call(server, "rust-wipe", { blueprints: true })).toMatchObject({ made: false, blueprints: false });
+        expect(left()).toEqual(["player.identities.19.db", "player.tokens.db"]);
+        // the next start is on the new seed
+        await online(server);
+        const started = JSON.parse(fs.readFileSync(path.join(server.dir, "install", "started-with.json"), "utf8")).args as string[];
+        expect(started[started.indexOf("+server.seed") + 1]).toBe(String(server.scope.server.settings.seed));
+        await stop(server);
+    });
+
     test("a save Rust answers without writing its file is refused", async () => {
         const server = await rustServer({ noSave: true });
         await online(server);
