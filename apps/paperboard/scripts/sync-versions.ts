@@ -18,6 +18,7 @@ const targets: Array<{ file: string; pattern: RegExp }> = [
   { file: "apps/paperdocs/package.json", pattern: JSON_VERSION },
   { file: "apps/origami/package.json", pattern: JSON_VERSION },
   { file: "apps/origami/library/package.json", pattern: JSON_VERSION },
+  { file: "apps/pbd/package.json", pattern: JSON_VERSION },
   { file: "packages/paperapi/package.json", pattern: JSON_VERSION },
   { file: "packages/paperui/package.json", pattern: JSON_VERSION },
   { file: "packages/create-panel/package.json", pattern: JSON_VERSION },
