@@ -15,7 +15,8 @@ export const MESSAGE_TOOLS: ToolSpec[] = [
         inputSchema: {
             type: "object",
             properties: {
-                text: { type: "string", description: "The message. Markdown works." },
+                text: { type: "string", description: "The message. Markdown works. Can be empty when it sends files." },
+                files: { type: "array", items: { type: "string" }, description: "Ids of files in the conversation to send with it, each shown under the text for the user to open (share_file gives one). Optional." },
                 reply_to: { type: "string", description: "Id of an earlier message (theirs or yours), like k3x9f2 from [k3x9f2], when this answers one of several or something said earlier. Optional." },
             },
             required: ["text"],
@@ -56,7 +57,7 @@ export function messagesToolset(texter: Texter): Toolset {
                 return { text: "reply_to must be a message id", isError: true };
             }
             let files: string[] | undefined;
-            if (mode.fromFlow && args.files !== undefined && args.files !== null) {
+            if (args.files !== undefined && args.files !== null) {
                 if (!Array.isArray(args.files) || !args.files.every((f) => typeof f === "string")) return { text: "files must be a list of file ids", isError: true };
                 files = args.files as string[];
             }

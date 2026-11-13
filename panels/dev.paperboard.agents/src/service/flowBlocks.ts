@@ -304,7 +304,7 @@ export function flowBlocks(host: BlocksHost): BlockSet {
                 base: "object",
                 fields: {
                     name: { type: "text", name: "Name" },
-                    kind: { type: "text", name: "Kind", description: "image, video or file" },
+                    kind: { type: "text", name: "Kind", description: "image, video, audio or file" },
                     type: { type: "text", name: "Media Type" },
                     bytes: { type: "number", name: "Size", description: "In bytes" },
                     path: { type: "text", name: "Path", description: "Where the file is on this computer" },

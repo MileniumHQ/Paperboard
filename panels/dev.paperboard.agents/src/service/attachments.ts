@@ -34,7 +34,14 @@ export function sniff(head: Buffer): Pick<Attachment, "kind" | "type"> {
     if (ascii(0, "GIF87a") || ascii(0, "GIF89a")) return { kind: "image", type: "image/gif" };
     if (ascii(0, "RIFF") && ascii(8, "WEBP")) return { kind: "image", type: "image/webp" };
     if (at(0, [0x1a, 0x45, 0xdf, 0xa3])) return { kind: "video", type: "video/webm" };
+    // an MP4 that holds only sound says so in its brand
+    if (ascii(4, "ftyp") && (ascii(8, "M4A ") || ascii(8, "M4B "))) return { kind: "audio", type: "audio/mp4" };
     if (ascii(4, "ftyp")) return { kind: "video", type: ascii(8, "qt  ") ? "video/quicktime" : "video/mp4" };
+    if (ascii(0, "RIFF") && ascii(8, "WAVE")) return { kind: "audio", type: "audio/wav" };
+    if (ascii(0, "OggS")) return { kind: "audio", type: "audio/ogg" };
+    if (ascii(0, "fLaC")) return { kind: "audio", type: "audio/flac" };
+    // MP3: an ID3 tag first, or straight into an MPEG audio frame (11 sync bits, layer III)
+    if (ascii(0, "ID3") || (head[0] === 0xff && (head[1] & 0xe6) === 0xe2)) return { kind: "audio", type: "audio/mpeg" };
     if (ascii(0, "%PDF-")) return { kind: "file", type: "application/pdf" };
     // text: valid UTF-8 with no NULs, as far as the head goes (a cut multi-byte character at its end is fine)
     if (head.length && !head.includes(0) && isUtf8(head.subarray(0, Math.max(0, head.length - 3)))) return { kind: "file", type: "text/plain" };

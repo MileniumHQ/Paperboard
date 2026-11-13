@@ -386,12 +386,12 @@ export class Conversation {
 
     /**
      * The agent's bubble, from its send_message tool: shown at once, mid-turn.
-     * Refused (the model sees why) with no text, or a replyTo that isn't a message in the conversation.
+     * Refused (the model sees why) with neither text nor files, or a replyTo that isn't a message in the conversation.
      */
     say(text: string, replyTo: string | null = null, fileIds: string[] = []): { id: string } {
         if (!this.running) throw new Error("there's no conversation going on right now");
         const message = text.trim();
-        if (!message) throw new Error("say something first");
+        if (!message && fileIds.length === 0) throw new Error("say something first");
         if (message.length > LIMITS.message) throw new Error(`messages are limited to ${LIMITS.message} characters`);
         if (replyTo !== null) this.checkReplyTarget(replyTo);
         // a file it shows has to be one of the conversation's, or the bubble would show nothing

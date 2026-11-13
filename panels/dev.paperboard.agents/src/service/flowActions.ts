@@ -24,7 +24,7 @@ export interface FlowHost {
 /** A file the agent sent with a reply, as a flow gets it. */
 export interface ReplyAttachment {
     name: string;
-    kind: "image" | "video" | "file";
+    kind: "image" | "video" | "audio" | "file";
     /** its media type */
     type: string;
     bytes: number;
@@ -141,7 +141,7 @@ export function flowActions(host: FlowHost, conversations: ConversationChoice[])
                 attachments: {
                     type: "list<object>",
                     label: "Attachments",
-                    description: "The files sent with it, each with its name, kind (image, video or file), type, bytes and path on this computer. Empty when there are none.",
+                    description: "The files sent with it, each with its name, kind (image, video, audio or file), type, bytes and path on this computer. Empty when there are none.",
                 },
                 messageId: { type: "string", label: "Message id" },
                 conversationId: { type: "string", label: "Conversation id" },

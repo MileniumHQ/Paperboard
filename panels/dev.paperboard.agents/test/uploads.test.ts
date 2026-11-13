@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { LIMITS } from "../src/contract";
-import { Attachments, cleanName } from "../src/service/attachments";
+import { Attachments, cleanName, sniff } from "../src/service/attachments";
+import { messagesToolset } from "../src/service/messages";
 import { tempDir } from "./support/host";
 
 const dirs: string[] = [];
@@ -86,5 +87,39 @@ describe("uploads", () => {
         const { id } = files.begin("../../../evil\u0007.txt", 2);
         files.put(id, 0, b64("hi"));
         expect(files.finish(id).name).toBe("evil.txt");
+    });
+});
+
+// What a file is comes from its bytes, never its name: it decides how the chat plays it.
+describe("what a file is", () => {
+    const head = (...parts: (string | number[])[]) => Buffer.concat(parts.map((p) => (typeof p === "string" ? Buffer.from(p, "latin1") : Buffer.from(p))));
+
+    test("recordings are audio, an MP4 with only sound included; a film stays video", () => {
+        expect(sniff(head("RIFF", [0x24, 0, 0, 0], "WAVEfmt "))).toEqual({ kind: "audio", type: "audio/wav" });
+        expect(sniff(head("ID3", [4, 0, 0, 0, 0, 0, 0]))).toEqual({ kind: "audio", type: "audio/mpeg" });
+        expect(sniff(head([0xff, 0xfb, 0x90, 0x64]))).toEqual({ kind: "audio", type: "audio/mpeg" });
+        expect(sniff(head("OggS", [0, 2]))).toEqual({ kind: "audio", type: "audio/ogg" });
+        expect(sniff(head("fLaC", [0, 0, 0, 0x22]))).toEqual({ kind: "audio", type: "audio/flac" });
+        expect(sniff(head([0, 0, 0, 0x20], "ftypM4A ", [0, 0, 0, 0]))).toEqual({ kind: "audio", type: "audio/mp4" });
+        expect(sniff(head([0, 0, 0, 0x20], "ftypisom", [0, 0, 2, 0]))).toEqual({ kind: "video", type: "video/mp4" });
+        // a WebP is RIFF too, and still a picture
+        expect(sniff(head("RIFF", [0x24, 0, 0, 0], "WEBPVP8 "))).toEqual({ kind: "image", type: "image/webp" });
+    });
+});
+
+// The agent sends files as messages, in a chat as well as to a flow.
+describe("the agent's files in a message", () => {
+    const texter = () => {
+        const said: { text: string; files?: string[] }[] = [];
+        return { said, tools: messagesToolset({ say: (text, _replyTo, files) => (said.push({ text, files }), { id: "m1" }) }) };
+    };
+
+    test("send_message carries file ids in a chat, and refuses a list that isn't one", async () => {
+        const { said, tools } = texter();
+        expect(tools.tools({ fromFlow: false }).find((t) => t.name === "send_message")?.inputSchema.properties).toHaveProperty("files");
+        expect((await tools.call("send_message", { text: "", files: ["0123456789ab"] }, { fromFlow: false })).isError).toBeFalsy();
+        expect(said).toEqual([{ text: "", files: ["0123456789ab"] }]);
+        expect((await tools.call("send_message", { text: "hi", files: "0123456789ab" }, { fromFlow: false })).isError).toBe(true);
+        expect(said).toHaveLength(1);
     });
 });

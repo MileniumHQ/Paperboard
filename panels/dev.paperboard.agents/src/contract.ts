@@ -62,6 +62,7 @@ export const UI_ACTION_IDS = {
     attachFinish: "ui-attach-finish",
     attachCancel: "ui-attach-cancel",
     attachRead: "ui-attach-read",
+    attachInfo: "ui-attach-info",
     // the models a brain offers, from the harness's own catalog
     models: "ui-models",
     // what the agent remembers, which the user can read and change too
@@ -489,13 +490,16 @@ export interface Attachment {
     id: string;
     name: string;
     /** how it's shown: decided from its bytes, not its name */
-    kind: "image" | "video" | "file";
+    kind: "image" | "video" | "audio" | "file";
     /** its media type, from its bytes; application/octet-stream when they don't say */
     type: string;
     bytes: number;
 }
 
-/** In an agent's message, `![caption](attachment:<id>)` shows one of the conversation's files inline. */
+/**
+ * In an agent's message, `![caption](attachment:<id>)` shows one of the conversation's files inline,
+ * and `[name](attachment:<id>)` names one in a sentence, as a chip that opens it.
+ */
 export const ATTACHMENT_SCHEME = "attachment:";
 export const ATTACHMENT_ID = /^[a-f0-9]{12}$/;
 
