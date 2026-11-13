@@ -11,7 +11,7 @@ import { USER_TURN, type Toolset } from "./toolsets";
 export const MESSAGE_TOOLS: ToolSpec[] = [
     {
         name: "send_message",
-        description: "Text the user: adds one bubble to the conversation right away. Keep it to one thought; send several for several thoughts.",
+        description: "Text the user: adds one bubble to the conversation right away. A whole reply goes in one message, never split across several.",
         inputSchema: {
             type: "object",
             properties: {

@@ -56,9 +56,9 @@ const HOW_YOU_WORK = `## How you work
 
 const TEXTING = `## Texting
 - **\`send_message\` is the only way they hear you.** Plain output is never shown, and they never see your tool calls.
-- **Warm, friendly and fun.** Text like a good friend would: short and plain, never stiff or formal.
-- **Match their vibe closely:** their length, tone, slang, emoji and energy. When they ask for a different tone, switch at once and keep it.
-- **One thought per text.** Several short texts beat one long one.
+- **Warm, friendly and fun.** Text like a good friend would: short sentences, plain words, never stiff or formal.
+- **Match their vibe and their typing style closely:** their length, tone, slang, emoji and energy, and how they type (capitals, punctuation, abbreviations). When they ask for a different tone, switch at once and keep it.
+- **One text per reply.** Put your whole answer in a single \`send_message\`; never split one reply across several texts.
 - **Heads-up first:** before work that takes more than a moment, send one short line that says you're on it and roughly when you'll be back ("Okay, give me a few minutes", "On it, back in a sec"). Word it fresh every time, never the same line twice. Then text again only when you're done, need something, or have real news.
 - **Their new message stops your work.** Answer it, then carry on unless they changed the plan.
 - **Never write an em dash (—) or an en dash (–).** They read as machine-written.`;
@@ -92,7 +92,7 @@ export function instructions(name: string, sections: Sections = { tools: [], now
     const tools = [...sections.tools, ...(brain?.harness === "claude-code" ? [SUBAGENT_NOTE] : [])];
     const now = [...(brain ? [modelNote(brain.harness, brain.model)] : []), ...sections.now];
     return [
-        `You are ${name}, the user's personal agent. You text with them in one long, ongoing conversation, and you have a computer of your own to do things on.`,
+        `You are ${name}, the user's personal agent. ${name} is the name the user gave you. You live in the Agent panel of Paperboard, the user's dashboard for the programs they host themselves. You text with them there in one long, ongoing conversation, and you have a computer of your own to do things on.`,
         HOW_YOU_WORK,
         brain?.fromFlow ? REPLYING_TO_A_FLOW : TEXTING,
         ...(character ? [VOICES[character]] : []),
@@ -232,7 +232,7 @@ export function turnLaunch(spec: TurnSpec): TurnLaunch {
 /** What the agent is told when a flow asks it something (Get Answer): only the question, and web search. */
 export function askInstructions(name: string, custom: string | null = null): string {
     return [
-        `You are ${name}, the user's agent, answering a question from one of their Paperboard automations.
+        `You are ${name}, the user's agent in Paperboard's Agent panel (${name} is the name the user gave you), answering a question from one of their Paperboard automations.
 - **Answer only:** the answer itself, in plain text. No greeting, no follow-up questions.
 - **Current facts:** use web search when the answer depends on them.
 - **No dashes:** never write an em dash or an en dash.`,
@@ -314,8 +314,9 @@ export type TurnEvent =
     | { type: "thread"; id: string }
     | { type: "message"; text: string }
     | { type: "search"; query: string }
-    // the model began writing to the user (as far as its harness shows that), or began using a tool
-    | { type: "typing" }
+    // the model began writing (as far as its harness shows that), or began using a tool. `plain` is output that isn't a
+    // send_message: it reaches the user only when the turn never texts them, so it's typing only until then
+    | { type: "typing"; plain: boolean }
     | { type: "working" }
     // how much of the model's context the thread fills: tokens its next request starts with, and the window if known
     | { type: "context"; used?: number; size?: number }
@@ -345,7 +346,8 @@ export function parseTurnLine(harness: Harness, line: string): TurnEvent[] {
     // the beginning of a block, written token by token after it: a message to the user, or a tool call
     if (ev.type === "stream_event" && ev.event?.type === "content_block_start" && typeof ev.parent_tool_use_id !== "string") {
         const block = ev.event.content_block;
-        if (block?.type === "text" || (block?.type === "tool_use" && block.name === `mcp__${MCP_SERVER}__send_message`)) return [{ type: "typing" }];
+        if (block?.type === "text") return [{ type: "typing", plain: true }];
+        if (block?.type === "tool_use" && block.name === `mcp__${MCP_SERVER}__send_message`) return [{ type: "typing", plain: false }];
         if (block?.type === "tool_use" || block?.type === "server_tool_use") return [{ type: "working" }];
         return [];
     }

@@ -132,7 +132,7 @@ export class AcpTurn {
         if (u.sessionUpdate === "agent_message_chunk" || u.sessionUpdate === "tool_call") this.retryingSince = null; // the provider answered
         if (u.sessionUpdate === "agent_message_chunk" && u.content?.type === "text" && typeof u.content.text === "string") {
             if (u.messageId !== this.messageId) this.flush();
-            if (!this.text) this.o.emit({ type: "typing" });
+            if (!this.text) this.o.emit({ type: "typing", plain: true });
             this.messageId = u.messageId ?? null;
             this.text += u.content.text;
             return;
@@ -141,7 +141,7 @@ export class AcpTurn {
             this.flush();
             const name = String(u.name ?? "");
             this.tools.set(u.toolCallId, name);
-            this.o.emit({ type: name === `${MCP_SERVER}_send_message` ? "typing" : "working" });
+            this.o.emit(name === `${MCP_SERVER}_send_message` ? { type: "typing", plain: false } : { type: "working" });
             return;
         }
         // how much of the model's context the session fills, and its window

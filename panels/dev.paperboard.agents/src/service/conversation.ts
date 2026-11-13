@@ -644,7 +644,8 @@ export class Conversation {
             }
             else if (ev.type === "message") plain.push(ev.text);
             else if (ev.type === "failed") failures.push(ev.message);
-            else if (ev.type === "typing") this.setTyping(true);
+            // after it texted, the model's plain output is its recap for itself: no one is being written to
+            else if (ev.type === "typing") this.setTyping(!ev.plain || this.unanswered);
             else if (ev.type === "working") this.setTyping(false);
             else if (ev.type === "done") {
                 // the prompt is answered; OpenCode would wait for the next one
