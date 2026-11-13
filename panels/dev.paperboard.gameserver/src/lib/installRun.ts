@@ -1,5 +1,5 @@
 import { createEffect, createSignal } from "solid-js";
-import { formatByteProgress, type LoaderStatus } from "@mileniumhq/paperui";
+import type { LoaderStatus } from "@mileniumhq/paperui";
 import { CALLS } from "../service/contract";
 import type { InstallOutcome } from "../games/minecraft/softwareInstall";
 import { providerFor } from "../games/minecraft/providers";
@@ -29,11 +29,6 @@ export function createInstallRun() {
     const installer = row();
     const [active, setActive] = createSignal(false);
     const [javaBytes, setJavaBytes] = createSignal<DownloadedBytes | undefined>();
-    /** how much has arrived, while the row is the one downloading */
-    const amount = (r: Row, bytes: () => DownloadedBytes | undefined) => () => {
-        const b = bytes();
-        return r.status() === "loading" && b && b.done > 0 ? formatByteProgress(b.done, b.total) : undefined;
-    };
     const jarBytes = () => (active() && installProgress()?.stage === "downloading" ? installProgress()?.bytes : undefined);
 
     // map the service's published progress while this run owns it;
@@ -75,9 +70,9 @@ export function createInstallRun() {
     const rows = (software: ServerSoftwareType): InstallLoaderItem[] => {
         const name = SOFTWARE_NAMES[software];
         const items: InstallLoaderItem[] = [
-            { label: "Downloading Java...", subtitle: amount(javaDownload, javaBytes), percent: javaDownload.percent, status: javaDownload.status },
+            { label: "Downloading Java...", bytes: () => (javaDownload.status() === "loading" ? javaBytes() : undefined), percent: javaDownload.percent, status: javaDownload.status },
             { label: "Installing Java...", percent: javaExtract.percent, status: javaExtract.status },
-            { label: `Downloading ${name}...`, subtitle: amount(download, jarBytes), percent: download.percent, status: download.status },
+            { label: `Downloading ${name}...`, bytes: () => (download.status() === "loading" ? jarBytes() : undefined), percent: download.percent, status: download.status },
         ];
         if (providerFor(software).install.type === "installer") {
             items.push({ label: `Installing ${name}...`, percent: installer.percent, status: installer.status });

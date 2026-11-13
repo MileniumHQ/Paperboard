@@ -1,5 +1,5 @@
 import { createEffect, createSignal } from "solid-js";
-import { formatByteProgress, type LoaderStatus } from "@mileniumhq/paperui";
+import type { LoaderStatus } from "@mileniumhq/paperui";
 import type { InstallLoaderItem } from "../../components/InstallLoaders";
 import { installProgress, serverBridge, setInstallProgress } from "../../lib/server";
 import { createInstallFlow } from "../installFlow";
@@ -58,14 +58,12 @@ export function createSteamInstall(action: string) {
         if (step === 2 || !live(step) || live(step)!.stage === "preparing") return "indeterminate";
         return "loading";
     };
-    const amount = (step: number) => () => {
-        const bytes = live(step)?.stage === "preparing" ? undefined : live(step)?.bytes;
-        return bytes && bytes.done > 0 && bytes.total > 0 ? formatByteProgress(bytes.done, bytes.total) : undefined;
-    };
+    /** how much the row has downloaded, while it is the one running */
+    const bytes = (step: number) => () => (live(step)?.stage === "preparing" ? undefined : live(step)?.bytes);
 
     const rows = (name: string): InstallLoaderItem[] => [
-        { label: `Downloading ${name} from Steam...`, subtitle: amount(0), percent: percent(0), status: status(0) },
-        { label: "Checking the downloaded files...", subtitle: amount(1), percent: percent(1), status: status(1) },
+        { label: `Downloading ${name} from Steam...`, bytes: bytes(0), percent: percent(0), status: status(0) },
+        { label: "Checking the downloaded files...", bytes: bytes(1), percent: percent(1), status: status(1) },
         { label: "Setting up server...", percent: percent(2), status: status(2) },
     ];
 

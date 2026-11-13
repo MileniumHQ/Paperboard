@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { formatByteProgress, type LoaderStatus } from "@mileniumhq/paperui";
+import type { LoaderStatus } from "@mileniumhq/paperui";
 import type { InstallLoaderItem } from "../../components/InstallLoaders";
 import { installProgress, serverBridge } from "../../lib/server";
 import { ensureJavaRuntime, type DownloadedBytes } from "../../lib/ensureJava";
@@ -49,22 +49,18 @@ export function createTerrariaInstall() {
         if (software === "tmodloader" && !runtimeReady()) return "waiting";
         return error() && !downloaded() ? "error" : downloaded() ? "success" : stage() ? "loading" : "waiting";
     };
-    const amount = (status: () => LoaderStatus, bytes: () => DownloadedBytes | undefined) => () => {
-        const b = bytes();
-        return status() === "loading" && b && b.done > 0 ? formatByteProgress(b.done, b.total) : undefined;
-    };
     const downloadBytes = () => (stage() === "downloading" ? installProgress()?.bytes : undefined);
     const setupStatus = (): LoaderStatus =>
         error() && downloaded() ? "error" : installed() ? "success" : downloaded() ? "indeterminate" : "waiting";
 
     const rows = (software: TerrariaSoftware, version: string): InstallLoaderItem[] => [
         ...(software === "tmodloader"
-            ? [{ label: `Installing the .NET ${tmodloaderReleaseFor(version).runtime.replace(/^dotnet-/, "")} runtime...`, percent: () => (runtimeReady() ? 100 : runtimePercent()), subtitle: amount(runtimeStatus, runtimeBytes), status: runtimeStatus }]
+            ? [{ label: `Installing the .NET ${tmodloaderReleaseFor(version).runtime.replace(/^dotnet-/, "")} runtime...`, percent: () => (runtimeReady() ? 100 : runtimePercent()), bytes: () => (runtimeStatus() === "loading" ? runtimeBytes() : undefined), status: runtimeStatus }]
             : []),
         {
             label: `Downloading ${software === "tmodloader" ? softwareName(software) : "Terraria"} ${version}...`,
             percent: () => (downloaded() ? 100 : installProgress()?.percent ?? 0),
-            subtitle: amount(downloadStatus(software), downloadBytes),
+            bytes: () => (downloadStatus(software)() === "loading" ? downloadBytes() : undefined),
             status: downloadStatus(software),
         },
         { label: "Setting up server...", percent: () => (installed() ? 100 : 0), status: setupStatus },
