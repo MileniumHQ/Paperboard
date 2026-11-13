@@ -1,7 +1,8 @@
 // The panel's real UI in a real browser: the page is built with the panel's
 // own vite config into a temp dir, served on loopback with the crane
 // credentials injected the way the shell's panel server does it
-// (window.__PAPERBOARD_CRANE, a panel token the daemon issued), and opened in
+// (window.__PAPERBOARD_CRANE, a panel token the daemon issued) and mobile mode
+// (data-paper-mobile, off), and opened in
 // headless Chrome, driven over the DevTools protocol. Its calls reach the
 // panel service through the test daemon.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
@@ -52,7 +53,7 @@ export async function servePanel(): Promise<{ url: string; stop: () => void }> {
             const file = path.join(dist, pathname === "/" ? "index.html" : pathname);
             if (!file.startsWith(dist) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return new Response("Not found", { status: 404 });
             if (file.endsWith(".html")) {
-                const html = fs.readFileSync(file, "utf8").replace(/<head[^>]*>/i, (m) => `${m}<script>window.__PAPERBOARD_CRANE=${creds};</script>`);
+                const html = fs.readFileSync(file, "utf8").replace(/<head[^>]*>/i, (m) => `${m}<script>window.__PAPERBOARD_CRANE=${creds};document.documentElement.setAttribute("data-paper-mobile","false");</script>`);
                 return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
             }
             return new Response(Bun.file(file));

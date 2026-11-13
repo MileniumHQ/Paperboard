@@ -299,13 +299,11 @@
     }
 }
 
-/* on touch, holding a bubble opens its menu; it shouldn't also start selecting
- * the text under the finger. Outranks PaperUI's selectable rule. */
-@media (hover: none) {
-    .row .bubbleWrap .bubble,
-    .row .bubbleWrap .bubble * {
-        -webkit-user-select: none;
-        user-select: none;
-        -webkit-touch-callout: none;
-    }
+/* in mobile mode, holding a bubble opens its menu; it shouldn't also start
+ * selecting the text under the finger. Outranks PaperUI's selectable rule. */
+:root[data-paper-mobile="true"] .row .bubbleWrap .bubble,
+:root[data-paper-mobile="true"] .row .bubbleWrap .bubble * {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
 }

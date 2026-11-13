@@ -5,7 +5,7 @@
 // takes control of the computer first (onUse), and the input follows.
 
 import { Show, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText, createPaperMobile } from "@mileniumhq/paperui";
 import type { ComputerWindow, InputEvent, PageDialog } from "../contract";
 import type { Agent } from "../lib/agent";
 import { errorText, failure, type Failure } from "../lib/failure";
@@ -117,15 +117,11 @@ export function WindowView(props: {
 
     // ------------------------------------------------------------- the on-screen keyboard
 
-    // A touch screen has no keyboard until a field has focus, and the window's picture isn't a field: so a hidden
+    // Mobile mode is a touch screen, which has no keyboard until a field has focus, and the window's picture isn't a field: so a hidden
     // one is, and what it receives is sent on. It always holds a zero-width mark, so a Backspace on a phone
     // (which reports no key, only an input) has something to delete and shows up as the mark going missing.
     const MARK = "\u200b";
-    const touch = matchMedia("(pointer: coarse)");
-    const [touching, setTouching] = createSignal(touch.matches);
-    const watchTouch = () => setTouching(touch.matches);
-    touch.addEventListener("change", watchTouch);
-    onCleanup(() => touch.removeEventListener("change", watchTouch));
+    const touching = createPaperMobile(); // mobile mode: the host says whether a finger is the input
     const [keyboard, setKeyboard] = createSignal(false);
     let keys: HTMLInputElement | undefined;
     const rest = () => {

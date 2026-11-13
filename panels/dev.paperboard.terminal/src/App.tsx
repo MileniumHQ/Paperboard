@@ -18,6 +18,7 @@ import {
     PaperContextMenuItem,
     PaperContextMenuHeader,
     copyText,
+    createPaperMobile,
     showToast,
     type LoaderStatus,
 } from "@mileniumhq/paperui";
@@ -114,6 +115,7 @@ export default function App() {
     // on a phone the tabs are always along the top: a side list would take
     // most of the width, and split shells share the one screen
     const compact = createCompact();
+    const mobile = createPaperMobile();
     const vertical = () => mirror.layout === "vertical" && !compact();
     const applyTabs = (next: unknown) => {
         if (Array.isArray(next)) setMirror("tabs", reconcile(next as TerminalTab[], { key: "id" }));
@@ -151,7 +153,7 @@ export default function App() {
     const [typing, setTyping] = createSignal(false);
     const [keyboardInset, setKeyboardInset] = createSignal(0);
     const [modifiers, setModifiers] = createSignal<Modifiers>(NO_MODIFIERS);
-    const showKeys = () => compact() && typing();
+    const showKeys = () => mobile() && typing();
     onMount(() => {
         onCleanup(watchKeyboardInset(setKeyboardInset));
         // a screen has the cursor when its helper textarea does; focus moving
@@ -357,7 +359,7 @@ export default function App() {
         });
     };
     // the phone shows no pointer or selection handles, so a copy says it happened
-    const copied = (what: string) => compact() && showToast({ title: `${what} copied`, variant: "success", duration: 1500 });
+    const copied = (what: string) => mobile() && showToast({ title: `${what} copied`, variant: "success", duration: 1500 });
     const copy = () => {
         setFailure(null);
         copySelection(currentSession()).then(() => copied("Selection"), report("Nothing copied"));
