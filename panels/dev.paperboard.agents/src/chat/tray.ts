@@ -12,14 +12,15 @@ export interface Chip {
     name: string;
     /** a local picture of an image or video being sent, while it's here */
     preview: string | null;
-    kind: "image" | "video" | "file";
+    kind: "image" | "video" | "audio" | "file";
     /** 0–1 while uploading */
     progress: number;
     file: Attachment | null;
     error: string | null;
 }
 
-const kindOf = (type: string): Chip["kind"] => (type.startsWith("image/") ? "image" : type.startsWith("video/") ? "video" : "file");
+const kindOf = (type: string): Chip["kind"] =>
+    type.startsWith("image/") ? "image" : type.startsWith("video/") ? "video" : type.startsWith("audio/") ? "audio" : "file";
 
 let keys = 0;
 
@@ -44,7 +45,7 @@ export function createTray(agent: Agent) {
                 const kind = kindOf(f.type);
                 const abort = new AbortController();
                 aborts.set(key, abort);
-                setChips((cs) => [...cs, { key, name: f.name, preview: kind === "file" ? null : URL.createObjectURL(f), kind, progress: 0, file: null, error: null }]);
+                setChips((cs) => [...cs, { key, name: f.name, preview: kind === "image" || kind === "video" ? URL.createObjectURL(f) : null, kind, progress: 0, file: null, error: null }]);
                 agent.files
                     .upload(f, (progress) => update(key, { progress }), abort.signal)
                     .then(

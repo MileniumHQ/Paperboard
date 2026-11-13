@@ -24,6 +24,8 @@ export function createFiles(call: Call) {
     type Read = { url: string; file: Attachment };
     const cache = new Map<string, { read: Promise<Read>; bytes: number }>();
     let cached = 0;
+    // what a file is, without its bytes: a file never changes once it's in the conversation
+    const infos = new Map<string, Promise<Attachment>>();
 
     const evict = () => {
         for (const [id, c] of cache) {
@@ -103,8 +105,20 @@ export function createFiles(call: Call) {
             return entry.read;
         },
 
+        /** What a file is, without reading it: for a chip that names it. */
+        info(id: string): Promise<Attachment> {
+            const hit = infos.get(id);
+            if (hit) return hit;
+            const info = call<Attachment>(UI_ACTION_IDS.attachInfo, { id });
+            infos.set(id, info);
+            // a failed look isn't kept: the next one tries again
+            info.catch(() => infos.get(id) === info && infos.delete(id));
+            return info;
+        },
+
         /** Release every blob (the conversation changed, or the panel closes). */
         clear() {
+            infos.clear();
             for (const c of cache.values()) void c.read.then((r) => URL.revokeObjectURL(r.url), () => undefined);
             cache.clear();
             cached = 0;

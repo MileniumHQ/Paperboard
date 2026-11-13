@@ -26,12 +26,47 @@
     background: var(--paper-surface-inset);
 }
 
+/* a picture opens in the preview */
+.mediaButton {
+    display: block;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: var(--paper-border-radius-half);
+    background: none;
+    cursor: zoom-in;
+}
+
+.mediaButton:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+.video {
+    --paper-video-max-height: calc(var(--paper-control-size-medium) * 8);
+}
+
+.list .video {
+    --paper-video-max-height: calc(var(--paper-control-size-medium) * 3);
+}
+
+.audio {
+    max-width: 100%;
+}
+
 .loading {
     display: block;
     width: calc(var(--paper-control-size-medium) * 4);
     height: calc(var(--paper-control-size-medium) * 3);
     border-radius: var(--paper-border-radius-half);
     background: var(--paper-surface-inset);
+}
+
+/* a recording's player is one row */
+.loading.loadingAudio {
+    width: var(--paper-size-card-min);
+    max-width: 100%;
+    height: calc(var(--paper-control-size-small) + var(--paper-uigap-half));
 }
 
 .missing {
@@ -50,9 +85,17 @@
     padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
     border-radius: var(--paper-border-radius-half);
     background: var(--paper-surface-raised);
+    border: 0;
     color: var(--paper-text);
-    text-decoration: none;
+    font: inherit;
     font-size: var(--paper-text-size-2);
+    text-align: start;
+    cursor: pointer;
+}
+
+.file:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
 }
 
 @media (hover: hover) {
@@ -77,6 +120,10 @@
 .fileSize {
     flex-shrink: 0;
     color: var(--paper-text-subtle);
+}
+
+.failed {
+    color: var(--paper-danger);
 }
 
 .youtube {

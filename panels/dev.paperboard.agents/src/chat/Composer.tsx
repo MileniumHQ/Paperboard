@@ -120,7 +120,7 @@ export default function Composer(props: {
                     <For each={tray().chips()}>
                         {(chip) => (
                             <li class={styles.chip} classList={{ [styles.chipFailed!]: !!chip.error }} title={chip.error ?? chip.name}>
-                                <Show when={chip.preview && chip.kind === "image"} fallback={<PaperIcon class={styles.chipIcon}>{chip.kind === "video" ? "movie" : chip.error ? "error" : "description"}</PaperIcon>}>
+                                <Show when={chip.preview && chip.kind === "image"} fallback={<PaperIcon class={styles.chipIcon}>{chip.error ? "error" : chip.kind === "video" ? "movie" : chip.kind === "audio" ? "music_note" : "description"}</PaperIcon>}>
                                     <img class={styles.chipThumb} src={chip.preview!} alt="" />
                                 </Show>
                                 <span class={styles.chipName}>{chip.error ? `${chip.name}: ${chip.error}` : chip.name}</span>

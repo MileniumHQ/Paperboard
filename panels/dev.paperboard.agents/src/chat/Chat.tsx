@@ -1,16 +1,15 @@
 import { For, Show, createComputed, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
-import { PAPER_PANEL_COMPACT_WIDTH, PaperButton, PaperContextMenu, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPresence, PaperProgress, PaperQuote, PaperText, type MarkdownImage } from "@mileniumhq/paperui";
+import { PAPER_PANEL_COMPACT_WIDTH, PaperButton, PaperContextMenu, PaperContextMenuItem, PaperEmptyState, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPresence, PaperProgress, PaperQuote, PaperText, type MarkdownImage, type MarkdownLink } from "@mileniumhq/paperui";
 import { createStore, reconcile } from "solid-js/store";
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import type { FaceController } from "../face/controller";
 import type { AccessEntry, ChatEntry, PageEntry, PromptEntry, SignInEntry, ToolServerEntry, ToolSignInEntry, WaitingMessage } from "../contract";
 import type { Agent } from "../lib/agent";
-import type { Files } from "../lib/files";
 import PageCard from "../pages/PageCard";
 import type { Launcher } from "../pages/launcher";
 import Composer from "./Composer";
-import { AttachmentList, renderAgentImage } from "./Media";
+import { AttachmentList, MediaProvider, renderAgentImage, renderAgentLink } from "./Media";
 import { createTray } from "./tray";
 import History from "./History";
 import { createSwipeReply } from "./swipeReply";
@@ -83,7 +82,6 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     const [replyTo, setReplyTo] = createSignal<Said | null>(null);
     const [draft, setDraft] = createSignal("");
     const tray = createTray(agent);
-    const agentImage = renderAgentImage(agent.files);
     const [notice, setNotice] = createSignal<Failure | null>(null);
     const [historyOpen, setHistoryOpen] = createSignal(false);
     const [startingNew, setStartingNew] = createSignal(false);
@@ -265,6 +263,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     };
 
     return (
+        <MediaProvider files={agent.files}>
         <div class={styles.page}>
             {/* the conversation is being compacted: it goes on, and what's sent meanwhile waits for it */}
             <Show when={agent.state.chat.compacting}>
@@ -382,8 +381,8 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                                 <Show when={row.side === "me" || row.side === "them"}>
                                     <PaperPresence when appear={arriving().has(row.key)} motion="pop">
                                         <Bubble
-                                            files={agent.files}
-                                            renderImage={agentImage}
+                                            renderImage={renderAgentImage}
+                                            renderLink={renderAgentLink}
                                             row={row}
                                             quoted={(id) => byId(id)}
                                             nameOf={(m) => (m.kind === "user" ? "You" : name())}
@@ -463,6 +462,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                 onClose={() => setHistoryOpen(false)}
             />
         </div>
+        </MediaProvider>
     );
 }
 
@@ -477,8 +477,8 @@ function Bubble(props: {
     onJump: (id: string) => void;
     /** a right click on the bubble: its message, if it's been read, and its text */
     onMenu: (e: MouseEvent, said: Said | null, text: string, bubble: HTMLElement) => void;
-    files: Files;
     renderImage: (image: MarkdownImage) => JSX.Element | undefined;
+    renderLink: (link: MarkdownLink) => JSX.Element | undefined;
 }) {
     const entry = () => props.row.entry as Said | null;
     const text = () => entry()?.text ?? props.row.waiting!.text;
@@ -492,7 +492,7 @@ function Bubble(props: {
         onArm: () => haptic("light"),
         onReply: () => props.onReply(entry()!),
     });
-    // the user's files, or the ones the agent sent with a reply to a flow
+    // the files sent with the text: the user's, or the agent's from send_message
     const attachments = () => (entry() ? entry()!.attachments : props.row.waiting?.attachments) ?? [];
 
     return (
@@ -530,15 +530,15 @@ function Bubble(props: {
                         when={me()}
                         fallback={
                             <>
-                                <PaperMarkdown class={styles.markdown} text={text()} renderImage={props.renderImage} />
+                                <PaperMarkdown class={styles.markdown} text={text()} renderImage={props.renderImage} renderLink={props.renderLink} />
                                 <Show when={attachments().length}>
-                                    <AttachmentList class={styles.attachments} files={props.files} list={attachments()} />
+                                    <AttachmentList class={styles.attachments} list={attachments()} />
                                 </Show>
                             </>
                         }
                     >
                         <Show when={attachments().length}>
-                            <AttachmentList class={styles.attachments} files={props.files} list={attachments()} />
+                            <AttachmentList class={styles.attachments} list={attachments()} />
                         </Show>
                         <Show when={text()}>
                             <PaperText preset="body" class={styles.plain}>
