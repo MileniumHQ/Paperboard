@@ -17,7 +17,8 @@ export default function RustMap(props: { active: boolean }) {
     const [blueprints, setBlueprints] = createSignal(false);
     const [wiping, setWiping] = createSignal(false);
     const [error, setError] = createSignal("");
-    const [wiped, setWiped] = createSignal(false);
+    /** set once a wipe is done: whether there was a map to move to the trash */
+    const [wiped, setWiped] = createSignal<{ trashed: boolean }>();
 
     const load = async () => {
         try {
@@ -34,8 +35,9 @@ export default function RustMap(props: { active: boolean }) {
         setWiping(true);
         setError("");
         try {
+            const trashed = view()?.made === true;
             setView(await serverBridge.call<RustMapView>("rust-wipe", { blueprints: blueprints() }));
-            setWiped(true);
+            setWiped({ trashed });
             setOpen(false);
         } catch (err) {
             setError(errorMessage(err));
@@ -55,8 +57,8 @@ export default function RustMap(props: { active: boolean }) {
                 <PaperQuote variant="warning" icon="warning" title="Server running">Stop the server to wipe it.</PaperQuote>
             </Show>
             <Show when={wiped()}>
-                <PaperQuote variant="success" icon="check_circle" title="Wiped" onDismiss={() => setWiped(false)}>
-                    The server makes its new map when it next starts. The old one is in a .trash folder in Files.
+                <PaperQuote variant="success" icon="check_circle" title="Wiped" onDismiss={() => setWiped(undefined)}>
+                    The server makes its new map when it next starts.{wiped()!.trashed ? " The old one is in a .trash folder in Files." : ""}
                 </PaperQuote>
             </Show>
 
