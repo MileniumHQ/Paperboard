@@ -5,13 +5,16 @@
  * one, but with the network left open so it can download the real game.
  * Whatever the work started is stopped and the folder removed afterwards,
  * whether it passed or threw.
+ *
+ * On a computer without the checkout (the Windows VM), SMOKE_CRANE names a
+ * daemon compiled elsewhere and SMOKE_PANEL a panel folder built elsewhere
+ * (manifest.json and dist/); the script itself is bundled with
+ * `bun build --target=bun` and run by a bare bun.
  */
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildSupervisor } from "../../../scripts/supervisor";
-import { installPanel } from "../test/helpers/installedPanel";
 import type { GameServerState } from "../src/service/types";
 
 export const PANEL = "dev.paperboard.gameserver";
@@ -41,10 +44,15 @@ export interface Scenario {
 export async function withScenarioDaemon(prefix: string, work: (scenario: Scenario) => Promise<void>): Promise<void> {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}-`));
     process.env.PAPERBOARD_DIR = root;
-    const binary = path.join(root, "bin", process.platform === "win32" ? "papercrane.exe" : "papercrane");
-    const build = spawnSync(process.execPath, ["build", "--compile", path.join(REPO, "apps/paperboard/papercrane/main.ts"), buildSupervisor(), "--outfile", binary], { cwd: path.join(REPO, "apps/paperboard"), encoding: "utf8" });
-    if (build.status !== 0 || !fs.existsSync(binary)) throw new Error(`Building the crane daemon failed (exit ${build.status}):\n${build.stdout}\n${build.stderr}`);
-    installPanel(root);
+    let binary = process.env.SMOKE_CRANE;
+    if (!binary) {
+        const { buildSupervisor } = await import("../../../scripts/supervisor");
+        binary = path.join(root, "bin", process.platform === "win32" ? "papercrane.exe" : "papercrane");
+        const build = spawnSync(process.execPath, ["build", "--compile", path.join(REPO, "apps/paperboard/papercrane/main.ts"), buildSupervisor(), "--outfile", binary], { cwd: path.join(REPO, "apps/paperboard"), encoding: "utf8" });
+        if (build.status !== 0 || !fs.existsSync(binary)) throw new Error(`Building the crane daemon failed (exit ${build.status}):\n${build.stdout}\n${build.stderr}`);
+    }
+    if (process.env.SMOKE_PANEL) fs.cpSync(process.env.SMOKE_PANEL, path.join(root, "panels", PANEL), { recursive: true });
+    else (await import("../test/helpers/installedPanel")).installPanel(root);
     const env = { ...process.env, PAPERBOARD_DIR: root };
     delete env.ELECTRON_RUN_AS_NODE;
     const daemon = spawn(binary, ["--data-dir", root, "--port", "0", "--host", "127.0.0.1", "--headless"], { env, stdio: ["ignore", "pipe", "pipe"] });
