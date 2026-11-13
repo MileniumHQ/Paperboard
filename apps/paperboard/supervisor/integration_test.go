@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -46,6 +47,14 @@ func runHelper(mode string) {
 		for scanner.Scan() {
 			fmt.Println("got:" + scanner.Text())
 		}
+	case mode == "drain":
+		// a program that reads its input to the end before it goes on
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Printf("read:%d\n", len(data))
 	case mode == "streams":
 		fmt.Fprintln(os.Stdout, "to-out")
 		fmt.Fprintln(os.Stderr, "to-err")
@@ -241,6 +250,23 @@ func (s *session) supervisorExit() int {
 		s.t.Fatal("the supervisor did not exit")
 	}
 	return s.process.ProcessState.ExitCode()
+}
+
+func TestClosingTheInputEndsItAfterWhatWasWritten(t *testing.T) {
+	s := supervise(t, "drain", helper("drain", nil))
+	s.send(map[string]any{"type": "attach"})
+	chunk := strings.Repeat("x", 64*1024)
+	for i := 0; i < 5; i++ {
+		s.send(map[string]any{"type": "stdin", "data": chunk})
+	}
+	s.send(map[string]any{"type": "stdin-close"})
+	if code := s.exitCode(); code != 0 {
+		t.Fatalf("exit code = %d, stderr %q", code, s.output("stderr"))
+	}
+	if out := strings.TrimSpace(s.output("stdout")); out != fmt.Sprintf("read:%d", 5*64*1024) {
+		t.Fatalf("stdout %q", out)
+	}
+	s.supervisorExit()
 }
 
 func helper(mode string, extra map[string]any) map[string]any {

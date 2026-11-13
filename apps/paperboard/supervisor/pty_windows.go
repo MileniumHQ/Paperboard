@@ -28,6 +28,11 @@ func (w *ptyWorkload) pid() int { return w.process.Pid }
 
 func (w *ptyWorkload) write(data []byte) error { return w.input.write(data) }
 
+// a terminal's input is the terminal itself: it stays open while it runs
+func (w *ptyWorkload) closeInput() error {
+	return fmt.Errorf("a terminal's input can't be closed")
+}
+
 func (w *ptyWorkload) resize(cols, rows int) error {
 	if cols <= 0 || rows <= 0 || cols > 32767 || rows > 32767 {
 		return fmt.Errorf("a terminal cannot be %dx%d", cols, rows)

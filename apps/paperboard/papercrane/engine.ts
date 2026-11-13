@@ -883,8 +883,17 @@ export class PaperCraneEngine {
         const client = this.clients.get(id);
         // a write to a process that is gone is a failure, not a delivery
         if (!client) throw new Error(`Process "${id}" is not running`);
-        if (this.inputless.has(id)) throw new Error(`Process "${id}" was started with no input; it can't be written to`);
+        if (this.inputless.has(id)) throw new Error(`Process "${id}" has no input open (it was started without one, or it was closed); it can't be written to`);
         client.write(data);
+    }
+
+    /** Ends a process's input after what was written to it: a program that reads its input to the end goes on. Later writes are refused. */
+    public closeProcessInput(id: string): void {
+        const client = this.clients.get(id);
+        if (!client) throw new Error(`Process "${id}" is not running`);
+        if (this.inputless.has(id)) throw new Error(`Process "${id}" has no input open (it was started without one, or it was closed already)`);
+        this.inputless.add(id);
+        client.closeInput();
     }
 
     public async killProcess(id: string, signal: string = "SIGTERM"): Promise<void> {

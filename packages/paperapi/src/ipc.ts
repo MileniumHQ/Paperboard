@@ -515,6 +515,8 @@ export function send(channel: string, ...args: unknown[]): Promise<void> {
             // the caller decides what a failed write means (a console line
             // is not a protocol frame): the rejection must reach it
             return t.call("process:write", args[0] as any).then(() => undefined);
+        case "process-close-input":
+            return t.call("process:close-input", args[0] as any).then(() => undefined);
         case "process-kill": {
             const { id } = args[0] as any;
             t.untrackProcess(id);

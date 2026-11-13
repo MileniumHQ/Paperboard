@@ -326,6 +326,11 @@ export class SupervisedProcessClient {
         this.send({ type: "stdin", data });
     }
 
+    /** ends the workload's input once what was written before reaches it */
+    public closeInput() {
+        this.send({ type: "stdin-close" });
+    }
+
     public resize(cols: number, rows: number) {
         this.send({ type: "resize", cols, rows });
     }

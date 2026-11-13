@@ -51,6 +51,10 @@ export const processApi = {
     write: (id: string, data: string): Promise<void> =>
         send("process-write", { id, data }),
 
+    /** Ends the process's input once what was written reaches it, for a program that reads its input to the end before it goes on. Later writes fail. */
+    closeInput: (id: string): Promise<void> =>
+        send("process-close-input", { id }),
+
     kill: (id: string, signal: string = "SIGTERM"): Promise<void> =>
         send("process-kill", { id, signal }),
 

@@ -318,6 +318,15 @@ describe("workloads and terminals take input on every platform", () => {
 		expect(dataOf(rpc, "noinput")).toContain("eof");
 		expect((await rpc.fail("process:write", { id: "noinput", data: "x" })).error).toBeTruthy();
 
+		// a program that reads its input to the end goes on once it's closed, with everything written before
+		await rpc.ok("process:run", { id: "drain", ...js("let n = 0; process.stdin.on('data', (d) => (n += d.length)); process.stdin.on('end', () => console.log('read:' + n))") });
+		const chunk = "x".repeat(65536);
+		for (let i = 0; i < 4; i++) await rpc.ok("process:write", { id: "drain", data: chunk });
+		await rpc.ok("process:close-input", { id: "drain" });
+		expect((await rpc.fail("process:write", { id: "drain", data: "x" })).error).toBeTruthy();
+		expect(await exitOf(rpc, "drain")).toBe(0);
+		expect(dataOf(rpc, "drain")).toContain(`read:${4 * 65536}`);
+
 		const cwd = tempDir();
 		await rpc.ok("process:run", { id: "pwd", cwd, ...js("console.log(process.env.PWD)") });
 		await exitOf(rpc, "pwd");

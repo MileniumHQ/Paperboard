@@ -77,6 +77,8 @@ processApi.exists(id: string): Promise<boolean>;
 /** subscribes this connection to a running process's output again */
 processApi.attach(id: string): Promise<{ success: boolean }>;
 processApi.write(id: string, data: string): Promise<void>;
+/** ends its input after what was written, for a program that reads its input to the end */
+processApi.closeInput(id: string): Promise<void>;
 processApi.kill(id: string, signal?: string): Promise<void>;
 
 processApi.onData(id: string, callback: (text: string) => void): () => void;
@@ -108,6 +110,7 @@ interface ProcessStartOptions {
                 <li>Subscribe with <PaperCode>onData</PaperCode> and the others before <PaperCode>start</PaperCode> to see the first lines. Each returns the function that unsubscribes.</li>
                 <li>Subscribing with <PaperCode>onData</PaperCode>, <PaperCode>onStdout</PaperCode> or <PaperCode>onStderr</PaperCode> attaches the connection to the process, so a new page or a restarted service sees the output of a process that was already running. <PaperCode>attach</PaperCode> does the same with no callback. After a reconnect, the SDK attaches again.</li>
                 <li><PaperCode>write</PaperCode> sends text as it is, with no newline added, at most 64 KB a call.</li>
+                <li><PaperCode>closeInput</PaperCode> ends the process's input once everything written before it has arrived, as the end of a pipe does. A program that reads its input to the end (<PaperCode>codex exec -</PaperCode>, <PaperCode>sort</PaperCode>) goes on. Later writes fail. A long text can go this way instead of in <PaperCode>args</PaperCode>, which every system limits in size and other users can read.</li>
                 <li><PaperCode>kill</PaperCode> sends the signal, <PaperCode>SIGTERM</PaperCode> by default. It resolves when the id is not running. Rejects with the daemon's reason when the kill is refused.</li>
                 <li>Installing or updating a panel stops every process it owns.</li>
             </PaperTextList>
@@ -130,8 +133,9 @@ interface ProcessStartOptions {
                 </thead>
                 <tbody>
                     <tr><td><PaperCode>Process &lt;id&gt; is already running</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td><PaperCode>start</PaperCode> with a running id.</td></tr>
-                    <tr><td><PaperCode>Process "&lt;id&gt;" is not running</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td><PaperCode>write</PaperCode> to a process that exited or never started.</td></tr>
-                    <tr><td><PaperCode>Process "&lt;id&gt;" was started with no input; it can't be written to</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td><PaperCode>write</PaperCode> to a process started with <PaperCode>stdin: false</PaperCode> or <PaperCode>consoleInput</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>Process "&lt;id&gt;" is not running</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td><PaperCode>write</PaperCode> or <PaperCode>closeInput</PaperCode> to a process that exited or never started.</td></tr>
+                    <tr><td><PaperCode>Process "&lt;id&gt;" has no input open (it was started without one, or it was closed); it can't be written to</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td><PaperCode>write</PaperCode> to a process started with <PaperCode>stdin: false</PaperCode> or <PaperCode>consoleInput</PaperCode>, or after <PaperCode>closeInput</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>Process "&lt;id&gt;" has no input open (it was started without one, or it was closed already)</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td><PaperCode>closeInput</PaperCode> on such a process.</td></tr>
                     <tr><td><PaperCode>spawn cwd does not exist: &lt;path&gt;</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>A missing <PaperCode>cwd</PaperCode>.</td></tr>
                     <tr><td><PaperCode>overriding "&lt;key&gt;" in a spawned child env is refused</PaperCode></td><td><PaperCode>FORBIDDEN</PaperCode></td><td>A credential key in <PaperCode>env</PaperCode>.</td></tr>
                     <tr><td><PaperCode>"&lt;id&gt;" belongs to another panel</PaperCode></td><td><PaperCode>FORBIDDEN</PaperCode></td><td>Another panel started that id.</td></tr>

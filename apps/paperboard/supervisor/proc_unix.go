@@ -219,6 +219,14 @@ func (w *pipedWorkload) write(data []byte) error {
 	return w.input.write(encodeInput(string(data), w.encoding))
 }
 
+func (w *pipedWorkload) closeInput() error {
+	if w.input == nil {
+		return errors.New("it was started with no input")
+	}
+	w.input.close()
+	return nil
+}
+
 func (w *pipedWorkload) resize(int, int) error { return nil }
 
 func (w *pipedWorkload) kill(signal string) error { return signalGroup(w.process.Pid, signal) }

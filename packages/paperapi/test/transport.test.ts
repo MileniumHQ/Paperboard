@@ -399,6 +399,7 @@ describe("failures reach the caller", () => {
         await expect(terminalApi.resize("t1", 80, 24)).rejects.toThrow("refused term:resize");
         await expect(terminalApi.destroy("t1")).rejects.toThrow("refused term:destroy");
         await expect(processApi.write("p1", "say hi\n")).rejects.toThrow("refused process:write");
+        await expect(processApi.closeInput("p1")).rejects.toThrow("refused process:close-input");
         await expect(processApi.kill("p1")).rejects.toThrow("refused process:kill");
     });
 

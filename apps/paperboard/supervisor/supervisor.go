@@ -27,6 +27,9 @@ type workload interface {
 	pid() int
 	// queues input; never blocks on a workload that is not reading
 	write(data []byte) error
+	// ends its input once what is queued has been written, so a program
+	// that reads its input to the end goes on
+	closeInput() error
 	resize(cols, rows int) error
 	// asks the workload and everything it started to stop
 	kill(signal string) error
@@ -416,6 +419,14 @@ func (s *supervisor) handle(c *client, line []byte) {
 		}
 		if err := work.write([]byte(*msg.Data)); err != nil {
 			s.at.logf("WARN", "[supervisor:%s] input was not delivered: %v", s.id, err)
+		}
+	case "stdin-close":
+		work := s.workload()
+		if work == nil {
+			return
+		}
+		if err := work.closeInput(); err != nil {
+			s.at.logf("WARN", "[supervisor:%s] input was not closed: %v", s.id, err)
 		}
 	case "resize":
 		work := s.workload()

@@ -67,6 +67,13 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
             reply(id, { success: true });
             return true;
         }
+        case "process:close-input": {
+            const procId = assertStr(params?.id, "id", 128);
+            checkClientOwnership(procId, ctx, "process:close-input");
+            engine.closeProcessInput(procId);
+            reply(id, { success: true });
+            return true;
+        }
         case "process:kill": {
             const procId = assertStr(params?.id, "id", 128);
             checkClientOwnership(procId, ctx, "process:kill");

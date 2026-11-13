@@ -46,6 +46,7 @@ describe("workloads belong to the panel that created them", () => {
 		for (const [action, params] of [
 			["process:kill", { id: "owned-proc" }],
 			["process:write", { id: "owned-proc", data: "x" }],
+			["process:close-input", { id: "owned-proc" }],
 			["process:attach", { id: "owned-proc" }],
 			["process:run", { id: "owned-proc", command: process.execPath, args: forever }],
 		] as const) {
