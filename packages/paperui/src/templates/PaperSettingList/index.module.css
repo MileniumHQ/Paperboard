@@ -16,6 +16,9 @@
     /* still clip: the row surfaces must not paint square corners over the
        rounded border just because the list sizes to its content */
     overflow: hidden;
+    /* overflow:hidden zeroes the auto min-size, so without this the list is
+       crushed to nothing by its siblings in a scrolling column */
+    flex-shrink: 0;
 }
 
 /* full-bleed pane usage: no card edge to clip, so no border or rounding */

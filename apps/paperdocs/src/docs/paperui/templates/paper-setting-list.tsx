@@ -87,7 +87,7 @@ export function Settings() {
                         <td><PaperCode>autoHeight</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td>No default (off)</td>
-                        <td>Sizes the list to its rows and clips instead of scrolling. Without it the list scrolls vertically when its parent limits its height.</td>
+                        <td>Sizes the list to its rows and clips instead of scrolling. It never shrinks below its rows in a column, so a scrolling parent scrolls past it. Without it the list scrolls vertically when its parent limits its height.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>flat</PaperCode></td>
@@ -176,7 +176,7 @@ export function Settings() {
                 <li>The list is 100% wide, with a raised surface, a border and rounded, clipped corners. Rows sit on the same surface, divided by a subtle rule, with none under the last row.</li>
                 <li>A row puts the title block on the left, taking the free width, and the control on the right.</li>
                 <li>A row that contains a <PaperCode>textarea</PaperCode> (a <PaperLink href="/docs/paperui/paperinput/">PaperInput</PaperLink> with <PaperCode>multiline</PaperCode>) stacks the control under the title at full width.</li>
-                <li>The list does not set a height. A row list in a bounded parent scrolls, and <PaperCode>autoHeight</PaperCode> turns that off.</li>
+                <li>The list does not set a height. A row list in a bounded parent scrolls, and <PaperCode>autoHeight</PaperCode> turns that off: the list keeps its full height, and the parent scrolls instead.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="named-controls">Named controls</PaperText>
