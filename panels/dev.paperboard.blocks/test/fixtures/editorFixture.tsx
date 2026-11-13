@@ -156,11 +156,13 @@ async function run(): Promise<Record<string, unknown>> {
     const afterThird = await savedWith(3);
 
     const uncaught = [...errors];
-    // what nothing catches is said on the page
-    window.dispatchEvent(new ErrorEvent("error", { error: new Error("the fixture's own failure"), message: "the fixture's own failure" }));
-    const alert = await until("the failure on the page", () => document.querySelector('[role="alert"]')?.textContent);
+    // what nothing catches is said on the page, by PaperProvider's toast: once, however often it's thrown
+    for (let i = 0; i < 3; i++) window.dispatchEvent(new ErrorEvent("error", { error: new Error("the fixture's own failure"), message: "the fixture's own failure" }));
+    await until("the failure on the page", () => document.querySelector('[aria-label="Notifications"] [role="alert"]'));
+    await frame();
+    const alerts = [...document.querySelectorAll('[role="alert"]')].map((el) => ({ toast: !!el.closest('[aria-label="Notifications"]'), text: el.textContent ?? "" }));
 
-    return { first, afterFirst, fitted, second, afterSecond, third, afterThird, uncaught, alert, greet: GREET };
+    return { first, afterFirst, fitted, second, afterSecond, third, afterThird, uncaught, alerts, greet: GREET };
 }
 
 run()

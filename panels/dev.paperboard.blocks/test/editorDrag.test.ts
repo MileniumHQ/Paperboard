@@ -80,9 +80,12 @@ describe("dragging blocks in the editor", () => {
     dragTest(
         named("nothing fails unseen: a drag throws nothing, and what nothing catches is said on the page"),
         async () => {
-            const { uncaught, alert } = await fixture();
+            const { uncaught, alerts } = await fixture();
             expect(uncaught).toEqual([]);
-            expect(alert).toContain("the fixture's own failure");
+            // one toast, and the editor's own notice doesn't say it again
+            expect(alerts).toHaveLength(1);
+            expect(alerts[0].toast).toBe(true);
+            expect(alerts[0].text).toContain("the fixture's own failure");
         },
         TIMEOUT,
     );
