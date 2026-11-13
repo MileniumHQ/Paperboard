@@ -57,6 +57,8 @@ export interface StateSetters {
     setGameSettings?: (v: Readonly<Record<string, unknown>>) => void;
     setServerVersion: (v: string) => void;
     setRamAllocation: (v: number) => void;
+    setMaxPlayers?: (v: number | null) => void;
+    setOnlineSince?: (v: number | null) => void;
     setActiveIssue: (v: ServerIssue | null) => void;
     setRecoveryBlock: (v: string | null) => void;
     setOnlinePlayerNames: (v: Set<string>) => void;
@@ -85,6 +87,8 @@ export function applyStatePatch(
         { key: "serverPort", apply: (v) => setters.setServerPort(v as string) },
         { key: "serverMotd", apply: (v) => setters.setServerMotd(v as string) },
         { key: "serverLevel", apply: (v) => setters.setServerLevel((v as string | null) ?? null) },
+        { key: "maxPlayers", apply: (v) => setters.setMaxPlayers?.((v as number | null) ?? null) },
+        { key: "onlineSince", apply: (v) => setters.setOnlineSince?.((v as number | null) ?? null) },
         {
             key: "serverSoftware",
             apply: (v) => setters.setServerSoftware(v as ServerSoftwareType),

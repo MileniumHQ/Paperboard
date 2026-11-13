@@ -48,6 +48,10 @@ export const [serverPort, setServerPort] = createSignal("25565");
 export const [serverMotd, setServerMotd] = createSignal(DEFAULT_MOTD);
 /** The map the running server plays, for games that change maps while running. */
 export const [serverLevel, setServerLevel] = createSignal<string | null>(null);
+/** the running server's player cap; null while offline or until it has answered */
+export const [maxPlayers, setMaxPlayers] = createSignal<number | null>(null);
+/** when the server came online, in milliseconds since 1970; null while it is not */
+export const [onlineSince, setOnlineSince] = createSignal<number | null>(null);
 export const [serverSoftware, setServerSoftware] = createSignal<string>("paper");
 export const [gameSettings, setGameSettings] = createSignal<Readonly<Record<string, unknown>>>({});
 export const [serverVersion, setServerVersion] = createSignal("");
@@ -77,6 +81,8 @@ function currentSetters() {
         setServerPort,
         setServerMotd,
         setServerLevel,
+        setMaxPlayers,
+        setOnlineSince,
         setServerSoftware,
         setGameSettings,
         setServerVersion,

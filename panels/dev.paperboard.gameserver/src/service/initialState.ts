@@ -13,6 +13,7 @@ export const initialServerState = (): GameServerState => ({
     ramAllocation: 4,
     onlinePlayers: [],
     maxPlayers: null,
+    onlineSince: null,
     serverLevel: null,
     seenPlayers: [],
     playerStats: {},

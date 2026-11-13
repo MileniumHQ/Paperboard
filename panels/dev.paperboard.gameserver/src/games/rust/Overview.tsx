@@ -1,32 +1,16 @@
-import { createEffect, createSignal, on, onCleanup, Show } from "solid-js";
-import { PaperAvatar, PaperGrid, PaperQuote, PaperStatTile, PaperText } from "@mileniumhq/paperui";
+import { Show } from "solid-js";
+import { PaperAvatar, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview from "../../components/ServerOverview";
-import { gameSettings, serverBridge, serverStatus } from "../../lib/server";
-import { errorMessage } from "../../lib/failure";
-import { uptimeLabel } from "../palworld/health";
+import { gameSettings } from "../../lib/server";
+import { createMetrics, createUptime, overviewStats } from "../../components/overviewStats";
 import { rust } from "./index";
 import { fpsTone } from "./health";
 import type { RustInfo } from "./webrcon";
 
-const METRICS_MS = 5_000;
-
 export default function RustOverview() {
     const description = () => String(gameSettings().description ?? "");
-    const [metrics, setMetrics] = createSignal<RustInfo>();
-    const [metricsError, setMetricsError] = createSignal("");
-    // the server is asked for its health while it runs; the numbers are gone when it stops
-    createEffect(on(serverStatus, (status) => {
-        setMetrics(undefined);
-        setMetricsError("");
-        if (status !== "online") return;
-        const load = () => serverBridge.call<RustInfo>("rust-metrics").then(
-            (answer) => { setMetrics(answer); setMetricsError(""); },
-            (err) => setMetricsError(errorMessage(err)),
-        );
-        void load();
-        const timer = setInterval(() => void load(), METRICS_MS);
-        onCleanup(() => clearInterval(timer));
-    }));
+    const metrics = createMetrics<RustInfo>("rust-metrics");
+    const uptime = createUptime();
 
     return (
         <ServerOverview
@@ -38,19 +22,14 @@ export default function RustOverview() {
             }
             software="Steam"
             control={rust.describe({ software: "", version: "" }).control}
+            stats={metrics.value() && overviewStats(
+                uptime(),
+                { icon: "speed", label: "Server FPS", value: String(Math.round(metrics.value()!.Framerate)), tone: fpsTone(metrics.value()!.Framerate) },
+                { icon: "deployed_code", label: "Entities", value: metrics.value()!.EntityCount.toLocaleString() },
+            )}
         >
-            <Show when={metrics()}>
-                {(health) => (
-                    <PaperGrid min="field">
-                        <PaperStatTile icon="speed" label="Server FPS" value={Math.round(health().Framerate)} tone={fpsTone(health().Framerate)} />
-                        <PaperStatTile icon="group" label="Players" value={`${health().Players} / ${health().MaxPlayers}`} />
-                        <PaperStatTile icon="deployed_code" label="Entities" value={health().EntityCount.toLocaleString()} />
-                        <PaperStatTile icon="schedule" label="Uptime" value={uptimeLabel(health().Uptime)} />
-                    </PaperGrid>
-                )}
-            </Show>
-            <Show when={metricsError()}>
-                <PaperQuote variant="danger" icon="warning" title="Server health unavailable">{metricsError()}</PaperQuote>
+            <Show when={metrics.error()}>
+                <PaperQuote variant="danger" icon="warning" title="Server health unavailable">{metrics.error()}</PaperQuote>
             </Show>
         </ServerOverview>
     );

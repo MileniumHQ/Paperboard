@@ -39,6 +39,10 @@ export interface GameServerState {
     // the running server's player cap, from its `list` answer; null while
     // offline or until it has answered
     maxPlayers: number | null;
+    // when the server came online, in milliseconds since 1970; null while it
+    // is not online. Kept with the console history, so it survives a restart
+    // of Paperboard that left the server running
+    onlineSince: number | null;
     // the map the running server plays, for games that change maps while
     // running; null while offline or for games without maps
     serverLevel: string | null;

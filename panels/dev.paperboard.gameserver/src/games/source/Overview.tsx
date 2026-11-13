@@ -5,7 +5,9 @@ import { gameSettings, serverBridge, serverLevel, serverStatus } from "../../lib
 import { errorMessage } from "../../lib/failure";
 import type { GameDefinition } from "../types";
 import { CALLS as A } from "../../service/contract";
-import { mapMode, sourceCalls, type SourceGameSpec } from "./index";
+import { createMetrics, createUptime, overviewStats } from "../../components/overviewStats";
+import { humanizeIdentifier } from "../../core/format";
+import { mapMode, sourceCalls, type SourceGameSpec, type SourceMetrics } from "./index";
 import MapCards, { mapChoices, mapNames } from "./MapCards";
 import { createMapPictures } from "./useMapPictures";
 import { createWorkshopMaps } from "./useWorkshopMaps";
@@ -22,6 +24,10 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal("");
     const pictures = createMapPictures(props.spec);
+    const uptime = createUptime();
+    const metrics = createMetrics<SourceMetrics>(ids.metrics);
+    /** how the server plays: its map's mode, or the game mode it was started in; a map of no listed mode is a custom one */
+    const mode = () => label(map()) ?? (typeof gameSettings().gamemode === "string" ? humanizeIdentifier(String(gameSettings().gamemode)) : "Custom");
     const workshop = createWorkshopMaps(props.spec);
 
     const edit = async () => {
@@ -65,7 +71,16 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
             software="Steam"
             control={features.control}
             world={features.calls.includes(A.saveWorld)}
+            stats={metrics.value() && overviewStats(
+                uptime(),
+                { icon: "smart_toy", label: "Bots", value: String(metrics.value()!.bots) },
+                { icon: "sports_esports", label: "Game mode", value: mode() },
+            )}
         >
+            <Show when={metrics.error()}>
+                <PaperQuote variant="danger" icon="warning" title="Server figures unavailable">{metrics.error()}</PaperQuote>
+            </Show>
+
             <PaperModal
                 open={open()}
                 onClose={() => setOpen(false)}

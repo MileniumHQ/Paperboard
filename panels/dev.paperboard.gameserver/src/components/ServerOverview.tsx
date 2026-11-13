@@ -1,4 +1,4 @@
-import { createSignal, onMount, Show, type JSX } from "solid-js";
+import { createSignal, For, onMount, Show, type JSX } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -11,7 +11,9 @@ import {
     PaperCard,
     PaperBadge,
     PaperEffect,
+    PaperGrid,
     PaperQuote,
+    PaperStatTile,
 } from "@mileniumhq/paperui";
 import {
     serverActionError,
@@ -34,6 +36,8 @@ import ServerIssueModal from "./ServerIssueModal";
 import RecoveryNotice from "./RecoveryNotice";
 import { errorMessage } from "../lib/failure";
 import type { Control } from "../games/types";
+import { createCompact } from "../lib/compact";
+import type { OverviewStats } from "./overviewStats";
 
 /** What a game's Overview says under the address, beside the button that edits it. */
 export function EditableDetail(props: { edit: string; onEdit(): void; children: JSX.Element }) {
@@ -48,9 +52,14 @@ export function EditableDetail(props: { edit: string; onEdit(): void; children: 
 }
 
 /**
- * Every game's Overview: the address card, the power controls, Save world
- * and the console. A game fills in its own avatar, the line under the address,
- * extra buttons for a running server and its notices.
+ * Every game's Overview: the address card, the power controls, Save world,
+ * a running server's four readouts and the console. A game fills in its own
+ * avatar, the line under the address, its readouts, extra buttons for a
+ * running server and its notices.
+ *
+ * The console takes what height is left. A phone has none left under the
+ * rest, so there the Overview scrolls and the console keeps a height of its
+ * own.
  */
 export default function ServerOverview(props: {
     avatar: JSX.Element;
@@ -58,6 +67,8 @@ export default function ServerOverview(props: {
     detail?: JSX.Element;
     /** the software badge beside the version, such as "Paper" or "Vanilla" */
     software: string;
+    /** a running server's readouts, in one row of four equal tiles (two rows of two on a phone) */
+    stats?: OverviewStats;
     /** buttons after Restart while the server is online */
     actions?: JSX.Element;
     /** notices between the controls and the console */
@@ -93,11 +104,12 @@ export default function ServerOverview(props: {
         sent.catch((err) => setCommandError(errorMessage(err)));
     };
 
+    const compact = createCompact();
     const badge = () => getStatusBadge(serverStatus());
     const address = () => `${localIp()}:${serverPort()}`;
 
     return (
-        <>
+        <PaperFlex direction="column" gap="full" grow minHeight={0} fullWidth scrollable={compact() ? "y" : undefined}>
             <PaperCard shrink={false} padding="full">
                 <PaperFlex direction="row" gap="threefourths" align="center">
                     {props.avatar}
@@ -149,6 +161,16 @@ export default function ServerOverview(props: {
                 </PaperFlex>
             </PaperFlex>
 
+            <Show when={serverStatus() === "online" && props.stats}>
+                {(stats) => (
+                    <PaperGrid columns={compact() ? 2 : 4}>
+                        <For each={stats()}>
+                            {(stat) => <PaperStatTile icon={stat.icon} label={stat.label} value={stat.value} tone={stat.tone} />}
+                        </For>
+                    </PaperGrid>
+                )}
+            </Show>
+
             <RecoveryNotice />
 
             <Show when={serverActionError()}>
@@ -173,7 +195,7 @@ export default function ServerOverview(props: {
 
             <PaperSeparator />
 
-            <PaperCard grow minHeight={0} padding="full">
+            <PaperCard grow={!compact()} shrink={!compact()} minHeight={0} height={compact() ? "panel-height-small" : undefined} padding="full">
                 <PaperConsole
                     entries={serverEntries()}
                     onCommand={runCommand}
@@ -191,6 +213,6 @@ export default function ServerOverview(props: {
             </PaperCard>
 
             <ServerIssueModal />
-        </>
+        </PaperFlex>
     );
 }

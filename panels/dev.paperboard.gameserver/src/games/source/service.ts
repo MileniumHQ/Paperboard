@@ -462,6 +462,7 @@ export function sourceService(spec: SourceGameSpec, game: GameDefinition): GameS
                 return ctx.state.gameSettings;
             },
             ...steamInstallCalls(steam),
+            [ids.metrics]: async () => ({ bots: [...local().online.values()].filter((p) => p.steamId === "BOT").length }),
             [ids.players]: async () => {
                 await saveStats();
                 return { seen: await roster().seen(), bans: await roster().bans(), online: [...local().online.values()], admins: (await modsOn()) ? await (await mods()).admins() : null };

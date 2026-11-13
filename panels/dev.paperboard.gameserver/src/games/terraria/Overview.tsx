@@ -2,7 +2,8 @@ import { createSignal, Show } from "solid-js";
 import { PaperAvatar, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { MotdEditor, MotdPreview } from "../../components/Motd";
-import { serverBridge, serverMotd, serverSoftware } from "../../lib/server";
+import { gameSettings, serverBridge, serverMotd, serverSoftware } from "../../lib/server";
+import { createUptime, overviewStats } from "../../components/overviewStats";
 import { terraria } from "./index";
 import { terrariaMotd } from "./motd";
 import { softwareName, terrariaSoftware } from "./catalog";
@@ -10,6 +11,7 @@ import { softwareName, terrariaSoftware } from "./catalog";
 export default function TerrariaOverview() {
     const [motdOpen, setMotdOpen] = createSignal(false);
     const [motdPending, setMotdPending] = createSignal(false);
+    const uptime = createUptime();
     const saveMotd = async (motd: string) => {
         const result = await serverBridge.call<{ appliesOnRestart: boolean }>("terraria-motd", { motd });
         setMotdPending(result.appliesOnRestart);
@@ -26,6 +28,11 @@ export default function TerrariaOverview() {
                 </EditableDetail>
             }
             software={softwareName(terrariaSoftware(serverSoftware()))}
+            stats={overviewStats(
+                uptime(),
+                { icon: "public", label: "World", value: String(gameSettings().world ?? "World") },
+                { icon: gameSettings().password ? "lock" : "lock_open", label: "Join password", value: gameSettings().password ? "On" : "Off" },
+            )}
         >
             <Show when={motdPending()}>
                 <PaperQuote variant="warning" icon="info" title="Message cleared" onDismiss={() => setMotdPending(false)}>

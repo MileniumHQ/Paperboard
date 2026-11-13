@@ -3,7 +3,7 @@ import { createEffect, createMemo, createSignal, onMount, onCleanup, untrack, Fo
 import { tabIds } from "./lib/tabIds";
 import {
     PaperPanel, PaperPresence, PaperButton, PaperIcon, PaperQuote, PaperLoader, PaperFlex, PaperText,
-    PaperSlidePage, PAPER_PANEL_COMPACT_WIDTH, getVar,
+    PaperSlidePage, getVar,
     PaperMenu,
     PaperMenuItem,
     PaperMenuLabel,
@@ -12,6 +12,7 @@ import {
 } from "@mileniumhq/paperui";
 import { serversBridge, selectedServerId, selectedServer, openServer } from "./lib/api";
 import { loadServerConfig } from "./lib/server";
+import { createCompact } from "./lib/compact";
 import type { ServersState } from "./service";
 import ServersHome from "./components/ServersHome";
 import { serverSoftware, serverVersion, gameSettings } from "./lib/server";
@@ -34,16 +35,6 @@ function slideMs(): number {
     const value = parseFloat(duration);
     if (!Number.isFinite(value)) throw new Error(`The page transition is not a duration: "${duration}"`);
     return duration.endsWith("ms") ? value : value * 1000;
-}
-
-/** the phone layout, the width at which PaperPanel puts its menu and page one over the other */
-function createCompact(): () => boolean {
-    const query = window.matchMedia(`(max-width: ${PAPER_PANEL_COMPACT_WIDTH - 0.02}px)`);
-    const [compact, setCompact] = createSignal(query.matches);
-    const change = () => setCompact(query.matches);
-    query.addEventListener("change", change);
-    onCleanup(() => query.removeEventListener("change", change));
-    return compact;
 }
 
 export default function App() {

@@ -3,7 +3,7 @@ import GameRoster, { CopyRow, createRosterState, type RosterPlayer } from "../..
 import { byName, withUniqueNames } from "../rosterNames";
 import PlayerAvatar from "../../components/PlayerAvatar";
 import { serverBridge } from "../../lib/server";
-import { uptimeLabel } from "../palworld/health";
+import { durationLabel } from "../../core/format";
 import type { RustBan, RustSeen } from "./roster";
 import type { RustPlayer } from "./webrcon";
 
@@ -45,7 +45,7 @@ export default function RustPlayers() {
             playerId={(player) => player.steamId}
             searchTerms={(player) => [player.steamId]}
             avatar={(player, size) => <PlayerAvatar name={player.name} size={size} />}
-            playing={(player) => (player.connected !== undefined ? `Playing · on for ${uptimeLabel(player.connected)}` : "Playing")}
+            playing={(player) => (player.connected !== undefined ? `Playing · on for ${durationLabel(player.connected)}` : "Playing")}
             pickHint="Players appear here once they join. Pick one to see their Steam id and to kick or ban them."
             moderation={{
                 kick: act("rust-kick"),

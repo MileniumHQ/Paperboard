@@ -28,7 +28,7 @@ import { CALLS } from "./service/contract";
 import { setRecoveryBlock } from "./service/recoveryState";
 import { handleProcessData, handleProcessExit, stopServerInstance, cancelReadiness, restartServerInstance, startServerInstance } from "./service/lifecycle";
 import { cancelAutomation, readAutomation, scheduleDailyRestart, scheduleUpdateChecks } from "./service/automation";
-import { historyWriter, readHistory } from "./service/history";
+import { historyWriter, onlineSinceAfter, readHistory } from "./service/history";
 
 import { currentGameService, gameServiceFor } from "./games/service";
 import { settingsBlocks } from "./service/settingsBlocks";
@@ -192,6 +192,7 @@ function createScope(server: StoredServer): ServerScope {
             setState(patch) {
                 const before = state;
                 state = { ...state, ...(typeof patch === "function" ? patch(state) : patch) };
+                state.onlineSince = onlineSinceAfter(before, state);
                 announceChanges(scope.blocks, before, state, server.name);
                 publish(scope);
                 histories.get(server.id)?.changed(state);
@@ -253,9 +254,11 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
         const blocks = scope.blocks;
         await inServer(scope, async () => blocks.register(bindBlocks(scope, mergeBlocks(sharedBlocks(scope.ctx), settingsBlocks(scope.ctx), await game.blocks?.(scope.ctx)))));
         let wasRunning = false;
+        let onlineSince: number | null = null;
         try {
             const history = await readHistory(await historyFile(server.id));
             wasRunning = history.running;
+            onlineSince = history.onlineSince;
             histories.get(server.id)!.loaded(history);
             scope.ctx.setState({ serverEntries: history.serverEntries, chatMessages: history.chatMessages });
         } catch (err) {
@@ -266,7 +269,9 @@ async function initialize(scope: ServerScope): Promise<ServerScope> {
             // A server left running keeps its identity and directory on migration.
             // Recovery must never modify that running process's files.
             const running = await scopedProcess.exists(game.primaryProcessId);
-            if (running) scope.ctx.setState({ serverStatus: "online" });
+            // a server left running has been online since its history says; one whose history
+            // predates that record counts from now
+            if (running) scope.ctx.setState({ serverStatus: "online", ...(onlineSince === null ? {} : { onlineSince }) });
             scope.unsubscribe.push(
                 scopedProcess.onData(game.primaryProcessId, (chunk) =>
                     handleProcessData(scope.ctx, chunk),

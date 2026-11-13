@@ -127,6 +127,7 @@ export const sourceCalls = (id: string) => ({
     latest: `${id}-latest`,
     install: `${id}-install`,
     players: `${id}-players`,
+    metrics: `${id}-metrics`,
     kick: `${id}-kick`,
     ban: `${id}-ban`,
     unban: `${id}-unban`,
@@ -147,6 +148,12 @@ export const sourceCalls = (id: string) => ({
     pluginUpload: `${id}-plugin-upload`,
     admin: `${id}-admin`,
 });
+
+/** A running server's figures for its Overview. */
+export interface SourceMetrics {
+    /** bots on the server; they are not counted as players */
+    bots: number;
+}
 
 /** What the Mods tab shows. */
 export interface SourceModView {

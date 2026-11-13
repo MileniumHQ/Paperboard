@@ -52,16 +52,19 @@ describe("servers through restarts", () => {
     test("a server running when the service starts again is shown online with its players and its console history", async () => {
         const state = servicesState();
         await callServer("s-a", "start-server");
-        await state.waitFor("s-a", (s) => s.serverStatus === "online" && s.onlinePlayers.length === 2, "s-a online with its players");
+        const before = await state.waitFor("s-a", (s) => s.serverStatus === "online" && s.onlinePlayers.length === 2, "s-a online with its players");
+        expect(Date.now() - before.onlineSince!).toBeLessThan(60_000);
         await callServer("s-a", "run-command", { command: "say before the restart" });
         await state.waitFor("s-a", (s) => s.serverEntries.some((e) => e.content.includes("[Server] before the restart")), "the command's echo");
-        // the console is kept on disk for the next service
-        await waitForFile(historyFile("s-a"), (text) => text.includes("[Server] before the restart"), "the console history to be saved");
+        // the console is kept on disk for the next service, with when the server came online
+        await waitForFile(historyFile("s-a"), (text) => text.includes("[Server] before the restart") && text.includes(`"onlineSince":${before.onlineSince}`), "the console history to be saved");
         const [pid] = runs("s-a");
 
         await restartService();
         const after = await state.waitFor("s-a", (s) => s.serverStatus === "online" && s.onlinePlayers.length === 2, "s-a online again after the restart");
         expect(after.onlinePlayers.sort()).toEqual(["alice", "bob"]);
+        // its uptime carries on from its start, not from the service's
+        expect(after.onlineSince).toBe(before.onlineSince);
         expect(after.serverEntries.map((e) => e.content)).toContain("[12:00:00] [Server thread/INFO]: [Server] before the restart");
         // the same process: adopted, not started again
         expect(runs("s-a")).toEqual([pid!]);

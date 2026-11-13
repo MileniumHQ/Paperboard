@@ -9,7 +9,8 @@ import {
     PaperContextMenuItem,
     useContextMenuState,
 } from "@mileniumhq/paperui";
-import { serverStatus, serverMotd, serverSoftware, serverVersion, loadServerConfig } from "../lib/server";
+import { ramAllocation, serverStatus, serverMotd, serverSoftware, serverVersion, loadServerConfig } from "../lib/server";
+import { createUptime, overviewStats } from "./overviewStats";
 import { SOFTWARE_NAMES } from "../lib/software";
 import ServerOverview from "./ServerOverview";
 import { MotdEditor, MotdPreview } from "./Motd";
@@ -33,6 +34,9 @@ export default function Overview(props: {
     const [motdOpen, setMotdOpen] = createSignal(false);
     const [restriction, setRestriction] = createSignal<JoinRestriction>(null);
     const [whitelistError, setWhitelistError] = createSignal("");
+    // the world the server runs: server.properties' level-name, "world" when it names none
+    const [world, setWorld] = createSignal("world");
+    const uptime = createUptime();
 
     // the whitelist can lock everyone but operators out, and 26.3 turns it
     // on for new servers; say so where people look when friends can't join
@@ -43,7 +47,9 @@ export default function Overview(props: {
                 fileApi.read("whitelist.json", PANEL_ID),
                 fileApi.read("ops.json", PANEL_ID),
             ]);
-            const on = (properties ? parseProperties(properties)["white-list"] : undefined) ?? whitelistDefault();
+            const parsed = properties ? parseProperties(properties) : {};
+            setWorld(parsed["level-name"] || "world");
+            const on = parsed["white-list"] ?? whitelistDefault();
             setRestriction(joinRestriction(on === "true", countJsonEntries(whitelist), countJsonEntries(ops)));
             setWhitelistError("");
         } catch (err) {
@@ -98,6 +104,11 @@ export default function Overview(props: {
 
     return (
         <ServerOverview
+            stats={overviewStats(
+                uptime(),
+                { icon: "public", label: "World", value: world() },
+                { icon: "memory", label: "Memory limit", value: `${ramAllocation()} GB` },
+            )}
             avatar={
                 <>
                     <PaperAvatar

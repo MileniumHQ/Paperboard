@@ -1,15 +1,15 @@
-import { createEffect, createSignal, on, onCleanup, Show } from "solid-js";
-import { PaperAvatar, PaperButton, PaperGrid, PaperInput, PaperModal, PaperQuote, PaperStatTile, PaperText } from "@mileniumhq/paperui";
+import { createSignal, Show } from "solid-js";
+import { PaperAvatar, PaperButton, PaperInput, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { gameSettings, serverBridge, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { CALLS } from "../../service/contract";
 import { palworld } from "./index";
 import type { PalworldMetrics } from "./rest";
-import { fpsTone, TARGET_FPS, uptimeLabel } from "./health";
+import { createMetrics, createUptime, overviewStats } from "../../components/overviewStats";
+import { fpsTone } from "./health";
 
 const DESCRIPTION = "ServerDescription";
-const METRICS_MS = 5_000;
 
 export default function PalworldOverview() {
     const description = () => String(gameSettings()[DESCRIPTION] ?? "");
@@ -33,21 +33,8 @@ export default function PalworldOverview() {
         }
     };
 
-    const [metrics, setMetrics] = createSignal<PalworldMetrics>();
-    const [metricsError, setMetricsError] = createSignal("");
-    // the server is asked for its health while it runs; the numbers are gone when it stops
-    createEffect(on(serverStatus, (status) => {
-        setMetrics(undefined);
-        setMetricsError("");
-        if (status !== "online") return;
-        const load = () => serverBridge.call<PalworldMetrics>("palworld-metrics").then(
-            (answer) => { setMetrics(answer); setMetricsError(""); },
-            (err) => setMetricsError(errorMessage(err)),
-        );
-        void load();
-        const timer = setInterval(() => void load(), METRICS_MS);
-        onCleanup(() => clearInterval(timer));
-    }));
+    const metrics = createMetrics<PalworldMetrics>("palworld-metrics");
+    const uptime = createUptime();
 
     return (
         <ServerOverview
@@ -61,20 +48,14 @@ export default function PalworldOverview() {
             }
             software="Steam"
             control={palworld.describe({ software: "", version: "" }).control}
+            stats={metrics.value() && overviewStats(
+                uptime(),
+                { icon: "speed", label: "Server FPS", value: String(Math.round(metrics.value()!.serverfpsaverage)), tone: fpsTone(metrics.value()!.serverfpsaverage) },
+                { icon: "wb_sunny", label: "In-game days", value: String(metrics.value()!.days) },
+            )}
         >
-            <Show when={metrics()}>
-                {(health) => (
-                    <PaperGrid min="field">
-                        <PaperStatTile icon="speed" label="Server FPS" value={Math.round(health().serverfpsaverage)} tone={fpsTone(health().serverfpsaverage)} meter={{ value: Math.min(health().serverfpsaverage, TARGET_FPS), max: TARGET_FPS }} />
-                        <PaperStatTile icon="group" label="Players" value={`${health().currentplayernum} / ${health().maxplayernum}`} />
-                        <PaperStatTile icon="home_work" label="Base camps" value={health().basecampnum} />
-                        <PaperStatTile icon="wb_sunny" label="In-game days" value={health().days} />
-                        <PaperStatTile icon="schedule" label="Uptime" value={uptimeLabel(health().uptime)} />
-                    </PaperGrid>
-                )}
-            </Show>
-            <Show when={metricsError()}>
-                <PaperQuote variant="danger" icon="warning" title="Server health unavailable">{metricsError()}</PaperQuote>
+            <Show when={metrics.error()}>
+                <PaperQuote variant="danger" icon="warning" title="Server health unavailable">{metrics.error()}</PaperQuote>
             </Show>
 
             <Show when={pending()}>
