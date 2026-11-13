@@ -100,6 +100,7 @@ export function Example() {
             <PaperTextList>
                 <li>The link is a plain anchor. A path such as <PaperCode>/docs/paperui/</PaperCode> makes the browser load that URL: PaperLink has no router and does no client-side navigation.</li>
                 <li>Only addresses starting with <PaperCode>http</PaperCode> count as external on their own. A <PaperCode>mailto:</PaperCode> or other scheme needs <PaperCode>external</PaperCode> if you want the new tab and marker.</li>
+                <li>The link is inline, so it wraps with the text around it. The marker follows its last word, on the same line.</li>
                 <li>The marker is an icon after the text and is hidden from assistive technology. Say in the link text where it leads, because the marker has no name.</li>
                 <li>The link is bold, in the primary color, and underlines on hover (and on press on touch devices).</li>
                 <li>Do not use <PaperCode>href="#"</PaperCode> with a click handler for an action. An action is a PaperButton.</li>

@@ -6,9 +6,8 @@
         color var(--paper-short-transition),
         text-decoration var(--paper-short-transition);
     cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--paper-uigap-onefourth);
+    /* inline, not a box: a link that wraps keeps flowing with the text around it, and its icon follows the last word */
+    display: inline;
 }
 
 @media (hover: hover) {
@@ -25,6 +24,8 @@
 }
 
 .externalIcon {
+    margin-inline-start: var(--paper-uigap-onefourth);
+    vertical-align: middle;
     font-size: var(--paper-link-font-scale);
     color: var(--paper-text-faint);
 }
