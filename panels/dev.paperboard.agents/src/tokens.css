@@ -1,6 +1,7 @@
-/* Footprints and motion particular to this panel. PaperUI has no token for
-   them, so they are named once here and nowhere else. Sizes are PaperUI's
-   own tokens, used directly; these are window shares, motion and scales. */
+/* Footprints, motion and colors particular to this panel. PaperUI has no
+   token for them, so they are named once here and nowhere else. Sizes are
+   PaperUI's own tokens, used directly; these are window shares, motion,
+   scales and the agent's own look. */
 :root {
     /* the menu's modal: the sidebar and the page, a fixed share of the window */
     --agents-workspace-height: 75vh;
@@ -12,6 +13,9 @@
     --agents-typing-cycle: 1.2s;
     /* the speaker shrinks away as the computer's setup takes its place */
     --agents-speaker-leave-scale: 0.3;
+    /* the agent's hologram face: a cyan glow around a dark core, the same in every theme */
+    --agents-hologram: #7fe0ff;
+    --agents-hologram-deep: #04202c;
     /* a speech bubble between lines */
     --agents-speech-hidden-scale: 0.85;
 }

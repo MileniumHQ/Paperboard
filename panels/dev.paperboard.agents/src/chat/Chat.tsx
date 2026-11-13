@@ -33,7 +33,7 @@ const PAGE_ROWS = 60;
 /** this close to the top, the next rows are drawn */
 const MORE_AT_PX = 200;
 /** the agent's face at the top of the chat */
-const AVATAR_PX = 80;
+const AVATAR_PX = 56;
 
 interface Row {
     key: string;
@@ -217,8 +217,9 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     let listHeight = 0;
     let readingAt = 0;
     let watch: ResizeObserver | undefined;
+    let messages!: HTMLDivElement;
     const watchRows = () => {
-        for (const row of list.children) watch?.observe(row);
+        for (const row of messages.children) watch?.observe(row);
     };
     onMount(() => {
         listHeight = list.clientHeight;
@@ -258,43 +259,6 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
             <Show when={agent.state.chat.compacting}>
                 <PaperProgress class={styles.compacting} aria-label={`${name()} is compacting the conversation`} title="Compacting the conversation to save space" />
             </Show>
-            {/* who this is, in the middle; the conversation's buttons on the sides, or one menu when the chat is narrow */}
-            <div class={styles.header} ref={header}>
-                <div class={styles.side}>
-                    <Show when={!compact()}>
-                        <PaperButton icon round variant="surface" aria-label="Past conversations" title="Past conversations" onClick={() => setHistoryOpen(true)}>
-                            history
-                        </PaperButton>
-                    </Show>
-                </div>
-                <div class={styles.who}>
-                    <Face face={face} size={AVATAR_PX} frame="sphere" hologram skin={skinFor(agent.state.settings?.name)} />
-                    <PaperButton round variant="surface" size="small" class={styles.name} title="Open the menu" onClick={() => props.onMenu()}>
-                        <span class={styles.nameText}>{name()}</span>
-                        <PaperIcon>chevron_right</PaperIcon>
-                    </PaperButton>
-                    <Show when={status()}>
-                        <PaperText preset="hint">{status()}</PaperText>
-                    </Show>
-                </div>
-                <div class={`${styles.side} ${styles.end}`}>
-                    <Show
-                        when={!compact()}
-                        fallback={
-                            <PaperButton icon round variant="surface" aria-label="Conversation menu" title="Conversation menu" onClick={(e) => headerMenu.openBelow(e.currentTarget, { align: "right" })}>
-                                more_horiz
-                            </PaperButton>
-                        }
-                    >
-                        <PaperButton icon round variant="surface" aria-label="New conversation" title="New conversation" disabled={!canStartNew()} onClick={startNew}>
-                            add
-                        </PaperButton>
-                        <PaperButton icon round variant="surface" aria-label="Menu" title="Menu" onClick={() => props.onMenu()}>
-                            more_horiz
-                        </PaperButton>
-                    </Show>
-                </div>
-            </div>
             <PaperContextMenu open={headerMenu.isOpen()} target={headerMenu.target()} placement={headerMenu.placement()} onClose={() => headerMenu.close()}>
                 <PaperContextMenuItem
                     icon="history"
@@ -335,80 +299,119 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                     pinned = list.scrollHeight - list.scrollTop - list.clientHeight < 48;
                     if (list.scrollTop < MORE_AT_PX && drawn() < rows().length) drawMore();
                 }}
-                aria-live="polite"
             >
-                <Show when={rows().length === 0}>
-                    <PaperFlex flex center>
-                        <PaperEmptyState title={`Say hi to ${name()}`} />
-                    </PaperFlex>
-                </Show>
-                <For each={visible()}>
-                    {(row) => (
-                        <>
-                            <Show when={row.stamp !== null}>
-                                <PaperFlex align="center" paddingY="half">
-                                    <PaperText preset="hint">
-                                        {stampText(row.stamp!)}
-                                    </PaperText>
-                                </PaperFlex>
-                            </Show>
-                            <Show when={row.side === "note"}>
-                                <PaperQuote variant="danger" icon="error" title={(row.entry as Extract<ChatEntry, { kind: "error" }>).title} role="alert">
-                                    {(row.entry as Extract<ChatEntry, { kind: "error" }>).text}
-                                </PaperQuote>
-                            </Show>
-                            <Show when={row.side === "card"}>
-                                <SignIn
-                                    agent={agent}
-                                    entry={row.entry as SignInEntry}
-                                    name={name()}
-                                    draft={draftOf(row.key)}
-                                    onDone={() => drafts.delete(row.key)}
-                                />
-                            </Show>
-                            <Show when={row.side === "access"}>
-                                <AccessRequest agent={agent} entry={row.entry as AccessEntry} name={name()} />
-                            </Show>
-                            <Show when={row.side === "prompt"}>
-                                <Prompt agent={agent} entry={row.entry as PromptEntry} name={name()} draft={draftOf(row.key)} onDone={() => drafts.delete(row.key)} />
-                            </Show>
-                            <Show when={row.side === "tool-server"}>
-                                <ToolServerRequest agent={agent} entry={row.entry as ToolServerEntry} name={name()} />
-                            </Show>
-                            <Show when={row.side === "tool-sign-in"}>
-                                <ToolSignIn entry={row.entry as ToolSignInEntry} name={name()} />
-                            </Show>
-                            <Show when={row.side === "app"}>
-                                <PageCard entry={row.entry as PageEntry} pages={props.pages} />
-                            </Show>
-                            <Show when={row.side === "me" || row.side === "them"}>
-                                <PaperPresence when appear={arriving().has(row.key)} motion="pop">
-                                    <Bubble
-                                        files={agent.files}
-                                        renderImage={agentImage}
-                                        row={row}
-                                        quoted={(id) => byId(id)}
-                                        nameOf={(m) => (m.kind === "user" ? "You" : name())}
-                                        onReply={(m) => setReplyTo(m)}
-                                        onJump={jumpTo}
-                                        onMenu={openMenu}
-                                    />
-                                </PaperPresence>
-                            </Show>
-                        </>
-                    )}
-                </For>
-                {/* only while it writes: working with its tools shows on its face, not as typing */}
-                {/* it pops in like a bubble, and goes at once: the reply it turns into takes its place */}
-                <PaperPresence when={agent.state.chat.typing} appear motion="pop" exitClass="">
-                    <div class={styles.row} classList={{ [styles.them!]: true, [styles.joinsPrev!]: typingJoins() }} role="status" aria-label={`${name()} is typing`}>
-                        <div class={`${styles.bubble} ${styles.typing}`} classList={{ [styles.joinsPrev!]: typingJoins() }} aria-hidden="true">
-                            <span class={styles.dot} />
-                            <span class={styles.dot} />
-                            <span class={styles.dot} />
-                        </div>
+                {/* who this is, in the middle; the conversation's buttons on the sides, or one menu when the chat is narrow.
+                    It stays at the top of the list, and the conversation scrolls on under it, fading into a blur */}
+                <div class={styles.header} ref={header}>
+                    <div class={styles.side}>
+                        <Show when={!compact()}>
+                            <PaperButton icon variant="text" aria-label="Past conversations" title="Past conversations" onClick={() => setHistoryOpen(true)}>
+                                history
+                            </PaperButton>
+                        </Show>
                     </div>
-                </PaperPresence>
+                    <Face class={styles.face} face={face} size={AVATAR_PX} frame="sphere" hologram skin={skinFor(agent.state.settings?.name)} />
+                    <div class={styles.who}>
+                        <PaperButton variant="text" size="small" class={styles.name} title="Open the menu" onClick={() => props.onMenu()}>
+                            <span class={styles.nameText}>{name()}</span>
+                            <PaperIcon>chevron_right</PaperIcon>
+                        </PaperButton>
+                        <Show when={status()}>
+                            <PaperText preset="hint">{status()}</PaperText>
+                        </Show>
+                    </div>
+                    <div class={`${styles.side} ${styles.end}`}>
+                        <Show
+                            when={!compact()}
+                            fallback={
+                                <PaperButton icon variant="text" aria-label="Conversation menu" title="Conversation menu" onClick={(e) => headerMenu.openBelow(e.currentTarget, { align: "right" })}>
+                                    more_horiz
+                                </PaperButton>
+                            }
+                        >
+                            <PaperButton icon variant="text" aria-label="New conversation" title="New conversation" disabled={!canStartNew()} onClick={startNew}>
+                                add
+                            </PaperButton>
+                            <PaperButton icon variant="text" aria-label="Menu" title="Menu" onClick={() => props.onMenu()}>
+                                more_horiz
+                            </PaperButton>
+                        </Show>
+                    </div>
+                </div>
+                <div class={styles.messages} ref={messages} aria-live="polite">
+                    <Show when={rows().length === 0}>
+                        <PaperFlex flex center>
+                            <PaperEmptyState title={`Say hi to ${name()}`} />
+                        </PaperFlex>
+                    </Show>
+                    <For each={visible()}>
+                        {(row) => (
+                            <>
+                                <Show when={row.stamp !== null}>
+                                    <PaperFlex align="center" paddingY="half">
+                                        <PaperText preset="hint">
+                                            {stampText(row.stamp!)}
+                                        </PaperText>
+                                    </PaperFlex>
+                                </Show>
+                                <Show when={row.side === "note"}>
+                                    <PaperQuote variant="danger" icon="error" title={(row.entry as Extract<ChatEntry, { kind: "error" }>).title} role="alert">
+                                        {(row.entry as Extract<ChatEntry, { kind: "error" }>).text}
+                                    </PaperQuote>
+                                </Show>
+                                <Show when={row.side === "card"}>
+                                    <SignIn
+                                        agent={agent}
+                                        entry={row.entry as SignInEntry}
+                                        name={name()}
+                                        draft={draftOf(row.key)}
+                                        onDone={() => drafts.delete(row.key)}
+                                    />
+                                </Show>
+                                <Show when={row.side === "access"}>
+                                    <AccessRequest agent={agent} entry={row.entry as AccessEntry} name={name()} />
+                                </Show>
+                                <Show when={row.side === "prompt"}>
+                                    <Prompt agent={agent} entry={row.entry as PromptEntry} name={name()} draft={draftOf(row.key)} onDone={() => drafts.delete(row.key)} />
+                                </Show>
+                                <Show when={row.side === "tool-server"}>
+                                    <ToolServerRequest agent={agent} entry={row.entry as ToolServerEntry} name={name()} />
+                                </Show>
+                                <Show when={row.side === "tool-sign-in"}>
+                                    <ToolSignIn entry={row.entry as ToolSignInEntry} name={name()} />
+                                </Show>
+                                <Show when={row.side === "app"}>
+                                    <PageCard entry={row.entry as PageEntry} pages={props.pages} />
+                                </Show>
+                                <Show when={row.side === "me" || row.side === "them"}>
+                                    <PaperPresence when appear={arriving().has(row.key)} motion="pop">
+                                        <Bubble
+                                            files={agent.files}
+                                            renderImage={agentImage}
+                                            row={row}
+                                            quoted={(id) => byId(id)}
+                                            nameOf={(m) => (m.kind === "user" ? "You" : name())}
+                                            onReply={(m) => setReplyTo(m)}
+                                            onJump={jumpTo}
+                                            onMenu={openMenu}
+                                        />
+                                    </PaperPresence>
+                                </Show>
+                            </>
+                        )}
+                    </For>
+                    {/* only while it writes: working with its tools shows on its face, not as typing */}
+                    {/* it pops in like a bubble, and goes at once: the reply it turns into takes its place */}
+                    <PaperPresence when={agent.state.chat.typing} appear motion="pop" exitClass="">
+                        <div class={styles.row} classList={{ [styles.them!]: true, [styles.joinsPrev!]: typingJoins() }} role="status" aria-label={`${name()} is typing`}>
+                            <div class={`${styles.bubble} ${styles.typing}`} classList={{ [styles.joinsPrev!]: typingJoins() }} aria-hidden="true">
+                                <span class={styles.dot} />
+                                <span class={styles.dot} />
+                                <span class={styles.dot} />
+                            </div>
+                        </div>
+                    </PaperPresence>
+                </div>
             </div>
 
             <Show when={notice()}>

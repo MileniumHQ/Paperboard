@@ -13,30 +13,25 @@
 
 /* the sphere glows past its edge */
 .hologram {
-    filter: drop-shadow(0 0 var(--paper-uigap-half) var(--paper-face-hologram));
+    filter: drop-shadow(0 0 var(--paper-uigap-half) var(--agents-hologram));
 }
 
 /* the features glow over the sphere like light, not paint */
 .face:has(.hologram) .ink {
-    fill: var(--paper-face-hologram-ink);
-    filter: drop-shadow(0 0 var(--paper-uigap-onefourth) var(--paper-face-hologram));
+    fill: var(--paper-on-color);
+    filter: drop-shadow(0 0 var(--paper-uigap-onefourth) var(--agents-hologram));
 }
 
 .core {
-    stop-color: var(--paper-face-hologram-deep);
+    stop-color: var(--agents-hologram-deep);
 }
 
 .glow {
-    stop-color: var(--paper-face-hologram);
-}
-
-.scanline {
-    fill: var(--paper-face-hologram-deep);
-    opacity: var(--paper-opacity-faint);
+    stop-color: var(--agents-hologram);
 }
 
 .rim {
     fill: none;
-    stroke: var(--paper-face-hologram-ink);
+    stroke: var(--paper-on-color);
     opacity: var(--paper-opacity-muted);
 }
