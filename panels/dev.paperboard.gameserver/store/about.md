@@ -14,8 +14,8 @@ Host your own game servers without learning a terminal. Game Server runs Minecra
 
 **Team Fortress 2** - Choose how the server plays, pick maps from pictures, set the map rotation, add maps from the Steam Workshop, and turn on SourceMod for plugins.
 
-**Counter-Strike 2** - Pick Competitive, Casual, Wingman, Deathmatch or Arms Race, change maps from the Overview, and set bots and their difficulty.
+**Counter-Strike 2** - Pick Competitive, Casual, Wingman, Deathmatch or Arms Race, change maps from their pictures, and set bots and their difficulty.
 
-**Garry's Mod** - Run Sandbox or any other game mode, and give the server a Steam Workshop collection to download its add-ons from.
+**Garry's Mod** - Run Sandbox or any other game mode, change maps from their pictures, and give the server a Steam Workshop collection to download its add-ons from.
 
-**Rust** - Set the map's size and seed, pick the game mode, watch the server's health while it runs, and wipe it in one click when it's time for a fresh map.
+**Rust** - Set the map's size and seed and see the map from above, pick the game mode, watch the server's health while it runs, and wipe it in one click when it's time for a fresh map.
