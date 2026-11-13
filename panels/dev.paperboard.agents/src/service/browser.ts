@@ -1087,7 +1087,7 @@ export class BrowserComputer {
         let head = `Window ${tab.id} "${page.title}" <${page.url}> (${page.width}x${page.height} px; x/y coordinates are pixels from its top-left).`;
         if (page.crossFrames) head += `\n${page.crossFrames} embedded frame${page.crossFrames === 1 ? " is" : "s are"} from other sites, so ${page.crossFrames === 1 ? "its" : "their"} insides aren't marked: zoom in and use x/y there.`;
         if (tab.chooser) head += "\nA file picker is open: pick files from your home folder with `upload`.";
-        return { text: head + (tab.marks.length ? "\nMarks:\n" + listing : "\nNo marks."), image };
+        return { text: head + (tab.marks.length ? "\nMarks:\n" + listing : "\nNo marks."), images: [{ data: image, type: "image/png" }] };
     }
 
     /** A screenshot with something drawn over the page for it, taken away again whatever happens. */
@@ -1126,7 +1126,7 @@ export class BrowserComputer {
         }, s);
         return {
             text: `Region ${x},${y} to ${x + w},${y + h} of window ${tab.id}, enlarged ${scale.toFixed(1)}x. Grid lines every ${step} px are labelled in window coordinates: click with those x/y.`,
-            image,
+            images: [{ data: image, type: "image/png" }],
         };
     }
 
@@ -1310,7 +1310,7 @@ export class BrowserComputer {
         const image = await this.shot(tab, overlayJs({ boxes }), { format: "png" }, s);
         const centre = (m: Mark) => ({ x: m.x + Math.floor(m.w / 2), y: m.y + Math.floor(m.h / 2) });
         this.signIn = { id: rid, targetId: tab.targetId, window: tab.id, site, fields: picked.map(([, m]) => centre(m)), submit: submit ? centre(submit[1]) : null };
-        return { text: JSON.stringify({ site, fields: picked.map(([, m]) => ({ secret: m.kind === "password text" })) }), image };
+        return { text: JSON.stringify({ site, fields: picked.map(([, m]) => ({ secret: m.kind === "password text" })) }), images: [{ data: image, type: "image/png" }] };
     }
 
     /** The user's values, typed into the fields the waiting request named, then submit pressed. Used once. */

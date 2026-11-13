@@ -19,11 +19,20 @@ const MAX_BODY = 1 << 20;
 const MAX_CONNECTIONS = 16;
 const REQUEST_TIMEOUT_MS = 15 * 60_000; // past the longest tool call (a sign-in waits for the user)
 
+/** the image types the agent can see */
+export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
+export type ImageType = (typeof IMAGE_TYPES)[number];
+export const isImageType = (t: unknown): t is ImageType => (IMAGE_TYPES as readonly unknown[]).includes(t);
+
+export interface ToolImage {
+    /** base64 */
+    data: string;
+    type: ImageType;
+}
+
 export interface ToolResult {
     text: string;
-    image?: string;
-    /** the image's media type; PNG when not said (the computer's screenshots) */
-    imageType?: string;
+    images?: ToolImage[];
     isError?: boolean;
 }
 
@@ -120,7 +129,7 @@ async function handle(msg: Json, tools: Pick<Toolbox, "list" | "call">): Promise
             const args = params.arguments && typeof params.arguments === "object" ? (params.arguments as Record<string, unknown>) : {};
             const r = await tools.call(name, args);
             const content: Json[] = [{ type: "text", text: r.text }];
-            if (r.image) content.push({ type: "image", data: r.image, mimeType: r.imageType ?? "image/png" });
+            for (const image of r.images ?? []) content.push({ type: "image", data: image.data, mimeType: image.type });
             return { content, isError: Boolean(r.isError) };
         }
         default:

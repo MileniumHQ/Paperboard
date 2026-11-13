@@ -5,7 +5,7 @@
 //
 // Everything is bounded: messages, pending requests, time, stderr kept.
 
-import type { ToolResult } from "./computerMcp";
+import { isImageType, type ToolImage, type ToolResult } from "./computerMcp";
 
 export const PROTOCOL_VERSION = "2025-06-18";
 export const MAX_MESSAGE = 4 * 1024 * 1024;
@@ -96,27 +96,42 @@ export class McpClient {
 
 const MAX_TEXT = 32_000;
 
-/** An MCP tool result as the agent's tool result. Only PNG images pass through; others are named, not carried. */
+/** images one result carries to the agent; a tool returning more names the rest */
+export const MAX_IMAGES = 8;
+
+/**
+ * An MCP tool result as the agent's tool result. Images it can see (PNG,
+ * JPEG, GIF, WebP), sent as image content or as an embedded resource's blob,
+ * pass through, up to MAX_IMAGES; any other is named in the text so the agent
+ * knows it was there.
+ */
 export function toToolResult(r: unknown): ToolResult {
     const res = (r ?? {}) as { content?: unknown; isError?: unknown; structuredContent?: unknown };
     const parts: string[] = [];
-    let image: string | undefined;
+    const images: ToolImage[] = [];
+    const image = (data: string, type: unknown, what: string) => {
+        const named = String(type ?? "unnamed").slice(0, 40);
+        if (!isImageType(type)) parts.push(`[${what} of type ${named} was returned; only PNG, JPEG, GIF and WebP images can be shown]`);
+        else if (images.length >= MAX_IMAGES) parts.push(`[another ${named} image was returned; only ${MAX_IMAGES} images can be shown at once]`);
+        else images.push({ data, type });
+    };
     if (Array.isArray(res.content)) {
         for (const c of res.content as any[]) {
             if (c?.type === "text" && typeof c.text === "string") parts.push(c.text);
-            else if (c?.type === "image" && typeof c.data === "string") {
-                if (c.mimeType === "image/png" && !image) image = c.data;
-                else parts.push(`[an ${String(c.mimeType ?? "image").slice(0, 40)} image was returned; only one PNG can be shown]`);
-            } else if (c?.type === "resource" && c.resource) {
+            else if (c?.type === "image" && typeof c.data === "string") image(c.data, c.mimeType, "an image");
+            else if (c?.type === "resource" && c.resource) {
                 const rs = c.resource;
-                parts.push(typeof rs.text === "string" ? rs.text : `[resource ${String(rs.uri ?? "").slice(0, 200)}]`);
+                const uri = String(rs.uri ?? "").slice(0, 200);
+                if (typeof rs.text === "string") parts.push(rs.text);
+                else if (typeof rs.blob === "string" && typeof rs.mimeType === "string" && rs.mimeType.startsWith("image/")) image(rs.blob, rs.mimeType, `the image ${uri}`);
+                else parts.push(`[resource ${uri}]`);
             } else if (c?.type === "resource_link") parts.push(`[resource ${String(c.uri ?? "").slice(0, 200)}]`);
         }
     }
-    if (!parts.length && !image && res.structuredContent !== undefined) parts.push(JSON.stringify(res.structuredContent));
+    if (!parts.length && !images.length && res.structuredContent !== undefined) parts.push(JSON.stringify(res.structuredContent));
     let text = parts.join("\n");
     if (text.length > MAX_TEXT) text = text.slice(0, MAX_TEXT) + `\n… ${text.length - MAX_TEXT} characters cut …`;
-    return { text: text || (image ? "" : "(the tool returned nothing)"), image, isError: res.isError === true };
+    return { text: text || (images.length ? "" : "(the tool returned nothing)"), ...(images.length ? { images } : {}), isError: res.isError === true };
 }
 
 // ------------------------------------------------------------- stdio on this computer

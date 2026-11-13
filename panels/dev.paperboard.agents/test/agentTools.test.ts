@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { PANEL_ID } from "../src/contract";
 import { actionsToolset, type ActionEntry } from "../src/service/actionsToolset";
 import { MCP_TOKEN_ENV, startComputerMcp, type ComputerMcp } from "../src/service/computerMcp";
+import { MAX_IMAGES, toToolResult } from "../src/service/mcpClient";
 import { toolbox, type Toolset } from "../src/service/toolsets";
 
 const closers: (() => Promise<void>)[] = [];
@@ -139,5 +140,27 @@ describe("the computer's MCP endpoint", () => {
         const call = await (await rpc(mcp, `Bearer ${mcp.token}`, "tools/call", { name: "look", arguments: {} })).json();
         expect(call.error.message).toBe("tool look is offered by both computer and plugin");
         expect(called).toEqual([]);
+    });
+
+    test("a tool server's images reach the agent: every seeable type, embedded ones too, and the rest are named", async () => {
+        const png = { type: "image", data: "cG5n", mimeType: "image/png" };
+        const from = toToolResult({
+            content: [
+                { type: "text", text: "two shots" },
+                png,
+                { type: "image", data: "anBn", mimeType: "image/jpeg" },
+                { type: "resource", resource: { uri: "file:///shot.webp", mimeType: "image/webp", blob: "d2VicA==" } },
+                { type: "image", data: "c3Zn", mimeType: "image/svg+xml" },
+                ...Array.from({ length: MAX_IMAGES }, () => png),
+            ],
+        });
+        expect(from.images?.map((i) => i.type)).toEqual(["image/png", "image/jpeg", "image/webp", ...Array(MAX_IMAGES - 3).fill("image/png")]);
+        expect(from.text).toContain("of type image/svg+xml was returned");
+        expect(from.text.split(`only ${MAX_IMAGES} images can be shown`).length - 1).toBe(3);
+
+        const mcp = await serve([{ id: "server", tools: () => [{ name: "look", description: "", inputSchema: { type: "object" } }], call: async () => from }]);
+        const call = await (await rpc(mcp, `Bearer ${mcp.token}`, "tools/call", { name: "look", arguments: {} })).json();
+        const sent = call.result.content.filter((c: { type: string }) => c.type === "image");
+        expect(sent).toEqual(from.images!.map((i) => ({ type: "image", data: i.data, mimeType: i.type })));
     });
 });

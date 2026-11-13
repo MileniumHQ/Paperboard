@@ -6,7 +6,7 @@
 import { LIMITS } from "../contract";
 import type { Attachments } from "./attachments";
 import { sizeText } from "./attachments";
-import type { ToolResult } from "./computerMcp";
+import { isImageType, type ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import { USER_TURN, type Toolset, type TurnMode } from "./toolsets";
 
@@ -58,8 +58,8 @@ export function filesToolset(deps: FilesDeps): Toolset {
         if (name === "open_file") {
             const a = deps.files().get(args.id);
             const about = `${a.name}, ${a.kind === "file" ? a.type : a.kind}, ${sizeText(a.bytes)}`;
-            if (a.kind === "image" && a.bytes <= LIMITS.attachments.viewBytes) {
-                return { text: about, image: deps.files().bytes(a.id).toString("base64"), imageType: a.type };
+            if (a.kind === "image" && isImageType(a.type) && a.bytes <= LIMITS.attachments.viewBytes) {
+                return { text: about, images: [{ data: deps.files().bytes(a.id).toString("base64"), type: a.type }] };
             }
             if (a.type === "text/plain" && a.bytes <= TEXT_BYTES) return { text: `${about}:\n\n${deps.files().bytes(a.id).toString("utf8")}` };
             return { text: `${about}: too big or not something you can see here. Use put_file_on_computer and open it there.` };

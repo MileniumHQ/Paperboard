@@ -9,7 +9,7 @@ function setup(fill: (args: { id: string; values: string[] }) => Promise<unknown
     const notices: string[] = [];
     const fills: { id: string; values: string[] }[] = [];
     const signIns = new SignIns({
-        prepare: async (args) => ({ text: JSON.stringify({ site: "example.com", fields: (args.fields as number[]).map((_, i) => ({ secret: i === 1 })) }), image: "aW1n" }),
+        prepare: async (args) => ({ text: JSON.stringify({ site: "example.com", fields: (args.fields as number[]).map((_, i) => ({ secret: i === 1 })) }), images: [{ data: "aW1n", type: "image/png" }] }),
         fill: async (args) => {
             fills.push(structuredClone(args));
             return fill(args);

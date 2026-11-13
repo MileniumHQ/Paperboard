@@ -110,7 +110,9 @@ export class SignIns {
         } catch {
             return fault("your computer's answer about the page was unreadable; try again");
         }
-        if (!r.image || typeof info.site !== "string" || info.fields?.length !== picks.length) return fault("your computer's answer about the page was incomplete; try again");
+        // the page as the user sees it, its fields marked: the one picture prepare takes
+        const image = r.images?.length === 1 ? r.images[0]!.data : undefined;
+        if (!image || typeof info.site !== "string" || info.fields?.length !== picks.length) return fault("your computer's answer about the page was incomplete; try again");
 
         this.lapse("expired"); // the one before, unanswered, is replaced
         const entry: SignInEntry = {
@@ -126,7 +128,7 @@ export class SignIns {
             this.lapse("expired");
             this.tell(`The user didn't answer your sign-in request on ${entry.site} in time; it has lapsed.`);
         }, this.deps.waitMs ?? LIMITS.signIn.waitMinutes * 60_000);
-        this.pending = { entry, window: window as number, image: r.image, timer };
+        this.pending = { entry, window: window as number, image, timer };
         this.deps.post(entry);
         return {
             text: `Asked the user to sign in on ${info.site}. They answer in the chat; you'll be told when it's done or they said no. Don't wait for it: finish this turn.`,
