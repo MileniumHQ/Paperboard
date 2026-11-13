@@ -45,7 +45,6 @@ interface Row {
     /** a timestamp to show above this row, if any */
     stamp: number | null;
     joinsPrev: boolean;
-    joinsNext: boolean;
 }
 
 const stampText = (at: number) => {
@@ -144,12 +143,10 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
             !!a && !!b && a.side === b.side && (a.side === "me" || a.side === "them") && gap(a, b) < GROUP_MS;
         return items.map((r, i) => {
             const prev = items[i - 1];
-            const next = items[i + 1];
             return {
                 ...r,
                 stamp: r.entry && (!prev?.entry || r.entry.at - prev.entry.at > STAMP_MS) ? r.entry.at : null,
                 joinsPrev: near(prev, r),
-                joinsNext: near(r, next),
             };
         });
     });
@@ -498,7 +495,7 @@ function Bubble(props: {
     return (
         <div
             class={styles.row}
-            classList={{ [styles.me!]: me(), [styles.them!]: !me(), [styles.joinsPrev!]: props.row.joinsPrev, [styles.joinsNext!]: props.row.joinsNext }}
+            classList={{ [styles.me!]: me(), [styles.them!]: !me(), [styles.joinsPrev!]: props.row.joinsPrev }}
             data-message={props.row.key}
             data-paper-no-swipe-back
             {...swipe.handlers}
@@ -513,7 +510,7 @@ function Bubble(props: {
                     class={styles.bubble}
                     data-selectable="true"
                     onContextMenu={(e) => props.onMenu(e, entry(), text(), e.currentTarget)}
-                    classList={{ [styles.joinsPrev!]: props.row.joinsPrev, [styles.joinsNext!]: props.row.joinsNext }}>
+                    classList={{ [styles.joinsPrev!]: props.row.joinsPrev }}>
                     <Show when={replyId()}>
                         <button
                             type="button"

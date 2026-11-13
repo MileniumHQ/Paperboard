@@ -26,6 +26,8 @@ export function createFiles(call: Call) {
     let cached = 0;
     // what a file is, without its bytes: a file never changes once it's in the conversation
     const infos = new Map<string, Promise<Attachment>>();
+    // web pictures messages show, by address, as blob URLs: the service fetches them, never this page
+    const webImages = new Map<string, Promise<string>>();
 
     const evict = () => {
         for (const [id, c] of cache) {
@@ -53,7 +55,7 @@ export function createFiles(call: Call) {
                 return await call<Attachment>(UI_ACTION_IDS.attachFinish, { id });
             } catch (e) {
                 // the service drops the half-made file; if even that fails, its idle timer does
-                await call(UI_ACTION_IDS.attachCancel, { id }).catch((why) => console.error("[ai] couldn't cancel an upload:", why));
+                await call(UI_ACTION_IDS.attachCancel, { id }).catch((why) => console.error("[agents] couldn't cancel an upload:", why));
                 throw e;
             }
         },
@@ -116,9 +118,34 @@ export function createFiles(call: Call) {
             return info;
         },
 
+        /**
+         * A web picture a message shows, as a blob URL. The service fetches it under the agent's network rule
+         * (public addresses only), so this page never sends a request to a host a message names.
+         */
+        webImage(url: string): Promise<string> {
+            const hit = webImages.get(url);
+            if (hit) {
+                webImages.delete(url);
+                webImages.set(url, hit);
+                return hit;
+            }
+            const read = call<{ type: string; data: string }>(UI_ACTION_IDS.webImage, { url }).then((r) => URL.createObjectURL(new Blob([fromBase64(r.data)], { type: r.type })));
+            webImages.set(url, read);
+            // a failed load isn't kept: the next look tries again
+            read.catch(() => webImages.get(url) === read && webImages.delete(url));
+            for (const [old, r] of webImages) {
+                if (webImages.size <= CACHE_FILES) break;
+                webImages.delete(old);
+                void r.then((u) => URL.revokeObjectURL(u), () => undefined);
+            }
+            return read;
+        },
+
         /** Release every blob (the conversation changed, or the panel closes). */
         clear() {
             infos.clear();
+            for (const r of webImages.values()) void r.then((u) => URL.revokeObjectURL(u), () => undefined);
+            webImages.clear();
             for (const c of cache.values()) void c.read.then((r) => URL.revokeObjectURL(r.url), () => undefined);
             cache.clear();
             cached = 0;

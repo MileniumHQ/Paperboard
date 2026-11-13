@@ -44,6 +44,35 @@ describe("the transcript", () => {
         expect(after).toHaveLength(4);
     }, SLOW);
 
+    test("compacting drops superseded copies and never a message, and doesn't rewrite on every append", async () => {
+        rig = await conversationRig();
+        const file = path.join(rig.dir, "transcript.jsonl");
+        // 600 messages of 8 KB is past the 4 MB cap and past the 500 kept in memory
+        const old = Array.from({ length: 600 }, (_, i) => ({ id: `m${String(i).padStart(4, "0")}`, at: 1000 + i, kind: "agent", text: `${i} ${"x".repeat(8 * 1024)}` }));
+        const superseded = { ...old[0]!, text: "first, before it changed" };
+        fs.writeFileSync(file, [superseded, ...old].map((e) => JSON.stringify(e)).join("\n") + "\n");
+        await rig.conversation.shutdown();
+        rig.restart();
+        // memory still holds only the latest messages, as it always did
+        expect(rig.conversation.history()).toHaveLength(LIMITS.history);
+
+        rig.conversation.send("one more");
+        await settled(rig);
+        const ids = () => fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).id as string);
+        // the superseded copy is gone, every one of the 600 older messages is still on disk
+        expect(ids().filter((id) => old.some((o) => o.id === id))).toEqual(old.map((o) => o.id));
+        expect(ids().length).toBe(new Set(ids()).size);
+
+        // still over the cap with nothing left to drop: later messages append, they don't rewrite the file
+        const size = fs.statSync(file).size;
+        const before = ids();
+        rig.conversation.send("and another");
+        await settled(rig);
+        expect(ids().slice(0, before.length)).toEqual(before);
+        expect(fs.statSync(file).size).toBeGreaterThan(size);
+        expect(rig.conversation.history()).toHaveLength(LIMITS.history);
+    }, SLOW);
+
     test("damage before the last line is refused, never read as an empty conversation", async () => {
         rig = await conversationRig();
         rig.conversation.send("keep me");
@@ -89,7 +118,7 @@ describe("the history", () => {
         await settled(rig);
         const last = rig.turns().at(-1);
         expect(last.thread).toBe(thread);
-        expect(rig.host.started.at(-1)!.args.slice(0, 2)).toEqual(["exec", "resume"]);
+        expect(rig.host.started.at(-1)!.args.filter((a) => a === "exec" || a === "resume")).toEqual(["exec", "resume"]);
     }, SLOW);
 
     test("a full history refuses a new conversation rather than drop an old one", async () => {

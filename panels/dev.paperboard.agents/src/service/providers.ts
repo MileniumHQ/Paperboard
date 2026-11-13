@@ -150,7 +150,7 @@ export class Providers {
             this.idle = null;
             void this.quiet().then(
                 (down) => down || this.arm(),
-                (e) => console.error(`[ai] couldn't stop OpenCode's provider server: ${errorText(e)}`),
+                (e) => console.error(`[agents] couldn't stop OpenCode's provider server: ${errorText(e)}`),
             );
         }, this.deps.idleMs ?? IDLE_MS);
     }

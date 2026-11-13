@@ -671,7 +671,7 @@ export class BrowserComputer {
         this.byId.set(tab.id, info.targetId);
         // attached at once, so a dialog or a file picker it opens before anyone looks is still seen; a failure
         // here is tried again, and reported, by the window's next use
-        void this.session(tab).catch((e) => console.warn(`[ai] couldn't attach to window ${tab.id} yet:`, errorText(e)));
+        void this.session(tab).catch((e) => console.warn(`[agents] couldn't attach to window ${tab.id} yet:`, errorText(e)));
     }
 
     private untrack(targetId: string) {

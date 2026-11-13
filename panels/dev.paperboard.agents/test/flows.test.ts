@@ -85,7 +85,9 @@ describe("the agent's flow actions", () => {
         expect(rig.host.startedAs(TURN_PROC_ID)).toEqual([]);
         const ask = rig.host.started.find((s) => s.id.includes(".ask."))!;
         expect(ask.args).toContain("--ephemeral");
-        expect(ask.args.slice(-2)).toEqual(["--", "capital of France?"]);
+        // the question goes over its input, not argv
+        expect(ask.args.at(-1)).toBe("-");
+        expect(rig.host.writes.filter((w) => w.id === ask.id).map((w) => w.data).join("")).toBe("capital of France?");
         expect(ask.args.some((a) => a.startsWith("mcp_servers."))).toBe(false);
         expect(Object.keys(ask.env!)).not.toContain("PAPERBOARD_COMPUTER_MCP_TOKEN");
     }, SLOW);

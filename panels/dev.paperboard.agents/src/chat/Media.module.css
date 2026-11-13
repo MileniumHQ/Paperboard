@@ -98,16 +98,11 @@
     outline-offset: var(--paper-focus-offset);
 }
 
-@media (hover: hover) {
-    .file:hover,
-    .file:focus-visible {
-        background: var(--paper-surface-inset);
-    }
-}
-@media (hover: none) {
-    .file:active {
-        background: var(--paper-surface-inset);
-    }
+/* pointing at the card is a mouse's way of reaching it; in mobile mode a tap's press is the feedback instead */
+.file:focus-visible,
+:root:not([data-paper-mobile="true"]) .file:hover,
+:root[data-paper-mobile="true"] .file:active {
+    background: var(--paper-surface-inset);
 }
 
 .fileName {

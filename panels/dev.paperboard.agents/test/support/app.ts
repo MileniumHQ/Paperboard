@@ -39,6 +39,7 @@ export async function appRig(o: { settings?: Settings; actions?: ActionEntry[]; 
     const appHost: AppHost = {
         start: host.start,
         kill: host.kill,
+        closeInput: host.closeInput,
         exists: host.exists,
         onExit: host.onExit,
         onStdout: host.onStdout,

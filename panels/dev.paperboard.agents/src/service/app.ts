@@ -1,4 +1,4 @@
-// The AI panel's service: the agent, its computer and its one conversation.
+// The Agents panel's service: the agent, its computer and its one conversation.
 //
 // Everything the UI shows comes from here, so every open shell (and none)
 // sees the same agent: settings and status travel as synced state, the
@@ -150,12 +150,12 @@ export class AiApp {
                     this.announced.set(value, JSON.stringify(read()));
                 } catch (e) {
                     // unreadable now (broken routines, say): the first change it reads after is announced
-                    console.error(`[ai] ${value} can't be read for Blocks:`, String(e));
+                    console.error(`[agents] ${value} can't be read for Blocks:`, String(e));
                 }
             }
             await this.memory.list().then(
                 (list) => this.seeMemory(list, false),
-                (e) => console.error("[ai] memory can't be read for Blocks:", String(e)),
+                (e) => console.error("[agents] memory can't be read for Blocks:", String(e)),
             );
             this.blocksRegistered = true;
         } catch (e) {
@@ -164,7 +164,7 @@ export class AiApp {
         }
         this.settle(null);
         // the UI follows starting through state.computer
-        void this.computer.init().catch((e) => console.error("[ai] the computer didn't start:", String(e)));
+        void this.computer.init().catch((e) => console.error("[agents] the computer didn't start:", String(e)));
     }
 
     private async prepare(ctx: AppContext) {
@@ -369,6 +369,7 @@ export class AiApp {
             env: (h) => this.brains.env(h),
             problem: (h) => this.brainProblem(h),
             workdir: path.join(root, "ask"),
+            filesDir: path.join(root, "ask-run"),
             log: this.turnLog,
         });
         // after the conversation exists: a one-off missed while the service was down runs as soon as it's read
@@ -376,7 +377,7 @@ export class AiApp {
         // a broken index shows in state.memory.error from the start; the failure itself is reported there
         await this.memory.list().then(
             () => undefined,
-            (e) => console.error("[ai] memory is unreadable:", String(e)),
+            (e) => console.error("[agents] memory is unreadable:", String(e)),
         );
     }
 
@@ -395,7 +396,7 @@ export class AiApp {
             this.brains?.shutdown(),
             this.providers?.stop(),
         ]);
-        for (const r of stops) if (r.status === "rejected") console.error("[ai] shutdown:", String(r.reason));
+        for (const r of stops) if (r.status === "rejected") console.error("[agents] shutdown:", String(r.reason));
         await Promise.all([this.mcp?.close(), this.pages?.close()]);
     }
 
@@ -474,13 +475,13 @@ export class AiApp {
                 () => ({ accepted: true }),
                 (e) => {
                     if (this.brains.snapshot()[harness].error !== errorText(e)) throw e;
-                    console.error(`[ai] ${HARNESS_NAMES[harness]} on this computer wasn't used:`, String(e));
+                    console.error(`[agents] ${HARNESS_NAMES[harness]} on this computer wasn't used:`, String(e));
                     return { accepted: true };
                 },
             );
         }
         // a download and an unpack: accepted now, followed through state.brains
-        void (from === "package" ? this.brains.installOwn(harness) : this.brains.install(harness)).catch((e) => console.error(`[ai] ${HARNESS_NAMES[harness]} didn't install:`, String(e)));
+        void (from === "package" ? this.brains.installOwn(harness) : this.brains.install(harness)).catch((e) => console.error(`[agents] ${HARNESS_NAMES[harness]} didn't install:`, String(e)));
         return { accepted: true };
     }
 
@@ -518,12 +519,12 @@ export class AiApp {
 
     installComputer() {
         // a download and an unpack: accepted now, followed through state.computer
-        void this.computer.install().catch((e) => console.error("[ai] computer setup failed:", String(e)));
+        void this.computer.install().catch((e) => console.error("[agents] computer setup failed:", String(e)));
         return { accepted: true };
     }
 
     startComputer() {
-        void this.computer.start().catch((e) => console.error("[ai] the computer didn't start:", String(e)));
+        void this.computer.start().catch((e) => console.error("[agents] the computer didn't start:", String(e)));
         return { accepted: true };
     }
 
@@ -682,7 +683,7 @@ export class AiApp {
         try {
             next = JSON.stringify(this.watched()[value]!());
         } catch (e) {
-            console.error(`[ai] ${value} can't be read for Blocks:`, String(e));
+            console.error(`[agents] ${value} can't be read for Blocks:`, String(e));
             return;
         }
         this.changedTo(value, next, true);
@@ -691,7 +692,7 @@ export class AiApp {
     private changedTo(value: string, next: string, tell: boolean) {
         if (this.announced.get(value) === next) return;
         this.announced.set(value, next);
-        if (tell) this.host.blocks.changed(value).catch((e) => console.error(`[ai] the change to ${value} didn't reach Blocks:`, String(e)));
+        if (tell) this.host.blocks.changed(value).catch((e) => console.error(`[agents] the change to ${value} didn't reach Blocks:`, String(e)));
     }
 
     /** Memory is read on its own queue: what changed is worked out once the read is done. */
@@ -700,7 +701,7 @@ export class AiApp {
         this.memoryRevision = revision;
         this.memory.list().then(
             (list) => this.seeMemory(list, true),
-            (e) => console.error("[ai] memory can't be read for Blocks:", String(e)),
+            (e) => console.error("[agents] memory can't be read for Blocks:", String(e)),
         );
     }
 
@@ -712,7 +713,7 @@ export class AiApp {
     /** An event for the Blocks panel; nothing listens before the blocks are registered. */
     private fireBlock(event: string, payload: Record<string, unknown>) {
         if (!this.blocksRegistered) return;
-        this.host.blocks.fire(event, payload).catch((e) => console.error(`[ai] ${event} didn't reach Blocks:`, String(e)));
+        this.host.blocks.fire(event, payload).catch((e) => console.error(`[agents] ${event} didn't reach Blocks:`, String(e)));
     }
 
     /** The current conversation (once it has messages), then the history, newest first. */
@@ -736,7 +737,7 @@ export class AiApp {
             try {
                 choices = JSON.stringify(this.conversationChoices());
             } catch (e) {
-                console.error("[ai] the conversation dropdown can't be listed:", String(e));
+                console.error("[agents] the conversation dropdown can't be listed:", String(e));
                 return;
             }
             if (choices === this.published) return;
@@ -746,7 +747,7 @@ export class AiApp {
                     await this.host.registerAction(def);
                 } catch (e) {
                     this.published = "";
-                    console.error(`[ai] couldn't update the "${def.id}" action:`, String(e));
+                    console.error(`[agents] couldn't update the "${def.id}" action:`, String(e));
                 }
             }
         });

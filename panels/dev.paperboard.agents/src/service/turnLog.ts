@@ -57,10 +57,10 @@ export function openTurnLog(dir: string, env: NodeJS.ProcessEnv = process.env): 
             fs.appendFileSync(file, `${JSON.stringify({ at: new Date().toISOString(), ...record })}\n`);
         } catch (e) {
             // the log is a developer's: a full disk or a removed folder is said, and the turn goes on
-            console.error(`[ai] the turn log couldn't be written (${file}):`, e instanceof Error ? e.message : String(e));
+            console.error(`[agents] the turn log couldn't be written (${file}):`, e instanceof Error ? e.message : String(e));
         }
     };
-    console.log(`[ai] logging every turn to ${file} (${TURN_LOG_ENV}=1)`);
+    console.log(`[agents] logging every turn to ${file} (${TURN_LOG_ENV}=1)`);
     return {
         file,
         begin(o) {

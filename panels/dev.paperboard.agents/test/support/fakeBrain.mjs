@@ -5,6 +5,8 @@
 //
 // Cues are read from the message's last paragraph only: a compacted conversation's
 // seed quotes earlier messages, and their cues aren't for this turn.
+// The message comes over stdin (Codex, Claude) or ACP (OpenCode), never argv;
+// the instructions from the file each harness is pointed at, logged with its mode.
 // It logs every run to $FAKE_DIR/calls.jsonl, reads what to do from
 // $FAKE_DIR/plan.json, and takes cues from the message it's given:
 //   [[hold]]   say {"type":"fake.holding"} and wait for SIGTERM or $FAKE_DIR/release
@@ -52,7 +54,7 @@ if (argv[0] === "--version") {
     process.exit(0);
 }
 
-/** stdin to its end, the way `codex exec` reads a piped input before it starts */
+/** stdin to its end, the way `codex exec -` and `claude -p` read the message before they start */
 function readAll() {
     return new Promise((ok) => {
         let data = "";
@@ -61,6 +63,32 @@ function readAll() {
         process.stdin.on("end", () => ok(data));
         process.stdin.on("error", () => ok(data));
     });
+}
+
+/** The instructions file a run was given, as the harness reads it, and who may read it (its mode). */
+function instructionsFile(file) {
+    const stat = fs.statSync(file);
+    return { instructions: fs.readFileSync(file, "utf8"), instructionsMode: stat.mode & 0o777 };
+}
+
+/** What `codex exec -p <name>` layers on its config: $CODEX_HOME/<name>.config.toml, whose one key the panel writes as a JSON-compatible string. */
+function codexProfile(home) {
+    const i = argv.indexOf("-p");
+    if (i < 0) return {};
+    const file = path.join(home, `${argv[i + 1]}.config.toml`);
+    const read = instructionsFile(file);
+    const m = /^developer_instructions = (.*)\n$/s.exec(read.instructions);
+    if (!m) throw new Error(`fake codex: ${file} isn't a profile the panel writes`);
+    return { ...read, instructions: JSON.parse(m[1]) };
+}
+
+/** the message: the input to its end, when told so by a `-` in place of a prompt (Codex) or no prompt at all (Claude) */
+async function readMessage() {
+    if (name === "codex" && argv.at(-1) !== "-") {
+        process.stderr.write(`fake codex: the prompt isn't read from stdin: ${argv.at(-1)}\n`);
+        process.exit(64);
+    }
+    return readAll();
 }
 
 function hold(file = "release") {
@@ -157,11 +185,11 @@ async function codex() {
         process.exit(plan.models?.exit ?? 0);
     }
     if (argv[0] === "exec") {
-        await readAll();
-        const dash = argv.indexOf("--");
-        const message = dash >= 0 ? argv[dash + 1] : argv.at(-1);
-        const thread = argv[1] === "resume" ? argv.at(-2) : `codex-${randomUUID()}`;
-        log({ event: "turn", thread, resumed: argv[1] === "resume", message });
+        const profile = codexProfile(home);
+        const message = await readMessage();
+        const resumed = argv.includes("resume");
+        const thread = resumed ? argv.at(-2) : `codex-${randomUUID()}`;
+        log({ event: "turn", thread, resumed, message, ...profile });
         out({ type: "thread.started", thread_id: thread });
         // its rollout, appended to on every resume: the only place each request's token count is
         if (!argv.includes("--ephemeral")) {
@@ -257,12 +285,11 @@ async function claude() {
         return;
     }
     if (argv[0] === "-p") {
-        await readAll();
-        const dash = argv.indexOf("--");
-        const message = dash >= 0 ? argv[dash + 1] : argv.at(-1);
+        const message = await readMessage();
         const at = (flag) => (argv.includes(flag) ? argv[argv.indexOf(flag) + 1] : null);
         const session = at("--resume") ?? at("--session-id");
-        log({ event: "turn", thread: session, resumed: argv.includes("--resume"), message });
+        const system = at("--append-system-prompt-file");
+        log({ event: "turn", thread: session, resumed: argv.includes("--resume"), message, ...(system ? instructionsFile(system) : {}) });
         const summarizing = message.startsWith("[from Paperboard, not the user] This conversation has grown long");
         if (summarizing) {
             if (plan.summaryFails) {
@@ -331,6 +358,9 @@ async function opencode() {
     if (argv[0] === "acp") {
         // ACP over stdio: a session, the panel's tools listed, one prompt answered
         const config = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT ?? "{}");
+        // {file:<path>}: OpenCode reads the instructions from that file
+        const ref = /^\{file:(.+)\}$/.exec(config.agents?.build?.system ?? "");
+        log({ event: "acp-config", ...(ref ? instructionsFile(ref[1]) : { system: config.agents?.build?.system }) });
         let buf = "";
         process.stdin.setEncoding("utf8");
         const send = (o) => out({ jsonrpc: "2.0", ...o });

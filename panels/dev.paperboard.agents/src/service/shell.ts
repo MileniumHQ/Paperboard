@@ -51,7 +51,7 @@ const DEFENSE: DefenseInDepthConfig = {
     // Neither reaches js-exec's code, which runs in QuickJS with its own globals.
     excludeViolationTypes: ["finalization_registry", "performance_timing"],
     // a blocked call reaches the agent only as an EIO: the service's log says what it was
-    onViolation: (v) => console.error(`[ai] the shell blocked ${v.path}: ${v.message}`),
+    onViolation: (v) => console.error(`[agents] the shell blocked ${v.path}: ${v.message}`),
 };
 
 // any site and method, as the agent's browser can; denyPrivateRanges keeps

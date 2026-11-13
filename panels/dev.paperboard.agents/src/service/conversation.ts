@@ -20,7 +20,7 @@
 //
 // A turn is the harness run as a daemon-supervised child (one at a time, id
 // TURN_PROC_ID). The transcript is an append-only JSONL file in the panel's
-// storage, compacted when it grows past a cap; an entry that changes is
+// storage, compacted when it grows past a cap (only superseded copies go); an entry that changes is
 // appended again and the latest copy wins.
 
 import { randomUUID } from "node:crypto";
@@ -30,7 +30,7 @@ import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AccessEntry, type PageEntr
 import type { StartOptions } from "./browser";
 import { Attachments, sizeText } from "./attachments";
 import { AcpTurn, type AcpEvent } from "./acp";
-import { HARNESS_NAMES, codexContext, instructions, parseTurnLine, turnLaunch, type TurnLaunch } from "./harness";
+import { HARNESS_NAMES, codexContext, feed, instructions, parseTurnLine, removeLeftRunFiles, runFilesDir, turnLaunch, writeRunFiles, type TurnLaunch } from "./harness";
 import type { TurnLog } from "./turnLog";
 import { writeLine } from "./mcpClient";
 import type { Sections, TurnMode } from "./toolsets";
@@ -41,6 +41,7 @@ const THREADS = "threads.json";
 const ATTACHMENTS = "attachments";
 const PAST = "past";
 const CARRY = "carry.json";
+const RUN = "run";
 const PAST_META = "meta.json";
 /** the current conversation's id: it keeps it through being put away and reopened, so a flow can name it */
 const ID = "id";
@@ -91,6 +92,8 @@ interface Context {
 export interface TurnHost {
     start(o: StartOptions): Promise<unknown>;
     write(id: string, data: string): Promise<void>;
+    /** ends the child's input after what was written to it */
+    closeInput(id: string): Promise<void>;
     kill(id: string, signal?: string): Promise<void>;
     exists(id: string): Promise<boolean>;
     onStdout(id: string, cb: (data: string) => void): () => void;
@@ -151,10 +154,11 @@ export class Conversation {
      * the agent does on the way; after that, typing is only the agent writing a send_message, not working.
      */
     private typing = false;
-    /** waiting messages aren't read before this: the user was typing */
     private context: Context | null = null;
     private carry: Carry | null = null;
     private compactingNow = false;
+    /** how big the transcript file may get before its superseded copies are dropped */
+    private compactAt = COMPACT_AT_BYTES;
     /** the running turn answers a flow's messages */
     private turnFromFlow = false;
     /** and the flow's own instructions for it */
@@ -173,13 +177,17 @@ export class Conversation {
         const threads = path.join(this.deps.dir, THREADS);
         if (fs.existsSync(threads)) this.threads = JSON.parse(fs.readFileSync(threads, "utf8"));
         this.carry = this.loadCarry();
+        // the instructions files of runs the last service generation didn't see to their end (the questions' too, in Codex's home)
+        removeLeftRunFiles(this.runDir());
+        const codexHome = this.deps.env("codex").CODEX_HOME;
+        if (codexHome) removeLeftRunFiles(codexHome);
         // a turn the last service generation left running is not ours to finish
         void this.deps.host
             .exists(TURN_PROC_ID)
             .then(async (alive) => {
                 if (alive) await this.deps.host.kill(TURN_PROC_ID, "SIGKILL");
             })
-            .catch((e) => console.error("[ai] couldn't stop a turn left from before:", String(e)));
+            .catch((e) => console.error("[agents] couldn't stop a turn left from before:", String(e)));
     }
 
     history(limit: number = LIMITS.history): ChatEntry[] {
@@ -235,7 +243,7 @@ export class Conversation {
         if (!this.deps.settings()) throw new Error("the agent isn't set up yet");
         this.notices.push(text);
         // a backlog this long means turns aren't keeping up: the oldest notice is the least useful one
-        if (this.notices.length > MAX_NOTICES) console.error("[ai] dropped a notice nobody read:", this.notices.shift()!.slice(0, 120));
+        if (this.notices.length > MAX_NOTICES) console.error("[agents] dropped a notice nobody read:", this.notices.shift()!.slice(0, 120));
         this.pump();
     }
 
@@ -268,6 +276,7 @@ export class Conversation {
         this.notices = [];
         await this.swap(() => {
             this.entries = [];
+            this.compactAt = COMPACT_AT_BYTES;
             this.threads = {};
             this.setCarry(null);
             fs.rmSync(path.join(this.deps.dir, ATTACHMENTS), { recursive: true, force: true });
@@ -351,6 +360,7 @@ export class Conversation {
             atomicWrite(path.join(this.deps.dir, ID), id as string);
             fs.rmSync(dir, { recursive: true });
             this.entries = this.load();
+            this.compactAt = COMPACT_AT_BYTES;
             this.threads = JSON.parse(fs.readFileSync(path.join(this.deps.dir, THREADS), "utf8"));
             this.carry = this.loadCarry();
         });
@@ -493,6 +503,7 @@ export class Conversation {
         // the next conversation gets an id of its own
         fs.rmSync(path.join(this.deps.dir, ID), { force: true });
         this.entries = [];
+        this.compactAt = COMPACT_AT_BYTES;
         this.threads = {};
         this.carry = null;
         this.context = null;
@@ -551,7 +562,7 @@ export class Conversation {
                 try {
                     this.deps.onTurnEnd?.();
                 } catch (e) {
-                    console.error("[ai] a turn's end couldn't be handled:", (e as Error).message);
+                    console.error("[agents] a turn's end couldn't be handled:", (e as Error).message);
                 }
                 this.pump();
             });
@@ -616,6 +627,7 @@ export class Conversation {
             mcpUrl: mcp.url,
             sections,
             fromFlow: this.turnFromFlow,
+            filesDir: runFilesDir(settings.harness, this.deps.env(settings.harness), this.runDir()),
         });
         if (launch.thread) this.saveThread(settings.harness, launch.thread);
         const log = this.deps.log ?? null;
@@ -668,7 +680,7 @@ export class Conversation {
                     this.deps.host
                         .exists(TURN_PROC_ID)
                         .then((alive) => (alive ? this.deps.host.kill(TURN_PROC_ID, signal) : undefined))
-                        .catch((e) => console.warn(`[ai] couldn't stop OpenCode after its answer (the turn's time limit still will): ${e instanceof Error ? e.message : e}`));
+                        .catch((e) => console.warn(`[agents] couldn't stop OpenCode after its answer (the turn's time limit still will): ${e instanceof Error ? e.message : e}`));
                 void stop("SIGTERM");
                 timers.add(setTimeout(() => void stop("SIGKILL"), STOP_GRACE_MS));
             }
@@ -735,6 +747,9 @@ export class Conversation {
         });
         let timer: ReturnType<typeof setTimeout> | undefined;
         let code: number | undefined;
+        // the message the harness couldn't be handed, if it ended first: its own exit says why, when it failed
+        let unfed: Error | null = null;
+        const removeFiles = writeRunFiles(launch.files);
         try {
             await this.deps.host.start({
                 id: TURN_PROC_ID,
@@ -742,12 +757,13 @@ export class Conversation {
                 args: launch.args,
                 cwd: this.workdir(),
                 env: { ...this.deps.env(settings.harness), ...launch.env, [launch.tokenEnv]: mcp.token },
-                // only an ACP turn talks over stdin; codex exec reads a piped stdin to its end before it starts
-                ...(acp ? {} : { stdin: false }),
             });
             timer = setTimeout(() => void this.killTurn(), this.deps.turnMs ?? TURN_MS);
+            // Codex and Claude read the message to the end of their input before they start; ACP talks over it
+            const fed = launch.input === null ? null : feed(this.deps.host, TURN_PROC_ID, launch.input).catch((e: Error) => void (unfed = e));
             const driven = acp?.run();
             code = await exited;
+            await fed;
             if (buf.trim()) onLine(buf);
             acp?.close();
             await driven;
@@ -755,6 +771,7 @@ export class Conversation {
             clearTimeout(timer);
             offListed();
             for (const t of timers) clearTimeout(t);
+            removeFiles();
         }
         // Codex says how long its thread is only in its rollout
         let unmeasured: string | null = null;
@@ -769,6 +786,7 @@ export class Conversation {
         if (this.stopRequested) return;
         if (failures.length) throw new Error(failures[failures.length - 1]);
         if (code !== 0 && !answered) throw new Error(`the turn ended with exit ${code ?? "?"}${stderr.trim() ? `: ${lastLines(stderr)}` : ""}`);
+        if (unfed) throw new Error(`${HARNESS_NAMES[settings.harness]} ended before it took the message: ${(unfed as Error).message}`);
         if (unmeasured) throw new Error(`Couldn't tell how long the conversation is, so it can't be compacted: ${unmeasured}`);
     }
 
@@ -873,6 +891,11 @@ export class Conversation {
         return dir;
     }
 
+    /** Where a turn's instructions file goes (but Codex's, which go in its home): only the turn reads it, while it runs. */
+    private runDir() {
+        return path.join(this.deps.dir, RUN);
+    }
+
     private saveThread(harness: Harness, id: string) {
         if (this.threads[harness] === id) return;
         this.threads = { ...this.threads, [harness]: id };
@@ -920,8 +943,32 @@ export class Conversation {
         if (this.entries.length > KEEP_IN_MEMORY) this.entries.splice(0, this.entries.length - KEEP_IN_MEMORY);
         const file = path.join(this.deps.dir, TRANSCRIPT);
         fs.appendFileSync(file, JSON.stringify(entry) + "\n");
-        if (fs.statSync(file).size > COMPACT_AT_BYTES) atomicWrite(file, this.entries.map((e) => JSON.stringify(e)).join("\n") + "\n");
+        if (fs.statSync(file).size > this.compactAt) this.dropSuperseded(file);
         this.deps.emit(entry);
+    }
+
+    /**
+     * Rewrites the transcript without its superseded copies. Every message stays: only memory is capped, never
+     * what the user's history holds. A transcript still big after that has earned its size, so the next rewrite
+     * waits until it has doubled; otherwise every append past the cap would rewrite the whole file.
+     */
+    private dropSuperseded(file: string) {
+        const latest = new Map<string, string>();
+        const lines = fs.readFileSync(file, "utf8").split("\n");
+        lines.forEach((line, n) => {
+            if (!line.trim()) return;
+            let id: unknown;
+            try {
+                id = JSON.parse(line).id;
+            } catch (err) {
+                throw new Error(`${file} line ${n + 1} is unreadable: ${(err as Error).message}`);
+            }
+            if (typeof id !== "string") throw new Error(`${file} line ${n + 1} has no id`);
+            latest.delete(id); // re-insert so a changed entry keeps its newest position
+            latest.set(id, line);
+        });
+        atomicWrite(file, [...latest.values()].join("\n") + "\n");
+        this.compactAt = Math.max(COMPACT_AT_BYTES, fs.statSync(file).size * 2);
     }
 
     /** A transcript's entries: the current conversation's, or one put away in the history. */

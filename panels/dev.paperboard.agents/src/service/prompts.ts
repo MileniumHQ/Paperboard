@@ -92,7 +92,7 @@ export class Prompts {
                 try {
                     return this.ask(args);
                 } catch (e) {
-                    console.warn(`[ai] ${name} failed:`, message(e));
+                    console.warn(`[agents] ${name} failed:`, message(e));
                     return fault(message(e));
                 }
             },
@@ -220,7 +220,7 @@ export class Prompts {
             this.deps.notice(text);
         } catch (e) {
             // the card already shows the answer; the agent hears of it when it's next asked
-            console.error("[ai] couldn't tell the agent about its request:", message(e));
+            console.error("[agents] couldn't tell the agent about its request:", message(e));
         }
     }
 }

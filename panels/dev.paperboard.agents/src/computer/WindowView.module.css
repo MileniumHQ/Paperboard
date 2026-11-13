@@ -80,11 +80,10 @@
     box-shadow: 0 0 0 calc(var(--paper-border-width) * 2) var(--paper-primary);
 }
 
-@media (hover: hover) {
-    .frame.driving:focus-visible {
-        outline: var(--paper-focus-ring);
-        outline-offset: var(--paper-focus-offset);
-    }
+/* a keyboard's focus ring; in mobile mode focus comes from the on-screen keyboard button, not a key press */
+:root:not([data-paper-mobile="true"]) .frame.driving:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
 }
 
 @media (prefers-reduced-motion: reduce) {

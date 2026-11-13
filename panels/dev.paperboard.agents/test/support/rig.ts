@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ChatEntry, ChatState, Harness, Settings } from "../../src/contract";
+import type { Sections } from "../../src/service/toolsets";
 import { startComputerMcp, type ComputerMcp } from "../../src/service/computerMcp";
 import { Conversation, TURN_PROC_ID } from "../../src/service/conversation";
 import { messagesToolset } from "../../src/service/messages";
@@ -28,7 +29,7 @@ export interface Rig {
     close(): Promise<void>;
 }
 
-export async function conversationRig(o: { harness?: Harness; contextBudget?: number; problem?: (h: Harness) => string | null; resolve?: (h: Harness) => string | null; env?: (h: Harness) => Record<string, string>; root?: string } = {}): Promise<Rig> {
+export async function conversationRig(o: { harness?: Harness; contextBudget?: number; problem?: (h: Harness) => string | null; resolve?: (h: Harness) => string | null; env?: (h: Harness) => Record<string, string>; root?: string; instructions?: () => Promise<Sections> } = {}): Promise<Rig> {
     const root = o.root ?? tempDir("conversation");
     const harness = o.harness ?? "codex";
     const host = new TestHost(fakeEnv(root));
@@ -50,7 +51,7 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
             env: o.env ?? ((h): Record<string, string> => (h === "codex" ? { CODEX_HOME: codexHome } : {})),
             problem: o.problem,
             mcp: () => ({ url: mcp.url, token: mcp.token, onToolsListed: (cb) => mcp.onToolsListed(cb) }),
-            instructions: async () => ({ tools: ["**Test:** a section"], now: [] }),
+            instructions: o.instructions ?? (async () => ({ tools: ["**Test:** a section"], now: [] })),
             emit: entries.push,
             onState: states.push,
             codexHome,

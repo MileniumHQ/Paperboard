@@ -145,7 +145,7 @@ export class Brains {
         // a look that fails is in the brain's state; one brain's trouble doesn't stop the service
         await Promise.all(
             (Object.keys(this.state) as Harness[]).map((h) =>
-                this.exclusive(h, () => this.look(h)).catch((e) => console.error(`[ai] couldn't look at ${NAMES[h]}: ${errorText(e)}`)),
+                this.exclusive(h, () => this.look(h)).catch((e) => console.error(`[agents] couldn't look at ${NAMES[h]}: ${errorText(e)}`)),
             ),
         );
     }
@@ -464,13 +464,13 @@ export class Brains {
             if (!this.state[harness].signedIn) throw new Error(`The ${NAMES[harness]} sign-in finished, but ${NAMES[harness]} still says it isn't signed in.`);
         } catch (e) {
             this.fail(harness, errorText(e));
-            console.error("[ai]", errorText(e));
+            console.error("[agents]", errorText(e));
         }
     }
 
     private stop(harness: Harness, login: Login, failure: string) {
         login.failure ??= failure;
-        this.deps.host.kill(loginProcessId(harness), "SIGTERM").catch((e) => console.error(`[ai] couldn't stop the ${NAMES[harness]} sign-in: ${errorText(e)}`));
+        this.deps.host.kill(loginProcessId(harness), "SIGTERM").catch((e) => console.error(`[agents] couldn't stop the ${NAMES[harness]} sign-in: ${errorText(e)}`));
     }
 
     private async cancel(harness: Harness) {

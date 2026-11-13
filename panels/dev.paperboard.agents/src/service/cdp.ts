@@ -85,7 +85,7 @@ export class Cdp {
         try {
             m = JSON.parse(raw);
         } catch (e) {
-            console.warn("[ai] the browser's DevTools connection sent something unreadable:", e instanceof Error ? e.message : String(e));
+            console.warn("[agents] the browser's DevTools connection sent something unreadable:", e instanceof Error ? e.message : String(e));
             this.end("the browser sent something unreadable");
             this.ws.close();
             return;

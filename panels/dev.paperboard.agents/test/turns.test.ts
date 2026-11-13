@@ -12,12 +12,14 @@ afterEach(async () => {
 
 // A turn's input is closed for argv harnesses.
 describe("a turn's input", () => {
-    test("Codex and Claude Code turns start with their input closed and finish", async () => {
+    test("Codex and Claude Code turns read the message from their input, closed after it, and finish", async () => {
         for (const harness of ["codex", "claude-code"] as const) {
             rig = await conversationRig({ harness });
-            rig.conversation.send("hello there");
+            const { id } = rig.conversation.send("hello there");
             await settled(rig);
-            expect(rig.host.startedAs(turnId).map((s) => s.stdin)).toEqual([false]);
+            expect(rig.host.startedAs(turnId).map((s) => s.stdin)).toEqual([undefined]);
+            expect(rig.host.writes.filter((w) => w.id === turnId).map((w) => w.data).join("")).toBe(`[${id}] hello there`);
+            expect(rig.host.inputsClosed).toEqual([turnId]);
             expect(said(rig)).toHaveLength(1);
             expect(errors(rig)).toEqual([]);
             await rig.close();
@@ -54,7 +56,7 @@ describe("messages during a turn", () => {
         expect(rig.log().filter((e) => e.event === "sigterm")).toHaveLength(1);
         // the same thread, resumed, with both messages
         expect(next.thread).toBe(first.thread);
-        expect(rig.host.startedAs(turnId)[1]!.args.slice(0, 2)).toEqual(["exec", "resume"]);
+        expect(rig.host.startedAs(turnId)[1]!.args.filter((a) => a === "exec" || a === "resume")).toEqual(["exec", "resume"]);
         expect(next.message).toContain(`[${a.id}] second`);
         expect(next.message).toContain(`[${b.id}] third`);
         expect(rig.conversation.history().filter((e) => e.kind === "user").map((e) => (e as { text: string }).text)).toEqual(["first [[hold]]", "second", "third"]);

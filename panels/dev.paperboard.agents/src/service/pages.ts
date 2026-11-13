@@ -445,7 +445,7 @@ export class Pages {
         const now = this.o.home.resolve(PAGES);
         if (!fs.existsSync(now)) {
             fs.renameSync(old, now);
-            console.log(`[ai] ${OLD_PAGES} is now ${PAGES}`);
+            console.log(`[agents] ${OLD_PAGES} is now ${PAGES}`);
             return;
         }
         const left: string[] = [];
@@ -455,7 +455,7 @@ export class Pages {
             else fs.renameSync(path.join(old, e), to);
         }
         if (!left.length) fs.rmdirSync(old);
-        else console.error(`[ai] ${left.join(", ")} stay in ${OLD_PAGES}: ${PAGES} has ones by the same name already`);
+        else console.error(`[agents] ${left.join(", ")} stay in ${OLD_PAGES}: ${PAGES} has ones by the same name already`);
     }
 
     /** The server, started once; on the port it had before when that's free. */
@@ -465,11 +465,11 @@ export class Pages {
             try {
                 saved = Number(JSON.parse(fs.readFileSync(this.o.portFile, "utf8")).port) || 0;
             } catch (e) {
-                if ((e as NodeJS.ErrnoException).code !== "ENOENT") console.error("[ai] the pages' saved port couldn't be read:", String(e));
+                if ((e as NodeJS.ErrnoException).code !== "ENOENT") console.error("[agents] the pages' saved port couldn't be read:", String(e));
             }
             const server = http.createServer((req, res) => {
                 this.handle(req, res).catch((e) => {
-                    console.error("[ai] a page's request failed:", e);
+                    console.error("[agents] a page's request failed:", e);
                     if (!res.headersSent) res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
                     res.end(`The pages' server failed: ${e instanceof Error ? e.message : String(e)}`);
                 });
@@ -489,7 +489,7 @@ export class Pages {
                 // ports anew at each boot): the pages move, and their saved data stays at the old origin
                 const code = (e as NodeJS.ErrnoException).code;
                 if (!saved || (code !== "EADDRINUSE" && code !== "EACCES")) throw e;
-                console.error(`[ai] the pages' port ${saved} can't be opened (${code}); they move to a new one`);
+                console.error(`[agents] the pages' port ${saved} can't be opened (${code}); they move to a new one`);
                 await listen(0);
             }
             this.server = server;
@@ -605,7 +605,7 @@ export class Pages {
         this.seen = this.names();
         const home = this.o.home.resolve("~");
         this.watchers.home = fs.watch(home, () => this.look());
-        this.watchers.home.on("error", (e) => console.error("[ai] the home folder can't be followed for pages:", String(e)));
+        this.watchers.home.on("error", (e) => console.error("[agents] the home folder can't be followed for pages:", String(e)));
         this.followPages();
     }
 
@@ -618,7 +618,7 @@ export class Pages {
             // ~/Pages itself was removed: it's followed again once it's back
             watcher.close();
             if (this.watchers.pages === watcher) this.watchers.pages = null;
-            if ((e as NodeJS.ErrnoException).code !== "ENOENT" && (e as NodeJS.ErrnoException).code !== "EPERM") console.error("[ai] ~/Pages can't be followed:", String(e));
+            if ((e as NodeJS.ErrnoException).code !== "ENOENT" && (e as NodeJS.ErrnoException).code !== "EPERM") console.error("[agents] ~/Pages can't be followed:", String(e));
             this.look();
         });
         this.watchers.pages = watcher;
@@ -642,7 +642,7 @@ export class Pages {
                 this.seen = now;
                 this.o.onChange();
             } catch (e) {
-                console.error("[ai] the pages couldn't be listed after a change:", String(e));
+                console.error("[agents] the pages couldn't be listed after a change:", String(e));
             }
         }, 100);
     }
@@ -716,7 +716,7 @@ function watchFolder(root: string, changed: () => void, gone: () => void): Folde
         } catch (e) {
             if (dir === root) throw e;
             // a folder gone between being listed and followed is expected; anything else leaves part of the page unfollowed
-            if ((e as NodeJS.ErrnoException).code !== "ENOENT") console.error(`[ai] ${dir} can't be followed for page changes:`, String(e));
+            if ((e as NodeJS.ErrnoException).code !== "ENOENT") console.error(`[agents] ${dir} can't be followed for page changes:`, String(e));
             return;
         }
         for (const e of entries) if (e.isDirectory() && e.name !== "node_modules") walk(path.join(dir, e.name));

@@ -73,6 +73,29 @@ describe("the agent on the user's computer", () => {
         expect(fs.existsSync(path.join(s.project, "new.txt"))).toBe(false);
     });
 
+    test("a read pages through multi-byte text by characters and refuses a file too big to load", async () => {
+        const s = setup();
+        const entry = await s.ask([{ kind: "folder", path: "~/project" }]);
+        s.access.answer(entry.id, "once");
+        const big = path.join(s.project, "big.txt");
+        // 3-byte characters: a byte offset and a character offset would disagree
+        fs.writeFileSync(big, "€".repeat(40_000));
+        const first = await s.call("user_computer_read", { path: big });
+        expect(first.text.startsWith("€".repeat(30_000))).toBe(true);
+        expect(first.text).toContain("read on from offset 30000");
+        const rest = await s.call("user_computer_read", { path: big, offset: 30_000 });
+        expect(rest.text).toBe("€".repeat(10_000));
+
+        // sparse, so the test doesn't write 9 MB: the size is what's checked, before anything is loaded
+        const huge = path.join(s.project, "huge.log");
+        fs.closeSync(fs.openSync(huge, "w"));
+        fs.truncateSync(huge, 9 * 1024 * 1024);
+        const refused = await s.call("user_computer_read", { path: huge });
+        expect(refused.isError).toBe(true);
+        expect(refused.text).toContain("too big to read whole");
+        expect(refused.text).toContain("user_computer_search");
+    });
+
     test("a folder allowed this time covers its files until the turn its answer started ends", async () => {
         const s = setup();
         const entry = await s.ask([{ kind: "folder", path: "~/project" }]);

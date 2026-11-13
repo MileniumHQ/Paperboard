@@ -154,10 +154,6 @@ export class AcpTurn {
             this.o.emit({ type: "working" });
             return;
         }
-        if (u.sessionUpdate === "tool_call_update" && u.status === "in_progress" && this.tools.get(u.toolCallId) === "websearch") {
-            this.tools.set(u.toolCallId, ""); // shown once
-            this.o.emit({ type: "search", query: String(u.rawInput?.query ?? "") });
-        }
     }
 
     /** OpenCode is waiting to retry the provider. It clears the notice (null) at each attempt, so only the model's output ends the wait. */

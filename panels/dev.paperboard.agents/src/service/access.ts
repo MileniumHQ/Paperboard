@@ -29,6 +29,8 @@ const RUN_MS = 5 * 60_000;
 const WRITE_BYTES = 2 * 1024 * 1024;
 const SEARCH_FILES = 20_000;
 const SEARCH_FILE_BYTES = 1024 * 1024;
+/** the biggest file read loads whole: offsets count characters, so it has to be decoded from the start */
+const READ_FILE_BYTES = 8 * 1024 * 1024;
 const SEARCH_HITS = 200;
 const LIST_ENTRIES = 500;
 /** folders a search doesn't go into unless it's asked to start there */
@@ -98,7 +100,7 @@ export const ACCESS_TOOLS: ToolSpec[] = [
     },
     {
         name: "user_computer_read",
-        description: `Read a text file on the user's computer, in an allowed folder. Up to ${OUTPUT_CHARS} characters from \`offset\`.`,
+        description: `Read a text file on the user's computer, in an allowed folder. Up to ${OUTPUT_CHARS} characters from \`offset\`. Files over ${READ_FILE_BYTES / 1024 / 1024} MB are refused; look into those with user_computer_search or a command like head, tail or grep.`,
         inputSchema: { type: "object", properties: { path: { type: "string" }, offset: { type: "integer", minimum: 0 } }, required: ["path"] },
     },
     {
@@ -209,7 +211,7 @@ export class Access {
         try {
             this.deps.onChange(this.view());
         } catch (e) {
-            console.error("[ai] couldn't publish what's allowed:", message(e));
+            console.error("[agents] couldn't publish what's allowed:", message(e));
         }
     }
 
@@ -315,7 +317,7 @@ export class Access {
                     }
                     return fault(`unknown tool ${name}`);
                 } catch (e) {
-                    console.warn(`[ai] ${name} failed:`, message(e));
+                    console.warn(`[agents] ${name} failed:`, message(e));
                     return fault(message(e));
                 }
             },
@@ -425,7 +427,7 @@ export class Access {
             this.deps.notice(text);
         } catch (e) {
             // the card already shows the answer; the agent hears of it when it's next asked
-            console.error("[ai] couldn't tell the agent about access:", message(e));
+            console.error("[agents] couldn't tell the agent about access:", message(e));
         }
     }
 
@@ -438,7 +440,7 @@ export class Access {
             try {
                 return `${e.name}  ${fs.statSync(path.join(dir, e.name)).size} bytes`;
             } catch (err) {
-                console.warn(`[ai] couldn't read the size of ${path.join(dir, e.name)}:`, message(err));
+                console.warn(`[agents] couldn't read the size of ${path.join(dir, e.name)}:`, message(err));
                 return `${e.name}  (size unreadable)`;
             }
         });
@@ -450,6 +452,8 @@ export class Access {
         const file = this.allowed(args.path);
         const offset = args.offset === undefined ? 0 : Number(args.offset);
         if (!Number.isInteger(offset) || offset < 0) return fault("offset is a whole number of characters from the start");
+        const size = fs.statSync(file).size;
+        if (size > READ_FILE_BYTES) return fault(`${file} is ${size} bytes, too big to read whole (the limit is ${READ_FILE_BYTES}); look inside it with user_computer_search, or with head, tail or grep through user_computer_run`);
         const buf = fs.readFileSync(file);
         if (buf.subarray(0, 8000).includes(0)) return fault(`${file} isn't a text file`);
         const text = buf.toString("utf8");

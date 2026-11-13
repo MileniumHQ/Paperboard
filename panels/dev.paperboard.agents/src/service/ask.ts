@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { LIMITS, PANEL_ID, type Harness, type Settings } from "../contract";
 import { AcpTurn, type AcpEvent } from "./acp";
-import { askInstructions, askLaunch, HARNESS_NAMES, parseTurnLine } from "./harness";
+import { askInstructions, askLaunch, feed, HARNESS_NAMES, parseTurnLine, removeLeftRunFiles, runFilesDir, writeRunFiles } from "./harness";
 import type { TurnLog } from "./turnLog";
 import { writeLine } from "./mcpClient";
 import type { TurnHost } from "./conversation";
@@ -31,6 +31,8 @@ export interface AskDeps {
     problem?: (harness: Harness) => string | null;
     /** an empty folder to run in: no project files or instruction files for the harness to pick up */
     workdir: string;
+    /** where a question's instructions file goes (but Codex's, which go in its home): only its run reads it, while it runs */
+    filesDir: string;
     askMs?: number;
     /** the developer's log of every turn (turnLog.ts), when it's switched on */
     log?: TurnLog | null;
@@ -40,7 +42,10 @@ export class Asker {
     private running = new Set<string>();
     private closed = false;
 
-    constructor(private deps: AskDeps) {}
+    constructor(private deps: AskDeps) {
+        // left by questions the last service generation didn't see to their end (Codex's are the conversation's to remove)
+        removeLeftRunFiles(deps.filesDir);
+    }
 
     /** `instructions`: the flow's own, in place of the ones in settings */
     async ask(question: unknown, instructions?: string): Promise<string> {
@@ -82,7 +87,8 @@ export class Asker {
 
     private async run(id: string, settings: Settings, command: string, question: string, instructions: string | null, lines: string[] | null): Promise<string> {
         const { host } = this.deps;
-        const launch = askLaunch({ harness: settings.harness, command, model: settings.model, name: settings.name, question, instructions });
+        const filesDir = runFilesDir(settings.harness, this.deps.env(settings.harness), this.deps.filesDir);
+        const launch = askLaunch({ harness: settings.harness, command, model: settings.model, name: settings.name, question, instructions, filesDir });
         const messages: string[] = [];
         const failures: string[] = [];
         let answered = false;
@@ -95,7 +101,7 @@ export class Asker {
             else if (ev.type === "done") {
                 // OpenCode waits for another prompt once it has answered
                 answered = true;
-                void host.kill(id, "SIGTERM").catch((e) => console.error(`[ai] couldn't stop OpenCode after its answer: ${e instanceof Error ? e.message : e}`));
+                void host.kill(id, "SIGTERM").catch((e) => console.error(`[agents] couldn't stop OpenCode after its answer: ${e instanceof Error ? e.message : e}`));
             }
         };
         const acp =
@@ -138,32 +144,40 @@ export class Asker {
             );
         });
         fs.mkdirSync(this.deps.workdir, { recursive: true });
-        await host.start({
-            id,
-            command: launch.command,
-            args: launch.args,
-            cwd: this.deps.workdir,
-            env: { ...this.deps.env(settings.harness), ...launch.env },
-            ...(acp ? {} : { stdin: false }),
-        });
         const ms = this.deps.askMs ?? ASK_MS;
-        const timer = setTimeout(() => {
-            timedOut = true;
-            void host.kill(id, "SIGKILL").catch((e) => console.error(`[ai] couldn't stop a question past its time: ${e instanceof Error ? e.message : e}`));
-        }, ms);
+        let timer: ReturnType<typeof setTimeout> | undefined;
         let code: number | undefined;
+        // the question the harness couldn't be handed, if it ended first: its own exit says why, when it failed
+        let unfed: Error | null = null;
+        const removeFiles = writeRunFiles(launch.files);
         try {
+            await host.start({
+                id,
+                command: launch.command,
+                args: launch.args,
+                cwd: this.deps.workdir,
+                env: { ...this.deps.env(settings.harness), ...launch.env },
+            });
+            timer = setTimeout(() => {
+                timedOut = true;
+                void host.kill(id, "SIGKILL").catch((e) => console.error(`[agents] couldn't stop a question past its time: ${e instanceof Error ? e.message : e}`));
+            }, ms);
+            // Codex and Claude read the question to the end of their input; ACP talks over it
+            const fed = launch.input === null ? null : feed(host, id, launch.input).catch((e: Error) => void (unfed = e));
             const driven = acp?.run();
             code = await exited;
+            await fed;
             if (buf.trim()) onLine(buf);
             acp?.close();
             await driven;
         } finally {
             clearTimeout(timer);
+            removeFiles();
         }
         if (timedOut) throw new Error(`the agent didn't answer within ${Math.round(ms / 1000)} seconds`);
         if (failures.length) throw new Error(failures[failures.length - 1]);
         if (code !== 0 && !answered) throw new Error(`${HARNESS_NAMES[settings.harness]} ended with exit ${code ?? "?"}${stderr.trim() ? `: ${stderr.trim().split("\n").slice(-3).join(" ").slice(0, 400)}` : ""}`);
+        if (unfed) throw new Error(`${HARNESS_NAMES[settings.harness]} ended before it took the question: ${(unfed as Error).message}`);
         // what it said before searching ("let me look that up") isn't the answer; its last message is
         const answer = messages.map((m) => m.trim()).filter(Boolean).at(-1);
         if (!answer) throw new Error("the agent gave no answer");

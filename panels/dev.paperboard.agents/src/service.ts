@@ -2,6 +2,7 @@ import { actionsApi, blocksApi, configApi, defineAction, definePanelService, fil
 import { DEFAULT_STATE, PANEL_ID, UI_ACTION_IDS, type AiState } from "./contract";
 import { TOOLS_ACTION_IDS } from "./toolsContract";
 import { AiApp, findProgram, type AppHost } from "./service/app";
+import { fetchWebImage } from "./service/webImage";
 
 // the tool servers and the actions switch: another document, so one never overwrites the other
 const TOOLS_PATH = "tools.json";
@@ -9,6 +10,7 @@ const TOOLS_PATH = "tools.json";
 const host: AppHost = {
     start: (o) => processApi.start(o),
     kill: (id, signal) => processApi.kill(id, signal),
+    closeInput: (id) => processApi.closeInput(id),
     exists: (id) => processApi.exists(id),
     onExit: (id, cb) => processApi.onExit(id, cb),
     // a harness's stdout is its protocol: stderr never mixes into it
@@ -107,6 +109,7 @@ export const aiService = definePanelService({
         ui(UI_ACTION_IDS.attachCancel, "Stop uploading a file", (i) => app.conversation.attachments.cancel(i.id)),
         ui(UI_ACTION_IDS.attachRead, "Read part of a file in the conversation", (i) => app.conversation.attachments.read(i.id, i.offset)),
         ui(UI_ACTION_IDS.attachInfo, "Say what a file in the conversation is", (i) => app.conversation.attachments.get(i.id)),
+        ui(UI_ACTION_IDS.webImage, "Load a web picture a message shows", (i) => fetchWebImage(i.url)),
         ui(UI_ACTION_IDS.installComputer, "Set up the agent's computer", () => app.installComputer()),
         ui(UI_ACTION_IDS.startComputer, "Start the agent's computer", () => app.startComputer()),
         ui(UI_ACTION_IDS.stopComputer, "Stop the agent's computer", () => app.stopComputer()),

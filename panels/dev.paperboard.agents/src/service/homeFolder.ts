@@ -114,7 +114,7 @@ export function moveHomeFolder(from: string, to: string): void {
         const into = path.join(to, n ? `Earlier home folder (${n})` : "Earlier home folder");
         if (fs.existsSync(into)) continue;
         fs.renameSync(from, into);
-        console.warn(`[ai] two home folders: the one from ${from} is now ${into}`);
+        console.warn(`[agents] two home folders: the one from ${from} is now ${into}`);
         return;
     }
     throw new Error(`the old home folder at ${from} couldn't be moved into ${to}: too many earlier ones`);

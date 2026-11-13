@@ -207,7 +207,7 @@ export class SignIns {
             this.deps.notice(text);
         } catch (e) {
             // the request's bubble already shows how it went; the agent hears of it when it's next asked
-            console.error("[ai] couldn't tell the agent about a sign-in:", e instanceof Error ? e.message : String(e));
+            console.error("[agents] couldn't tell the agent about a sign-in:", e instanceof Error ? e.message : String(e));
         }
     }
 }

@@ -137,6 +137,15 @@ export class TestHost {
         await new Promise<void>((ok, fail) => child.stdin!.write(data, (e) => (e ? fail(e) : ok())));
     };
 
+    readonly inputsClosed: string[] = [];
+
+    closeInput = async (id: string): Promise<void> => {
+        const child = this.procs.get(id);
+        if (!child?.stdin || child.stdin.writableEnded) throw new Error(`${id} has no input open to close`);
+        this.inputsClosed.push(id);
+        await new Promise<void>((ok) => child.stdin!.end(ok));
+    };
+
     onStdout = (id: string, cb: Listener) => this.on(this.stdout, id, cb);
     onStderr = (id: string, cb: Listener) => this.on(this.stderr, id, cb);
     onExit = (id: string, cb: ExitListener) => this.on(this.exits, id, cb);

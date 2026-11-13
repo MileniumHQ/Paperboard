@@ -1,4 +1,4 @@
-// The agent's tools as an MCP server, served by the AI panel's service.
+// The agent's tools as an MCP server, served by the Agents panel's service.
 //
 // The agent harness (Codex, Claude Code, OpenCode) runs as a daemon-supervised child
 // with its own tools off; this endpoint is its only pair of hands (every

@@ -64,7 +64,7 @@ export function whereText(spec: ServerSpec): string {
     try {
         return new URL(spec.url).host;
     } catch (e) {
-        console.warn("[ai] a tool server's address isn't a URL:", spec.url, e);
+        console.warn("[agents] a tool server's address isn't a URL:", spec.url, e);
         return spec.url;
     }
 }

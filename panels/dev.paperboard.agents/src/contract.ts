@@ -1,4 +1,4 @@
-// What the AI panel's service and its UI agree on: ids, state, events.
+// What the Agents panel's service and its UI agree on: ids, state, events.
 //
 // The agent is one ongoing conversation, like texting a friend. Its brain is
 // an agent harness Paperboard installs for them (Codex, Claude Code or OpenCode) with every
@@ -63,6 +63,8 @@ export const UI_ACTION_IDS = {
     attachCancel: "ui-attach-cancel",
     attachRead: "ui-attach-read",
     attachInfo: "ui-attach-info",
+    // a web picture an agent's message shows, fetched by the service under the browser's network rule
+    webImage: "ui-web-image",
     // the models a brain offers, from the harness's own catalog
     models: "ui-models",
     // what the agent remembers, which the user can read and change too

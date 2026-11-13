@@ -451,7 +451,7 @@ export class HttpWire implements McpWire {
             headers: { ...this.o.headers, ...(this.authorization ? { Authorization: this.authorization } : {}), "Mcp-Session-Id": this.session },
             signal: AbortSignal.timeout(3000),
         }).catch((e: Error) => {
-            console.error(`[ai] couldn't end the session with ${new URL(this.o.url).host}: ${e.message}`);
+            console.error(`[agents] couldn't end the session with ${new URL(this.o.url).host}: ${e.message}`);
             return null;
         });
         await discard(res?.body);
@@ -567,7 +567,7 @@ export class SseWire implements McpWire {
         try {
             m = JSON.parse(raw);
         } catch (e) {
-            console.warn("[ai] a tool server sent an event that isn't JSON:", e instanceof Error ? e.message : String(e));
+            console.warn("[agents] a tool server sent an event that isn't JSON:", e instanceof Error ? e.message : String(e));
             return;
         }
         for (const one of Array.isArray(m) ? m : [m]) {
@@ -656,7 +656,7 @@ async function discard(s: { cancel(): Promise<void>; locked?: boolean } | null |
     try {
         await s?.cancel();
     } catch (e) {
-        console.error("[ai] couldn't release a response stream:", String(e));
+        console.error("[agents] couldn't release a response stream:", String(e));
     }
 }
 

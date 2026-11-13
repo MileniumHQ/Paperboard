@@ -68,7 +68,7 @@ export class Routines {
             this.broken = null;
         } catch (e) {
             this.broken = e instanceof Error ? e.message : String(e);
-            console.error("[ai] routines are unreadable:", this.broken);
+            console.error("[agents] routines are unreadable:", this.broken);
         }
         const now = this.now();
         for (const r of this.items) this.next.set(r.id, firstRun(r, now));
@@ -130,7 +130,7 @@ export class Routines {
                 r.lastError = null;
             } catch (e) {
                 r.lastError = e instanceof Error ? e.message : String(e);
-                console.error(`[ai] routine ${r.id} couldn't run:`, r.lastError);
+                console.error(`[agents] routine ${r.id} couldn't run:`, r.lastError);
             }
             if (r.schedule.kind === "once" && r.lastError === null) {
                 this.items.splice(this.items.indexOf(r), 1);
@@ -143,7 +143,7 @@ export class Routines {
         try {
             await this.save();
         } catch (e) {
-            console.error("[ai] couldn't save the routines after a run:", e instanceof Error ? e.message : String(e));
+            console.error("[agents] couldn't save the routines after a run:", e instanceof Error ? e.message : String(e));
         }
         this.arm();
     }

@@ -216,18 +216,14 @@
 }
 
 /* the way to answer one bubble: shown when pointing at it or tabbing to it,
-   and always on a touch screen */
+   and always in mobile mode, where nothing can point (see the end of the file) */
 .replyButton {
     opacity: 0;
 }
 
-.row:focus-within .replyButton {
+.row:focus-within .replyButton,
+.row:hover .replyButton {
     opacity: 1;
-}
-@media (hover: hover) {
-    .row:hover .replyButton {
-        opacity: 1;
-    }
 }
 /* ---- swiping a bubble toward the middle to reply (see swipeReply.ts) */
 
@@ -306,4 +302,8 @@
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
+}
+
+:root[data-paper-mobile="true"] .replyButton {
+    opacity: 1;
 }

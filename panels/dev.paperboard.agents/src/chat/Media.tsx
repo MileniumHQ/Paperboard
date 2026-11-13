@@ -3,7 +3,10 @@
 // PaperPreview. Anything a preview can't show is a card that saves it.
 // Agent messages show files through markdown: `![caption](attachment:<id>)`
 // on its own line, or `[name](attachment:<id>)` in a sentence, a chip that
-// opens it. They can show web images and YouTube thumbnails the same way.
+// opens it. They can show web images and YouTube thumbnails the same way. A
+// web image comes through the service (webImage.ts), which fetches it under the
+// agent's network rule: a message, written by the model or by a page it read,
+// never gets this page to ask a host of its choosing for anything.
 
 import { createContext, createResource, createSignal, For, Match, Switch, useContext, type JSX, type ParentProps } from "solid-js";
 import {
@@ -178,8 +181,31 @@ function PlayedFile(props: { file: Attachment; caption?: string }) {
 function Missing(props: { caption: string; why: string }) {
     return (
         <span class={styles.missing} role="img" aria-label={`${props.caption} couldn't be shown: ${props.why}`} title={props.why}>
-            <PaperIcon>broken_image</PaperIcon> {props.caption} couldn't be shown
+            <PaperIcon>broken_image</PaperIcon> {props.caption} couldn't be shown: {props.why}
         </span>
+    );
+}
+
+/** A picture on the web, as the service fetched it; why not, when it couldn't or wouldn't. */
+function WebImage(props: { url: string; alt: string; title?: string }) {
+    const media = useMedia();
+    const [read] = createResource(
+        () => props.url,
+        (url) => media.files.webImage(url),
+    );
+    const name = () => props.alt || "A picture";
+    return (
+        <Switch>
+            <Match when={read.error}>
+                <Missing caption={name()} why={message(read.error)} />
+            </Match>
+            <Match when={read.loading || !read()}>
+                <span class={styles.loading} aria-label={`Loading ${name()}`} />
+            </Match>
+            <Match when={true}>
+                <img class={styles.media} src={read()!} alt={props.alt} title={props.title} />
+            </Match>
+        </Switch>
     );
 }
 
@@ -269,7 +295,7 @@ export function renderAgentImage(img: MarkdownImage): JSX.Element | undefined {
             </PaperLink>
         );
     }
-    if (/^https:\/\//i.test(img.src)) return <img class={styles.media} src={img.src} alt={img.alt} title={img.title ?? undefined} loading="lazy" />;
+    if (/^https:\/\//i.test(img.src)) return <WebImage url={img.src} alt={img.alt} title={img.title ?? undefined} />;
     return undefined;
 }
 

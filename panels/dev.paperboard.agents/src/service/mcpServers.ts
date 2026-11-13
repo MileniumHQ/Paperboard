@@ -290,7 +290,7 @@ export class McpServers {
                     this.deps.onChange(await this.view());
                 }
             } catch (e) {
-                console.error("[ai] couldn't publish the tools view:", message(e));
+                console.error("[agents] couldn't publish the tools view:", message(e));
             } finally {
                 this.publishing = false;
             }
@@ -524,7 +524,7 @@ export class McpServers {
         try {
             url = new URL(address);
         } catch (e) {
-            console.warn(`[ai] ${name}'s sign-in came back to an address that isn't a URL:`, message(e));
+            console.warn(`[agents] ${name}'s sign-in came back to an address that isn't a URL:`, message(e));
             return "that isn't the address the sign-in came back to";
         }
         const expected = new URL(p.callback);
@@ -544,7 +544,7 @@ export class McpServers {
             await this.deps.vault.set(vaultName(name, OAUTH_SECRET), JSON.stringify(tokens));
         } catch (e) {
             const why = message(e);
-            console.error(`[ai] ${name}'s sign-in couldn't trade its code for tokens:`, why);
+            console.error(`[agents] ${name}'s sign-in couldn't trade its code for tokens:`, why);
             this.failSignIn(name, why, fromListener);
             return why;
         }

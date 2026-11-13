@@ -146,7 +146,7 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
             try {
                 panels = [...new Set((await listed()).map((a) => a.panelId))].sort();
             } catch (e) {
-                console.error("[ai] couldn't list other panels' actions:", message(e));
+                console.error("[agents] couldn't list other panels' actions:", message(e));
                 return "Other Paperboard panels' actions: the list isn't available right now (" + message(e) + ").";
             }
             const named = panels.slice(0, MAX_PANEL_NAMES).join(", ") + (panels.length > MAX_PANEL_NAMES ? `, and ${panels.length - MAX_PANEL_NAMES} more` : "");
@@ -161,7 +161,7 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
             try {
                 return name === "list_actions" ? await list(args) : await run(args);
             } catch (e) {
-                console.error(`[ai] ${name} failed:`, message(e));
+                console.error(`[agents] ${name} failed:`, message(e));
                 return fault(message(e));
             }
         },

@@ -1,6 +1,7 @@
 // The messages toolset: how the agent texts. Each send_message call puts one
 // bubble in the conversation right away, even in the middle of a turn, so
-// the agent can say a thing, keep working, and say another.
+// the agent can send a short heads-up before long work and keep going. The
+// answer itself is one message.
 
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
@@ -11,7 +12,7 @@ import { USER_TURN, type Toolset } from "./toolsets";
 export const MESSAGE_TOOLS: ToolSpec[] = [
     {
         name: "send_message",
-        description: "Text the user: adds one bubble to the conversation right away. A whole reply goes in one message, never split across several.",
+        description: "Text the user: adds one bubble to the conversation right away. A short heads-up before long work is its own message; the answer itself goes in one message, never split across several.",
         inputSchema: {
             type: "object",
             properties: {

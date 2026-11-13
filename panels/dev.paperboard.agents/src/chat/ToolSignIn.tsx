@@ -24,7 +24,7 @@ export default function ToolSignIn(props: { entry: ToolSignInEntry; name: string
         try {
             return new URL(e().url).host;
         } catch (err) {
-            console.warn("[ai] a tool server's address isn't a URL:", e().url, err);
+            console.warn("[agents] a tool server's address isn't a URL:", e().url, err);
             return e().url;
         }
     };
