@@ -6,6 +6,7 @@ import path from "node:path";
 import type { ChatEntry, ChatState, Harness, Settings } from "../../src/contract";
 import { startComputerMcp, type ComputerMcp } from "../../src/service/computerMcp";
 import { Conversation, TURN_PROC_ID } from "../../src/service/conversation";
+import { messagesToolset } from "../../src/service/messages";
 import { toolbox } from "../../src/service/toolsets";
 import { brainProgram, fakeEnv, fakeLog, Recorder, TestHost, tempDir } from "./host";
 
@@ -35,7 +36,8 @@ export async function conversationRig(o: { harness?: Harness; contextBudget?: nu
     const dir = path.join(root, "storage", "conversation");
     const codexHome = path.join(root, "storage", "brains", "codex");
     fs.mkdirSync(codexHome, { recursive: true });
-    const mcp = await startComputerMcp(toolbox([{ id: "messages", tools: () => [{ name: "send_message", description: "text", inputSchema: { type: "object" } }], call: async () => ({ text: "sent" }) }]));
+    // the real messages toolset, texting the rig's conversation
+    const mcp = await startComputerMcp(toolbox([messagesToolset({ say: (text, replyTo, files) => rig.conversation.say(text, replyTo, files) })]));
     const settings: Settings = { name: "Ada", harness, model: null, compaction: "summarize" };
     const entries = new Recorder<ChatEntry>();
     const states = new Recorder<ChatState>();

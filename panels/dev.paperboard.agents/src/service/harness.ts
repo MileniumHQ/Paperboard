@@ -55,7 +55,7 @@ const HOW_YOU_WORK = `## How you work
 - **Not everything needs a tool.** Small talk, opinions and what you already know just need a text.`;
 
 const TEXTING = `## Texting
-- **\`send_message\` is the only way they hear you.** Plain output is never shown, and they never see your tool calls.
+- **Every reply is a \`send_message\`.** It's the only way they hear you: call it for each reply, even a one-word one, before you end your turn. Plain output is never shown, and they never see your tool calls.
 - **Warm, friendly and fun.** Text like a good friend would: short sentences, plain words, never stiff or formal.
 - **Match their vibe and their typing style closely:** their length, tone, slang, emoji and energy, and how they type (capitals, punctuation, abbreviations). When they ask for a different tone, switch at once and keep it.
 - **One text per reply.** Put your whole answer in a single \`send_message\`; never split one reply across several texts.
@@ -314,9 +314,9 @@ export type TurnEvent =
     | { type: "thread"; id: string }
     | { type: "message"; text: string }
     | { type: "search"; query: string }
-    // the model began writing (as far as its harness shows that), or began using a tool. `plain` is output that isn't a
-    // send_message: it reaches the user only when the turn never texts them, so it's typing only until then
-    | { type: "typing"; plain: boolean }
+    // the model began a send_message (as far as its harness shows that), or began using another tool. Its plain
+    // output is never shown, so writing it isn't typing
+    | { type: "typing" }
     | { type: "working" }
     // how much of the model's context the thread fills: tokens its next request starts with, and the window if known
     | { type: "context"; used?: number; size?: number }
@@ -343,11 +343,10 @@ export function parseTurnLine(harness: Harness, line: string): TurnEvent[] {
         if (ev.type === "error") return [{ type: "failed", message: String(ev.message ?? "Codex reported an error") }];
         return [];
     }
-    // the beginning of a block, written token by token after it: a message to the user, or a tool call
+    // the beginning of a block, written token by token after it: a text to the user, or another tool call
     if (ev.type === "stream_event" && ev.event?.type === "content_block_start" && typeof ev.parent_tool_use_id !== "string") {
         const block = ev.event.content_block;
-        if (block?.type === "text") return [{ type: "typing", plain: true }];
-        if (block?.type === "tool_use" && block.name === `mcp__${MCP_SERVER}__send_message`) return [{ type: "typing", plain: false }];
+        if (block?.type === "tool_use" && block.name === `mcp__${MCP_SERVER}__send_message`) return [{ type: "typing" }];
         if (block?.type === "tool_use" || block?.type === "server_tool_use") return [{ type: "working" }];
         return [];
     }

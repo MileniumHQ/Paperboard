@@ -70,6 +70,9 @@ const SUMMARIZE = `[from Paperboard, not the user] This conversation has grown l
 - what you were in the middle of, and what you said you'd do next
 Leave out small talk and finished things that won't matter again. Be complete but compact.`;
 
+// a turn that answered the user in plain output, which they never see
+const UNTEXTED = `[from Paperboard, not the user] Your turn ended without a send_message, so the user hasn't heard from you. Plain output is never shown: send them your reply with send_message now.`;
+
 /** What a compacted conversation carries into its next thread. */
 interface Carry {
     /** the agent's summary; null when the older part was forgotten instead */
@@ -137,13 +140,16 @@ export class Conversation {
     private closed = false;
     /** set while conversations are swapped: no turn starts until the files are in place */
     private switching: Promise<unknown> | null = null;
-    /** the user's messages in the running turn have no text after them yet; until they do, plain output is the answer */
+    /** the user's messages in the running turn have no text after them yet: the agent owes them a reply */
     private unanswered = false;
-    /** the running turn's plain output */
+    /** the running turn's plain output: only a summary is written that way, never a reply */
     private plain: string[] = [];
     /** ids of the user's messages the running turn is answering */
     private answering: string[] = [];
-    /** the agent is writing to the user right now, not working: only then does the typing bubble show */
+    /**
+     * The typing bubble. A reply owed is one typing session from the turn's start until its text lands, whatever
+     * the agent does on the way; after that, typing is only the agent writing a send_message, not working.
+     */
     private typing = false;
     /** waiting messages aren't read before this: the user was typing */
     private context: Context | null = null;
@@ -400,9 +406,9 @@ export class Conversation {
         return { id: entry.id };
     }
 
-    /** The agent is using a tool other than its messages: it's working, not typing. */
+    /** The agent is using a tool other than its messages: it's working, not typing, unless a reply is still owed. */
     working() {
-        this.setTyping(false);
+        if (!this.unanswered) this.setTyping(false);
     }
 
     private setTyping(on: boolean) {
@@ -576,12 +582,21 @@ export class Conversation {
         const carry = thread === null && !this.compactingNow ? this.carry : null;
         try {
             await this.run(settings, thread, carry ? `${this.seed(carry)}\n\n${message}` : message);
+            // a reply left as plain output never reaches the user: the agent is told once, in the same thread, to text it
+            const resumed = this.threads[settings.harness];
+            if (this.owesReply() && resumed) await this.run(settings, resumed, UNTEXTED);
+            if (this.owesReply()) throw new Error("the turn ended without a reply");
         } catch (e) {
             if (carry) this.dropThread(settings.harness);
             throw e;
         }
         if (carry && this.stopRequested) this.dropThread(settings.harness);
         else if (carry) this.setCarry(null);
+    }
+
+    /** the turn answers the user's messages, hasn't texted them, and wasn't stopped */
+    private owesReply(): boolean {
+        return this.unanswered && this.answering.length > 0 && !this.stopRequested;
     }
 
     private async run(settings: Settings, thread: string | null, message: string) {
@@ -644,9 +659,8 @@ export class Conversation {
             }
             else if (ev.type === "message") plain.push(ev.text);
             else if (ev.type === "failed") failures.push(ev.message);
-            // after it texted, the model's plain output is its recap for itself: no one is being written to
-            else if (ev.type === "typing") this.setTyping(!ev.plain || this.unanswered);
-            else if (ev.type === "working") this.setTyping(false);
+            else if (ev.type === "typing") this.setTyping(true);
+            else if (ev.type === "working") this.working();
             else if (ev.type === "done") {
                 // the prompt is answered; OpenCode would wait for the next one
                 answered = true;
@@ -752,22 +766,9 @@ export class Conversation {
                 unmeasured = e instanceof Error ? e.message : String(e);
             }
         }
-        // plain output reaches the user only when the model never texted after their latest messages: a turn that
-        // did text ends with its own recap of what it sent ("I sent you two messages…"), which isn't meant for the
-        // user. A turn that only answers a notice texts with send_message or not at all: its plain output is its
-        // note to itself
-        const forUser = this.answering.length > 0;
-        if (this.unanswered && forUser) {
-            for (const text of plain) {
-                if (!text.trim()) continue;
-                this.unanswered = false;
-                this.put({ id: this.newId(), at: Date.now(), kind: "agent", text: text.trim() });
-            }
-        }
         if (this.stopRequested) return;
         if (failures.length) throw new Error(failures[failures.length - 1]);
         if (code !== 0 && !answered) throw new Error(`the turn ended with exit ${code ?? "?"}${stderr.trim() ? `: ${lastLines(stderr)}` : ""}`);
-        if (this.unanswered && forUser) throw new Error("the turn ended without a reply");
         if (unmeasured) throw new Error(`Couldn't tell how long the conversation is, so it can't be compacted: ${unmeasured}`);
     }
 

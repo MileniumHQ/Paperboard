@@ -9,7 +9,9 @@
 // $FAKE_DIR/plan.json, and takes cues from the message it's given:
 //   [[hold]]   say {"type":"fake.holding"} and wait for SIGTERM or $FAKE_DIR/release
 //   [[fail]]   print to stderr and exit 1
-//   [[silent]] end without a reply
+//   [[silent]] end without a reply, and again when told it hadn't texted
+//   [[work]]   (Claude) think aloud in plain output and use a tool before replying
+//   [[plain]]  reply in plain output instead of send_message, which the user never sees
 //   [[tools]]  list the panel's MCP tools with the token from the environment
 //   [[big]]    report a context past any budget
 //   [[notloggedin]] (Claude) Claude's own "Not logged in" reply
@@ -87,6 +89,21 @@ async function listTools(url) {
     log({ event: "tools", status: res.status, tools: (body.result?.tools ?? []).map((t) => t.name) });
 }
 
+/** Text the user over the panel's send_message tool; throws when it's refused. */
+async function sendMessage(url, text) {
+    const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${process.env.PAPERBOARD_COMPUTER_MCP_TOKEN}` },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "send_message", arguments: { text } } }),
+    });
+    const body = await res.json();
+    log({ event: "send_message", status: res.status, text, result: body.result });
+    if (res.status !== 200 || body.result?.isError) throw new Error(`send_message was refused: ${JSON.stringify(body)}`);
+}
+
+/** A turn's reply: a send_message, or plain output for [[plain]] (and for a question from a flow, which has no tools). */
+const texts = (message, url) => url !== null && !newest(message).includes("[[plain]]");
+
 const fixture = (f) => fs.readFileSync(path.join(fixturesDir, f), "utf8");
 
 // ------------------------------------------------------------------ Codex
@@ -158,16 +175,28 @@ async function codex() {
             out({ type: "item.completed", item: { type: "agent_message", text: "SUMMARY: the user likes trains" } });
             process.exit(0);
         }
-        await cues(message, () => {
-            const urlArg = argv.find((a) => a.startsWith("mcp_servers.paperboard.url="));
-            return urlArg ? JSON.parse(urlArg.slice("mcp_servers.paperboard.url=".length)) : null;
-        });
-        if (newest(message).includes("[[silent]]")) process.exit(0);
-        out({ type: "item.completed", item: { type: "agent_message", text: plan.reply ?? `ok: ${message.slice(-20)}` } });
+        const urlArg = argv.find((a) => a.startsWith("mcp_servers.paperboard.url="));
+        const url = urlArg ? JSON.parse(urlArg.slice("mcp_servers.paperboard.url=".length)) : null;
+        await cues(message, () => url);
+        if (silent(message, thread)) process.exit(0);
+        const reply = plan.reply ?? `ok: ${message.slice(-20)}`;
+        if (texts(message, url)) {
+            out({ type: "item.started", item: { type: "mcp_tool_call", server: "paperboard", tool: "send_message" } });
+            await sendMessage(url, reply);
+            out({ type: "item.completed", item: { type: "mcp_tool_call", server: "paperboard", tool: "send_message" } });
+        } else out({ type: "item.completed", item: { type: "agent_message", text: reply } });
         process.exit(0);
     }
     process.stderr.write(`fake codex: unknown command ${argv.join(" ")}\n`);
     process.exit(64);
+}
+
+/** [[silent]]: this turn's message asks for it, or it's Paperboard's word that the thread's last turn didn't text */
+function silent(message, thread) {
+    if (newest(message).includes("[[silent]]")) return true;
+    if (!message.startsWith("[from Paperboard, not the user] Your turn ended without a send_message")) return false;
+    const turns = fs.readFileSync(path.join(FAKE_DIR, "calls.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((e) => e.event === "turn" && e.thread === thread);
+    return turns.length >= 2 && silent(turns.at(-2).message, thread);
 }
 
 /** what every turn does with the cues in its message */
@@ -250,13 +279,22 @@ async function claude() {
             out({ type: "result", is_error: true, result: "Not logged in · Please run /login" });
             process.exit(1);
         }
-        await cues(message, () => {
-            const config = JSON.parse(at("--mcp-config"));
-            return config.mcpServers.paperboard.url;
-        });
-        if (newest(message).includes("[[silent]]")) process.exit(0);
+        const url = at("--mcp-config") ? JSON.parse(at("--mcp-config")).mcpServers.paperboard.url : null;
+        await cues(message, () => url);
+        if (silent(message, session)) process.exit(0);
         const used = newest(message).includes("[[big]]") ? 500_000 : 100;
-        out({ type: "assistant", message: { usage: { input_tokens: used }, content: [{ type: "text", text: plan.reply ?? "ok" }] } });
+        const reply = plan.reply ?? "ok";
+        if (newest(message).includes("[[work]]")) {
+            out({ type: "stream_event", event: { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } } });
+            out({ type: "stream_event", event: { type: "content_block_start", index: 1, content_block: { type: "server_tool_use", id: "srvtoolu_fake", name: "web_search", input: {} } } });
+            await new Promise((ok) => setTimeout(ok, 50));
+        }
+        if (texts(message, url)) {
+            const call = { type: "tool_use", id: "toolu_fake", name: "mcp__paperboard__send_message", input: { text: reply } };
+            out({ type: "stream_event", event: { type: "content_block_start", index: 0, content_block: { ...call, input: {} } } });
+            await sendMessage(url, reply);
+            out({ type: "assistant", message: { usage: { input_tokens: used }, content: [call] } });
+        } else out({ type: "assistant", message: { usage: { input_tokens: used }, content: [{ type: "text", text: reply }] } });
         out({ type: "result", is_error: false, modelUsage: { m: { contextWindow: 1_000_000 } } });
         process.exit(0);
     }
@@ -309,7 +347,12 @@ async function opencode() {
                     const mcp = config.mcp?.servers?.paperboard;
                     if (mcp) await listTools(mcp.url);
                 } else if (msg.method === "session/prompt") {
-                    send({ method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: "ok from opencode" } } } });
+                    const prompt = (msg.params?.prompt ?? []).map((p) => p.text ?? "").join("");
+                    const url = config.mcp?.servers?.paperboard?.url ?? null;
+                    if (texts(prompt, url)) {
+                        send({ method: "session/update", params: { update: { sessionUpdate: "tool_call", toolCallId: "call_fake", name: "paperboard_send_message" } } });
+                        await sendMessage(url, "ok from opencode");
+                    } else send({ method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: "ok from opencode" } } } });
                     send({ id: msg.id, result: { stopReason: "end_turn" } });
                 } else if (msg.id !== undefined) send({ id: msg.id, result: {} });
             }

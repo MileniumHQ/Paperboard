@@ -79,6 +79,29 @@ describe("messages during a turn", () => {
     }, SLOW);
 });
 
+// Replies are texts: one typing session each, never plain output.
+describe("replies", () => {
+    test("answering is one typing session from the turn's start to the text, through the agent's work on the way", async () => {
+        rig = await conversationRig({ harness: "claude-code" });
+        rig.conversation.send("look it up [[work]]");
+        await settled(rig);
+        expect(said(rig)).toEqual(["ok"]);
+        const typing = rig.states.items.map((s) => s.typing).filter((t, i, all) => i === 0 || t !== all[i - 1]);
+        expect(typing).toEqual([false, true, false]);
+    }, SLOW);
+
+    test("a reply left as plain output is never shown: the agent is told once, in the same thread, to text it", async () => {
+        rig = await conversationRig({ harness: "claude-code" });
+        rig.conversation.send("hi [[plain]]");
+        await settled(rig);
+        expect(said(rig)).toEqual(["ok"]);
+        expect(errors(rig)).toEqual([]);
+        const [first, nudge] = rig.turns();
+        expect(nudge.thread).toBe(first.thread);
+        expect(nudge.message).toStartWith("[from Paperboard, not the user] Your turn ended without a send_message");
+    }, SLOW);
+});
+
 // Failures are shown, not swallowed (the conversation's part).
 describe("failed turns", () => {
     test("a turn that fails, or ends without a reply, adds an error entry and never a text bubble", async () => {
