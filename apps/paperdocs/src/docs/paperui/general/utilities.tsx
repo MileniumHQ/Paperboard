@@ -361,6 +361,52 @@ export function Done() {
 }`}
             </PaperCode>
 
+            <PaperText preset="subheader" as="h2" id="mobile-mode">Mobile mode</PaperText>
+            <PaperText preset="body" as="p">
+                Mobile mode is whether Paperboard is running as the phone app. Two questions look alike and are answered differently:
+            </PaperText>
+            <PaperTextList>
+                <li><strong>Layout</strong> (sizes, columns, stacking, spacing) follows the width: a container or media width query, or <PaperCode>PAPER_PANEL_COMPACT_WIDTH</PaperCode>. It never asks for mobile mode, so a narrow window and a phone lay out the same.</li>
+                <li><strong>Behavior</strong> that differs between a finger and a mouse (a long press that opens a menu, text that must not select under a finger, a control that only shows on hover, haptics, swipe gestures) follows mobile mode. Don't read <PaperCode>@media (hover: none)</PaperCode>, <PaperCode>pointer: coarse</PaperCode>, the user agent or <PaperCode>navigator.maxTouchPoints</PaperCode> for it.</li>
+            </PaperTextList>
+            <PaperText preset="body" as="p">
+                The host owns the fact and writes it on the document root as <PaperCode>data-paper-mobile</PaperCode> (<PaperCode>MOBILE_ATTRIBUTE</PaperCode>), <PaperCode>"true"</PaperCode> or <PaperCode>"false"</PaperCode>. Paperboard stamps it on every panel and widget document before its own scripts run, and <PaperCode>@mileniumhq/paperapi</PaperCode> keeps it current when the shell changes it, so a panel needs nothing to receive it.
+                Style with <PaperCode>:root[data-paper-mobile="true"]</PaperCode>, or read it in TypeScript:
+            </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Export</th>
+                        <th>Does</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>createPaperMobile()</PaperCode></td><td>A Solid accessor for mobile mode that follows the host as it changes. Call it where a component is created.</td></tr>
+                    <tr><td><PaperCode>paperMobile(root?)</PaperCode></td><td>The current value, for code outside a component.</td></tr>
+                    <tr><td><PaperCode>setPaperMobile(on, root?)</PaperCode></td><td>Writes the attribute. Only a host calls it, such as a page outside Paperboard, a test or a story.</td></tr>
+                </tbody>
+            </PaperTable>
+            <PaperText preset="body" as="p">
+                A document the host never told throws an error naming the attribute instead of guessing "desktop": both readers throw when the attribute is missing or isn't <PaperCode>true</PaperCode> or <PaperCode>false</PaperCode>. CSS rules simply don't match.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { createPaperMobile } from "@mileniumhq/paperui";
+
+export function Keyboard() {
+    const mobile = createPaperMobile();
+    return <Show when={mobile()}>{/* a button that raises the on-screen keyboard */}</Show>;
+}`}
+            </PaperCode>
+            <PaperCode block language="css">
+{`/* holding a bubble opens its menu, so it must not also select */
+:root[data-paper-mobile="true"] .bubble {
+    user-select: none;
+}`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                Events that carry their own input type stay as they are: a handler that checks <PaperCode>pointerType === "touch"</PaperCode> answers for that one finger, wherever it lands. Plain <PaperCode>:hover</PaperCode> tints that PaperUI's components guard with <PaperCode>@media (hover: hover)</PaperCode> are a pointer capability, not a mode.
+            </PaperText>
+
             <PaperText preset="subheader" as="h2" id="press-cancel">Sliding off a press</PaperText>
             <PaperText preset="body" as="p">
                 A finger that presses a control and slides off it before lifting doesn't press it, like a native button.{" "}
