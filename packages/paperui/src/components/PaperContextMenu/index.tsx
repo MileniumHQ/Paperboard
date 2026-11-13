@@ -240,6 +240,25 @@ export function useContextMenuState(
 
 const LEVEL_SELECTOR = "[data-context-level]";
 
+/** The bottom of what's on screen: above a phone's keyboard, which covers the page without shrinking the window. */
+function visibleHeight(): number {
+    return Math.min(window.innerHeight, window.visualViewport?.height ?? window.innerHeight);
+}
+
+/**
+ * Where a fixed box at 0, 0 shows up, in the coordinates getBoundingClientRect gives. It's 0, 0 until a browser's
+ * fixed layer and its measurements part: iOS Safari scrolls the page for a keyboard and measures from what's visible,
+ * while fixed boxes stay on the page. A menu placed by its target's measurements is moved back by this.
+ */
+function fixedOrigin(host: HTMLElement): { x: number; y: number } {
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none";
+    host.appendChild(probe);
+    const r = probe.getBoundingClientRect();
+    probe.remove();
+    return { x: r.left, y: r.top };
+}
+
 interface SubMenuHandle {
     open: () => void;
     close: () => void;
@@ -376,18 +395,19 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
         let top = targetY;
 
         const isBelowMode = placementMode.startsWith("below");
+        const bottom = visibleHeight();
 
-        if (isBelowMode && top + rect.height > window.innerHeight - padding) {
+        if (isBelowMode && top + rect.height > bottom - padding) {
             if (resolvedEl) {
                 const elRect = resolvedEl.getBoundingClientRect();
                 top = Math.max(padding, elRect.top - rect.height);
             } else {
                 top = Math.max(
                     padding,
-                    window.innerHeight - rect.height - padding,
+                    bottom - rect.height - padding,
                 );
             }
-        } else if (top + rect.height > window.innerHeight - padding) {
+        } else if (top + rect.height > bottom - padding) {
             top = Math.max(padding, top - rect.height);
         }
 
@@ -395,7 +415,8 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
             top = padding;
         }
 
-        setCoords({ left, top });
+        const origin = fixedOrigin(menuRef.parentElement ?? document.body);
+        setCoords({ left: left - origin.x, top: top - origin.y });
     };
 
     const handleClose = () => {
@@ -585,9 +606,17 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
 
         const handleScroll = (e: Event) => {
             const targetNode = e.target instanceof Node ? e.target : null;
-            if (menuRef && (!targetNode || !inMenu(targetNode))) {
-                handleClose();
+            if (!menuRef || (targetNode && inMenu(targetNode))) return;
+            // A phone's keyboard rising for a text field in the menu (a select's search) scrolls the page to keep
+            // the field in view. Closing then would take the field away and drop the keyboard again: the menu
+            // follows its target instead.
+            const typing = document.activeElement;
+            const pageScrolled = targetNode === document || targetNode === document.scrollingElement;
+            if (pageScrolled && (typing instanceof HTMLInputElement || typing instanceof HTMLTextAreaElement) && inMenu(typing)) {
+                updatePosition();
+                return;
             }
+            handleClose();
         };
 
         window.addEventListener("keydown", handleKeyDown);
@@ -595,8 +624,17 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
         window.addEventListener("pointerup", handleGlobalPointerUp);
         window.addEventListener("scroll", handleScroll, true);
         document.addEventListener("pointerdown", handleOutsidePointerDown, true);
+        // a keyboard coming or going changes what's visible, and a search changes the menu's height: it stays by its target
+        const viewport = window.visualViewport;
+        viewport?.addEventListener("resize", updatePosition);
+        viewport?.addEventListener("scroll", updatePosition);
+        const resized = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => updatePosition());
+        if (menuRef) resized?.observe(menuRef);
 
         onCleanup(() => {
+            viewport?.removeEventListener("resize", updatePosition);
+            viewport?.removeEventListener("scroll", updatePosition);
+            resized?.disconnect();
             if (pointerMoveRaf) cancelAnimationFrame(pointerMoveRaf);
             window.removeEventListener("keydown", handleKeyDown);
             window.removeEventListener("pointermove", handleGlobalPointerMove);

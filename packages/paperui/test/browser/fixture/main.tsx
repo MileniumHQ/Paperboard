@@ -117,6 +117,15 @@ const scenarios: Record<string, () => JSX.Element> = {
                         </Show>
                     </PaperSelectMenu>
                 </div>
+                <div id="searchable">
+                    <PaperSelectMenu name="model" searchable onValueChange={(v) => t.changes.push(v)}>
+                        <PaperSelectMenuItem value="fast">Fast</PaperSelectMenuItem>
+                        <PaperSelectMenuItem value="smart">Smart</PaperSelectMenuItem>
+                    </PaperSelectMenu>
+                </div>
+                <div id="scroller" style={{ height: "160px", overflow: "auto" }}>
+                    <div style={{ height: "800px" }}>scrolls</div>
+                </div>
             </div>,
         );
     },

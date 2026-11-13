@@ -66,4 +66,29 @@ describe("PaperSelectMenu", () => {
         await page.eval('t.relabel("Ex, renamed")');
         expect(await triggerText("late")).toContain("Ex, renamed");
     });
+
+    // A phone's keyboard rising for the search field scrolls the page to keep the field in view. Closing on that
+    // scroll took the field away, the keyboard fell again, and a searchable menu could never be used on a phone.
+    test("a searchable menu stays open while its search field is focused and the page scrolls under it", async () => {
+        page = await browser.open("selectMenu");
+        await openMenu("searchable", "fast");
+        const searchFocused = `document.activeElement?.matches('[role="listbox"] input[type="search"]') === true`;
+        await page.waitFor(searchFocused, "the search field to take focus");
+
+        await page.eval("document.dispatchEvent(new Event('scroll'))");
+        await page.eval("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+        expect(await page.eval(popupOpen("fast"))).toBe(true);
+        expect(await page.eval(searchFocused)).toBe(true);
+
+        await page.click(option("smart"));
+        expect(await page.eval("t.changes")).toEqual(["smart"]);
+    });
+
+    test("a searchable menu still closes when the page scrolls once its search field isn't focused", async () => {
+        page = await browser.open("selectMenu");
+        await openMenu("searchable", "fast");
+        await page.eval("document.activeElement.blur()");
+        await page.eval('document.getElementById("scroller").scrollTop = 200');
+        await page.waitFor(`!(${popupOpen("fast")})`, "the scroll to close the menu");
+    });
 });

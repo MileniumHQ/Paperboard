@@ -392,6 +392,7 @@ menu.setPlacement(placement: ContextMenuPlacement): void;`}
             <PaperTextList>
                 <li>The menu renders in a portal on the page, fixed to the viewport, so a clipping ancestor such as a PaperCard cannot cut it off.</li>
                 <li>Position is measured on the frame after it opens. A menu that would run past the bottom edge flips above its target, or moves up to fit; one that would run past the right edge anchors by its right edge to the target. It keeps at least 12 pixels from every viewport edge.</li>
+                <li>The bottom edge is the top of a phone's on-screen keyboard while one is up. The menu moves when the keyboard comes or goes and when its own height changes, such as a select's search filtering it.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="dismissal">Dismissal</PaperText>
@@ -401,7 +402,7 @@ menu.setPlacement(placement: ContextMenuPlacement): void;`}
             <PaperTextList>
                 <li>Escape, unless <PaperCode>closeOnEsc</PaperCode> is <PaperCode>false</PaperCode>.</li>
                 <li>A press anywhere outside the menu and its submenus. A press on the target element, when the target is an element, does not count as outside, so the trigger's own click decides whether to reopen or close.</li>
-                <li>A scroll of anything except the menu itself.</li>
+                <li>A scroll of anything except the menu itself. While a text field in the menu has focus, such as a select's search, a scroll of the page moves the menu instead: a phone scrolls the page to make room for its keyboard.</li>
                 <li>Choosing an item, unless <PaperCode>closeOnClick</PaperCode> is <PaperCode>false</PaperCode>.</li>
             </PaperTextList>
 
