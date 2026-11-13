@@ -1,0 +1,188 @@
+AppID : 258550, change number : 0/0, last change : Thu Nov 12 00:00:00 2026 
+"258550"
+{
+	"common"
+	{
+		"name"		"Rust Dedicated Server"
+		"type"		"Game"
+		"ReleaseState"		"released"
+		"oslist"		"windows,linux"
+		"osarch"		""
+		"osextended"		""
+		"associations"
+		{
+		}
+		"gameid"		"258550"
+		"store_tags"
+		{
+		}
+	}
+	"extended"
+	{
+		"gamedir"		""
+	}
+	"config"
+	{
+		"contenttype"		"3"
+		"installdir"		"rust_dedicated"
+	}
+	"depots"
+	{
+		"overridescddb"		"1"
+		"markdlcdepots"		"1"
+		"258551"
+		{
+			"systemdefined"		"1"
+			"config"
+			{
+				"oslist"		"windows"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"754785054187022296"
+					"size"		"762923616"
+					"download"		"537137040"
+				}
+				"debug"
+				{
+					"gid"		"2591346971987511447"
+					"size"		"631208934"
+					"download"		"393851888"
+				}
+				"last-month"
+				{
+					"gid"		"93946663446561466"
+					"size"		"818696768"
+					"download"		"560748064"
+				}
+				"release"
+				{
+					"gid"		"754785054187022296"
+					"size"		"762923616"
+					"download"		"537137040"
+				}
+				"staging"
+				{
+					"gid"		"4341872122517423410"
+					"size"		"759590100"
+					"download"		"533655728"
+				}
+			}
+		}
+		"258552"
+		{
+			"config"
+			{
+				"oslist"		"linux"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"7175333784427202048"
+					"size"		"769822950"
+					"download"		"508225152"
+				}
+				"debug"
+				{
+					"gid"		"8305401038939912362"
+					"size"		"139415558"
+					"download"		"34397936"
+				}
+				"last-month"
+				{
+					"gid"		"1632958440323253420"
+					"size"		"826604814"
+					"download"		"532239360"
+				}
+				"release"
+				{
+					"gid"		"7175333784427202048"
+					"size"		"769822950"
+					"download"		"508225152"
+				}
+				"staging"
+				{
+					"gid"		"3884307731348307143"
+					"size"		"766607282"
+					"download"		"505379712"
+				}
+			}
+		}
+		"258554"
+		{
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"8417394343345843224"
+					"size"		"4942888459"
+					"download"		"1022960208"
+				}
+				"debug"
+				{
+					"gid"		"9050441631359858310"
+					"size"		"8000428058"
+					"download"		"1942290304"
+				}
+				"last-month"
+				{
+					"gid"		"2507054976021021832"
+					"size"		"5285434417"
+					"download"		"1276623552"
+				}
+				"release"
+				{
+					"gid"		"8417394343345843224"
+					"size"		"4942888459"
+					"download"		"1022960208"
+				}
+				"staging"
+				{
+					"gid"		"3903271683292288815"
+					"size"		"4950745269"
+					"download"		"1027713728"
+				}
+			}
+		}
+		"branches"
+		{
+			"public"
+			{
+				"buildid"		"26498655"
+				"timeupdated"		"1794019915"
+				"timebuildupdated"		"1794014169"
+			}
+			"debug"
+			{
+				"buildid"		"17041002"
+				"description"		"debug"
+				"timeupdated"		"1737126347"
+				"timebuildupdated"		"1737123193"
+			}
+			"last-month"
+			{
+				"buildid"		"26139947"
+				"description"		"last-month"
+				"timeupdated"		"1792691950"
+				"timebuildupdated"		"1792690223"
+			}
+			"release"
+			{
+				"buildid"		"26498655"
+				"description"		"Release, before public"
+				"timeupdated"		"1794014169"
+				"timebuildupdated"		"1794014169"
+			}
+			"staging"
+			{
+				"buildid"		"26628923"
+				"timeupdated"		"1794520175"
+				"timebuildupdated"		"1794520175"
+			}
+		}
+		"privatebranches"		"1"
+	}
+}

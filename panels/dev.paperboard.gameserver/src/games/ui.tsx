@@ -9,8 +9,10 @@ import { tf2 } from "./tf2";
 import { tf2UI } from "./tf2/ui";
 import { gmod } from "./gmod";
 import { gmodUI } from "./gmod/ui";
+import { rust } from "./rust";
+import { rustUI } from "./rust/ui";
 import type { GameUI } from "./uiTypes";
-const interfaces: Readonly<Record<string, GameUI>> = { [minecraft.id]: minecraftUI, [terraria.id]: terrariaUI, [palworld.id]: palworldUI, [tf2.id]: tf2UI, [gmod.id]: gmodUI };
+const interfaces: Readonly<Record<string, GameUI>> = { [minecraft.id]: minecraftUI, [terraria.id]: terrariaUI, [palworld.id]: palworldUI, [tf2.id]: tf2UI, [gmod.id]: gmodUI, [rust.id]: rustUI };
 export function gameUIFor(id: string): GameUI {
     const game = gameFor(id);
     const ui = interfaces[game.id];
