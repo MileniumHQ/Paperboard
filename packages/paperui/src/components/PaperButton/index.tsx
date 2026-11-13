@@ -14,6 +14,8 @@ export interface PaperButtonProps extends JSX.ButtonHTMLAttributes<HTMLButtonEle
     variant?: PaperButtonVariant;
     /** stretches across its container, like PaperInput's fullWidth */
     fullWidth?: boolean;
+    /** fully rounded ends: a circle for an icon button, a pill for a labelled one */
+    round?: boolean;
     ref?: HTMLButtonElement | ((el: HTMLButtonElement) => void);
     /** When set, renders an anchor styled as a button instead of a button. */
     href?: string;
@@ -27,6 +29,7 @@ export function PaperButton(props: PaperButtonProps) {
         "size",
         "variant",
         "fullWidth",
+        "round",
         "disabled",
         "class",
         "classList",
@@ -50,9 +53,11 @@ export function PaperButton(props: PaperButtonProps) {
             styles[`size-${local.size ?? "medium"}`],
             local.variant === "text" ? styles.text : "",
             local.variant === "outline" ? styles.outline : "",
+            local.variant === "surface" ? styles.surface : "",
             local.disabled ? styles.disabled : "",
             local.icon ? styles.icon : "",
             local.fullWidth ? styles.fullWidth : "",
+            local.round ? styles.round : "",
             local.class,
         ]
             .filter(Boolean)

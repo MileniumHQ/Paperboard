@@ -150,7 +150,7 @@ export function Example() {
                         <td><PaperCode>finishVariant</PaperCode></td>
                         <td><PaperCode>PaperButtonVariant</PaperCode></td>
                         <td><PaperCode>"success"</PaperCode></td>
-                        <td>The variant of the last-step button, with the <PaperLink href="/docs/paperui/papereffect/">PaperEffect</PaperLink> shadow in the same color. A <PaperCode>text</PaperCode> or <PaperCode>outline</PaperCode> variant gets a colorless shadow. Use <PaperCode>danger</PaperCode> when finishing destroys something.</td>
+                        <td>The variant of the last-step button, with the <PaperLink href="/docs/paperui/papereffect/">PaperEffect</PaperLink> shadow in the same color. A <PaperCode>surface</PaperCode>, <PaperCode>text</PaperCode> or <PaperCode>outline</PaperCode> variant gets a colorless shadow. Use <PaperCode>danger</PaperCode> when finishing destroys something.</td>
                     </tr>
                 </tbody>
             </PaperTable>
