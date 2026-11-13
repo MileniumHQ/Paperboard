@@ -8,6 +8,7 @@
 // behaviour comes from fake-rust.json in its working directory:
 // { "noSave": true } answers a save without writing the file.
 import * as fs from "node:fs";
+import { PNG } from "pngjs";
 import * as path from "node:path";
 
 const say = (line: string) => process.stdout.write(`${line}\n`);
@@ -35,6 +36,26 @@ let maxPlayers = Number(setting("server.maxplayers") || 50);
 let saves = 0;
 const saveWorld = () => { if (!plan.noSave) fs.writeFileSync(saveFile, `save ${++saves} at ${process.hrtime.bigint()}`); };
 
+/**
+ * world.rendermap as build 26498655 draws it: an 8-bit RGBA PNG of the world
+ * at `scale` pixels a metre inside a 500-pixel ocean border, saved in the
+ * working directory as map_<size>_<seed>.png. Here the world is land green
+ * with a red top-left pixel, and the border ocean blue.
+ */
+function renderMap(scale: number): string {
+    const world = Math.floor(Number(setting("server.worldsize")) * scale);
+    const side = world + 1000;
+    const image = new PNG({ width: side, height: side });
+    for (let y = 0; y < side; y++) for (let x = 0; x < side; x++) {
+        const inside = x >= 500 && y >= 500 && x < 500 + world && y < 500 + world;
+        const corner = x === 500 && y === 500;
+        image.data.set(corner ? [255, 0, 0, 255] : inside ? [60, 140, 60, 255] : [10, 60, 80, 255], (y * side + x) * 4);
+    }
+    const file = path.join(cwd, `map_${setting("server.worldsize")}_${setting("server.seed")}.png`);
+    fs.writeFileSync(file, PNG.sync.write(image));
+    return file;
+}
+
 Bun.serve<undefined, never>({
     port: Number(setting("rcon.port")),
     hostname: setting("rcon.ip"),
@@ -61,6 +82,7 @@ Bun.serve<undefined, never>({
             else if ((match = /^unban (\d+)$/.exec(Message))) answer(bans.delete(match[1]!) ? `Unbanned User: ${match[1]}` : `User ${match[1]} isn't banned`);
             else if (Message === "banlistex") answer([...bans].map(([id, ban], i) => `${i + 1} ${id} "${ban.name}" "${ban.reason}" -1\n`).join(""));
             else if (/^kick /.test(Message)) answer("Player not found");
+            else if ((match = /^world\.rendermap ([\d.]+)$/.exec(Message))) answer(`Saved map render to: ${renderMap(Number(match[1]))}`);
             else if ((match = /^server\.maxplayers (\d+)$/.exec(Message))) { maxPlayers = Number(match[1]); answer(`server.maxplayers: "${maxPlayers}"`); }
             else if ((match = /^(server\.\w+) (.+)$/.exec(Message))) answer(`${match[1]}: ${match[2]}`);
             else if (Message === "status") answer(`hostname: ${setting("server.hostname")}\nversion : 2636 secure (secure mode enabled, connected to Steam3)\nmap     : Procedural Map\nplayers : 0 (${maxPlayers} max) (0 queued) (0 joining)\n\nid name ping connected addr owner violation kicks entityId \n`);

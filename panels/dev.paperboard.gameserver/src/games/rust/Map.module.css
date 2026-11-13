@@ -1,0 +1,8 @@
+/* the map from above, square, whole, and as wide as its column */
+.picture {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-inset);
+}

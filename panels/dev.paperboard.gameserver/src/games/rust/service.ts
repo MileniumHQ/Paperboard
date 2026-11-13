@@ -17,6 +17,7 @@ import { trashDirName } from "../../service/trash";
 import { rust, options, RUST_APP_ID, type RustMapView, type RustOption } from "./index";
 import { parseInfo, parsePlayers, RustRcon, RustRconSilent, type RustChat, type RustInfo, type RustPlayer } from "./webrcon";
 import { parseBanList, parseBansCfg, RustRoster, steamId, type RustBan } from "./roster";
+import { renderScale, worldPicture } from "./mapPicture";
 
 const GAME = "rust";
 const PROC = "rust-server";
@@ -219,6 +220,56 @@ async function mapView(): Promise<RustMapView> {
     };
 }
 
+/** The map's picture, kept beside the map's own files (proceduralmap.<size>.<seed>.…), so a wipe takes it with them. */
+const pictureName = (size: number, seed: number) => `proceduralmap.${size}.${seed}.png`;
+const pictureUrl = (png: Buffer) => `data:image/png;base64,${png.toString("base64")}`;
+const RENDERED = "Saved map render to:";
+
+/** The picture of the map the settings name, or null when the server hasn't drawn it. */
+async function mapPicture(): Promise<string | null> {
+    const { size, seed } = await mapView();
+    const png = await fs.readFile(path.join(await identityDir(), pictureName(size, seed))).catch((err: NodeJS.ErrnoException) => {
+        if (err.code === "ENOENT") return null;
+        throw err;
+    });
+    return png && pictureUrl(png);
+}
+
+// one drawing at a time per server: the Map tab asks again when it opens again
+const drawing = new Map<string, Promise<string>>();
+
+/**
+ * Has the running server draw its map, from above, and keeps the world part
+ * of it (see mapPicture.ts). Rust names the render after the map it is on,
+ * which is the one kept: the settings may already name the next.
+ */
+async function drawMap(ctx: Context): Promise<string> {
+    if (ctx.state.serverStatus !== "online") throw new Error("Start Rust to draw its map");
+    const root = await serverRoot();
+    const pending = drawing.get(root) ?? (async () => {
+        const { size } = await mapView();
+        const reply = await rcon().exec(`world.rendermap ${renderScale(size)}`, {
+            until: (message) => message.startsWith(RENDERED) || message.startsWith("Failed to render"),
+            timeoutMs: 300_000,
+        });
+        const line = reply.split("\n").find((l) => l.startsWith(RENDERED));
+        if (!line) throw new Error(`Rust couldn't draw its map: ${reply.trim()}`);
+        const render = path.resolve(await installDir(), line.slice(RENDERED.length).trim());
+        const drawn = /map_(\d+)_(\d+)\.png$/.exec(render);
+        if (!drawn || path.dirname(render) !== (await installDir())) throw new Error(`Rust saved its map somewhere unexpected: ${render}`);
+        try {
+            const png = await worldPicture(await fs.readFile(render));
+            await fs.mkdir(await identityDir(), { recursive: true });
+            await fs.writeFile(path.join(await identityDir(), pictureName(Number(drawn[1]), Number(drawn[2]))), png);
+            return pictureUrl(png);
+        } finally {
+            await fs.rm(render, { force: true });
+        }
+    })().finally(() => drawing.delete(root));
+    drawing.set(root, pending);
+    return pending;
+}
+
 /**
  * Wipes a stopped server: the map's files (and the blueprints, when asked)
  * move to a trash folder in the server folder, never deleted, and the server
@@ -297,6 +348,8 @@ export const rustService: GameService = {
         ...steamInstallCalls(steam),
         ["rust-metrics"]: () => info(),
         ["rust-map"]: () => mapView(),
+        ["rust-map-picture"]: () => mapPicture(),
+        ["rust-map-draw"]: (ctx) => drawMap(ctx),
         ["rust-wipe"]: (ctx, { blueprints }) => exclusive(ctx, local(), "Rust", async () => {
             if (typeof blueprints !== "boolean") throw new Error("Choose whether blueprints are wiped too");
             const view = await wipe(blueprints);

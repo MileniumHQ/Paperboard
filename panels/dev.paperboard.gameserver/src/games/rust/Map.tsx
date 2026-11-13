@@ -1,8 +1,9 @@
 import { createEffect, createSignal, on, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperFlex, PaperIcon, PaperLoader, PaperModal, PaperPageHeader, PaperQuote, PaperSettingItem, PaperSettingList, PaperTable, PaperText, PaperToggle } from "@mileniumhq/paperui";
 import { serverBridge, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import type { RustMapView } from "./index";
+import styles from "./Map.module.css";
 
 /**
  * The map a Rust server plays, and its wipe: a fresh map with everything on
@@ -20,15 +21,37 @@ export default function RustMap(props: { active: boolean }) {
     /** set once a wipe is done: whether there was a map to move to the trash */
     const [wiped, setWiped] = createSignal<{ trashed: boolean }>();
 
+    // the map from above: undefined until read, null until the server draws it
+    const [picture, setPicture] = createSignal<string | null>();
+    const [drawing, setDrawing] = createSignal(false);
+    const [pictureError, setPictureError] = createSignal("");
+
     const load = async () => {
         try {
             setView(await serverBridge.call<RustMapView>("rust-map"));
+            setPicture(await serverBridge.call<string | null>("rust-map-picture"));
             setLoadError("");
         } catch (err) {
             setLoadError(errorMessage(err));
         }
     };
     createEffect(on([() => props.active, serverStatus], ([active]) => { if (active) void load(); }));
+
+    // a running server without a picture of its map draws one, once
+    const draw = async () => {
+        setDrawing(true);
+        setPictureError("");
+        try {
+            setPicture(await serverBridge.call<string>("rust-map-draw"));
+        } catch (err) {
+            setPictureError(errorMessage(err));
+        } finally {
+            setDrawing(false);
+        }
+    };
+    createEffect(() => {
+        if (props.active && serverStatus() === "online" && picture() === null && !drawing() && !pictureError()) void draw();
+    });
 
     const ask = () => { setBlueprints(false); setError(""); setOpen(true); };
     const wipe = async () => {
@@ -37,6 +60,7 @@ export default function RustMap(props: { active: boolean }) {
         try {
             const trashed = view()?.made === true;
             setView(await serverBridge.call<RustMapView>("rust-wipe", { blueprints: blueprints() }));
+            setPicture(null);
             setWiped({ trashed });
             setOpen(false);
         } catch (err) {
@@ -63,7 +87,35 @@ export default function RustMap(props: { active: boolean }) {
             </Show>
 
             <PaperCard>
-                <PaperFlex direction="column" gap="half" padding="full">
+                <PaperFlex direction="row" wrap gap="full" padding="full" align="flex-start">
+                <PaperFlex grow maxWidth="panel-small" minWidth="field-wide" fullWidth>
+                    <Show
+                        when={picture()}
+                        fallback={
+                            <PaperFlex center direction="column" gap="half" fullWidth class={styles.picture}>
+                                <Show
+                                    when={!pictureError()}
+                                    fallback={
+                                        <PaperFlex direction="column" gap="half" align="center" padding="full">
+                                            <PaperQuote variant="danger" icon="warning" title="The map couldn't be drawn">{pictureError()}</PaperQuote>
+                                            <PaperButton disabled={serverStatus() !== "online"} onClick={() => void draw()}>Try again</PaperButton>
+                                        </PaperFlex>
+                                    }
+                                >
+                                    <Show
+                                        when={drawing()}
+                                        fallback={<PaperText preset="body" color="text-subtle">{picture() === null ? "Rust draws the map when the server runs." : ""}</PaperText>}
+                                    >
+                                        <PaperLoader loaderStatus="indeterminate" label="Drawing the map..." />
+                                    </Show>
+                                </Show>
+                            </PaperFlex>
+                        }
+                    >
+                        {(src) => <img class={styles.picture} src={src()} alt={`The map from above, ${view()?.size ?? ""} m, seed ${view()?.seed ?? ""}`} />}
+                    </Show>
+                </PaperFlex>
+                <PaperFlex direction="column" gap="half" flex="1 1 0" minWidth="field-wide">
                     <PaperText size={3} weight={700}>Procedural map</PaperText>
                     <PaperText preset="body" color="text-subtle">
                         Rust makes the map from its size and seed. Change them in Options, or wipe for a new seed.
@@ -84,6 +136,7 @@ export default function RustMap(props: { active: boolean }) {
                             </tr>
                         </tbody>
                     </PaperTable>
+                </PaperFlex>
                 </PaperFlex>
             </PaperCard>
 

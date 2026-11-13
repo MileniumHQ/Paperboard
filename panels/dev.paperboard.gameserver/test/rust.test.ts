@@ -12,6 +12,7 @@ import { sendServerCommand, startServerInstance, stopServerInstance } from "../s
 import { argValue, rconPasswordRule, rustService } from "../src/games/rust/service";
 import { parseBanList, parseBansCfg, steamId } from "../src/games/rust/roster";
 import { parseInfo, parsePlayers, RustRcon, RustRconSilent, RustRconUnreachable } from "../src/games/rust/webrcon";
+import { PNG } from "pngjs";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -97,6 +98,31 @@ describe("Rust", () => {
         // stopped: the ban list is read from the file the server keeps, and changing it waits for the server
         expect((await call(server, "rust-players") as { bans: { steamId: string }[] }).bans.map((b) => b.steamId)).toEqual([BANNED]);
         await expect(call(server, "rust-unban", { steamId: BANNED })).rejects.toThrow("Start the server to ban or unban players");
+    });
+
+    test("the running server draws its map once, the world alone is kept beside the map's files, and a wipe takes it too", async () => {
+        const server = await rustServer();
+        expect(await call(server, "rust-map-picture")).toBeNull();
+        await expect(call(server, "rust-map-draw")).rejects.toThrow("Start Rust to draw its map");
+        await online(server);
+        const drawn = await call(server, "rust-map-draw") as string;
+        expect(drawn.startsWith("data:image/png;base64,")).toBe(true);
+        // the ocean border is cut off: the picture starts at the world's corner, and is the world's width at the picture's scale
+        const png = PNG.sync.read(Buffer.from(drawn.slice("data:image/png;base64,".length), "base64"));
+        expect([png.width, png.height]).toEqual([1024, 1024]);
+        const pixel = (x: number, y: number) => [...png.data.subarray((y * 1024 + x) * 4, (y * 1024 + x) * 4 + 3)];
+        expect([pixel(0, 0), pixel(1, 0), pixel(1023, 1023)]).toEqual([[255, 0, 0], [60, 140, 60], [60, 140, 60]]);
+        // the render itself doesn't stay in the game's folder
+        expect(fs.readdirSync(path.join(server.dir, "install")).filter((name) => name.startsWith("map_"))).toEqual([]);
+        const identity = path.join(server.dir, "server", "paperboard");
+        expect(fs.existsSync(path.join(identity, "proceduralmap.1000.12345.png"))).toBe(true);
+        expect(await call(server, "rust-map-picture")).toBe(drawn);
+        await stop(server);
+
+        await call(server, "rust-wipe", { blueprints: false });
+        expect(await call(server, "rust-map-picture")).toBeNull();
+        const trash = fs.readdirSync(server.dir).filter((name) => name.startsWith(".trash-"));
+        expect(fs.readdirSync(path.join(server.dir, trash[0]!, "server", "paperboard"))).toContain("proceduralmap.1000.12345.png");
     });
 
     test("a wipe moves the map and what was on it to the trash, keeps blueprints unless asked, gives a new seed, and never runs on a running server", async () => {
