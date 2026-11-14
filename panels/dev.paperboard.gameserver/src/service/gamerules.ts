@@ -29,11 +29,11 @@ function profileFor(ctx: ServiceContext<GameServerState>): VersionProfile {
     return resolveVersionProfile(minecraftSoftware(ctx.state.serverSoftware), ctx.state.serverVersion);
 }
 
-export function setGamerule(
+export async function setGamerule(
     ctx: ServiceContext<GameServerState>,
     rawName: string,
     rawValue: string,
-): boolean {
+): Promise<boolean> {
     const name = assertGameruleName(rawName);
     const value = assertGameruleValue(name, rawValue);
     const profile = profileFor(ctx);
@@ -44,8 +44,9 @@ export function setGamerule(
         writeServerLineBestEffort(`gamerule ${serverName} ${serverValue}\n`);
     } else {
         // offline edits must never look applied-and-dropped: they persist
-        // in panel config and re-apply the next time the server boots
-        void persistPendingGamerule(name, value);
+        // in panel config and re-apply the next time the server boots, and
+        // an edit that could not be saved fails the call that made it
+        await persistPendingGamerule(name, value);
     }
 
     // optimistic truth until the server's readout corrects it
@@ -55,19 +56,20 @@ export function setGamerule(
     return true;
 }
 
-async function persistPendingGamerule(name: string, value: string): Promise<void> {
-    let saved: Record<string, unknown> = {};
-    try {
-        const current = await config.get<Record<string, unknown>>(PANEL_ID);
-        if (current && typeof current === "object") saved = current;
-    } catch (err) {
-        console.debug("[Service:Gamerules] no saved panel config yet:", String(err));
-    }
-    const pending = {
-        ...((saved.pendingGamerules as Record<string, string> | undefined) ?? {}),
-        [name]: value,
-    };
-    await config.set({ ...saved, pendingGamerules: pending }, PANEL_ID);
+// one read-merge-write of the saved edits at a time, so two quick edits both stay
+let pendingWrites: Promise<unknown> = Promise.resolve();
+
+function persistPendingGamerule(name: string, value: string): Promise<void> {
+    const write = pendingWrites.then(async () => {
+        const saved = (await config.get<Record<string, unknown> | null>(PANEL_ID)) ?? {};
+        const pending = {
+            ...((saved.pendingGamerules as Record<string, string> | undefined) ?? {}),
+            [name]: value,
+        };
+        await config.set({ ...saved, pendingGamerules: pending }, PANEL_ID);
+    });
+    pendingWrites = write.catch(() => undefined);
+    return write;
 }
 
 // reads current values from the running server — one query per rule,

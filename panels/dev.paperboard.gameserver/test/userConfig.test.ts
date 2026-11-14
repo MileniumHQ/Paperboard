@@ -77,7 +77,7 @@ describe("user config files", () => {
     test("offline property and gamerule edits are kept as pending and applied once on the next boot", async () => {
         const mc = minecraftServer({ version: "1.21.1", software: "paper" });
         await mc.run(() => applyRuntimeProperties(mc.scope.ctx, { difficulty: "3", gamemode: "creative", "force-gamemode": "true" }));
-        mc.run(() => setGamerule(mc.scope.ctx, "keep_inventory", "true"));
+        await mc.run(() => setGamerule(mc.scope.ctx, "keep_inventory", "true"));
         const settings = () => mc.scope.server.settings as Record<string, Record<string, string>>;
         await mc.scope.waitFor(() => settings().pendingGamerules?.keep_inventory === "true", "the gamerule edit to be saved");
         expect(settings().pendingProperties).toEqual({ difficulty: "3", gamemode: "creative", "force-gamemode": "true" });

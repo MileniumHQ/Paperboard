@@ -1,4 +1,5 @@
 import { GAMERULES, type GameruleEntry } from "../generated/gamerules.generated";
+export type { GameruleEntry };
 import {
     mcAtLeast,
     canonicalGameruleName,

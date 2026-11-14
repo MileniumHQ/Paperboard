@@ -159,8 +159,8 @@ function gameruleBlocks(ctx: Context): { command: BlockCommandDefinition; value:
             description: "Sets a game rule now, or for the next start when the server is offline",
             text: "Set game rule {rule} to {value}",
             inputs: { rule, value: { type: "text", name: "Value" } },
-            run: ({ rule, value }: { rule: string; value: string }) => {
-                setGamerule(ctx, rule, value);
+            run: async ({ rule, value }: { rule: string; value: string }) => {
+                await setGamerule(ctx, rule, value);
             },
         },
         value: {

@@ -87,15 +87,15 @@ describe("console and property injection", () => {
         await exit;
     });
 
-    test("gamerules are checked against the registry and the rule's type", () => {
+    test("gamerules are checked against the registry and the rule's type", async () => {
         const scope = testScope({ directory: "servers/rules" }, { serverVersion: "1.21.11", serverSoftware: "paper" });
         const set = (name: string, value: string) => inServer(scope, () => setGamerule(scope.ctx, name, value));
-        expect(() => set("not_a_rule", "true")).toThrow("Refusing unknown gamerule");
-        expect(() => set("keep_inventory\nop Mallory", "true")).toThrow("Refusing unknown gamerule");
-        expect(() => set("keep_inventory", "true\nop Mallory")).toThrow("Refusing unsafe gamerule value");
+        await expect(set("not_a_rule", "true")).rejects.toThrow("Refusing unknown gamerule");
+        await expect(set("keep_inventory\nop Mallory", "true")).rejects.toThrow("Refusing unknown gamerule");
+        await expect(set("keep_inventory", "true\nop Mallory")).rejects.toThrow("Refusing unsafe gamerule value");
         // a number for a true/false rule, and a word for a number rule
-        expect(() => set("keep_inventory", "5")).toThrow();
-        expect(() => set("respawn_radius", "true")).toThrow();
+        await expect(set("keep_inventory", "5")).rejects.toThrow();
+        await expect(set("respawn_radius", "true")).rejects.toThrow();
     });
 
     test("difficulty and gamemode map only to known named commands", () => {
