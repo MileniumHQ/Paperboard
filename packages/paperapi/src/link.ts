@@ -104,7 +104,9 @@ export interface LinkAllResult {
 // links every panel directory under panelsRoot. A directory without a
 // manifest is not a panel and is not a candidate. A candidate that cannot be
 // linked (bad id, physical target without --force) is reported in `skipped`,
-// never swallowed; the caller decides whether that is fatal.
+// never swallowed; the caller decides whether that is fatal. `force` replaces
+// installed copies without linkPanelWhenStopped's running-daemon check: the
+// caller must make sure Paperboard is not running on this data folder.
 export function linkAllPanels(
     panelsRoot: string,
     options: { force?: boolean } = {},

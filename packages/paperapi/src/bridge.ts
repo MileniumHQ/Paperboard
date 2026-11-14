@@ -53,9 +53,8 @@ export function createPanelBridge<
                 }
             }
         } catch (err) {
-            // service may still be booting — logged, and the bridge keeps
-            // serving the last-known (possibly default) state meanwhile
-            console.debug(`[bridge:${panelId}] refreshState deferred, service may be booting:`, err);
+            // the caller hears it; the bridge keeps serving the last-known
+            // (possibly default) state meanwhile
             if (read === latestRead) status = { ready: false, error: err instanceof Error ? err.message : String(err) };
             throw err;
         } finally {
@@ -65,7 +64,7 @@ export function createPanelBridge<
     };
 
     const unregisterHydrator = registerPanelHydrator(panelId, refreshState);
-    void refreshState().catch((err) => console.debug(`[bridge:${panelId}] initial hydration failed; retry via refreshState:`, err));
+    void refreshState().catch((err) => console.error(`[bridge:${panelId}] initial hydration failed; retry via refreshState:`, err));
 
     const onStateChange = (
         cb: (patch: Partial<TState>, full: TState) => void,

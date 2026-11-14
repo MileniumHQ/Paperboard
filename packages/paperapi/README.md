@@ -122,7 +122,7 @@ follows the terminal, `NO_COLOR` and `FORCE_COLOR`.
 | `paperapi links [--json]` | List development links, marking the ones whose folder is gone. |
 | `paperapi doctor [panel-dir] [--json]` | Check the manifest, the build (and whether `src/` changed since), the link, that Paperboard is running, and that the panel's service answers. Each problem comes with what to run. Exits 1 if anything fails. |
 | `paperapi monitor [--panel <id>] [--json]` | Watch PaperAPI calls, events, services and processes on this computer as they happen. `--json` prints one record per line. Keeps watching through a Paperboard restart; Ctrl+C stops it. |
-| `paperapi call <panel-id> [action] [inputs] [--timeout <ms\|none>]` | Call an action and print its result as JSON. `inputs` is one JSON value; the timeout defaults to 30000, up to 60000, or `none`. With no action, lists the panel's actions and their inputs. |
+| `paperapi call <panel-id> [name] [input] [--timeout <ms\|none>]` | Run one of the panel's blocks (`command.x`, `value.x`, `project/command.x`) or one of its service's calls, and print the result as JSON. `input` is one JSON value; the timeout defaults to 30000, up to 60000, or `none`. With no name, lists the panel's blocks and their inputs. |
 | `paperapi restart [panel]` | Restart a panel's service so it runs the latest build. `panel` is a folder or an id (default: here). |
 | `paperapi pack [panel-dir] [--out <dir>] [--json]` | Package the manifest, `dist` and the branding icon into `out/<id>-<version>.tar.gz`, building first (`bun run build`) when the entry is missing. Prints the archive and its sha256, or the release metadata with `--json`. |
 
@@ -145,7 +145,7 @@ are shown, and every other argument by its shape (`‹14 chars›`, `[3]`,
 04:21:15.206  dev.example.weather  secrets:set   2.0 ms  ok  name=apiKey value=‹14 chars›
 04:21:15.209  dev.example.weather  config:set    0.7 ms  ok  id=dev.example.weather data={city,units}
 04:21:15.209  dev.example.weather  secrets:get   0.1 ms  ✗ FORBIDDEN Cross-panel access refused: …  panelId=dev.example.other name=apiKey
-04:21:15.210  dev.example.weather  event actions:dev.example.weather:forecast  84 B → 0 sockets
+04:21:15.210  dev.example.weather  event blocks:dev.example.weather:event.emit-forecast  84 B → 0 sockets
 04:21:15.267  dev.example.weather  process started  weather-fetch
 04:21:15.467  dev.example.weather  process exited  weather-fetch · code 0
 ```

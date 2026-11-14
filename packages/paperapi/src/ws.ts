@@ -1,6 +1,7 @@
 // WebSocket transport bound to one computer; remote frames ride a tunnel or fail
 import { debug, debugErr } from "./debug";
 import { PROTOCOL_VERSION } from "./protocol";
+import { newClientId } from "./channels";
 import { TransportRegistry } from "./transport/registry";
 import { grantedComputerId, resolveDefaultPanelId } from "./identity";
 import { resolveCredentials, type CraneCredentials, type ResolvedCredentials } from "./transport/credentials";
@@ -32,19 +33,6 @@ interface Pending {
 
 const RECONNECT_BASE_MS = 400;
 const RECONNECT_MAX_MS = 5_000;
-
-async function randomTunnelId(): Promise<string> {
-    const c = (globalThis as any).crypto;
-    if (c?.getRandomValues) {
-        const bytes = new Uint8Array(6);
-        c.getRandomValues(bytes);
-        return `t-${Array.from(bytes, (b) =>
-            b.toString(16).padStart(2, "0"),
-        ).join("")}`;
-    }
-    const mod = await import(/* @vite-ignore */ "node:crypto");
-    return `t-${mod.randomBytes(6).toString("hex")}`;
-}
 
 export class CraneTransport {
     public readonly computerId: string;
@@ -297,7 +285,7 @@ export class CraneTransport {
     }
 
     private async openTunnel(computerId: string): Promise<void> {
-        const id = await randomTunnelId();
+        const id = newClientId("t");
         debug(`target=${computerId} opening tunnel ${id}`);
         try {
             await new Promise<void>((resolve, reject) => {
@@ -657,14 +645,10 @@ export class CraneTransport {
         this.attachedProcesses.delete(id);
     }
 
-    private resolveDefaultPanelId(): string {
-        return resolveDefaultPanelId(this.opts.panelId);
-    }
-
     // the transport's panel id: its explicit option, else the granted one;
     // empty when neither exists
     public getDefaultPanelId(): string {
-        return this.resolveDefaultPanelId();
+        return resolveDefaultPanelId(this.opts.panelId);
     }
 
     public async registerAction(

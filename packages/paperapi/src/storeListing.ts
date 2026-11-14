@@ -248,12 +248,6 @@ export function storeScreenshotField(index: number, theme: "light" | "dark"): st
 // directory; the one shared parser above validates what it names.
 
 export const INSTALLED_ICON_MAX_BYTES = 1024 * 1024;
-const ICON_TYPES: Record<string, string> = {
-    png: "image/png",
-    webp: "image/webp",
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-};
 
 export interface InstalledPanelMedia {
     icon?: string;
@@ -293,9 +287,9 @@ export async function loadInstalledPanelMedia(
 
     const iconPath = typeof manifest?.icon === "string" ? manifest.icon : null;
     const iconExt = iconPath?.split(".").pop()?.toLowerCase() ?? "";
-    if (iconPath && ICON_TYPES[iconExt] && !iconPath.split(/[\\/]/).includes("..")) {
+    if (iconPath && STORE_IMAGE_TYPES[iconExt] && !iconPath.split(/[\\/]/).includes("..")) {
         const bytes = await readCapped(read, iconPath, INSTALLED_ICON_MAX_BYTES);
-        media.icon = `data:${ICON_TYPES[iconExt]};base64,${toBase64(bytes)}`;
+        media.icon = `data:${STORE_IMAGE_TYPES[iconExt]};base64,${toBase64(bytes)}`;
     }
 
     if (!full) return media;
