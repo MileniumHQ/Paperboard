@@ -1,10 +1,11 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
+import * as net from "node:net";
 import * as path from "node:path";
 import { APP_DIR, childEnv, craneBinary, runCrane, spawnChild, startCrane } from "../../daemon/support/crane";
 import { dataDir, tempDir } from "../../daemon/support/fs";
 import { Rpc } from "../../daemon/support/rpc";
-import { TEST_TIMEOUT_MS, waitFor, within } from "../../daemon/support/wait";
+import { isAlive, TEST_TIMEOUT_MS, waitFor, within } from "../../daemon/support/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 
@@ -46,6 +47,27 @@ describe("the daemon command line works headless", () => {
 		expect(byFlag.code).toBe(0);
 		expect(JSON.parse(byFlag.output).dataDir).toBe(path.resolve(live));
 		await crane.stop();
+	});
+
+	// a pidfile a crash left behind names a PID the system may have handed
+	// to another program since: a busy port never ends that program
+	test("a busy port is not reclaimed from a recorded PID that now runs another program", async () => {
+		const dir = dataDir();
+		const other = spawnChild(process.execPath, ["-e", "setInterval(() => {}, 1000)"], process.env);
+		const holder = net.createServer();
+		await new Promise<void>((resolve) => holder.listen(0, "127.0.0.1", resolve));
+		const port = (holder.address() as net.AddressInfo).port;
+		try {
+			fs.writeFileSync(path.join(dir, "papercrane.pid"), JSON.stringify({ pid: other.proc.pid, startedAt: new Date().toISOString(), execPath: await craneBinary() }));
+			const run = await runCrane(["--headless", "--host", "127.0.0.1", "--port", String(port)], childEnv(dir));
+			expect(run.code).not.toBe(0);
+			expect(run.output).toContain("already in use");
+			expect(isAlive(other.proc.pid!)).toBe(true);
+		} finally {
+			holder.close();
+			other.proc.kill("SIGKILL");
+			await other.exited;
+		}
 	});
 
 	test("pair prints a code and exits 0 once a client pairs", async () => {

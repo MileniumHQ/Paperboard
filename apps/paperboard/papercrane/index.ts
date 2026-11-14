@@ -214,59 +214,69 @@ function isProcessAlive(pid: number): boolean {
     }
 }
 
-// verify the recorded executable path matches the running PID before
-// killing it — /proc/exe on Linux, exact path compare elsewhere
-function isRecordedProcessAlive(record: PidFileRecord): boolean {
-    if (!isProcessAlive(record.pid)) return false;
+// The executable a live PID runs, or null when the system won't say. A PID
+// from our own pidfile may since belong to another program: it is signalled
+// only when it still runs the executable the record names.
+async function processExecutable(pid: number): Promise<string | null> {
     try {
-        if (process.platform === "linux") {
-            const exe = fs.readlinkSync(`/proc/${record.pid}/exe`);
-            return path.resolve(exe) === path.resolve(record.execPath);
+        if (process.platform === "linux") return fs.readlinkSync(`/proc/${pid}/exe`);
+        if (process.platform === "win32") {
+            const { stdout } = await promisifiedExecFile(
+                "powershell.exe",
+                ["-NoProfile", "-NonInteractive", "-Command", `(Get-Process -Id ${pid} -ErrorAction Stop).Path`],
+                { windowsHide: true, timeout: 15_000 },
+            );
+            return stdout.trim() || null;
         }
-        return true; // non-linux: recorded pid from our own pidfile is trusted
+        // macOS and the BSDs: the full path a program was started from
+        const { stdout } = await promisifiedExecFile("ps", ["-p", String(pid), "-o", "comm="], { timeout: 15_000 });
+        return stdout.trim() || null;
     } catch (err) {
-        logger.debug(
-            `[Paperboard Server] could not verify executable of PID ${record.pid}:`,
-            err,
-        );
-        return false;
+        logger.debug(`[Paperboard Server] could not read the executable of PID ${pid}:`, err);
+        return null;
     }
 }
 
-async function killStalePaperCrane(
-    port: number,
-    _host: string, // informational; takeover is pid-file based
-): Promise<boolean> {
-    // PID-file reclaim only: one fact, one source, path-verified
-    const record = readPidRecord();
-    if (record && record.pid !== process.pid && isRecordedProcessAlive(record)) {
-        console.log(
-            `[Paperboard Server] Reclaiming port ${port} from stale instance (PID ${record.pid})...`,
-        );
-        try {
-            process.kill(record.pid, "SIGTERM");
-        } catch (err) {
-            logger.debug(`[Paperboard Server] SIGTERM to PID ${record.pid} failed:`, err);
-        }
-        await new Promise((r) => setTimeout(r, 400));
-        if (isProcessAlive(record.pid)) {
-            try {
-                process.kill(record.pid, "SIGKILL");
-            } catch (err) {
-                logger.debug(
-                    `[Paperboard Server] SIGKILL to PID ${record.pid} failed:`,
-                    err,
-                );
-            }
-            await new Promise((r) => setTimeout(r, 200));
-        }
-        removePidFile();
-        return true;
-    }
+const samePath = (a: string, b: string) =>
+    process.platform === "linux" ? path.resolve(a) === path.resolve(b) : path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
 
-    // no takeable stale record: either nothing is running or the port is
-    // held by something we cannot identify — never signal untrusted PIDs
-    return false;
+async function isRecordedProcessAlive(record: PidFileRecord): Promise<boolean> {
+    if (!isProcessAlive(record.pid)) return false;
+    const exe = await processExecutable(record.pid);
+    return exe !== null && samePath(exe, record.execPath);
+}
+
+// whether the PID is gone before the deadline
+async function exitedWithin(pid: number, ms: number): Promise<boolean> {
+    const deadline = Date.now() + ms;
+    while (isProcessAlive(pid)) {
+        if (Date.now() >= deadline) return false;
+        await new Promise((r) => setTimeout(r, 50));
+    }
+    return true;
+}
+
+// PID-file reclaim only: one fact, one source, executable-verified. A port
+// held by anything we cannot identify is never signalled.
+async function killStalePaperCrane(port: number): Promise<boolean> {
+    const record = readPidRecord();
+    if (!record || record.pid === process.pid || !(await isRecordedProcessAlive(record))) return false;
+    console.log(`[Paperboard Server] Reclaiming port ${port} from stale instance (PID ${record.pid})...`);
+    try {
+        process.kill(record.pid, "SIGTERM");
+    } catch (err) {
+        logger.debug(`[Paperboard Server] SIGTERM to PID ${record.pid} failed:`, err);
+    }
+    if (!(await exitedWithin(record.pid, 2000))) {
+        try {
+            process.kill(record.pid, "SIGKILL");
+        } catch (err) {
+            logger.debug(`[Paperboard Server] SIGKILL to PID ${record.pid} failed:`, err);
+        }
+        if (!(await exitedWithin(record.pid, 2000))) return false;
+    }
+    removePidFile();
+    return true;
 }
 
 export interface ServerOptions {
@@ -546,7 +556,7 @@ function listenPaperCraneServer(
                 const inUse =
                     err?.code === "EADDRINUSE" || /already in use|in use/i.test(msg);
                 if (inUse) {
-                    const killed = await killStalePaperCrane(currentPort, host);
+                    const killed = await killStalePaperCrane(currentPort);
                     if (killed) {
                         tryStart(currentPort);
                         return;
