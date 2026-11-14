@@ -75,7 +75,7 @@
         "services": [
             {
                 "name": "Discord",
-                "detail": "Connecting your bot and its commands"
+                "detail": "Connecting your bot and its commands, and showing avatars and server icons"
             }
         ],
         "credits": [
