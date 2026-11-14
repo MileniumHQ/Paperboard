@@ -72,6 +72,36 @@ describe("a .deb or .rpm Paperboard updates itself", () => {
         await expect(u.install()).rejects.toThrow("No app update has been downloaded");
     });
 
+    test("a download cut off, or one the disk can't take, fails at once and leaves nothing behind", async () => {
+        // the connection drops halfway through the package
+        server.removeAllListeners("request");
+        server.on("request", (req, res) => {
+            if (req.url === "/pb/latest-linux.yml") return void res.end(`version: ${feedVersion}\npath: x\nsha512: x\nfiles: []\n`);
+            if (req.url === "/pb/SHA256SUMS") return void res.end(sums);
+            res.writeHead(200, { "content-length": String(PACKAGE.length * 2) });
+            res.write(PACKAGE, () => res.destroy());
+        });
+        const cut = updater().updater;
+        await expect((await cut.checkForUpdates()).downloadPromise!).rejects.toThrow();
+        expect(fs.readdirSync(path.join(dir, "downloads"))).toEqual([]);
+
+        // the package can't be written where it downloads
+        server.removeAllListeners("request");
+        server.on("request", (req, res) => {
+            if (req.url === "/pb/latest-linux.yml") return void res.end(`version: ${feedVersion}\npath: x\nsha512: x\nfiles: []\n`);
+            if (req.url === "/pb/SHA256SUMS") return void res.end(sums);
+            res.end(PACKAGE);
+        });
+        fs.chmodSync(path.join(dir, "downloads"), 0o555);
+        try {
+            const full = updater().updater;
+            await expect((await full.checkForUpdates()).downloadPromise!).rejects.toThrow("EACCES");
+        } finally {
+            fs.chmodSync(path.join(dir, "downloads"), 0o755);
+        }
+        expect(fs.readdirSync(path.join(dir, "downloads"))).toEqual([]);
+    });
+
     test("the current release downloads nothing", async () => {
         feedVersion = "1.0.0";
         const { updater: u, events } = updater();

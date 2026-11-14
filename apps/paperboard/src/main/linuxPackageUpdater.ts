@@ -12,6 +12,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { pipeline } from "node:stream/promises";
 import { gt, valid } from "semver";
 import { parseUpdateInfo } from "electron-updater/out/providers/Provider";
 
@@ -118,24 +119,29 @@ export class LinuxPackageUpdater extends EventEmitter {
         if (!response.ok || !response.body) throw new Error(`Could not download ${file}: HTTP ${response.status}`);
         const total = Number(response.headers.get("content-length")) || 0;
         const hash = createHash("sha256");
-        // the package manager reads it as its own user
-        const out = fs.createWriteStream(partial, { mode: 0o644 });
-        let transferred = 0;
-        try {
-            for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
+        const progress = (transferred: number) => {
+            if (total) this.emit("download-progress", { percent: (transferred / total) * 100, transferred, total });
+        };
+        async function* count(source: AsyncIterable<Uint8Array>) {
+            let transferred = 0;
+            for await (const chunk of source) {
                 transferred += chunk.length;
                 if (transferred > MAX_PACKAGE_BYTES) throw new Error(`${file} is larger than a Paperboard package can be`);
                 hash.update(chunk);
-                if (!out.write(chunk)) await new Promise<void>((resolve) => out.once("drain", () => resolve()));
-                if (total) this.emit("download-progress", { percent: (transferred / total) * 100, transferred, total });
+                progress(transferred);
+                yield chunk;
             }
-        } finally {
-            await new Promise<void>((resolve, reject) => out.end((err?: Error | null) => (err ? reject(err) : resolve())));
         }
-        const actual = hash.digest("hex");
-        if (actual !== expected) {
+        // a download that fails at any point (the network, the size cap, a
+        // full disk) leaves nothing behind
+        try {
+            // the package manager reads it as its own user
+            await pipeline(response.body as unknown as AsyncIterable<Uint8Array>, count, fs.createWriteStream(partial, { mode: 0o644 }));
+            const actual = hash.digest("hex");
+            if (actual !== expected) throw new Error(`The downloaded ${file} doesn't match its checksum (expected ${expected}, got ${actual})`);
+        } catch (err) {
             fs.rmSync(partial, { force: true });
-            throw new Error(`The downloaded ${file} doesn't match its checksum (expected ${expected}, got ${actual})`);
+            throw err;
         }
         fs.renameSync(partial, target);
         this.downloaded = { file: target, version };
