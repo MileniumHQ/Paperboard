@@ -47,7 +47,7 @@ function readPidRecord(): PidFileRecord | null {
             }
         }
     } catch (err) {
-        logger.debug("[Paperboard Server] failed to read PID file:", err);
+        logger.warn("[Paperboard Server] the PID file is unreadable, so no stale instance can be reclaimed from it:", err);
     }
     return null;
 }
@@ -55,8 +55,10 @@ function readPidRecord(): PidFileRecord | null {
 export function removePidFile() {
     try {
         fs.unlinkSync(getPidFile());
-    } catch {
-        logger.debug("[Paperboard Server] failed to remove PID file (already gone?)");
+    } catch (err) {
+        // gone already is the goal; anything else leaves a record the next
+        // start reads as a stale instance to reclaim
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") logger.error("[Paperboard Server] could not remove the PID file:", err);
     }
 }
 

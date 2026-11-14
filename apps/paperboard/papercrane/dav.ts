@@ -549,6 +549,24 @@ async function serveDav(
     await handler({ req, res, method, root, target });
 }
 
+// a /dav/session body: none is {}, and one that is not a JSON object is
+// answered 400 here (null), never read as defaults
+async function readSessionBody(req: http.IncomingMessage, res: http.ServerResponse): Promise<Record<string, unknown> | null> {
+    let parsed: unknown;
+    try {
+        const raw = (await readBody(req, 4096)).toString("utf-8");
+        parsed = raw ? JSON.parse(raw) : {};
+    } catch (err) {
+        replyText(res, 400, `The session request is not readable JSON: ${(err as Error)?.message ?? err}`);
+        return null;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        replyText(res, 400, "The session request must be a JSON object");
+        return null;
+    }
+    return parsed as Record<string, unknown>;
+}
+
 /** POST /dav/session, main token only */
 export async function handleDavSessionIssue(
     sessions: DavSessionStore,
@@ -558,15 +576,9 @@ export async function handleDavSessionIssue(
 ): Promise<void> {
     const token = mainTokenOf(auth, sessions, req);
     if (token === null) return davUnauthorized(res);
-    let idleMs = DEFAULT_IDLE_MS;
-    try {
-        const raw = (await readBody(req, 4096)).toString("utf-8");
-        const parsed = raw ? JSON.parse(raw) : {};
-        if (typeof parsed?.idleMs === "number") idleMs = parsed.idleMs;
-    } catch (err) {
-        // fall through with defaults
-        logger.debug("[dav] session body unreadable, using defaults:", err);
-    }
+    const body = await readSessionBody(req, res);
+    if (body === null) return;
+    const idleMs = typeof body.idleMs === "number" ? body.idleMs : DEFAULT_IDLE_MS;
     const s = (() => {
         try {
             return sessions.issue(idleMs, token);
@@ -591,14 +603,9 @@ export async function handleDavSessionRevoke(
 ): Promise<void> {
     const token = mainTokenOf(auth, sessions, req);
     if (token === null) return davUnauthorized(res);
-    let user = "";
-    try {
-        const raw = (await readBody(req, 4096)).toString("utf-8");
-        user = (raw ? JSON.parse(raw) : {})?.user ?? "";
-    } catch (err) {
-        // reported below as unknown user
-        logger.debug("[dav] session revoke body unreadable:", err);
-    }
+    const body = await readSessionBody(req, res);
+    if (body === null) return;
+    const user = body.user ?? "";
     if (typeof user !== "string" || !sessions.revoke(user)) {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "unknown session" }));

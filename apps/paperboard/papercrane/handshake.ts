@@ -53,9 +53,11 @@ export function readCraneHandshake(): CraneHandshakeFile | null {
         }
         return { port: creds.port, token: creds.token, ...(typeof creds.startId === "string" ? { startId: creds.startId } : {}) };
     } catch (err) {
-        // missing/unparseable handshake at startup is routine (daemon still
-        // booting) — logged, callers treat null as not-ready
-        logger.debug("[handshake] crane.json unreadable:", err);
+        // missing at startup is routine (the daemon is still booting) and
+        // callers treat null as not-ready; it is written atomically, so
+        // anything else is a real fault the log names
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+        logger.warn("[handshake] crane.json unreadable:", err);
         return null;
     }
 }

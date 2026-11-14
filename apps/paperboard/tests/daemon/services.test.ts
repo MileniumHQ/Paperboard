@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { dataDir, tempDir } from "./support/fs";
 import { startDaemon, type InProcessDaemon } from "./support/inproc";
 import { installPanelFiles, serviceSource } from "./support/panels";
-import { TEST_TIMEOUT_MS } from "./support/wait";
+import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 
@@ -51,6 +51,28 @@ describe("a service that fails to start", () => {
 		);
 		const fixed = (await host.ok("panel:list")).panels.find((p: { id: string }) => p.id === "test.brokenstart");
 		expect(fixed.serviceError).toBeUndefined();
+		await host.close();
+	});
+});
+
+// A crashed service that cannot be started again says why, not only how it
+// last exited.
+describe("a service whose restart fails", () => {
+	test("the panel list carries the restart's failure", async () => {
+		const dir = dataDir();
+		// it exits after removing its own entry, so the restart finds nothing to run
+		await installPanelFiles(dir, {
+			id: "test.norestart",
+			service: 'import * as fs from "node:fs"; fs.rmSync("service.js"); process.exit(1);',
+		});
+		await daemon?.stop();
+		daemon = await startDaemon({ dataDir: dir });
+		const host = await daemon.rpc();
+		const listed = await waitFor("the failed restart in the panel list", async () => {
+			const panel = (await host.ok("panel:list")).panels.find((p: { id: string }) => p.id === "test.norestart");
+			return panel?.serviceError?.includes("service.js") ? panel : null;
+		});
+		expect(listed.serviceError).toContain("no such file");
 		await host.close();
 	});
 });

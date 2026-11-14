@@ -13,7 +13,7 @@ import { isMainBearer } from "./davAuth";
 import { receiveFileAtomic, UploadTooLargeError } from "./atomicUpload";
 import { isPanelId } from "../../../packages/paperapi/src/panelIdentity";
 import { logger } from "./logger";
-import { openResolvedFile } from "./pathContainment";
+import { isMissingPathError, openResolvedFile } from "./pathContainment";
 
 export const PANEL_FILES_PREFIX = "/panel-files/";
 export const PANEL_FILE_PATH_MAX = 1024;
@@ -92,7 +92,10 @@ async function servePanelFile(
         let st: fs.Stats;
         try {
             st = fs.lstatSync(target);
-        } catch {
+        } catch (err) {
+            // only a missing file is a 404; a permission or I/O failure is
+            // the 500 handlePanelFileRequest answers with its reason logged
+            if (!isMissingPathError(err)) throw err;
             reply(res, 404, "No such file");
             return;
         }

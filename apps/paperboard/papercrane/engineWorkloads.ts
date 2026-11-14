@@ -548,13 +548,12 @@ export class WorkloadRegistry {
     private async adoptRunningSupervisors(): Promise<void> {
         const socketsDir = getSocketsDir();
         if (!fs.existsSync(socketsDir)) return;
-        let files: string[];
-        try {
-            files = await fs.promises.readdir(socketsDir);
-        } catch (err) {
-            logger.warn("[Paperboard Server] failed to list running supervisors:", err);
-            return;
-        }
+        // unlisted supervisors would run unseen, and a package swap that
+        // waits on adoption would pull the runtime out from under them, so
+        // a listing that fails fails the recovery
+        const files = await fs.promises.readdir(socketsDir).catch((err: Error) => {
+            throw new Error(`The running workloads could not be listed in ${socketsDir}: ${err.message}`, { cause: err });
+        });
         for (const file of files) {
             if (!file.endsWith(".json")) continue;
             const stem = file.slice(0, -".json".length);

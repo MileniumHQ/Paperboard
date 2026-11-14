@@ -66,6 +66,17 @@ describe("WebDAV", () => {
 		expect((await request(port, { path: "/dav/", method: "PROPFIND", headers: basic(idle.user, idle.pass) })).status).toBe(401);
 	});
 
+	test("a session request whose body is not a JSON object is refused with 400, not read as defaults", async () => {
+		const daemon = await startDaemon();
+		const port = daemon.instance.localPort;
+		for (const method of ["POST", "DELETE"]) {
+			for (const body of ["{idleMs: 1000", "[]", "7"]) {
+				const res = await request(port, { method, path: "/dav/session", headers: bearer(daemon.token), body });
+				expect(res.status).toBe(400);
+			}
+		}
+	});
+
 	test("local/, sockets/ and key or credential files resolve to nothing for every method and are absent from listings", async () => {
 		const daemon = await startDaemon();
 		const port = daemon.instance.localPort;

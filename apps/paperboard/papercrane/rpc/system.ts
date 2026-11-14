@@ -29,7 +29,7 @@ function isSafeUpdateUrl(rawUrl: string): boolean {
     } catch (err) {
         // malformed URL fails closed (deny) — logged so update refusals
         // stay diagnosable instead of mysterious
-        console.error("[system:update] refusing unparseable download URL:", err);
+        logger.warn("[system:update] refusing unparseable download URL:", err);
         return false;
     }
 }

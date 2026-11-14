@@ -180,6 +180,7 @@ export function setupWebSocketServer(
             inFlightTotal++;
             // kept for the catch below so failures always answer
             let failedId: unknown = null;
+            let failedAction: string | null = null;
             // records this request's answer for the monitor, once; null
             // while nobody watches, so an unwatched daemon builds nothing
             let tapAnswer: ((error?: string, code?: string) => void) | null = null;
@@ -207,6 +208,7 @@ export function setupWebSocketServer(
                 const msg = maybe;
                 failedId = (msg as any)?.id ?? null;
                 const { id, action, params } = msg;
+                failedAction = typeof action === "string" ? action : null;
                 if (monitor.active) {
                     const at = Date.now();
                     const started = performance.now();
@@ -313,7 +315,7 @@ export function setupWebSocketServer(
                 } catch (replyErr) {
                     logger.debug("[Paperboard Server:RPC] error reply failed:", replyErr);
                 }
-                console.error("[Paperboard Server:RPC:Error]", err?.message || err);
+                logger.error(`[Paperboard Server:RPC] ${failedAction ?? "a frame"} failed:`, err?.message || err);
                 if (err instanceof SyntaxError) ws.close(1007, "Malformed RPC frame");
             } finally {
                 inFlight--;

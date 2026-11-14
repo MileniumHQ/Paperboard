@@ -43,13 +43,11 @@ export function paperCraneMachineId(): string {
             logger.warn(`[Paperboard Server] the machine id in ${file} is unreadable; a new one replaces it, so paired computers see this one as new:`, err);
         }
     }
+    // an id that is not kept would make this computer new on every start,
+    // so a write that fails is the advertisement's failure
     const id = crypto.randomUUID();
-    try {
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, JSON.stringify({ id }, null, 2));
-    } catch (err) {
-        logger.warn("[Paperboard Server] cannot persist machine id, using ephemeral one:", err);
-    }
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ id }, null, 2));
     return id;
 }
 

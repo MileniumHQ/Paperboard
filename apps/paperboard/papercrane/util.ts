@@ -158,6 +158,7 @@ export class RingBuffer {
 }
 
 import * as fs from "fs";
+import { logger } from "./logger";
 
 // linux distro info from /etc/os-release
 export function getLinuxDistroInfo(): {
@@ -196,7 +197,8 @@ export function getLinuxDistroInfo(): {
             return version ? { ...out, version } : out;
         }
     } catch (err) {
-        console.error("[util] failed to read /etc/os-release:", err);
+        // shown as plain Linux; the log keeps why
+        logger.warn("[util] /etc/os-release is unreadable, so this computer shows as Linux:", err);
     }
     return { distroId: "linux", distroName: "Linux" };
 }

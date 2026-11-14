@@ -63,10 +63,9 @@ export function ensurePrivateDir(dir: string): string {
     return dir;
 }
 
-// ensure a directory exists, no-op on failure
+// the directory, made if missing; a failure (EACCES, ENOSPC, a read-only
+// volume) throws, so the caller can say why
 export function ensureDir(dir: string): string {
-    try {
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    } catch (err) { console.error("[paths.ts] ensureDir failed:", err) }
+    fs.mkdirSync(dir, { recursive: true });
     return dir;
 }

@@ -244,7 +244,10 @@ export class PanelServicesManager {
                 if (entry.stopped || this.services.get(id) !== entry) return;
                 this.services.delete(id);
                 try { this.startService(id, crashes); }
-                catch (err) { logger.error(`[services] ${id} restart failed`, err); }
+                catch (err) {
+                    logger.error(`[services] ${id} restart failed`, err);
+                    this.announce(id, { state: "failed", error: err instanceof Error ? err.message : String(err) });
+                }
             }, Math.min(10_000, 1000 * 2 ** (crashes - 1)));
             entry.restartTimer.unref?.();
         });
