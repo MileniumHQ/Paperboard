@@ -11,7 +11,7 @@
         {
             "id": "bot-status",
             "name": "Bot status",
-            "description": "A bot's avatar, whether it is online, and how many servers it is in",
+            "description": "A bot's name and how many servers it is in, with its avatar and online state on the wider tile",
             "sizes": [
                 "1x1",
                 "2x1"
