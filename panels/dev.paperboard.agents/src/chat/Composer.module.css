@@ -55,6 +55,13 @@
     color: var(--paper-text-subtle);
 }
 
+/* the placeholder is one line at any width: a long name is cut short, not wrapped into a scrolling second line */
+.field:placeholder-shown {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
 /* the field's twin, where its text is measured: as wide as the field (set as it's measured), out of sight and outside the layout */
 .sizer {
     position: absolute;
