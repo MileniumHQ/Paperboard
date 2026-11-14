@@ -1,8 +1,7 @@
 // How blocks look: each style is a PaperUI role colour and an icon. Blockly's
 // own blocks name their styles (logic_blocks, loop_blocks...), so they take
 // the same look as this panel's. Each panel gets a colour of its own, and its
-// blocks show its icon, as the Actions panel's blocks do; a built-in block
-// shows its own symbol, as Actions' built-ins did.
+// blocks show its icon; a built-in block shows its own symbol.
 import * as Blockly from "blockly";
 import { token } from "./tokens";
 import { BUILTIN_SECTIONS } from "./blockDefs";
@@ -120,7 +119,7 @@ function panelOf(type: string): string {
     throw new Error(`${type} is styled as a panel's block but names no panel`);
 }
 
-/** Each built-in block's own symbol, the ones Actions' built-ins had where there's one to match. */
+/** Each built-in block's own symbol. */
 const BLOCK_SYMBOLS: Record<string, string> = {
     [BUILTIN.onRun]: "play_arrow",
     [BUILTIN.wait]: "timer",

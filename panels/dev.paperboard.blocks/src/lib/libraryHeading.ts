@@ -1,4 +1,4 @@
-// A section heading in the Library's list, as the Actions library drew one:
+// A section heading in the Library's list:
 // the section's symbol, its name, and a badge with how many blocks it has.
 // Blockly's flyout lays out SVG, so this is Blockly's label with the symbol
 // and the badge drawn beside its text, measured in PaperUI's tokens.

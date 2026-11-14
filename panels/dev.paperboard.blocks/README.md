@@ -1,6 +1,6 @@
 # Blocks
 
-Build automations from blocks, with every panel's actions
+Build automations from blocks, with every panel's blocks
 
 A [Paperboard](https://paperboard.dev) panel, built with SolidJS and PaperUI.
 
@@ -8,7 +8,7 @@ A [Paperboard](https://paperboard.dev) panel, built with SolidJS and PaperUI.
 
 ```sh
 bun install          # the panel's dependencies
-bun run build        # typecheck, then the page, widget and service bundles
+bun run build        # typecheck, then the page and service bundles
 bunx paperapi link   # Paperboard runs the panel from this folder
 ```
 
@@ -21,9 +21,6 @@ restart the panel from its menu in Paperboard) to run the new build.
   Paperboard is running, and says what to run for anything that is not right.
 - `bunx paperapi monitor --panel dev.paperboard.blocks` shows every call the panel
   makes and receives as it happens: how long it took and how it went.
-- `bunx paperapi call dev.paperboard.blocks greet '{"name":"Ada"}'` calls one of the
-  service's actions from the terminal; `bunx paperapi call dev.paperboard.blocks`
-  lists them.
 - `bun test` runs the unit tests and the UI standards guard.
 
 The guides for building panels are at <https://paperboard.dev/docs/developers/>.
@@ -36,13 +33,14 @@ The guides for building panels are at <https://paperboard.dev/docs/developers/>.
 - `src/lib/projects.ts` keeps the projects: an index, and each project's
   flows in its own file. The one canvas from before projects becomes
   "My flows" the first time, and its old file is left as it was.
-- `src/panel.ts` holds what the page, the service and the widget share.
-- `src/service.ts` is the background service. Its actions are what other
-  panels and the Actions panel can call, and its state is what every window
-  mirrors.
+- `src/panel.ts` holds what the page and the service share.
+- `src/service.ts` is the background service, and `src/runtime.ts` what it
+  does: it keeps the projects, listens for the events their flows start
+  from and runs them. Its state is what every window mirrors.
+- `src/blocks.ts` is the panel's own Projects blocks, which other flows
+  drive it with.
+- `src/editorFlows.ts` loads and saves the open project's canvas, and
+  `src/libraryModel.ts` is what the Library lists.
 - `test/uiStandards.test.ts` keeps inline styles out of the UI.
 - `test/hermetic.ts` keeps the tests off the network and off your real
   Paperboard data.
-
-Before you publish, add `branding/icon.png` and point the manifest's `icon` at
-it, and add screenshots to `store`.

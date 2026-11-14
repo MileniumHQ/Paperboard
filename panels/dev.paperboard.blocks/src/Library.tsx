@@ -1,4 +1,4 @@
-// The Library beside the canvas, as the Actions panel has it: a rail of
+// The Library beside the canvas: a rail of
 // categories (the built-ins, then each panel by its icon), and over the
 // block list a header with the category, how many blocks it has, a search,
 // and for a panel with projects, which one. The list itself is Blockly's

@@ -1,4 +1,4 @@
-// The trash, as the Actions canvas has it: a tile in the corner a block is
+// The trash: a tile in the canvas's corner a block is
 // dropped on to delete it. The tile is the page's own element; this tells
 // Blockly where it is, so a block dragged over it is deleted on drop.
 import * as Blockly from "blockly";
@@ -49,7 +49,7 @@ export function addTrash(workspace: Blockly.WorkspaceSvg, element: HTMLElement, 
         weight: Blockly.ComponentManager.ComponentWeight.TRASHCAN_WEIGHT,
         capabilities: [Blockly.ComponentManager.Capability.DELETE_AREA, Blockly.ComponentManager.Capability.DRAG_TARGET],
     });
-    // the tile dims in while anything is dragged, as Actions' does
+    // the tile dims in while anything is dragged
     workspace.addChangeListener((event: Blockly.Events.Abstract) => {
         if (event.type !== Blockly.Events.BLOCK_DRAG) return;
         const drag = event as Blockly.Events.BlockDrag;

@@ -1,8 +1,8 @@
-/* The run log, as the Actions canvas's console. */
+/* The run log: a glass panel over the canvas. */
 
 .panel {
-    width: 320px;
-    max-height: 240px;
+    width: var(--paper-size-split-side);
+    max-height: var(--paper-size-panel-height-small);
     border-radius: var(--paper-border-radius);
     background: color-mix(in srgb, var(--paper-surface) 72%, transparent);
     backdrop-filter: var(--paper-blur-heavy);
@@ -40,7 +40,8 @@
 .body {
     padding: var(--paper-uigap-half);
     overflow-y: auto;
-    max-height: 180px;
+    flex: 1 1 auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     gap: var(--paper-uigap-onefourth);

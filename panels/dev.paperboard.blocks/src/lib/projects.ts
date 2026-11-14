@@ -1,5 +1,5 @@
 // Projects: each one a canvas of flows with a name, listed on the Blocks
-// home screen like documents, as Actions lists its own. The index says
+// home screen like documents. The index says
 // which projects exist and whether their flows run; each canvas is its own
 // file. The store runs in the service and in the tests, over any storage
 // that reads and writes JSON by path.
