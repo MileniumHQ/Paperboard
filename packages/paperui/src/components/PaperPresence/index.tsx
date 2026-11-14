@@ -52,14 +52,34 @@ const END_GRACE_MS = 50;
  */
 export function PaperPresence(props: PaperPresenceProps) {
     // at most one running animation per element, all cancelled on unmount
-    const running = new Map<Element, () => void>();
+    const running = new Map<Element, { kind: "enter" | "exit"; finish: () => void; cancel: () => void }>();
     onCleanup(() => {
-        for (const cancel of running.values()) cancel();
+        for (const animation of running.values()) animation.cancel();
         running.clear();
     });
 
-    const play = (el: Element, classes: string, done: () => void) => {
-        running.get(el)?.();
+    // inserted, with the enter that animates it in still queued for the
+    // microtask after insertion
+    const arriving = new WeakSet<Element>();
+
+    const play = (el: Element, kind: "enter" | "exit", classes: string, done: () => void) => {
+        if (kind === "enter") arriving.delete(el);
+        // An element hidden again in the update that showed it was never
+        // painted: it leaves at once, with nothing to fade from.
+        if (kind === "exit" && arriving.has(el)) {
+            arriving.delete(el);
+            done();
+            return;
+        }
+        // An enter that reaches an element already leaving has nothing to
+        // arrive for; the exit, which takes it out of the DOM, runs to its end.
+        const current = running.get(el);
+        if (kind === "enter" && current?.kind === "exit") {
+            done();
+            return;
+        }
+        // an enter that an exit interrupts is over: its done always runs
+        current?.finish();
         // Resolve the previous classes' removal before reusing a preset's
         // animation-name. Without a rendering frame between enter and exit,
         // CSS otherwise reuses enter's timeline and can end exit immediately.
@@ -74,20 +94,20 @@ export function PaperPresence(props: PaperPresenceProps) {
             clearTimeout(timer);
             el.removeEventListener("animationend", onEnd);
             el.classList.remove(...tokens);
-            running.delete(el);
+            if (running.get(el) === animation) running.delete(el);
         };
         // done first: an exiting element must leave before its class does,
         // or it flashes back for a frame
         const finish = () => {
+            if (running.get(el) !== animation) return;
             done();
             cancel();
         };
-        running.set(el, cancel);
+        const animation = { kind, finish, cancel };
+        running.set(el, animation);
         const length = prefersReducedMotion(el) ? 0 : longestAnimation(el);
         if (length === 0) {
-            queueMicrotask(() => {
-                if (running.get(el) === cancel) finish();
-            });
+            queueMicrotask(finish);
             return;
         }
         el.addEventListener("animationend", onEnd);
@@ -99,8 +119,9 @@ export function PaperPresence(props: PaperPresenceProps) {
     return (
         <Transition
             appear={props.appear}
-            onEnter={(el, done) => play(el, props.enterClass ?? `${styles.enter} ${preset()}`, done)}
-            onExit={(el, done) => play(el, props.exitClass ?? `${styles.exit} ${preset()}`, done)}
+            onBeforeEnter={(el) => arriving.add(el)}
+            onEnter={(el, done) => play(el, "enter", props.enterClass ?? `${styles.enter} ${preset()}`, done)}
+            onExit={(el, done) => play(el, "exit", props.exitClass ?? `${styles.exit} ${preset()}`, done)}
         >
             <Show when={props.when}>{props.children}</Show>
         </Transition>

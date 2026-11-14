@@ -149,6 +149,7 @@ export function Example() {
             <PaperTextList>
                 <li>The entrance takes the medium transition time, the exit the short one. Set the CSS custom property <PaperCode>--paper-presence-duration</PaperCode> on or above the element to use one duration for both.</li>
                 <li>The exit plays the entrance keyframes in reverse, so arriving and leaving always match.</li>
+                <li>An element shown and hidden again in the same update, before its entrance began, leaves at once without an exit. An entrance that an exit interrupts ends there, and the exit always runs to its end.</li>
                 <li>The element is removed when its own animation ends, backed by a timer a short grace after the declared duration. A child with no animation is removed at once.</li>
                 <li>Toggling <PaperCode>when</PaperCode> mid-animation cancels the running animation and starts the other.</li>
             </PaperTextList>
