@@ -2,11 +2,17 @@
 
 Cloudflare Worker package registry for Paperboard.
 
-## Endpoints
+## Endpoints (`origami.ariapis.com`)
 
-- **`GET /package/:package-name.json`**: Retrieves metadata for a specific package from the `PACKAGES` KV store (e.g. `/package/java-26.json`).
-- **`GET /package/index.json`**: Retrieves the entire KV stack with all packages and their metadata as a key-value dictionary.
-- **`GET /`**: Worker health & service info.
+Every route is read-only; records are written by the operator scripts below, never by a request.
+
+- **`GET /`** and **`/health`**: service info and the route list.
+- **`GET /package/:name.json`**: one package record from the `PACKAGES` KV namespace (e.g. `/package/java-26.json`).
+- **`GET /package/index.json`**: every package record, keyed by name. A registry holding more than 200 packages answers 500 instead of a partial map.
+- **`GET /panels/index.json`**: every listed panel record, keyed by id. **`GET /panel/:id.json`** is one record (unlisted ones included), **`/panel/:id/download`** serves its archive, **`/panel/:id/icon`** and **`/panel/:id/media/:version/:file`** serve its icon and store screenshots.
+- **`/library/`**: the panel library (below).
+
+A record that exists but can't be read answers 500 naming it, never 404.
 
 ## Panel library (`/library/`)
 
@@ -16,14 +22,16 @@ When it runs inside Paperboard's iframe, the shell completes a postMessage hands
 
 ## Downloads (`i.paperboard.dev`)
 
-Binaries live on GitHub Releases; Origami only 302-redirects to them (plus the small `latest.yml` updater feeds from R2). A KV version database (`dl/pb`, `dl/crane` in the `PACKAGES` namespace) is the source of truth — unknown versions and unrecorded files are 404s.
+Binaries live on GitHub Releases; Origami only 302-redirects to them, and serves the small updater feeds and checksums from R2. A KV version database (`dl/pb`, `dl/crane` in the `PACKAGES` namespace) is the source of truth: unknown versions and unrecorded files are 404s.
 
+- **`GET /`**: the install script. `curl -fsSL https://i.paperboard.dev | sh` gets `install.sh`, PowerShell's `irm https://i.paperboard.dev | iex` gets `install.ps1`, and a browser is sent to the downloads page. **`/install.sh`** and **`/install.ps1`** name them directly; both come from `packages/crane-launcher/install`.
+- **`GET /pb/SHA256SUMS`**: the checksums the install scripts verify against.
 - **`GET /pb/latest/:file`** and **`GET /crane/latest/:file`**: redirect to the current release asset (not cached).
 - **`GET /pb/:version/:file`** and **`GET /crane/:version/:file`**: redirect to that version's asset (immutable, cached). Previous versions keep working.
-- **`GET /pb/latest.yml`**, **`/pb/latest-mac.yml`**, **`/pb/latest-linux.yml`**: electron-updater feeds (R2).
-- Everything else on this host — including `/`, the registry, and panels — is a 404.
+- **`GET /pb/latest.yml`**, **`/pb/latest-mac.yml`**, **`/pb/latest-linux.yml`**, **`/pb/latest-linux-arm64.yml`**: electron-updater feeds.
+- Everything else on this host, the registry and panels included, is a 404.
 
-The same routes exist under `/paperdl/` on the main host (`origami.ariapis.com`). The old `/paperdl/:app/:target/download` paths 302 to the canonical latest file so existing installs keep updating.
+On the main host the release routes and feeds live under `/paperdl/` (`/paperdl/pb/…`, `/paperdl/crane/…`), with `/paperdl/:app/index.json` for the host updater; the install scripts and `SHA256SUMS` are on `i.paperboard.dev` only. The old `/paperdl/paperboard/…` feeds and `/paperdl/:app/:target/download` paths still answer (the downloads 302 to the canonical latest file) so existing installs keep updating.
 
 ## Development
 
@@ -81,7 +89,7 @@ bun run update:steamcmd -- --dry-run
 bun run update:proton -- --dry-run
 ```
 
-Every platform entry carries a `sha256` from the upstream authority (Adoptium's API, GitHub's asset digest cross-checked against `sha256sum.txt`). A platform without one is dropped (Java) or fails the whole record (Ollama). The daemon refuses to install without it. `layout` tells the daemon how the archive maps onto the package directory: `wrapped` (default, one top-level folder around `bin/`), `root` (archive root holds `bin/`), or `bin` (archive root *is* `bin/`).
+Every platform entry carries a `sha256` from the upstream authority (Adoptium's API, GitHub's asset digest cross-checked against `sha256sum.txt`). A platform without one fails the whole record, and the record already served stays. The daemon refuses to install without it. `layout` tells the daemon how the archive maps onto the package directory: `wrapped` (default, one top-level folder around `bin/`), `root` (archive root holds `bin/`), or `bin` (archive root *is* `bin/`).
 
 A package Paperboard does not host carries a `recipe` instead of a `layout`: data the daemon runs on the user's computer after checking the download, never a script. `unpack` is one of `zip`, `tar`, `tar.xz` (needs the system's `xz`) or `dmg` (macOS only; mounted read-only, copied out with `ditto`), and `take` maps package paths to paths in the unpacked tree, for example `{ "unpack": "dmg", "take": { "bin/Helium.app": "Helium.app" } }`. The release signature covers the recipe, so daemons from before recipes refuse such an entry instead of installing it unpacked. See `apps/paperboard/papercrane/packageRecipe.ts`.
 
@@ -101,6 +109,4 @@ The Agent panel's three CLIs are packages too, none of them hosted by Paperboard
 
 ## Configuration
 
-KV binding is defined in `wrangler.jsonc`:
-- **Binding Name**: `PACKAGES`
-- **ID**: `ORIGAMI_PACKAGES_KV`
+`wrangler.jsonc` binds the `PACKAGES` KV namespace (package records, panel records, `panels:index` and the `dl/*` version database), the `PANELS_BUCKET` R2 bucket (panel archives, icons and store media) and the `PAPERDL_BUCKET` R2 bucket (updater feeds, `SHA256SUMS` and the `paperdl` indexes). It also serves `library/dist` as static assets on the same origin.

@@ -263,25 +263,20 @@ export async function handlePaperdlRoutes(
         return null;
     }
 
-    const paperdlMatch = pathname.match(
-        /^\/paperdl\/(crane|paperboard)(\/.*)?$/,
-    );
+    // The pre-"pb" Paperboard paths; /paperdl/crane is the versioned
+    // scheme above.
+    const paperdlMatch = pathname.match(/^\/paperdl\/paperboard(\/.*)?$/);
     if (paperdlMatch) {
-        const app = paperdlMatch[1] as "crane" | "paperboard";
-        const sub = paperdlMatch[2] || "";
+        const sub = paperdlMatch[1] || "";
 
         if (
             request.method === "GET" &&
             (sub === "/index.json" || sub === "" || sub === "/")
         ) {
-            return serveR2Index(env, `${app}/index.json`);
+            return serveR2Index(env, "paperboard/index.json");
         }
 
-        if (
-            request.method === "GET" &&
-            app === "paperboard" &&
-            PB_FEEDS.has(sub.slice(1))
-        ) {
+        if (request.method === "GET" && PB_FEEDS.has(sub.slice(1))) {
             // Legacy feed path serves the current feed (now under pb/ so
             // old installs keep updating; the orphaned paperboard/*.yml
             // objects in R2 are frozen history, not served).
@@ -292,7 +287,7 @@ export async function handlePaperdlRoutes(
         // new scheme so existing installs and links keep working.
         const dlMatch = sub.match(/^\/([a-zA-Z0-9_\-]+)\/download(?:\/.*)?$/);
         if (request.method === "GET" && dlMatch && dlMatch[1]) {
-            const redir = legacyRedirectTarget(app, dlMatch[1]);
+            const redir = legacyRedirectTarget("paperboard", dlMatch[1]);
             if (!redir) return jsonResponse({ error: "Not found" }, 404);
             return legacyRedirect(redir);
         }

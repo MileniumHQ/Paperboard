@@ -278,8 +278,15 @@ function readStoreUpload(upload: PanelUpload): StoreMedia | null {
 
 /**
  * Publishes one panel and returns the stored record. Throws
- * `PanelPublishError` on any validation, version or I/O failure; a failed
- * publish leaves no record (bytes may be orphaned in R2, never referenced).
+ * `PanelPublishError` on any validation, version or I/O failure.
+ *
+ * KV has no transactions, so the guarantee is an order: bytes, then the
+ * `panel:<id>` record, then `panels:index`. A failure before the record
+ * leaves the registry as it was (bytes may be orphaned in R2, never
+ * referenced). A failure writing the index leaves the new record live
+ * (`/panel/:id.json` and downloads serve it) while the store still lists the
+ * old release; the same version is then refused as already published, so
+ * the repair is publishing the next version, which rewrites both.
  */
 export async function publishPanel(
     upload: PanelUpload,
