@@ -27,6 +27,7 @@ import { GameOptionControl } from "../../components/GameOptions";
 import { options } from "./index";
 import { gameModeLabel, worldSizeLabel, type TerrariaWorldHeader } from "./worldFile";
 import type { TerrariaWorld } from "./worldStore";
+import { keepUnchanged } from "../../core/state";
 
 const WLD_FILTERS = [{ name: "Terraria worlds", extensions: ["wld"] }];
 const UPLOAD_DIR = ".terraria-upload";
@@ -64,7 +65,9 @@ export default function TerrariaWorlds() {
     // a failed listing keeps the last-known worlds and shows why
     const refresh = async () => {
         try {
-            setWorlds(await serverBridge.call<TerrariaWorld[]>("terraria-worlds"));
+            const next = await serverBridge.call<TerrariaWorld[]>("terraria-worlds");
+            // an unchanged world stays the row it is
+            setWorlds((prev) => keepUnchanged(prev, next));
             setListError("");
         } catch (err) {
             setListError(errorMessage(err));
@@ -304,20 +307,20 @@ export default function TerrariaWorlds() {
                     </>
                 }
             >
-                <Show when={shown()} keyed>
+                <Show when={shown()}>
                     {(world) => (
                         <PaperFlex direction="column" gap="full">
                             <PaperFlex direction="row" gap="full" align="center">
-                                <WorldTile active={world.active} />
+                                <WorldTile active={world().active} />
                                 <PaperFlex direction="column" gap="onefourth">
                                     <Show
-                                        when={world.active}
+                                        when={world().active}
                                         fallback={<PaperText size={3} color="text-subtle">Inactive. Switching takes effect after a restart.</PaperText>}
                                     >
                                         <PaperBadge variant="success">Active world</PaperBadge>
                                     </Show>
-                                    <PaperText size={3}>{summary(world.header, world.generated)}</PaperText>
-                                    <Show when={world.header}>
+                                    <PaperText size={3}>{summary(world().header, world().generated)}</PaperText>
+                                    <Show when={world().header}>
                                         {(header) => (
                                             <PaperFlex direction="row" gap="onefourth" wrap>
                                                 <PaperBadge variant={header().evil === "crimson" ? "danger" : "primary"}>
@@ -331,14 +334,14 @@ export default function TerrariaWorlds() {
                                     </Show>
                                 </PaperFlex>
                             </PaperFlex>
-                            <Show when={world.error}>
+                            <Show when={world().error}>
                                 <PaperQuote variant="danger" icon="warning" title="This world can't be read">
-                                    {world.error}
+                                    {world().error}
                                 </PaperQuote>
                             </Show>
                             <PaperTable>
                                 <tbody>
-                                    <Show when={world.header}>
+                                    <Show when={world().header}>
                                         {(header) => (
                                             <>
                                                 <tr>
@@ -372,7 +375,7 @@ export default function TerrariaWorlds() {
                                         )}
                                     </Show>
                                     <Show
-                                        when={world.generated}
+                                        when={world().generated}
                                         fallback={
                                             <tr>
                                                 <th>World</th>
@@ -382,11 +385,11 @@ export default function TerrariaWorlds() {
                                     >
                                         <tr>
                                             <th>File</th>
-                                            <td>{world.name}.wld · {fileSize(world.bytes)}</td>
+                                            <td>{world().name}.wld · {fileSize(world().bytes)}</td>
                                         </tr>
                                         <tr>
                                             <th>Last saved</th>
-                                            <td>{new Date(world.modified).toLocaleString()}</td>
+                                            <td>{new Date(world().modified).toLocaleString()}</td>
                                         </tr>
                                     </Show>
                                 </tbody>

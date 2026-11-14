@@ -45,6 +45,7 @@ import { serverStatus } from "../lib/server";
 import { PANEL_ID } from "../service/contract";
 import { WORLD_TRANSFER_DIR, worldNameFromFile } from "../core/worldArchive";
 import { errorMessage, type Outcome } from "../lib/failure";
+import { keepUnchanged } from "../core/state";
 
 const ZIP_FILTERS = [{ name: "World zips", extensions: ["zip"] }];
 
@@ -87,7 +88,9 @@ export default function Worlds() {
     // silently disable the duplicate check for the New World dialog.
     const refresh = async () => {
         try {
-            setWorlds(await listWorlds());
+            const next = await listWorlds();
+            // an unchanged world stays the row it is
+            setWorlds((prev) => keepUnchanged(prev, next));
             setListError("");
         } catch (err) {
             console.error("[Worlds] Failed to list worlds:", err);
@@ -419,14 +422,14 @@ export default function Worlds() {
                     </>
                 }
             >
-                <Show when={shown()} keyed>
+                <Show when={shown()}>
                     {(world) => (
                         <PaperFlex direction="column" gap="full">
                             <PaperFlex direction="row" gap="full" align="center">
-                                <WorldTile active={world.active} />
+                                <WorldTile active={world().active} />
                                 <PaperFlex direction="column" gap="onefourth">
                                     <Show
-                                        when={world.active}
+                                        when={world().active}
                                         fallback={
                                             <PaperText size={3} color="text-subtle">
                                                 Inactive. Switching takes effect after a restart.
@@ -435,7 +438,7 @@ export default function Worlds() {
                                     >
                                         <PaperBadge variant="success">Active world</PaperBadge>
                                     </Show>
-                                    <PaperText size={3}>{dimensionsLabel(world)}</PaperText>
+                                    <PaperText size={3}>{dimensionsLabel(world())}</PaperText>
                                 </PaperFlex>
                             </PaperFlex>
                             <PaperTable>
@@ -443,18 +446,18 @@ export default function Worlds() {
                                     <tr>
                                         <th>Overworld</th>
                                         <td>
-                                            {world.generated
+                                            {world().generated
                                                 ? "Generated"
                                                 : "Not generated yet"}
                                         </td>
                                     </tr>
                                     <tr>
                                         <th>Nether</th>
-                                        <td>{world.hasNether ? "Generated" : "Not generated yet"}</td>
+                                        <td>{world().hasNether ? "Generated" : "Not generated yet"}</td>
                                     </tr>
                                     <tr>
                                         <th>End</th>
-                                        <td>{world.hasEnd ? "Generated" : "Not generated yet"}</td>
+                                        <td>{world().hasEnd ? "Generated" : "Not generated yet"}</td>
                                     </tr>
                                 </tbody>
                             </PaperTable>
