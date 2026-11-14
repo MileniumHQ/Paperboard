@@ -7,7 +7,7 @@ import * as path from "node:path";
 import { blocksApi, getTransport } from "@mileniumhq/paperapi";
 import { clearWorkloads, testDaemon } from "./helpers/crane";
 import { PANEL_ID, call, panelFiles, serviceState, startService, stopServices } from "./helpers/service";
-import { within } from "./helpers/wait";
+import { stateWhere, until, within } from "./helpers/wait";
 import { runShellCommand } from "../src/lib/shellCommand";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
@@ -36,16 +36,13 @@ function nextEvent(event: string, accept: (payload: Record<string, unknown>) => 
     return { fired: within(`${event} to fire`, fired).finally(() => off()), off };
 }
 
-/** Resolves once a fresh read of `value` passes `accept`, read again every 50 ms. */
-async function readUntil<T>(value: string, inputs: Record<string, unknown>, accept: (v: T) => boolean, what: string): Promise<T> {
-    const deadline = Date.now() + 20_000;
-    let last: T;
-    for (;;) {
-        last = await read<T>(value, inputs);
-        if (accept(last)) return last;
-        if (Date.now() > deadline) throw new Error(`Timed out waiting for ${what}; last read: ${JSON.stringify(last)}`);
-        await new Promise((resolve) => setTimeout(resolve, 50));
-    }
+/** Resolves once `value` changes, announced by its change event. */
+function nextChange(value: string) {
+    let off = () => {};
+    const changed = new Promise<void>((resolve) => {
+        off = blocksApi.onChange(PANEL_ID, value, () => resolve());
+    });
+    return { changed: within(`${value} to announce a change`, changed).finally(() => off()), off };
 }
 
 // an event fired before the daemon took its subscription is never heard
@@ -104,29 +101,21 @@ describe("the Terminal's blocks", () => {
         // the test daemon's shell is a plain sh, which marks nothing: bash does
         const tab = await call<string>("create-tab", { label: "Here", cwd: folder, shell: "/bin/bash" });
         const property = (field: string) => blocksApi.property(`${PANEL_ID}:tab`, field, tab);
-        const until = async (field: string, accept: (v: unknown) => boolean) => {
-            const deadline = Date.now() + 20_000;
-            for (;;) {
-                const value = await property(field);
-                if (accept(value)) return value;
-                if (Date.now() > deadline) throw new Error(`Timed out waiting for the tab's ${field}; last: ${JSON.stringify(value)}`);
-                await new Promise((resolve) => setTimeout(resolve, 50));
-            }
-        };
-        expect(await until("folder", (v) => v === folder)).toBe(folder);
-        await within("bash to say its folder", (async () => {
-            while ((await serviceState()).live?.[tab]?.cwd !== folder) await new Promise((resolve) => setTimeout(resolve, 50));
-        })());
-        const shell = await until("program", (v) => typeof v === "string" && v.length > 0);
+        const propertyIs = (field: string, accept: (v: unknown) => boolean) => until(`the tab's ${field}`, () => property(field), accept);
+        expect(await propertyIs("folder", (v) => v === folder)).toBe(folder);
+        await stateWhere<any>(PANEL_ID, (s) => s.live?.[tab]?.cwd === folder, "bash to say its folder");
+        const shell = await propertyIs("program", (v) => typeof v === "string" && v.length > 0);
 
         const failed = nextEvent("command-finished", (p) => p.tab === tab && p.command === "sh -c 'exit 4'");
         await settle();
         await run("run-in-tab", { command: "sh -c 'exit 4'", tab });
         expect(await failed.fired).toEqual({ tab, command: "sh -c 'exit 4'", succeeded: false, "exit-code": 4, result: "Exit 4" });
 
-        await run("run-in-tab", { command: "sleep 3", tab });
-        await until("program", (v) => v === "sleep");
-        await until("program", (v) => v === shell);
+        // the program in front is the shell again once the one it ran ends
+        await run("run-in-tab", { command: "sleep 600", tab });
+        await propertyIs("program", (v) => v === "sleep");
+        await run("type-in-tab", { text: "\x03", tab });
+        await propertyIs("program", (v) => v === shell);
 
         expect(await property("split")).toBe(false);
         await expect(run("unsplit-tab", { tab })).rejects.toThrow("Here is not split");
@@ -136,10 +125,8 @@ describe("the Terminal's blocks", () => {
         const split = (await serviceState()).tabs.find((t: any) => t.id === tab).split;
         expect(split).toMatchObject({ direction: "down", session: { cwd: folder } });
         // the second shell is a shell of its own, in the first one's folder
-        await within("the split's shell", (async () => {
-            while (!(await serviceState()).live?.[split.session.id]?.cwd) await new Promise((resolve) => setTimeout(resolve, 50));
-        })());
-        expect((await serviceState()).live[split.session.id].cwd).toBe(folder);
+        const said = await stateWhere<any>(PANEL_ID, (s) => Boolean(s.live?.[split.session.id]?.cwd), "the split's shell to say its folder");
+        expect(said.live[split.session.id].cwd).toBe(folder);
         await run("unsplit-tab", { tab });
         expect(await property("split")).toBe(false);
         expect(fs.existsSync(path.join(work, "missing"))).toBe(false);
@@ -149,19 +136,16 @@ describe("the Terminal's blocks", () => {
     test("a new tab is a Tab, announces the change, runs commands and shows their output; an unknown tab is refused", async () => {
         await panelFiles({ "tabs.json": TABS });
         await startService();
-        let tabsChanged = 0;
-        const off = blocksApi.onChange(PANEL_ID, "tabs", () => tabsChanged++);
+        const tabsChanged = nextChange("tabs");
         try {
             await settle();
             const tab = await run<string>("new-tab", { name: "Build" });
             expect(await read("tabs")).toEqual(["tab1", "tab2", tab]);
             expect(await blocksApi.property(`${PANEL_ID}:tab`, "name", tab)).toBe("Build");
-            await within("the tabs to announce the change", (async () => {
-                while (tabsChanged === 0) await new Promise((resolve) => setTimeout(resolve, 20));
-            })());
+            await tabsChanged.changed;
 
             expect(await run("run-in-tab", { command: "echo blocks-$((40+2))", tab })).toBeNull();
-            await readUntil<string>("output", { tab, lines: 20 }, (out) => out.includes("blocks-42"), "the command's output");
+            await until("the command's output", () => read<string>("output", { tab, lines: 20 }), (out) => out.includes("blocks-42"));
 
             await expect(run("type-in-tab", { text: "echo REFUSED", tab: "nope" })).rejects.toThrow("Unknown terminal tab: nope");
             await expect(read("output", { tab: "nope", lines: 5 })).rejects.toThrow("Unknown terminal tab: nope");
@@ -173,7 +157,7 @@ describe("the Terminal's blocks", () => {
             await run("close-tab", { tab });
             expect(await read("tabs")).toEqual(["tab1", "tab2"]);
         } finally {
-            off();
+            tabsChanged.off();
         }
     });
 
@@ -203,8 +187,7 @@ describe("the Terminal's blocks", () => {
         await panelFiles({ "tabs.json": TABS });
         await startService();
         expect(await read("active-tab")).toBe("tab1");
-        let activeChanged = 0;
-        const off = blocksApi.onChange(PANEL_ID, "active-tab", () => activeChanged++);
+        const activeChanged = nextChange("active-tab");
         try {
             await settle();
             await run("show-tab", { tab: "tab2" });
@@ -215,13 +198,11 @@ describe("the Terminal's blocks", () => {
             // showing it again is a new request, which every window follows again
             await run("show-tab", { tab: "tab2" });
             expect((await serviceState()).showTab.request).not.toBe(first.request);
-            await within("the Active Tab to announce the change", (async () => {
-                while (activeChanged === 0) await new Promise((resolve) => setTimeout(resolve, 20));
-            })());
+            await activeChanged.changed;
             await expect(run("show-tab", { tab: "nope" })).rejects.toThrow("Unknown terminal tab: nope");
             expect(await read("active-tab")).toBe("tab2");
         } finally {
-            off();
+            activeChanged.off();
         }
 
         const third = await run<string>("new-tab", { name: "Three" });
