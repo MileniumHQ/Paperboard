@@ -15,7 +15,7 @@ import {
     untrack,
     type JSX,
 } from "solid-js";
-import { Portal } from "solid-js/web";
+import { ThemedPortal } from "../shared/ThemedPortal";
 import { PaperPresence } from "../PaperPresence";
 import { focusBeforeMenu } from "../shared/menuFocus";
 import { cx } from "../../utils/cx";
@@ -127,22 +127,27 @@ export function ModalLayer(props: ModalLayerProps) {
         const stack = openModals();
         return own !== null && stack.indexOf(own) < stack.length - 1;
     };
-    createEffect(() => {
-        if (local.open) {
-            setShown(true);
-            return;
-        }
-        // A page that draws no frames (a hidden tab, a headless browser on
-        // fast-forwarded time) still lets the dialog go: the timer comes long
-        // after a frame wherever frames are drawn.
-        const hide = () => setShown(false);
-        const frame = requestAnimationFrame(hide);
-        const timer = setTimeout(hide, LEAVE_WITHOUT_FRAME_MS);
-        onCleanup(() => {
-            cancelAnimationFrame(frame);
-            clearTimeout(timer);
-        });
-    });
+    createEffect(
+        on(
+            () => local.open,
+            (open) => {
+                if (open) {
+                    setShown(true);
+                    return;
+                }
+                // A page that draws no frames (a hidden tab, a headless browser on
+                // fast-forwarded time) still lets the dialog go: the timer comes long
+                // after a frame wherever frames are drawn.
+                const hide = () => setShown(false);
+                const frame = requestAnimationFrame(hide);
+                const timer = setTimeout(hide, LEAVE_WITHOUT_FRAME_MS);
+                onCleanup(() => {
+                    cancelAnimationFrame(frame);
+                    clearTimeout(timer);
+                });
+            },
+        ),
+    );
 
     createEffect(on(() => local.open, (open) => {
         if (!open) return;
@@ -219,7 +224,7 @@ export function ModalLayer(props: ModalLayerProps) {
     };
 
     return (
-        <Portal>
+        <ThemedPortal>
             {/* appear: a modal mounted already open (shown by a <Show>) still rises in */}
             <PaperPresence
                 when={shown()}
@@ -254,6 +259,6 @@ export function ModalLayer(props: ModalLayerProps) {
                     </div>
                 </div>
             </PaperPresence>
-        </Portal>
+        </ThemedPortal>
     );
 }

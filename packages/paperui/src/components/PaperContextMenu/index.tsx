@@ -16,7 +16,7 @@ import {
     type JSX,
 } from "solid-js";
 import { contextMenuDismissals } from "../shared/contextMenuDismiss";
-import { Portal } from "solid-js/web";
+import { ThemedPortal } from "../shared/ThemedPortal";
 import { PaperIcon } from "../PaperIcon";
 import { escapeAttributeValue } from "../../utils/selector";
 import {
@@ -37,7 +37,7 @@ import {
 } from "./position";
 import { cx } from "../../utils/cx";
 
-export { positionFromTarget, resolveMenuLeft, type ContextMenuPlacement, type ContextMenuTarget } from "./position";
+export type { ContextMenuPlacement, ContextMenuTarget } from "./position";
 
 export interface PaperContextMenuProps extends JSX.HTMLAttributes<HTMLDivElement> {
     x?: number;
@@ -244,10 +244,11 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
 
         const initial = local.initialHighlight;
         setHighlightedItem(initial === undefined || initial === null ? null : String(initial));
-        requestAnimationFrame(() => {
+        const frame = requestAnimationFrame(() => {
             updatePosition();
             scrollHighlightedIntoView();
         });
+        onCleanup(() => cancelAnimationFrame(frame));
 
         installMenuKeyboard(openMenu);
         installDragHighlight(openMenu, drag);
@@ -293,7 +294,7 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
 
     return (
         <Show when={local.open || local.keepMounted}>
-            <Portal>
+            <ThemedPortal>
                 <Show when={local.open && (local.overlay ?? true)}>
                     <div class={styles.contextMenuOverlay} onClick={handleClose} />
                 </Show>
@@ -319,7 +320,7 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
                         </div>
                     </ContextMenuContext.Provider>
                 </SubMenuLevelContext.Provider>
-            </Portal>
+            </ThemedPortal>
         </Show>
     );
 }
@@ -552,7 +553,7 @@ export function PaperContextMenuSub(
             <PaperIcon class={menuStyles.subMenuIndicator} zeroHeight>chevron_right</PaperIcon>
 
             <Show when={isOpen()}>
-                <Portal>
+                <ThemedPortal>
                     <SubMenuLevelContext.Provider value={childSubMenuContextValue}>
                         <div
                             ref={subRef}
@@ -569,7 +570,7 @@ export function PaperContextMenuSub(
                             {local.children}
                         </div>
                     </SubMenuLevelContext.Provider>
-                </Portal>
+                </ThemedPortal>
             </Show>
         </div>
     );

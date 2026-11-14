@@ -151,4 +151,17 @@ describe("PaperContextMenu", () => {
         expect(placed.bottom).toBeLessThanOrEqual(keyboardTop);
         expect(placed.top).toBeGreaterThanOrEqual(12);
     });
+
+    test("under a dark provider on a light page, the menu and its submenu are dark", async () => {
+        page = await browser.open("contextMenu", { query: "theme=dark", colorScheme: "light" });
+        await page.click("#target", "right");
+        await hittable(item("Rename"), "the context menu to open");
+        await page.click(`${ROOT_MENU} [data-context-sub]`);
+        await page.waitFor(`document.querySelector('${SUBMENU}') !== null`, "the submenu to open");
+        const text = (selector: string) => page.eval<string>(`getComputedStyle(document.querySelector('${selector}')).getPropertyValue("--paper-text")`);
+        const dark = await text(".paperui-root");
+        expect(dark).not.toBe(await page.eval<string>(`getComputedStyle(document.body).getPropertyValue("--paper-text")`));
+        expect(await text(ROOT_MENU)).toBe(dark);
+        expect(await text(SUBMENU)).toBe(dark);
+    });
 });

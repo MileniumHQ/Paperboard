@@ -10,7 +10,7 @@ import {
     type JSX,
     type ParentProps,
 } from "solid-js";
-import { Portal } from "solid-js/web";
+import { ThemedPortal } from "../shared/ThemedPortal";
 import { PaperText } from "../PaperText";
 import { mergeStyle } from "../../utils/style";
 import { cx } from "../../utils/cx";
@@ -137,7 +137,7 @@ export function PaperPopover(props: ParentProps<PaperPopoverProps>) {
 
     return (
         <Show when={local.open}>
-            <Portal>
+            <ThemedPortal>
                 <div
                     ref={box}
                     role="dialog"
@@ -176,7 +176,7 @@ export function PaperPopover(props: ParentProps<PaperPopoverProps>) {
                     </Show>
                     <div class={styles.body}>{local.children}</div>
                 </div>
-            </Portal>
+            </ThemedPortal>
         </Show>
     );
 }

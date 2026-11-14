@@ -124,6 +124,7 @@ render(
             </PaperTextList>
             <PaperText preset="body" as="p">
                 Leave <PaperCode>theme</PaperCode> unset in a panel. Set it only when the interface must stay in one mode.
+                Menus, dialogs and popovers open at the end of the page, outside the provider's root, and still take its theme.
             </PaperText>
 
             <PaperText preset="subheader" as="h3" id="use-paper">usePaper</PaperText>
@@ -136,6 +137,7 @@ render(
 
 const paper = usePaper();
 paper?.theme(); // ThemeMode: the mode, "system" included, not the resolved light or dark
+paper?.resolvedTheme(); // "light" | "dark": what the provider draws
 paper?.setTheme("dark"); // ThemeMode => void`}
             </PaperCode>
             <PaperText preset="body" as="p">

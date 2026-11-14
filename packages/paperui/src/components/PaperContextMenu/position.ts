@@ -38,7 +38,7 @@ export function elementFromTarget(target: ContextMenuTarget): HTMLElement | null
     return null;
 }
 
-export function positionFromTarget(
+function positionFromTarget(
     target: ContextMenuTarget,
     placement: ContextMenuPlacement = "mouse",
 ): { x: number; y: number } | null {
@@ -110,7 +110,7 @@ function getElementPosition(
  * on either side of its target, or a mouse-positioned menu with no target
  * edge to anchor to.
  */
-export function resolveMenuLeft(
+function resolveMenuLeft(
     targetLeft: number,
     targetRight: number | null,
     menuWidth: number,

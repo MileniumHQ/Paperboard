@@ -8,11 +8,12 @@ import {
     createEffect,
     createSignal,
     For,
+    on,
     onCleanup,
     Show,
     type JSX,
 } from "solid-js";
-import { Portal } from "solid-js/web";
+import { ThemedPortal } from "./ThemedPortal";
 import { PaperButton } from "../PaperButton";
 import { PaperRange } from "../PaperRange";
 import {
@@ -91,13 +92,15 @@ export function createMediaPlayer(options: { noun: string; onError?: (message: s
         setCurrentTime(media.currentTime);
         frame = requestAnimationFrame(tick);
     };
-    createEffect(() => {
-        if (playing() && frame === undefined && typeof requestAnimationFrame === "function") {
-            frame = requestAnimationFrame(tick);
-        } else if (!playing()) {
-            stopFrames();
-        }
-    });
+    createEffect(
+        on(playing, (isPlaying) => {
+            if (isPlaying && frame === undefined && typeof requestAnimationFrame === "function") {
+                frame = requestAnimationFrame(tick);
+            } else if (!isPlaying) {
+                stopFrames();
+            }
+        }),
+    );
 
     onCleanup(() => {
         stopFrames();
@@ -320,17 +323,19 @@ export function MediaActions(props: { player: MediaPlayer; label: string; childr
             setVolumeOpen(false);
         }, VOLUME_CLOSE_DELAY_MS);
     };
-    createEffect(() => {
-        if (!volumeOpen()) return;
-        // a fixed popover would drift from its button; close instead
-        const close = () => setVolumeOpen(false);
-        window.addEventListener("scroll", close, true);
-        window.addEventListener("resize", close);
-        onCleanup(() => {
-            window.removeEventListener("scroll", close, true);
-            window.removeEventListener("resize", close);
-        });
-    });
+    createEffect(
+        on(volumeOpen, (isOpen) => {
+            if (!isOpen) return;
+            // a fixed popover would drift from its button; close instead
+            const close = () => setVolumeOpen(false);
+            window.addEventListener("scroll", close, true);
+            window.addEventListener("resize", close);
+            onCleanup(() => {
+                window.removeEventListener("scroll", close, true);
+                window.removeEventListener("resize", close);
+            });
+        }),
+    );
     onCleanup(cancelVolumeClose);
 
     const onVolumeKey: JSX.EventHandler<HTMLButtonElement, KeyboardEvent> = (e) => {
@@ -370,7 +375,7 @@ export function MediaActions(props: { player: MediaPlayer; label: string; childr
                 {p.effectiveVolume() === 0 ? "volume_off" : p.effectiveVolume() < 0.5 ? "volume_down" : "volume_up"}
             </PaperButton>
             <Show when={volumeOpen()}>
-                <Portal>
+                <ThemedPortal>
                     <div
                         ref={volumePopover}
                         class={styles.volumePopover}
@@ -393,7 +398,7 @@ export function MediaActions(props: { player: MediaPlayer; label: string; childr
                             />
                         </div>
                     </div>
-                </Portal>
+                </ThemedPortal>
             </Show>
 
             {props.children}

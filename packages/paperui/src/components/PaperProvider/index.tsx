@@ -2,7 +2,9 @@ import {
     createEffect,
     createSignal,
     createMemo,
+    on,
     onCleanup,
+    onMount,
     createContext,
     useContext,
     splitProps,
@@ -34,6 +36,8 @@ export interface PaperProviderProps extends JSX.HTMLAttributes<HTMLDivElement> {
 
 interface PaperContextValue {
     theme: () => ThemeMode;
+    /** the theme the provider draws: the mode with "system" settled */
+    resolvedTheme: () => "light" | "dark";
     setTheme: (theme: ThemeMode) => void;
 }
 
@@ -88,7 +92,7 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
         readHostTheme(),
     );
 
-    createEffect(() => {
+    onMount(() => {
         if (typeof document === "undefined" || typeof MutationObserver === "undefined") {
             return;
         }
@@ -100,7 +104,7 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
         onCleanup(() => observer.disconnect());
     });
 
-    createEffect(() => {
+    onMount(() => {
         if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
         const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
         setSystemPrefersDark(mediaQuery.matches);
@@ -140,22 +144,27 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
         return systemPrefersDark() ? "dark" : "light";
     });
 
-    createEffect(() => {
-        if (local.styleBody && typeof document !== "undefined") {
-            const body = document.body;
-            body.setAttribute("data-paperui-theme", resolvedTheme());
-            if (local.unselectable || local.noSelect) {
-                body.setAttribute("data-unselectable", "true");
-                body.classList.add("unselectable");
-            } else {
-                body.removeAttribute("data-unselectable");
-                body.classList.remove("unselectable");
-            }
-        }
-    });
+    createEffect(
+        on(
+            () => [local.styleBody, resolvedTheme(), Boolean(local.unselectable || local.noSelect)] as const,
+            ([styleBody, theme, unselectable]) => {
+                if (!styleBody || typeof document === "undefined") return;
+                const body = document.body;
+                body.setAttribute("data-paperui-theme", theme);
+                if (unselectable) {
+                    body.setAttribute("data-unselectable", "true");
+                    body.classList.add("unselectable");
+                } else {
+                    body.removeAttribute("data-unselectable");
+                    body.classList.remove("unselectable");
+                }
+            },
+        ),
+    );
 
     const contextValue: PaperContextValue = {
         theme: currentThemeMode,
+        resolvedTheme,
         setTheme: (t) => setInternalTheme(() => t),
     };
 
