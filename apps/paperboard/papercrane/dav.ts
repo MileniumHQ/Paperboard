@@ -8,6 +8,7 @@ import { lookupMime } from "./mime";
 import { secretsMatch } from "./secretCompare";
 import { logger } from "./logger";
 import { receiveFileAtomic, UploadTooLargeError } from "./atomicUpload";
+import { hasOnlyRealEntriesBelow } from "./storage";
 
 // WebDAV rooted at the app-data dir, main token or ephemeral session auth
 export const DAV_PREFIX = "/dav";
@@ -71,7 +72,8 @@ export class DavSessionStore {
             throw new Error(
                 `Session store is full (${MAX_SESSIONS} active sessions). Revoke one before opening another.`,
             );
-        }        const clamped = Math.min(MAX_IDLE_MS, Math.max(MIN_IDLE_MS, idleMs));
+        }
+        const clamped = Math.min(MAX_IDLE_MS, Math.max(MIN_IDLE_MS, idleMs));
         const now = Date.now();
         const s: DavSession = {
             user: `dav-${crypto.randomBytes(6).toString("hex")}`,
@@ -240,7 +242,9 @@ export function resolveDavPath(root: string, rel: string): string | null {
         if (seg === "." || seg === "..") continue;
         if (isBlockedFileName(seg)) return null;
     }
-    return target;
+    // a linked folder above the target would lead outside the root; the
+    // leaf itself is checked by each method (a link is never served)
+    return target === root || hasOnlyRealEntriesBelow(root, path.dirname(target)) ? target : null;
 }
 
 interface PropRow {
@@ -618,8 +622,8 @@ export async function handleDavRequest(
             return;
         }
         const st = fs.lstatSync(target);
-        // lstat, not stat — see the PROPFIND guard above. A symlink is
-        // never served, even one pointing inside the tree.
+        // lstat, not stat: a symlink is never served, even one pointing
+        // inside the tree (resolveDavPath refuses linked folders above it)
         if (!st.isFile() || st.isSymbolicLink()) {
             res.writeHead(403, { "Content-Type": "text/plain" });
             res.end("Not a file");

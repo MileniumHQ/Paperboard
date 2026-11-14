@@ -203,20 +203,31 @@ export function resolveSecureTargetPath(
         throw error;
     }
     if (rootStat.isSymbolicLink()) throw new Error("Access denied: symbolic link at storage root");
-    let current = baseDir;
-    for (const segment of ["", ...path.relative(baseDir, resolved).split(path.sep)]) {
-        if (segment) current = path.join(current, segment);
+    if (!hasOnlyRealEntriesBelow(baseDir, resolved)) {
+        throw new Error(`Access denied: symbolic link in storage path for ${cleanAppId}`);
+    }
+    return resolved;
+}
+
+/**
+ * Whether every existing path component from `root` (exclusive) down to
+ * `target` is a real entry, not a link, dangling links included. `target`
+ * must already be inside `root` by path text.
+ */
+export function hasOnlyRealEntriesBelow(root: string, target: string): boolean {
+    let current = root;
+    for (const segment of path.relative(root, target).split(path.sep)) {
+        if (!segment) continue;
+        current = path.join(current, segment);
         let stat: fs.BigIntStats;
         try { stat = fs.lstatSync(current, { bigint: true }); }
         catch (error) {
-            if (isMissingPathError(error)) break;
+            if (isMissingPathError(error)) return true;
             throw error;
         }
-        if (stat.isSymbolicLink() || !isSameEntry(stat, fs.statSync(fs.realpathSync(current), { bigint: true }))) {
-            throw new Error(`Access denied: symbolic link in storage path for ${cleanAppId}`);
-        }
+        if (stat.isSymbolicLink() || !isSameEntry(stat, fs.statSync(fs.realpathSync(current), { bigint: true }))) return false;
     }
-    return resolved;
+    return true;
 }
 
 /** Open without following the leaf, then recheck the chain and inode before use. */

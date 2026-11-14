@@ -138,6 +138,7 @@ describe("WebDAV", () => {
 		fs.symlinkSync(path.join(outside, "secret.txt"), path.join(daemon.dataDir, "files", "test.dav", "out.txt"));
 		fs.writeFileSync(path.join(daemon.dataDir, "files", "test.dav", "in.txt"), "in");
 		fs.symlinkSync(path.join(daemon.dataDir, "files", "test.dav", "in.txt"), path.join(daemon.dataDir, "files", "test.dav", "inner-link.txt"));
+		fs.symlinkSync(outside, path.join(daemon.dataDir, "files", "test.dav", "out-dir"), "dir");
 		const before = listTree(daemon.dataDir);
 
 		// %2e%2e segments are dot segments to the URL parser, so they normalise
@@ -159,6 +160,10 @@ describe("WebDAV", () => {
 			const res = await request(port, { path: p, headers: auth });
 			expect({ p, status: res.status }).toEqual({ p, status: 403 });
 		}
+		// a linked folder is not followed, for reading or writing
+		expect((await request(port, { path: "/dav/files/test.dav/out-dir/secret.txt", headers: auth })).status).toBe(403);
+		expect((await request(port, { method: "PUT", path: "/dav/files/test.dav/out-dir/planted.txt", headers: auth, body: "x" })).status).toBe(403);
+		expect(fs.readdirSync(outside)).toEqual(["secret.txt"]);
 		expect((await request(port, { method: "DELETE", path: "/dav/%2f", headers: auth })).status).toBe(403);
 		expect((await request(port, { method: "DELETE", path: "/dav/", headers: auth })).status).toBe(403);
 		expect(listTree(daemon.dataDir)).toEqual(before);
