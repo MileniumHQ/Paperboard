@@ -3,7 +3,8 @@
 // (which stops its upload). Sending takes the finished ones; a message
 // taken back puts its files back here.
 
-import { createSignal, onCleanup } from "solid-js";
+import { onCleanup } from "solid-js";
+import { createStore } from "solid-js/store";
 import { LIMITS, type Attachment } from "../contract";
 import type { Agent } from "../lib/agent";
 
@@ -25,9 +26,11 @@ const kindOf = (type: string): Chip["kind"] =>
 let keys = 0;
 
 export function createTray(agent: Agent) {
-    const [chips, setChips] = createSignal<Chip[]>([]);
+    // a store: a chip's progress changes the chip in place, so its row stays the row it was
+    const [list, setChips] = createStore<Chip[]>([]);
+    const chips = () => list;
     const aborts = new Map<string, AbortController>();
-    const update = (key: string, change: Partial<Chip>) => setChips((cs) => cs.map((c) => (c.key === key ? { ...c, ...change } : c)));
+    const update = (key: string, change: Partial<Chip>) => setChips((c) => c.key === key, change);
 
     const release = (c: Chip) => {
         aborts.get(c.key)?.abort();
@@ -45,7 +48,7 @@ export function createTray(agent: Agent) {
                 const kind = kindOf(f.type);
                 const abort = new AbortController();
                 aborts.set(key, abort);
-                setChips((cs) => [...cs, { key, name: f.name, preview: kind === "image" || kind === "video" ? URL.createObjectURL(f) : null, kind, progress: 0, file: null, error: null }]);
+                setChips(list.length, { key, name: f.name, preview: kind === "image" || kind === "video" ? URL.createObjectURL(f) : null, kind, progress: 0, file: null, error: null });
                 agent.files
                     .upload(f, (progress) => update(key, { progress }), abort.signal)
                     .then(
