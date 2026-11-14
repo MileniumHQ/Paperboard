@@ -63,15 +63,8 @@ export async function handlePanelsRoutes(
             }
         }
 
-        // Publisher-typed redirect leg is DELETED: redirecting to a
-        // record-carried URL asked every client to trust the same record
-        // that demands the download (the accepted pre-Alpha-3 gap). The
-        // registry serves only the archive it hashes (the archiveKey path
-        // above). Legacy records whose archive lives off-registry no
-        // longer resolve — re-publish through the operator publisher. The
-        // message matches the missing-record case above: a not-found here
-        // must not distinguish "record exists, archive missing" to an
-        // unauthenticated caller.
+        // only the archive the registry hosts is served, never a URL the
+        // record names; a missing one is the same 404 as a missing record
         return jsonResponse({ error: "Panel not found" }, 404);
     }
 

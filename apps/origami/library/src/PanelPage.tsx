@@ -245,16 +245,16 @@ const PanelPage: Component<PanelPageProps> = (props) => {
                 </div>
                 <div class={styles.heroAction}>
                     <PaperEffect>
-                    <PaperButton
-                        class={styles.actionButton}
-                        size="large"
-                        variant={action() === "open" ? "brand" : "primary"}
-                        disabled={action() === "busy" || action() === "detecting"}
-                        onClick={props.onAction}
-                    >
-                        <PaperIcon aria-hidden="true">{ACTION_ICON[action()]}</PaperIcon>
-                        {ACTION_LABEL[action()]}
-                    </PaperButton>
+                        <PaperButton
+                            class={styles.actionButton}
+                            size="large"
+                            variant={action() === "open" ? "brand" : "primary"}
+                            disabled={action() === "busy" || action() === "detecting"}
+                            onClick={props.onAction}
+                        >
+                            <PaperIcon aria-hidden="true">{ACTION_ICON[action()]}</PaperIcon>
+                            {ACTION_LABEL[action()]}
+                        </PaperButton>
                     </PaperEffect>
                     <Show when={props.error}>
                         <PaperText size={2} color="danger" role="alert">
