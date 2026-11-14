@@ -39,19 +39,28 @@ function panelUi(): string {
     return out;
 }
 
-/** serves the built UI with a panel credential the test daemon issued */
-export async function servePanel(): Promise<{ url: string; stop: () => void }> {
+/**
+ * Serves the built UI with a panel credential the test daemon issued. A file
+ * whose path `hold` matches is answered only once `release()` is called, as a
+ * slow network would deliver it.
+ */
+export async function servePanel(options: { hold?: RegExp } = {}): Promise<{ url: string; stop: () => void; release: () => void }> {
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
     const daemon = await testDaemon();
     const dist = panelUi();
     const granted = (await getTransport().call("auth:panel-token", { panelId: PANEL_ID })) as { token: string };
     const creds = JSON.stringify({ port: daemon.port, token: granted.token, scoped: true, computerId: "local", panelId: PANEL_ID }).replace(/</g, "\\u003c");
     const server = Bun.serve({
         port: 0,
+        // a held file's request stays open until it is released
+        idleTimeout: 0,
         hostname: "127.0.0.1",
         async fetch(req) {
             const pathname = new URL(req.url).pathname;
             const file = path.join(dist, pathname === "/" ? "index.html" : pathname);
             if (!file.startsWith(dist) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return new Response("Not found", { status: 404 });
+            if (options.hold?.test(pathname)) await released;
             if (file.endsWith(".html")) {
                 const html = fs.readFileSync(file, "utf8").replace(/<head[^>]*>/i, (m) => `${m}<script>window.__PAPERBOARD_CRANE=${creds};document.documentElement.setAttribute("data-paper-mobile","false");</script>`);
                 return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
@@ -59,7 +68,14 @@ export async function servePanel(): Promise<{ url: string; stop: () => void }> {
             return new Response(Bun.file(file));
         },
     });
-    return { url: `http://127.0.0.1:${server.port}`, stop: () => server.stop(true) };
+    return {
+        url: `http://127.0.0.1:${server.port}`,
+        stop: () => {
+            release();
+            server.stop(true);
+        },
+        release,
+    };
 }
 
 type CdpEvent = { method: string; params: any };
@@ -73,14 +89,24 @@ export interface Page {
     insertText(text: string): Promise<void>;
     /** clicks the element `selector` finds, at its centre, as a mouse would */
     click(selector: string, button?: "left" | "right"): Promise<void>;
+    /** clicks, as a mouse would, the innermost shown `selector` element whose text includes `text` */
+    clickText(selector: string, text: string): Promise<void>;
+    /** presses and lets go of one key (Enter, Tab, Escape…) in whatever has focus, as a keyboard would */
+    press(key: "Enter" | "Escape" | "Tab"): Promise<void>;
+    /** loads the page again, as a person reloading the panel would */
+    reload(): Promise<void>;
     /** what the page threw, and every message its sockets sent and received */
     exceptions: string[];
     frames: string[];
     close(): Promise<void>;
 }
 
-/** opens `url` in a fresh headless Chrome with a throwaway profile */
-export async function openPage(url: string): Promise<Page> {
+/**
+ * Opens `url` in a fresh headless Chrome with a throwaway profile, once the
+ * page has loaded; `until: "parsed"` returns once its document is parsed and
+ * its scripts ran, for a page whose load waits on a file the test holds back.
+ */
+export async function openPage(url: string, options: { until?: "loaded" | "parsed" } = {}): Promise<Page> {
     const profile = fs.mkdtempSync(path.join(os.tmpdir(), "terminal-chrome-"));
     const chrome: ChildProcess = spawn(chromeBinary(), [
         "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check",
@@ -158,6 +184,37 @@ export async function openPage(url: string): Promise<Page> {
             await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: box.x, y: box.y });
             for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x: box.x, y: box.y, button, clickCount: 1 });
         },
+        async clickText(selector, text) {
+            const tag = `t${Math.random().toString(36).slice(2)}`;
+            const shown = `[...document.querySelectorAll(${JSON.stringify(selector)})].filter((el) => el.getClientRects().length > 0 && el.innerText?.includes(${JSON.stringify(text)}))`;
+            await page.waitFor(`${shown}.length > 0`, `a ${selector} showing "${text}"`);
+            // a menu that just opened places itself on the next frame: it is clicked where it settles
+            await evaluate(`new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+            await evaluate(`(() => {
+                const all = ${shown};
+                const inner = all.filter((el) => !all.some((other) => other !== el && el.contains(other)));
+                inner[0].dataset.test = ${JSON.stringify(tag)};
+            })()`);
+            await page.click(`[data-test="${tag}"]`);
+        },
+        async press(key) {
+            const codes = { Enter: [13, "\r"], Escape: [27, ""], Tab: [9, "\t"] } as const;
+            const [keyCode, text] = codes[key];
+            await send("Input.dispatchKeyEvent", { type: "keyDown", key, code: key, windowsVirtualKeyCode: keyCode, ...(text ? { text } : {}) });
+            await send("Input.dispatchKeyEvent", { type: "keyUp", key, code: key, windowsVirtualKeyCode: keyCode });
+        },
+        async reload() {
+            const loaded = new Promise<void>((resolve) => {
+                const listener = ({ method }: CdpEvent) => {
+                    if (method !== "Page.loadEventFired") return;
+                    listeners.delete(listener);
+                    resolve();
+                };
+                listeners.add(listener);
+            });
+            await send("Page.reload");
+            await loaded;
+        },
         waitFor: (predicate, what) =>
             evaluate(`new Promise((resolve, reject) => {
                 // a predicate that throws rejects the wait with its error
@@ -181,7 +238,8 @@ export async function openPage(url: string): Promise<Page> {
             fs.rmSync(profile, { recursive: true, force: true });
         },
     };
-    const loaded = new Promise<void>((resolve) => listeners.add(({ method }) => method === "Page.loadEventFired" && resolve()));
+    const until = options.until === "parsed" ? "Page.domContentEventFired" : "Page.loadEventFired";
+    const loaded = new Promise<void>((resolve) => listeners.add(({ method }) => method === until && resolve()));
     await send("Page.navigate", { url });
     await loaded;
     return page;
