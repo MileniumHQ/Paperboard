@@ -136,7 +136,12 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                                                             setDetailOpen(true);
                                                         }}
                                                         icon={props.icon(player)}
-                                                        description={props.description(player)}
+                                                        description={
+                                                            // one line, so a row with every badge stands as tall as the rest
+                                                            <PaperText as="div" truncate size={1} weight={600}>
+                                                                {props.description(player)}
+                                                            </PaperText>
+                                                        }
                                                         actions={
                                                             <PaperFlex direction="row" gap="onefourth" align="center">
                                                                 {props.badges?.(player)}

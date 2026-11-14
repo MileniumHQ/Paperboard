@@ -53,7 +53,12 @@ export function AddonInstalledList<Meta>(props: {
                             <PaperListItem
                                 value={item.id}
                                 icon={<PaperAvatar src={item.iconUrl} shape="square" size="large" fallbackIcon={props.kind.glyph} />}
-                                description={[item.subtitle, item.footer].filter(Boolean).join(" · ")}
+                                description={
+                                    // a file name has no spaces to wrap at; it breaks where it must
+                                    <PaperText breakWord size={1} weight={600}>
+                                        {[item.subtitle, item.footer].filter(Boolean).join(" · ")}
+                                    </PaperText>
+                                }
                                 actions={
                                     <PaperFlex direction="row" gap="half" align="center">
                                         <PaperBadge variant={item.badge.variant}>{item.badge.label}</PaperBadge>
