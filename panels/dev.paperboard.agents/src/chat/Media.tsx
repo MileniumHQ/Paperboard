@@ -8,7 +8,7 @@
 // agent's network rule: a message, written by the model or by a page it read,
 // never gets this page to ask a host of its choosing for anything.
 
-import { createContext, createResource, createSignal, For, Match, Switch, useContext, type JSX, type ParentProps } from "solid-js";
+import { createContext, createMemo, createResource, createSignal, For, Match, Switch, useContext, type JSX, type ParentProps } from "solid-js";
 import {
     PaperAudio,
     PaperButton,
@@ -268,9 +268,11 @@ export function FileChip(props: { id: string; label: string }) {
 
 /** The files a message carries, under its text. */
 export function AttachmentList(props: { list: Attachment[]; class?: string }) {
+    // by id: a message that turns from waiting into a real entry hands over new objects for the same files, which stay as they are
+    const ids = createMemo(() => props.list.map((a) => a.id), [], { equals: (a, b) => a.length === b.length && a.every((id, i) => id === b[i]) });
     return (
         <div class={`${styles.list} ${props.class ?? ""}`}>
-            <For each={props.list}>{(a) => <FileView id={a.id} caption={a.name} />}</For>
+            <For each={ids()}>{(id) => <FileView id={id} caption={props.list.find((a) => a.id === id)?.name} />}</For>
         </div>
     );
 }
