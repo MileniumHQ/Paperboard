@@ -4,7 +4,7 @@
 // 0 when done, 1 when something is wrong, 2 when the command line is.
 import { Command, CommanderError } from "commander";
 import { packPanel } from "../src/pack";
-import { linkPanel, unlinkPanel, listLinkedPanels } from "../src/link";
+import { linkPanelWhenStopped, unlinkPanel, listLinkedPanels, type LinkResult } from "../src/link";
 import { requirePanelId } from "../src/panelIdentity";
 import { runMonitor } from "../src/cli/monitor";
 import { runDoctor } from "../src/cli/doctor";
@@ -73,11 +73,11 @@ program
     .command("link [panel-dir]")
     .alias("dev-link")
     .description("Link a panel folder into Paperboard, so it runs from your working copy")
-    .option("-f, --force", "replace an installed copy of the panel (its data stays)")
-    .action(command((panelDir: string | undefined, opts: { force?: boolean }) => {
-        let res: ReturnType<typeof linkPanel>;
+    .option("-f, --force", "replace an installed copy of the panel while Paperboard is quit (its data stays)")
+    .action(command(async (panelDir: string | undefined, opts: { force?: boolean }) => {
+        let res: LinkResult;
         try {
-            res = linkPanel({ targetDir: panelDir ?? process.cwd(), force: opts.force });
+            res = await linkPanelWhenStopped({ targetDir: panelDir ?? process.cwd(), force: opts.force });
         } catch (err) {
             const message = (err as Error).message;
             throw new CliError(message, /--force/.test(message) ? undefined : "Run paperapi doctor in the panel folder to see what is wrong.");

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawn } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import * as net from "node:net";
@@ -6,8 +6,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocketServer } from "ws";
 import { linkPanel } from "../src/link";
+import { startDaemon } from "./helpers/daemon";
 
 const CLI = join(import.meta.dir, "..", "bin", "cli.ts");
+setDefaultTimeout(30_000);
 
 let work: string;
 let dataDir: string;
@@ -39,9 +41,9 @@ interface Run {
 }
 
 // the CLI as a developer runs it, in its own process
-function cli(args: string[], cwd = work): Promise<Run> {
+function cli(args: string[], cwd = work, data = dataDir): Promise<Run> {
     return new Promise((resolve, reject) => {
-        const child = spawn(process.execPath, [CLI, ...args], { cwd, env: { ...process.env, PAPERBOARD_DIR: dataDir, HOME: home, USERPROFILE: home }, stdio: ["ignore", "pipe", "pipe"] });
+        const child = spawn(process.execPath, [CLI, ...args], { cwd, env: { ...process.env, PAPERBOARD_DIR: data, HOME: home, USERPROFILE: home }, stdio: ["ignore", "pipe", "pipe"] });
         let stdout = "";
         let stderr = "";
         child.stdout.on("data", (c: Buffer) => {
@@ -99,6 +101,26 @@ describe("linking never clobbers an install or the real Paperboard, and the CLI 
         const forced = await cli(["link", "--force"], dir);
         expect(forced.code).toBe(0);
         expect(lstatSync(installed).isSymbolicLink()).toBe(true);
+    });
+
+    test("an installed panel is not replaced while Paperboard runs it", async () => {
+        // the real daemon, on the test process's own data folder
+        const daemonDir = process.env.PAPERBOARD_DIR!;
+        const daemon = await startDaemon();
+        const installed = join(daemonDir, "panels", "dev.test.linked");
+        try {
+            const dir = panelFolder();
+            mkdirSync(installed, { recursive: true });
+            writeFileSync(join(installed, "manifest.json"), '{"id":"dev.test.linked","installed":true}');
+            const refused = await cli(["link", "--force"], dir, daemonDir);
+            expect(refused.code).toBe(1);
+            expect(refused.stderr).toContain(`Paperboard is running dev.test.linked from ${installed}`);
+            expect(lstatSync(installed).isDirectory()).toBe(true);
+            expect(readFileSync(join(installed, "manifest.json"), "utf8")).toContain('"installed":true');
+        } finally {
+            await daemon.stop();
+            rmSync(installed, { recursive: true, force: true });
+        }
     });
 
     test("unreadable command lines exit 2", async () => {

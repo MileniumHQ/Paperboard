@@ -169,6 +169,7 @@ Paperboard serves its pages from this folder now. After a build, run paperapi re
             <PaperTextList>
                 <li>An installed copy of the panel in that place is refused: <PaperCode>An installed copy of dev.example.weather already exists at /home/ada/.paperboard/panels/dev.example.weather. Use --force to replace it with this folder.</PaperCode></li>
                 <li><PaperCode>--force</PaperCode> deletes the installed copy's code and links the folder in its place. The panel's config, files and secrets live elsewhere and stay.</li>
+                <li><PaperCode>--force</PaperCode> is refused while Paperboard runs on that data folder, because Paperboard serves the panel and runs its service from the installed copy: <PaperCode>Paperboard is running dev.example.weather from /home/ada/.paperboard/panels/dev.example.weather, so its installed copy can't be replaced now. Quit Paperboard, then run paperapi link --force again.</PaperCode></li>
                 <li>A folder without <PaperCode>manifest.json</PaperCode> fails with <PaperCode>No manifest.json found at &lt;folder&gt;. Cannot link non-panel directory.</PaperCode></li>
             </PaperTextList>
 
