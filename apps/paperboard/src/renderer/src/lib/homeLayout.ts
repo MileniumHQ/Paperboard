@@ -175,9 +175,10 @@ export function computeGeometry(width: number, items: HomeItem[]): HomeGeometry 
  * Opening the gallery, or a window narrower than the layout, takes room from
  * Home without rearranging it. `width` is how much room the drawn canvas
  * takes; past the smallest scale it is wider than `room`, and Home scrolls
- * sideways to reach the rest.
+ * sideways to reach the rest. The smallest scale keeps a widget's smallest
+ * text readable: a narrow window scrolls rather than shrink it past that.
  */
-export const MIN_CANVAS_SCALE = 0.4;
+export const MIN_CANVAS_SCALE = 0.8;
 export function fitCanvas(gridWidth: number, room: number): { scale: number; left: number; width: number } {
     const space = Math.max(room, 0);
     const scale = gridWidth > 0 ? Math.min(1, Math.max(MIN_CANVAS_SCALE, space / gridWidth)) : 1;
