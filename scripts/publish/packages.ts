@@ -27,8 +27,15 @@ function listPackages(): NpmPackage[] {
                 scripts?: Record<string, string>;
             };
             if (pkg.private) continue;
-            if (typeof pkg.name !== "string" || typeof pkg.version !== "string") continue;
-            if (!pkg.scripts?.build) continue;
+            // a public package that cannot be published says why it is missing
+            if (typeof pkg.name !== "string" || typeof pkg.version !== "string") {
+                p.log.warn(`Skipping ${e.name}: package.json needs a string name and version`);
+                continue;
+            }
+            if (!pkg.scripts?.build) {
+                p.log.warn(`Skipping ${pkg.name}: package.json has no build script`);
+                continue;
+            }
             out.push({ dir: join(pkgsRoot, e.name), name: pkg.name, version: pkg.version });
         } catch (err) {
             p.log.warn(

@@ -2,8 +2,8 @@
 /**
  * scrape-gamerules.ts — Generates gamerules.generated.ts from the Minecraft Wiki
  *
- * Usage: bun run scrape-gamerules.ts
- * Output: ../panels/dev.paperboard.gameserver/src/generated/gamerules.generated.ts
+ * Usage (from the repo root): bun scripts/scrape-gamerules.ts
+ * Output: panels/dev.paperboard.gameserver/src/generated/gamerules.generated.ts
  */
 
 import { writeFileSync } from "fs";
@@ -50,7 +50,6 @@ function stripMarkup(text: string): string {
         })
         .replace(/\{\{va\|([^}|]+)\}\}/g, "$1")
         .replace(/\{\{nowrap\|([\s\S]*?)\}\}/gi, "$1")
-        .replace(/\{\{nowrap\|([\s\S]*?)\}\}/g, "$1")
         // [[link|label]] → label, [[link]] → link
         .replace(/\[\[(?:[^\]|]*\|)?([^\]]+)\]\]/g, "$1")
         // remaining simple text templates {{IN|java}} etc
@@ -270,23 +269,12 @@ function applyHistory(entries: GameruleEntry[], rawEvents: HistoryEvent[]) {
 
         // "Added the following gamerules:" followed by * {{cd|Name}} bullets
         const bulletNames = [...ev.text.matchAll(/^\s*\*\s*\{\{cd\|([^}|]+)\}\}/gm)].map((m) => m[1].trim());
-        // Inline mentions: Added/Removed game rule {{cd|Name}}
-        const inlineNames = [...ev.text.matchAll(/(Added|Removed|Renamed)[^.\n]*?\{\{cd\|([^}|]+)\}\}/g)].map(
-            (m) => ({ verb: m[1].toLowerCase(), name: m[2].trim() }),
-        );
+        // Inline mentions: Added game rule {{cd|Name}}
+        const inlineNames = [...ev.text.matchAll(/Added[^.\n]*?\{\{cd\|([^}|]+)\}\}/g)].map((m) => m[1].trim());
 
-        for (const b of bulletNames) {
-            const entry = lookup(byCanonical, b);
-            if (entry && !entry.addedIn) entry.addedIn = ver;
-        }
-
-        for (const { verb, name } of inlineNames) {
+        for (const name of [...bulletNames, ...inlineNames]) {
             const entry = lookup(byCanonical, name);
-            if (!entry) continue;
-
-            if (verb === "added") {
-                if (!entry.addedIn) entry.addedIn = ver;
-            }
+            if (entry && !entry.addedIn) entry.addedIn = ver;
         }
     }
 }
@@ -333,7 +321,7 @@ function generate(entries: GameruleEntry[]): string {
     const lines: string[] = [];
     lines.push("// GENERATED FILE — do not edit by hand.");
     lines.push(`// Source: minecraft.wiki /w/Game_rule (scraped ${new Date().toISOString().slice(0, 10)})`);
-    lines.push("// Regenerate with: bun run Paperboard/scripts/scrape-gamerules.ts");
+    lines.push("// Regenerate from the repo root with: bun scripts/scrape-gamerules.ts");
     lines.push("");
     lines.push("export interface GameruleEntry {");
     lines.push("    name: string;");
@@ -371,8 +359,8 @@ const entries = parseRuleList(wikitext);
 const events = parseHistory(wikitext);
 applyHistory(entries, events);
 
-const usable = entries.filter((e) => !/bedrock/i.test(e.category));
-console.log(`Parsed ${entries.length} gamerules (${usable.length} Java Edition, ${entries.filter((e) => !/bedrock/i.test(e.category)).length} currently live)`);
+const java = entries.filter((e) => !/bedrock/i.test(e.category));
+console.log(`Parsed ${entries.length} gamerules (${java.length} Java Edition)`);
 
 writeFileSync(OUT_FILE, generate(entries));
 console.log(`Written to ${OUT_FILE}`);

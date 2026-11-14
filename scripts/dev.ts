@@ -76,7 +76,7 @@ function ensureAppElectron(): void {
 function linkPanels(force: boolean): void {
     // linkAllPanels owns the linking policy (trash-rename recovery, skip
     // reporting); this driver only presents the result.
-    const { linked, skipped } = linkAllPanels(join(ROOT, "panels"), { force });
+    const { linked, skipped } = linkAllPanels(PANELS_ROOT, { force });
     for (const entry of linked) console.log(`linked ${entry.id} -> ${entry.linkPath}`);
     for (const entry of skipped) console.error(`skipped ${entry.dir}: ${entry.reason}`);
     console.log(`\n${linked.length}/${linked.length + skipped.length} panels linked.`);
