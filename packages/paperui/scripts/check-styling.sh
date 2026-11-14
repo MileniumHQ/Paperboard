@@ -6,9 +6,10 @@
 #   - no unscoped global selectors (`* {`, `:global(*)`) — styling must live
 #     inside a scoped root context
 #
-# Attribute-scoped global contracts (e.g. body[data-paperui-theme] rules in
-# colors.css, `:global([data-paperui-theme=...])` inside a scoped selector) are
-# allowed per the documented exceptions in AGENTS.md.
+# Attribute-scoped global rules (body[data-paperui-theme] rules in colors.css,
+# `:global([data-paperui-theme=...])` inside a scoped selector) are allowed:
+# they style a document only once it opts in with the attribute, and check (b)
+# below only matches a bare `* {` or `:global(*)`.
 #
 # Usage: bash scripts/check-styling.sh (from the repo root)
 
