@@ -22,14 +22,13 @@ import { resolveRegistryUrl } from "./util";
 import { daemonReleaseKey } from "./releaseSignature";
 import type { MonitorLifecycle } from "../../../packages/paperapi/src/monitorProtocol";
 import type { BackupEnded } from "./backups/types";
-import type { InputEncoding } from "./supervisor";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
-import { WorkloadRegistry, type TerminalStreams } from "./engineWorkloads";
+import { WorkloadRegistry, type ProcessStreams, type TerminalStreams } from "./engineWorkloads";
 import { PackageManager, sanitizeIdOrThrow, type PackageInstallOutcome, type PackageUpdateWait, type ReleaseSource } from "./enginePackages";
 import { PanelInstaller, type ExpectedPanelRelease, type UninstallResult } from "./enginePanels";
 import type { PanelManifest } from "./types";
 
-export type { TerminalStreams } from "./engineWorkloads";
+export type { ProcessStreams, TerminalStreams } from "./engineWorkloads";
 export type { StagedPackage, PackageUpdateWait, PackageInstallOutcome } from "./enginePackages";
 export type { ExpectedPanelRelease, UninstallResult } from "./enginePanels";
 
@@ -390,29 +389,12 @@ export class PaperCraneEngine {
         return this.workloads.attachTerminal(id, subscriber, streams);
     }
     public isTerminalRunning(id: string): Promise<boolean> { return this.workloads.isTerminalRunning(id); }
-    public runProcess(
-        id: string, command: string, args: string[] = [], cwd?: string, env?: Record<string, string>,
-        onData?: (data: string) => void, onStdout?: (data: string) => void, onStderr?: (data: string) => void,
-    ): Promise<{ exitCode: number | null }> {
-        return this.workloads.runProcess(id, command, args, cwd, env, onData, onStdout, onStderr);
-    }
-    public startProcess(
-        id: string, command: string, args: string[] = [], cwd?: string, env?: Record<string, string>,
-        onData?: (data: string) => void, onStdout?: (data: string) => void, onStderr?: (data: string) => void,
-        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; important?: boolean; subscriber?: object; onExit?: (exitCode: number | null) => void } = {},
-    ): Promise<{ completion: Promise<{ exitCode: number | null }> }> {
-        return this.workloads.startProcess(id, command, args, cwd, env, onData, onStdout, onStderr, options);
-    }
+    public startProcess(...args: Parameters<WorkloadRegistry["startProcess"]>): Promise<void> { return this.workloads.startProcess(...args); }
     public writeProcess(id: string, data: string): void { this.workloads.writeProcess(id, data); }
     public closeProcessInput(id: string): void { this.workloads.closeProcessInput(id); }
     public killProcess(id: string, signal = "SIGTERM"): Promise<void> { return this.workloads.killProcess(id, signal); }
     public isProcessRunning(id: string): Promise<boolean> { return this.workloads.isProcessRunning(id); }
-    public attachProcess(
-        id: string, subscriber: object,
-        onData?: (data: string) => void, onStdout?: (data: string) => void, onStderr?: (data: string) => void, onExit?: (exitCode: number | null) => void,
-    ): Promise<boolean> {
-        return this.workloads.attachProcess(id, subscriber, onData, onStdout, onStderr, onExit);
-    }
+    public attachProcess(id: string, subscriber: object, streams?: ProcessStreams): Promise<boolean> { return this.workloads.attachProcess(id, subscriber, streams); }
     public detachStreams(subscriber: object): void { this.workloads.detachStreams(subscriber); }
     public setClientOwner(id: string, owner: string | null): void { this.workloads.setClientOwner(id, owner); }
     public reserveClientOwner(id: string, owner: string | null): { commit(): void; undo(): void } { return this.workloads.reserveClientOwner(id, owner); }

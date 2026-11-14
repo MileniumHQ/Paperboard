@@ -22,6 +22,15 @@ import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import type { MonitorLifecycle } from "../../../packages/paperapi/src/monitorProtocol";
 
 type StreamListeners = Record<string, ((...args: any[]) => void) | undefined>;
+/**
+ * what a process tells its subscriber; there is no combined stream, which
+ * would be stdout and stderr again
+ */
+export interface ProcessStreams {
+    stdout?: (data: string) => void;
+    stderr?: (data: string) => void;
+    exit?: (exitCode: number | null) => void;
+}
 /** what a terminal tells its listeners; see SupervisedProcessClient's events */
 export interface TerminalStreams {
     data?: (data: string) => void;
@@ -427,47 +436,22 @@ export class WorkloadRegistry {
         return client?.isConnected() ?? false;
     }
 
-    // Background supervised processes
-    public async runProcess(
-        id: string,
-        command: string,
-        args: string[] = [],
-        cwd?: string,
-        env?: Record<string, string>,
-        onData?: (data: string) => void,
-        onStdout?: (data: string) => void,
-        onStderr?: (data: string) => void,
-    ): Promise<{ exitCode: number | null }> {
-        return (await this.startProcess(id, command, args, cwd, env, onData, onStdout, onStderr)).completion;
-    }
-
+    // Background supervised processes. subscriber: the socket that receives
+    // the streams (see subscribeStreams). important: people rely on it while
+    // it runs (a game server), so an update of what it runs from waits for it
+    // instead of stopping it.
     public async startProcess(
-        id: string, command: string, args: string[] = [], cwd?: string, env?: Record<string, string>,
-        onData?: (data: string) => void, onStdout?: (data: string) => void, onStderr?: (data: string) => void,
-        // subscriber: the socket that receives the streams (see
-        // subscribeStreams), onExit its exit listener; without one, the
-        // listeners belong to this process alone
-        // important: people rely on it while it runs (a game server), so an
-        // update of what it runs from waits for it instead of stopping it
-        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; important?: boolean; subscriber?: object; onExit?: (exitCode: number | null) => void } = {},
-    ): Promise<{ completion: Promise<{ exitCode: number | null }> }> {
+        id: string, command: string, args: string[], cwd: string | undefined, env: Record<string, string> | undefined,
+        subscriber: object, streams: ProcessStreams,
+        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; important?: boolean } = {},
+    ): Promise<void> {
         if (!id || typeof id !== "string") {
             throw new Error("process id is required");
         }
         await this.runtime.beforeStart(id, command);
         const resolvedCwd = this.resolveSpawnCwd(cwd);
-        const subscriber = options.subscriber;
-        if (subscriber) {
-            this.subscribeStreams(id, subscriber, {
-                data: onData,
-                stdout: onStdout,
-                stderr: onStderr,
-                exit: options.onExit,
-            });
-        }
+        this.subscribeStreams(id, subscriber, { ...streams });
 
-        let resolveExit!: (result: { exitCode: number | null }) => void;
-        const completion = new Promise<{ exitCode: number | null }>((resolve) => { resolveExit = resolve; });
         // a Windows console input takes no writes: the process is inputless,
         // recorded as such so a daemon that adopts it refuses writes too
         const inputless = options.stdin === false || (options.consoleInput === true && process.platform === "win32");
@@ -489,9 +473,6 @@ export class WorkloadRegistry {
                 },
                 this.clients,
                 {
-                    onData: subscriber ? undefined : onData,
-                    onStdout: subscriber ? undefined : onStdout,
-                    onStderr: subscriber ? undefined : onStderr,
                     onExit: (exitCode: number | null) => {
                         this.clients.delete(id);
                         // a process can exit before its spawn resolves: it
@@ -502,8 +483,6 @@ export class WorkloadRegistry {
                         }
                         exited = true;
                         this.workloadEnded(id, exitCode);
-                        resolveExit({ exitCode });
-                        if (!subscriber) options.onExit?.(exitCode);
                     },
                     attach: (client) => this.wireStreams(id, client),
                 },
@@ -518,7 +497,6 @@ export class WorkloadRegistry {
             announced = true;
             this.announceWorkload(id, "started");
         }
-        return { completion };
     }
 
 
@@ -553,20 +531,8 @@ export class WorkloadRegistry {
         return client?.isConnected() ?? false;
     }
 
-    public async attachProcess(
-        id: string,
-        subscriber: object,
-        onData?: (data: string) => void,
-        onStdout?: (data: string) => void,
-        onStderr?: (data: string) => void,
-        onExit?: (exitCode: number | null) => void,
-    ): Promise<boolean> {
-        this.subscribeStreams(id, subscriber, {
-            data: onData,
-            stdout: onStdout,
-            stderr: onStderr,
-            exit: onExit,
-        });
+    public async attachProcess(id: string, subscriber: object, streams: ProcessStreams = {}): Promise<boolean> {
+        this.subscribeStreams(id, subscriber, { ...streams });
         return (await this.getOrConnectClient(id)) !== null;
     }
 

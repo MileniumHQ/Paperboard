@@ -1,7 +1,17 @@
 import type { RpcContext } from "./context";
 import { claimClient, checkClientOwnership, checkSpawnEnv } from "./ownership";
 import { INPUT_ENCODINGS } from "../supervisor";
+import type { ProcessStreams } from "../engineWorkloads";
 import { assertStr, assertOptStr, assertEnvMap, InvalidParamsError } from "./params";
+
+// a process's streams as the events its socket receives
+function streamsTo(procId: string, sendEvent: RpcContext["sendEvent"]): ProcessStreams {
+    return {
+        stdout: (data) => sendEvent("process:data", { id: procId, data, stream: "stdout" }),
+        stderr: (data) => sendEvent("process:data", { id: procId, data, stream: "stderr" }),
+        exit: (exitCode) => sendEvent("process:exit", { id: procId, exitCode }),
+    };
+}
 
 export async function handleProcess(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {
     const { engine, reply, sendEvent } = ctx;
@@ -45,17 +55,9 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
                 args,
                 assertOptStr(params?.cwd, "cwd", 1024),
                 env,
-                undefined, // onData omitted — stdout & stderr are individually routed below
-                (stdout) => sendEvent("process:data", { id: procId, data: stdout, stream: "stdout" }),
-                (stderr) => sendEvent("process:data", { id: procId, data: stderr, stream: "stderr" }),
-                {
-                    stdin: params?.stdin,
-                    inputEncoding,
-                    consoleInput: params?.consoleInput,
-                    important: params?.important === true,
-                    subscriber: ctx.ws,
-                    onExit: (exitCode) => sendEvent("process:exit", { id: procId, exitCode }),
-                },
+                ctx.ws,
+                streamsTo(procId, sendEvent),
+                { stdin: params?.stdin, inputEncoding, consoleInput: params?.consoleInput, important: params?.important === true },
             ));
             reply(id, { success: true });
             return true;
@@ -91,16 +93,7 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
         case "process:attach": {
             const procId = assertStr(params?.id, "id", 128);
             checkClientOwnership(procId, ctx, "process:attach");
-            const success = await engine.attachProcess(
-                procId,
-                ctx.ws,
-                // onData omitted, as in process:run: a process's combined
-                // stream is its stdout and stderr again, so it sent every line twice
-                undefined,
-                (stdout) => sendEvent("process:data", { id: procId, data: stdout, stream: "stdout" }),
-                (stderr) => sendEvent("process:data", { id: procId, data: stderr, stream: "stderr" }),
-                (exitCode) => sendEvent("process:exit", { id: procId, exitCode }),
-            );
+            const success = await engine.attachProcess(procId, ctx.ws, streamsTo(procId, sendEvent));
             reply(id, { success });
             return true;
         }
