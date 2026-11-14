@@ -15,6 +15,13 @@
     scroll-margin-top: 75px;
 }
 
+/* A demo is a panel's screen: what a component pins to the screen (a
+   collapsed PaperSplit's page, a fixed PaperSlidePage) stays inside the
+   demo, under the site's bar, as it stays inside a panel. */
+.paperui-root [data-docs-demo] {
+    contain: layout;
+}
+
 /* Pages use real headings and paragraphs (STYLE.md) for search engines and
    the Markdown export; spacing comes from the page's flex gaps, so the
    browser's default margins are removed. */
