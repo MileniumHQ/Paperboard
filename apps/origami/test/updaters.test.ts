@@ -13,6 +13,7 @@ import { buildLatestOpencodeRecord } from "../scripts/update-opencode";
 import { buildLatestCodexRecord, TARGETS } from "../scripts/update-codex";
 import { buildLatestDotnetRecord, RIDS } from "../scripts/update-dotnet";
 import { buildLatestProtonRecord } from "../scripts/update-proton";
+import { type AdoptiumAsset, buildJavaRecords } from "../scripts/update-java";
 import { PLATFORM_KEYS } from "../scripts/lib/records";
 import { requested, resetUpstream, serve, upstreamFetch } from "./helpers/upstream";
 
@@ -321,4 +322,19 @@ describe("updaters publish only bytes that match a trusted digest", () => {
             }
         });
     });
+
+    test("Java fails a feature release with a platform Adoptium gave no checksum, instead of dropping that platform", async () => {
+        const asset = (os: string, checksum: string): AdoptiumAsset => ({
+            release_name: "jdk-21.0.5+11",
+            binary: { os, architecture: "x64", image_type: "jdk", jvm_impl: "hotspot", heap_size: "normal", package: { link: `https://github.com/adoptium/${os}.tar.gz`, checksum } },
+        });
+        const url = "https://api.adoptium.net/v3/assets/latest/21/hotspot?image_type=jdk";
+        serve(url, [asset("linux", "a".repeat(64)), asset("windows", "not a checksum")]);
+        expect(await buildJavaRecords([21], upstreamFetch)).toEqual([{ key: "java-21", error: "Adoptium gave windows-x64 no valid sha256" }]);
+        serve(url, [asset("linux", "a".repeat(64)), asset("windows", "B".repeat(64))]);
+        const [built] = await buildJavaRecords([21], upstreamFetch);
+        expect(Object.keys(built!.record!.platforms).sort()).toEqual(["linux-x64", "windows-x64"]);
+        expect(built!.record!.platforms["windows-x64"]!.sha256).toBe("b".repeat(64));
+    });
+
 });

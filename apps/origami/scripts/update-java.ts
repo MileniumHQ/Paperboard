@@ -7,7 +7,7 @@
 // Trust: the URL and sha256 both come from Adoptium's API record, fetched
 // fresh over TLS on every run. Adoptium is the authority for its own
 // artifacts; nothing publisher-supplied is persisted without it.
-import { runUpdater } from "./lib/cli";
+import { type BuiltEntry, runUpdater, settle } from "./lib/cli";
 import {
     assertValidRecord,
     fetchJson,
@@ -57,8 +57,9 @@ export function buildJavaRecord(feature: number, assets: AdoptiumAsset[]): Packa
         if (!key || platforms[key]) continue;
         const sha256 = (bin.package.checksum ?? "").toLowerCase();
         // a platform without a checksum is uninstallable (the daemon refuses
-        // it), so it is left out rather than published as a trap
-        if (!/^[a-f0-9]{64}$/.test(sha256)) continue;
+        // it); dropping it would take Java away from that platform's users,
+        // so the record fails and the one already served stays
+        if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error(`Adoptium gave ${key} no valid sha256`);
         platforms[key] = {
             url: bin.package.link,
             sha256,
@@ -89,19 +90,17 @@ export async function availableFeatures(fetchFn: typeof fetch = fetch): Promise<
 export async function buildJavaRecords(
     features: number[],
     fetchFn: typeof fetch = fetch,
-): Promise<{ key: string; record?: PackageRecord; error?: string }[]> {
-    const built: { key: string; record?: PackageRecord; error?: string }[] = [];
+): Promise<BuiltEntry[]> {
+    const built: BuiltEntry[] = [];
     for (const feature of features) {
-        const key = `java-${feature}`;
-        try {
-            const assets = await fetchJson<AdoptiumAsset[]>(
-                `${API}/assets/latest/${feature}/hotspot?image_type=jdk`,
-                fetchFn,
-            );
-            built.push({ key, record: buildJavaRecord(feature, assets) });
-        } catch (err) {
-            built.push({ key, error: err instanceof Error ? err.message : String(err) });
-        }
+        built.push(
+            await settle(`java-${feature}`, async () =>
+                buildJavaRecord(
+                    feature,
+                    await fetchJson<AdoptiumAsset[]>(`${API}/assets/latest/${feature}/hotspot?image_type=jdk`, fetchFn),
+                ),
+            ),
+        );
     }
     return built;
 }

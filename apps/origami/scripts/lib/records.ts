@@ -3,6 +3,7 @@
 // papercrane/engine.ts: it installs platforms[<os>-<arch>] and refuses any
 // entry without a sha256.
 import { parsePackageRecipe, type PackageRecipe } from "../../../paperboard/papercrane/packageRecipe";
+import { UPDATER_USER_AGENT } from "./download";
 
 export type { PackageRecipe };
 
@@ -99,7 +100,7 @@ export async function fetchJson<T>(
 ): Promise<T> {
     const res = await fetchFn(url, {
         headers: {
-            "User-Agent": "Origami-Package-Updater/2.0",
+            "User-Agent": UPDATER_USER_AGENT,
             Accept: "application/json",
             ...headers,
         },
@@ -116,7 +117,7 @@ export async function fetchText(
     fetchFn: typeof fetch = fetch,
 ): Promise<string> {
     const res = await fetchFn(url, {
-        headers: { "User-Agent": "Origami-Package-Updater/2.0" },
+        headers: { "User-Agent": UPDATER_USER_AGENT },
         signal: AbortSignal.timeout(30_000),
         redirect: "follow",
     });
