@@ -115,6 +115,14 @@ export default function Servers(props: { bot: () => BotSummary }) {
     // never shows on the page of the one chosen after it
     let detailRequest = 0;
     let memberRequest = 0;
+    // a message sent from one server's page is never confirmed on another's
+    let sendRequest = 0;
+    const dropSend = () => {
+        sendRequest++;
+        setSending(false);
+        setSendError("");
+        setSentTo("");
+    };
 
     const selectGuild = async (guildId: string) => {
         const request = ++detailRequest;
@@ -123,15 +131,14 @@ export default function Servers(props: { bot: () => BotSummary }) {
         setSelectedId(guildId);
         setShownId(guildId);
         setDetailError("");
-        setSendError("");
         if (!reloading) {
             memberRequest++;
+            dropSend();
             setMembersLoading(false);
             setDetail(null);
             setMembers(null);
             setMembersError("");
             setMemberQuery("");
-            setSentTo("");
         }
         setDetailLoading(true);
         try {
@@ -183,6 +190,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
         // an answer still on its way is for a page that is no longer open
         detailRequest++;
         memberRequest++;
+        dropSend();
         setDetailLoading(false);
         setMembersLoading(false);
         setSelectedId(null);
@@ -216,9 +224,13 @@ export default function Servers(props: { bot: () => BotSummary }) {
     };
 
     const sendTest = async () => {
+        // Enter in the message field while one is on its way: the button is off then too
+        if (sending()) return;
+        const request = ++sendRequest;
         setSendError("");
         setSentTo("");
-        if (!channelId()) {
+        const channel = textChannels().find((c) => c.id === channelId());
+        if (!channel) {
             setSendError("Pick a channel first.");
             return;
         }
@@ -230,16 +242,15 @@ export default function Servers(props: { bot: () => BotSummary }) {
         try {
             await serviceApi.call(PANEL_ID, "sendMessage", {
                 bot: bot(),
-                channel: channelId(),
+                channel: channel.id,
                 content: content().trim(),
             });
-            const channel = textChannels().find((c) => c.id === channelId());
-            setSentTo(channel ? `#${channel.name}` : "the channel");
+            if (request === sendRequest) setSentTo(`#${channel.name}`);
         } catch (err) {
             console.error("[Servers] test message send failed:", err);
-            setSendError(errorToMessage(err));
+            if (request === sendRequest) setSendError(errorToMessage(err));
         } finally {
-            setSending(false);
+            if (request === sendRequest) setSending(false);
         }
     };
 

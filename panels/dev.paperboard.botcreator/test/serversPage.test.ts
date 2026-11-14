@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import type { BotsServiceState } from "../src/bots";
 import { panelBrowser, servePanel, type Page } from "./helpers/browser";
-import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
+import { guild, snowflake, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";
 
@@ -53,6 +53,58 @@ describe("the server explorer", () => {
             expect(sent.bot).toBe(fake.token);
             expect(sent.body.content).toBe("Hello from Paperboard!");
             await page.waitFor(`document.body.innerText.includes("Posted to #general")`, "the confirmation");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+});
+
+// A message is confirmed only on the page of the server it went to: an
+// answer that comes back after the person opened another server is dropped.
+describe("a test message's answer", () => {
+    test("a send that answers after another server was opened shows nothing on that server's page", async () => {
+        const home = guild("Home");
+        const away = { ...guild("Away"), channels: [{ id: snowflake(), name: "lobby" }] };
+        const fake = discord.addBot({ username: "Keeper", guilds: [home, away] });
+        await savedBots([{ stored: storedBot("b-keep", fake.appId, { name: "Keeper" }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.find((b) => b.id === "b-keep")?.guilds.length === 2, "Keeper to connect");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.resize(1400, 900);
+            await page.waitFor(`document.body.innerText.includes("Keeper")`, "the bot list");
+            await clickText(page, "[class*=card], [class*=Card]", "Keeper");
+            await page.click(`input[name=botMenu][value="servers"]`);
+            await page.waitFor(`document.body.innerText.includes("2 servers")`, "the server list");
+            await clickText(page, "[class*=card], [class*=Card]", "Home");
+            await page.waitFor(`document.body.innerText.includes("Send a message")`, "Home's page");
+
+            const homeMessages = `/channels/${home.channels[0]!.id}/messages`;
+            const release = discord.hold((r) => r.method === "POST" && r.path === homeMessages);
+            await clickText(page, "button", "Send");
+            await discord.request((r) => r.method === "POST" && r.path === homeMessages, "Home's message to reach Discord");
+
+            await clickText(page, "button", "All servers");
+            await page.waitFor(`document.body.innerText.includes("2 servers")`, "the server list again");
+            await clickText(page, "[class*=card], [class*=Card]", "Away");
+            await page.waitFor(`document.body.innerText.includes("#lobby")`, "Away's page");
+            // Away's own Send is ready: Home's message isn't sending here
+            await page.waitFor(`[...document.querySelectorAll("button")].some((b) => b.innerText.includes("Send") && !b.innerText.includes("Sending") && !b.disabled)`, "Away's Send button");
+
+            release();
+            // the bot's next message to Home queues behind the held one, so once it is
+            // answered Home's answer has left the service; a Refresh answered after that
+            // reaches the page behind it
+            await call("sendMessage", { bot: "b-keep", channel: home.channels[0]!.id, content: "after" });
+            await clickText(page, "button", "Refresh");
+            await page.waitFor(`[...document.querySelectorAll("button")].some((b) => b.innerText.includes("Refresh") && !b.disabled)`, "the refresh");
+            const text = await page.evaluate<string>(`document.body.innerText`);
+            expect(text).toContain("#lobby");
+            expect(text).not.toContain("Message sent");
+            expect(text).not.toContain("Message not sent");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

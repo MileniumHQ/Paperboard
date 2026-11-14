@@ -65,10 +65,14 @@ export interface FakeDiscord {
     requests: RecordedRequest[];
     /** every picture asked of its CDN (/cdn, beside the API), by path and query */
     pictures: string[];
+    /** how the CDN answers for a path other than its one-pixel picture */
+    cdnAnswers: Map<string, () => Response>;
     /** a token Discord accepts, for a new application with its own bot user */
     addBot(options?: { username?: string; guilds?: FakeGuild[]; gateway?: FakeBot["gateway"] }): FakeBot;
     /** resolves with the first recorded request (already made or still to come) that `match` accepts */
     request(match: (req: RecordedRequest) => boolean, what: string): Promise<RecordedRequest>;
+    /** keeps the answer to the first request `match` accepts from now on until the returned release is called */
+    hold(match: (req: RecordedRequest) => boolean): () => void;
     /** sends a dispatch event on the bot's live gateway session */
     dispatch(bot: FakeBot, event: string, data: unknown): void;
     /** adds the bot to a server while it's connected, as Discord says so (GUILD_CREATE) */
@@ -92,9 +96,11 @@ export function startFakeDiscord(): FakeDiscord {
     const sessions = new Map<string, GatewaySession>();
     const requests: RecordedRequest[] = [];
     const pictures: string[] = [];
+    const cdnAnswers = new Map<string, () => Response>();
     const requestWaiters = new Set<() => void>();
     const sessionWaiters = new Set<() => void>();
     const commandsByScope = new Map<string, unknown[]>();
+    const holds: { match: (req: RecordedRequest) => boolean; released: Promise<void> }[] = [];
     let port = 0;
 
     const userOf = (bot: FakeBot) => ({ id: bot.appId, username: bot.username, discriminator: "0", global_name: null, avatar: null, bot: true });
@@ -260,6 +266,8 @@ export function startFakeDiscord(): FakeDiscord {
             // every avatar and icon is the same one-pixel picture
             if (url.pathname.startsWith("/cdn/")) {
                 pictures.push(url.pathname + url.search);
+                const answer = cdnAnswers.get(url.pathname);
+                if (answer) return answer();
                 return new Response(PIXEL, { headers: { "content-type": "image/png" } });
             }
             if (!url.pathname.startsWith("/api/v10/")) return json(404, { message: "Not Found", code: 0 });
@@ -268,6 +276,8 @@ export function startFakeDiscord(): FakeDiscord {
             const recorded: RecordedRequest = { method: req.method, path: decodeURIComponent(url.pathname.slice("/api/v10".length)), query: url.searchParams, bot: bot?.token ?? null, body, files };
             requests.push(recorded);
             for (const wake of [...requestWaiters]) wake();
+            const held = holds.findIndex((h) => h.match(recorded));
+            if (held !== -1) await holds.splice(held, 1)[0]!.released;
             return route(req, recorded, bot);
         },
         websocket: {
@@ -329,6 +339,7 @@ export function startFakeDiscord(): FakeDiscord {
         api: `http://127.0.0.1:${port}/api`,
         requests,
         pictures,
+        cdnAnswers,
         addBot(options = {}) {
             const appId = snowflake();
             const bot: FakeBot = { token: tokenFor(appId), appId, username: options.username ?? `bot-${appId.slice(-4)}`, guilds: options.guilds ?? [], gateway: options.gateway ?? "ok" };
@@ -372,6 +383,11 @@ export function startFakeDiscord(): FakeDiscord {
                 sessionWaiters.add(wake);
                 wake();
             }),
+        hold(match) {
+            let release!: () => void;
+            holds.push({ match, released: new Promise<void>((resolve) => (release = resolve)) });
+            return () => release();
+        },
         user: userOf,
         stop() {
             allowed.delete(port);
