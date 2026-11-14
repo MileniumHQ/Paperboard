@@ -74,7 +74,7 @@ export function Example() {
                         <td><PaperCode>checked</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td>No default</td>
-                        <td>The checked state. When set, you own the state: the box changes only when this prop changes. Leave it unset for an uncontrolled checkbox.</td>
+                        <td>The checked state. When set, you own the state: the box, and the hidden input a form reads, change only when this prop changes. Leave it unset for an uncontrolled checkbox.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>defaultChecked</PaperCode></td>

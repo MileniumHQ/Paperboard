@@ -105,7 +105,7 @@ export function Settings() {
                         <td><PaperCode>value</PaperCode></td>
                         <td><PaperCode>Record&lt;string, any&gt;</PaperCode></td>
                         <td>No default</td>
-                        <td>The record. It fills the named controls and is the base of what <PaperCode>onValueChange</PaperCode> reports. Setting it makes the list controlled: update it from <PaperCode>onValueChange</PaperCode>. See Named controls.</td>
+                        <td>The record. It fills the named controls and is the base of what <PaperCode>onValueChange</PaperCode> reports. Setting it makes the list controlled: the controls show this record and nothing else, so update it from <PaperCode>onValueChange</PaperCode>, or leave it to refuse a change. See Named controls.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>defaultValue</PaperCode></td>

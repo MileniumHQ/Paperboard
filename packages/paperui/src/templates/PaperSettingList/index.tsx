@@ -1,8 +1,9 @@
 import styles from "./index.module.css";
 import {
     splitProps,
+    children,
+    createMemo,
     createSignal,
-    createEffect,
     Show,
     type JSX,
     type ParentProps,
@@ -38,15 +39,18 @@ export function PaperSettingList(props: ParentProps<PaperSettingListProps>) {
         "children",
     ]);
 
-    const [dataStore, setDataStore] = createSignal<Record<string, any>>(
-        local.value ?? local.defaultValue ?? {}
-    );
-
-    createEffect(() => {
-        if (local.value !== undefined) {
-            setDataStore(local.value);
-        }
+    // uncontrolled: the list keeps what its controls change
+    const [ownData, setOwnData] = createSignal<Record<string, any>>(local.defaultValue ?? {});
+    // controlled: the record is the prop itself, read once per change of it
+    const dataStore = createMemo(() => {
+        const value = local.value;
+        return value !== undefined ? value : ownData();
     });
+
+    // what the edit under way last asked for: a PaperToggle or PaperCheckbox
+    // reports one edit as both an input and a change event, and a parent
+    // that has not taken the first must not be asked twice
+    let asked: { name: string; value: unknown } | null = null;
 
     const handleFormEvent = (e: Event) => {
         const target = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
@@ -60,13 +64,16 @@ export function PaperSettingList(props: ParentProps<PaperSettingListProps>) {
         // a text field fires input then change, and a PaperToggle both at
         // once: the second event of one edit carries nothing new
         if (dataStore()[target.name] === val) return;
+        if (asked && asked.name === target.name && asked.value === val) return;
+        asked = { name: target.name, value: val };
+        queueMicrotask(() => (asked = null));
 
         const nextData = {
             ...dataStore(),
             [target.name]: val,
         };
 
-        setDataStore(nextData);
+        if (local.value === undefined) setOwnData(nextData);
         local.onValueChange?.(nextData);
     };
 
@@ -131,6 +138,7 @@ export function PaperSettingItem(props: ParentProps<PaperSettingItemProps>) {
         "classList",
         "children",
     ]);
+    const description = children(() => local.description);
 
     return (
         <div
@@ -148,9 +156,9 @@ export function PaperSettingItem(props: ParentProps<PaperSettingItemProps>) {
                 <PaperText preset="label">
                     {local.title}
                 </PaperText>
-                <Show when={local.description}>
+                <Show when={description()}>
                     <PaperText preset="hint">
-                        {local.description}
+                        {description()}
                     </PaperText>
                 </Show>
             </PaperFlex>

@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { splitProps, createSignal, Show, type JSX } from "solid-js";
+import { children, splitProps, createSignal, Show, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { haptic } from "../../utils/haptics";
 import { useSettingListChecked } from "../../contexts/settingList";
@@ -27,6 +27,9 @@ export function PaperCheckbox(props: PaperCheckboxProps) {
         "classList",
     ]);
 
+    const label = children(() => local.label);
+    const description = children(() => local.description);
+
     const [internalChecked, setInternalChecked] = createSignal(
         local.defaultChecked ?? false,
     );
@@ -51,6 +54,9 @@ export function PaperCheckbox(props: PaperCheckboxProps) {
         }
 
         local.onChange?.(next);
+        // a controlled box shows its prop: when the parent kept the old
+        // state, the native input (what a form reads) goes back to it
+        if (inputRef) inputRef.checked = isChecked();
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -105,15 +111,13 @@ export function PaperCheckbox(props: PaperCheckboxProps) {
                 </div>
             </div>
 
-            <Show when={local.label || local.description}>
+            <Show when={label() || description()}>
                 <div class={styles.content}>
-                    <Show when={local.label}>
-                        <span class={styles.label}>{local.label}</span>
+                    <Show when={label()}>
+                        <span class={styles.label}>{label()}</span>
                     </Show>
-                    <Show when={local.description}>
-                        <span class={styles.description}>
-                            {local.description}
-                        </span>
+                    <Show when={description()}>
+                        <span class={styles.description}>{description()}</span>
                     </Show>
                 </div>
             </Show>

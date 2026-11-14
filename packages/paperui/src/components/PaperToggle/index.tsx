@@ -108,6 +108,9 @@ export function PaperToggle(props: PaperToggleProps) {
             inputRef.dispatchEvent(new Event("input", { bubbles: true }));
         }
         local.onChange?.(next);
+        // the hidden checkbox (what a form reads) shows the state held: a
+        // parent that kept the old one, or answers later, leaves it at that
+        if (inputRef) inputRef.checked = isChecked();
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {

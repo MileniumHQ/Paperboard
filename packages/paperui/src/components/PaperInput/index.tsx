@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { splitProps, Show, createSignal, createEffect, createUniqueId, type JSX } from "solid-js";
+import { children, splitProps, Show, createSignal, createEffect, createUniqueId, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { useSettingListText } from "../../contexts/settingList";
 
@@ -50,6 +50,8 @@ export function PaperInput(props: PaperInputProps) {
         "resize",
     ]);
 
+    const icon = children(() => local.icon);
+
     const [internalValue, setInternalValue] = createSignal(
         String(local.value ?? local.defaultValue ?? "")
     );
@@ -90,6 +92,11 @@ export function PaperInput(props: PaperInputProps) {
         if (typeof local.onChange === "function") {
             (local.onChange as JSX.EventHandler<HTMLInputElement, Event>)(e as never);
         }
+        // a controlled field shows its value: when the parent kept another one,
+        // the field goes back to it rather than keep text nobody holds
+        if (local.value !== undefined && e.currentTarget.value !== String(local.value)) {
+            e.currentTarget.value = String(local.value);
+        }
     };
 
     const isMultiline = () => Boolean(local.multiline);
@@ -103,7 +110,7 @@ export function PaperInput(props: PaperInputProps) {
             styles.PaperInput,
             local.compact ? styles.compact : "",
             local.fullWidth ? styles.fullWidth : "",
-            local.icon ? styles.hasIcon : "",
+            icon() ? styles.hasIcon : "",
             local.label ? styles.labelled : "",
             isInvalid() ? styles.invalid : "",
             local.disabled ? styles.disabled : "",
@@ -132,13 +139,13 @@ export function PaperInput(props: PaperInputProps) {
                     {local.label}
                 </label>
             </Show>
-            <Show when={local.icon}>
-                {typeof local.icon === "string" ? (
+            <Show when={icon()}>
+                {typeof icon() === "string" ? (
                     <PaperIcon class={styles.inputIcon} zeroHeight>
-                        {local.icon}
+                        {icon()}
                     </PaperIcon>
                 ) : (
-                    <span class={styles.inputIcon}>{local.icon}</span>
+                    <span class={styles.inputIcon}>{icon()}</span>
                 )}
             </Show>
             <Show

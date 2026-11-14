@@ -82,7 +82,7 @@ export function Example() {
                         <td><PaperCode>value</PaperCode></td>
                         <td><PaperCode>string | number</PaperCode></td>
                         <td>No default (uncontrolled)</td>
-                        <td>The text, converted to a string. When set, the field follows it.</td>
+                        <td>The text, converted to a string. When set, the field follows it, and a <PaperCode>change</PaperCode> the parent does not take puts the field back to it.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>defaultValue</PaperCode></td>
