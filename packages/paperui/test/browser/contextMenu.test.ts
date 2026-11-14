@@ -118,4 +118,37 @@ describe("PaperContextMenu", () => {
         expect(await page.eval("t.closes")).toBe(1);
         expect(await menuOpen()).toBe(false);
     });
+
+    test("a submenu that would open under a phone's keyboard is pulled up above it", async () => {
+        // a keyboard covers the bottom of the page without shrinking the window:
+        // only the visual viewport gets shorter, from where the test sets its top
+        page = await browser.open("contextMenu", {
+            beforeLoad: `Object.defineProperty(VisualViewport.prototype, "height", {
+                configurable: true,
+                get() { return window.keyboardTop ?? window.innerHeight; },
+            });`,
+        });
+        await page.clickAt({ x: 100, y: 60 }, "right");
+        await hittable(item("Rename"), "the context menu to open");
+        await page.frames();
+        // the keyboard rises to just under the menu, which still fits above it
+        const keyboardTop = await page.eval<number>(
+            `window.keyboardTop = Math.ceil(document.querySelector('${ROOT_MENU}').getBoundingClientRect().bottom) + 16`,
+        );
+
+        await page.press("ArrowDown");
+        await page.press("ArrowDown");
+        await page.press("ArrowRight");
+        await page.waitFor(`document.querySelector('${SUBMENU}') !== null`, "the submenu to open");
+        await page.frames();
+        const placed = await page.eval<{ rowTop: number; top: number; bottom: number; height: number }>(`(() => {
+            const row = document.querySelector('${ROOT_MENU} [data-context-sub]').getBoundingClientRect();
+            const r = document.querySelector('${SUBMENU}').getBoundingClientRect();
+            return { rowTop: row.top, top: r.top, bottom: r.bottom, height: r.height };
+        })()`);
+        // beside its row, the submenu would reach under the keyboard
+        expect(placed.rowTop + placed.height).toBeGreaterThan(keyboardTop);
+        expect(placed.bottom).toBeLessThanOrEqual(keyboardTop);
+        expect(placed.top).toBeGreaterThanOrEqual(12);
+    });
 });
