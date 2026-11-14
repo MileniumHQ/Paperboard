@@ -10,4 +10,4 @@ A component library and design system for [Paperboard](https://paperboard.dev) a
 
     bun run test
 
-Plain `bun test` cannot compile these sources (bun's test transpiler has no SolidJS JSX support). It is deliberately blocked with a refusal message by `test/bun-test-guard.ts` (wired via `bunfig.toml`); `bash bin/test-which.sh` reports the contract for humans and CI.
+Plain `bun test` cannot compile these sources (bun's test transpiler has no SolidJS JSX support). It is deliberately blocked with a refusal message by `test/bun-test-guard.ts` (wired via `bunfig.toml`).
