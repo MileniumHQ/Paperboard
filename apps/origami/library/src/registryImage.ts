@@ -4,8 +4,7 @@
 // record places anywhere else is dropped, never loaded.
 import type { PanelItem } from "../../../../packages/paperapi/src/panelMerge";
 import type { StoreListing, StoreScreenshot } from "../../../../packages/paperapi/src/storeListing";
-
-const REGISTRY_ORIGIN = "https://origami.ariapis.com";
+import { REGISTRY_ORIGIN } from "../../src/downloadUrl";
 
 /** The image's path on this page's origin, or undefined when the registry does not host it. */
 export function registryImage(url: string | undefined): string | undefined {

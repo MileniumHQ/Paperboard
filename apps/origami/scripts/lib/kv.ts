@@ -8,6 +8,7 @@ import { RELEASE_PUBLIC_KEY, verifyRelease } from "../../../paperboard/papercran
 import { parsePackageRecipe, recipeDigest } from "../../../paperboard/papercrane/packageRecipe";
 import { kvPut, runCommand, type CommandRunner } from "./wrangler";
 import { messageOf } from "./errors";
+import { REGISTRY_ORIGIN } from "../../src/downloadUrl";
 
 // Signs every platform entry with the offline release key. Daemons refuse
 // an entry without a valid signature, so an unsigned record is never
@@ -38,7 +39,7 @@ export type PublishedReader = (name: string) => Promise<unknown>;
 // Reads through the public route, not wrangler: the same bytes daemons see,
 // and no account call for a record that has not changed.
 export const readPublished: PublishedReader = async (name) => {
-    const res = await fetch(`https://origami.ariapis.com/package/${encodeURIComponent(name)}.json`, {
+    const res = await fetch(`${REGISTRY_ORIGIN}/package/${encodeURIComponent(name)}.json`, {
         headers: { "cache-control": "no-cache" },
     });
     if (res.status === 404) return undefined;

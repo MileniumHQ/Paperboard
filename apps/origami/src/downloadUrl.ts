@@ -4,6 +4,11 @@
 // Releases under the v<version> tag (one release holds both apps' assets);
 // <host>/<app>/<version|latest>/<file> 302s to them.
 export const DOWNLOAD_HOST = "i.paperboard.dev";
+
+// The registry's production origin: record URLs are minted on it, the
+// operator scripts read through it, and the library loads only images it
+// hosts (or its own origin's), so every reader names this one constant.
+export const REGISTRY_ORIGIN = "https://origami.ariapis.com";
 export const GH_REPO = "MileniumHQ/Paperboard";
 
 // A version or filename sits inside a URL path slot and inside the redirect
