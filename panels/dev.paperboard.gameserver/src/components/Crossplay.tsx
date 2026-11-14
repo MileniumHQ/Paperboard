@@ -12,6 +12,7 @@ import {
 } from "@mileniumhq/paperui";
 import ConfigSettings from "./ConfigSettings";
 import { errorMessage } from "../lib/failure";
+import { createSaves } from "../lib/saves";
 import { crossplayPlatform, disableCrossplay, enableCrossplay, readCrossplay } from "../lib/crossplay";
 import { localIp, serverBridge, serverSoftware, serverStatus } from "../lib/server";
 import { CALLS } from "../service/contract";
@@ -24,7 +25,6 @@ import { BEDROCK_PORT_SETTING_ID } from "../software/crossplay";
 export default function Crossplay(props: { active: boolean }) {
     const [view, setView] = createSignal<CrossplayView | null>(null);
     const [loadError, setLoadError] = createSignal("");
-    const [working, setWorking] = createSignal<"on" | "off" | null>(null);
     const [error, setError] = createSignal("");
 
     const load = async () => {
@@ -44,21 +44,21 @@ export default function Crossplay(props: { active: boolean }) {
 
     const enabled = () => Boolean(view()?.geyser && view()?.floodgate);
 
-    const toggle = async (on: boolean) => {
+    // Turning crossplay on downloads Geyser and Floodgate, which takes a
+    // while; the switch shows where it is going at once, and a second press
+    // waits for the first to finish instead of racing it
+    const saves = createSaves({ failed: (err) => setError(errorMessage(err)), changed: () => setError("") });
+    const crossplay = saves.setting("crossplay", enabled, async (on) => {
         const current = view();
-        if (!current) return;
-        setWorking(on ? "on" : "off");
-        setError("");
+        if (!current) throw new Error("Crossplay has not been read yet");
         try {
             setView(on ? await enableCrossplay(current) : await disableCrossplay(current));
         } catch (err) {
-            setError(errorMessage(err));
             // whatever did land is what the switch shows
             await load();
-        } finally {
-            setWorking(null);
+            throw err;
         }
-    };
+    });
 
     const bedrockPort = () =>
         view()
@@ -72,8 +72,7 @@ export default function Crossplay(props: { active: boolean }) {
     };
 
     const status = () => {
-        if (working() === "on") return "Turning on…";
-        if (working() === "off") return "Turning off…";
+        if (crossplay.saving()) return crossplay.value() ? "Turning on…" : "Turning off…";
         return "Bedrock players can join.";
     };
 
@@ -91,11 +90,7 @@ export default function Crossplay(props: { active: boolean }) {
             <Show when={view()}>
                 <PaperSettingList autoHeight>
                     <PaperSettingItem title="Crossplay" description={status()}>
-                        <PaperToggle
-                            checked={enabled()}
-                            disabled={working() !== null}
-                            onChange={(checked) => void toggle(checked)}
-                        />
+                        <PaperToggle checked={crossplay.value()} onChange={crossplay.set} />
                     </PaperSettingItem>
                 </PaperSettingList>
                 <Show when={error()}>
@@ -110,7 +105,8 @@ export default function Crossplay(props: { active: boolean }) {
                         </PaperQuote>
                     )}
                 </Show>
-                <Show when={enabled()}>
+                {/* its settings belong to the installed jars: gone the moment the switch turns off */}
+                <Show when={enabled() && crossplay.value()}>
                     <Show when={serverStatus() !== "offline"}>
                         <PaperQuote variant="warning" icon="info" title="Applies after a restart">
                             Restart the server so Bedrock players can join and these settings take effect.

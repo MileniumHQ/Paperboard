@@ -1,4 +1,4 @@
-import { createSignal, onMount, For, Show } from "solid-js";
+import { createMemo, createSignal, onMount, For, Show, untrack } from "solid-js";
 import {
     PaperButton,
     PaperCard,
@@ -15,9 +15,11 @@ import {
     PaperText,
     PaperToggle,
 } from "@mileniumhq/paperui";
-import type { GameFeatures, GameOption, GameTab, OptionSection } from "../games";
+import type { GameFeatures, GameOption, GameTab } from "../games";
 import { serverBridge, serverStatus } from "../lib/server";
 import { errorMessage } from "../lib/failure";
+import { createSaves } from "../lib/saves";
+import { sameData } from "../core/state";
 import { CALLS } from "../service/contract";
 import { fitsNumber } from "../games/options";
 
@@ -34,30 +36,32 @@ export function GameOptionControl(props: {
     disabled?: boolean;
     onChange: (value: unknown) => void;
 }) {
-    const field = props.field;
-    switch (field.kind) {
+    // an option's kind is what it is; the rest follows the option as it is described again
+    const field = <K extends GameOption["kind"]>(_kind: K) => props.field as Extract<GameOption, { kind: K }>;
+    switch (untrack(() => props.field.kind)) {
         case "boolean":
             return <PaperToggle checked={Boolean(props.value)} disabled={props.disabled} onChange={(checked) => props.onChange(checked)} />;
         case "select":
             return (
-                <PaperSelectMenu name={field.id} value={String(props.value ?? "")} disabled={props.disabled} onValueChange={(value) => props.onChange(String(value))}>
-                    <For each={field.choices}>{(choice) => <PaperSelectMenuItem value={choice.value}>{choice.label}</PaperSelectMenuItem>}</For>
+                <PaperSelectMenu name={field("select").id} value={String(props.value ?? "")} disabled={props.disabled} onValueChange={(value) => props.onChange(String(value))}>
+                    <For each={field("select").choices}>{(choice) => <PaperSelectMenuItem value={choice.value}>{choice.label}</PaperSelectMenuItem>}</For>
                 </PaperSelectMenu>
             );
         case "number": {
             const [draft, setDraft] = createSignal<string | null>(null);
             const shown = () => draft() ?? String(props.value ?? "");
-            const valid = (raw: string) => raw.trim() !== "" && fitsNumber(field, Number(raw));
+            const valid = (raw: string) => raw.trim() !== "" && fitsNumber(field("number"), Number(raw));
             return (
                 <PaperInput
                     type="number"
-                    min={field.min}
-                    max={field.max}
-                    step={field.step ?? 1}
+                    min={field("number").min}
+                    max={field("number").max}
+                    step={field("number").step ?? 1}
                     value={shown()}
                     invalid={!valid(shown())}
                     disabled={props.disabled}
                     onInput={(e) => setDraft(e.currentTarget.value)}
+                    onKeyDown={commitOnEnter}
                     onBlur={() => {
                         const raw = draft();
                         setDraft(null);
@@ -72,13 +76,13 @@ export function GameOptionControl(props: {
             return (
                 <PaperFlex width="field-wide">
                     <PaperRange
-                        aria-label={field.label}
-                        min={field.min}
-                        max={field.max}
-                        step={field.step}
-                        marks={field.marks ? [...field.marks] : undefined}
-                        value={draft() ?? Number(props.value ?? field.min)}
-                        formatValue={(value) => `${value} ${field.unit}`}
+                        aria-label={field("slider").label}
+                        min={field("slider").min}
+                        max={field("slider").max}
+                        step={field("slider").step}
+                        marks={field("slider").marks ? [...field("slider").marks!] : undefined}
+                        value={draft() ?? Number(props.value ?? field("slider").min)}
+                        formatValue={(value) => `${value} ${field("slider").unit}`}
                         disabled={props.disabled}
                         onInput={setDraft}
                         onChange={(value) => {
@@ -94,7 +98,7 @@ export function GameOptionControl(props: {
                 <PaperFlex direction="row" gap="half" align="center">
                     <PaperInput
                         type="password"
-                        placeholder={secretPlaceholder(field.noun ?? "password", props.secretStored)}
+                        placeholder={secretPlaceholder(field("secret").noun ?? "password", props.secretStored)}
                         disabled={props.disabled}
                         onBlur={(e) => {
                             const value = e.currentTarget.value;
@@ -112,8 +116,9 @@ export function GameOptionControl(props: {
             return (
                 <PaperInput
                     value={String(props.value ?? "")}
-                    maxLength={field.kind === "text" ? field.maxLength : undefined}
+                    maxLength={props.field.kind === "text" ? props.field.maxLength : undefined}
                     disabled={props.disabled}
+                    onKeyDown={commitOnEnter}
                     onBlur={(e) => {
                         if (e.currentTarget.value !== String(props.value ?? "")) props.onChange(e.currentTarget.value);
                     }}
@@ -121,6 +126,11 @@ export function GameOptionControl(props: {
             );
     }
 }
+
+/** Enter in a field commits it, as leaving it does. */
+export const commitOnEnter = (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
+    if (e.key === "Enter") e.currentTarget.blur();
+};
 
 /** Lists over this many options get a search field. */
 const SEARCH_FROM = 12;
@@ -137,27 +147,37 @@ export default function GameOptions(props: {
     const [values, setValues] = createSignal<Record<string, unknown> | null>(null);
     const [loadError, setLoadError] = createSignal("");
     const [saveError, setSaveError] = createSignal("");
-    const [saving, setSaving] = createSignal(false);
     const [search, setSearch] = createSignal("");
-    const listed = () => props.fields.filter((field) => !field.scope && (field.tab ?? "options") === props.tab.id);
-    const fields = () => {
+    const listed = createMemo(() => props.fields.filter((field) => !field.scope && (field.tab ?? "options") === props.tab.id));
+    // the game describes its options again as its state changes, in new
+    // objects: an option is the row of its id, so its control stays the one
+    // it is (its focus, its draft, its open menu) through every describe
+    const byId = createMemo(() => new Map(listed().map((field) => [field.id, field])));
+    const matching = createMemo(() => {
         const query = search().toLowerCase().trim();
         if (!query) return listed();
         return listed().filter((field) =>
             field.label.toLowerCase().includes(query) ||
             (field.description ?? "").toLowerCase().includes(query) ||
             field.id.toLowerCase().includes(query));
-    };
-    // unsectioned options first, then each section in the order it first appears
-    const groups = () => {
-        const list: { section?: OptionSection; fields: GameOption[] }[] = [{ fields: [] }];
-        for (const field of fields()) {
-            const group = list.find((g) => g.section?.title === field.section?.title);
-            if (group) group.fields.push(field);
-            else list.push({ section: field.section, fields: [field] });
-        }
-        return list.filter((g) => g.fields.length > 0);
-    };
+    });
+    // unsectioned options first, then each section in the order it first
+    // appears, each by its title and its options by their ids
+    const groups = createMemo(
+        () => {
+            const list: { title: string; ids: string[] }[] = [{ title: "", ids: [] }];
+            for (const field of matching()) {
+                const title = field.section?.title ?? "";
+                const group = list.find((g) => g.title === title);
+                if (group) group.ids.push(field.id);
+                else list.push({ title, ids: [field.id] });
+            }
+            return list.filter((g) => g.ids.length > 0);
+        },
+        undefined,
+        { equals: sameData },
+    );
+    const titles = createMemo(() => groups().map((group) => group.title), undefined, { equals: sameData });
     const online = () => serverStatus() !== "offline";
     const locked = () => online() && props.whileRunning === "locked";
     // what a running server takes at once, named in the notice
@@ -179,18 +199,32 @@ export default function GameOptions(props: {
     };
     onMount(() => void load());
 
-    const value = (field: GameOption) => values()?.[field.id] ?? (field.kind === "secret" ? "" : field.default);
+    const saves = createSaves({ failed: (err) => setSaveError(errorMessage(err)), changed: () => setSaveError("") });
 
-    const save = async (id: string, next: unknown) => {
-        setSaving(true);
-        setSaveError("");
-        try {
-            setValues(await serverBridge.call<Record<string, unknown>>(CALLS.writeGameOptions, { patch: { [id]: next } }));
-        } catch (err) {
-            setSaveError(errorMessage(err));
-        } finally {
-            setSaving(false);
-        }
+    /** one option's row: its control saves through the tab's saves */
+    const OptionRow = (row: { id: string }) => {
+        const field = () => byId().get(row.id)!;
+        const saved = saves.setting<unknown>(
+            row.id,
+            () => {
+                const option = field();
+                return values()?.[row.id] ?? (option.kind === "secret" ? "" : option.default);
+            },
+            async (next) => {
+                setValues(await serverBridge.call<Record<string, unknown>>(CALLS.writeGameOptions, { patch: { [row.id]: next } }));
+            },
+        );
+        return (
+            <PaperSettingItem title={field().label} description={field().description}>
+                <GameOptionControl
+                    field={field()}
+                    value={saved.value()}
+                    secretStored={Boolean(saved.value())}
+                    disabled={locked()}
+                    onChange={saved.set}
+                />
+            </PaperSettingItem>
+        );
     };
 
     return (
@@ -249,38 +283,30 @@ export default function GameOptions(props: {
                     </Show>
                 }
             >
-                <Show when={groups().length > 0} fallback={<PaperEmptyState icon="search" title="No settings match your search." />}>
+                <Show when={titles().length > 0} fallback={<PaperEmptyState icon="search" title="No settings match your search." />}>
                     <PaperFlex direction="column" gap="full" fullWidth>
-                        <For each={groups()}>
-                            {(group) => (
-                                <PaperFlex direction="column" gap="half" fullWidth>
-                                    <Show when={group.section}>
-                                        {(section) => (
-                                            <PaperFlex direction="column" gap="onefourth">
-                                                <PaperText size={2} weight={700} color="text-subtle">{section().title}</PaperText>
-                                                <Show when={section().description}>
-                                                    <PaperText size={2} color="text-subtle">{section().description}</PaperText>
-                                                </Show>
-                                            </PaperFlex>
-                                        )}
-                                    </Show>
-                                    <PaperSettingList autoHeight>
-                                        <For each={group.fields}>
-                                            {(field) => (
-                                                <PaperSettingItem title={field.label} description={field.description}>
-                                                    <GameOptionControl
-                                                        field={field}
-                                                        value={value(field)}
-                                                        secretStored={Boolean(values()?.[field.id])}
-                                                        disabled={locked() || saving()}
-                                                        onChange={(next) => void save(field.id, next)}
-                                                    />
-                                                </PaperSettingItem>
+                        <For each={titles()}>
+                            {(title) => {
+                                const ids = createMemo(() => groups().find((group) => group.title === title)?.ids ?? [], undefined, { equals: sameData });
+                                const section = () => (title ? byId().get(ids()[0]!)?.section : undefined);
+                                return (
+                                    <PaperFlex direction="column" gap="half" fullWidth>
+                                        <Show when={section()}>
+                                            {(shown) => (
+                                                <PaperFlex direction="column" gap="onefourth">
+                                                    <PaperText size={2} weight={700} color="text-subtle">{shown().title}</PaperText>
+                                                    <Show when={shown().description}>
+                                                        <PaperText size={2} color="text-subtle">{shown().description}</PaperText>
+                                                    </Show>
+                                                </PaperFlex>
                                             )}
-                                        </For>
-                                    </PaperSettingList>
-                                </PaperFlex>
-                            )}
+                                        </Show>
+                                        <PaperSettingList autoHeight>
+                                            <For each={ids()}>{(id) => <OptionRow id={id} />}</For>
+                                        </PaperSettingList>
+                                    </PaperFlex>
+                                );
+                            }}
                         </For>
                     </PaperFlex>
                 </Show>

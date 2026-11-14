@@ -27,6 +27,7 @@ import {
 import { selectedServerId } from "../lib/api";
 import { PANEL_ID } from "../service/contract";
 import { errorMessage, type Outcome } from "../lib/failure";
+import { createSaves } from "../lib/saves";
 
 // Backups of the whole server folder (worlds, settings, plugins, mods),
 // made now or routinely by this computer's Paperboard Server, which makes
@@ -59,7 +60,7 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
     const [loadError, setLoadError] = createSignal("");
     const [error, setError] = createSignal<Outcome | null>(null);
     const [notice, setNotice] = createSignal<Outcome | null>(null);
-    const [busy, setBusy] = createSignal<"create" | "schedule" | null>(null);
+    const [busy, setBusy] = createSignal<"create" | "location" | null>(null);
     // the server's running backup or restore, made here or routinely
     const [progress, setProgress] = createSignal<BackupProgress | null>(null);
     let stopProgress: (() => void) | null = null;
@@ -84,19 +85,31 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
         if (props.active) void load();
     });
 
-    const act = async (kind: "create" | "schedule", failTitle: string, work: () => Promise<Outcome | null>) => {
+    // the routine schedule is one setting, its switch and both menus change
+    // it; a backup made now and a new location take their turn with its
+    // saves, so two location pickers never open at once
+    const saves = createSaves({
+        failed: (err) => setError({ title: "Schedule not saved", message: errorMessage(err) }),
+        changed: () => {
+            setError(null);
+            setNotice(null);
+        },
+    });
+
+    const act = async (kind: "create" | "location", failTitle: string, work: () => Promise<Outcome | null>) => {
         if (busy()) return;
         setBusy(kind);
         setError(null);
         setNotice(null);
         try {
-            const done = await work();
+            const done = await saves.run(work);
             if (done) setNotice(done);
         } catch (err) {
             setError({ title: failTitle, message: errorMessage(err) });
         } finally {
-            setBusy(null);
+            // what the work changed is on screen before its button is back
             await load();
+            setBusy(null);
         }
     };
 
@@ -106,7 +119,7 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
         return (await backupsApi.chooseLocation()).status === "chosen";
     };
 
-    const changeLocation = () => act("schedule", "Location not changed", async () => {
+    const changeLocation = () => act("location", "Location not changed", async () => {
         const result = await backupsApi.chooseLocation();
         return result.status === "chosen"
             ? { title: "Location changed", message: `Backups now go to ${result.location.label}.` }
@@ -119,15 +132,21 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
         return { title: "Backed up", message: `Backed up the server (${sizeText(record.size)}).` };
     });
 
-    const setSchedule = (next: { everyHours: BackupSchedule["everyHours"]; keep: number } | null) => act("schedule", "Schedule not saved", async () => {
-        if (next && !(await ensureLocation())) return null;
-        await backupsApi.setSchedule(next);
-        return null;
-    });
-
     const schedule = () => status()?.schedule ?? null;
+    const routine = saves.setting<{ everyHours: BackupSchedule["everyHours"]; keep: number } | null>(
+        "schedule",
+        () => {
+            const stored = schedule();
+            return stored ? { everyHours: stored.everyHours, keep: stored.keep } : null;
+        },
+        async (next) => {
+            // a first routine backup needs somewhere to go; closing the picker calls it off
+            if (next && !(await ensureLocation())) return false;
+            setStatus(await backupsApi.setSchedule(next));
+        },
+    );
     const keepChoices = () => {
-        const current = schedule()?.keep;
+        const current = routine.value()?.keep;
         return current && !KEEP_CHOICES.includes(current) ? [...KEEP_CHOICES, current].sort((a, b) => a - b) : KEEP_CHOICES;
     };
 
@@ -216,20 +235,19 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
                         : "A running server is saved, stopped for the copy and started again."}`}
                 >
                     <PaperToggle
-                        checked={schedule() !== null}
-                        disabled={busy() !== null || status() === null}
-                        onChange={(on) => void setSchedule(on ? { ...DEFAULT_SCHEDULE } : null)}
+                        checked={routine.value() !== null}
+                        disabled={status() === null}
+                        onChange={(on) => routine.set(on ? { ...DEFAULT_SCHEDULE } : null)}
                     />
                 </PaperSettingItem>
-                <Show when={schedule()}>
+                <Show when={routine.value()}>
                     {(current) => (
                         <>
                             <PaperSettingItem title="How Often">
                                 <PaperSelectMenu
                                     name="backupEvery"
                                     value={String(current().everyHours)}
-                                    disabled={busy() !== null}
-                                    onValueChange={(value) => void setSchedule({ everyHours: Number(value) as BackupSchedule["everyHours"], keep: current().keep })}
+                                    onValueChange={(value) => routine.set({ everyHours: Number(value) as BackupSchedule["everyHours"], keep: current().keep })}
                                 >
                                     <For each={[...ROUTINE_BACKUP_HOURS]}>
                                         {(hours) => <PaperSelectMenuItem value={String(hours)}>{everyText(hours)}</PaperSelectMenuItem>}
@@ -240,27 +258,30 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
                                 <PaperSelectMenu
                                     name="backupKeep"
                                     value={String(current().keep)}
-                                    disabled={busy() !== null}
-                                    onValueChange={(value) => void setSchedule({ everyHours: current().everyHours, keep: Number(value) })}
+                                    onValueChange={(value) => routine.set({ everyHours: current().everyHours, keep: Number(value) })}
                                 >
                                     <For each={keepChoices()}>
                                         {(keep) => <PaperSelectMenuItem value={String(keep)}>{keep === 1 ? "The newest" : `The newest ${keep}`}</PaperSelectMenuItem>}
                                     </For>
                                 </PaperSelectMenu>
                             </PaperSettingItem>
-                            <PaperFlex direction="column" gap="half" padding="full">
-                                <PaperText size={2} color="text-subtle">Next routine backup: {dateText(current().nextRunAt)}</PaperText>
-                                <Show when={current().last}>
-                                    {(last) => (
-                                        <PaperText size={2} color={last().ok ? "text-subtle" : "danger"}>
-                                            {last().ok
-                                                ? `Last routine backup: ${dateText(last().at)}`
-                                                : `The routine backup at ${dateText(last().at)} failed: ${last().message ?? "no reason given"}`}
-                                        </PaperText>
-                                    )}
-                                </Show>
-                            </PaperFlex>
                         </>
+                    )}
+                </Show>
+                <Show when={schedule()}>
+                    {(stored) => (
+                        <PaperFlex direction="column" gap="half" padding="full">
+                            <PaperText size={2} color="text-subtle">Next routine backup: {dateText(stored().nextRunAt)}</PaperText>
+                            <Show when={stored().last}>
+                                {(last) => (
+                                    <PaperText size={2} color={last().ok ? "text-subtle" : "danger"}>
+                                        {last().ok
+                                            ? `Last routine backup: ${dateText(last().at)}`
+                                            : `The routine backup at ${dateText(last().at)} failed: ${last().message ?? "no reason given"}`}
+                                    </PaperText>
+                                )}
+                            </Show>
+                        </PaperFlex>
                     )}
                 </Show>
             </PaperSettingList>

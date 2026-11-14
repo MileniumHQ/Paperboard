@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, on, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -13,11 +13,14 @@ import {
 } from "@mileniumhq/paperui";
 import { serverBridge, serverStatus } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
+import { createSaves } from "../../lib/saves";
+import { sameData } from "../../core/state";
 import { discardUpload, listAdded, newStage, pickFiles, stageFolder } from "../../lib/addons/upload";
 import { sourceCalls, type SourceGameSpec, type SourceModView } from "./index";
 import type { SourcePlugin } from "./sourcemod";
 
 const upload = pickFiles("Upload plugins", ["smx"]);
+const SOURCEMOD = "sourcemod";
 
 // SourceMod on a Source server: one switch for it, then its plugins, each
 // turned on or off where SourceMod keeps them. There is no catalog that
@@ -41,27 +44,46 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
     };
     createEffect(on([() => props.active, serverStatus], ([active]) => { if (active) void load(); }));
 
-    const change = async (key: string, title: string, work: () => Promise<SourceModView>) => {
-        setWorking(key);
-        setError(null);
-        setNotice("");
+    // SourceMod's switch and each plugin's flip at once; their saves, the
+    // removals and the uploads run one at a time, so none races another
+    const saves = createSaves({
+        failed: (err, key, on) => {
+            const what = key === SOURCEMOD ? "SourceMod" : (view()?.plugins.find((plugin) => plugin.file === key)?.title ?? key);
+            setError({ title: `${what} did not turn ${on ? "on" : "off"}`, message: errorMessage(err) });
+        },
+        changed: () => {
+            setError(null);
+            setNotice("");
+        },
+    });
+    /** saves through `work`, and on a failure shows whatever did land */
+    const answer = async (work: () => Promise<SourceModView>) => {
         try {
             setView(await work());
-            return true;
         } catch (err) {
-            setError({ title, message: errorMessage(err) });
-            // whatever did land is what the page shows
             await load();
-            return false;
-        } finally {
-            setWorking(null);
+            throw err;
         }
     };
     // turning SourceMod on the first time downloads it, which can take a while
-    const setOn = (on: boolean) => change("sourcemod", on ? "SourceMod did not turn on" : "SourceMod did not turn off", () => serverBridge.call<SourceModView>(ids.sourcemodSet, { on }, { timeoutMs: null }));
-    const setPlugin = (plugin: SourcePlugin, on: boolean) => change(plugin.file, `${plugin.title} did not turn ${on ? "on" : "off"}`, () => serverBridge.call<SourceModView>(ids.plugin, { file: plugin.file, on }));
+    const sourcemod = saves.setting(SOURCEMOD, () => view()?.on ?? false, (on) =>
+        answer(() => serverBridge.call<SourceModView>(ids.sourcemodSet, { on }, { timeoutMs: null })),
+    );
+    const pluginSetting = (file: string, enabled: () => boolean) =>
+        saves.setting(file, enabled, (on) => answer(() => serverBridge.call<SourceModView>(ids.plugin, { file, on })));
+
     const remove = async (plugin: SourcePlugin) => {
-        if (await change(plugin.file, `${plugin.title} was not removed`, () => serverBridge.call<SourceModView>(ids.pluginRemove, { file: plugin.file }))) setRemoving(null);
+        setWorking(plugin.file);
+        setError(null);
+        setNotice("");
+        try {
+            await saves.run(() => answer(() => serverBridge.call<SourceModView>(ids.pluginRemove, { file: plugin.file })));
+            setRemoving(null);
+        } catch (err) {
+            setError({ title: `${plugin.title} was not removed`, message: errorMessage(err) });
+        } finally {
+            setWorking(null);
+        }
     };
     const uploadPlugins = async () => {
         const stage = newStage();
@@ -74,7 +96,9 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
                 await discardUpload(stage);
                 return;
             }
-            const { added, view: next } = await serverBridge.call<{ added: string[]; view: SourceModView }>(ids.pluginUpload, { stage }, { timeoutMs: null });
+            const { added, view: next } = await saves.run(() =>
+                serverBridge.call<{ added: string[]; view: SourceModView }>(ids.pluginUpload, { stage }, { timeoutMs: null }),
+            );
             setView(next);
             setNotice(`${listAdded(added)} ${added.length === 1 ? "is" : "are"} on.`);
         } catch (err) {
@@ -85,6 +109,9 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
             setWorking(null);
         }
     };
+    // a plugin is the row of its file: a save's answer brings new objects, and the rows stay
+    const pluginFiles = createMemo(() => (view()?.plugins ?? []).map((plugin) => plugin.file), undefined, { equals: sameData });
+    const pluginOf = (file: string) => view()?.plugins.find((plugin) => plugin.file === file);
 
     const restart = () => {
         const current = view();
@@ -92,7 +119,7 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
     };
     const live = () => !!view()?.active;
     const status = () => {
-        if (working() === "sourcemod") return view()?.on ? "Turning off…" : "Downloading and turning on…";
+        if (sourcemod.saving()) return sourcemod.value() ? "Downloading and turning on…" : "Turning off…";
         return view()?.on ? "Metamod:Source and SourceMod load with the server." : "Admin commands, map votes and plugins, by AlliedModders.";
     };
 
@@ -100,7 +127,7 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
         <>
             <PaperPageHeader icon="extension" title="Mods">
                 <Show when={view()?.on && !view()?.missing}>
-                    <PaperButton disabled={working() !== null} onClick={() => void uploadPlugins()}>
+                    <PaperButton disabled={working() !== null || sourcemod.saving()} onClick={() => void uploadPlugins()}>
                         <PaperIcon aria-hidden="true">{working() === "upload" ? "hourglass_top" : upload.icon}</PaperIcon>
                         {upload.label}
                     </PaperButton>
@@ -120,7 +147,7 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
                     <PaperFlex direction="column" gap="full">
                         <PaperSettingList autoHeight>
                             <PaperSettingItem title="SourceMod" description={status()}>
-                                <PaperToggle checked={current().on} disabled={working() !== null} onChange={(checked) => void setOn(checked)} />
+                                <PaperToggle checked={sourcemod.value()} onChange={sourcemod.set} />
                             </PaperSettingItem>
                         </PaperSettingList>
 
@@ -148,27 +175,27 @@ export default function SourceMods(props: { spec: SourceGameSpec; active: boolea
                                 The server won't start with SourceMod on. Turn it off and on again to reinstall it.
                             </PaperQuote>
                         </Show>
-                        <Show when={current().on && !current().missing}>
+                        {/* the plugins go with SourceMod the moment its switch turns off */}
+                        <Show when={current().on && sourcemod.value() && !current().missing}>
                             <PaperText size={2} weight={700} color="text-subtle">Plugins</PaperText>
                             <PaperSettingList autoHeight>
-                                <For each={current().plugins}>
-                                    {(plugin) => (
-                                        <PaperSettingItem title={plugin.title} description={plugin.bundled ? plugin.description : `${plugin.file} · ${plugin.description}`}>
-                                            <PaperFlex direction="row" gap="half" align="center">
-                                                <Show when={!plugin.bundled}>
-                                                    <PaperButton variant="text" disabled={working() !== null} onClick={() => setRemoving(plugin)}>
-                                                        Remove
-                                                    </PaperButton>
-                                                </Show>
-                                                <PaperToggle
-                                                    checked={plugin.enabled}
-                                                    disabled={working() !== null}
-                                                    aria-label={`${plugin.title} on`}
-                                                    onChange={(checked) => void setPlugin(plugin, checked)}
-                                                />
-                                            </PaperFlex>
-                                        </PaperSettingItem>
-                                    )}
+                                <For each={pluginFiles()}>
+                                    {(file) => {
+                                        const plugin = () => pluginOf(file)!;
+                                        const enabled = pluginSetting(file, () => plugin().enabled);
+                                        return (
+                                            <PaperSettingItem title={plugin().title} description={plugin().bundled ? plugin().description : `${file} · ${plugin().description}`}>
+                                                <PaperFlex direction="row" gap="half" align="center">
+                                                    <Show when={!plugin().bundled}>
+                                                        <PaperButton variant="text" disabled={working() !== null} onClick={() => setRemoving(plugin())}>
+                                                            Remove
+                                                        </PaperButton>
+                                                    </Show>
+                                                    <PaperToggle checked={enabled.value()} aria-label={`${plugin().title} on`} onChange={enabled.set} />
+                                                </PaperFlex>
+                                            </PaperSettingItem>
+                                        );
+                                    }}
                                 </For>
                             </PaperSettingList>
                             <PaperText size={2} color="text-subtle">

@@ -13,6 +13,7 @@ import {
 } from "@mileniumhq/paperui";
 import { supports } from "../lib/capabilities";
 import { errorMessage } from "../lib/failure";
+import { createSaves } from "../lib/saves";
 import { writeServerProperties } from "../lib/properties";
 import { selectCustomResourcePack } from "../lib/resourcepack";
 import { resourcePackKind, type PackSettings } from "../lib/addons/resourcepack";
@@ -73,23 +74,33 @@ export default function ResourcePack(props: { active: boolean }) {
         }
     };
 
-    const persist = async () => {
-        const next = settings();
-        if (!next || draftError(next)) return;
-        try {
-            await writeServerProperties({
-                ...(supports("requireResourcePack") ? { "require-resource-pack": String(next.require) } : {}),
-                ...(supports("resourcePackPrompt") ? { "resource-pack-prompt": promptToProperty(next.prompt) } : {}),
-                ...(supports("resourcePackId") ? { "resource-pack-id": next.id.trim().toLowerCase() } : {}),
-            });
-            setSaveError("");
-        } catch (err) {
+    // every write of server.properties takes its turn, so one never undoes another
+    const saves = createSaves({
+        failed: (err) => {
             console.error("[Resource Pack] Failed to save the settings:", err);
             setSaveError(errorMessage(err));
-        }
+        },
+        changed: () => setSaveError(""),
+    });
+
+    // the prompt and the pack id, once typing pauses
+    const persist = () => {
+        const next = settings();
+        if (!next || draftError(next)) return;
+        saves
+            .run(() =>
+                writeServerProperties({
+                    ...(supports("resourcePackPrompt") ? { "resource-pack-prompt": promptToProperty(next.prompt) } : {}),
+                    ...(supports("resourcePackId") ? { "resource-pack-id": next.id.trim().toLowerCase() } : {}),
+                }),
+            )
+            .catch((err) => {
+                console.error("[Resource Pack] Failed to save the settings:", err);
+                setSaveError(errorMessage(err));
+            });
     };
 
-    const change = (patch: Partial<PackSettings>, immediate = false) => {
+    const change = (patch: Partial<Pick<PackSettings, "prompt" | "id">>) => {
         const next = { ...settings()!, ...patch };
         setSettings(next);
         if (saveTimer) clearTimeout(saveTimer);
@@ -99,8 +110,7 @@ export default function ResourcePack(props: { active: boolean }) {
             return;
         }
         setSaveError("");
-        if (immediate) void persist();
-        else saveTimer = setTimeout(() => void persist(), SAVE_DEBOUNCE_MS);
+        saveTimer = setTimeout(persist, SAVE_DEBOUNCE_MS);
     };
 
     return (
@@ -126,39 +136,47 @@ export default function ResourcePack(props: { active: boolean }) {
             extras={
                 <>
                     <Show when={settings()}>
-                        {(values) => (
-                            <PaperSettingList autoHeight>
-                                <Show when={supports("requireResourcePack")}>
-                                    <PaperSettingItem title="Require Resource Pack" description="Players must accept the pack to join.">
-                                        <PaperToggle checked={values().require} onChange={(checked) => change({ require: checked }, true)} />
-                                    </PaperSettingItem>
-                                </Show>
-                                <Show when={supports("resourcePackPrompt")}>
-                                    <PaperSettingItem
-                                        title="Prompt"
-                                        description="The message players see when asked to accept the pack. Leave empty for the default."
-                                    >
-                                        <PaperInput
-                                            value={values().prompt}
-                                            invalid={promptProblem(values().prompt) !== ""}
-                                            onInput={(e) => change({ prompt: e.currentTarget.value })}
-                                        />
-                                    </PaperSettingItem>
-                                </Show>
-                                <Show when={supports("resourcePackId")}>
-                                    <PaperSettingItem
-                                        title="Pack ID"
-                                        description="A UUID clients use to tell this pack from others. Leave empty to let the game choose."
-                                    >
-                                        <PaperInput
-                                            value={values().id}
-                                            invalid={idProblem(values().id) !== ""}
-                                            onInput={(e) => change({ id: e.currentTarget.value })}
-                                        />
-                                    </PaperSettingItem>
-                                </Show>
-                            </PaperSettingList>
-                        )}
+                        {(values) => {
+                            // what server.properties held when it was last read
+                            const required = saves.setting(
+                                "require-resource-pack",
+                                () => values().require,
+                                (on) => writeServerProperties({ "require-resource-pack": String(on) }),
+                            );
+                            return (
+                                <PaperSettingList autoHeight>
+                                    <Show when={supports("requireResourcePack")}>
+                                        <PaperSettingItem title="Require Resource Pack" description="Players must accept the pack to join.">
+                                            <PaperToggle checked={required.value()} onChange={required.set} />
+                                        </PaperSettingItem>
+                                    </Show>
+                                    <Show when={supports("resourcePackPrompt")}>
+                                        <PaperSettingItem
+                                            title="Prompt"
+                                            description="The message players see when asked to accept the pack. Leave empty for the default."
+                                        >
+                                            <PaperInput
+                                                value={values().prompt}
+                                                invalid={promptProblem(values().prompt) !== ""}
+                                                onInput={(e) => change({ prompt: e.currentTarget.value })}
+                                            />
+                                        </PaperSettingItem>
+                                    </Show>
+                                    <Show when={supports("resourcePackId")}>
+                                        <PaperSettingItem
+                                            title="Pack ID"
+                                            description="A UUID clients use to tell this pack from others. Leave empty to let the game choose."
+                                        >
+                                            <PaperInput
+                                                value={values().id}
+                                                invalid={idProblem(values().id) !== ""}
+                                                onInput={(e) => change({ id: e.currentTarget.value })}
+                                            />
+                                        </PaperSettingItem>
+                                    </Show>
+                                </PaperSettingList>
+                            );
+                        }}
                     </Show>
 
                     <PaperCard>

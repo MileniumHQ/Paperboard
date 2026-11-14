@@ -79,6 +79,8 @@ export interface Page {
     settled(): Promise<void>;
     /** resolves once the page has received a socket message `match` accepts */
     received(match: (frame: string) => boolean, what: string): Promise<void>;
+    /** what the page shows, as a PNG, for a person to look at */
+    screenshot(): Promise<Buffer>;
     close(): Promise<void>;
 }
 
@@ -204,6 +206,10 @@ export async function openPage(url: string, windowSize = "1400,900"): Promise<Pa
                 const timer = setTimeout(() => { observer.disconnect(); reject(new Error(${JSON.stringify(`Timed out waiting for ${what}`)} + "; the page shows: " + document.body.innerText.slice(0, 2000))); }, ${WAIT_MS});
                 observer.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
             })`).then(() => undefined),
+        async screenshot() {
+            const shot = await send<{ data: string }>("Page.captureScreenshot", { format: "png" });
+            return Buffer.from(shot.data, "base64");
+        },
         async close() {
             if (closed) return;
             closed = true;
