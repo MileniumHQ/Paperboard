@@ -5,11 +5,15 @@
 // The compiled binary, not the source entry: the daemon starts every
 // workload under a supervisor by re-running its own executable with
 // `--supervise`, which only a compiled crane (or the desktop app) can do.
+//
+// A daemon that never listens is stopped before the start fails, and one the
+// suite never stops is stopped as the test process ends.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { buildSupervisor } from "../supervisor";
+import { undoOnExit } from "./cleanup";
 
 const REPO = path.resolve(import.meta.dir, "../..");
 const CRANE_ENTRY = path.join(REPO, "apps/paperboard/papercrane/main.ts");
@@ -61,7 +65,20 @@ export async function startCrane(binary: string, dataDir: string, host = "127.0.
         stdio: ["ignore", "pipe", "pipe"],
     });
     let log = "";
-    const exited = new Promise<number | null>((resolve) => child.once("exit", (code) => resolve(code)));
+    const running = () => child.exitCode === null && child.signalCode === null;
+    // a daemon that failed to spawn never exits: there is nothing to wait for
+    const exited = new Promise<number | null>((resolve) => {
+        child.once("exit", (code) => resolve(code));
+        child.once("error", () => resolve(null));
+    });
+    const forget = undoOnExit(() => {
+        if (running()) child.kill();
+    });
+    const stop = async () => {
+        forget();
+        if (running()) child.kill();
+        await exited;
+    };
     const listening = new RegExp(`Listening on https?://${host.replace(/\./g, "\\.")}:(\\d+)`);
     const port = await new Promise<number>((resolve, reject) => {
         const timer = setTimeout(
@@ -85,14 +102,9 @@ export async function startCrane(binary: string, dataDir: string, host = "127.0.
             clearTimeout(timer);
             reject(new Error(`The test daemon exited (${code}) before it listened:\n${log}`));
         });
+    }).catch(async (err) => {
+        await stop();
+        throw err;
     });
-    return {
-        port,
-        dataDir,
-        output: () => log,
-        async stop() {
-            if (child.exitCode === null && child.signalCode === null) child.kill();
-            await exited;
-        },
-    };
+    return { port, dataDir, output: () => log, stop };
 }
