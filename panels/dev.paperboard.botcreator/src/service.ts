@@ -53,6 +53,7 @@ import {
 } from "./bots";
 import { BotSession } from "./session";
 import { buildGuildDetail, buildMemberSummaries } from "./explorer";
+import { discordPicture } from "./discordCdn";
 
 export async function buildInviteUrl(appId: string, permissions: string[]): Promise<string> {
     if (!appId) {
@@ -733,6 +734,9 @@ export const serviceCalls = {
 
     /** Removes a stored command, its event and its Discord definition. */
     deleteCommand: (_ctx: unknown, input: any) => deleteCommand(requireBot(input?.bot), input?.id),
+
+    /** An avatar or server icon from Discord's CDN, as a data: address: a page never loads a picture someone else chose. */
+    getPicture: (_ctx: unknown, input: any) => discordPicture(input?.url),
 
     /** Sends a message as the bot, from the server explorer. */
     sendMessage: (_ctx: unknown, input: any) =>

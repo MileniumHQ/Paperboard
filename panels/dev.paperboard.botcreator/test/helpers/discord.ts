@@ -63,6 +63,8 @@ export interface FakeDiscord {
     /** the REST base for discord.js (`rest.api`) */
     api: string;
     requests: RecordedRequest[];
+    /** every picture asked of its CDN (/cdn, beside the API), by path and query */
+    pictures: string[];
     /** a token Discord accepts, for a new application with its own bot user */
     addBot(options?: { username?: string; guilds?: FakeGuild[]; gateway?: FakeBot["gateway"] }): FakeBot;
     /** resolves with the first recorded request (already made or still to come) that `match` accepts */
@@ -79,6 +81,8 @@ export interface FakeDiscord {
     stop(): void;
 }
 
+const PIXEL = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+
 function tokenFor(appId: string): string {
     return `${Buffer.from(appId).toString("base64url")}.${crypto.randomBytes(4).toString("base64url")}.${crypto.randomBytes(20).toString("base64url")}`;
 }
@@ -87,6 +91,7 @@ export function startFakeDiscord(): FakeDiscord {
     const bots = new Map<string, FakeBot>();
     const sessions = new Map<string, GatewaySession>();
     const requests: RecordedRequest[] = [];
+    const pictures: string[] = [];
     const requestWaiters = new Set<() => void>();
     const sessionWaiters = new Set<() => void>();
     const commandsByScope = new Map<string, unknown[]>();
@@ -252,6 +257,11 @@ export function startFakeDiscord(): FakeDiscord {
                 return new Response("upgrade failed", { status: 400 });
             }
             const url = new URL(req.url);
+            // every avatar and icon is the same one-pixel picture
+            if (url.pathname.startsWith("/cdn/")) {
+                pictures.push(url.pathname + url.search);
+                return new Response(PIXEL, { headers: { "content-type": "image/png" } });
+            }
             if (!url.pathname.startsWith("/api/v10/")) return json(404, { message: "Not Found", code: 0 });
             const bot = botByAuth(req);
             const { body, files } = await readBody(req);
@@ -318,6 +328,7 @@ export function startFakeDiscord(): FakeDiscord {
     return {
         api: `http://127.0.0.1:${port}/api`,
         requests,
+        pictures,
         addBot(options = {}) {
             const appId = snowflake();
             const bot: FakeBot = { token: tokenFor(appId), appId, username: options.username ?? `bot-${appId.slice(-4)}`, guilds: options.guilds ?? [], gateway: options.gateway ?? "ok" };

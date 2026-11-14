@@ -22,7 +22,8 @@ import {
 import { serviceApi, defineWidgets, type WidgetContext } from "@mileniumhq/paperapi";
 import type { CommandActivity } from "./commandActivity";
 import type { BotWidgetStatus } from "./session";
-import { DEFAULT_DISCORD_AVATAR, errorToMessage } from "./types";
+import { errorToMessage } from "./types";
+import { picture } from "./picture";
 import { PANEL_ID } from "./bots";
 
 const STATUS_POLL_MS = 15_000;
@@ -165,7 +166,7 @@ function BotStatus(props: { widget: WidgetContext }) {
     // it is drawn again only when the picture changes
     const avatar = createMemo(() => {
         const status = ready();
-        return status ? status.avatar || DEFAULT_DISCORD_AVATAR : null;
+        return status ? picture(status.avatar) ?? null : null;
     });
     const icon = createMemo((): JSX.Element | string => {
         // a 1x1 gives the room to the bot's name instead

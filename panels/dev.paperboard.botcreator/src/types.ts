@@ -188,8 +188,6 @@ export const DEFAULT_SELECTED_PERMISSIONS = [
     "UseApplicationCommands",
 ];
 
-export const DEFAULT_DISCORD_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png";
-
 // shared with the service's ring buffer so the UI subscription caps
 // recent messages with the exact same bound (one invariant, one number)
 export const RECENT_MESSAGE_CAP = 10;

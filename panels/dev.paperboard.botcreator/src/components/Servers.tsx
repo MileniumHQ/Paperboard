@@ -25,6 +25,7 @@ import {
 } from "@mileniumhq/paperui";
 import { serviceApi } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
+import { picture } from "../picture";
 import {
     CHANNEL_KIND_LABELS,
     errorToMessage,
@@ -328,7 +329,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                         <PaperCard>
                             <PaperFlex direction="row" padding="full" gap="full" align="center">
                                 <PaperAvatar
-                                    src={guild().icon}
+                                    src={picture(guild().icon)}
                                     fallbackIcon="dns"
                                     size="xlarge"
                                 />
@@ -457,7 +458,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                                         align="center"
                                                         fullWidth
                                                     >
-                                                        <PaperAvatar src={member.avatar} size="medium" fallbackIcon="person" />
+                                                        <PaperAvatar src={picture(member.avatar)} size="medium" fallbackIcon="person" />
                                                         <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
                                                             <PaperFlex
                                                                 direction="row"
@@ -577,7 +578,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                         <For each={guilds()}>
                             {(guild) => (
                                 <PaperMediaCard
-                                    icon={guild.icon || "dns"}
+                                    icon={picture(guild.icon) ?? "dns"}
                                     title={guild.name}
                                     subtitle={count(guild.memberCount, "member")}
                                     description={`${count(guild.channelCount, "channel")} · ${count(guild.roleCount, "role")}`}
@@ -593,7 +594,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                 position="fixed"
                 open={selectedId() !== null}
                 title={detail()?.name ?? "Loading server…"}
-                icon={<PaperAvatar size="small" src={detail()?.icon || undefined} fallbackIcon="dns" />}
+                icon={<PaperAvatar size="small" src={picture(detail()?.icon)} fallbackIcon="dns" />}
                 onBack={closeServer}
                 onClosed={clearServer}
             >

@@ -24,7 +24,8 @@ import Configuration from "./components/Configuration";
 import SetupGuide from "./components/SetupGuide";
 import { createBots, type BotsState } from "./state";
 import { createCompact } from "./compact";
-import { DEFAULT_DISCORD_AVATAR, errorToMessage } from "./types";
+import { errorToMessage } from "./types";
+import { picture } from "./picture";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 
@@ -157,7 +158,7 @@ export default function App() {
                 enabled={compact()}
                 open={shown() !== null}
                 title={(pageBot() && bots.find(pageBot()!)?.name) || ""}
-                icon={<PaperAvatar size="small" src={(pageBot() && bots.find(pageBot()!)?.avatar) || DEFAULT_DISCORD_AVATAR} />}
+                icon={<PaperAvatar size="small" src={picture(pageBot() && bots.find(pageBot()!)?.avatar)} fallbackIcon="smart_toy" />}
                 onBack={() => setOpened(null)}
             >
                 <Show when={pageBot()} keyed>

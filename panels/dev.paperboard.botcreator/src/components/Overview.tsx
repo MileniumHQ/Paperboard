@@ -16,13 +16,13 @@ import { serviceApi } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
 import {
     appendCapped,
-    DEFAULT_DISCORD_AVATAR,
     formatDuration,
     RECENT_MESSAGE_CAP,
     errorToMessage,
     type Health,
 } from "../types";
 import type { RecentMessage } from "../session";
+import { picture } from "../picture";
 
 const HEALTH_POLL_MS = 10000;
 
@@ -140,7 +140,8 @@ export default function Overview(props: OverviewProps) {
             <PaperCard>
                         <PaperFlex direction="row" padding="full" gap="full" align="center">
                             <PaperAvatar
-                                src={props.bot().avatar || DEFAULT_DISCORD_AVATAR}
+                                src={picture(props.bot().avatar)}
+                                fallbackIcon="smart_toy"
                                 alt={props.bot().name}
                                 size="xlarge"
                             />

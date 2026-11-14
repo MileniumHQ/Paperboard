@@ -132,7 +132,8 @@ const gatewayErrorMessage = (err: unknown): string => {
  * The Discord API base a bot's client talks to. Unset, it is discord.com.
  * BOTCREATOR_DISCORD_API names another Discord-compatible API (an http or
  * https address ending in /api), which is how the panel's tests run bots
- * against a Discord on loopback; the gateway address comes from that API.
+ * against a Discord on loopback; the gateway address comes from that API,
+ * and its pictures are at /cdn on the same host (discordCdnBase).
  */
 export function discordApiBase(env: Record<string, string | undefined> = process.env): string | undefined {
     const raw = env.BOTCREATOR_DISCORD_API;
@@ -147,6 +148,12 @@ export function discordApiBase(env: Record<string, string | undefined> = process
         throw new Error(`BOTCREATOR_DISCORD_API must be an http or https address, not "${raw}"`);
     }
     return url.href.replace(/\/+$/, "");
+}
+
+/** Where a bot's client says avatars and server icons are: Discord's CDN, or /cdn beside BOTCREATOR_DISCORD_API. */
+export function discordCdnBase(env: Record<string, string | undefined> = process.env): string {
+    const api = discordApiBase(env);
+    return api ? `${new URL(api).origin}/cdn` : "https://cdn.discordapp.com";
 }
 
 export class BotSession {
@@ -419,7 +426,7 @@ export class BotSession {
         const bot = clientFactory
             ? clientFactory()
             : new Client({
-                ...(api ? { rest: { api } } : {}),
+                ...(api ? { rest: { api, cdn: discordCdnBase() } } : {}),
                 intents: [
                     GatewayIntentBits.Guilds,
                     GatewayIntentBits.GuildMessages,
