@@ -3,6 +3,7 @@ import { putRecord, readPublished, type PublishedReader } from "./kv";
 import type { CommandRunner } from "./wrangler";
 import { loadReleaseSigningKey } from "../../../../scripts/releaseSigning";
 import type { PackageRecord } from "./records";
+import { messageOf } from "./errors";
 
 export interface UpdateOutcome {
     written: string[];
@@ -37,7 +38,7 @@ export async function writeRecords(
             const result = await putRecord(record, signingKey!, opts.run, opts.publicKey, opts.published ?? readPublished);
             outcome[result].push(key);
         } catch (err) {
-            outcome.errors[key] = err instanceof Error ? err.message : String(err);
+            outcome.errors[key] = messageOf(err);
         }
     }
     return outcome;
@@ -54,10 +55,6 @@ export function report(outcome: UpdateOutcome, dryRun: boolean): number {
 }
 
 export type BuiltEntry = { key: string; record?: PackageRecord; error?: string };
-
-function messageOf(err: unknown): string {
-    return err instanceof Error ? err.message : String(err);
-}
 
 /** One record, or the failure that stopped it, keyed for writeRecords. */
 export async function settle(key: string, build: () => Promise<PackageRecord>): Promise<BuiltEntry> {

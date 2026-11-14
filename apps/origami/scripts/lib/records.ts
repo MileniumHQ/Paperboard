@@ -3,6 +3,7 @@
 // papercrane/engine.ts: it installs platforms[<os>-<arch>] and refuses any
 // entry without a sha256.
 import { parsePackageRecipe, type PackageRecipe } from "../../../paperboard/papercrane/packageRecipe";
+import { messageOf } from "./errors";
 
 export type { PackageRecipe };
 
@@ -86,7 +87,7 @@ export function assertValidRecord(record: PackageRecord): void {
             try {
                 parsePackageRecipe(dl.recipe);
             } catch (err) {
-                throw new Error(`${record.name}/${key}: ${err instanceof Error ? err.message : String(err)}`);
+                throw new Error(`${record.name}/${key}: ${messageOf(err)}`);
             }
         }
     }

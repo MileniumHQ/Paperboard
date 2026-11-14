@@ -31,7 +31,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fetchBytes, fetchJson, fetchText, listTar, UPDATER_USER_AGENT, withStreamedDownload } from "./lib/download";
+import { fetchBytes, fetchJson, fetchText, listTar, memberSet, UPDATER_USER_AGENT, withStreamedDownload } from "./lib/download";
 import { runUpdater, settle } from "./lib/cli";
 import {
     assertValidRecord,
@@ -144,7 +144,7 @@ function platformDownload(
     }
 
     const recipe = recipeFor(key);
-    const members = new Set(facts.members.map((m) => m.replace(/^\.\//, "").replace(/\/+$/, "")));
+    const members = memberSet(facts.members);
     for (const source of Object.values(recipe.take)) {
         if (!members.has(source)) throw new Error(`${where}: ${source} is not in the tarball`);
     }

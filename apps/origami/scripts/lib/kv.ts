@@ -7,6 +7,7 @@ import { releaseMessage, signRelease } from "../../../../scripts/releaseSigning"
 import { RELEASE_PUBLIC_KEY, verifyRelease } from "../../../paperboard/papercrane/releaseSignature";
 import { parsePackageRecipe, recipeDigest } from "../../../paperboard/papercrane/packageRecipe";
 import { kvPut, runCommand, type CommandRunner } from "./wrangler";
+import { messageOf } from "./errors";
 
 // Signs every platform entry with the offline release key. Daemons refuse
 // an entry without a valid signature, so an unsigned record is never
@@ -70,7 +71,7 @@ export async function putRecord(
     // skip: the write goes ahead.
     if (published) {
         const live = await published(signed.name).catch((err) => {
-            console.warn(err instanceof Error ? err.message : String(err));
+            console.warn(messageOf(err));
             return undefined;
         });
         if (live !== undefined && canonical(live) === canonical(signed)) return "unchanged";

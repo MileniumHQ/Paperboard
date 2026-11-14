@@ -30,7 +30,7 @@
 // release's codex-package_SHA256SUMS. The downloaded bytes are hashed too:
 // listing an archive proves nothing about a file whose hash is unchecked.
 // A missing or disagreeing fact drops the whole record.
-import { fetchJson, fetchText, listTar, withStreamedDownload } from "./lib/download";
+import { fetchJson, fetchText, listTar, memberSet, withStreamedDownload } from "./lib/download";
 import { parseSha256Sums, verifiedAsset, type GithubRelease } from "./lib/github";
 import { runUpdater, settle } from "./lib/cli";
 import {
@@ -113,7 +113,7 @@ export function buildCodexRecord(release: GithubRelease, sumsText: string, listi
     for (const { key, file, url, sha256, size } of downloads) {
         const listing = listings[key];
         if (!listing?.length) throw new Error(`${file}: no archive listing`);
-        const members = new Set(listing.map((p) => p.replace(/^\.\//, "").replace(/\/+$/, "")));
+        const members = memberSet(listing);
         for (const source of Object.values(TARGETS[key].take)) {
             if (!hasMember(members, source)) throw new Error(`${file}: ${source} is not in the archive`);
         }

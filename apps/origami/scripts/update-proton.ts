@@ -8,29 +8,30 @@
 import { runUpdater, settle } from "./lib/cli";
 import { fetchJson, fetchText } from "./lib/download";
 import { assertValidRecord, PLATFORM_KEYS, type PackageRecord, type PlatformKey, type PlatformDownload } from "./lib/records";
-import type { GithubRelease } from "./lib/github";
+import { digestedAsset, type GithubRelease } from "./lib/github";
 
 const LATEST = "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest";
 const ARCH: Partial<Record<PlatformKey, string>> = { "linux-x64": "x86_64", "linux-arm64": "aarch64" };
 
-export function buildProtonRecord(release: GithubRelease, sums: Record<string, string>): PackageRecord {
+function assertStableRelease(release: GithubRelease): void {
     if (release.draft || release.prerelease) throw new Error(`${release.tag_name} is not a stable release`);
     if (!/^GE-Proton[1-9]\d*-[1-9]\d*$/.test(release.tag_name)) throw new Error(`unexpected release tag ${JSON.stringify(release.tag_name)}`);
+}
+
+export function buildProtonRecord(release: GithubRelease, sums: Record<string, string>): PackageRecord {
+    assertStableRelease(release);
     const platforms: Partial<Record<PlatformKey, PlatformDownload>> = {};
     for (const key of PLATFORM_KEYS) {
         const arch = ARCH[key];
         if (!arch) continue;
         const stem = `${release.tag_name}-${arch}`;
         const file = `${stem}.tar.gz`;
-        const asset = release.assets.find((a) => a.name === file);
-        if (!asset) throw new Error(`${release.tag_name}: asset ${file} missing`);
-        const digest = asset.digest?.match(/^sha256:([a-f0-9]{64})$/i)?.[1]?.toLowerCase();
-        if (!digest) throw new Error(`${file} has no sha256 digest`);
+        const download = digestedAsset(release.assets, file, release.tag_name);
         const checksum = `${stem}.sha512sum`;
         if (!release.assets.some((a) => a.name === checksum)) throw new Error(`${checksum} missing`);
         const match = sums[checksum]?.trim().match(/^([a-f0-9]{128})\s+\*?(?:\.\/)?([^\r\n]+)$/i);
         if (!match || match[2] !== file) throw new Error(`${checksum} missing or malformed checksum for ${file}`);
-        platforms[key] = { url: asset.browser_download_url, sha256: digest, ...(typeof asset.size === "number" ? { size: asset.size } : {}), recipe: { unpack: "tar", take: { bin: stem } } };
+        platforms[key] = { ...download, recipe: { unpack: "tar", take: { bin: stem } } };
     }
     const record: PackageRecord = { name: "proton", version: release.tag_name, platforms };
     assertValidRecord(record);
@@ -40,8 +41,7 @@ export function buildProtonRecord(release: GithubRelease, sums: Record<string, s
 export async function buildLatestProtonRecord(fetchFn: typeof fetch = fetch): Promise<PackageRecord> {
     const release = await fetchJson<GithubRelease>(LATEST, fetchFn, { Accept: "application/vnd.github+json" });
     // Validate release metadata before fetching any checksum URLs.
-    if (release.draft || release.prerelease) throw new Error(`${release.tag_name} is not a stable release`);
-    if (!/^GE-Proton[1-9]\d*-[1-9]\d*$/.test(release.tag_name)) throw new Error(`unexpected release tag ${JSON.stringify(release.tag_name)}`);
+    assertStableRelease(release);
     const sums: Record<string, string> = {};
     for (const arch of Object.values(ARCH)) {
         const name = `${release.tag_name}-${arch}.sha512sum`;

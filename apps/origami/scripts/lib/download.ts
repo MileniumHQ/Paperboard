@@ -83,6 +83,11 @@ export async function withStreamedDownload<T>(
     }
 }
 
+/** A tar listing as plain member paths: no leading `./`, no trailing `/`. */
+export function memberSet(listing: string[]): Set<string> {
+    return new Set(listing.map((p) => p.replace(/^\.\//, "").replace(/\/+$/, "")));
+}
+
 /** Member paths of a .tar.gz. argv array, no shell; -t only lists. */
 export function listTar(archive: string): Promise<string[]> {
     return new Promise((resolve, reject) => {
