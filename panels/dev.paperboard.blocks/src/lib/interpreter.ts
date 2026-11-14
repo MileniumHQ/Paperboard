@@ -2,7 +2,7 @@
 // does what they say. Blocks from the registry run in the panel that owns
 // them, through `host`; built-in blocks run here. Nothing is generated or
 // evaluated as code. Every failure names the block it happened on.
-import { errorMessage } from "./failure";
+import { RUN_STOPPED, errorMessage } from "./failure";
 import { base64, formatTime, isPrime, median, modes, position, regex, standardDeviation, timePart, unitMs, web, type WebAnswer } from "./library";
 import { BUILTIN, parseChoiceBlockType, parseEntry, parsePropertyBlockType, parseRegistryBlockType } from "./names";
 
@@ -139,7 +139,7 @@ const blockOf = (input: SavedInput | undefined) => input?.block ?? input?.shadow
 
 async function chain(run: Run, first: SavedBlock | undefined): Promise<void> {
     for (let block = first; block; block = block.next?.block) {
-        if (run.host.signal.aborted) throw new BlockError("The run was stopped", block.id);
+        if (run.host.signal.aborted) throw new BlockError(RUN_STOPPED, block.id);
         if (block.enabled === false) continue;
         await statement(run, block);
     }
@@ -234,7 +234,7 @@ async function listItem(run: Run, block: SavedBlock, remove: boolean): Promise<u
 /** Waits, ending early (and failing the run) when it is stopped. */
 function pause(run: Run, block: SavedBlock, ms: number): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-        if (run.host.signal.aborted) return reject(new BlockError("The run was stopped", block.id));
+        if (run.host.signal.aborted) return reject(new BlockError(RUN_STOPPED, block.id));
         const timer = setTimeout(done, ms);
         function done() {
             run.host.signal.removeEventListener("abort", stop);
@@ -242,7 +242,7 @@ function pause(run: Run, block: SavedBlock, ms: number): Promise<void> {
         }
         function stop() {
             clearTimeout(timer);
-            reject(new BlockError("The run was stopped", block.id));
+            reject(new BlockError(RUN_STOPPED, block.id));
         }
         run.host.signal.addEventListener("abort", stop, { once: true });
     });
@@ -291,7 +291,7 @@ async function gatherInputs(run: Run, block: SavedBlock, skip: string[] = []): P
 async function loop(run: Run, block: SavedBlock, round: () => Promise<boolean>): Promise<void> {
     for (let i = 0; ; i++) {
         if (i >= MAX_LOOP_ITERATIONS) throw new BlockError(`This loop went round ${MAX_LOOP_ITERATIONS} times, so the run stopped it`, block.id);
-        if (run.host.signal.aborted) throw new BlockError("The run was stopped", block.id);
+        if (run.host.signal.aborted) throw new BlockError(RUN_STOPPED, block.id);
         // a long loop leaves room for the rest of the service between rounds
         if (i % 1000 === 999) await new Promise((resolve) => setTimeout(resolve, 0));
         if (!(await round())) return;

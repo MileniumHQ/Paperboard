@@ -6,7 +6,7 @@ import { blockEntry, type blocksApi, type BlocksHandle, type ServiceContext } fr
 import { BlockError, hatInputs, isHat, runHat, type Host, type SavedBlock } from "./lib/interpreter";
 import { BUILTIN, parseEntry, parseRegistryBlockType, registryBlockType } from "./lib/names";
 import { BlocksAnnouncer, FLOW_FAILED_EVENT, blocksPanelBlocks } from "./blocks";
-import { errorMessage } from "./lib/failure";
+import { RUN_STOPPED, errorMessage } from "./lib/failure";
 import { isRecord, readFlows } from "./lib/flows";
 import { ProjectStore, readPreview, type ProjectStorage } from "./lib/projects";
 import { MAX_LOG, PANEL_ID, SERVICE_CALLS, type LogEntry, type PanelState, type SavedFlows } from "./panel";
@@ -68,9 +68,9 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
      * waiting for it. The other panel still finishes what it started.
      */
     function untilStopped<T>(signal: AbortSignal, call: Promise<T>): Promise<T> {
-        if (signal.aborted) return Promise.reject(new Error("The run was stopped"));
+        if (signal.aborted) return Promise.reject(new Error(RUN_STOPPED));
         return new Promise<T>((resolve, reject) => {
-            const stopped = () => reject(new Error("The run was stopped"));
+            const stopped = () => reject(new Error(RUN_STOPPED));
             signal.addEventListener("abort", stopped, { once: true });
             call.then(resolve, reject).finally(() => signal.removeEventListener("abort", stopped));
         });

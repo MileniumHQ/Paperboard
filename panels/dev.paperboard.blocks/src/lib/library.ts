@@ -2,7 +2,7 @@
 // requests, time, positions in lists and text. Pure functions the
 // interpreter calls; each throws a plain Error the interpreter pins on the
 // block that asked.
-import { errorMessage } from "./failure";
+import { RUN_STOPPED, errorMessage } from "./failure";
 
 /** The longest a web request may take, in milliseconds. */
 export const WEB_TIMEOUT_MS = 30_000;
@@ -56,7 +56,7 @@ export async function web(method: "GET" | "POST", url: string, body: unknown, an
     const timeout = AbortSignal.timeout(WEB_TIMEOUT_MS);
     // a stop or the time running out says so, whether it came while asking or while reading
     const failed = (err: unknown) => {
-        if (signal.aborted) return new Error("The run was stopped");
+        if (signal.aborted) return new Error(RUN_STOPPED);
         if (timeout.aborted) return new Error(`${url} didn't answer within ${WEB_TIMEOUT_MS / 1000} seconds`);
         return new Error(`${method} ${url} failed: ${errorMessage(err)}`);
     };

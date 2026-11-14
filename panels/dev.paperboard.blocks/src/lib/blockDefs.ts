@@ -450,7 +450,7 @@ export const BUILTIN_BLOCKS: Json[] = [
         tooltip: "Runs the first steps; if one fails, runs the second ones instead of ending the flow",
     },
     reporter(BUILTIN.errorMessage, "error message", [], "String", "What went wrong, inside \"If it fails\"", "loop_blocks"),
-    reporter(BUILTIN.hasValue, "%1 has a value", [socket("VALUE")], "Boolean", "False when a value is missing, like the reason of a ban nobody gave a reason for", "logic_blocks"),
+    reporter(BUILTIN.hasValue, "%1 has a value", [socket("VALUE")], "Boolean", "False when a value is missing, like an optional input nobody filled in", "logic_blocks"),
     reporter(BUILTIN.textTest, "%1 %2 %3", [socket("TEXT", "String"), dropdown("OP", [["contains", "CONTAINS"], ["starts with", "STARTS"], ["ends with", "ENDS"]]), socket("PART", "String")], "Boolean", "Checks for a piece of text", "text_blocks"),
     reporter(BUILTIN.regexTest, "%1 matches pattern %2", [socket("TEXT", "String"), socket("PATTERN", "String")], "Boolean", "Checks text against a regular expression", "text_blocks"),
     reporter(BUILTIN.regexFind, "find pattern %1 in %2", [socket("PATTERN", "String"), socket("TEXT", "String")], "String", "The first match (or its first group); empty text when nothing matches", "text_blocks"),
