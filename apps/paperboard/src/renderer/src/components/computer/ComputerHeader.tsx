@@ -8,10 +8,10 @@ import {
 import styles from "./ComputerHeader.module.css";
 import iconStyles from "./panelIcon.module.css";
 import libraryIcon from "../../assets/PanelLibrary.png";
-import type { ComputerItem } from "../../App";
+import type { ComputerInfo } from "../../lib/shell";
 
 export interface ComputerHeaderProps {
-    computer?: ComputerItem;
+    computer?: ComputerInfo;
     selectedTab: string;
     onSelectTab: (tab: string) => void;
     /** a tab was tapped, even the one already selected (the phone layout opens it) */
@@ -52,7 +52,7 @@ const OS_BRANDS: Record<string, { name: string; color: string }> = {
     linux: { name: "Linux", color: `${getVarCss("os-linux")}` },
 };
 
-export function getOsBrandInfo(comp?: ComputerItem): OsBrandInfo {
+export function getOsBrandInfo(comp?: ComputerInfo): OsBrandInfo {
     if (!comp) {
         return {
             name: "Unknown",

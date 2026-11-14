@@ -1,9 +1,9 @@
 import { type Component } from "solid-js";
 import { PaperEmptyState, PaperFlex } from "@mileniumhq/paperui";
-import type { ComputerItem } from "../../App";
+import type { ComputerInfo } from "../../lib/shell";
 
 export interface LandingViewProps {
-    computer?: ComputerItem;
+    computer?: ComputerInfo;
 }
 
 // The splash shown on launch (and whenever a tab is closed back to the

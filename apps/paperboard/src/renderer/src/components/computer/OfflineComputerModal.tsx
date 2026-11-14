@@ -1,10 +1,10 @@
 import { type Component, createEffect, on, Show } from "solid-js";
 import { PaperFlex, PaperText, PaperButton, PaperIcon, PaperModal } from "@mileniumhq/paperui";
-import type { ComputerItem } from "../../App";
+import type { ComputerInfo } from "../../lib/shell";
 import { createReachCheck } from "../../lib/reachCheck";
 
 export interface OfflineComputerModalProps {
-    computer?: ComputerItem;
+    computer?: ComputerInfo;
     open: boolean;
     onClose: () => void;
     /** User chose to forget the unreachable computer. */

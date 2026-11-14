@@ -1,4 +1,4 @@
-import { type Component, createSignal, createEffect, Show, For, onMount, onCleanup } from "solid-js";
+import { type Component, createSignal, createEffect, on, Show, For, onMount, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import {
     PaperWizard,
@@ -14,13 +14,14 @@ import {
 import {
     computersApi as computers,
     discoveryApi,
+    type ComputerInfo,
     type DiscoveredComputer,
 } from "../../lib/shell";
 import frameStyles from "./wizardFrame.module.css";
 
 export interface ComputerSetupWizardProps {
     onClose: () => void;
-    onComplete: (computer: any) => void;
+    onComplete: (computer: ComputerInfo) => void;
 }
 
 export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
@@ -66,7 +67,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
         onCleanup(() => off());
     });
 
-    let probeTimeout: any;
+    let probeTimeout: ReturnType<typeof setTimeout> | undefined;
     let lastAutoName = "";
     // only the latest probe answers for the address: one for an address
     // that has since been changed is dropped, so Next can't be enabled by
@@ -202,23 +203,21 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     };
 
     let hasAutoSelected = false;
-    createEffect(() => {
-        const list = discovered();
+    createEffect(on(discovered, (list) => {
         if (list.length > 0 && !hasAutoSelected && method() === "" && !host()) {
             hasAutoSelected = true;
             const first = list[0];
             handleMethodChange(suggestionKey(first));
         }
-    });
+    }));
 
     // Helper inside PaperWizard to seamlessly skip the IP step for discovered computers
     const WizardStepRouter: Component = () => {
         const wizard = useWizard();
         let previousStep = 0;
 
-        createEffect(() => {
-            if (!wizard) return;
-            const step = wizard.currentStep();
+        if (!wizard) return null;
+        createEffect(on(wizard.currentStep, (step) => {
             const prev = previousStep;
             previousStep = step;
 
@@ -232,7 +231,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                     wizard.setCurrentStep(0);
                 }
             }
-        });
+        }));
 
         return null;
     };

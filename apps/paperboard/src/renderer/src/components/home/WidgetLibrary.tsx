@@ -19,7 +19,8 @@ import {
     type WidgetDeclaration,
     type WidgetOptionValues,
 } from "@mileniumhq/paperapi";
-import { type ComputerInfo, logToMain, panelUrl } from "../../lib/shell";
+import { type ComputerInfo, logToMain } from "../../lib/shell";
+import PanelIcon from "../computer/PanelIcon";
 import type { LoadQueue } from "../../lib/loadQueue";
 import { BUILTIN_WIDGETS, BuiltinView, builtinWidget } from "./builtins";
 import PanelWidgetFrame, { type FrameFacts } from "./PanelWidgetFrame";
@@ -275,16 +276,6 @@ const SourceRow: Component<{ key: string; icon: JSX.Element; name: string; detai
         {props.name}
     </PaperListItem>
 );
-
-const PanelIcon: Component<{ computerId: string; panel: PanelItem }> = (props) => {
-    const src = () =>
-        props.panel.iconUrl ?? (props.panel.icon?.includes(".") ? panelUrl(props.computerId, props.panel.id, props.panel.icon) : undefined);
-    return (
-        <PaperIcon src={src()} alt="">
-            {props.panel.icon && !props.panel.icon.includes(".") ? props.panel.icon : "dashboard"}
-        </PaperIcon>
-    );
-};
 
 const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; entryAt: (size: string) => LibraryEntry }> = (props) => {
     const [size, setSize] = createSignal(props.widget.sizes[0]);

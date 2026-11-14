@@ -1,50 +1,91 @@
-import { Show, type Component } from "solid-js";
+import { Show, createEffect, createSignal, on, type Component } from "solid-js";
 import {
     PaperCheckbox,
     PaperModal,
     PaperFlex,
     PaperButton,
     PaperText,
+    showToast,
 } from "@mileniumhq/paperui";
-import { type PanelItem } from "@mileniumhq/paperapi";
+import { getTransport, type PanelItem } from "@mileniumhq/paperapi";
+import { logToMain } from "../../lib/shell";
 
 export interface UninstallTarget {
     compId: string;
     panel: PanelItem;
 }
 
-interface UninstallPanelModalProps {
-    open: boolean;
+export interface UninstallPanelModalProps {
+    /** the panel being uninstalled; null closes the dialog */
     target: UninstallTarget | null;
-    isBusy: boolean;
-    error?: string | null;
-    deleteData: boolean;
-    onDeleteDataChange: (value: boolean) => void;
     onClose: () => void;
-    onConfirm: () => void;
+    /** the panel is gone: the shell lets go of it before the dialog closes */
+    onUninstalled: (target: UninstallTarget) => Promise<void>;
 }
 
-// Confirmation dialog for uninstalling a panel.
+// panelsApi.uninstall answers only that it worked; the daemon also says
+// which of the panel's packages it could not remove, which the person who
+// asked must be told
+async function uninstallPanel(target: UninstallTarget, deleteData: boolean): Promise<{ packagesWarning?: string }> {
+    // as long as it takes: the daemon may still be removing a large panel
+    const result = await getTransport(target.compId).call("panel:uninstall", { panelId: target.panel.id, deleteData }, null);
+    return typeof result?.packagesWarning === "string" ? { packagesWarning: result.packagesWarning } : {};
+}
+
+// Confirmation dialog for uninstalling a panel. Data is kept unless the
+// person ticks the box, and each opening starts with it unticked.
 const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
+    const [busy, setBusy] = createSignal(false);
+    const [deleteData, setDeleteData] = createSignal(false);
+    const [error, setError] = createSignal<string | null>(null);
+
+    createEffect(
+        on(
+            () => props.target,
+            () => {
+                setDeleteData(false);
+                setError(null);
+            },
+        ),
+    );
+
+    const close = () => {
+        if (!busy()) props.onClose();
+    };
+
+    const confirm = async () => {
+        const target = props.target;
+        if (!target || busy()) return;
+        setBusy(true);
+        setError(null);
+        try {
+            const { packagesWarning } = await uninstallPanel(target, deleteData());
+            await props.onUninstalled(target);
+            if (packagesWarning) {
+                showToast({ variant: "warning", title: `${target.panel.name} is uninstalled`, message: packagesWarning, duration: null });
+            }
+            props.onClose();
+        } catch (err) {
+            logToMain("error", "Failed to uninstall panel:", err);
+            setError(`Couldn't uninstall ${target.panel.name}: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+            setBusy(false);
+        }
+    };
+
     return (
         <PaperModal
-            open={props.open}
-            onClose={() => props.onClose()}
+            open={props.target !== null}
+            onClose={close}
             title="Uninstall Panel"
             size="small"
             footer={
                 <>
-                    <PaperButton
-                        onClick={() => props.onClose()}
-                        variant="text"
-                        disabled={props.isBusy}>
+                    <PaperButton onClick={close} variant="text" disabled={busy()}>
                         Cancel
                     </PaperButton>
-                    <PaperButton
-                        onClick={() => props.onConfirm()}
-                        variant="danger"
-                        disabled={props.isBusy}>
-                        {props.isBusy ? "Uninstalling..." : "Uninstall"}
+                    <PaperButton onClick={() => void confirm()} variant="danger" disabled={busy()}>
+                        {busy() ? "Uninstalling..." : "Uninstall"}
                     </PaperButton>
                 </>
             }
@@ -62,18 +103,14 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
                             kept for reinstalling.
                         </PaperText>
                         <PaperCheckbox
-                            checked={props.deleteData}
-                            disabled={props.isBusy}
-                            onChange={(checked) =>
-                                props.onDeleteDataChange(checked)
-                            }
+                            checked={deleteData()}
+                            disabled={busy()}
+                            onChange={setDeleteData}
                             label="Also delete this panel's data and saved credentials"
                             description="Configuration, files and vault entries are removed. This cannot be undone."
                         />
-                        <Show when={props.error}>
-                            <PaperText preset="error">
-                                {props.error}
-                            </PaperText>
+                        <Show when={error()}>
+                            <PaperText preset="error">{error()}</PaperText>
                         </Show>
                     </PaperFlex>
                 )}

@@ -5,3 +5,8 @@
     border-radius: var(--paper-border-radius-half);
     object-fit: contain;
 }
+
+/* a PanelIcon's picture, at the size its place gives icons, rounded the same */
+.rounded img {
+    border-radius: var(--paper-border-radius-half);
+}

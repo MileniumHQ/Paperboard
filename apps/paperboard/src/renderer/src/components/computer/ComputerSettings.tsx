@@ -6,13 +6,13 @@ import {
     PaperPage,
     PaperPageHeader,
 } from "@mileniumhq/paperui";
-import type { ComputerItem } from "../../App";
+import type { ComputerInfo } from "../../lib/shell";
 import { computerIcon } from "./computerIcon";
 import BackupLocations from "../backups/BackupLocations";
 import ComputerPorts from "./ComputerPorts";
 
 export interface ComputerSettingsProps {
-    computer?: ComputerItem;
+    computer?: ComputerInfo;
     /** opens the Forget Computer dialog, the same one the rail's menu opens */
     onForget: () => void;
     onChangeName: () => void;

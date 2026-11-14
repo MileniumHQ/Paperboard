@@ -5,9 +5,9 @@ import { logToMain } from "../lib/shell";
 import { isShellTab } from "../lib/shellTabs";
 import { unsavedPanels } from "../lib/unsavedPanels";
 
-// placeholder divs render per opened key (PanelView), so the list itself
-// must be bounded: most-recent-first, oldest dropped past the cap.
-// Reopening a dropped key re-adds it — nothing is lost but dead divs.
+// every opened key is walked by PanelView's frame bookkeeping and LRU, so
+// the list is bounded: past the cap the oldest is dropped (never the one
+// just opened, nor one holding unsaved work), and reopening it adds it again.
 export const MAX_OPENED_PANELS = 50;
 
 // panel state per computer
@@ -67,8 +67,8 @@ export function usePanels() {
                 if (prev.includes(key)) return prev;
                 const next = [...prev, key];
                 if (next.length <= MAX_OPENED_PANELS) return next;
-                // drop the oldest placeholder, never the panel just selected
-                // nor one whose page holds unsaved work
+                // drop the oldest, never the panel just selected nor one
+                // whose page holds unsaved work
                 const holding = unsavedPanels();
                 const drop = next.findIndex((k) => k !== key && !holding.has(k));
                 if (drop !== -1) next.splice(drop, 1);

@@ -1,11 +1,11 @@
 import { type Component, Show } from "solid-js";
 import { PaperFlex, PaperText, PaperButton, PaperIcon } from "@mileniumhq/paperui";
 import styles from "./ConnectionLostOverlay.module.css";
-import type { ComputerItem } from "../../App";
+import type { ComputerInfo } from "../../lib/shell";
 import { createReachCheck } from "../../lib/reachCheck";
 
 export interface ConnectionLostOverlayProps {
-    computer: ComputerItem;
+    computer: ComputerInfo;
     /** Attempt Reconnect reached it: the caller reconnects to it */
     onReconnectSuccess: () => void;
 }
