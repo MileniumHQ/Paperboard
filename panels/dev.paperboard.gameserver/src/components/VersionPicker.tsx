@@ -33,22 +33,25 @@ export default function VersionPicker(props: {
     const [includeReleases, setIncludeReleases] = createSignal(true);
     const [includeSnapshots, setIncludeSnapshots] = createSignal(false);
 
+    // The parent owns the choice and clears it when its software changes. A
+    // list keeps the choice it finds there, read as the list arrives (a
+    // parent may set it while the list loads, as the Versions tab does with
+    // the installed version), and otherwise picks the newest release.
     const loadVersions = async (software = props.software) => {
         const currentGeneration = ++generation;
-        const selected = untrack(() => props.selectedVersion);
         setLoading(true);
         setError("");
         setAllVersions([]);
-        props.onSelectVersion("");
         try {
             // the service fetches upstream: some indexes refuse cross-origin reads
             const versions = (await serverBridge.call<VersionItem[]>(CALLS.listSoftwareVersions, { software }))
                 .filter((v) => v.installable && (v.type === "release" || v.type === "snapshot"));
             if (currentGeneration !== generation) return;
             setAllVersions(versions);
-            const current = versions.find((v) => v.id === selected);
-            const first = current ?? versions.find((v) => v.type === "release") ?? versions[0];
-            if (first) props.onSelectVersion(first.id);
+            const selected = untrack(() => props.selectedVersion);
+            if (!versions.some((v) => v.id === selected)) {
+                props.onSelectVersion((versions.find((v) => v.type === "release") ?? versions[0])?.id ?? "");
+            }
         } catch (err) {
             if (currentGeneration !== generation) return;
             setError(err instanceof Error ? err.message : String(err));
