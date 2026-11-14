@@ -20,7 +20,9 @@ export class AppUpdateSession {
     private cancelDownload: (() => void) | null = null;
     private timer: ReturnType<typeof setTimeout> | undefined;
     private rejectRun: ((error: Error) => void) | null = null;
-    private expired = false;
+    // a timed-out run's updater may still emit; its events are dropped until
+    // the next check starts
+    private stale = false;
     private failedRun = false;
     private listeners: [string, (...args: any[]) => void][];
 
@@ -44,7 +46,7 @@ export class AppUpdateSession {
     snapshot(): AppUpdateState { return { ...this.state }; }
 
     private set(change: Partial<AppUpdateState>) {
-        if (this.disposed || this.expired) return;
+        if (this.disposed || this.stale) return;
         if (this.failedRun && change.status !== "failed") return;
         this.state = { ...this.state, ...change, revision: this.state.revision + 1 };
         this.publish(this.snapshot());
@@ -58,7 +60,7 @@ export class AppUpdateSession {
     check(): Promise<AppUpdateState> {
         if (this.disposed) return Promise.reject(new Error("App updater has stopped"));
         if (this.running) return this.running;
-        if (this.expired) return Promise.resolve(this.snapshot());
+        this.stale = false;
         this.failedRun = false;
         this.set({ status: "checking", percent: null, error: null });
         this.running = this.run().finally(() => { this.running = null; });
@@ -86,9 +88,9 @@ export class AppUpdateSession {
             })]);
         } catch (err) {
             this.fail(err);
-            // A timed-out metadata request may still emit late events. It
-            // cannot turn this run green or start another run in this process.
-            this.expired = timedOut;
+            // a timed-out request may still emit late events: they cannot
+            // turn this run green; a retry starts a fresh run
+            this.stale = timedOut;
         } finally {
             clearTimeout(this.timer);
             this.timer = undefined;
