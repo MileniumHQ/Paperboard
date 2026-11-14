@@ -1,4 +1,4 @@
-import { createMemo, createSignal } from "solid-js";
+import { batch, createMemo, createSignal, Show } from "solid-js";
 import GameRoster, { CopyRow, createRosterState, type RosterPlayer } from "../../components/GameRoster";
 import { byName } from "../rosterNames";
 import PlayerAvatar from "../../components/PlayerAvatar";
@@ -16,8 +16,10 @@ export default function TerrariaPlayers() {
     const [bans, setBans] = createSignal<BanEntry[]>([]);
     const state = createRosterState(async () => {
         const roster = await serverBridge.call<{ seen: SeenPlayer[]; bans: BanEntry[] }>("terraria-players");
-        setSeen(roster.seen);
-        setBans(roster.bans);
+        batch(() => {
+            setSeen(roster.seen);
+            setBans(roster.bans);
+        });
     });
     const act = (action: string) => (player: Player) => serverBridge.call(action, { name: player.name });
 
@@ -45,7 +47,11 @@ export default function TerrariaPlayers() {
                 unban: act("terraria-unban"),
                 banNote: "Terraria bans the address a player joins from, so anyone else joining from it is turned away too.",
             }}
-            details={(player) => player.address ? <CopyRow label="Address" value={player.address} /> : <tr><th>Address</th><td>Not seen yet</td></tr>}
+            details={(player) => (
+                <Show when={player().address} fallback={<tr><th>Address</th><td>Not seen yet</td></tr>}>
+                    {(address) => <CopyRow label="Address" value={address()} />}
+                </Show>
+            )}
         />
     );
 }

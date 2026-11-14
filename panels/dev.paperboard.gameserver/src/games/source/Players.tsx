@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Show } from "solid-js";
+import { batch, createMemo, createSignal, Show } from "solid-js";
 import {
     PaperBadge,
     PaperGrid,
@@ -41,10 +41,12 @@ export default function SourcePlayers(props: { spec: SourceGameSpec }) {
     const [admins, setAdmins] = createSignal<string[] | null>(null);
     const state = createRosterState(async () => {
         const roster = await serverBridge.call<{ seen: SourceSeen[]; bans: SourceBan[]; online: SourceOnline[]; admins: string[] | null }>(ids.players);
-        setSeen(roster.seen);
-        setBans(roster.bans);
-        setOnline(roster.online);
-        setAdmins(roster.admins);
+        batch(() => {
+            setSeen(roster.seen);
+            setBans(roster.bans);
+            setOnline(roster.online);
+            setAdmins(roster.admins);
+        });
     });
 
     // a clash between names gets the Steam id
@@ -56,7 +58,7 @@ export default function SourcePlayers(props: { spec: SourceGameSpec }) {
             const bot = p.steamId === "BOT";
             const key = bot ? `bot-${p.userId}` : p.steamId;
             const stats = bot ? p.stats : byKey.get(key)?.stats ?? noStats();
-            byKey.set(key, { name: p.name, key, steamId: p.steamId, bot, userId: p.userId, team: p.team && p.team !== "Unassigned" ? p.team : undefined, role: roleName(props.spec, p.role), stats, since: p.since, lastSeen: Date.now(), online: true, banned: banned.has(p.steamId) });
+            byKey.set(key, { name: p.name, key, steamId: p.steamId, bot, userId: p.userId, team: p.team && p.team !== "Unassigned" ? p.team : undefined, role: roleName(props.spec, p.role), stats, since: p.since, lastSeen: byKey.get(key)?.lastSeen, online: true, banned: banned.has(p.steamId) });
         }
         for (const b of bans()) if (!byKey.has(b.steamId)) byKey.set(b.steamId, { name: b.name, key: b.steamId, steamId: b.steamId, bot: false, stats: noStats(), online: false, banned: true });
         return withUniqueNames([...byKey.values()], (p) => p.steamId, (p) => p.bot).sort(byName);
@@ -73,13 +75,13 @@ export default function SourcePlayers(props: { spec: SourceGameSpec }) {
             pickHint="Players appear here once they join. Pick one to see their stats, or to kick or ban them."
             badges={(player) => (
                 <>
-                    <Show when={player.team}>
-                        <PaperBadge>{player.team}</PaperBadge>
+                    <Show when={player().team}>
+                        <PaperBadge>{player().team}</PaperBadge>
                     </Show>
-                    <Show when={player.role}>
-                        <PaperBadge>{player.role}</PaperBadge>
+                    <Show when={player().role}>
+                        <PaperBadge>{player().role}</PaperBadge>
                     </Show>
-                    <Show when={player.bot}>
+                    <Show when={player().bot}>
                         <PaperBadge>Bot</PaperBadge>
                     </Show>
                 </>
@@ -95,18 +97,18 @@ export default function SourcePlayers(props: { spec: SourceGameSpec }) {
                 <>
                     <PaperSeparator />
 
-                    <PaperText size={2} weight={700} color="text-subtle">{player.bot ? "Since joining" : "Stats"}</PaperText>
+                    <PaperText size={2} weight={700} color="text-subtle">{player().bot ? "Since joining" : "Stats"}</PaperText>
                     <PaperGrid min="field">
-                        <PaperStatTile icon="swords" label="Kills" value={player.stats.kills.toLocaleString()} tone="success" />
-                        <PaperStatTile icon="skull" label="Deaths" value={player.stats.deaths.toLocaleString()} tone="danger" />
-                        <PaperStatTile icon="handshake" label="Assists" value={player.stats.assists.toLocaleString()} />
-                        <PaperStatTile icon="military_tech" label="Dominations" value={player.stats.dominations.toLocaleString()} tone="warning" />
-                        <Show when={!player.bot}>
-                            <PaperStatTile icon="schedule" label="Total playtime" value={playtime(player.stats.playtime)} />
+                        <PaperStatTile icon="swords" label="Kills" value={player().stats.kills.toLocaleString()} tone="success" />
+                        <PaperStatTile icon="skull" label="Deaths" value={player().stats.deaths.toLocaleString()} tone="danger" />
+                        <PaperStatTile icon="handshake" label="Assists" value={player().stats.assists.toLocaleString()} />
+                        <PaperStatTile icon="military_tech" label="Dominations" value={player().stats.dominations.toLocaleString()} tone="warning" />
+                        <Show when={!player().bot}>
+                            <PaperStatTile icon="schedule" label="Total playtime" value={playtime(player().stats.playtime)} />
                         </Show>
                     </PaperGrid>
 
-                    <Show when={!player.bot && admins()}>
+                    <Show when={!player().bot && admins()}>
                         {(list) => (
                             <>
                                 <PaperSeparator />
@@ -115,9 +117,9 @@ export default function SourcePlayers(props: { spec: SourceGameSpec }) {
                                 <PaperSettingList autoHeight>
                                     <PaperSettingItem title="SourceMod admin" description="Every SourceMod admin command, in chat or the console, and immunity from other admins.">
                                         <PaperToggle
-                                            checked={list().includes(player.steamId)}
+                                            checked={list().includes(player().steamId)}
                                             disabled={state.busy()}
-                                            onChange={(checked) => void state.run(`${player.name} was not ${checked ? "made" : "removed as"} an admin`, () => serverBridge.call(ids.admin, { steamId: player.steamId, admin: checked }))}
+                                            onChange={(checked) => void state.run(`${player().name} was not ${checked ? "made" : "removed as"} an admin`, () => serverBridge.call(ids.admin, { steamId: player().steamId, admin: checked }))}
                                         />
                                     </PaperSettingItem>
                                 </PaperSettingList>
@@ -127,7 +129,7 @@ export default function SourcePlayers(props: { spec: SourceGameSpec }) {
                 </>
             )}
             hasDetails={(player) => !player.bot}
-            details={(player) => <CopyRow label="Steam id" value={player.steamId} />}
+            details={(player) => <CopyRow label="Steam id" value={player().steamId} />}
         />
     );
 }
