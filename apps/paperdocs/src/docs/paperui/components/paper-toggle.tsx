@@ -78,9 +78,9 @@ export function Example() {
                     </tr>
                     <tr>
                         <td><PaperCode>onChange</PaperCode></td>
-                        <td><PaperCode>(checked: boolean) =&gt; void</PaperCode></td>
+                        <td><PaperCode>(checked: boolean) =&gt; void | Promise&lt;unknown&gt;</PaperCode></td>
                         <td>No default</td>
-                        <td>Called with the new state when the user flips the switch. It is not called when disabled.</td>
+                        <td>Called with the new state when the user flips the switch. It is not called when disabled. Return the save's promise when <PaperCode>checked</PaperCode> changes only once the save is done.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>disabled</PaperCode></td>
@@ -126,7 +126,7 @@ export function Example() {
                 <li>A click, or Space or Enter while the switch has focus, flips it. Controlled and uncontrolled work as in a form.</li>
                 <li>The switch is one tab stop. A disabled switch has <PaperCode>tabindex="-1"</PaperCode> and <PaperCode>aria-disabled="true"</PaperCode>, and is dimmed and colorless, on or off, like every disabled control.</li>
                 <li><PaperCode>aria-checked</PaperCode> follows the state.</li>
-                <li>On a flip, the hidden checkbox is set and fires bubbling <PaperCode>change</PaperCode> and <PaperCode>input</PaperCode> events, so a parent that listens for them, such as a form handler, sees the change. Where the device supports it, the flip is felt: a faint rumble while the knob slides, then a thump as it lands (the <PaperCode>toggle</PaperCode> haptic). A switch whose <PaperCode>checked</PaperCode> follows a slow save feels it when the knob moves, not when it is pressed, and a change nobody pressed for is not felt.</li>
+                <li>On a flip, the hidden checkbox is set and fires bubbling <PaperCode>change</PaperCode> and <PaperCode>input</PaperCode> events, so a parent that listens for them, such as a form handler, sees the change. Where the device supports it, the flip is felt: a faint rumble while the knob slides, then a thump as it lands (the <PaperCode>toggle</PaperCode> haptic). A switch whose <PaperCode>checked</PaperCode> follows a slow save feels it when the knob moves, not when it is pressed, as long as <PaperCode>onChange</PaperCode> returns the save's promise. A flip the parent refuses, and a change nobody pressed for, are not felt.</li>
                 <li>A switch inside a <PaperCode>label</PaperCode> changes once when you press the switch, and once when you press the label's text. Both call <PaperCode>onChange</PaperCode>.</li>
                 <li>In a <PaperLink href="/docs/paperui/papersettinglist/">PaperSettingList</PaperLink>, a named switch without <PaperCode>checked</PaperCode> takes its state from the list's record.</li>
                 <li>Handlers are yours: PaperToggle does not catch errors thrown by <PaperCode>onChange</PaperCode>. When saving can fail, show the failure to the user and put the state back.</li>
@@ -156,7 +156,7 @@ export function EnabledSetting(props: { enabled: boolean; save: (enabled: boolea
 
     return (
         <PaperFlex direction="column" gap="half">
-            <PaperToggle checked={props.enabled} aria-label="Enabled" onChange={(next) => void change(next)} />
+            <PaperToggle checked={props.enabled} aria-label="Enabled" onChange={change} />
             <Show when={failure()}>
                 {(message) => <PaperQuote variant="danger" title="Not saved">{message()}</PaperQuote>}
             </Show>

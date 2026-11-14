@@ -33,6 +33,7 @@ import {
     PaperSlidePage,
     PaperSplit,
     PaperToggle,
+    setHapticPlayer,
     useContextMenuState,
     type PaperFileBrowserRef,
     type ThemeMode,
@@ -303,11 +304,29 @@ const scenarios: Record<string, () => JSX.Element> = {
 
     toggle() {
         const [on, setOn] = createSignal(false);
+        const [refusing, setRefusing] = createSignal(false);
+        const [saved, setSaved] = createSignal(false);
+        let save: ((keep: boolean) => void) | undefined;
         const t = (window.t = {
             changes: [] as boolean[],
             controlledChanges: [] as boolean[],
             disabledChanges: [] as boolean[],
+            haptics: [] as string[],
             setControlled: setOn,
+            setRefusing,
+            setSaved,
+            /** the pending save answers: kept (the state changes) or refused */
+            answerSave: async (keep: boolean) => {
+                save?.(keep);
+                save = undefined;
+                // let the toggle hear the save settle
+                await Promise.resolve();
+                await Promise.resolve();
+            },
+        });
+        setHapticPlayer((kind) => {
+            t.haptics.push(kind);
+            return true;
         });
         const row = { display: "flex", gap: "12px", "align-items": "center", padding: "12px" } as const;
         return shell(
@@ -325,6 +344,26 @@ const scenarios: Record<string, () => JSX.Element> = {
                         }}
                     />
                     <span id="controlled-text">Controlled</span>
+                </label>
+                <label id="refusing" style={row}>
+                    {/* its parent never takes the flip */}
+                    <PaperToggle checked={refusing()} onChange={() => {}} />
+                    <span id="refusing-text">Refusing</span>
+                </label>
+                <label id="saving" style={row}>
+                    {/* changes only once its save answers */}
+                    <PaperToggle
+                        checked={saved()}
+                        onChange={(v) =>
+                            new Promise<void>((resolve) => {
+                                save = (keep) => {
+                                    if (keep) setSaved(v);
+                                    resolve();
+                                };
+                            })
+                        }
+                    />
+                    <span id="saving-text">Saving</span>
                 </label>
                 <label id="disabled" style={row}>
                     <PaperToggle disabled onChange={(v) => t.disabledChanges.push(v)} />

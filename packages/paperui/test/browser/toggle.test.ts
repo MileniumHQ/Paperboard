@@ -59,3 +59,51 @@ describe("PaperToggle in a label", () => {
         expect(await state("disabled", "disabledChanges")).toEqual({ ariaChecked: "false", checked: false, changes: [] });
     });
 });
+
+const haptics = () => page.eval<string[]>("t.haptics");
+const checkedOf = (id: string) => page.eval<string>(`document.querySelector('#${id} [role="switch"]').getAttribute("aria-checked")`);
+
+// Inventory: Menus and form controls — A toggle thumps for its own flip only.
+describe("PaperToggle's thump", () => {
+    test("follows the user's own flip, from the switch or the label", async () => {
+        page = await browser.open("toggle");
+        await page.click('#free [role="switch"]');
+        await page.click("#free-text");
+        await page.click('#controlled [role="switch"]');
+        await page.click("#controlled-text");
+        expect(await haptics()).toEqual(["toggle", "toggle", "toggle", "toggle"]);
+
+        // a change nobody pressed for moves the knob without one
+        await page.eval("t.setControlled(true)");
+        expect(await checkedOf("controlled")).toBe("true");
+        expect(await haptics()).toHaveLength(4);
+    });
+
+    test("a refused flip leaves nothing waiting for a later change", async () => {
+        page = await browser.open("toggle");
+        await page.click('#refusing [role="switch"]');
+        await page.click("#refusing-text");
+        expect(await checkedOf("refusing")).toBe("false");
+
+        await page.eval("t.setRefusing(true)");
+        expect(await checkedOf("refusing")).toBe("true");
+        expect(await haptics()).toEqual([]);
+    });
+
+    test("waits for a save the parent returns, and not past it", async () => {
+        page = await browser.open("toggle");
+        await page.click('#saving [role="switch"]');
+        expect(await haptics()).toEqual([]);
+        await page.eval("t.answerSave(true)");
+        expect(await checkedOf("saving")).toBe("true");
+        expect(await haptics()).toEqual(["toggle"]);
+
+        // a save that keeps the old state, then an unrelated change
+        await page.click('#saving [role="switch"]');
+        await page.eval("t.answerSave(false)");
+        expect(await checkedOf("saving")).toBe("true");
+        await page.eval("t.setSaved(false)");
+        expect(await checkedOf("saving")).toBe("false");
+        expect(await haptics()).toEqual(["toggle"]);
+    });
+});
