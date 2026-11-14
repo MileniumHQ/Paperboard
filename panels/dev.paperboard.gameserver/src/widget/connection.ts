@@ -9,6 +9,7 @@ import { serverStateOf } from "../servers";
 import { PANEL_ID } from "../service/contract";
 import type { ServersState } from "../service";
 import type { GameServerState } from "../service/types";
+import { createStateSignal } from "../core/state";
 
 /** the last log lines a widget keeps; the console tail shows two */
 export const TAIL_ENTRIES = 4;
@@ -78,7 +79,9 @@ const messageOf = (err: unknown) => (err instanceof Error ? err.message : String
 /** Must run inside a Solid root: it cleans up with it. */
 export function useWidgetServer(widget: WidgetContext): WidgetServer {
     const [visible, setVisible] = createSignal(widget.visible());
-    const [connection, setConnection] = createSignal<Connection>({ phase: "loading" });
+    // every server's activity is pushed to every widget: a push that leaves
+    // this widget's view as it was keeps the view, and the widget stays put
+    const [connection, setConnection] = createStateSignal<Connection>({ phase: "loading" });
     let bridge: ReturnType<typeof createPanelBridge<ServersState>> | null = null;
     let generation = 0;
 

@@ -2,7 +2,7 @@
 // line up with every other widget on Home. Every one reads the panel's own
 // service through useWidgetServer, so what they show is what the service
 // holds: a service that doesn't answer is "unavailable", never an empty server.
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, mapArray, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js";
 import { type WidgetContext } from "@mileniumhq/paperapi";
 import {
     PaperButton,
@@ -280,22 +280,31 @@ export function PlayersWidget(props: Props) {
         <Connected server={server} widget={props.widget} title="Players" icon="group" short={false}>
             {(s) => {
                 const online = () => s().serverStatus === "online";
-                const rows = (): PaperWidgetRow[] => {
-                    const roster = rosterRows(s().onlinePlayers, ROSTER_ROWS);
-                    const list: PaperWidgetRow[] = roster.shown.map((key) => ({
-                        id: key,
-                        label: (
-                            <span class={styles.player}>
-                                <HeadAvatar name={nameOf(key)} loadHead={loadHead} size="small" alt="" class={styles.head} />
-                                <span class={styles.playerName}>{nameOf(key)}</span>
-                            </span>
-                        ),
-                    }));
-                    if (roster.more > 0) {
-                        list.push({ id: "more", label: `and ${roster.more} more`, ariaLabel: `${roster.more} more players: open Game Server`, onClick: () => props.widget.openPanel() });
-                    }
-                    return list;
-                };
+                const roster = createMemo(() => rosterRows(s().onlinePlayers, ROSTER_ROWS));
+                // one row per player, made when they join the list and kept
+                // while they stay, so their head is asked for once
+                const playerRows = createMemo(
+                    mapArray(
+                        () => roster().shown,
+                        (key): PaperWidgetRow => ({
+                            id: key,
+                            label: (
+                                <span class={styles.player}>
+                                    <HeadAvatar name={nameOf(key)} loadHead={loadHead} size="small" alt="" class={styles.head} />
+                                    <span class={styles.playerName}>{nameOf(key)}</span>
+                                </span>
+                            ),
+                        }),
+                    ),
+                );
+                const more = createMemo(() => roster().more);
+                const moreRow = createMemo((): PaperWidgetRow | null =>
+                    more() > 0 ? { id: "more", label: `and ${more()} more`, ariaLabel: `${more()} more players: open Game Server`, onClick: () => props.widget.openPanel() } : null,
+                );
+                const rows = createMemo((): PaperWidgetRow[] => {
+                    const extra = moreRow();
+                    return extra ? [...playerRows(), extra] : playerRows();
+                });
                 return (
                     <PaperWidget
                         title="Players"
@@ -338,7 +347,7 @@ export function ConsoleWidget(props: Props) {
     return (
         <Connected server={server} widget={props.widget} title="Console" icon="terminal" short>
             {(s) => {
-                const rows = (): PaperWidgetRow[] =>
+                const rows = createMemo((): PaperWidgetRow[] =>
                     consoleTail(s().serverEntries, 2).map((line, index) => ({
                         id: `${index}:${line.time}:${line.text}`,
                         label: <span class={styles.mono} title={line.text}>{line.text}</span>,
@@ -346,7 +355,8 @@ export function ConsoleWidget(props: Props) {
                         tone: line.tone === "error" ? "danger" : line.tone === "warn" ? "warning" : "none",
                         ariaLabel: `${TONE_WORD[line.tone] ? `${TONE_WORD[line.tone]}: ` : ""}${line.text}. Open the console`,
                         onClick: () => props.widget.openPanel(),
-                    }));
+                    })),
+                );
                 return (
                     <PaperWidget title="Console" icon="terminal" detail={<StatusWord status={s().serverStatus} />} action={open}>
                         <Show when={s().serverEntries.length > 0} fallback={<PaperWidgetMessage title="No server output yet" />}>
