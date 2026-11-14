@@ -27,16 +27,22 @@ interface PackedPanel {
     bytes: Buffer;
     sha256: string;
     meta: Record<string, unknown>;
+    icon: PanelUpload["icon"];
     store: ReturnType<typeof storeUploadParts>;
 }
 
 async function packPanel(info: DiscoveredPanel): Promise<PackedPanel> {
-    // listing files are read and validated before the build: a broken
-    // listing refuses the publish instead of shipping a release without it
-    const store = storeUploadParts(
-        JSON.parse(readFileSync(join(info.dir, "manifest.json"), "utf8")).store,
-        (rel) => readFileSync(join(info.dir, rel)),
-    );
+    // listing files and the declared icon are read before the build: a broken
+    // listing or a missing icon refuses the publish instead of shipping a
+    // release without it
+    const manifest = JSON.parse(readFileSync(join(info.dir, "manifest.json"), "utf8"));
+    const store = storeUploadParts(manifest.store, (rel) => readFileSync(join(info.dir, rel)));
+    let icon: PanelUpload["icon"];
+    if (manifest.icon !== undefined) {
+        const iconPath = join(info.dir, String(manifest.icon).replace(/^\.\//, ""));
+        if (!existsSync(iconPath)) fail(`${info.id}: manifest.json declares icon "${manifest.icon}", but ${iconPath} does not exist.`);
+        icon = { name: basename(iconPath), bytes: readFileSync(iconPath) };
+    }
     await sh([process.execPath, "run", "build"], { cwd: info.dir, quiet: false });
     assertRelativePanelBuild(info.dir, info.id);
 
@@ -56,11 +62,11 @@ async function packPanel(info: DiscoveredPanel): Promise<PackedPanel> {
         rmSync(outDir, { recursive: true, force: true });
     }
     const sha256 = hex(await crypto.subtle.digest("SHA-256", bytes));
-    const manifest = JSON.parse(readFileSync(join(info.dir, "manifest.json"), "utf8"));
     return {
         info,
         bytes,
         sha256,
+        icon,
         store,
         meta: {
             id: info.id,
@@ -79,10 +85,7 @@ async function packPanel(info: DiscoveredPanel): Promise<PackedPanel> {
 // operator's Cloudflare session). The record URLs are baked from the
 // canonical production origin.
 async function publishPackedPanel(packed: PackedPanel): Promise<void> {
-    const { info, bytes, meta, store } = packed;
-    const iconPath = meta["icon"]
-        ? join(info.dir, String(meta["icon"]).replace(/^\.\//, ""))
-        : null;
+    const { info, bytes, meta, icon, store } = packed;
     const files = new Map<string, Uint8Array>();
     for (const part of store.files) files.set(part.field, part.bytes);
 
@@ -94,10 +97,7 @@ async function publishPackedPanel(packed: PackedPanel): Promise<void> {
             typeof meta["description"] === "string" ? meta["description"] : undefined,
         signature: String(meta["signature"]),
         manifest: meta["manifest"] as Record<string, unknown>,
-        icon:
-            iconPath && existsSync(iconPath)
-                ? { name: basename(iconPath), bytes: readFileSync(iconPath) }
-                : undefined,
+        icon,
         store: { about: store.about, files },
         archive: bytes,
     };
