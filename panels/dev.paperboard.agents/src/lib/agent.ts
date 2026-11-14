@@ -6,6 +6,7 @@ import { actionsApi, createPanelBridge } from "@mileniumhq/paperapi";
 import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { createFiles } from "./files";
+import { createSettingsQueue } from "./settingsQueue";
 import {
     DEFAULT_STATE,
     EVENTS,
@@ -92,6 +93,13 @@ export function createAgent() {
     };
     void hydrate();
 
+    /** every change to the settings goes through here, one at a time, each built from the settings as they then stand */
+    const saveSettings = createSettingsQueue({
+        current: () => state.settings,
+        write: (settings) => call(UI_ACTION_IDS.setup, { settings }),
+        refresh: async () => setState(reconcile(await bridge.refreshState())),
+    });
+
     return {
         state,
         entries,
@@ -112,6 +120,7 @@ export function createAgent() {
         disconnectProvider: (credential: string) => call(UI_ACTION_IDS.disconnectProvider, { credential }),
         models: (harness: Harness) => call<{ models: BrainModel[] }>(UI_ACTION_IDS.models, { harness }).then((r) => r.models),
         setup: (settings: Settings) => call(UI_ACTION_IDS.setup, { settings }),
+        saveSettings,
         installComputer: () => call(UI_ACTION_IDS.installComputer, {}),
         startComputer: () => call(UI_ACTION_IDS.startComputer),
         stopComputer: () => call(UI_ACTION_IDS.stopComputer),

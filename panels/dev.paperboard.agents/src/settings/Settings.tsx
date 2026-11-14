@@ -61,22 +61,20 @@ function AgentSettings(props: { agent: Agent }) {
     createEffect(on(() => current().name, (n) => setName(n)));
     createEffect(on(() => current().model, (m) => setModel(m ?? "")));
 
-    // one save at a time, each of the whole settings as they stand
-    let queue: Promise<void> = Promise.resolve();
+    // saved through the agent's one queue, each built from the settings as they stand when its turn comes
     const save = (title: string, patch: Partial<Saved>) => {
-        queue = queue.then(async () => {
-            const next = { ...current(), ...patch };
-            if (next.name === current().name && next.harness === current().harness && next.model === current().model) return;
-            setError(null);
-            try {
-                await props.agent.setup(next);
-            } catch (e) {
+        setError(null);
+        return props.agent
+            .saveSettings((cur) => {
+                const next = { ...cur, ...patch };
+                return next.name === cur.name && next.harness === cur.harness && next.model === cur.model ? null : next;
+            })
+            .catch((e) => {
                 setError(failure(title, e));
                 // what's saved is what shows
                 setName(current().name);
                 setModel(current().model ?? "");
-            }
-        });
+            });
     };
     const saveName = () => {
         const n = name().trim();
@@ -363,9 +361,8 @@ function ConversationSettings(props: { agent: Agent }) {
     const [error, setError] = createSignal<string | null>(null);
     const current = () => props.agent.state.settings!;
     const setCompaction = (compaction: Compaction) => {
-        if (compaction === current().compaction) return;
         setError(null);
-        props.agent.setup({ ...current(), compaction }).catch((e) => setError(errorText(e)));
+        props.agent.saveSettings((cur) => (cur.compaction === compaction ? null : { ...cur, compaction })).catch((e) => setError(errorText(e)));
     };
     return (
         <PaperFlex gap="full" role="region" aria-label="Conversation">
@@ -406,13 +403,17 @@ function AutomationSettings(props: { agent: Agent }) {
     createEffect(on(() => current().automationInstructions, (t) => setText(t ?? "")));
     const save = () => {
         const next = text().trim();
-        if (next === (current().automationInstructions ?? "")) return;
         setError(null);
-        const { automationInstructions: _, ...rest } = current();
-        props.agent.setup(next ? { ...rest, automationInstructions: next } : rest).catch((e) => {
-            setError(errorText(e));
-            setText(current().automationInstructions ?? "");
-        });
+        props.agent
+            .saveSettings((cur) => {
+                if (next === (cur.automationInstructions ?? "")) return null;
+                const { automationInstructions: _, ...rest } = cur;
+                return next ? { ...rest, automationInstructions: next } : rest;
+            })
+            .catch((e) => {
+                setError(errorText(e));
+                setText(current().automationInstructions ?? "");
+            });
     };
     return (
         <PaperFlex gap="full" role="region" aria-label="Flows">
