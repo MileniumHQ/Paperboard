@@ -27,7 +27,6 @@ export function modrinthSource(path: string, browseUrl: string): AddonSource {
                 description: project.description,
                 iconUrl: project.iconUrl,
                 body: project.body,
-                // Modrinth bodies are reviewed, host-scoped by the panel manifest and CSP-enforced
                 allowImages: true,
                 // Modrinth pages are Markdown with HTML in it, which modrinth.com draws
                 allowHtml: true,
