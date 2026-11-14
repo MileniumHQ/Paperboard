@@ -1,6 +1,6 @@
 // Renaming and deleting a project, the same from the home screen and the
 // editor. Each says what failed, in place, instead of closing on an error.
-import { createEffect, createSignal, on, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, on, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperInput, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { MAX_PROJECT_NAME } from "../lib/projects";
 
@@ -72,8 +72,11 @@ export function RenameProjectModal(props: {
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
     // a fresh form each time the dialog opens for a project; the list changing
-    // under it (a new announcement) never resets what was typed or a request in flight
-    createEffect(on(() => props.project?.id, (id) => {
+    // under it (a new announcement) never resets what was typed or a request in flight.
+    // The id is a memo: `on` runs again whenever its source is recomputed, and the
+    // project prop is recomputed with every announcement of the list
+    const openFor = createMemo(() => props.project?.id);
+    createEffect(on(openFor, (id) => {
         if (!id) return;
         setName(props.project!.name);
         setError(null);
@@ -132,7 +135,9 @@ export function DeleteProjectModal(props: {
 }) {
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
-    createEffect(on(() => props.project?.id, (id) => {
+    // what failed stays said while the list is announced again (see RenameProjectModal)
+    const openFor = createMemo(() => props.project?.id);
+    createEffect(on(openFor, (id) => {
         if (!id) return;
         setError(null);
         setBusy(false);
