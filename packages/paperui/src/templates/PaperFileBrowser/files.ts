@@ -156,3 +156,8 @@ export function parentPath(path: string): string {
 export function baseName(path: string): string {
     return path.slice(path.lastIndexOf("/") + 1);
 }
+
+/** what an error says, for a notice or a status row */
+export function messageOf(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+}

@@ -114,12 +114,53 @@ describe("PaperFileBrowser on a phone", () => {
             { x: 160, y: 404 },
             { x: 300, y: 406 },
         ]);
-        // read the question first: a press within moments of a drag is the drag's own (pressCancel)
+        // the swipe lifted off where it started, so pressCancel takes the next
+        // click as the swipe's own: a tap on the question's text gives it one
         await page.waitFor(QUESTION, "the question after the swipe");
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await page.eval(`${QUESTION}.querySelector("p").id = "question-text"`);
+        await page.tap("#question-text");
         await answer("Discard");
         await page.waitFor(`!${FILE_PAGE} || ${FILE_PAGE}.inert`, "the file's page to close");
         await page.waitFor(`!${EDITOR}`, "the file to close");
         expect(await page.eval("t.dirty()")).toBe(false);
+    });
+});
+
+// Inventory: Templates — Failures are shown, not swallowed (file browser Copy path).
+describe("PaperFileBrowser Copy path", () => {
+    const NOTICE = `document.querySelector('[role="alert"], [role="status"]')?.innerText ?? ""`;
+
+    async function copyPath() {
+        await page.click('button[aria-label="File actions"]');
+        await page.waitFor(`[...document.querySelectorAll('[role="menuitem"]')].some((el) => el.innerText.includes("Copy path"))`, "the file menu");
+        await page.eval(`[...document.querySelectorAll('[role="menuitem"]')].find((el) => el.innerText.includes("Copy path")).id = "copy-path"`);
+        // pressed once the menu has been placed by its button, inside the window
+        await page.waitFor(`document.getElementById("copy-path").getBoundingClientRect().right <= innerWidth`, "the menu to be placed");
+        await page.click("#copy-path");
+    }
+
+    async function openA() {
+        page = await browser.open("fileBrowser");
+        await page.waitFor(`document.querySelector('[role="treeitem"][data-path="a.txt"]')`, "the tree");
+        await page.click('[role="treeitem"][data-path="a.txt"]');
+        await page.waitFor(`${EDITOR}?.value === "alpha\\n"`, "a.txt in the editor");
+    }
+
+    test("says the path was copied", async () => {
+        await openA();
+        await page.eval(`window.copied = []; navigator.clipboard.writeText = async (text) => { window.copied.push(text); }`);
+        await copyPath();
+        await page.waitFor(`(${NOTICE}).includes("Path copied")`, "the copy's notice");
+        expect(await page.eval("window.copied")).toEqual(["a.txt"]);
+    });
+
+    test("a clipboard the page may not use shows why nothing was copied", async () => {
+        await openA();
+        await page.eval(`navigator.clipboard.writeText = () => Promise.reject(new DOMException("Write permission denied.", "NotAllowedError")); document.execCommand = () => false`);
+        await copyPath();
+        await page.waitFor(`document.querySelector('[role="alert"]')?.innerText.includes("Couldn't copy the path")`, "the copy's error");
+        // the clipboard's own refusal is logged for whoever debugs it
+        expect(page.errors).toEqual(["[paperui] clipboard copy rejected by the document"]);
+        page.errors.length = 0;
     });
 });

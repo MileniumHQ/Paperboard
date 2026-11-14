@@ -1,27 +1,15 @@
 import styles from "./index.module.css";
-import {
-    batch,
-    createEffect,
-    createMemo,
-    createSignal,
-    For,
-    Match,
-    on,
-    onCleanup,
-    onMount,
-    Show,
-    Switch,
-} from "solid-js";
-import { createStore } from "solid-js/store";
+import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { PaperButton } from "../../components/PaperButton";
 import { PaperContextMenu, PaperContextMenuItem, useContextMenuState } from "../../components/PaperContextMenu";
-import { PaperEditor, type PaperEditorPosition } from "../../components/PaperEditor";
+import { PaperEditor } from "../../components/PaperEditor";
 import { PaperEmptyState } from "../../components/PaperEmptyState";
 import { PaperIcon } from "../../components/PaperIcon";
 import { PaperLoader } from "../../components/PaperLoader";
 import { PaperModal } from "../../components/PaperModal";
 import { PaperSplit } from "../PaperSplit";
 import { copyText } from "../../utils/clipboard";
+import { createFileDocument } from "./fileDocument";
 import {
     PAPER_FILE_BROWSER_ICONS as ICONS,
     ancestorPaths,
@@ -30,6 +18,8 @@ import {
     paperFileLanguage,
     parentPath,
 } from "./files";
+import { createFolderTree } from "./folderTree";
+import type { PaperFileBrowserProps, PaperFileContent, PaperFileEntry, PaperFileReveal } from "./types";
 
 export {
     PAPER_FILE_BROWSER_ICONS,
@@ -42,104 +32,15 @@ export {
     type PaperFileLanguage,
 } from "./files";
 
-export interface PaperFileEntry {
-    name: string;
-    /** "/"-joined path from the browser's root ("" is the root itself) */
-    path: string;
-    kind: "file" | "folder";
-    size?: number;
-}
-
-export interface PaperFileListing {
-    entries: PaperFileEntry[];
-    /** shown under the folder's entries, e.g. "Showing the first 500 of 1,204" */
-    note?: string;
-}
-
-export type PaperFileContent =
-    | {
-          kind: "text";
-          text: string;
-          /** opaque token handed back to `write`, so a save can refuse a file that changed */
-          version?: string;
-          /** Prism language id; defaults to one picked from the extension */
-          language?: string;
-          /** set to say why this file opens read-only */
-          readOnly?: string;
-      }
-    | { kind: "image"; src: string; alt?: string }
-    | { kind: "unavailable"; reason: string };
-
-export interface PaperFileSaveResult {
-    version?: string;
-    /** shown after saving, e.g. when the change takes effect */
-    message?: string;
-}
-
-export interface PaperFileReveal {
-    path: string;
-    kind: "file" | "folder";
-}
-
-export interface PaperFileBrowserProps {
-    /** names the root folder in the tree and the breadcrumb */
-    rootLabel: string;
-    list: (path: string) => Promise<PaperFileListing>;
-    read: (path: string) => Promise<PaperFileContent>;
-    /** omit for a read-only browser */
-    write?: (path: string, text: string, version: string | undefined) => Promise<PaperFileSaveResult>;
-    /**
-     * Opens the tree to this path (and opens it, for a file). A new object
-     * reveals again, so callers can repeat the same path.
-     */
-    reveal?: PaperFileReveal | null;
-    /** syntax highlighting in the editor (default true) */
-    highlight?: boolean;
-    /** the editor's ⋮ file menu (default true) */
-    fileMenu?: boolean;
-    sideWidth?: number | string;
-    class?: string;
-    /** hands the host what it needs to guard leaving the browser */
-    ref?: (browser: PaperFileBrowserRef) => void;
-}
-
-/** What a host asks a file browser before taking it away (a tab, a modal, a page). */
-export interface PaperFileBrowserRef {
-    /** whether the open file has edits that are not saved; reactive */
-    dirty: () => boolean;
-    /**
-     * Asks the person what happens to unsaved edits, with the same Save /
-     * Discard / Cancel dialog as switching files. Resolves true once they are
-     * saved or discarded (at once when there are none), so the host may go
-     * ahead; false when the person cancels or the save fails (its error shows
-     * in the browser), so the host stays. Its shape fits onBeforeClose.
-     */
-    confirmLeave: () => Promise<boolean>;
-}
-
-type FolderState =
-    | { status: "loading" }
-    | { status: "ready"; entries: PaperFileEntry[]; note?: string }
-    | { status: "error"; message: string };
-
-type Row =
-    | { type: "entry"; entry: PaperFileEntry; depth: number; setSize: number; position: number }
-    | { type: "status"; folder: string; depth: number; state: "loading" | "error" | "empty" | "note"; message: string };
-
-type DocState =
-    | { status: "idle" }
-    | { status: "loading"; path: string }
-    | { status: "error"; path: string; message: string }
-    | { status: "ready"; path: string; content: PaperFileContent };
-
-interface Notice {
-    tone: "success" | "danger";
-    text: string;
-}
-
-function messageOf(err: unknown): string {
-    return err instanceof Error ? err.message : String(err);
-}
+export type {
+    PaperFileBrowserProps,
+    PaperFileBrowserRef,
+    PaperFileContent,
+    PaperFileEntry,
+    PaperFileListing,
+    PaperFileReveal,
+    PaperFileSaveResult,
+} from "./types";
 
 function rowSelector(path: string): string {
     const escaped =
@@ -165,138 +66,29 @@ function Icon(props: { name: string; class?: string }) {
  */
 export function PaperFileBrowser(props: PaperFileBrowserProps) {
     let treeRef: HTMLDivElement | undefined;
-    const [folders, setFolders] = createStore<Record<string, FolderState>>({});
-    const [expanded, setExpanded] = createSignal<ReadonlySet<string>>(new Set([""]));
+    const tree = createFolderTree((path) => props.list(path));
+    const file = createFileDocument(props);
+    const { expanded, loadFolder, setFolderOpen, rows, entryRows } = tree;
+    const { openPath, textContent, readOnlyReason, editable, dirty, notice } = file;
     const [selected, setSelected] = createSignal<string | null>(null);
     const [focused, setFocused] = createSignal<string>("");
-
-    const [doc, setDoc] = createSignal<DocState>({ status: "idle" });
-    const [buffer, setBuffer] = createSignal("");
-    const [savedText, setSavedText] = createSignal("");
-    const [version, setVersion] = createSignal<string | undefined>(undefined);
-    const [saving, setSaving] = createSignal(false);
-    const [notice, setNotice] = createSignal<Notice | null>(null);
-    const [cursor, setCursor] = createSignal<PaperEditorPosition>({ line: 1, column: 1 });
     const [wrap, setWrap] = createSignal(false);
     const [lineNumbers, setLineNumbers] = createSignal(true);
-    // the open question about unsaved edits; `settle` answers whoever asked it
-    const [pending, setPending] = createSignal<{ name: string; settle: (go: boolean) => void } | null>(null);
     const [collapsed, setCollapsed] = createSignal(false);
     const menu = useContextMenuState("below-right");
 
-    // ─── folders ──────────────────────────────────────────────────────
-
-    const inflight = new Map<string, Promise<void>>();
-    let listGeneration = 0;
-
-    const loadFolder = (path: string, force = false): Promise<void> => {
-        const running = inflight.get(path);
-        if (running && !force) return running;
-        if (!force && folders[path]?.status === "ready") return Promise.resolve();
-        const generation = listGeneration;
-        if (folders[path]?.status !== "ready") setFolders(path, { status: "loading" });
-        // started on a microtask so `task` exists before its own cleanup runs,
-        // even when `list` throws synchronously
-        const task: Promise<void> = Promise.resolve().then(async () => {
-            try {
-                const listing = await props.list(path);
-                if (generation !== listGeneration) return;
-                setFolders(path, { status: "ready", entries: listing.entries, note: listing.note });
-            } catch (err) {
-                if (generation !== listGeneration) return;
-                setFolders(path, { status: "error", message: messageOf(err) });
-            } finally {
-                if (inflight.get(path) === task) inflight.delete(path);
-            }
-        });
-        inflight.set(path, task);
-        return task;
-    };
-
-    const refresh = () => {
-        listGeneration++;
-        inflight.clear();
-        for (const path of expanded()) void loadFolder(path, true);
-    };
-
-    const setFolderOpen = (path: string, open: boolean) => {
-        setExpanded((prev) => {
-            const next = new Set(prev);
-            if (open) next.add(path);
-            else next.delete(path);
-            return next;
-        });
-        if (open) void loadFolder(path);
-    };
-
     onMount(() => void loadFolder(""));
 
-    // rows keep their identity while they are unchanged, so expanding one
-    // folder does not rebuild (and drop focus from) every other row
-    let rowCache = new Map<string, Row>();
-    const sameRow = (a: Row, b: Row): boolean => {
-        if (a.type === "entry" && b.type === "entry") {
-            return a.entry === b.entry && a.depth === b.depth && a.setSize === b.setSize && a.position === b.position;
-        }
-        if (a.type === "status" && b.type === "status") {
-            return a.folder === b.folder && a.depth === b.depth && a.state === b.state && a.message === b.message;
-        }
-        return false;
+    props.ref?.({ dirty, confirmLeave: file.confirmLeave });
+    // taken away while it asks: whoever asked stays where they are
+    onCleanup(() => file.pending()?.settle(false));
+
+    /** the open file's state, when it is `status` */
+    const docIn = <S extends ReturnType<typeof file.doc>["status"]>(status: S) => {
+        const state = file.doc();
+        return state.status === status ? (state as Extract<ReturnType<typeof file.doc>, { status: S }>) : undefined;
     };
 
-    const rows = createMemo<Row[]>(() => {
-        const out: Row[] = [];
-        const next = new Map<string, Row>();
-        const push = (key: string, row: Row) => {
-            const previous = rowCache.get(key);
-            const kept = previous && sameRow(previous, row) ? previous : row;
-            next.set(key, kept);
-            out.push(kept);
-        };
-        const open = expanded();
-        const walk = (folder: string, depth: number) => {
-            const state = folders[folder];
-            if (!state || state.status === "loading") {
-                push(`loading:${folder}`, { type: "status", folder, depth, state: "loading", message: "Loading…" });
-                return;
-            }
-            if (state.status === "error") {
-                push(`error:${folder}`, { type: "status", folder, depth, state: "error", message: state.message });
-                return;
-            }
-            if (state.entries.length === 0) {
-                push(`empty:${folder}`, { type: "status", folder, depth, state: "empty", message: "This folder is empty" });
-            }
-            state.entries.forEach((entry, i) => {
-                push(`entry:${entry.path}`, { type: "entry", entry, depth, setSize: state.entries.length, position: i + 1 });
-                if (entry.kind === "folder" && open.has(entry.path)) walk(entry.path, depth + 1);
-            });
-            if (state.note) push(`note:${folder}`, { type: "status", folder, depth, state: "note", message: state.note });
-        };
-        walk("", 1);
-        rowCache = next;
-        return out;
-    });
-
-    // ─── the open file ────────────────────────────────────────────────
-
-    const openPath = () => {
-        const state = doc();
-        return state.status === "idle" ? null : state.path;
-    };
-    const textContent = () => {
-        const state = doc();
-        return state.status === "ready" && state.content.kind === "text" ? state.content : null;
-    };
-    const readOnlyReason = () => {
-        const content = textContent();
-        if (!content) return null;
-        if (content.readOnly) return content.readOnly;
-        if (!props.write) return "This browser is read-only";
-        return null;
-    };
-    const editable = () => textContent() !== null && readOnlyReason() === null;
-    const dirty = () => textContent() !== null && buffer() !== savedText();
     const language = () => {
         const path = openPath();
         const fallback = path ? paperFileLanguage(baseName(path)) : { label: "Plain text" };
@@ -304,109 +96,21 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
         return { id, label: fallback.label };
     };
 
-    let readToken = 0;
-    const load = async (path: string) => {
-        const token = ++readToken;
-        batch(() => {
-            setDoc({ status: "loading", path });
-            setNotice(null);
-        });
-        try {
-            const content = await props.read(path);
-            if (token !== readToken) return;
-            batch(() => {
-                setDoc({ status: "ready", path, content });
-                const text = content.kind === "text" ? content.text : "";
-                setBuffer(text);
-                setSavedText(text);
-                setVersion(content.kind === "text" ? content.version : undefined);
-                setCursor({ line: 1, column: 1 });
-            });
-        } catch (err) {
-            if (token !== readToken) return;
-            setDoc({ status: "error", path, message: messageOf(err) });
-        }
-    };
-
-    /**
-     * Asks what happens to the unsaved edits: true once they are saved or
-     * discarded, false when the person keeps editing. A newer question
-     * replaces an open one, which then answers false.
-     */
-    const ask = (path: string): Promise<boolean> =>
-        new Promise((resolve) => {
-            pending()?.settle(false);
-            setPending({ name: baseName(path), settle: resolve });
-        });
-
-    /** closes the dialog with the person's answer */
-    const answer = (go: boolean) => {
-        const request = pending();
-        setPending(null);
-        request?.settle(go);
-    };
-
-    /** runs `action` now, or after the user decides what happens to unsaved edits */
-    const guard = (action: () => void) => {
-        const path = openPath();
-        if (!dirty() || !path) return action();
-        void ask(path).then((go) => {
-            if (go) action();
-        });
-    };
-
-    const confirmLeave = (): Promise<boolean> => {
-        const path = openPath();
-        return !dirty() || !path ? Promise.resolve(true) : ask(path);
-    };
-    props.ref?.({ dirty, confirmLeave });
-    // taken away while it asks: whoever asked stays where they are
-    onCleanup(() => pending()?.settle(false));
-
     const openFile = (path: string) => {
         setSelected(path);
-        if (openPath() === path && doc().status !== "error") return;
-        guard(() => void load(path));
+        file.open(path);
     };
 
-    const closeFile = () =>
-        guard(() => {
-            readToken++;
-            setDoc({ status: "idle" });
-            setNotice(null);
-        });
-
-    const save = async (): Promise<boolean> => {
+    const copyPath = async () => {
         const path = openPath();
-        if (!path || !props.write || !editable() || saving()) return false;
-        const text = buffer();
-        setSaving(true);
-        setNotice(null);
-        try {
-            const result = await props.write(path, text, version());
-            if (openPath() !== path) return true;
-            batch(() => {
-                setSavedText(text);
-                setVersion(result.version);
-                setNotice({ tone: "success", text: result.message ?? "Saved" });
-            });
-            return true;
-        } catch (err) {
-            if (openPath() === path) setNotice({ tone: "danger", text: messageOf(err) });
-            return false;
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const revert = () => {
-        setBuffer(savedText());
-        setNotice(null);
-    };
-
-    const reloadFromDisk = () => {
-        const path = openPath();
-        if (path) guard(() => void load(path));
+        if (!path) return;
+        const copied = await copyText(path);
+        if (openPath() !== path) return;
+        file.setNotice(
+            copied
+                ? { tone: "success", text: "Path copied" }
+                : { tone: "danger", text: "Couldn't copy the path: this page may not use the clipboard" },
+        );
     };
 
     // ─── reveal ───────────────────────────────────────────────────────
@@ -420,13 +124,18 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
         });
     };
 
+    // a newer reveal replaces one still opening folders on its way
+    let revealToken = 0;
     const reveal = async (target: PaperFileReveal) => {
+        const token = ++revealToken;
         const folder = target.kind === "folder" ? target.path : parentPath(target.path);
         await loadFolder("");
         for (const path of ancestorPaths(folder)) {
+            if (token !== revealToken) return;
             setFolderOpen(path, true);
             await loadFolder(path);
         }
+        if (token !== revealToken) return;
         setSelected(target.path);
         setFocused(target.path);
         requestAnimationFrame(() => {
@@ -447,8 +156,6 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
     );
 
     // ─── tree keyboard ────────────────────────────────────────────────
-
-    const entryRows = () => rows().filter((row): row is Extract<Row, { type: "entry" }> => row.type === "entry");
 
     const activate = (entry: PaperFileEntry) => {
         if (entry.kind === "folder") {
@@ -517,14 +224,14 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
         return [props.rootLabel, ...(path ? path.split("/") : [])];
     };
 
-    const tree = (
+    const treePane = (
         <div class={styles.treePane}>
             <div class={styles.treeHeader}>
                 <span class={styles.treeTitle}>
                     <Icon name={ICONS.folder} class={styles.treeTitleIcon} />
                     {props.rootLabel}
                 </span>
-                <PaperButton size="tiny" icon variant="text" aria-label="Refresh files" title="Refresh files" onClick={refresh}>
+                <PaperButton size="tiny" icon variant="text" aria-label="Refresh files" title="Refresh files" onClick={tree.refresh}>
                     <Icon name={ICONS.refresh} />
                 </PaperButton>
             </div>
@@ -643,11 +350,11 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
                     <PaperButton
                         size="small"
                         variant="primary"
-                        disabled={!dirty() || !editable() || saving()}
-                        onClick={() => void save()}
+                        disabled={!dirty() || !editable() || file.saving()}
+                        onClick={() => void file.save()}
                     >
                         <Icon name={ICONS.save} />
-                        {saving() ? "Saving…" : "Save"}
+                        {file.saving() ? "Saving…" : "Save"}
                     </PaperButton>
                 </Show>
                 <Show when={(props.fileMenu ?? true) && openPath()}>
@@ -675,8 +382,8 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
                     >
                         <Icon name={current.tone === "danger" ? ICONS.warning : ICONS.saved} />
                         <span class={styles.noticeText}>{current.text}</span>
-                        <Show when={current.tone === "danger"}>
-                            <PaperButton size="tiny" variant="text" onClick={reloadFromDisk}>
+                        <Show when={current.reload}>
+                            <PaperButton size="tiny" variant="text" onClick={file.reloadFromDisk}>
                                 <Icon name={ICONS.reload} />
                                 Reload from disk
                             </PaperButton>
@@ -687,19 +394,19 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
 
             <div class={styles.body}>
                 <Switch>
-                    <Match when={doc().status === "idle"}>
+                    <Match when={file.doc().status === "idle"}>
                         <PaperEmptyState
                             icon={<Icon name={ICONS.choose} class={styles.emptyIcon} />}
-                            title={selected() && folders[selected()!] ? baseName(selected()!) : "Choose a file"}
+                            title={selected() && tree.isListed(selected()!) ? baseName(selected()!) : "Choose a file"}
                             description="Pick a file on the left to view or edit it."
                         />
                     </Match>
-                    <Match when={doc().status === "loading"}>
+                    <Match when={file.doc().status === "loading"}>
                         <div class={styles.center}>
                             <PaperLoader loaderStatus="indeterminate" label="Opening…" />
                         </div>
                     </Match>
-                    <Match when={doc().status === "error" && (doc() as Extract<DocState, { status: "error" }>)}>
+                    <Match when={docIn("error")}>
                         {(state) => (
                             <PaperEmptyState
                                 icon={<Icon name={ICONS.error} class={styles.emptyIcon} />}
@@ -707,7 +414,7 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
                                 description={state().message}
                                 role="alert"
                             >
-                                <PaperButton size="small" onClick={() => void load(state().path)}>
+                                <PaperButton size="small" onClick={() => void file.load(state().path)}>
                                     <Icon name={ICONS.refresh} />
                                     Try again
                                 </PaperButton>
@@ -716,22 +423,19 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
                     </Match>
                     <Match when={textContent()}>
                         <PaperEditor
-                            value={buffer()}
-                            onChange={(value) => {
-                                setBuffer(value);
-                                if (notice()?.tone === "success") setNotice(null);
-                            }}
+                            value={file.buffer()}
+                            onChange={file.edit}
                             language={language().id}
                             highlight={props.highlight ?? true}
                             lineNumbers={lineNumbers()}
                             wrap={wrap()}
                             readOnly={!editable()}
-                            onSave={() => void save()}
-                            onCursorChange={setCursor}
+                            onSave={() => void file.save()}
+                            onCursorChange={file.setCursor}
                             aria-label={`Contents of ${baseName(openPath() ?? "")}`}
                         />
                     </Match>
-                    <Match when={doc().status === "ready" && (doc() as Extract<DocState, { status: "ready" }>).content}>
+                    <Match when={docIn("ready")?.content}>
                         {(content) => (
                             <Switch>
                                 <Match when={content().kind === "image" && (content() as Extract<PaperFileContent, { kind: "image" }>)}>
@@ -766,7 +470,7 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
                     </Show>
                     <span class={styles.statusSpacer} />
                     <span class={styles.statusItem}>
-                        Ln {cursor().line}, Col {cursor().column}
+                        Ln {file.cursor().line}, Col {file.cursor().column}
                     </span>
                     <span class={styles.statusItem}>{language().label}</span>
                 </footer>
@@ -778,16 +482,16 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
                         value="save"
                         icon={<Icon name={ICONS.save} />}
                         shortcut="Ctrl+S"
-                        disabled={!dirty() || !editable() || saving()}
-                        onClick={() => void save()}
+                        disabled={!dirty() || !editable() || file.saving()}
+                        onClick={() => void file.save()}
                     >
                         Save
                     </PaperContextMenuItem>
-                    <PaperContextMenuItem value="revert" icon={<Icon name={ICONS.revert} />} disabled={!dirty()} onClick={revert}>
+                    <PaperContextMenuItem value="revert" icon={<Icon name={ICONS.revert} />} disabled={!dirty()} onClick={file.revert}>
                         Revert changes
                     </PaperContextMenuItem>
                 </Show>
-                <PaperContextMenuItem value="reload" icon={<Icon name={ICONS.reload} />} onClick={reloadFromDisk}>
+                <PaperContextMenuItem value="reload" icon={<Icon name={ICONS.reload} />} onClick={file.reloadFromDisk}>
                     Reload from disk
                 </PaperContextMenuItem>
                 <PaperContextMenuItem
@@ -811,10 +515,7 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
                 <PaperContextMenuItem
                     value="copy-path"
                     icon={<Icon name={ICONS.copy} />}
-                    onClick={() => {
-                        const path = openPath();
-                        if (path) void copyText(path);
-                    }}
+                    onClick={() => void copyPath()}
                 >
                     Copy path
                 </PaperContextMenuItem>
@@ -826,11 +527,11 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
         <>
             <PaperSplit
                 class={[styles.PaperFileBrowser, props.class].filter(Boolean).join(" ")}
-                side={tree}
+                side={treePane}
                 sideWidth={props.sideWidth}
                 detailActive={openPath() !== null}
-                onBeforeDetailClose={confirmLeave}
-                onDetailClose={closeFile}
+                onBeforeDetailClose={file.confirmLeave}
+                onDetailClose={file.close}
                 detailTitle={openPath() ? baseName(openPath()!) : undefined}
                 onCollapsedChange={setCollapsed}
             >
@@ -838,20 +539,20 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
             </PaperSplit>
 
             <PaperModal
-                open={pending() !== null}
-                onClose={() => answer(false)}
-                title={`Save changes to ${pending()?.name ?? "this file"}?`}
+                open={file.pending() !== null}
+                onClose={() => file.answer(false)}
+                title={`Save changes to ${file.pending()?.name ?? "this file"}?`}
                 size="small"
                 footer={
                     <div class={styles.modalActions}>
-                        <PaperButton variant="text" onClick={() => answer(false)}>
+                        <PaperButton variant="text" onClick={() => file.answer(false)}>
                             Cancel
                         </PaperButton>
                         <PaperButton
                             variant="danger"
                             onClick={() => {
-                                revert();
-                                answer(true);
+                                file.revert();
+                                file.answer(true);
                             }}
                         >
                             Discard
@@ -860,15 +561,15 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
                             <PaperButton
                                 variant="primary"
                                 onClick={async () => {
-                                    const request = pending();
+                                    const request = file.pending();
                                     if (!request) return;
-                                    const saved = await save();
+                                    const saved = await file.save();
                                     // canceled, or replaced by another question, while it saved:
                                     // that is the decision now, and this one no longer runs
-                                    if (pending() !== request) return;
+                                    if (file.pending() !== request) return;
                                     // a failed save stays, its error showing; edits typed
                                     // while it saved are not in the file, so they stay too
-                                    answer(saved && !dirty());
+                                    file.answer(saved && !dirty());
                                 }}
                             >
                                 Save

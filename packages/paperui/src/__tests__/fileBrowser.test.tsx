@@ -1,9 +1,11 @@
 import { describe, expect, test } from "vitest";
+import { createSignal } from "solid-js";
 import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import {
     PaperFileBrowser,
     type PaperFileContent,
     type PaperFileListing,
+    type PaperFileReveal,
     type PaperFileSaveResult,
 } from "../index";
 
@@ -221,5 +223,52 @@ describe("PaperFileBrowser read failures", () => {
         fireEvent.click(within(alert).getByRole("button", { name: /Try again/ }));
         await waitFor(() => expect(editor().value).toBe("motd=hi"));
         expect(attempts).toBe(2);
+    });
+});
+
+// Inventory: Templates — Late answers lose (file browser reveal).
+describe("PaperFileBrowser reveal", () => {
+    test("a newer reveal wins over an older one still opening its folders", async () => {
+        const deep = deferred<PaperFileListing>();
+        const listings: Record<string, () => Promise<PaperFileListing>> = {
+            "": async () => ({
+                entries: [
+                    { name: "deep", path: "deep", kind: "folder" },
+                    { name: "top.txt", path: "top.txt", kind: "file" },
+                ],
+            }),
+            deep: () => {
+                deepAsked = true;
+                return deep.promise;
+            },
+        };
+        let deepAsked = false;
+        const reads: string[] = [];
+        const [reveal, setReveal] = createSignal<PaperFileReveal | null>(null);
+        render(() => (
+            <PaperFileBrowser
+                rootLabel="Server"
+                list={(path) => listings[path]!()}
+                read={async (path) => {
+                    reads.push(path);
+                    return { kind: "text", text: path };
+                }}
+                reveal={reveal()}
+            />
+        ));
+        await waitFor(() => row("top.txt"));
+
+        // the older reveal waits on deep's listing; the newer one opens at once
+        setReveal({ path: "deep/old.txt", kind: "file" });
+        await waitFor(() => expect(deepAsked).toBe(true));
+        setReveal({ path: "top.txt", kind: "file" });
+        await waitFor(() => expect(editor().value).toBe("top.txt"));
+
+        deep.resolve({ entries: [{ name: "old.txt", path: "deep/old.txt", kind: "file" }] });
+        await waitFor(() => row("old.txt"));
+        await Promise.resolve();
+        expect(reads).toEqual(["top.txt"]);
+        expect(editor().value).toBe("top.txt");
+        expect(row("top.txt").getAttribute("aria-selected")).toBe("true");
     });
 });

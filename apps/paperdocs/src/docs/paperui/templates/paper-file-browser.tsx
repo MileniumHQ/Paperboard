@@ -156,7 +156,7 @@ export function Example() {
                         <td><PaperCode>reveal</PaperCode></td>
                         <td><PaperCode>PaperFileReveal | null</PaperCode></td>
                         <td>No default</td>
-                        <td>Opens the tree to a path and selects it. A file is also opened. A new object reveals again, so pass a fresh object to repeat the same path.</td>
+                        <td>Opens the tree to a path and selects it. A file is also opened. A new object reveals again, so pass a fresh object to repeat the same path. A newer reveal replaces one still opening folders.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>highlight</PaperCode></td>
@@ -250,6 +250,7 @@ interface PaperFileBrowserRef {
                 <li><PaperCode>read</PaperCode> fails: the viewer shows "Couldn't open" with the file name and the message.</li>
                 <li><PaperCode>write</PaperCode> fails: a danger notice with the message and a Reload from disk button. The edit stays in the editor.</li>
                 <li><PaperCode>write</PaperCode> succeeds: a success notice with <PaperCode>message</PaperCode>, or "Saved". Return the new <PaperCode>version</PaperCode> so the next save compares against it.</li>
+                <li>Copy path: a success notice, or a danger notice when the page may not use the clipboard.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="viewer">The viewer</PaperText>
