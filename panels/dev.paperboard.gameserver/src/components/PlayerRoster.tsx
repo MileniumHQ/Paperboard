@@ -7,7 +7,6 @@ import {
     PaperListItem,
     PaperListLabel,
     PaperQuote,
-    PaperSlidePage,
     PaperSplit,
     PaperSwatch,
     PaperText,
@@ -53,11 +52,11 @@ export default function PlayerRoster<T extends { name: string }>(props: {
     onOpen(name: string | undefined): void;
     children: JSX.Element;
 }) {
-    // Collapsed, the detail is a page that slides in over the roster (a modal
-    // takes no back swipe). The page opens from a row and closes with its back
-    // action, and the open player stays set while it slides out so the page
-    // doesn't change under the animation; rows open the detail directly,
-    // because the roster's radio selection is invisible behind it.
+    // Collapsed, PaperSplit slides the detail in over the roster as a page (a
+    // modal takes no back swipe). The page opens from a row and closes with
+    // its back action, and the open player stays set while it slides out so
+    // the page doesn't change under the animation; rows open the detail
+    // directly, because the roster's radio selection is invisible behind it.
     const [compact, setCompact] = createSignal(false);
     const [detailOpen, setDetailOpen] = createSignal(false);
     const any = () => props.sections.some((section) => section.players.length > 0);
@@ -67,16 +66,13 @@ export default function PlayerRoster<T extends { name: string }>(props: {
     // it slides where it is and the page keeps its scroll.
     const openName = createMemo(() => props.open);
     const opened = createMemo(() => ({ name: openName() }));
-    const detail = () => (
-        <Show when={opened()} keyed>
-            {(_opened) => props.children}
-        </Show>
-    );
 
     return (
         <PaperFlex grow minHeight={0} fullWidth>
             <PaperSplit
-                detailActive={false}
+                detailActive={detailOpen() && props.open !== undefined}
+                detailTitle={props.open ?? ""}
+                onDetailClose={() => setDetailOpen(false)}
                 onCollapsedChange={setCompact}
                 side={
                     <PaperFlex direction="column" gap="half" fullHeight>
@@ -160,23 +156,13 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                     </PaperFlex>
                 }
             >
-                <Show when={!compact()}>{detail()}</Show>
+                {/* the detail brings its own margin and scroll */}
+                <PaperFlex direction="column" flex={1} minHeight={0} fullHeight>
+                    <Show when={opened()} keyed>
+                        {(_opened) => props.children}
+                    </Show>
+                </PaperFlex>
             </PaperSplit>
-            {/* over the whole panel, its own bar in place of the tab's */}
-            <PaperSlidePage
-                position="fixed"
-                enabled={compact()}
-                open={detailOpen() && props.open !== undefined}
-                title={props.open ?? ""}
-                onBack={() => setDetailOpen(false)}
-            >
-                <Show when={compact()}>
-                    {/* the detail brings its own margin and scroll */}
-                    <PaperFlex direction="column" flex={1} minHeight={0}>
-                        {detail()}
-                    </PaperFlex>
-                </Show>
-            </PaperSlidePage>
         </PaperFlex>
     );
 }
