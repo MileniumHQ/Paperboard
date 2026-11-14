@@ -41,55 +41,43 @@ export async function buildDiscordEmbed(data: DiscordEmbedData) {
 // same moment still reach Discord in the order they were asked for.
 function embedFrom({ EmbedBuilder }: Discord, data: DiscordEmbedData) {
     const embed = new EmbedBuilder();
-    if (data.title) embed.setTitle(data.title);
-    if (data.description) embed.setDescription(data.description);
-    if (data.color) {
+    // a field Discord would refuse stops the send and says which: the embed
+    // never goes out without it
+    const set = (field: string, apply: () => unknown) => {
         try {
-            embed.setColor(data.color as ColorResolvable);
+            apply();
         } catch (err) {
-            console.error("[DiscordService] embed color rejected:", err);
+            throw new Error(`Embed ${field}: ${errorToMessage(err)}`);
         }
-    }
-    if (data.url) {
-        try {
-            embed.setURL(data.url);
-        } catch (err) {
-            console.error("[DiscordService] embed url rejected:", err);
-        }
-    }
+    };
+    if (data.title) set("title", () => embed.setTitle(data.title!));
+    if (data.description) set("description", () => embed.setDescription(data.description!));
+    if (data.color) set("color", () => embed.setColor(data.color as ColorResolvable));
+    if (data.url) set("link", () => embed.setURL(data.url!));
     const footer = typeof data.footer === "object" ? data.footer?.text : data.footer;
-    if (footer) embed.setFooter({ text: footer });
+    if (footer) set("footer", () => embed.setFooter({ text: footer }));
     const image = typeof data.image === "object" ? data.image?.url : data.image;
-    if (image) {
-        try {
-            embed.setImage(image);
-        } catch (err) {
-            console.error("[DiscordService] embed image rejected:", err);
-        }
-    }
+    if (image) set("image", () => embed.setImage(image));
     return embed;
 }
 
+/** A flow's embeds: one, a list, or their JSON. Anything else is refused, never sent as no embed. */
 export function normalizeEmbeds(input: unknown): DiscordEmbedData[] {
-    if (!input) return [];
-    if (Array.isArray(input)) {
-        return input.filter(
-            (e) => e && typeof e === "object",
-        ) as DiscordEmbedData[];
-    }
-    if (typeof input === "object") return [input as DiscordEmbedData];
+    if (input === undefined || input === null || (typeof input === "string" && !input.trim())) return [];
     if (typeof input === "string") {
-        const trimmed = input.trim();
-        if (!trimmed) return [];
+        let parsed: unknown;
         try {
-            const parsed = JSON.parse(trimmed);
-            return normalizeEmbeds(parsed);
+            parsed = JSON.parse(input);
         } catch (err) {
-            console.error("[DiscordService] embeds JSON unparseable, ignoring:", err);
-            return [];
+            throw new Error(`Embeds aren't valid JSON: ${errorToMessage(err)}`);
         }
+        return normalizeEmbeds(parsed);
     }
-    return [];
+    const list = Array.isArray(input) ? input : [input];
+    list.forEach((embed, index) => {
+        if (!embed || typeof embed !== "object" || Array.isArray(embed)) throw new Error(`Embed ${index + 1} isn't an embed`);
+    });
+    return list as DiscordEmbedData[];
 }
 
 // ─── message components ─────────────────────────────────────────────────────
@@ -1100,7 +1088,7 @@ export function buildPoll(inputs: { question?: unknown; answers?: unknown; hours
     };
 }
 
-/** A file to attach, from a web address; Discord reads it, Paperboard doesn't run it. */
+/** A file to attach, from an http(s) address: the service downloads it (discord.js fetches the address) and uploads the bytes to Discord. */
 export function fileFromUrl(url: unknown, name?: unknown): { attachment: string; name?: string } {
     const text = typeof url === "string" ? url.trim() : "";
     let parsed: URL;

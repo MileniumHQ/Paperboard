@@ -426,168 +426,65 @@ export function describeCommandProblem(input: {
     return null;
 }
 
-function isDefinition(value: unknown): value is SlashCommandDefinition {
-    if (!value || typeof value !== "object") return false;
-    const def = value as Partial<SlashCommandDefinition>;
-    return (
-        typeof def.id === "string" &&
-        def.id.length > 0 &&
-        typeof def.name === "string" &&
-        typeof def.description === "string" &&
-        (def.scope === undefined || typeof def.scope === "string") &&
-        (def.options === undefined || Array.isArray(def.options))
-    );
-}
-
-function normalizeOptions(raw: unknown): SlashCommandOption[] {
-    if (!Array.isArray(raw)) {
-        if (raw !== undefined && raw !== null) {
-            console.error(
-                "[botcreator] stored command options are not a list; ignoring them:",
-                raw,
-            );
-        }
-        return [];
-    }
-
-    // structurally valid candidates first, so uniqueness and ordering can
-    // be judged against the real list instead of a filtered one
-    const candidates: SlashCommandOption[] = [];
-    for (const entry of raw) {
-        if (!entry || typeof entry !== "object") {
-            console.error("[botcreator] ignoring malformed stored option:", entry);
-            continue;
-        }
-        const option = entry as Partial<SlashCommandOption>;
-        if (typeof option.id !== "string" || !option.id) {
-            console.error("[botcreator] ignoring stored option without an id:", entry);
-            continue;
-        }
-        if (!isCommandOptionType(option.type)) {
-            console.error(
-                `[botcreator] ignoring stored option /${String(option.name)}: unknown type "${String(option.type)}"`,
-            );
-            continue;
-        }
-        candidates.push({
+function readStoredOptions(raw: unknown): SlashCommandOption[] {
+    if (raw === undefined || raw === null) return [];
+    if (!Array.isArray(raw)) throw new Error("its options are not a list");
+    if (raw.length > MAX_COMMAND_OPTIONS) throw new Error(`it has more than Discord's ${MAX_COMMAND_OPTIONS} options`);
+    const candidates = raw.map((entry: unknown, index): SlashCommandOption => {
+        const option = (entry && typeof entry === "object" ? entry : {}) as Partial<SlashCommandOption>;
+        if (typeof option.id !== "string" || !option.id) throw new Error(`option ${index + 1} has no id`);
+        if (!isCommandOptionType(option.type)) throw new Error(`option ${index + 1} has the unknown type "${String(option.type)}"`);
+        return {
             id: option.id,
-            name: normalizeCommandName(
-                typeof option.name === "string" ? option.name : "",
-            ),
-            description:
-                typeof option.description === "string" ? option.description : "",
+            name: normalizeCommandName(typeof option.name === "string" ? option.name : ""),
+            description: typeof option.description === "string" ? option.description.trim() : "",
             type: option.type,
             required: Boolean(option.required),
-        });
-    }
-
-    if (candidates.length > MAX_COMMAND_OPTIONS) {
-        console.error(
-            `[botcreator] ignoring stored command options past Discord's ${MAX_COMMAND_OPTIONS}-option limit`,
-        );
-    }
-
-    const options: SlashCommandOption[] = [];
-    for (const candidate of candidates) {
-        if (options.length >= MAX_COMMAND_OPTIONS) break;
-        const problem = describeCommandOptionProblem(
-            candidate,
-            candidates,
-            candidates.indexOf(candidate),
-        );
-        if (problem) {
-            console.error(
-                `[botcreator] ignoring stored option /${candidate.name || "?"}: ${problem}`,
-            );
-            continue;
-        }
-        options.push({
-            ...candidate,
-            name: candidate.name.trim(),
-            description: candidate.description.trim(),
-        });
-    }
-    return options;
+        };
+    });
+    candidates.forEach((candidate, index) => {
+        const problem = describeCommandOptionProblem(candidate, candidates, index);
+        if (problem) throw new Error(`option ${index + 1} (${candidate.name || "unnamed"}): ${problem}`);
+    });
+    return candidates;
 }
 
 /**
- * Reads stored command definitions into a valid, deduplicated, bounded list.
- * Invalid entries are dropped with a loud log — never silently — because a
- * command the user created but the service ignores is a lie.
+ * Reads a bot's saved commands, the same rules the editor and the service
+ * hold every new one to. A damaged command refuses the whole list, saying
+ * which and why: dropping it would lose it for good at the next save.
  */
-export function normalizeCommandDefinitions(raw: unknown): SlashCommandDefinition[] {
-    if (!Array.isArray(raw)) {
-        if (raw !== undefined && raw !== null) {
-            console.error(
-                "[botcreator] stored commands are not a list; ignoring the stored value:",
-                raw,
-            );
-        }
-        return [];
-    }
-
+export function readStoredCommands(raw: unknown): SlashCommandDefinition[] {
+    if (raw === undefined || raw === null) return [];
+    if (!Array.isArray(raw)) throw new Error("its commands are not a list");
     const seen = new Set<string>();
     const perScope = new Map<string, number>();
-    const commands: SlashCommandDefinition[] = [];
-
-    for (const entry of raw) {
-        if (!isDefinition(entry)) {
-            console.error("[botcreator] ignoring malformed stored command:", entry);
-            continue;
+    return raw.map((entry: unknown, index) => {
+        const def = (entry && typeof entry === "object" ? entry : {}) as Partial<SlashCommandDefinition>;
+        const label = `saved command ${index + 1}${typeof def.name === "string" && def.name ? ` (/${def.name})` : ""}`;
+        const damaged = (why: string) => new Error(`${label} is damaged: ${why}`);
+        if (typeof def.id !== "string" || !def.id) throw damaged("it has no id");
+        if (typeof def.name !== "string" || typeof def.description !== "string") throw damaged("it has no name or description");
+        const scope = def.scope || GLOBAL_SCOPE;
+        if (scope !== GLOBAL_SCOPE && !SNOWFLAKE_PATTERN.test(scope)) throw damaged(`"${scope}" is not a server`);
+        const problem = describeCommandProblem({ name: def.name, description: def.description });
+        if (problem) throw damaged(problem);
+        const name = normalizeCommandName(def.name);
+        if (seen.has(`${scope}:${name}`)) throw damaged(`/${name} is saved twice for the same ${scope === GLOBAL_SCOPE ? "scope" : "server"}`);
+        seen.add(`${scope}:${name}`);
+        const count = (perScope.get(scope) ?? 0) + 1;
+        if (count > MAX_COMMANDS_PER_SCOPE) throw damaged(`it is past Discord's ${MAX_COMMANDS_PER_SCOPE}-command limit`);
+        perScope.set(scope, count);
+        // Discord honors installation contexts only on global commands
+        if (def.userInstall && scope !== GLOBAL_SCOPE) throw damaged("only global commands can be installed by users");
+        let options: SlashCommandOption[];
+        try {
+            options = readStoredOptions(def.options);
+        } catch (err) {
+            throw damaged(errorToMessage(err));
         }
-        const scope = entry.scope || GLOBAL_SCOPE;
-        if (scope !== GLOBAL_SCOPE && !SNOWFLAKE_PATTERN.test(scope)) {
-            console.error(
-                `[botcreator] ignoring stored command /${entry.name}: unknown scope "${scope}"`,
-            );
-            continue;
-        }
-        const problem = describeCommandProblem(entry);
-        if (problem) {
-            console.error(
-                `[botcreator] ignoring stored command /${entry.name}: ${problem}`,
-            );
-            continue;
-        }
-        const name = normalizeCommandName(entry.name);
-        const key = `${scope}:${name}`;
-        if (seen.has(key)) {
-            console.error(
-                `[botcreator] ignoring duplicate stored command /${name} in scope ${scope}`,
-            );
-            continue;
-        }
-        const count = perScope.get(scope) ?? 0;
-        if (count >= MAX_COMMANDS_PER_SCOPE) {
-            console.error(
-                `[botcreator] ignoring stored command /${entry.name}: scope ${scope} is at Discord's ${MAX_COMMANDS_PER_SCOPE}-command limit`,
-            );
-            continue;
-        }
-        seen.add(key);
-        perScope.set(scope, count + 1);
-        // Discord only honors installation contexts on globally-scoped
-        // commands: a server-scoped user-install flag would register as a
-        // guild command that silently ignores it, so it is dropped loudly
-        let userInstall = Boolean(
-            (entry as Partial<SlashCommandDefinition>).userInstall,
-        );
-        if (userInstall && scope !== GLOBAL_SCOPE) {
-            console.error(
-                `[botcreator] ignoring user-install flag on stored command /${name}: user apps are only available for global commands`,
-            );
-            userInstall = false;
-        }
-        commands.push({
-            ...entry,
-            name,
-            scope,
-            options: normalizeOptions(entry.options),
-            userInstall,
-        });
-    }
-
-    return commands;
+        return { ...def, id: def.id, name, description: def.description, scope, options, userInstall: Boolean(def.userInstall) };
+    });
 }
 
 // ---------------------------------------------------------------------------

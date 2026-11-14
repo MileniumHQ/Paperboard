@@ -2,7 +2,7 @@
 // Blocks project, listed on the Bot Creator home screen. The panel config
 // holds the list; each token is its own vault secret. Pure, so the service,
 // the panel and their tests share one implementation.
-import { normalizeCommandDefinitions, type SlashCommandDefinition } from "./types";
+import { errorToMessage, readStoredCommands, type GuildSummary, type SlashCommandDefinition } from "./types";
 
 export const PANEL_ID = "dev.paperboard.botcreator";
 export const BOTS_VERSION = 2;
@@ -45,6 +45,8 @@ export interface BotSummary {
     hasToken: boolean;
     lastError: string | null;
     guildCount: number;
+    /** the servers it is in now (the first 100); none while it isn't connected */
+    guilds: GuildSummary[];
     createdAt: number;
     /**
      * Its saved slash commands, however they were made (the Commands tab, a
@@ -84,6 +86,15 @@ export function tokenName(botId: string): string {
     return `bot-token.${botId}`;
 }
 
+/** A bot's saved commands, or why they can't be read, naming whose they are. */
+function readCommands(raw: unknown, whose: string): SlashCommandDefinition[] {
+    try {
+        return readStoredCommands(raw);
+    } catch (err) {
+        throw new Error(`${whose}: ${errorToMessage(err)}`);
+    }
+}
+
 /** Reads one stored bot, refusing anything that is not one. */
 function readStoredBot(raw: any, index: number): StoredBot {
     if (!raw || typeof raw !== "object" || !isBotId(raw.id)) {
@@ -95,7 +106,7 @@ function readStoredBot(raw: any, index: number): StoredBot {
         avatar: typeof raw.avatar === "string" ? raw.avatar : "",
         applicationId: typeof raw.applicationId === "string" ? raw.applicationId : "",
         enabled: raw.enabled !== false,
-        commands: normalizeCommandDefinitions(raw.commands),
+        commands: readCommands(raw.commands, `bot ${index + 1} in the saved list`),
         createdAt: Number.isFinite(raw.createdAt) ? raw.createdAt : 0,
     };
 }
@@ -117,7 +128,7 @@ export function readBotsConfig(saved: unknown):
             return {
                 kind: "legacy",
                 applicationId: typeof config.applicationId === "string" ? config.applicationId : "",
-                commands: normalizeCommandDefinitions(config.commands),
+                commands: readCommands(config.commands, "the saved bot"),
             };
         }
         // never set up, or reset before several bots: nothing to run
