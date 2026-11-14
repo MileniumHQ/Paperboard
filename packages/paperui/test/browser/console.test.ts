@@ -101,3 +101,16 @@ describe("PaperConsole windowing", () => {
         expect(measures).toBeLessThan(50);
     });
 });
+
+// Inventory: PaperConsole — Typing a command leaves nothing behind.
+describe("PaperConsole's command line", () => {
+    test("typing and sending a command makes no computation outside a root", async () => {
+        page = await browser.open("console", { query: "input" });
+        await page.click('[class*="_inputForm_"] input');
+        await page.type("say hi");
+        await page.press("Enter");
+        await page.waitFor("t.commands.length === 1", "the command to be sent");
+        expect(await page.eval("t.commands")).toEqual(["say hi"]);
+        expect(page.warnings.filter((w) => w.includes("createRoot"))).toEqual([]);
+    });
+});

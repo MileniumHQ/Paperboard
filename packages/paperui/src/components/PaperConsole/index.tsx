@@ -144,6 +144,8 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
             setInputValue(local.value);
         }
     });
+    // the command line as shown: the parent's value when it holds one
+    const shownInput = () => (local.value !== undefined ? local.value : inputValue());
 
     // ---- windowed entries ----
 
@@ -370,7 +372,7 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
 
     const handleFormSubmit = (e: Event) => {
         e.preventDefault();
-        const cmd = (local.value !== undefined ? local.value : inputValue()).trim();
+        const cmd = shownInput().trim();
         if (!cmd) return;
 
         if (local.onCommand) {
@@ -561,7 +563,7 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
                         icon={local.prompt ?? "chevron_right"}
                         placeholder={local.placeholder ?? "Enter command..."}
                         disabled={local.inputDisabled}
-                        value={local.value !== undefined ? local.value : inputValue()}
+                        value={shownInput()}
                         onInput={(e) => {
                             const val = e.currentTarget.value;
                             if (local.value === undefined) {
