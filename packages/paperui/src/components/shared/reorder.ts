@@ -6,6 +6,7 @@ import { dismissContextMenus } from "./contextMenuDismiss";
 // Drag-to-reorder for a row or column of items, shared by PaperList and
 // PaperRail. The dragged item follows the pointer; its siblings slide one
 // step to open the gap; release reports the new order of item values.
+// Escape during a drag puts every item back where it was and reports nothing.
 
 interface DragState {
     value: string;
@@ -157,6 +158,41 @@ export function createReorder(options: ReorderOptions): Reorder {
             window.removeEventListener("pointermove", handlePointerMove);
             window.removeEventListener("pointerup", finish);
             window.removeEventListener("pointercancel", finish);
+            window.removeEventListener("keydown", cancelOnEscape, true);
+        };
+
+        // The click that ends a gesture must not also select. A drag that
+        // Escape called off still has its press down: the click comes when
+        // the pointer is let go.
+        const swallowNextClick = () => {
+            justFinishedDrag = true;
+            const letGo = (up: PointerEvent) => {
+                if (up.pointerId !== e.pointerId) return;
+                window.removeEventListener("pointerup", letGo, true);
+                window.removeEventListener("pointercancel", letGo, true);
+                setTimeout(() => {
+                    justFinishedDrag = false;
+                }, 50);
+            };
+            window.addEventListener("pointerup", letGo, true);
+            window.addEventListener("pointercancel", letGo, true);
+        };
+
+        // Escape calls a drag off, and is the drag's alone: a dialog the list
+        // sits in stays open
+        const cancelOnEscape = (ev: KeyboardEvent) => {
+            if (ev.key !== "Escape") return;
+            if (!didDrag && !(lifted && startOptions.holdMs !== undefined)) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            try {
+                targetEl.releasePointerCapture(e.pointerId);
+            } catch (err) {
+                console.debug("[PaperUI reorder] pointer capture release failed:", err);
+            }
+            cleanup();
+            setDragState(null);
+            swallowNextClick();
         };
 
         const finish = (ev: PointerEvent) => {
@@ -203,6 +239,7 @@ export function createReorder(options: ReorderOptions): Reorder {
         window.addEventListener("pointermove", handlePointerMove);
         window.addEventListener("pointerup", finish);
         window.addEventListener("pointercancel", finish);
+        window.addEventListener("keydown", cancelOnEscape, true);
     };
 
     const itemStyle = (value: string | number): JSX.CSSProperties => {

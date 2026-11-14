@@ -361,6 +361,7 @@ onClosed(value: string | number): void;`}
                 <li>Items shift out of the way while you drag. On drop, <PaperCode>onReorder</PaperCode> gets the full new order. The list does not reorder its own children: reorder your data, and the items follow.</li>
                 <li>The order is read from the DOM, so the values passed to <PaperCode>onReorder</PaperCode> are strings, even if the items' values are numbers. Convert them back when you look items up.</li>
                 <li>Only items that are direct children take part. A drop that lands where the drag began does not call <PaperCode>onReorder</PaperCode>. The click that ends a drag is swallowed, so it does not select the item.</li>
+                <li>Escape during a drag calls it off: the items go back where they were, <PaperCode>onReorder</PaperCode> is not called, and letting go selects nothing. The Escape does not reach a dialog around the list.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="closing">Closing items</PaperText>

@@ -238,6 +238,7 @@ export function Example() {
                 <li>A finger holds the item still for half a second first, and the item lifts. Moving sooner scrolls the rail instead. The hold is the same one that opens the item's context menu: let go and the menu stays open, move and the menu closes as the item follows the finger.</li>
                 <li>On drop, the rail's <PaperCode>onReorder</PaperCode> gets the reorderable items' values in their new order, as strings. The rail does not reorder its own children: reorder your data, and the items follow.</li>
                 <li>A drop where the drag began does not call <PaperCode>onReorder</PaperCode>. The click that ends a drag does not select the item.</li>
+                <li>Escape during a drag calls it off: the items go back where they were, <PaperCode>onReorder</PaperCode> is not called, and letting go selects nothing. The Escape does not reach a dialog around the list.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="accessibility">Accessibility</PaperText>
