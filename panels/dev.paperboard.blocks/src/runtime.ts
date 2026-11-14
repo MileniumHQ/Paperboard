@@ -6,7 +6,8 @@ import { blockEntry, type blocksApi, type BlocksHandle, type ServiceContext } fr
 import { BlockError, hatInputs, isHat, runHat, type Host, type SavedBlock } from "./lib/interpreter";
 import { BUILTIN, parseEntry, parseRegistryBlockType, registryBlockType } from "./lib/names";
 import { BlocksAnnouncer, FLOW_FAILED_EVENT, blocksPanelBlocks } from "./blocks";
-import { readFlows } from "./lib/flows";
+import { errorMessage } from "./lib/failure";
+import { isRecord, readFlows } from "./lib/flows";
 import { ProjectStore, readPreview, type ProjectStorage } from "./lib/projects";
 import { MAX_LOG, PANEL_ID, SERVICE_CALLS, type LogEntry, type PanelState, type SavedFlows } from "./panel";
 
@@ -23,9 +24,8 @@ export interface RuntimeDeps {
 
 type SetState = ServiceContext<PanelState>["setState"];
 
-const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
-const isRecord = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
-const topBlocks = (flows: SavedFlows) => (flows.workspace.blocks?.blocks ?? []).filter((b) => b.enabled !== false);
+/** The stacks that run: a switched-off stack starts from nothing. */
+const enabledStacks = (flows: SavedFlows) => (flows.workspace.blocks?.blocks ?? []).filter((b) => b.enabled !== false);
 // the hat of this panel's own "When a Flow Fails": a flow it starts that fails doesn't fire it again
 const FLOW_FAILED_HAT = registryBlockType({ kind: "event", panelId: PANEL_ID, entry: blockEntry("event", FLOW_FAILED_EVENT) });
 
@@ -58,7 +58,7 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
     /** The project list changed: every window hears it, the registry is told, and the listening follows. */
     function publishProjects(): void {
         setState({ projects: store.list() });
-        announcer.projects(keptProjects()).catch((err: unknown) => setState({ blocksError: `The other panels weren't told the projects changed: ${message(err)}` }));
+        announcer.projects(keptProjects()).catch((err: unknown) => setState({ blocksError: `The other panels weren't told the projects changed: ${errorMessage(err)}` }));
         listen();
     }
 
@@ -104,10 +104,11 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
         try {
             await runHat(hat, payload, flows.workspace, host(project, controller.signal));
         } catch (err) {
-            log(project, "error", message(err), err instanceof BlockError ? err.blockId : hat.id);
-            // a run that was stopped didn't fail
-            if (!controller.signal.aborted && hat.type !== FLOW_FAILED_HAT) {
-                announcer.failed(project, message(err)).catch((why: unknown) => log(project, "error", `"When a Flow Fails" didn't hear this failure: ${message(why)}`, hat.id));
+            // a run that was stopped didn't fail: it is said, and nothing is pinned on a block
+            if (controller.signal.aborted) return log(project, "info", errorMessage(err));
+            log(project, "error", errorMessage(err), err instanceof BlockError ? err.blockId : hat.id);
+            if (hat.type !== FLOW_FAILED_HAT) {
+                announcer.failed(project, errorMessage(err)).catch((why: unknown) => log(project, "error", `"When a Flow Fails" didn't hear this failure: ${errorMessage(why)}`, hat.id));
             }
         } finally {
             runs.delete(controller);
@@ -120,14 +121,14 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
         for (const { id: project, flows } of store.running()) {
             const schema = flows.schemas[hatType]?.schema;
             const filters = schema?.kind === "event" ? (schema.filters ?? {}) : {};
-            for (const hat of topBlocks(flows).filter((b) => b.type === hatType)) {
+            for (const hat of enabledStacks(flows).filter((b) => b.type === hatType)) {
                 if (Object.keys(filters).length) {
                     let wanted: Record<string, unknown>;
                     try {
                         // a filter's input is worked out before the flow starts, outside any run
                         wanted = await hatInputs(hat, flows.workspace, host(project, new AbortController().signal));
                     } catch (err) {
-                        log(project, "error", message(err), err instanceof BlockError ? err.blockId : hat.id);
+                        log(project, "error", errorMessage(err), err instanceof BlockError ? err.blockId : hat.id);
                         continue;
                     }
                     // a filter left empty takes any
@@ -146,7 +147,7 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
     function listen(): void {
         const wanted = new Set(
             store.running().flatMap(({ flows }) =>
-                topBlocks(flows)
+                enabledStacks(flows)
                     .map((b) => b.type)
                     .filter((type) => {
                         const name = parseRegistryBlockType(type);
@@ -185,7 +186,7 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
     /** Starts a project's "When Run is clicked" flows; how many started. */
     function runProject(project: unknown): number {
         const flows = store.flows(project);
-        const hats = topBlocks(flows).filter((b) => b.type === BUILTIN.onRun);
+        const hats = enabledStacks(flows).filter((b) => b.type === BUILTIN.onRun);
         if (!hats.length) throw new Error('Add a "When Run is clicked" block for Run to start');
         for (const hat of hats) void start(String(project), flows, hat, null);
         return hats.length;
@@ -202,11 +203,13 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
         return run(isRecord(input) ? input : {});
     };
 
-    /** A project change, then the list every window shows. */
+    /** A project change, then the list every window shows, also after a change that only partly happened. */
     const changing = async <T>(work: Promise<T>): Promise<T> => {
-        const result = await work;
-        publishProjects();
-        return result;
+        try {
+            return await work;
+        } finally {
+            publishProjects();
+        }
     };
 
     const calls = {
@@ -222,10 +225,12 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
         [SERVICE_CALLS.updateProject]: call(({ project, name, enabled }) => changing(store.update(project, { name, enabled }))),
         [SERVICE_CALLS.duplicateProject]: call(({ project }) => changing(store.duplicate(project))),
         [SERVICE_CALLS.deleteProject]: call(async ({ project, onlyDraft }) => {
-            const deleted = await changing(store.remove(project, onlyDraft === true));
-            // a deleted project's flows stop with it
-            if (deleted) stop(String(project));
-            return { deleted };
+            try {
+                return { deleted: await changing(store.remove(project, onlyDraft === true)) };
+            } finally {
+                // a deleted project's flows stop with it, also when its file couldn't be emptied after
+                if (!store.has(project)) stop(String(project));
+            }
         }),
     };
 
@@ -236,9 +241,9 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
             await store.open();
         } catch (err) {
             // nothing runs and nothing is written while the projects can't be read
-            setState({ projectsError: message(err), loaded: true });
+            setState({ projectsError: errorMessage(err), loaded: true });
             console.error(`[${PANEL_ID}] the projects couldn't be read:`, err);
-            settle(message(err));
+            settle(errorMessage(err));
             return;
         }
         setState({ projects: store.list(), loaded: true });
@@ -258,10 +263,10 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
             );
         } catch (err) {
             // the projects still run; only flows that drive them are missing their blocks
-            setState({ blocksError: `The Projects blocks couldn't be added: ${message(err)}` });
+            setState({ blocksError: `The Projects blocks couldn't be added: ${errorMessage(err)}` });
             console.error(`[${PANEL_ID}] the Projects blocks couldn't be registered:`, err);
         }
-        const flows = store.running().reduce((n, p) => n + topBlocks(p.flows).filter((b) => isHat(b.type)).length, 0);
+        const flows = store.running().reduce((n, p) => n + enabledStacks(p.flows).filter((b) => isHat(b.type)).length, 0);
         console.log(`[${PANEL_ID}] ${store.list().length} project(s), ${flows} flow(s) switched on.`);
     }
 

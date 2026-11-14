@@ -156,6 +156,40 @@ describe("changing a project", () => {
         expect(index(mem.files).projects[0]!.name).toBe("Mine");
     });
 
+    test("a change that fails says exactly what happened, and what wasn't done stays undone", async () => {
+        const mem = memory();
+        // a project file can be written, but not emptied, while the list can't be written
+        let listWrites = true;
+        const store = new ProjectStore({
+            get: mem.storage.get,
+            set: async (value, path) => {
+                if (path === PROJECTS_FILE && !listWrites) throw new Error("the list can't be written");
+                if (path?.startsWith("projects/") && value === null) throw new Error("the folder is read-only");
+                return mem.storage.set(value, path);
+            },
+        });
+        await store.open();
+        const made = await store.create("Mine");
+        await store.save(made.id, flows(BUILTIN.onRun), null);
+
+        // refused halfway through: neither part of the change is kept
+        await expect(store.update(made.id, { name: "Renamed", enabled: "yes" })).rejects.toThrow("enabled is true or false");
+        expect(store.summaryOf(made.id).name).toBe("Mine");
+        expect(store.list()).toHaveLength(1);
+
+        // not made: why comes first, then the cleanup that failed after it
+        listWrites = false;
+        const copy = store.duplicate(made.id);
+        await expect(copy).rejects.toThrow(/^the list can't be written .*wasn't removed either: the folder is read-only$/);
+        expect(store.list().map((p) => p.name)).toEqual(["Mine"]);
+        listWrites = true;
+
+        // deleted, though its file stays: it says so, and the project is gone
+        await expect(store.remove(made.id)).rejects.toThrow(`"Mine" was deleted, but its file ${projectFlowsPath(made.id)} wasn't emptied: the folder is read-only`);
+        expect(store.has(made.id)).toBe(false);
+        expect(index(mem.files).projects).toEqual([]);
+    });
+
     test("a copy has the same flows under its own file", async () => {
         const mem = memory();
         const store = new ProjectStore(mem.storage);

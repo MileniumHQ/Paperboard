@@ -4,7 +4,8 @@
 // file. The store runs in the service and in the tests, over any storage
 // that reads and writes JSON by path.
 import { EMPTY_FLOWS as EMPTY, type SavedFlows } from "../panel";
-import { readFlows } from "./flows";
+import { errorMessage } from "./failure";
+import { isRecord, readFlows } from "./flows";
 import { isHat } from "./interpreter";
 
 /** the project index, in the panel's files */
@@ -91,7 +92,6 @@ export function nextProjectName(names: readonly string[], base = NEW_PROJECT_NAM
     for (let n = 2; ; n++) if (!taken.has(`${base} ${n}`)) return `${base} ${n}`;
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isRect = (v: unknown): v is PreviewRect => isRecord(v) && finite(v.x) && finite(v.y) && finite(v.w) && finite(v.h) && v.w >= 0 && v.h >= 0;
 
@@ -136,16 +136,17 @@ export function readProjectIndex(saved: unknown): ProjectMeta[] | null {
     });
 }
 
-/** The stacks on a canvas: blocks the saved workspace holds at its top level. */
-const topBlocks = (flows: SavedFlows) => flows.workspace.blocks?.blocks ?? [];
+/** The stacks on a canvas, switched off or not: blocks the saved workspace holds at its top level. */
+const stacks = (flows: SavedFlows) => flows.workspace.blocks?.blocks ?? [];
 
 /** True when a canvas holds anything worth keeping. */
 export function hasBlocks(flows: SavedFlows): boolean {
-    return topBlocks(flows).length > 0;
+    return stacks(flows).length > 0;
 }
 
+/** The flows a project holds, the switched-off ones too: they are still on its canvas. */
 export function flowCount(flows: SavedFlows): number {
-    return topBlocks(flows).filter((b) => isHat(b.type)).length;
+    return stacks(flows).filter((b) => isHat(b.type)).length;
 }
 
 interface Project {
@@ -191,7 +192,7 @@ export class ProjectStore {
                 const saved = await this.storage.get(projectFlowsPath(meta.id));
                 project.flows = saved === undefined || saved === null ? EMPTY : readFlows(saved);
             } catch (err) {
-                project.loadError = err instanceof Error ? err.message : String(err);
+                project.loadError = errorMessage(err);
             }
             this.projects.set(meta.id, project);
         }
@@ -216,6 +217,10 @@ export class ProjectStore {
         return project.flows;
     }
 
+    has(id: unknown): boolean {
+        return typeof id === "string" && this.projects.has(id);
+    }
+
     summaryOf(id: unknown): ProjectSummary {
         return this.summary(this.require(id));
     }
@@ -237,7 +242,10 @@ export class ProjectStore {
                     await this.writeIndex();
                 } catch (err) {
                     this.projects.delete(meta.id);
-                    await this.storage.set(null, projectFlowsPath(meta.id));
+                    // what is said is why the project wasn't made, and the cleanup's failure after it
+                    await this.storage.set(null, projectFlowsPath(meta.id)).catch((why: unknown) => {
+                        throw new Error(`${errorMessage(err)} Its file ${projectFlowsPath(meta.id)} wasn't removed either: ${errorMessage(why)}`);
+                    });
                     throw err;
                 }
             }
@@ -274,12 +282,13 @@ export class ProjectStore {
     update(id: unknown, change: { name?: unknown; enabled?: unknown }): Promise<ProjectSummary> {
         return this.serial(async () => {
             const project = this.require(id);
+            // both are checked before either changes, so a refused change changes nothing
+            const name = change.name === undefined ? undefined : cleanProjectName(change.name);
+            const enabled = change.enabled;
+            if (enabled !== undefined && typeof enabled !== "boolean") throw new Error("enabled is true or false");
             const before = { ...project.meta };
-            if (change.name !== undefined) project.meta.name = cleanProjectName(change.name);
-            if (change.enabled !== undefined) {
-                if (typeof change.enabled !== "boolean") throw new Error("enabled is true or false");
-                project.meta.enabled = change.enabled;
-            }
+            if (name !== undefined) project.meta.name = name;
+            if (typeof enabled === "boolean") project.meta.enabled = enabled;
             try {
                 // a draft's name and switch are written with it, once it has a block
                 if (!project.draft) await this.writeIndex();
@@ -313,8 +322,11 @@ export class ProjectStore {
                     this.projects.set(project.meta.id, project);
                     throw err;
                 }
-                // the canvas file is emptied, not kept: a deleted project is gone
-                await this.storage.set(null, projectFlowsPath(project.meta.id));
+                // the canvas file is emptied, not kept: a deleted project is gone. The
+                // project is deleted by now, so a file that stays says only that
+                await this.storage.set(null, projectFlowsPath(project.meta.id)).catch((why: unknown) => {
+                    throw new Error(`"${project.meta.name}" was deleted, but its file ${projectFlowsPath(project.meta.id)} wasn't emptied: ${errorMessage(why)}`);
+                });
             }
             return true;
         });

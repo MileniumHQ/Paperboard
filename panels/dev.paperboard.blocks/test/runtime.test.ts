@@ -143,7 +143,7 @@ describe("the service's runtime", () => {
         await until("the run to start", () => s.state().running[id] === 1);
         expect(await s.call(SERVICE_CALLS.deleteProject, { project: id })).toEqual({ deleted: true });
         await until("the run to end", () => !s.state().running[id]);
-        expect(s.said(id)).toEqual(["error: The run was stopped"]);
+        expect(s.said(id)).toEqual(["info: The run was stopped"]);
     });
 
     test('a failed flow fires "When a Flow Fails", but one that flow starts does not fire it again', async () => {
