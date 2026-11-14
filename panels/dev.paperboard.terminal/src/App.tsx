@@ -219,7 +219,7 @@ export default function App() {
         commandsSeen = true;
     };
     // looking at a tab is seeing what it did
-    createEffect(on(activeTab, (id) => id && setAttention(id, {})));
+    createEffect(on(activeTab, (id) => id && setAttention(id, { busy: undefined, finished: undefined, bell: undefined })));
     const statusOf = (tabId: string): LoaderStatus | undefined => {
         const a = attention[tabId];
         if (a?.busy) return "indeterminate";
