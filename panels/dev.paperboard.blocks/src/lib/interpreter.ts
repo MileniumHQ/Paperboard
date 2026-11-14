@@ -491,7 +491,11 @@ async function evaluate(run: Run, block: SavedBlock): Promise<unknown> {
     }
 }
 
-async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
+// what a family's evaluator gives back for a block of another family
+const NOT_THIS_FAMILY = Symbol("not this family");
+
+/** true or false: the logic blocks */
+async function logicValue(run: Run, block: SavedBlock): Promise<unknown> {
     switch (block.type) {
         case "logic_boolean":
             return field(block, "BOOL") === "TRUE";
@@ -518,6 +522,13 @@ async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
             const [x, y] = [a as number | string, b as number | string];
             return op === "LT" ? x < y : op === "LTE" ? x <= y : op === "GT" ? x > y : x >= y;
         }
+    }
+    return NOT_THIS_FAMILY;
+}
+
+/** numbers: the math blocks */
+async function mathValue(run: Run, block: SavedBlock): Promise<unknown> {
+    switch (block.type) {
         case "math_number":
             return Number(field(block, "NUM"));
         case "math_arithmetic": {
@@ -623,6 +634,13 @@ async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
             }
             throw new BlockError(`Unknown operation ${String(op)}`, block.id);
         }
+    }
+    return NOT_THIS_FAMILY;
+}
+
+/** texts: the text blocks */
+async function textValue(run: Run, block: SavedBlock): Promise<unknown> {
+    switch (block.type) {
         case "text":
             return String(field(block, "TEXT") ?? "");
         case "text_changeCase": {
@@ -665,6 +683,23 @@ async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
             const [start, end] = await rangeOf(run, block, chars.length, "text");
             return chars.slice(start, end).join("");
         }
+        case "text_join": {
+            const count = ((block.extraState ?? {}) as { itemCount?: number }).itemCount ?? 0;
+            let out = "";
+            for (let i = 0; i < count; i++) out += asText(await value(run, block, `ADD${i}`));
+            return out;
+        }
+        case "text_length":
+            return asText(await value(run, block, "VALUE")).length;
+        case "text_isEmpty":
+            return asText(await value(run, block, "VALUE")).length === 0;
+    }
+    return NOT_THIS_FAMILY;
+}
+
+/** the panel's own value blocks: tests, numbers from text, JSON, errors, time and the web */
+async function dataValue(run: Run, block: SavedBlock): Promise<unknown> {
+    switch (block.type) {
         case BUILTIN.textTest: {
             const t = await textOf(run, block, "TEXT");
             const part = await textOf(run, block, "PART");
@@ -724,16 +759,13 @@ async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
             return web("GET", await textOf(run, block, "URL"), undefined, field(block, "AS") as WebAnswer, run.host.signal);
         case BUILTIN.webPost:
             return web("POST", await textOf(run, block, "URL"), await value(run, block, "BODY"), field(block, "AS") as WebAnswer, run.host.signal);
-        case "text_join": {
-            const count = ((block.extraState ?? {}) as { itemCount?: number }).itemCount ?? 0;
-            let out = "";
-            for (let i = 0; i < count; i++) out += asText(await value(run, block, `ADD${i}`));
-            return out;
-        }
-        case "text_length":
-            return asText(await value(run, block, "VALUE")).length;
-        case "text_isEmpty":
-            return asText(await value(run, block, "VALUE")).length === 0;
+    }
+    return NOT_THIS_FAMILY;
+}
+
+/** lists: the list blocks */
+async function listValue(run: Run, block: SavedBlock): Promise<unknown> {
+    switch (block.type) {
         case "lists_create_with": {
             const count = ((block.extraState ?? {}) as { itemCount?: number }).itemCount ?? 0;
             const list: unknown[] = [];
@@ -792,6 +824,17 @@ async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
             return (await listOf(run, block, "VALUE", "The list")).length;
         case "lists_isEmpty":
             return (await listOf(run, block, "VALUE", "The list")).length === 0;
+    }
+    return NOT_THIS_FAMILY;
+}
+
+/** A value block's value: its family's, or a variable's, a function's, a dropdown's or a panel's. */
+async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
+    for (const family of [logicValue, mathValue, textValue, dataValue, listValue]) {
+        const found = await family(run, block);
+        if (found !== NOT_THIS_FAMILY) return found;
+    }
+    switch (block.type) {
         case BUILTIN.hasValue: {
             const v = await value(run, block, "VALUE");
             return v !== undefined && v !== null;
