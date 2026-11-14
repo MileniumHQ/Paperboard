@@ -71,13 +71,14 @@ export function RenameProjectModal(props: {
     const [name, setName] = createSignal("");
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
-    createEffect(() => {
-        const project = props.project;
-        if (!project) return;
-        setName(project.name);
+    // a fresh form each time the dialog opens for a project; the list changing
+    // under it (a new announcement) never resets what was typed or a request in flight
+    createEffect(on(() => props.project?.id, (id) => {
+        if (!id) return;
+        setName(props.project!.name);
         setError(null);
         setBusy(false);
-    });
+    }));
     const submit = async () => {
         const project = props.project;
         if (!project || busy()) return;
@@ -131,11 +132,11 @@ export function DeleteProjectModal(props: {
 }) {
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
-    createEffect(() => {
-        if (!props.project) return;
+    createEffect(on(() => props.project?.id, (id) => {
+        if (!id) return;
         setError(null);
         setBusy(false);
-    });
+    }));
     const confirm = async () => {
         const project = props.project;
         if (!project || busy()) return;
