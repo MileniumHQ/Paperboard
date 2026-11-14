@@ -77,9 +77,8 @@ const persistTimers = new Map<string, ReturnType<typeof setTimeout>>();
 // empty, so it is never written over (a new shell starts a new screen)
 const unreadScrollback = new Set<string>();
 const sessionErrors: SessionErrors = {};
-const subscribedSessions = new Set<string>();
-// teardown handles for the listeners above: a closed tab must detach, not
-// just hide behind the findSession() guard inside the callbacks
+// each heard session's listeners: a closed tab must detach them, not just
+// hide behind the findSession() guard inside the callbacks
 const sessionUnsubs = new Map<string, Array<() => void>>();
 
 function scrollbackPath(id: string): string {
@@ -191,65 +190,60 @@ function publishLive() {
 }
 
 function subscribeSession(id: string) {
-    if (subscribedSessions.has(id)) return;
-    subscribedSessions.add(id);
-    try {
-        const unsubs = [
-            terminalApi.onData(id, (data) => {
-                if (!findSession(tabs, id)) return;
-                buffers.set(id, applyScrollbackCap(data, buffers.get(id) || ""));
-                schedulePersist(id);
-            }),
-            terminalApi.onExit(id, (exitCode) => {
-                // the program in front was the shell, and it is gone
-                if (live[id]) {
-                    live[id].program = "";
-                    publishLive();
-                }
-                const owner = findSession(tabs, id);
-                // a split's shell ending is not the tab's
-                if (owner && owner.tab.id !== id) return;
-                announcer.fire("terminal-exit", exitPayload(id, exitCode));
-            }),
-            terminalApi.onForeground(id, (program) => {
-                if (!findSession(tabs, id)) return;
-                liveSession(id).program = program;
+    if (sessionUnsubs.has(id)) return;
+    // a listener that can't be made throws to whoever opened the session,
+    // and nothing is marked as heard, so the next open tries again
+    sessionUnsubs.set(id, [
+        terminalApi.onData(id, (data) => {
+            if (!findSession(tabs, id)) return;
+            buffers.set(id, applyScrollbackCap(data, buffers.get(id) || ""));
+            schedulePersist(id);
+        }),
+        terminalApi.onExit(id, (exitCode) => {
+            // the program in front was the shell, and it is gone
+            if (live[id]) {
+                live[id].program = "";
                 publishLive();
-            }),
-            terminalApi.onCwd(id, (cwd) => {
-                const owner = findSession(tabs, id);
-                if (!owner) return;
-                liveSession(id).cwd = cwd;
-                publishLive();
-                // where the next shell for this session starts
-                if (owner.session.cwd !== cwd && serviceCtx) {
-                    changeTabs(serviceCtx, () => {
-                        const now = findSession(tabs, id);
-                        if (now) now.session.cwd = cwd;
-                    }).then(
-                        () => setSessionError(id, "folder", ""),
-                        (err) => setSessionError(id, "folder", `${cwd} wasn't saved as this shell's folder, so its next shell may start somewhere else: ${errorMessage(err)}`),
-                    );
-                }
-            }),
-            terminalApi.onCommand(id, (finished) => {
-                const owner = findSession(tabs, id);
-                if (!owner) return;
-                liveSession(id).command = { line: finished.command, exitCode: finished.exitCode, seq: ++commandSeq };
-                publishLive();
-                announcer.fire("command-finished", commandPayload(owner.tab.id, finished));
-            }),
-        ];
-        sessionUnsubs.set(id, unsubs);
-    } catch (err) {
-        console.error(`[TerminalService] session subscription failed for ${id}:`, err);
-    }
+            }
+            const owner = findSession(tabs, id);
+            // a split's shell ending is not the tab's
+            if (owner && owner.tab.id !== id) return;
+            announcer.fire("terminal-exit", exitPayload(id, exitCode));
+        }),
+        terminalApi.onForeground(id, (program) => {
+            if (!findSession(tabs, id)) return;
+            liveSession(id).program = program;
+            publishLive();
+        }),
+        terminalApi.onCwd(id, (cwd) => {
+            const owner = findSession(tabs, id);
+            if (!owner) return;
+            liveSession(id).cwd = cwd;
+            publishLive();
+            // where the next shell for this session starts
+            if (owner.session.cwd !== cwd && serviceCtx) {
+                changeTabs(serviceCtx, () => {
+                    const now = findSession(tabs, id);
+                    if (now) now.session.cwd = cwd;
+                }).then(
+                    () => setSessionError(id, "folder", ""),
+                    (err) => setSessionError(id, "folder", `${cwd} wasn't saved as this shell's folder, so its next shell may start somewhere else: ${errorMessage(err)}`),
+                );
+            }
+        }),
+        terminalApi.onCommand(id, (finished) => {
+            const owner = findSession(tabs, id);
+            if (!owner) return;
+            liveSession(id).command = { line: finished.command, exitCode: finished.exitCode, seq: ++commandSeq };
+            publishLive();
+            announcer.fire("command-finished", commandPayload(owner.tab.id, finished));
+        }),
+    ]);
 }
 
 function unsubscribeSession(id: string) {
-    // deallocated, not just guarded: drop the id AND detach the listeners
-    // so a reconnect storm or daemon echo can't wake a dead tab
-    subscribedSessions.delete(id);
+    // deallocated, not just guarded: the listeners are detached so a
+    // reconnect storm or daemon echo can't wake a dead tab
     delete live[id];
     const unsubs = sessionUnsubs.get(id);
     sessionUnsubs.delete(id);
@@ -342,13 +336,13 @@ function requireStart(start: { cwd?: string; shell?: string }): { cwd?: string; 
 }
 
 // create-tab starts its shell ahead of any viewer; a shell that cannot
-// start must not lose the tab. Opening the tab (open-tab) retries and
-// reports the failure to the viewer.
+// start must not lose the tab. The state says why until a shell starts for
+// it: opening the tab (open-tab) or writing to it tries again.
 async function tryEnsureSession(id: string): Promise<void> {
     try {
         await ensureSession(id);
     } catch (err) {
-        console.error(`[TerminalService] session create failed for ${id}:`, err);
+        setSessionError(id, "start", `This shell didn't start; opening its tab tries again: ${errorMessage(err)}`);
     }
 }
 
@@ -629,18 +623,14 @@ const calls = {
     "split-tab": (ctx: Ctx, input: { id: string; direction?: SplitDirection }) => splitTab(ctx, input?.id, input?.direction ?? "right"),
     "unsplit-tab": (ctx: Ctx, input: { id: string }) => unsplitTab(ctx, input?.id),
     "set-tab-layout": (ctx: Ctx, input: { layout: TabLayout }) => setLayout(ctx, input?.layout),
-    // attaches the page to a session and gives back its scrollback
-    "open-tab": async (ctx: Ctx, input: { id: string; cols?: number; rows?: number }) => {
+    // attaches the page to a session and gives back its scrollback. Every
+    // screen a window mounts opens its session, shown or not, so opening says
+    // nothing about which tab is in front: touch-tab and show-tab say that
+    "open-tab": async (_ctx: Ctx, input: { id: string; cols?: number; rows?: number }) => {
         const id = (input?.id || "").trim();
-        const owner = findSession(tabs, id);
-        if (!owner) {
-            throw new Error(`Unknown terminal tab "${input?.id}"`);
-        }
+        if (!findSession(tabs, id)) throw new Error(`Unknown terminal tab "${input?.id}"`);
         await ensureSession(id, input?.cols, input?.rows);
         subscribeSession(id);
-        await changeTabs(ctx, () => {
-            activeTabId = owner.tab.id;
-        });
         return buffers.get(id) || "";
     },
     "rename-tab": (ctx: Ctx, input: { id: string; label: string }) => renameTab(ctx, input?.id, input?.label),

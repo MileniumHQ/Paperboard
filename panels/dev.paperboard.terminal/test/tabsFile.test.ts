@@ -139,4 +139,16 @@ describe("a tab's scrollback", () => {
         await expect(call("create-tab", { label: "Odd", shell: "/bin/not-a-shell" })).rejects.toThrow("is not a shell on this computer");
         expect(fs.existsSync(scrollback(dir)) ? fs.readdirSync(scrollback(dir)) : []).toEqual([]);
     });
+
+    test("that can't be started for a new tab keeps the tab, and the state says why its shell didn't start", async () => {
+        const dir = await panelFiles({ "tabs.json": TABS });
+        // a new shell starts by clearing its saved screen, and this folder takes no writes
+        fs.mkdirSync(scrollback(dir), { mode: 0o555 });
+        readOnly = scrollback(dir);
+        await startService();
+        const id = await runBlock<string>("new-tab", { name: "Three" });
+        expect(await readBlock("tabs")).toEqual(["tab1", "tab2", id]);
+        const said = await serviceState();
+        expect(said.sessionErrors[id]?.start).toContain("This shell didn't start");
+    });
 });
