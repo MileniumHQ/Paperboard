@@ -1,4 +1,4 @@
-import { For, createMemo, createSignal, type JSX, Show } from "solid-js";
+import { For, createMemo, createSignal, Show } from "solid-js";
 import {
     PaperSettingList,
     PaperSettingItem,
@@ -15,7 +15,6 @@ import {
     PaperPageHeader,
     PaperQuote,
     PaperSectionHeader,
-    PaperText,
     showToast,
 } from "@mileniumhq/paperui";
 import { isBrowserShell, shellIpc, signOutOfBrowser } from "../../lib/shell";
@@ -26,7 +25,6 @@ import { START_ON_HOME, startTarget } from "../../lib/startOn";
 import type { AppSettingsData } from "../../lib/appSettings";
 import { computerIcon } from "../computer/computerIcon";
 import PanelPermissionSettings from "./PanelPermissionSettings";
-import styles from "./AppSettings.module.css";
 // Inlined at build time: the viewer always shows the exact files shipped
 // in this repo, so the text cannot drift from the license on disk.
 import paperboardLicenseText from "../../../../../LICENSE?raw";
@@ -91,7 +89,7 @@ export default function AppSettings(props: {
     computers: StartComputer[];
     /** a panel's name, for the permissions you've given panels */
     panelName?: (panelId: string) => string;
-    /** the phone layout: grouped rows, the way phones lay out settings */
+    /** the phone layout: a page of its own, with only what applies on a phone */
     compact?: boolean;
     /** a load or save that didn't go through */
     failure?: SettingsFailure | null;
@@ -123,294 +121,127 @@ export default function AppSettings(props: {
         props.onChange({ ...props.settings, ...next });
     };
 
-    // one modal for both layouts, built once and opened through licenseOpen
-    const licenseModal = (
-        <PaperModal
-            open={licenseOpen()}
-            onClose={() => setLicenseOpen(false)}
-            title={LICENSE_TITLES[license()]}
-            size="large"
-        >
-            <PaperMarkdown text={LICENSE_TEXTS[license()]} />
-        </PaperModal>
-    );
-
-    const failureNotice = (
-        <Show when={props.failure}>
-            {(failure) => (
-                <PaperQuote
-                    variant="danger"
-                    icon="warning"
-                    title={{ load: "Settings not loaded", save: "Settings not saved", apply: "Run on startup not applied", graphics: "Graphics card not checked" }[failure().kind]}
-                    role="alert"
-                    onDismiss={props.onDismissFailure}
-                >
-                    <PaperFlex direction="column" gap="half" align="flex-start">
-                        {{
-                            load: `These are the defaults, not your settings: ${failure().message}`,
-                            save: `Your change was not kept: ${failure().message}`,
-                            apply: failure().message,
-                            graphics: `Animations and blur stay on unless you turn them off, even if this computer has no graphics card: ${failure().message}`,
-                        }[failure().kind]}
-                        <Show when={failure().kind === "load" && props.onRetryLoad}>
-                            <PaperButton size="tiny" onClick={() => props.onRetryLoad?.()}>Retry loading</PaperButton>
-                        </Show>
-                    </PaperFlex>
-                </PaperQuote>
-            )}
-        </Show>
-    );
-
     return (
-        <Show
-            when={!props.compact}
-            fallback={
-                <CompactSettings
-                    notice={failureNotice}
-                    settings={props.settings}
-                    gpu={props.gpu}
-                    onChange={handleChange}
-                    computers={props.computers}
-                    onViewLicense={viewLicense}
-                    licenseModal={licenseModal}
-                />
-            }
-        >
-            <PaperPage>
+        // the phone's page has its own title bar, and a phone doesn't start
+        // at login, update itself, or quit: those rows are the desktop's
+        <PaperPage padding={props.compact ? "full" : undefined}>
+            <Show when={!props.compact}>
                 <PaperPageHeader
                     icon="settings"
                     title="App Settings"
                     subtitle={isBrowserShell() ? "Appearance, startup, and licenses." : "Appearance, startup, updates, and licenses."}
                 />
-                {failureNotice}
+            </Show>
+            <Show when={props.failure}>
+                {(failure) => (
+                    <PaperQuote
+                        variant="danger"
+                        icon="warning"
+                        title={{ load: "Settings not loaded", save: "Settings not saved", apply: "Run on startup not applied", graphics: "Graphics card not checked" }[failure().kind]}
+                        role="alert"
+                        onDismiss={props.onDismissFailure}
+                    >
+                        <PaperFlex direction="column" gap="half" align="flex-start">
+                            {{
+                                load: `These are the defaults, not your settings: ${failure().message}`,
+                                save: `Your change was not kept: ${failure().message}`,
+                                apply: failure().message,
+                                graphics: `Animations and blur stay on unless you turn them off, even if this computer has no graphics card: ${failure().message}`,
+                            }[failure().kind]}
+                            <Show when={failure().kind === "load" && props.onRetryLoad}>
+                                <PaperButton size="tiny" onClick={() => props.onRetryLoad?.()}>Retry loading</PaperButton>
+                            </Show>
+                        </PaperFlex>
+                    </PaperQuote>
+                )}
+            </Show>
 
-                <PaperSettingList
-                    autoHeight
-                    value={settingsValue()}
-                    onValueChange={handleChange}
+            <PaperSettingList autoHeight value={settingsValue()} onValueChange={handleChange}>
+                <PaperSettingItem title="Appearance" description="Match the operating system appearance or force light or dark.">
+                    <PaperSelectMenu name="darkMode" value={props.settings.darkMode} fullWidth={!props.compact}>
+                        <PaperSelectMenuItem value="system" icon="contrast">System</PaperSelectMenuItem>
+                        <PaperSelectMenuItem value="light" icon="light_mode">Light</PaperSelectMenuItem>
+                        <PaperSelectMenuItem value="dark" icon="dark_mode">Dark</PaperSelectMenuItem>
+                    </PaperSelectMenu>
+                </PaperSettingItem>
+
+                <PaperSettingItem
+                    title="Disable animations"
+                    description={look().animationsByDefault ? NO_GPU : "Turns off animations and transitions."}
                 >
-                    <PaperSettingItem
-                        title="Appearance"
-                        description="Match the operating system appearance or force light or dark."
-                    >
-                        <PaperSelectMenu
-                            name="darkMode"
-                            value={props.settings.darkMode}
-                            fullWidth
-                        >
-                            <PaperSelectMenuItem value="system" icon="contrast">
-                                System
-                            </PaperSelectMenuItem>
-                            <PaperSelectMenuItem value="light" icon="light_mode">
-                                Light
-                            </PaperSelectMenuItem>
-                            <PaperSelectMenuItem value="dark" icon="dark_mode">
-                                Dark
-                            </PaperSelectMenuItem>
-                        </PaperSelectMenu>
+                    <PaperToggle name="disableAnimations" checked={look().disableAnimations} />
+                </PaperSettingItem>
+
+                <PaperSettingItem
+                    title="Disable blur"
+                    description={look().blurByDefault ? NO_GPU : "Turns off the blur behind dialogs and overlays."}
+                >
+                    <PaperToggle name="disableBlur" checked={look().disableBlur} />
+                </PaperSettingItem>
+
+                <PaperSettingItem title="Start on" description={startOnMissing() ? START_ON_MISSING : START_ON_NOTE}>
+                    <PaperSelectMenu name="startOn" value={props.settings.startOn} fullWidth={!props.compact}>
+                        <StartOnItems computers={props.computers} startOn={props.settings.startOn} />
+                    </PaperSelectMenu>
+                </PaperSettingItem>
+
+                <Show when={!props.compact}>
+                    <PaperSettingItem title="Run on startup" description="Launch Paperboard automatically when you log in.">
+                        <PaperToggle name="runOnStartup" checked={props.settings.runOnStartup} />
                     </PaperSettingItem>
-
-                    <PaperSettingItem
-                        title="Disable animations"
-                        description={look().animationsByDefault ? NO_GPU : "Turns off animations and transitions."}
-                    >
-                        <PaperToggle
-                            name="disableAnimations"
-                            checked={look().disableAnimations}
-                        />
-                    </PaperSettingItem>
-
-                    <PaperSettingItem
-                        title="Disable blur"
-                        description={look().blurByDefault ? NO_GPU : "Turns off the blur behind dialogs and overlays."}
-                    >
-                        <PaperToggle
-                            name="disableBlur"
-                            checked={look().disableBlur}
-                        />
-                    </PaperSettingItem>
-
-                    <PaperSettingItem title="Start on" description={startOnMissing() ? START_ON_MISSING : START_ON_NOTE}>
-                        <PaperSelectMenu name="startOn" value={props.settings.startOn} fullWidth>
-                            <StartOnItems computers={props.computers} startOn={props.settings.startOn} />
-                        </PaperSelectMenu>
-                    </PaperSettingItem>
-
-                    <PaperSettingItem
-                        title="Run on startup"
-                        description="Launch Paperboard automatically when you log in."
-                    >
-                        <PaperToggle
-                            name="runOnStartup"
-                            checked={props.settings.runOnStartup}
-                        />
-                    </PaperSettingItem>
-
-                    {/* browser mode runs no updates */}
-                    <Show when={!isBrowserShell()}>
-                        <PaperSettingItem
-                            title="Updates"
-                            description={UPDATE_NOTE}
-                        >
-                            <PaperEffect variant="primary">
-                                <PaperButton
-                                    onClick={() => void checkForUpdates()}>
-                                    <PaperIcon>update</PaperIcon>
-                                    Update everything now
-                                </PaperButton>
-                            </PaperEffect>
-                        </PaperSettingItem>
-
-                        <PaperSettingItem
-                            title="Quit App"
-                            description={QUIT_NOTE}
-                        >
-                            <PaperButton
-                                variant="danger"
-                                onClick={quitApp}
-                                aria-label="Quit Paperboard"
-                            >
-                                <PaperIcon>close</PaperIcon>
-                                Quit App
-                            </PaperButton>
-                        </PaperSettingItem>
-                    </Show>
-
-                    <Show when={isBrowserShell()}>
-                        <PaperSettingItem title="Sign out" description={SIGN_OUT_NOTE}>
-                            <PaperButton onClick={signOut}>
-                                <PaperIcon>logout</PaperIcon>
-                                Sign Out
-                            </PaperButton>
-                        </PaperSettingItem>
-                    </Show>
-                </PaperSettingList>
-
-                {/* browser mode: the browser keeps its own permissions */}
-                <Show when={!isBrowserShell() && props.panelName}>
-                    {(panelName) => <PanelPermissionSettings panelName={panelName()} />}
                 </Show>
 
-                <PaperSectionHeader icon="license" title="Licenses" />
-                <PaperSettingList autoHeight>
-                    <PaperSettingItem
-                        title="PolyForm Noncommercial 1.0.0"
-                        description="Your Paperboard experience"
-                    >
-                        <PaperButton
-                            size="small"
-                            onClick={() => viewLicense("paperboard")}
-                            aria-label="View PolyForm Noncommercial 1.0.0 license"
-                        >
-                            View
+                {/* browser mode runs no updates */}
+                <Show when={!props.compact && !isBrowserShell()}>
+                    <PaperSettingItem title="Updates" description={UPDATE_NOTE}>
+                        <PaperEffect variant="primary">
+                            <PaperButton onClick={() => void checkForUpdates()}>
+                                <PaperIcon>update</PaperIcon>
+                                Update everything now
+                            </PaperButton>
+                        </PaperEffect>
+                    </PaperSettingItem>
+
+                    <PaperSettingItem title="Quit App" description={QUIT_NOTE}>
+                        <PaperButton variant="danger" onClick={quitApp} aria-label="Quit Paperboard">
+                            <PaperIcon>close</PaperIcon>
+                            Quit App
                         </PaperButton>
                     </PaperSettingItem>
-                    <PaperSettingItem title="MIT license" description="Applies to SDKs">
-                        <PaperButton
-                            size="small"
-                            onClick={() => viewLicense("mit")}
-                            aria-label="View MIT license"
-                        >
-                            View
+                </Show>
+
+                <Show when={isBrowserShell()}>
+                    <PaperSettingItem title="Sign out" description={SIGN_OUT_NOTE}>
+                        <PaperButton onClick={signOut}>
+                            <PaperIcon>logout</PaperIcon>
+                            Sign Out
                         </PaperButton>
                     </PaperSettingItem>
-                </PaperSettingList>
-
-                {licenseModal}
-            </PaperPage>
-        </Show>
-    );
-}
-
-// The phone layout: titled groups of one-line rows, controls on the right,
-// and actions as rows you tap. Only what applies on a phone is here.
-function CompactSettings(props: {
-    settings: AppSettingsData;
-    gpu: boolean;
-    onChange: (next: Record<string, any>) => void;
-    computers: StartComputer[];
-    onViewLicense: (kind: LicenseKind) => void;
-    licenseModal: JSX.Element;
-    notice: JSX.Element;
-}) {
-    const settingsValue = createMemo(() => ({ ...props.settings }) as Record<string, any>);
-    const ActionRow = (row: { label: string; onClick: () => void; chevron?: boolean }) => (
-        <button
-            type="button"
-            class={styles.row}
-            onClick={row.onClick}
-        >
-            <PaperText preset="label" class={styles.label}>{row.label}</PaperText>
-            <Show when={row.chevron}>
-                <PaperIcon class={styles.chevron} aria-hidden="true">chevron_right</PaperIcon>
-            </Show>
-        </button>
-    );
-
-    return (
-        <div class={styles.compact}>
-            {props.notice}
-            <PaperSettingList
-                flat
-                autoHeight
-                class={styles.form}
-                value={settingsValue()}
-                onValueChange={props.onChange}
-            >
-                <section class={styles.group} aria-labelledby="settings-appearance">
-                    <h2 id="settings-appearance" class={styles.heading}><PaperText preset="section" inset>Appearance</PaperText></h2>
-                    <div class={styles.card}>
-                        <div class={styles.row}>
-                            <PaperText preset="label" class={styles.label}>Theme</PaperText>
-                            <PaperSelectMenu name="darkMode" value={props.settings.darkMode}>
-                                <PaperSelectMenuItem value="system" icon="contrast">System</PaperSelectMenuItem>
-                                <PaperSelectMenuItem value="light" icon="light_mode">Light</PaperSelectMenuItem>
-                                <PaperSelectMenuItem value="dark" icon="dark_mode">Dark</PaperSelectMenuItem>
-                            </PaperSelectMenu>
-                        </div>
-                        <label class={styles.row}>
-                            <PaperText preset="label" class={styles.label}>Disable animations</PaperText>
-                            <PaperToggle name="disableAnimations" checked={effectiveLook(props.settings, { gpu: props.gpu }).disableAnimations} />
-                        </label>
-                        <label class={styles.row}>
-                            <PaperText preset="label" class={styles.label}>Disable blur</PaperText>
-                            <PaperToggle name="disableBlur" checked={effectiveLook(props.settings, { gpu: props.gpu }).disableBlur} />
-                        </label>
-                    </div>
-                </section>
-
-                <section class={styles.group} aria-labelledby="settings-general">
-                    <h2 id="settings-general" class={styles.heading}><PaperText preset="section" inset>General</PaperText></h2>
-                    <div class={styles.card}>
-                        <div class={styles.row}>
-                            <PaperText preset="label" class={styles.label}>Start on</PaperText>
-                            <PaperSelectMenu name="startOn" value={props.settings.startOn}>
-                                <StartOnItems computers={props.computers} startOn={props.settings.startOn} />
-                            </PaperSelectMenu>
-                        </div>
-                    </div>
-                </section>
+                </Show>
             </PaperSettingList>
 
-            {/* a phone doesn't start at login, update itself, or quit: those rows are the desktop's */}
-            <section class={styles.group} aria-labelledby="settings-licenses">
-                <h2 id="settings-licenses" class={styles.heading}><PaperText preset="section" inset>Licenses</PaperText></h2>
-                <div class={styles.card}>
-                    <ActionRow label={LICENSE_TITLES.paperboard} onClick={() => props.onViewLicense("paperboard")} chevron />
-                    <ActionRow label={`${LICENSE_TITLES.mit} (SDKs)`} onClick={() => props.onViewLicense("mit")} chevron />
-                </div>
-            </section>
-
-            <Show when={isBrowserShell()}>
-                <section class={styles.group} aria-labelledby="settings-browser">
-                    <h2 id="settings-browser" class={styles.heading}><PaperText preset="section" inset>This browser</PaperText></h2>
-                    <div class={styles.card}>
-                        <ActionRow label="Sign Out" onClick={signOut} />
-                    </div>
-                </section>
+            {/* browser mode: the browser keeps its own permissions */}
+            <Show when={!isBrowserShell() && props.panelName}>
+                {(panelName) => <PanelPermissionSettings panelName={panelName()} />}
             </Show>
 
-            {props.licenseModal}
-        </div>
+            <PaperSectionHeader icon="license" title="Licenses" />
+            <PaperSettingList autoHeight>
+                <PaperSettingItem title={LICENSE_TITLES.paperboard} description="Your Paperboard experience">
+                    <PaperButton size="small" onClick={() => viewLicense("paperboard")} aria-label={`View ${LICENSE_TITLES.paperboard} license`}>
+                        View
+                    </PaperButton>
+                </PaperSettingItem>
+                <PaperSettingItem title={LICENSE_TITLES.mit} description="Applies to SDKs">
+                    <PaperButton size="small" onClick={() => viewLicense("mit")} aria-label={`View ${LICENSE_TITLES.mit}`}>
+                        View
+                    </PaperButton>
+                </PaperSettingItem>
+            </PaperSettingList>
+
+            <PaperModal open={licenseOpen()} onClose={() => setLicenseOpen(false)} title={LICENSE_TITLES[license()]} size="large">
+                <PaperMarkdown text={LICENSE_TEXTS[license()]} />
+            </PaperModal>
+        </PaperPage>
     );
 }
