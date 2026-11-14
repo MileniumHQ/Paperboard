@@ -24,16 +24,6 @@ export function usePanels() {
     // installed panels whose manifest the computer refuses, with why
     const [invalidStore, setInvalidStore] = createStore<Record<string, InvalidPanel[]>>({});
     const invalidPanelsByComputer = () => invalidStore;
-    /** a forgotten computer's panels are gone with it */
-    const forgetPanels = (compId: string) =>
-        batch(() => {
-            setPanelStore(produce((panels) => {
-                delete panels[compId];
-            }));
-            setInvalidStore(produce((invalid) => {
-                delete invalid[compId];
-            }));
-        });
     const [activeTabByComputer, setActiveTabByComputer] = createSignal<
         Record<string, string>
     >({
@@ -47,6 +37,22 @@ export function usePanels() {
     const [panelsLoadError, setPanelsLoadError] = createSignal<
         Record<string, string>
     >({});
+    /** a forgotten computer's panels are gone with it: their lists, frames and tab */
+    const forgetPanels = (compId: string) =>
+        batch(() => {
+            setPanelStore(produce((panels) => {
+                delete panels[compId];
+            }));
+            setInvalidStore(produce((invalid) => {
+                delete invalid[compId];
+            }));
+            setOpenedPanels((prev) => prev.filter((k) => !k.startsWith(`${compId}::`)));
+            setActiveTabByComputer((prev) => {
+                const copy = { ...prev };
+                delete copy[compId];
+                return copy;
+            });
+        });
     const panelsLoadFailed = createMemo(() =>
         Object.fromEntries(Object.entries(panelsLoadError()).map(([id, error]) => [id, error !== ""])),
     );
@@ -106,7 +112,6 @@ export function usePanels() {
         invalidPanelsByComputer,
         forgetPanels,
         activeTabByComputer,
-        setActiveTabByComputer,
         openedPanels,
         setOpenedPanels,
         reloadTokens,

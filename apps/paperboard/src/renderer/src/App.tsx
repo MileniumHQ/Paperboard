@@ -1,9 +1,8 @@
-import { type Component, type JSX, createSignal, createEffect, createMemo, on, onMount, onCleanup, For, Show } from "solid-js";
+import { type Component, type JSX, createSignal, createMemo, onMount, onCleanup, For, Show } from "solid-js";
 import {
     PaperProvider,
     PaperFlex,
     PaperModal,
-    useContextMenuState,
     PaperSlidePage,
     showToast,
 } from "@mileniumhq/paperui";
@@ -14,30 +13,26 @@ import {
     logToMain,
     shellApi,
     readPanelListingFile,
-    type ComputerInfo,
 } from "./lib/shell";
 import { mobileMode, setMobileMode } from "./lib/mobileMode";
 import AppSettings from "./components/settings/AppSettings";
 import PanelPermissionPrompt from "./components/panels/PanelPermissionPrompt";
 import PanelView from "./components/panels/PanelView";
 import LibraryFrame from "./components/panels/LibraryFrame";
-import PanelContextMenu from "./components/panels/PanelContextMenu";
-import LibraryContextMenu from "./components/panels/LibraryContextMenu";
 import type { PanelHeading } from "./components/panels/PanelView";
-import UninstallPanelModal, { type UninstallTarget } from "./components/panels/UninstallPanelModal";
+import type { UninstallTarget } from "./components/panels/UninstallPanelModal";
+import { createPanelDialogs } from "./components/panels/panelDialogs";
 import LandingView from "./components/computer/LandingView";
 import ComputerSetupWizard from "./components/wizard/ComputerSetupWizard";
 import ComputerSettings from "./components/computer/ComputerSettings";
 import ComputerSidebar from "./components/computer/ComputerSidebar";
-import ForgetComputerModal from "./components/computer/ForgetComputerModal";
+import { createComputerDialogs } from "./components/computer/computerDialogs";
 import PanelIcon from "./components/computer/PanelIcon";
 import { isShellTab } from "./lib/shellTabs";
 import { createShownWhileClosing } from "./lib/openings";
 import ConnectionLostOverlay from "./components/computer/ConnectionLostOverlay";
 import OfflineComputerModal from "./components/computer/OfflineComputerModal";
 import ComputerRail from "./components/computer/ComputerRail";
-import ComputerContextMenu from "./components/computer/ComputerContextMenu";
-import RenameComputerModal from "./components/computer/RenameComputerModal";
 import HomeView from "./components/home/HomeView";
 import AppUpdateModal from "./components/layout/AppUpdateModal";
 import { useAppUpdate } from "./hooks/useAppUpdate";
@@ -51,8 +46,9 @@ import libraryIcon from "./assets/PanelLibrary.png";
 import styles from "./App.module.css";
 import iconStyles from "./components/computer/panelIcon.module.css";
 import { useAppSettings } from "./hooks/useAppSettings";
-import { START_ON_HOME, startTarget } from "./lib/startOn";
+import { startTarget } from "./lib/startOn";
 import { useComputers } from "./hooks/useComputers";
+import { useComputerSelection } from "./hooks/useComputerSelection";
 import { usePanels } from "./hooks/usePanels";
 import { usePanelRestarts } from "./hooks/usePanelRestarts";
 import { askPanelToLeave, unsavedPanels } from "./lib/unsavedPanels";
@@ -61,11 +57,11 @@ import { errorMessage } from "./lib/errorMessage";
 const App: Component = () => {
     const appUpdate = useAppUpdate();
     const updateQueue = useUpdateQueue();
+    const computerState = useComputers();
     const {
         computers,
         setComputers,
         activeComputerId,
-        setActiveComputerId,
         offlineTarget,
         setOfflineTarget,
         refreshComputers,
@@ -73,13 +69,11 @@ const App: Component = () => {
         subscribeComputerChanges,
         computersLoadFailed,
         computersLoaded,
-    } = useComputers();
+    } = computerState;
+    const panelState = usePanels();
     const {
         panelsByComputer,
         invalidPanelsByComputer,
-        forgetPanels,
-        activeTabByComputer,
-        setActiveTabByComputer,
         openedPanels,
         setOpenedPanels,
         reloadTokens,
@@ -89,23 +83,10 @@ const App: Component = () => {
         getSelectedTab,
         setComputerTab,
         refreshPanelsForComputer,
-    } = usePanels();
+    } = panelState;
     const [isSetupOpen, setIsSetupOpen] = createSignal<boolean>(false);
     // the wizard stays through the fade and starts over on the next open
     const setupShown = createShownWhileClosing(isSetupOpen);
-    const panelContextMenu = useContextMenuState();
-    const [contextMenuPanel, setContextMenuPanel] = createSignal<UninstallTarget | null>(null);
-    const computerContextMenu = useContextMenuState();
-    const [contextMenuComputerId, setContextMenuComputerId] = createSignal<string | null>(null);
-    const libraryContextMenu = useContextMenuState();
-    const [libraryReloadToken, setLibraryReloadToken] = createSignal(0);
-    const reloadLibrary = () =>
-        setLibraryReloadToken((token) => token + 1);
-    // the computers the Forget Computer and Change Name dialogs are open for
-    const [forgetTarget, setForgetTarget] = createSignal<string | null>(null);
-    const [renameComputerId, setRenameComputerId] = createSignal<string | null>(null);
-    const [uninstallTarget, setUninstallTarget] = createSignal<UninstallTarget | null>(null);
-    const computerById = (id: string | null) => computers().find((c) => c.id === id);
     const panelName = (compId: string, panelId: string) =>
         panelsByComputer()[compId]?.find((p) => p.id === panelId)?.name || panelId;
     const {
@@ -117,6 +98,12 @@ const App: Component = () => {
         retryLoadAppSettings,
         dismissSettingsFailure,
     } = useAppSettings();
+    const selection = useComputerSelection({
+        computers: computerState,
+        panels: panelState,
+        appSettings,
+        onAppSettingsChange: handleAppSettingsChange,
+    });
     // what the main area shows: Home (where Paperboard opens), app
     // settings, or the active computer's panels
     const [railMode, setRailMode] = createSignal<"home" | "settings" | "computer">("home");
@@ -137,10 +124,8 @@ const App: Component = () => {
         if (mobile()) setMobilePageOpen(true);
     };
 
-    // a newer selection wins: a slow probe for an older one is dropped
-    let selectionRequest = 0;
     const handleRailSelect = (val: string) => {
-        selectionRequest++;
+        selection.supersedeSelection();
         setOfflineTarget(null);
         if (val === "__settings" && mobile()) {
             setMobileSettingsOpen(true);
@@ -153,16 +138,16 @@ const App: Component = () => {
             setRailMode("settings");
         } else {
             setRailMode("computer");
-            handleComputerSelect(val);
+            void selection.selectComputer(val);
         }
     };
 
-    // a widget's "open panel": the panel's own computer, its own tab
-    const openPanelFromHome = (compId: string, panelId: string) => {
+    /** shows a tab of a computer: a widget's "open panel", or the computer's info page */
+    const openComputerTab = (compId: string, tab: string) => {
         setRailMode("computer");
-        setComputerTab(compId, panelId);
+        setComputerTab(compId, tab);
         openMobilePage();
-        void handleComputerSelect(compId);
+        void selection.selectComputer(compId);
     };
 
     // A panel page holding unsaved work is shown and asked (its own dialog)
@@ -174,7 +159,7 @@ const App: Component = () => {
             setRailMode("computer");
             setComputerTab(compId, panelId);
             openMobilePage();
-            if (activeComputerId() !== compId) finishComputerSelect(compId);
+            if (activeComputerId() !== compId) selection.showComputer(compId);
             const answer = await askPanelToLeave(key);
             if (answer.error) {
                 showToast({ variant: "danger", title: `${panelName(compId, panelId)} couldn't ask about its unsaved changes`, message: answer.error });
@@ -192,54 +177,29 @@ const App: Component = () => {
         refreshPanelsForComputer,
     });
 
-    const handleRestartPanel = () => {
-        const target = contextMenuPanel();
-        if (!target) return;
-        panelContextMenu.close();
-        void restartPanel(target.compId, target.panel.id, target.panel.name);
-    };
-
-    const handleRequestUninstall = async () => {
-        const target = contextMenuPanel();
-        if (!target) return;
-        panelContextMenu.close();
-        if (!(await mayClosePanels([`${target.compId}::${target.panel.id}`]))) return;
-        setUninstallTarget(target);
-    };
-
-    // the panel is gone: its frame closes, and its tab with it
-    const handleUninstalled = async (target: UninstallTarget) => {
-        const key = `${target.compId}::${target.panel.id}`;
-        setOpenedPanels((prev) => prev.filter((k) => k !== key));
-        setRestartState(key, null);
-        if (getSelectedTab(target.compId) === target.panel.id) {
-            setComputerTab(target.compId, "landing");
-            // the phone layout's landing is the panel list underneath
-            setMobilePageOpen(false);
-        }
-        await refreshPanelsForComputer(target.compId);
-    };
-
-    // a computer a dialog found answering again: the one way back to it,
-    // switching to it and listing its panels (connectComputer)
-    const reconnected = async (compId: string) => {
-        await refreshComputers();
-        finishComputerSelect(compId);
-    };
-
-    // a panel list that failed is fetched again once its computer reconnects;
-    // tracks the computer and its connection, not the list it fetches
-    const wasConnected: Record<string, boolean | undefined> = {};
-    createEffect(on(
-        [activeComputerId, () => computers().find((c) => c.id === activeComputerId())?.status?.connected === true],
-        ([id, connected]) => {
-            const was = wasConnected[id];
-            wasConnected[id] = connected;
-            if (was === false && connected && panelsLoadFailed()[id]) {
-                void refreshPanelsForComputer(id);
+    const panelDialogs = createPanelDialogs({
+        restartPanel,
+        mayClosePanel: (key) => mayClosePanels([key]),
+        // the panel is gone: its frame closes, and its tab with it
+        onUninstalled: async (target: UninstallTarget) => {
+            const key = `${target.compId}::${target.panel.id}`;
+            setOpenedPanels((prev) => prev.filter((k) => k !== key));
+            setRestartState(key, null);
+            if (getSelectedTab(target.compId) === target.panel.id) {
+                setComputerTab(target.compId, "landing");
+                // the phone layout's landing is the panel list underneath
+                setMobilePageOpen(false);
             }
+            await refreshPanelsForComputer(target.compId);
         },
-    ));
+    });
+
+    const computerDialogs = createComputerDialogs({
+        computers,
+        mayLeaveComputer: (compId) => mayClosePanels(openedPanels().filter((key) => key.startsWith(`${compId}::`))),
+        openComputerInfo: (compId) => openComputerTab(compId, "settings"),
+        forgetComputer: selection.forgetComputer,
+    });
 
     onMount(async () => {
         try {
@@ -288,128 +248,6 @@ const App: Component = () => {
         }
     };
 
-    const finishComputerSelect = (compId: string) => {
-        setActiveComputerId(compId);
-
-        if (!activeTabByComputer()[compId]) {
-            const openForComp = openedPanels().filter((key) =>
-                key.startsWith(`${compId}::`),
-            );
-            if (openForComp.length === 0) {
-                setComputerTab(compId, "landing");
-            } else {
-                const [, fallbackPanel] =
-                    openForComp[openForComp.length - 1].split("::");
-                setComputerTab(compId, fallbackPanel);
-            }
-        }
-
-        void connectComputer(compId);
-    };
-
-    // why a computer couldn't be made the active one, shown in its panel list
-    const [switchError, setSwitchError] = createSignal<Record<string, string>>({});
-    // makes the computer the one main talks to and Paperboard reopens, then
-    // lists its panels
-    const connectComputer = async (compId: string) => {
-        setSwitchError((prev) => ({ ...prev, [compId]: "" }));
-        try {
-            if (!(await computersApi.switch(compId))) throw new Error("Paperboard doesn't know this computer anymore.");
-        } catch (err) {
-            logToMain("error", "Failed to switch computer:", err);
-            setSwitchError((prev) => ({ ...prev, [compId]: errorMessage(err) }));
-            return;
-        }
-        await refreshPanelsForComputer(compId);
-    };
-
-    const handleComputerSelect = async (compId: string) => {
-        const request = ++selectionRequest;
-        const comp = computers().find((c) => c.id === compId);
-        if (!comp || comp.isLocal) {
-            finishComputerSelect(compId);
-            return;
-        }
-
-        // Probe before switching so offline computers prompt explicitly; the
-        // dialog shows this probe's answer and probes again only when asked
-        try {
-            const probe = await computersApi.probe(comp.host, comp.port);
-            if (request !== selectionRequest) return;
-            if (!probe?.reachable) {
-                setOfflineTarget({
-                    ...comp,
-                    status: { ...comp.status, connected: false, error: probe?.error },
-                });
-                return;
-            }
-        } catch (err) {
-            logToMain("error", "Failed to probe computer:", err);
-            if (request !== selectionRequest) return;
-            setOfflineTarget({
-                ...comp,
-                status: { ...comp.status, connected: false, error: errorMessage(err) },
-            });
-            return;
-        }
-
-        finishComputerSelect(compId);
-    };
-
-    // a failed forget rejects with why; the dialog stays open showing it
-    const forgetComputer = async (compId: string) => {
-        if (!(await computersApi.remove(compId))) throw new Error("Paperboard doesn't know this computer anymore.");
-        setOpenedPanels((prev) =>
-            prev.filter((k) => !k.startsWith(`${compId}::`)),
-        );
-        forgetPanels(compId);
-        setActiveTabByComputer((prev) => {
-            const copy = { ...prev };
-            delete copy[compId];
-            return copy;
-        });
-        await refreshComputers();
-        // forgetting another computer leaves you where you are
-        if (activeComputerId() === compId) await handleComputerSelect("local");
-        // Paperboard can't open on a computer it forgot
-        if (appSettings().startOn === compId) {
-            await handleAppSettingsChange({ ...appSettings(), startOn: START_ON_HOME });
-        }
-    };
-
-    const handleComputerAdded = async (newComp: ComputerInfo) => {
-        await refreshComputers();
-        await handleComputerSelect(newComp.id);
-    };
-
-    const handleComputerContextMenu = (compId: string, e: MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setContextMenuComputerId(compId);
-        computerContextMenu.openAtMouse(e);
-    };
-
-    // the computer's info page: the same page its header opens
-    const openComputerInfo = (compId: string) => {
-        setRailMode("computer");
-        setComputerTab(compId, "settings");
-        openMobilePage();
-        void handleComputerSelect(compId);
-    };
-
-    const handleInfoFromMenu = () => {
-        computerContextMenu.close();
-        const compId = contextMenuComputerId();
-        setContextMenuComputerId(null);
-        if (compId) openComputerInfo(compId);
-    };
-
-    const handleRenameFromMenu = () => {
-        computerContextMenu.close();
-        setRenameComputerId(contextMenuComputerId());
-        setContextMenuComputerId(null);
-    };
-
     // the rail moves at once; a failed save says so and puts it back
     const handleReorderComputers = async (shownIds: string[]) => {
         const before = [...computers()];
@@ -428,21 +266,6 @@ const App: Component = () => {
             });
             void refreshComputers();
         }
-    };
-
-    // The Forget Computer dialog opens from the rail's menu, the can't-reach
-    // dialog and the computer's info page, after the computer's panels with
-    // unsaved work have had their say.
-    const openForget = async (compId: string) => {
-        if (!(await mayClosePanels(openedPanels().filter((key) => key.startsWith(`${compId}::`))))) return;
-        setForgetTarget(compId);
-    };
-
-    const handleForgetFromMenu = () => {
-        computerContextMenu.close();
-        const compId = contextMenuComputerId();
-        setContextMenuComputerId(null);
-        if (compId) void openForget(compId);
     };
 
     // The library runs in an iframe and asks for installs over postMessage;
@@ -572,7 +395,7 @@ const App: Component = () => {
                         }
                         onSelect={(val) => handleRailSelect(val)}
                         onAdd={() => setIsSetupOpen(true)}
-                        onComputerContextMenu={handleComputerContextMenu}
+                        onComputerContextMenu={computerDialogs.openMenu}
                         onReorder={(ids) => void handleReorderComputers(ids)}
                         loadFailed={computersLoadFailed()}
                         onRetryLoad={() => void refreshComputers()}
@@ -621,7 +444,7 @@ const App: Component = () => {
                         >
                             <ConnectionLostOverlay
                                 computer={activeComputer()!}
-                                onReconnectSuccess={() => void reconnected(activeComputerId())}
+                                onReconnectSuccess={() => void selection.reconnected(activeComputerId())}
                             />
                         </Show>
 
@@ -634,15 +457,12 @@ const App: Component = () => {
                             panelsByComputer={panelsByComputer()}
                             invalidPanelsByComputer={invalidPanelsByComputer()}
                             updatingPanels={updatingPanels()}
-                            switchError={switchError()}
-                            onRetrySwitch={(compId) => void connectComputer(compId)}
+                            switchError={selection.switchError()}
+                            onRetrySwitch={(compId) => void selection.connectComputer(compId)}
                             panelsLoadError={panelsLoadError()}
                             onRetryPanels={(compId) => void refreshPanelsForComputer(compId)}
-                            onPanelContextMenu={(compId, panel, e) => {
-                                setContextMenuPanel({ compId, panel });
-                                panelContextMenu.openAtMouse(e);
-                            }}
-                            onLibraryContextMenu={(e) => libraryContextMenu.openAtMouse(e)}
+                            onPanelContextMenu={panelDialogs.openPanelMenu}
+                            onLibraryContextMenu={panelDialogs.openLibraryMenu}
                             mobile={mobile()}
                             inert={mobilePageOpen()}
                         />
@@ -702,8 +522,8 @@ const App: Component = () => {
                                     onInstall={handleLibraryInstall}
                                     onOpen={handleLibraryOpen}
                                     loadMedia={handleLibraryMedia}
-                                    reloadToken={libraryReloadToken()}
-                                    onReload={reloadLibrary}
+                                    reloadToken={panelDialogs.libraryReloadToken()}
+                                    onReload={panelDialogs.reloadLibrary}
                                 />
                             </PaperFlex>
 
@@ -722,8 +542,8 @@ const App: Component = () => {
                                         >
                                             <ComputerSettings
                                                 computer={comp}
-                                                onForget={() => void openForget(comp.id)}
-                                                onChangeName={() => setRenameComputerId(comp.id)}
+                                                onForget={() => void computerDialogs.openForget(comp.id)}
+                                                onChangeName={() => computerDialogs.openRename(comp.id)}
                                             />
                                         </PaperFlex>
                                     );
@@ -774,7 +594,7 @@ const App: Component = () => {
                         panelsByComputer={panelsByComputer()}
                         panelsLoadFailed={panelsLoadFailed()}
                         onRefreshPanels={(compId) => void refreshPanelsForComputer(compId)}
-                        onOpenPanel={openPanelFromHome}
+                        onOpenPanel={openComputerTab}
                         onOpenComputer={(compId) => handleRailSelect(compId)}
                         reloadTokens={reloadTokens()}
                     />
@@ -823,13 +643,13 @@ const App: Component = () => {
                     const comp = offlineTarget();
                     if (!comp) return;
                     setOfflineTarget(null);
-                    void openForget(comp.id);
+                    void computerDialogs.openForget(comp.id);
                 }}
                 onReconnectSuccess={() => {
                     const comp = offlineTarget();
                     if (!comp) return;
                     setOfflineTarget(null);
-                    void reconnected(comp.id);
+                    void selection.reconnected(comp.id);
                 }}
             />
 
@@ -844,54 +664,13 @@ const App: Component = () => {
                 <Show when={setupShown()} keyed>
                     <ComputerSetupWizard
                         onClose={() => setIsSetupOpen(false)}
-                        onComplete={handleComputerAdded}
+                        onComplete={selection.addComputer}
                     />
                 </Show>
             </PaperModal>
 
-            <PanelContextMenu
-                menu={panelContextMenu}
-                onClose={() => {
-                    panelContextMenu.close();
-                    setContextMenuPanel(null);
-                }}
-                onRestart={handleRestartPanel}
-                onUninstall={handleRequestUninstall}
-            />
-
-            <ComputerContextMenu
-                menu={computerContextMenu}
-                isLocal={Boolean(computerById(contextMenuComputerId())?.isLocal)}
-                onInfo={handleInfoFromMenu}
-                onRename={handleRenameFromMenu}
-                onForget={handleForgetFromMenu}
-            />
-
-            <RenameComputerModal
-                computer={computerById(renameComputerId())}
-                onClose={() => setRenameComputerId(null)}
-            />
-
-            <LibraryContextMenu
-                menu={libraryContextMenu}
-                onClose={() => libraryContextMenu.close()}
-                onReload={() => {
-                    libraryContextMenu.close();
-                    reloadLibrary();
-                }}
-            />
-
-            <ForgetComputerModal
-                computer={computerById(forgetTarget())}
-                onClose={() => setForgetTarget(null)}
-                onForget={forgetComputer}
-            />
-
-            <UninstallPanelModal
-                target={uninstallTarget()}
-                onClose={() => setUninstallTarget(null)}
-                onUninstalled={handleUninstalled}
-            />
+            <panelDialogs.Dialogs />
+            <computerDialogs.Dialogs />
         </PaperProvider>
     );
 };
