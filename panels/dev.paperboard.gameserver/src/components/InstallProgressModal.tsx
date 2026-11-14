@@ -2,6 +2,7 @@ import { Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperModal, PaperQuote } from "@mileniumhq/paperui";
 import InstallLoaders, { type InstallLoaderItem } from "./InstallLoaders";
 import type { Outcome } from "../lib/failure";
+import FailureText from "./FailureText";
 
 /**
  * What an install in the Versions tab shows: its rows, which nothing closes
@@ -26,7 +27,7 @@ export default function InstallProgressModal(props: {
                 <PaperFlex fullWidth maxWidth="panel-small">
                     <InstallLoaders items={props.rows} />
                     <Show when={props.failure}>
-                        {(note) => <PaperQuote variant="danger" icon="warning" title={note().title}>{note().message}</PaperQuote>}
+                        {(note) => <PaperQuote variant="danger" icon="warning" title={note().title}><FailureText message={note().message} /></PaperQuote>}
                     </Show>
                 </PaperFlex>
             </PaperFlex>

@@ -1,6 +1,7 @@
 import { onCleanup, Show, type JSX } from "solid-js";
 import { PaperButton, PaperCenteredInterface, PaperFlex, PaperQuote, useWizard } from "@mileniumhq/paperui";
 import InstallLoaders, { type InstallLoaderItem } from "./InstallLoaders";
+import FailureText from "./FailureText";
 
 /**
  * Runs a setup wizard's install: Back and Next are hidden while it runs, and
@@ -39,7 +40,7 @@ export default function InstallStepView(props: {
             <PaperFlex direction="column" gap="full" center fullWidth>
                 {props.children}
                 <Show when={props.error}>
-                    <PaperQuote variant="danger" title="Setup failed">{props.error}</PaperQuote>
+                    <PaperQuote variant="danger" title="Setup failed"><FailureText message={props.error} /></PaperQuote>
                     <PaperFlex gap="half">
                         <PaperButton onClick={props.onRetry}>Retry setup</PaperButton>
                         {props.actions}

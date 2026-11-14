@@ -28,6 +28,7 @@ import { isServerSoftware } from "../software/catalog";
 import { listInstalledPlugins, uninstallAllPlugins } from "../lib/plugins";
 import VersionPicker from "./VersionPicker";
 import { errorMessage, type Outcome } from "../lib/failure";
+import FailureText from "./FailureText";
 
 // Versions: swap the server software for a different software/version. This is a
 // destructive boundary (world format and plugin compatibility can change),
@@ -138,7 +139,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                     <Show when={error()}>
                         {(failure) => (
                             <PaperQuote variant="danger" icon="warning" title={failure().title}>
-                                {failure().message}
+                                <FailureText message={failure().message} />
                             </PaperQuote>
                         )}
                     </Show>

@@ -16,6 +16,7 @@ import InstallProgressModal from "../../components/InstallProgressModal";
 import { serverBridge, serverStatus } from "../../lib/server";
 import { errorMessage, type Outcome } from "../../lib/failure";
 import { createSteamInstall, type SteamInstallInfo, type SteamUpdateStatus } from "./installRows";
+import FailureText from "../../components/FailureText";
 
 /**
  * Versions for a Steam dedicated server: Steam serves one current build, so
@@ -75,7 +76,7 @@ export default function SteamVersions(props: { name: string; infoAction: string;
             <InstallNotices game={props.name} stopFor="update it" loadFailure={loadFailure()} host={info()?.host ?? null} />
 
             <Show when={checkFailure()}>
-                {(note) => <PaperQuote variant="danger" icon="warning" title={note().title}>{note().message}</PaperQuote>}
+                {(note) => <PaperQuote variant="danger" icon="warning" title={note().title}><FailureText message={note().message} /></PaperQuote>}
             </Show>
 
             <PaperCard>

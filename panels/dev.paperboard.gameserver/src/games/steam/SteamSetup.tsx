@@ -10,6 +10,7 @@ import { UnsupportedHost } from "../../components/InstallNotices";
 import { serverBridge } from "../../lib/server";
 import { errorMessage, type Outcome } from "../../lib/failure";
 import { createSteamInstall, type SteamInstallInfo } from "./installRows";
+import FailureText from "../../components/FailureText";
 
 function InstallStep(props: { name: string; infoAction: string; installAction: string }) {
     const install = createSteamInstall(props.installAction);
@@ -45,7 +46,7 @@ function InstallStep(props: { name: string; infoAction: string; installAction: s
                 <PaperCenteredInterface>
                     <UnsupportedHost game={props.name} host={blocked()!.host ?? null} />
                     <Show when={blocked()!.failure}>
-                        {(note) => <PaperQuote variant="danger" icon="warning" title={note().title}>{note().message}</PaperQuote>}
+                        {(note) => <PaperQuote variant="danger" icon="warning" title={note().title}><FailureText message={note().message} /></PaperQuote>}
                     </Show>
                 </PaperCenteredInterface>
             }
