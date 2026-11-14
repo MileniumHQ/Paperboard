@@ -7,6 +7,7 @@ import type { PaperColor, PaperTextPreset } from "../../types";
 import { resolveColor, getVarCss } from "../../utils/theme";
 import { copyText } from "../../utils/clipboard";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export interface PaperTextProps extends JSX.HTMLAttributes<HTMLElement> {
     weight?: number;
@@ -94,7 +95,7 @@ export function PaperText(props: PaperTextProps) {
     const resolvedColor = () => resolveColor(local.color);
 
     const className = () =>
-        [
+        cx(
             styles.PaperText,
             local.rounded ? styles.rounded : "",
             local.family === "code" ? styles.code : "",
@@ -103,9 +104,7 @@ export function PaperText(props: PaperTextProps) {
             local.truncate ? styles.truncate : "",
             local.inset ? styles.inset : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     const dynamicStyle = () => {
         const extra: JSX.CSSProperties = {};

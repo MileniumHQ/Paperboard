@@ -12,6 +12,7 @@ import { PaperText } from "../../components/PaperText";
 import { PaperFlex } from "../PaperFlex";
 import { PaperSettingListContext } from "../../contexts/settingList";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export interface PaperSettingListProps
     extends JSX.HTMLAttributes<HTMLDivElement> {
@@ -79,14 +80,12 @@ export function PaperSettingList(props: ParentProps<PaperSettingListProps>) {
     };
 
     const className = () =>
-        [
+        cx(
             styles.PaperSettingList,
             local.autoHeight ? styles.autoHeight : "",
             local.flat ? styles.flat : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     const dynamicStyle = () => {
         const extra: JSX.CSSProperties = {};
@@ -141,13 +140,11 @@ export function PaperSettingItem(props: ParentProps<PaperSettingItemProps>) {
     return (
         <div
             {...rest}
-            class={[
+            class={cx(
                 styles.PaperSettingItem,
                 local.disabled ? styles.disabled : "",
                 local.class,
-            ]
-                .filter(Boolean)
-                .join(" ")}
+            )}
             classList={local.classList}
         >
             <PaperFlex direction="column" gap="onefourth" class={styles.text}>

@@ -3,6 +3,7 @@ import styles from "./index.module.css";
 import progressStyles from "../PaperProgress/index.module.css";
 import { For, Show, splitProps, type JSX } from "solid-js";
 import { haptic } from "../../utils/haptics";
+import { cx } from "../../utils/cx";
 
 /** most stops a drag ticks through; finer sliders glide without buzzing */
 const MAX_DETENTS = 24;
@@ -166,15 +167,13 @@ export function PaperRange(props: PaperRangeProps) {
     };
 
     const className = () =>
-        [
+        cx(
             styles.PaperRange,
             vertical() ? styles.vertical : styles.horizontal,
             stacked() ? styles.stacked : "",
             local.disabled ? styles.disabled : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <div

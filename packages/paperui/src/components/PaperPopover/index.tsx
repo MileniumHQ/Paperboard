@@ -13,6 +13,7 @@ import {
 import { Portal } from "solid-js/web";
 import { PaperText } from "../PaperText";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export type PaperPopoverPlacement = "below" | "above";
 
@@ -141,7 +142,7 @@ export function PaperPopover(props: ParentProps<PaperPopoverProps>) {
                     ref={box}
                     role="dialog"
                     {...rest}
-                    class={[styles.PaperPopover, local.class].filter(Boolean).join(" ")}
+                    class={cx(styles.PaperPopover, local.class)}
                     classList={{
                         [styles.placed]: position() !== null,
                         [styles.above]: position()?.side === "above",

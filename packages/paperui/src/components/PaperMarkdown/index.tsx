@@ -12,6 +12,7 @@ import { PaperText } from "../PaperText";
 import { PaperTextList } from "../PaperTextList";
 import type { PaperTextPreset } from "../../types";
 import { nestHtml, textOf, tokenizeHtml, type HtmlNode, type HtmlToken } from "./html";
+import { cx } from "../../utils/cx";
 
 /**
  * Markdown rendered as PaperUI elements — never as innerHTML. The consumer
@@ -719,7 +720,7 @@ export function PaperMarkdown(props: PaperMarkdownProps) {
     return (
         <div
             ref={root}
-            class={[styles.PaperMarkdown, local.class].filter(Boolean).join(" ")}
+            class={cx(styles.PaperMarkdown, local.class)}
             classList={local.classList}
             onClick={followAnchor}
         >

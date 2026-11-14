@@ -7,6 +7,7 @@ import { PaperText } from "../PaperText";
 import { PaperIcon } from "../PaperIcon";
 import { PaperEffect } from "../PaperEffect";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export interface PaperMediaCardProps
     extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "title" | "onClick"> {
@@ -194,16 +195,14 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
             aria-pressed={!isLink() && isInteractive() && local.selected !== undefined ? local.selected : undefined}
             onClick={handleClick}
             onKeyDown={isLink() ? undefined : handleKeyDown}
-            class={[
+            class={cx(
                 styles.card,
                 isInteractive() ? styles.interactive : "",
                 local.disabled ? styles.disabled : "",
                 local.selected ? styles.selected : "",
                 local.plainIcon ? styles.iconPlain : "",
                 local.class,
-            ]
-                .filter(Boolean)
-                .join(" ")}
+            )}
             classList={local.classList}
         >
             <Show when={hasBanner()}>
@@ -244,15 +243,13 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
             </Show>
 
             <div
-                class={[
+                class={cx(
                     styles.body,
                     hasOverlappingIcon()
                         ? styles.bodyWithOverlappingIcon
                         : "",
                     hasOverlappingPoster() ? styles.bodyBesidePoster : "",
-                ]
-                    .filter(Boolean)
-                    .join(" ")}
+                )}
             >
                 <Show when={!hasBanner() && local.poster}>
                     <img src={local.poster} alt={local.posterAlt || ""} class={styles.posterStandalone} />
@@ -329,7 +326,7 @@ export function PaperMediaCardGroup(props: ParentProps<PaperMediaCardGroupProps>
     return (
         <div
             {...rest}
-            class={[styles.cardGroup, local.class].filter(Boolean).join(" ")}
+            class={cx(styles.cardGroup, local.class)}
             classList={local.classList}
             style={mergeStyle(
                 { "grid-template-columns": `repeat(auto-fill, minmax(${resolveSize(local.minCardWidth ?? "card-min")}, 1fr))` },

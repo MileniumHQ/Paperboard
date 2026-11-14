@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import { splitProps, Show, type JSX } from "solid-js";
 import type { PaperColor } from "../../types";
 import { resolveColor } from "../../utils/theme";
+import { cx } from "../../utils/cx";
 
 export interface PaperIconProps extends JSX.HTMLAttributes<HTMLSpanElement> {
     zeroHeight?: boolean;
@@ -48,14 +49,12 @@ export function PaperIcon(props: PaperIconProps) {
             : { "aria-hidden": "true" as const };
 
     const className = () =>
-        [
+        cx(
             styles.PaperIcon,
             local.zeroHeight ? styles.zeroHeight : "",
             local.monogram ? styles.monogram : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <span {...semantics()} {...rest} class={className()} classList={local.classList}>
@@ -67,9 +66,7 @@ export function PaperIcon(props: PaperIconProps) {
                             <img
                                 src={src()}
                                 alt={local.alt ?? ""}
-                                class={[styles.iconImage, local.pixelated ? styles.pixelated : ""]
-                                    .filter(Boolean)
-                                    .join(" ")}
+                                class={cx(styles.iconImage, local.pixelated ? styles.pixelated : "")}
                             />
                         }
                     >

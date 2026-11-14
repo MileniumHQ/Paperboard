@@ -3,6 +3,7 @@ import tokens from "../shared/codeTokens.module.css";
 import { createEffect, createMemo, createSignal, For, on, Show, type JSX } from "solid-js";
 import { escapeHtml, grammarFor, highlightLines } from "../../utils/highlight";
 import { caretPosition, detectIndent, indentEdit, newlineEdit, type TextEdit } from "./edit";
+import { cx } from "../../utils/cx";
 
 export { detectIndent, indentEdit, newlineEdit, caretPosition } from "./edit";
 export type { TextEdit } from "./edit";
@@ -160,7 +161,7 @@ export function PaperEditor(props: PaperEditorProps) {
 
     return (
         <div
-            class={[styles.PaperEditor, props.class].filter(Boolean).join(" ")}
+            class={cx(styles.PaperEditor, props.class)}
             classList={{
                 ...props.classList,
                 [styles.wrap]: Boolean(props.wrap),

@@ -18,6 +18,7 @@ import {
 import { Portal } from "solid-js/web";
 import { PaperPresence } from "../PaperPresence";
 import { focusBeforeMenu } from "../shared/menuFocus";
+import { cx } from "../../utils/cx";
 
 export interface ModalLayerProps extends JSX.HTMLAttributes<HTMLDivElement> {
     open?: boolean;
@@ -227,7 +228,7 @@ export function ModalLayer(props: ModalLayerProps) {
                 exitClass={styles.backdropTransitionOut}
             >
                 <div
-                    class={[styles.backdrop, local.backdropClass].filter(Boolean).join(" ")}
+                    class={cx(styles.backdrop, local.backdropClass)}
                     classList={{
                         [styles.bottom]: local.placement === "bottom",
                         [styles.concealed]: !!local.concealed,
@@ -247,7 +248,7 @@ export function ModalLayer(props: ModalLayerProps) {
                         role="dialog"
                         aria-modal={local.open ? "true" : undefined}
                         {...rest}
-                        class={[styles.dialog, local.class].filter(Boolean).join(" ")}
+                        class={cx(styles.dialog, local.class)}
                     >
                         <Held open={!!local.open}>{local.content}</Held>
                     </div>

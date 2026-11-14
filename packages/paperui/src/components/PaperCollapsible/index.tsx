@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import { children, createSignal, createUniqueId, splitProps, Show, type JSX, type ParentProps } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
+import { cx } from "../../utils/cx";
 
 export interface PaperCollapsibleProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "title"> {
     /** what the button says; the content is hidden behind it */
@@ -29,7 +30,7 @@ export function PaperCollapsible(props: ParentProps<PaperCollapsibleProps>) {
     };
 
     return (
-        <div {...rest} class={[styles.PaperCollapsible, local.class].filter(Boolean).join(" ")} classList={local.classList}>
+        <div {...rest} class={cx(styles.PaperCollapsible, local.class)} classList={local.classList}>
             <button type="button" class={styles.header} aria-expanded={open()} aria-controls={`${id}-content`} id={`${id}-header`} onClick={toggle}>
                 <span class={styles.chevron} classList={{ [styles.open!]: open() }} aria-hidden="true">
                     <PaperIcon>chevron_right</PaperIcon>

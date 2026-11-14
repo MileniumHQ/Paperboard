@@ -13,6 +13,7 @@ import { copyText } from "../../utils/clipboard";
 
 import { escapeHtml, highlightCode } from "../../utils/highlight";
 import tokens from "../shared/codeTokens.module.css";
+import { cx } from "../../utils/cx";
 
 export interface PaperCodeProps extends JSX.HTMLAttributes<HTMLElement> {
     block?: boolean;
@@ -72,9 +73,7 @@ export function PaperCode(props: ParentProps<PaperCodeProps>) {
                 <code
                     {...rest}
                     ref={local.ref}
-                    class={[styles.PaperCodeInline, tokens.tokens, local.class]
-                        .filter(Boolean)
-                        .join(" ")}
+                    class={cx(styles.PaperCodeInline, tokens.tokens, local.class)}
                     classList={local.classList}
                     innerHTML={highlightedHTML()}
                 />
@@ -119,9 +118,7 @@ export function PaperCode(props: ParentProps<PaperCodeProps>) {
                     {...rest}
                     ref={local.ref as any}
                     data-language={local.language || local.lang || undefined}
-                    class={[styles.PaperCodeBlock, tokens.tokens, local.class]
-                        .filter(Boolean)
-                        .join(" ")}
+                    class={cx(styles.PaperCodeBlock, tokens.tokens, local.class)}
                     classList={local.classList}
                 >
                     <code innerHTML={highlightedHTML()} />

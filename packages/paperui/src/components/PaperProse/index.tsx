@@ -1,5 +1,6 @@
 import styles from "./index.module.css";
 import { splitProps, type JSX, type ParentProps } from "solid-js";
+import { cx } from "../../utils/cx";
 
 export interface PaperProseProps extends JSX.HTMLAttributes<HTMLDivElement> {}
 
@@ -12,7 +13,7 @@ export function PaperProse(props: ParentProps<PaperProseProps>) {
     const [local, rest] = splitProps(props, ["class", "classList", "children"]);
 
     const className = () =>
-        [styles.PaperProse, local.class].filter(Boolean).join(" ");
+        cx(styles.PaperProse, local.class);
 
     return (
         <div {...rest} class={className()} classList={local.classList}>

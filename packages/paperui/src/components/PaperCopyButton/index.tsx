@@ -5,6 +5,7 @@ import { PaperIcon } from "../PaperIcon";
 import { copyText } from "../../utils/clipboard";
 import { haptic } from "../../utils/haptics";
 import type { PaperButtonVariant } from "../../types";
+import { cx } from "../../utils/cx";
 
 export interface PaperCopyButtonProps
     extends Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "onClick"> {
@@ -45,7 +46,7 @@ export function PaperCopyButton(props: PaperCopyButtonProps) {
         <PaperButton size={local.label ? "medium" : "tiny"}
             {...rest}
             icon={!local.label}
-            class={[styles.PaperCopyButton, local.class].filter(Boolean).join(" ")}
+            class={cx(styles.PaperCopyButton, local.class)}
             classList={local.classList}
             title={statusText() ?? local.title ?? "Copy"}
             onClick={() => void handleCopy()}>

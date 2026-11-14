@@ -3,6 +3,7 @@ import { splitProps, Show, children, type ParentProps, type JSX } from "solid-js
 import { PaperIcon } from "../PaperIcon";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import type { PaperBadgeVariant } from "../../types";
+import { cx } from "../../utils/cx";
 
 export interface PaperBadgeProps extends JSX.HTMLAttributes<HTMLSpanElement> {
     variant?: PaperBadgeVariant;
@@ -25,7 +26,7 @@ export function PaperBadge(props: ParentProps<PaperBadgeProps>) {
     return (
         <span
             {...rest}
-            class={[styles.PaperBadge, variantClass(), local.class].filter(Boolean).join(" ")}
+            class={cx(styles.PaperBadge, variantClass(), local.class)}
             classList={local.classList}
             style={roleStyle()}
         >

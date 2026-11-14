@@ -23,6 +23,7 @@ import {
     PAPER_MEDIA_RATES,
 } from "../shared/media";
 import { DEFAULT_WAVEFORM_MAX_BYTES, loadWaveform } from "./waveform";
+import { cx } from "../../utils/cx";
 
 export { computePeaks, loadWaveform, WAVEFORM_RESOLUTION, DEFAULT_WAVEFORM_MAX_BYTES } from "./waveform";
 
@@ -198,13 +199,11 @@ export function PaperAudio(props: PaperAudioProps) {
     });
 
     const className = () =>
-        [
+        cx(
             styles.PaperAudio,
             local.fullWidth ? styles.fullWidth : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <div

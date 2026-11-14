@@ -12,6 +12,7 @@ import {
 } from "solid-js";
 import { PaperButton, type PaperButtonSize } from "../PaperButton";
 import { PaperContextMenu } from "../PaperContextMenu";
+import { cx } from "../../utils/cx";
 
 interface MenuBarContextType {
     openId: () => string | null;
@@ -142,7 +143,7 @@ export function PaperMenuBar(props: ParentProps<PaperMenuBarProps>) {
                 ref={barRef}
                 role="menubar"
                 aria-orientation="horizontal"
-                class={[styles.PaperMenuBar, local.class].filter(Boolean).join(" ")}
+                class={cx(styles.PaperMenuBar, local.class)}
                 classList={local.classList}
                 onKeyDown={handleKeyDown}
             >
@@ -220,7 +221,7 @@ export function PaperMenuBarMenu(props: PaperMenuBarMenuProps) {
                 disabled={local.disabled}
                 tabIndex={tabbable() ? 0 : -1}
                 data-menubar-trigger={id}
-                class={[styles.trigger, local.class].filter(Boolean).join(" ")}
+                class={cx(styles.trigger, local.class)}
                 classList={local.classList}
                 onClick={() => {
                     if (isOpen()) handleClose();

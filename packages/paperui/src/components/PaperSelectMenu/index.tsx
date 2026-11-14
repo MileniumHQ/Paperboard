@@ -25,6 +25,7 @@ import {
 } from "../contexts/selection";
 import { useContextMenu } from "../PaperContextMenu";
 import { useSettingListText } from "../../contexts/settingList";
+import { cx } from "../../utils/cx";
 
 interface RegisteredOption {
     value: string | number;
@@ -235,14 +236,12 @@ function SelectMenuInner(
     // press that started an option click, so no option ever committed.
 
     const className = () =>
-        [
+        cx(
             styles.PaperSelectMenu,
             local.fullWidth ? styles.fullWidth : "",
             local.disabled ? styles.disabled : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <SelectMenuContext.Provider value={menuContext}>

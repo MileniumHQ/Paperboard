@@ -1,5 +1,6 @@
 import styles from "./index.module.css";
 import { splitProps, type JSX } from "solid-js";
+import { cx } from "../../utils/cx";
 
 export interface PaperSeparatorProps extends JSX.HTMLAttributes<HTMLSpanElement> {
     direction?: "horizontal" | "vertical";
@@ -22,13 +23,11 @@ export function PaperSeparator(props: PaperSeparatorProps) {
         local.orientation === "vertical";
 
     const className = () =>
-        [
+        cx(
             styles.PaperSeparator,
             isVertical() ? styles.vertical : styles.horizontal,
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return <span {...rest} class={className()} classList={local.classList} />;
 }

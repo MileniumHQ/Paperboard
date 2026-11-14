@@ -8,6 +8,7 @@ import {
 } from "../../contexts/layout";
 import type { PaperSpacing, PaperRole } from "../../types";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 /** surface tone; front is the standard panel card */
 export type PaperCardSurface =
@@ -69,16 +70,14 @@ export function PaperCard(props: ParentProps<PaperCardProps>) {
     ]);
 
     const className = () =>
-        [
+        cx(
             styles.PaperCard,
             local.surface ? styles[local.surface] : "",
             local.borderless ? styles.borderless : "",
             local.plain ? styles.plain : "",
             local.accent ? styles.accent : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     const cardStyle = () => {
         const axisPadding =

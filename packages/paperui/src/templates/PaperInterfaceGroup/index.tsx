@@ -3,6 +3,7 @@ import { createContext, onCleanup, useContext, Show, splitProps, type JSX, type 
 import { PaperPage, type PaperPageWidth } from "../PaperPage";
 import { usePaperPanel } from "../../contexts/panel";
 import { PaperSlidePage } from "../../components/PaperSlidePage";
+import { cx } from "../../utils/cx";
 
 const InterfaceGroupContext = createContext<() => string | number>();
 
@@ -33,13 +34,11 @@ export function PaperInterfaceGroup(props: ParentProps<PaperInterfaceGroupProps>
     const [local, rest] = splitProps(props, ["value", "class", "classList", "children"]);
 
     const className = () =>
-        [
+        cx(
             styles.PaperInterfaceGroup,
             panel?.inPanel ? styles.inPanel : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     // a phone-width PaperPanel: the group is the page its menu opens
     const entry = () => panel?.entry?.(local.value);
@@ -79,9 +78,7 @@ export function PaperInterfaceItem(props: ParentProps<PaperInterfaceItemProps>) 
     const hostsPage = () => variant() === "page" || variant() === "fill";
 
     const className = () =>
-        [styles.PaperInterfaceItem, styles[variant()], local.class]
-            .filter(Boolean)
-            .join(" ");
+        cx(styles.PaperInterfaceItem, styles[variant()], local.class);
 
     return (
         <Show when={activeValue?.() === local.value}>

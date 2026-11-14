@@ -1,6 +1,7 @@
 import styles from "./index.module.css";
 import { createMemo, For, Show, splitProps, type JSX } from "solid-js";
 import { PaperButton } from "../PaperButton";
+import { cx } from "../../utils/cx";
 
 export interface PaperPaginationProps
     extends Omit<JSX.HTMLAttributes<HTMLElement>, "onChange"> {
@@ -61,7 +62,7 @@ export function PaperPagination(props: PaperPaginationProps) {
         <Show when={pageCount() > 1}>
             <nav
                 {...rest}
-                class={[styles.PaperPagination, local.class].filter(Boolean).join(" ")}
+                class={cx(styles.PaperPagination, local.class)}
                 classList={local.classList}
                 aria-label={local.label ?? "Pagination"}
             >

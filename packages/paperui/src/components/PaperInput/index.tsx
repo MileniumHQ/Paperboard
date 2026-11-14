@@ -13,6 +13,7 @@ import {
 import { PaperIcon } from "../PaperIcon";
 import { useSettingListText } from "../../contexts/settingList";
 import { callEventHandler } from "../../utils/events";
+import { cx } from "../../utils/cx";
 
 type Field = HTMLInputElement | HTMLTextAreaElement;
 
@@ -171,7 +172,7 @@ export function PaperInput(props: PaperInputProps) {
     // width:fit-content assumes a single-line field; a textarea should fill the
     // frame it is given, and its resize handle must not be clipped.
     const className = () =>
-        [
+        cx(
             styles.PaperInput,
             local.compact ? styles.compact : "",
             local.fullWidth ? styles.fullWidth : "",
@@ -182,9 +183,7 @@ export function PaperInput(props: PaperInputProps) {
             isMultiline() ? styles.multiline : "",
             isMultiline() && local.resize === false ? styles.fixedSize : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <div

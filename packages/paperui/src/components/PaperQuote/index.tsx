@@ -5,6 +5,7 @@ import { PaperText } from "../PaperText";
 import { PaperButton } from "../PaperButton";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import type { PaperRole } from "../../types";
+import { cx } from "../../utils/cx";
 
 export type PaperQuoteVariant = "monochrome" | PaperRole;
 
@@ -41,9 +42,7 @@ export function PaperQuote(props: ParentProps<PaperQuoteProps>) {
     return (
         <div
             {...rest}
-            class={[styles.PaperQuote, variantClass(), local.class]
-                .filter(Boolean)
-                .join(" ")}
+            class={cx(styles.PaperQuote, variantClass(), local.class)}
             classList={local.classList}
             style={roleStyle()}
         >

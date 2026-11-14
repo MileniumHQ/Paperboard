@@ -11,6 +11,7 @@ import { PaperMarkdown } from "../PaperMarkdown";
 import { PaperText } from "../PaperText";
 import { PaperVideo, prefersNativeVideo } from "../PaperVideo";
 import { grammarFor } from "../../utils/highlight";
+import { cx } from "../../utils/cx";
 
 /** How a file is shown: what PaperPreview draws it with. */
 export type PaperPreviewKind = "image" | "video" | "audio" | "markdown" | "code" | "text";
@@ -142,7 +143,7 @@ export function PaperPreview(props: PaperPreviewProps) {
             onClose={local.onClose}
             aria-label={local.name}
             {...rest}
-            class={[styles.PaperPreview, local.class].filter(Boolean).join(" ")}
+            class={cx(styles.PaperPreview, local.class)}
             data-kind={kind() ?? undefined}
             onClick={closeOnSpace}
             content={() => (

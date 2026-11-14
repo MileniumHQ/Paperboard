@@ -9,6 +9,7 @@ import {
     useSelectionItem,
     type SelectionProviderProps,
 } from "../contexts/selection";
+import { cx } from "../../utils/cx";
 
 export type PaperSelectorProps = SelectionProviderProps &
     JSX.HTMLAttributes<HTMLDivElement> & {
@@ -37,13 +38,11 @@ export function PaperSelector(props: ParentProps<PaperSelectorProps>) {
         local.direction === "horizontal" || Boolean(local.horizontal);
 
     const className = () =>
-        [
+        cx(
             styles.PaperSelector,
             isHorizontal() ? styles.horizontal : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <SelectionProvider
@@ -95,14 +94,12 @@ export function PaperSelectorItem(props: ParentProps<PaperSelectorItemProps>) {
     );
 
     const className = () =>
-        [
+        cx(
             styles.PaperSelectorItem,
             isSelected() ? styles.selected : "",
             local.reverse ? styles.reverse : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     const icon = children(() => local.icon);
     const description = children(() => local.description);

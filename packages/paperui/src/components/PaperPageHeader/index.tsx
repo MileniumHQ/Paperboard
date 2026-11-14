@@ -13,6 +13,7 @@ import {
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
 import { useSlidePageTitle } from "../../contexts/slidePage";
+import { cx } from "../../utils/cx";
 
 export interface PaperPageHeaderProps
     extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "title"> {
@@ -93,14 +94,12 @@ export function PaperPageHeader(props: ParentProps<PaperPageHeaderProps>) {
                     rootRef = el;
                     if (typeof rest.ref === "function") rest.ref(el);
                 }}
-                class={[
+                class={cx(
                     styles.PaperPageHeader,
                     stacked() ? styles.stacked : "",
                     stacked() && local.centerWhenStacked ? styles.centered : "",
                     local.class,
-                ]
-                    .filter(Boolean)
-                    .join(" ")}
+                )}
                 classList={local.classList}
             >
                 <Show when={headingShown()}>

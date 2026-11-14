@@ -3,6 +3,7 @@ import type { PaperSize } from "../../types";
 import styles from "./index.module.css";
 import { splitProps, type JSX, type ParentProps } from "solid-js";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export interface PaperGridProps extends JSX.HTMLAttributes<HTMLDivElement> {
     /** minimum column width, a size token; defaults to the shared grid token */
@@ -33,7 +34,7 @@ export function PaperGrid(props: ParentProps<PaperGridProps>) {
     ]);
 
     const className = () =>
-        [styles.PaperGrid, local.class].filter(Boolean).join(" ");
+        cx(styles.PaperGrid, local.class);
 
     const gridStyle = () => mergeStyle(
         {

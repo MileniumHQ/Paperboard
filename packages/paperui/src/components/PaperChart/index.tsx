@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import { children, createMemo, splitProps, Index, Show, type JSX } from "solid-js";
 import { resolveColor } from "../../utils/theme";
 import type { PaperColor } from "../../types";
+import { cx } from "../../utils/cx";
 
 export interface PaperChartSegment {
     label: string;
@@ -155,7 +156,7 @@ function LineChart(props: PaperChartLineProps) {
             .map((r) => `${r.label} ${r.detail}`);
         return readings.length > 0 ? `${local.label}: ${readings.join(", ")}` : local.label;
     };
-    const className = () => [styles.PaperChart, styles.line, local.class].filter(Boolean).join(" ");
+    const className = () => cx(styles.PaperChart, styles.line, local.class);
     return (
         <div {...rest} role="img" aria-label={name()} class={className()}>
             {/* stretched to the box it is given; strokes keep their width */}
@@ -212,7 +213,7 @@ function PartsChart(props: PaperChartPartsProps) {
     });
 
     const className = () =>
-        [styles.PaperChart, isBar() ? styles.bar : styles.donut, local.class].filter(Boolean).join(" ");
+        cx(styles.PaperChart, isBar() ? styles.bar : styles.donut, local.class);
 
     return (
         <div {...rest} role="img" aria-label={name()} class={className()}>
@@ -260,7 +261,7 @@ function PartsChart(props: PaperChartPartsProps) {
 /** The chart's parts by name: a swatch, a label and a reading each. */
 export function PaperChartLegend(props: PaperChartLegendProps) {
     const [local, rest] = splitProps(props, ["segments", "total", "compact", "class"]);
-    const className = () => [styles.legend, local.class].filter(Boolean).join(" ");
+    const className = () => cx(styles.legend, local.class);
     return (
         <ul {...rest} class={className()}>
             <Index each={partsOf(local.segments, local.total)}>

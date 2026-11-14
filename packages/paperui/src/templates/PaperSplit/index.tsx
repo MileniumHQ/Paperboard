@@ -12,6 +12,7 @@ import {
 } from "solid-js";
 import { getVarCss } from "../../utils/theme";
 import { PaperSlidePage } from "../../components/PaperSlidePage";
+import { cx } from "../../utils/cx";
 
 export interface PaperSplitProps {
     /** the list/roster pane, held at a fixed width beside the detail */
@@ -118,7 +119,7 @@ export function PaperSplit(props: ParentProps<PaperSplitProps>) {
         <div
             ref={rootRef}
             {...rest}
-            class={[styles.PaperSplit, local.class].filter(Boolean).join(" ")}
+            class={cx(styles.PaperSplit, local.class)}
             classList={local.classList}
         >
             <div class={styles.row}>

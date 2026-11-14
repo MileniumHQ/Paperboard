@@ -3,6 +3,7 @@ import type { PaperColor } from "../../types";
 import styles from "./index.module.css";
 import { splitProps, type JSX } from "solid-js";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export type PaperSwatchSize = "small" | "medium" | "large";
 
@@ -23,9 +24,7 @@ export function PaperSwatch(props: PaperSwatchProps) {
     ]);
 
     const className = () =>
-        [styles.PaperSwatch, styles[local.size ?? "medium"], local.class]
-            .filter(Boolean)
-            .join(" ");
+        cx(styles.PaperSwatch, styles[local.size ?? "medium"], local.class);
 
     return (
         <span

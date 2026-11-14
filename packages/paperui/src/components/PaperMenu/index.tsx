@@ -26,6 +26,7 @@ import { callEventHandler } from "../../utils/events";
 import type { PaperSpacing } from "../../types";
 import { resolveSpacing } from "../../utils/theme";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 const MenuLevelContext = createContext<number>(0);
 // true for a PaperPanel's navigation menu: its entries open the panel's
@@ -80,16 +81,14 @@ export function PaperMenu(props: ParentProps<PaperMenuProps>) {
     };
 
     const className = () =>
-        [
+        cx(
             styles.PaperMenu,
             isHorizontal() ? styles.horizontal : "",
             local.spacing ? styles.spacing : "",
             local.embedded ? styles.embedded : "",
             isCompact() ? styles.compact : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     const style = () => {
         const gapVal = resolvedSpacing();
@@ -203,7 +202,7 @@ export function PaperMenuSection(props: ParentProps<PaperMenuSectionProps>) {
     return (
         <div
             {...rest}
-            class={[styles.PaperMenuSection, local.class].filter(Boolean).join(" ")}
+            class={cx(styles.PaperMenuSection, local.class)}
             classList={local.classList}
             style={style()}
         >
@@ -239,13 +238,11 @@ export function PaperMenuSection(props: ParentProps<PaperMenuSectionProps>) {
 
                 <Show when={isCollapsible()}>
                     <PaperIcon
-                        class={[
+                        class={cx(
                             styles.sectionChevron,
                             styles.menuIcon,
                             isOpen() ? styles.open : "",
-                        ]
-                            .filter(Boolean)
-                            .join(" ")}
+                        )}
                         zeroHeight
                     >
                         chevron_right
@@ -273,7 +270,7 @@ export function PaperMenuLabel(props: ParentProps<PaperMenuLabelProps>) {
             as="div"
             {...rest}
             preset="section"
-            class={[styles.menuLabel, local.class].filter(Boolean).join(" ")}
+            class={cx(styles.menuLabel, local.class)}
             style={mergeStyle(
                 {
                     "--menu-indent-level": level,
@@ -349,16 +346,14 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
     const effectiveLevel = () => local.level ?? contextLevel;
 
     const className = () =>
-        [
+        cx(
             styles.PaperMenuItem,
             // a phone-width panel's menu is a list of buttons: what an entry
             // opens covers the menu, so none stays highlighted
             isSelected() && !(isPanelNav() && panel?.compact?.()) ? styles.selected : "",
             local.disabled ? styles.disabled : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     const style = () => mergeStyle(
         {

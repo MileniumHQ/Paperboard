@@ -3,6 +3,7 @@ import { splitProps, type JSX } from "solid-js";
 import type { PaperSpacing } from "../../types";
 import { resolveSpacing } from "../../utils/theme";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export interface PaperSpacerProps extends JSX.HTMLAttributes<HTMLDivElement> {
     size?: PaperSpacing;
@@ -30,13 +31,11 @@ export function PaperSpacer(props: PaperSpacerProps) {
     };
 
     const className = () =>
-        [
+        cx(
             styles.PaperSpacer,
             local.direction ? styles[local.direction] : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <div

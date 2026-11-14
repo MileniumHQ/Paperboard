@@ -21,6 +21,7 @@ import {
     PaperContextMenuSub,
     useContextMenuState,
 } from "../PaperContextMenu";
+import { cx } from "../../utils/cx";
 
 export const PAPER_MEDIA_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 
@@ -229,7 +230,7 @@ export function MediaPlayButton(props: { player: MediaPlayer; class?: string }) 
         <PaperButton
             icon
             size="small"
-            class={[styles.play, props.class].filter(Boolean).join(" ")}
+            class={cx(styles.play, props.class)}
             aria-label={props.player.playing() ? "Pause" : "Play"}
             disabled={props.player.error() !== null}
             onClick={() => void props.player.togglePlay()}

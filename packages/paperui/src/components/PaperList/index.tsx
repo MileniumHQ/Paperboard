@@ -23,6 +23,7 @@ import type { LoaderStatus, PaperBackgroundSurface } from "../../types";
 import { resolveBackground } from "../../utils/theme";
 import { createReorder } from "../shared/reorder";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export interface PaperListItemCloseEvent {
     value: string | number;
@@ -182,7 +183,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
     };
 
     const className = () =>
-        [
+        cx(
             styles.PaperList,
             isHorizontal() ? styles.horizontal : "",
             isReorderable() ? styles.reorderable : "",
@@ -193,9 +194,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
             local.fullHeight ? styles.fullHeight : "",
             isScrollable() ? styles.scrollable : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     const dynamicStyle = () => {
         const extra: JSX.CSSProperties = {};
@@ -261,7 +260,7 @@ export function PaperListLabel(props: ParentProps<PaperListLabelProps>) {
             color="text-subtle"
             {...rest}
             preset="section"
-            class={[styles.PaperListLabel, local.class].filter(Boolean).join(" ")}
+            class={cx(styles.PaperListLabel, local.class)}
         >
             {local.children}
         </PaperText>
@@ -339,7 +338,7 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
         );
 
     const className = () =>
-        [
+        cx(
             styles.PaperListItem,
             isSelected() && selectable() && !listCtx?.isButtons() ? styles.selected : "",
             isDragging() ? styles.dragging : "",
@@ -347,9 +346,7 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
             listCtx?.hasActiveDrag() && !isDragging() ? styles.isSibling : "",
             local.disabled ? styles.disabled : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     const handlePointerDown = (e: PointerEvent) => {
         if (listCtx?.isReorderable()) {

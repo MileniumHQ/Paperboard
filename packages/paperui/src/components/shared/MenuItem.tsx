@@ -1,6 +1,7 @@
 import { children, splitProps, Show, type JSX, type ParentProps } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import styles from "./menu.module.css";
+import { cx } from "../../utils/cx";
 
 /**
  * The one menu-item element. PaperContextMenu and PaperSelectMenu both render
@@ -35,15 +36,13 @@ export function MenuItem(props: ParentProps<MenuItemProps>) {
     const description = children(() => local.description);
 
     const className = () =>
-        [
+        cx(
             styles.item,
             local.danger ? styles.danger : "",
             local.disabled ? styles.disabled : "",
             local.highlighted ? styles.highlighted : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <div {...rest} class={className()} classList={local.classList}>

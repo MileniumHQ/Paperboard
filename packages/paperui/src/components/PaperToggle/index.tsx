@@ -3,6 +3,7 @@ import { splitProps, createEffect, createSignal, on, onCleanup, Show, type JSX }
 import { PaperIcon } from "../PaperIcon";
 import { haptic } from "../../utils/haptics";
 import { useSettingListChecked } from "../../contexts/settingList";
+import { cx } from "../../utils/cx";
 
 export interface PaperToggleProps
     extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "onChange"> {
@@ -155,15 +156,13 @@ export function PaperToggle(props: PaperToggleProps) {
             aria-describedby={local["aria-describedby"]}
             title={local.title}
             tabIndex={local.disabled ? -1 : 0}
-            class={[
+            class={cx(
                 styles.PaperToggle,
                 isChecked() ? styles.checked : "",
                 isAnimating() ? styles.animating : "",
                 local.disabled ? styles.disabled : "",
                 local.class,
-            ]
-                .filter(Boolean)
-                .join(" ")}
+            )}
             classList={local.classList}
             onClick={handleToggle}
             onKeyDown={handleKeyDown}

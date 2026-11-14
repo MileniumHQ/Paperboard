@@ -3,6 +3,7 @@ import { splitProps, type JSX } from "solid-js";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import type { PaperRole } from "../../types";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export interface PaperProgressProps extends JSX.HTMLAttributes<HTMLDivElement> {
     value?: number;
@@ -35,14 +36,12 @@ export function PaperProgress(props: PaperProgressProps) {
     };
 
     const className = () =>
-        [
+        cx(
             styles.PaperProgress,
             local.variant ? styles.variantRole : "",
             isIndeterminate() ? styles.indeterminate : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <div

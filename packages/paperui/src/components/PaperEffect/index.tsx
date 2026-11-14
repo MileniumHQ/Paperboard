@@ -5,6 +5,7 @@ import { haptic } from "../../utils/haptics";
 import { pressedOutside } from "../../utils/pressCancel";
 import type { PaperRole } from "../../types";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export interface PaperEffectProps extends JSX.HTMLAttributes<HTMLDivElement> {
     colorless?: boolean;
@@ -31,14 +32,12 @@ export function PaperEffect(props: PaperEffectProps) {
             : {};
 
     const className = () =>
-        [
+        cx(
             styles.PaperEffect,
             isColorless() ? styles.colorless : "",
             local.disabled ? styles.disabled : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     // a finger lifted where it pressed feels the paper go down and spring
     // back; a press that became a scroll, or slid off, is cancelled and

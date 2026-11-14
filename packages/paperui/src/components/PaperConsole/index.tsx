@@ -19,6 +19,7 @@ import { PaperInput } from "../PaperInput";
 import { PaperIcon } from "../PaperIcon";
 import { PaperButton } from "../PaperButton";
 import { parseAnsiToSegments } from "../../utils/ansi";
+import { cx } from "../../utils/cx";
 
 export type PaperConsoleEntryType =
     | "command"
@@ -480,13 +481,11 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
     return (
         <div
             {...rest}
-            class={[
+            class={cx(
                 styles.PaperConsole,
                 isDivided() ? styles.divided : "",
                 local.class,
-            ]
-                .filter(Boolean)
-                .join(" ")}
+            )}
             classList={local.classList}
         >
             <Show when={title() || local.onClear}>
@@ -526,13 +525,11 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
                             <Index each={visible()}>
                                 {(entry, i) => (
                                     <div
-                                        class={[
+                                        class={cx(
                                             styles.entry,
                                             styles[entryType(entry())],
                                             range().start + i === 0 ? styles.firstEntry : "",
-                                        ]
-                                            .filter(Boolean)
-                                            .join(" ")}
+                                        )}
                                     >
                                         {renderPrefix(entryType(entry()))}
                                         <div class={styles.content}>

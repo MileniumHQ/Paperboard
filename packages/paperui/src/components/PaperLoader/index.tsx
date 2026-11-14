@@ -4,6 +4,7 @@ import { haptic } from "../../utils/haptics";
 import { LoaderStatus } from "../../types";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
+import { cx } from "../../utils/cx";
 
 export type PaperLoaderSize = "small" | "medium" | "large";
 
@@ -75,7 +76,7 @@ export function PaperLoader(props: PaperLoaderProps) {
     const subtitle = children(() => local.subtitle);
 
     const loaderClass = () =>
-        [styles.PaperLoader, local.class].filter(Boolean).join(" ");
+        cx(styles.PaperLoader, local.class);
 
     const clampedPercent = () => Math.min(100, Math.max(0, local.percent || 0));
     const isIndeterminate = () => local.loaderStatus === "indeterminate";
@@ -191,7 +192,7 @@ export function PaperLoader(props: PaperLoaderProps) {
 export function PaperLoaderGroup(props: PaperLoaderGroupProps) {
     const [local, rest] = splitProps(props, ["class", "classList", "children"]);
     const className = () =>
-        [styles.PaperLoaderGroup, local.class].filter(Boolean).join(" ");
+        cx(styles.PaperLoaderGroup, local.class);
 
     return (
         <div {...rest} class={className()} classList={local.classList}>

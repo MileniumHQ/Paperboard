@@ -1,5 +1,6 @@
 import styles from "./index.module.css";
 import { splitProps, type JSX, type ParentProps } from "solid-js";
+import { cx } from "../../utils/cx";
 
 export type PaperCenteredInterfacePreset =
     | "small"
@@ -36,13 +37,11 @@ export function PaperCenteredInterface(
     const activePreset = () => local.preset ?? local.size;
 
     const className = () =>
-        [
+        cx(
             styles.PaperCenteredInterface,
             activePreset() ? styles[activePreset()!] : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     const wrapperStyle = () => {
         const s: Record<string, string | undefined> = {};

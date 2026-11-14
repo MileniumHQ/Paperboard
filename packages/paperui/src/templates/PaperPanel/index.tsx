@@ -9,6 +9,7 @@ import {
     type ParentProps,
 } from "solid-js";
 import { PaperPanelContext, type PaperPanelEntry } from "../../contexts/panel";
+import { cx } from "../../utils/cx";
 
 export interface PaperPanelProps extends JSX.HTMLAttributes<HTMLDivElement> {
     /** column stacks the menu above the content instead of beside it */
@@ -96,13 +97,11 @@ export function PaperPanel(props: ParentProps<PaperPanelProps>) {
     };
 
     const className = () =>
-        [
+        cx(
             styles.PaperPanel,
             local.direction === "column" ? styles.column : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <PaperPanelContext.Provider

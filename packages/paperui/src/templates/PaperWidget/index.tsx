@@ -4,6 +4,7 @@ import { PaperIcon } from "../../components/PaperIcon";
 import { PaperProgress } from "../../components/PaperProgress";
 import type { PaperRole } from "../../types";
 import { isPaperRole, roleVars } from "../../utils/colors";
+import { cx } from "../../utils/cx";
 
 // a role colors through --role-base; "none" and no tone fall back to text
 const toneStyle = (tone: PaperRole | "none" | undefined): JSX.CSSProperties | undefined =>
@@ -79,7 +80,7 @@ export function PaperWidget(props: ParentProps<PaperWidgetProps>) {
         });
     });
     return (
-        <div {...rest} class={[styles.PaperWidget, local.class].filter(Boolean).join(" ")} classList={local.classList} data-pressable={local.onPress ? "" : undefined}>
+        <div {...rest} class={cx(styles.PaperWidget, local.class)} classList={local.classList} data-pressable={local.onPress ? "" : undefined}>
             <Show when={local.onPress}>
                 <button
                     type="button"
@@ -177,7 +178,7 @@ export function PaperWidgetStat(props: PaperWidgetStatProps) {
     const [local, rest] = splitProps(props, ["value", "caption", "tone", "meter", "class"]);
     const caption = children(() => local.caption);
     return (
-        <div {...rest} class={[styles.stat, local.class].filter(Boolean).join(" ")} data-tone={local.tone} style={toneStyle(local.tone)}>
+        <div {...rest} class={cx(styles.stat, local.class)} data-tone={local.tone} style={toneStyle(local.tone)}>
             <span class={styles.statValue}>{local.value}</span>
             <Show when={caption() !== undefined}>
                 <span class={styles.statCaption}>{caption()}</span>
@@ -200,7 +201,7 @@ export function PaperWidgetStat(props: PaperWidgetStatProps) {
 export function PaperWidgetStats(props: ParentProps<JSX.HTMLAttributes<HTMLDivElement>>) {
     const [local, rest] = splitProps(props, ["class", "children"]);
     return (
-        <div {...rest} class={[styles.stats, local.class].filter(Boolean).join(" ")}>
+        <div {...rest} class={cx(styles.stats, local.class)}>
             {local.children}
         </div>
     );
@@ -240,7 +241,7 @@ export function PaperWidgetRows(props: PaperWidgetRowsProps) {
     });
     const ids = createMemo(() => [...byId().keys()]);
     return (
-        <ul {...rest} class={[styles.rows, local.class].filter(Boolean).join(" ")}>
+        <ul {...rest} class={cx(styles.rows, local.class)}>
             <For each={ids()}>
                 {(id) => {
                     // a removed id's row is disposed right after this update;
@@ -299,7 +300,7 @@ export function PaperWidgetMessage(props: ParentProps<PaperWidgetMessageProps>) 
             role={alert() ? "alert" : "status"}
             {...rest}
             title={local.hint || undefined}
-            class={[styles.message, local.class].filter(Boolean).join(" ")}
+            class={cx(styles.message, local.class)}
             data-tone={local.tone}
             style={toneStyle(local.tone)}
         >
@@ -318,7 +319,7 @@ export function PaperWidgetMessage(props: ParentProps<PaperWidgetMessageProps>) 
 export function PaperWidgetDot(props: { tone?: PaperRole | "none"; class?: string }) {
     return (
         <span
-            class={[styles.dot, props.class].filter(Boolean).join(" ")}
+            class={cx(styles.dot, props.class)}
             data-tone={props.tone ?? "none"}
             style={toneStyle(props.tone)}
             aria-hidden="true"

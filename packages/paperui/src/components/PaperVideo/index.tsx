@@ -10,6 +10,7 @@ import {
     MediaSeek,
     MediaTime,
 } from "../shared/media";
+import { cx } from "../../utils/cx";
 
 export interface PaperVideoProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "onError"> {
     src: string;
@@ -134,7 +135,7 @@ export function PaperVideo(props: PaperVideoProps) {
             aria-label={local.label ?? "Video"}
             {...rest}
             ref={root}
-            class={[styles.PaperVideo, fullscreen() ? styles.fullscreen : "", local.class].filter(Boolean).join(" ")}
+            class={cx(styles.PaperVideo, fullscreen() ? styles.fullscreen : "", local.class)}
             classList={local.classList}
         >
             {/* the picture is a big play button for the pointer; the bar's

@@ -19,6 +19,7 @@ import {
     splitProps,
     type ParentProps,
 } from "solid-js";
+import { cx } from "../../utils/cx";
 
 export interface PaperWizardProps extends JSX.HTMLAttributes<HTMLFormElement> {
     initialData?: Record<string, any>;
@@ -194,7 +195,7 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
     };
 
     const className = () =>
-        [styles.PaperWizard, local.class].filter(Boolean).join(" ");
+        cx(styles.PaperWizard, local.class);
 
     const stepNumbers = () => Array.from({ length: totalSteps() }, (_, i) => i);
 
@@ -323,7 +324,7 @@ export function PaperWizardStep(props: ParentProps<PaperWizardStepProps>) {
     });
 
     const className = () =>
-        [styles.PaperWizardStep, local.class].filter(Boolean).join(" ");
+        cx(styles.PaperWizardStep, local.class);
 
     // the step leaving stays over the one arriving until it has faded, so a
     // step change crossfades instead of passing through an empty frame

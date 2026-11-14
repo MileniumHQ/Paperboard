@@ -4,6 +4,7 @@ import { ModalLayer } from "./layer";
 import { PaperText } from "../PaperText";
 import { PaperIcon } from "../PaperIcon";
 import { PaperButton } from "../PaperButton";
+import { cx } from "../../utils/cx";
 
 export interface PaperModalProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "title"> {
     open?: boolean;
@@ -73,7 +74,7 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
             concealed={local.concealed}
             aria-labelledby={title() && !local.noHeader ? titleId : undefined}
             {...rest}
-            class={[styles.modalBox, sizeClass(), local.class].filter(Boolean).join(" ")}
+            class={cx(styles.modalBox, sizeClass(), local.class)}
             classList={local.classList}
             content={() => {
                 const footer = children(() => local.footer);
@@ -123,12 +124,10 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
                                 </Show>
 
                                 <div
-                                    class={[
+                                    class={cx(
                                         styles.body,
                                         local.noPadding ? styles.noPadding : "",
-                                    ]
-                                        .filter(Boolean)
-                                        .join(" ")}
+                                    )}
                                 >
                                     {local.children}
                                 </div>

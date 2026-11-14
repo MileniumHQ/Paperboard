@@ -1,6 +1,7 @@
 import styles from "./index.module.css";
 import { splitProps, Show, type ParentProps, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
+import { cx } from "../../utils/cx";
 
 export interface PaperLinkProps extends JSX.AnchorHTMLAttributes<HTMLAnchorElement> {
     external?: boolean;
@@ -16,7 +17,7 @@ export function PaperLink(props: ParentProps<PaperLinkProps>) {
             {...rest}
             target={local.target ?? (isExternal() ? "_blank" : undefined)}
             rel={local.rel ?? (isExternal() ? "noopener noreferrer" : undefined)}
-            class={[styles.PaperLink, local.class].filter(Boolean).join(" ")}
+            class={cx(styles.PaperLink, local.class)}
             classList={local.classList}
         >
             {local.children}

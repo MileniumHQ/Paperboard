@@ -3,6 +3,7 @@ import { children, splitProps, Show, type JSX, type ParentProps } from "solid-js
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
 import { PaperBadge } from "../PaperBadge";
+import { cx } from "../../utils/cx";
 
 export interface PaperSectionHeaderProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "title"> {
     icon?: JSX.Element | string;
@@ -26,7 +27,7 @@ export function PaperSectionHeader(props: ParentProps<PaperSectionHeaderProps>) 
     const actions = children(() => local.children);
 
     const className = () =>
-        [styles.PaperSectionHeader, local.class].filter(Boolean).join(" ");
+        cx(styles.PaperSectionHeader, local.class);
 
     return (
         <div {...rest} class={className()} classList={local.classList}>

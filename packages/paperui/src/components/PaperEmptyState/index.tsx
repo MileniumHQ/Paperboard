@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import { splitProps, Show, children, type JSX, type ParentProps } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
+import { cx } from "../../utils/cx";
 
 export interface PaperEmptyStateProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "title"> {
     icon?: JSX.Element | string;
@@ -26,7 +27,7 @@ export function PaperEmptyState(props: ParentProps<PaperEmptyStateProps>) {
     const actions = children(() => local.children);
 
     const className = () =>
-        [styles.PaperEmptyState, local.class].filter(Boolean).join(" ");
+        cx(styles.PaperEmptyState, local.class);
 
     return (
         <div {...rest} class={className()} classList={local.classList}>

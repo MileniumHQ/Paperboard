@@ -5,6 +5,7 @@ import { roleVars, isPaperRole } from "../../utils/colors";
 import { PaperIcon } from "../PaperIcon";
 import type { PaperButtonVariant } from "../../types";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export type PaperButtonSize = "tiny" | "small" | "medium" | "large";
 
@@ -48,7 +49,7 @@ export function PaperButton(props: PaperButtonProps) {
     const inertLink = () => Boolean(local.href && local.disabled);
 
     const className = () =>
-        [
+        cx(
             styles.PaperButton,
             styles[`size-${local.size ?? "medium"}`],
             local.variant === "text" ? styles.text : "",
@@ -57,9 +58,7 @@ export function PaperButton(props: PaperButtonProps) {
             local.icon ? styles.icon : "",
             local.fullWidth ? styles.fullWidth : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     const roleStyle = () =>
         local.variant && isPaperRole(local.variant)

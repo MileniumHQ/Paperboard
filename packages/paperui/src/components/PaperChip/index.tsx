@@ -1,6 +1,7 @@
 import styles from "./index.module.css";
 import { splitProps, Show, children, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
+import { cx } from "../../utils/cx";
 
 export interface PaperChipProps
     extends Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
@@ -31,14 +32,12 @@ export function PaperChip(props: PaperChipProps) {
     const icon = children(() => local.icon);
 
     const className = () =>
-        [
+        cx(
             styles.PaperChip,
             local.selected ? styles.selected : "",
             local.disabled ? styles.disabled : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <button

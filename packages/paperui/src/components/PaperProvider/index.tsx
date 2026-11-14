@@ -17,6 +17,7 @@ import { installPressCancel } from "../../utils/pressCancel";
 import { installFrameBackground } from "../../utils/frameBackground";
 import { installPageZoomLock } from "../../utils/pageZoom";
 import { installUncaughtErrors } from "../../utils/uncaughtErrors";
+import { cx } from "../../utils/cx";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -176,7 +177,7 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
     }
 
     const className = () =>
-        [
+        cx(
             "paperui-root",
             local.fullScreen ? "fullScreen" : "",
             local.fullWidth ? "fullWidth" : "",
@@ -185,9 +186,7 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
             isUnselectable() ? "unselectable" : "",
             iconsReady() ? "" : "iconsPending",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <PaperContext.Provider value={contextValue}>

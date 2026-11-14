@@ -1,5 +1,6 @@
 import styles from "./index.module.css";
 import { splitProps, type JSX, type ParentProps } from "solid-js";
+import { cx } from "../../utils/cx";
 
 export interface PaperKeyValueListProps extends JSX.HTMLAttributes<HTMLDListElement> {}
 
@@ -8,7 +9,7 @@ export function PaperKeyValueList(props: ParentProps<PaperKeyValueListProps>) {
     const [local, rest] = splitProps(props, ["class", "classList", "children"]);
 
     const className = () =>
-        [styles.PaperKeyValueList, local.class].filter(Boolean).join(" ");
+        cx(styles.PaperKeyValueList, local.class);
 
     return (
         <dl {...rest} class={className()} classList={local.classList}>
@@ -30,7 +31,7 @@ export function PaperKeyValue(props: ParentProps<PaperKeyValueProps>) {
     ]);
 
     const className = () =>
-        [styles.PaperKeyValue, local.class].filter(Boolean).join(" ");
+        cx(styles.PaperKeyValue, local.class);
 
     return (
         <div {...rest} class={className()} classList={local.classList}>

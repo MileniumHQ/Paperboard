@@ -7,6 +7,7 @@ import {
 } from "../../contexts/layout";
 import type { PaperSpacing } from "../../types";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export type PaperPageWidth = "standard" | "wide" | "full";
 
@@ -53,13 +54,11 @@ export function PaperPage(props: ParentProps<PaperPageProps>) {
     ]);
 
     const className = () =>
-        [
+        cx(
             styles.PaperPage,
             local.width ? styles[local.width] : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     const pageStyle = () => mergeStyle(
         {

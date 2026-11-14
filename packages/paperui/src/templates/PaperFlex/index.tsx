@@ -16,6 +16,7 @@ import {
     type PaperLayoutContextValue,
 } from "../../contexts/layout";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export type PaperFlexSpacing = PaperSpacing;
 export type PaperFlexGap = PaperFlexSpacing;
@@ -230,19 +231,17 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
             <div
                 ref={containerRef}
                 {...rest}
-                class={[styles.PaperFlex, local.class].filter(Boolean).join(" ")}
+                class={cx(styles.PaperFlex, local.class)}
                 classList={local.classList}
                 style={style()}
             >
                 {local.children}
                 <Show when={local.resizable}>
                     <div
-                        class={[
+                        class={cx(
                             handleClass(),
                             isDragging() ? styles.isDragging : "",
-                        ]
-                            .filter(Boolean)
-                            .join(" ")}
+                        )}
                         onPointerDown={handlePointerDown}
                     />
                 </Show>

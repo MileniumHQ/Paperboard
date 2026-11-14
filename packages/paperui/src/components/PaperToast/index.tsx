@@ -4,6 +4,7 @@ import { Portal } from "solid-js/web";
 import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
+import { cx } from "../../utils/cx";
 
 export type PaperToastVariant = "danger" | "warning" | "success" | "info";
 
@@ -87,7 +88,7 @@ export function PaperToastRegion(props: JSX.HTMLAttributes<HTMLDivElement>) {
     return (
         <Show when={toasts().length > 0}>
             <Portal>
-                <div {...props} class={[styles.region, props.class].filter(Boolean).join(" ")} role="region" aria-label="Notifications">
+                <div {...props} class={cx(styles.region, props.class)} role="region" aria-label="Notifications">
                     <For each={toasts()}>
                         {(toast) => (
                             <div

@@ -9,6 +9,7 @@ import {
 import { createReorder, type Reorder } from "../shared/reorder";
 import { HOLD_MS } from "../../utils/touchHold";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 const RailContext = createContext<{ showLabels?: boolean; reorder: Reorder }>();
 
@@ -62,13 +63,11 @@ export function PaperRail(props: ParentProps<PaperRailProps>) {
     const onValueChange = createMemo(() => local.onValueChange);
 
     const className = () =>
-        [
+        cx(
             styles.PaperRail,
             local.showLabels ? styles.withLabels : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <SelectionProvider
@@ -143,7 +142,7 @@ export function PaperRailItem(props: PaperRailItemProps) {
     const isDragging = () => railCtx?.reorder.isDragging(value()) ?? false;
 
     const className = () =>
-        [
+        cx(
             styles.PaperRailItem,
             isSelected() ? styles.selected : "",
             shouldShowLabel() ? styles.hasLabel : "",
@@ -154,9 +153,7 @@ export function PaperRailItem(props: PaperRailItemProps) {
             railCtx?.reorder.isDropping() ? styles.dropping : "",
             railCtx?.reorder.hasActiveDrag() && !isDragging() ? styles.isSibling : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     // a finger holds first, so a quick swipe still scrolls the rail; the
     // hold is the same one that opens the item's context menu
@@ -248,14 +245,12 @@ export function PaperRailAction(props: PaperRailActionProps) {
     };
 
     const className = () =>
-        [
+        cx(
             styles.PaperRailItem,
             styles.railAction,
             shouldShowLabel() ? styles.hasLabel : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <button

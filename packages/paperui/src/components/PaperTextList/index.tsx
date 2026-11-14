@@ -12,6 +12,7 @@ import { PaperText, type PaperTextProps, PRESETS } from "../PaperText";
 import type { PaperColor, PaperTextPreset } from "../../types";
 import { getVarCss, resolveColor } from "../../utils/theme";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export interface PaperTextListProps
     extends JSX.HTMLAttributes<HTMLUListElement | HTMLOListElement> {
@@ -77,7 +78,7 @@ export function PaperTextList(props: ParentProps<PaperTextListProps>) {
     const resolvedColor = () => resolveColor(local.color);
 
     const className = () =>
-        [
+        cx(
             styles.PaperTextList,
             styles[spacingPreset()],
             local.rounded ? styles.rounded : "",
@@ -86,9 +87,7 @@ export function PaperTextList(props: ParentProps<PaperTextListProps>) {
             local.breakWord ? styles.breakWord : "",
             local.truncate ? styles.truncate : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     const combinedStyle = () => {
         const extra: JSX.CSSProperties = {};

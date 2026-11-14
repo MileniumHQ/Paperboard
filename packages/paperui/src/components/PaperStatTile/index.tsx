@@ -6,6 +6,7 @@ import { PaperProgress } from "../PaperProgress";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import type { PaperRole } from "../../types";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export interface PaperStatTileMeter {
     value: number;
@@ -47,12 +48,10 @@ export function PaperStatTile(props: PaperStatTileProps) {
         isPaperRole(local.tone) ? roleVars(local.tone) : {};
 
     const className = () =>
-        [styles.PaperStatTile, local.class].filter(Boolean).join(" ");
+        cx(styles.PaperStatTile, local.class);
 
     const iconClass = () =>
-        [styles.icon, isPaperRole(local.tone) ? styles.tone : ""]
-            .filter(Boolean)
-            .join(" ");
+        cx(styles.icon, isPaperRole(local.tone) ? styles.tone : "");
 
     return (
         <div

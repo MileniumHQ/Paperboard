@@ -4,6 +4,7 @@ import { PaperIcon } from "../PaperIcon";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import type { PaperRole } from "../../types";
 import { mergeStyle } from "../../utils/style";
+import { cx } from "../../utils/cx";
 
 export type PaperAvatarSize = "small" | "medium" | "large" | "xlarge";
 
@@ -50,7 +51,7 @@ export function PaperAvatar(props: PaperAvatarProps) {
     const image = () => (local.src && local.src !== failedSrc() ? local.src : undefined);
 
     const className = () =>
-        [
+        cx(
             styles.PaperAvatar,
             styles[local.size ?? "medium"],
             local.shape === "square" ? styles.square : "",
@@ -59,9 +60,7 @@ export function PaperAvatar(props: PaperAvatarProps) {
             !image() && local.accent ? styles.accent : "",
             local.onEdit ? styles.editable : "",
             local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
+        );
 
     return (
         <span

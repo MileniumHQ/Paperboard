@@ -1,6 +1,7 @@
 import styles from "./index.module.css";
 import { Show, splitProps, children, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
+import { cx } from "../../utils/cx";
 
 export interface PaperInlineChipProps
     extends Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
@@ -23,7 +24,7 @@ export function PaperInlineChip(props: PaperInlineChipProps) {
         <button
             {...rest}
             type={local.type ?? "button"}
-            class={[styles.PaperInlineChip, local.class].filter(Boolean).join(" ")}
+            class={cx(styles.PaperInlineChip, local.class)}
             classList={local.classList}
         >
             <Show when={icon()}>

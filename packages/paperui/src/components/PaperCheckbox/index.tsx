@@ -3,6 +3,7 @@ import { children, splitProps, createSignal, Show, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { haptic } from "../../utils/haptics";
 import { useSettingListChecked } from "../../contexts/settingList";
+import { cx } from "../../utils/cx";
 
 export interface PaperCheckboxProps
     extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "onChange"> {
@@ -68,13 +69,11 @@ export function PaperCheckbox(props: PaperCheckboxProps) {
 
     return (
         <label
-            class={[
+            class={cx(
                 styles.PaperCheckboxContainer,
                 local.disabled ? styles.disabled : "",
                 local.class,
-            ]
-                .filter(Boolean)
-                .join(" ")}
+            )}
             classList={local.classList}
             onClick={(e) => {
                 e.preventDefault();
@@ -85,12 +84,10 @@ export function PaperCheckbox(props: PaperCheckboxProps) {
                 role="checkbox"
                 aria-checked={isChecked()}
                 tabIndex={local.disabled ? -1 : 0}
-                class={[
+                class={cx(
                     styles.PaperCheckbox,
                     isChecked() ? styles.checked : "",
-                ]
-                    .filter(Boolean)
-                    .join(" ")}
+                )}
                 onKeyDown={handleKeyDown}
             >
                 <input
