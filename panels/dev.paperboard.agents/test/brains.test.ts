@@ -392,6 +392,32 @@ describe("brain failures", () => {
         expect(host.kills.filter((k) => k.id.includes(".models.")).map((k) => k.signal)).toEqual(["SIGTERM", "SIGTERM"]);
     }, SLOW);
 
+    test("a Claude that ends while it is asked for its models is a failed listing, not a crashed service", async () => {
+        const root = tempDir("models-exit");
+        const host = new TestHost();
+        cleanups.push(async () => {
+            await host.close();
+            fs.rmSync(root, { recursive: true, force: true });
+        });
+        const quits = path.join(root, "quits.mjs");
+        fs.writeFileSync(quits, 'process.stderr.write("no config\\n");\nprocess.exit(0);\n');
+        const unhandled: unknown[] = [];
+        const note = (e: unknown) => unhandled.push(e);
+        process.on("unhandledRejection", note);
+        try {
+            // a write that is slow to land: Claude has ended before anything awaits its answer
+            const slowWrite = { ...host, write: async (id: string) => {
+                await host.gone(id);
+                await new Promise((r) => setTimeout(r, 20));
+            } };
+            await expect(askClaudeModels(slowWrite, { command: quits, env: {}, cwd: path.join(root, "models") })).rejects.toThrow("Claude ended before it listed its models (exit 0): no config");
+            await new Promise((r) => setTimeout(r, 50));
+        } finally {
+            process.off("unhandledRejection", note);
+        }
+        expect(unhandled).toEqual([]);
+    }, SLOW);
+
     test("a service whose init throws rejects ready(), so its actions fail instead of hanging", async () => {
         const app = new AiApp({ storageDir: async () => Promise.reject(new Error("the panel's storage is gone")) } as unknown as AppHost);
         const ctx = { state: {} as never, setState: () => {}, emit: () => {}, trigger: () => {} };
