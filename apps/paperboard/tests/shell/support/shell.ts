@@ -19,6 +19,7 @@ import { buildCrane, startCrane, type Crane } from "../../../../../scripts/testi
 import { installDevPanelInto, type DevPanel } from "../../../scripts/devPanel";
 import viteConfig from "../../../electron.vite.config";
 import { ANSWER } from "./protocol";
+import { reapOnExit, type Reaper } from "./reaper";
 
 export { API_DEMO, WIDGET_DEMO, type DevPanel } from "../../../scripts/devPanel";
 export type { Page } from "../../../../../scripts/testing/chrome";
@@ -86,20 +87,49 @@ function hermeticEnv(dataDir: string): NodeJS.ProcessEnv {
     return env;
 }
 
-/** `init` runs in every document the shell opens, before its own scripts (ChromeOptions.init) */
-export async function bootShell(options: { panels?: DevPanel[]; init?: string } = {}): Promise<Shell> {
+export interface BootOptions {
+    panels?: DevPanel[];
+    /** runs in every document the shell opens, before its own scripts (ChromeOptions.init) */
+    init?: string;
+    /** writes what the data dir holds before the daemon starts, as a computer that already has it */
+    seed?: (dataDir: string) => void;
+}
+
+/** the shell over a fresh data dir; its temp root goes on close(), or with this process however it ends */
+export async function bootShell(options: BootOptions = {}): Promise<Shell> {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "paperboard-shell-"));
     const dataDir = path.join(root, "data");
     const rendererDir = path.join(root, "renderer");
     fs.mkdirSync(path.join(dataDir, "local"), { recursive: true });
-    const stops: (() => Promise<void> | void)[] = [() => fs.rmSync(root, { recursive: true, force: true })];
+    let reaper: Reaper;
+    try {
+        reaper = await reapOnExit(root);
+    } catch (err) {
+        fs.rmSync(root, { recursive: true, force: true });
+        throw err;
+    }
+    const stops: (() => Promise<void> | void)[] = [];
+    // every stop runs, even after one fails, and the root goes last; a root
+    // that could not be removed is left to the reaper
     const close = async () => {
-        for (const stop of stops.splice(0).reverse()) await stop();
+        const failures: unknown[] = [];
+        for (const stop of stops.splice(0).reverse()) {
+            try {
+                await stop();
+            } catch (err) {
+                failures.push(err);
+            }
+        }
+        fs.rmSync(root, { recursive: true, force: true, maxRetries: 10 });
+        reaper.dismiss();
+        if (failures.length > 0) throw new AggregateError(failures, "Closing the shell boot failed");
     };
     try {
+        options.seed?.(dataDir);
         const binary = buildCrane(root);
         await Promise.all([buildRenderer(rendererDir), ...(options.panels ?? []).map((panel) => installDevPanelInto(panel, dataDir))]);
         const daemon = await startCrane(binary, dataDir);
+        reaper.track();
         stops.push(() => daemon.stop());
 
         const child: ChildProcess = spawn(process.execPath, [HOST_MAIN, rendererDir], {
@@ -124,6 +154,7 @@ export async function bootShell(options: { panels?: DevPanel[]; init?: string } 
             for (const waiting of answers.values()) waiting.reject(new Error(`The shell host exited:\n${output}`));
             answers.clear();
         });
+        reaper.track();
         stops.push(async () => {
             child.stdin!.end();
             await exited;
@@ -150,9 +181,11 @@ export async function bootShell(options: { panels?: DevPanel[]; init?: string } 
             const otherDir = path.join(root, `computer-${nextId}`);
             fs.mkdirSync(otherDir);
             const other = await startCrane(binary, otherDir, "127.0.0.2");
+            reaper.track();
             stops.push(() => other.stop());
             // `papercrane pair` opens pairing and prints the code, then waits for the pairing
             const pairing = spawn(binary, ["pair", "--data-dir", otherDir], { env: hermeticEnv(otherDir), stdio: ["ignore", "pipe", "pipe"] });
+            reaper.track();
             const paired = new Promise<number | null>((resolve) => pairing.once("exit", resolve));
             let said = "";
             const code = await new Promise<string>((resolve, reject) => {
@@ -176,7 +209,11 @@ export async function bootShell(options: { panels?: DevPanel[]; init?: string } 
 
         return { page, dataDir, daemon, host, pairComputer, close };
     } catch (err) {
-        await close();
+        try {
+            await close();
+        } catch (closeErr) {
+            throw new AggregateError([err, closeErr], "The shell boot failed, and so did closing it");
+        }
         throw err;
     }
 }
