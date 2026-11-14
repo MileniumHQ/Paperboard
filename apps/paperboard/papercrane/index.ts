@@ -12,7 +12,8 @@ import { PaperCraneEngine } from "./engine";
 import { PaperCraneAuth } from "./auth";
 import { handleHttpRequest } from "./http";
 import { createHostAuthorityCheck } from "./hostAuthority";
-import { davMaxUploadBytes, DavSessionStore } from "./dav";
+import { davMaxUploadBytes } from "./dav";
+import { DavSessionStore } from "./davAuth";
 import { setupWebSocketServer } from "./ws";
 import { PaperCraneTui } from "./tui";
 import { advertisePaperCrane, isLoopbackHost, type AdvertisementHandle } from "./discovery";
@@ -39,6 +40,7 @@ export * from "./tui";
 export * from "./supervisor";
 export * from "./actions";
 export * from "./dav";
+export * from "./davAuth";
 export * from "./panelServices";
 export * from "./panelAssets";
 export {

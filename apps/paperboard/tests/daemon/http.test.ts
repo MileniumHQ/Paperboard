@@ -175,6 +175,20 @@ describe("WebDAV", () => {
 		expect(JSON.parse(health.body.toString()).status).toBe("ok");
 	});
 
+	test("a request whose filesystem check throws is answered with a 500, not left hanging", async () => {
+		const daemon = await startDaemon();
+		const port = daemon.instance.localPort;
+		// a name longer than any filesystem takes: checking the folders above the target throws ENAMETOOLONG
+		const path_ = `/dav/files/${"n".repeat(300)}/file.txt`;
+		for (const method of ["PROPFIND", "GET", "PUT", "DELETE"]) {
+			const answer = await Promise.race([
+				request(port, { method, path: path_, headers: { ...bearer(daemon.token), Depth: "0" }, body: method === "PUT" ? "x" : undefined }),
+				new Promise<null>((resolve) => setTimeout(() => resolve(null), 10_000)),
+			]);
+			expect({ method, status: answer?.status ?? "no answer" }).toEqual({ method, status: 500 });
+		}
+	});
+
 	test("/shutdown needs the guard header and a valid token", async () => {
 		const daemon = await startDaemon();
 		const port = daemon.instance.localPort;

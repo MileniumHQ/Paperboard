@@ -8,7 +8,8 @@ import * as fs from "fs";
 import * as path from "path";
 import type { PaperCraneEngine } from "./engine";
 import type { PaperCraneAuth } from "./auth";
-import { davMaxUploadBytes, isMainBearer } from "./dav";
+import { davMaxUploadBytes, replyText as reply } from "./dav";
+import { isMainBearer } from "./davAuth";
 import { receiveFileAtomic, UploadTooLargeError } from "./atomicUpload";
 import { isPanelId } from "../../../packages/paperapi/src/panelIdentity";
 import { logger } from "./logger";
@@ -16,11 +17,6 @@ import { openResolvedFile } from "./storage";
 
 export const PANEL_FILES_PREFIX = "/panel-files/";
 export const PANEL_FILE_PATH_MAX = 1024;
-
-function reply(res: http.ServerResponse, status: number, text: string, extra: Record<string, string> = {}): void {
-    res.writeHead(status, { "Content-Type": "text/plain", ...extra });
-    res.end(text);
-}
 
 /** "<panelId>/<path>" after the prefix, decoded; null when malformed */
 export function parsePanelFilePath(rest: string): { panelId: string; filePath: string } | null {

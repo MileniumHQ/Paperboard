@@ -10,14 +10,8 @@ import { isAllowedOrigin } from "./ws";
 import { lookupMime } from "./mime";
 import { buildPanelCsp } from "./panelNet";
 import { resolveLocalPanelFile } from "./panelAssets";
-import {
-    DAV_PREFIX,
-    DavSessionStore,
-    handleDavRequest,
-    handleDavSessionIssue,
-    handleDavSessionRevoke,
-    isMainBearer,
-} from "./dav";
+import { DAV_PREFIX, handleDavRequest, handleDavSessionIssue, handleDavSessionRevoke } from "./dav";
+import { DavSessionStore, isMainBearer } from "./davAuth";
 import type { PaperCraneAuth } from "./auth";
 import { handlePanelFileRequest, PANEL_FILES_PREFIX } from "./panelFiles";
 

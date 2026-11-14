@@ -1,24 +1,17 @@
 import * as fs from "fs";
 import * as path from "path";
-import * as crypto from "crypto";
-import * as http from "http";
+import type * as http from "http";
 import type { PaperCraneEngine } from "./engine";
 import type { PaperCraneAuth } from "./auth";
 import { lookupMime } from "./mime";
-import { secretsMatch } from "./secretCompare";
 import { logger } from "./logger";
+import { checkDavAuth, davUnauthorized, type DavSessionStore, DEFAULT_IDLE_MS, mainTokenOf } from "./davAuth";
 import { receiveFileAtomic, UploadTooLargeError } from "./atomicUpload";
 import { hasOnlyRealEntriesBelow } from "./storage";
 
-// WebDAV rooted at the app-data dir, main token or ephemeral session auth
+// WebDAV rooted at the app-data dir, for the main token or an ephemeral
+// session (davAuth.ts)
 export const DAV_PREFIX = "/dav";
-export const DAV_REALM = "Paperboard Server";
-const DEFAULT_IDLE_MS = 5 * 60_000;
-const MIN_IDLE_MS = 30_000;
-const MAX_IDLE_MS = 30 * 60_000;
-// session cap: refusals for NEW sessions only, never eviction of live ones
-// (same shape as the token vault's MAX_TOKENS refusal)
-const MAX_SESSIONS = 50;
 // top-level dirs WebDAV never serves. sockets/: non-regular entries break
 // PROPFIND/GET. local/: this computer's own credentials and server state
 // (vault, paired tokens, TLS identity, paired computers, crane.json). The
@@ -51,164 +44,6 @@ export function davMaxUploadBytes(): number {
 function isBlockedFileName(name: string): boolean {
     const lower = name.toLowerCase();
     return BLOCKED_FILE_NAMES.has(lower) || lower.startsWith("secrets.json.") || lower.startsWith("tls_identity.json.") || KEY_MATERIAL_RE.test(name);
-}
-
-export interface DavSession {
-    user: string;
-    pass: string;
-    createdAt: number;
-    lastActiveAt: number;
-    idleMs: number;
-    issuerToken?: string;
-}
-
-export class DavSessionStore {
-    private byUser = new Map<string, DavSession>();
-    private secrets = new Set<string>();
-
-    issue(idleMs = DEFAULT_IDLE_MS, issuerToken?: string): DavSession {
-        this.sweep();
-        if (this.byUser.size >= MAX_SESSIONS) {
-            throw new Error(
-                `Session store is full (${MAX_SESSIONS} active sessions). Revoke one before opening another.`,
-            );
-        }
-        const clamped = Math.min(MAX_IDLE_MS, Math.max(MIN_IDLE_MS, idleMs));
-        const now = Date.now();
-        const s: DavSession = {
-            user: `dav-${crypto.randomBytes(6).toString("hex")}`,
-            pass: crypto.randomBytes(24).toString("hex"),
-            createdAt: now,
-            lastActiveAt: now,
-            idleMs: clamped,
-            issuerToken,
-        };
-        this.byUser.set(s.user, s);
-        this.secrets.add(s.pass);
-        this.sweep();
-        return s;
-    }
-
-    revoke(user: string): boolean {
-        const s = this.byUser.get(user);
-        if (!s) return false;
-        this.byUser.delete(user);
-        this.secrets.delete(s.pass);
-        return true;
-    }
-
-    revokeAll(): void {
-        this.byUser.clear();
-        this.secrets.clear();
-    }
-
-    isSessionSecret(secret: string): boolean {
-        return this.secrets.has(secret);
-    }
-
-    /** Session for Basic user+pass, or null */
-    useBasic(user: string, pass: string, auth?: PaperCraneAuth): DavSession | null {
-        const s = this.byUser.get(user);
-        if (!s) return null;
-        if (s.issuerToken && !auth?.verifyHostToken(s.issuerToken)) {
-            this.revoke(user);
-            return null;
-        }
-        if (Date.now() - s.lastActiveAt > s.idleMs) {
-            this.revoke(user);
-            return null;
-        }
-        if (!secretsMatch(s.pass, pass)) return null;
-        s.lastActiveAt = Date.now();
-        return s;
-    }
-
-    sweep(): void {
-        const now = Date.now();
-        for (const [user, s] of this.byUser) {
-            if (now - s.lastActiveAt > s.idleMs) {
-                this.byUser.delete(user);
-                this.secrets.delete(s.pass);
-            }
-        }
-    }
-}
-
-export interface DavCredential {
-    kind: "main" | "session";
-}
-
-export function parseBasic(header: string): { user: string; pass: string } | null {
-    // runs before authentication on attacker-sized input: plain slicing, no
-    // backtracking pattern
-    const value = header.trim();
-    if (value.slice(0, 5).toLowerCase() !== "basic" || !/^\s/.test(value.slice(5, 6))) return null;
-    const token = value.slice(5).trimStart();
-    if (!token) return null;
-    let decoded: string;
-    try {
-        decoded = Buffer.from(token, "base64").toString("utf-8");
-    } catch (err) {
-        logger.debug("[dav] basic-auth decode failed:", err);
-        return null;
-    }
-    const idx = decoded.indexOf(":");
-    if (idx < 0) return null;
-    return { user: decoded.slice(0, idx), pass: decoded.slice(idx + 1) };
-}
-
-/** Main-token check without the lastSeen write */
-function isMainToken(auth: PaperCraneAuth | undefined, secret: string): boolean {
-    if (!auth || !secret) return false;
-    if (auth.noAuth) return true;
-    try {
-        // hash-index lookup + one constant-time compare (auth.matchToken),
-        // no per-entry scan
-        return auth.verifyHostToken(secret);
-    } catch (err) {
-        logger.debug("[dav] main-token check failed:", err);
-        return false;
-    }
-}
-
-export function checkDavAuth(
-    auth: PaperCraneAuth | undefined,
-    sessions: DavSessionStore,
-    req: http.IncomingMessage,
-): DavCredential | null {
-    const header = req.headers.authorization;
-    if (!header) return null;
-    if (/^Bearer\s+/i.test(header)) {
-        const token = header.replace(/^Bearer\s+/i, "").trim();
-        if (sessions.isSessionSecret(token)) return null; // sessions can't mint
-        return isMainToken(auth, token) ? { kind: "main" } : null;
-    }
-    const basic = parseBasic(header);
-    if (!basic) return null;
-    if (sessions.useBasic(basic.user, basic.pass, auth)) return { kind: "session" };
-    if (sessions.isSessionSecret(basic.pass)) return null;
-    return isMainToken(auth, basic.pass) ? { kind: "main" } : null;
-}
-
-export function davUnauthorized(res: http.ServerResponse): void {
-    res.writeHead(401, {
-        "Content-Type": "text/plain",
-        "WWW-Authenticate": `Basic realm="${DAV_REALM}"`,
-    });
-    res.end("Unauthorized");
-}
-
-// main-token Bearer check for non-DAV surfaces (panel assets): ephemeral
-// DAV session secrets are never accepted here, same as session minting
-export function isMainBearer(
-    auth: PaperCraneAuth | undefined,
-    req: http.IncomingMessage,
-): boolean {
-    const header = req.headers.authorization;
-    if (!header || !/^Bearer\s+/i.test(header)) return false;
-    const token = header.replace(/^Bearer\s+/i, "").trim();
-    if (!token) return false;
-    return isMainToken(auth, token);
 }
 
 function escXml(s: string): string {
@@ -363,18 +198,13 @@ function hrefFor(davPath: string, isDir: boolean): string {
 }
 
 async function handlePropfind(
-    engine: PaperCraneEngine,
+    root: string,
     req: http.IncomingMessage,
     res: http.ServerResponse,
     rel: string,
 ): Promise<void> {
-    const root = engine.getAppDataDir();
     const target = resolveDavPath(root, rel);
-    if (!target || !fs.existsSync(target)) {
-        res.writeHead(404, { "Content-Type": "text/plain" });
-        res.end("Not Found");
-        return;
-    }
+    if (!target || !fs.existsSync(target)) return replyText(res, 404, "Not Found");
     const body = (await readBody(req)).toString("utf-8");
     const { mode, names } = parsePropfind(body);
     const depth = (req.headers.depth as string | undefined ?? "infinity").toLowerCase();
@@ -441,19 +271,23 @@ async function handlePropfind(
     res.end(xml);
 }
 
-export function sendFile(
-    res: http.ServerResponse,
-    abs: string,
-    range?: string,
-): void {
-    const st = fs.statSync(abs);
-    const headers: Record<string, string> = {
+function fileHeaders(abs: string, st: fs.Stats): Record<string, string> {
+    return {
         "Content-Type": lookupMime(path.extname(abs)),
         "Content-Length": String(st.size),
         "Accept-Ranges": "bytes",
         ETag: `"${st.size}-${Math.round(st.mtimeMs)}"`,
         "Last-Modified": st.mtime.toUTCString(),
     };
+}
+
+export function sendFile(
+    res: http.ServerResponse,
+    abs: string,
+    range?: string,
+): void {
+    const st = fs.statSync(abs);
+    const headers = fileHeaders(abs, st);
     let start = 0;
     let end = st.size - 1;
     let status = 200;
@@ -487,18 +321,15 @@ export function sendFile(
     body.pipe(res);
 }
 
-const DAV_ALLOW =
-    "OPTIONS, PROPFIND, GET, HEAD, PUT, DELETE, MKCOL, COPY, MOVE";
-
 function davRooted(pathname: string): string | null {
     if (pathname === DAV_PREFIX || pathname === `${DAV_PREFIX}/`) return "/";
     if (!pathname.startsWith(`${DAV_PREFIX}/`)) return null;
     return pathname.slice(DAV_PREFIX.length) || "/";
 }
 
-function badGateway(res: http.ServerResponse): void {
-    res.writeHead(502, { "Content-Type": "text/plain" });
-    res.end("Destination must stay under /dav/ on this server");
+export function replyText(res: http.ServerResponse, status: number, text: string, extra: Record<string, string> = {}): void {
+    res.writeHead(status, { "Content-Type": "text/plain", ...extra });
+    res.end(text);
 }
 
 function entryId(p: string): string | null {
@@ -543,26 +374,130 @@ export function davOverlap(source: string, dest: string, destExists: boolean): "
 function destRel(req: http.IncomingMessage, res: http.ServerResponse): string | null {
     const raw = req.headers.destination;
     if (typeof raw !== "string" || !raw) {
-        res.writeHead(400, { "Content-Type": "text/plain" });
-        res.end("Missing Destination");
+        replyText(res, 400, "Missing Destination");
         return null;
     }
     let destPath: string;
     try {
         destPath = new URL(raw).pathname;
     } catch {
-        res.writeHead(400, { "Content-Type": "text/plain" });
-        res.end("Bad Destination");
+        replyText(res, 400, "Bad Destination");
         return null;
     }
     const rel = davRooted(destPath);
     if (rel === null) {
-        badGateway(res);
+        replyText(res, 502, "Destination must stay under /dav/ on this server");
         return null;
     }
     return rel;
 }
 
+// one authenticated request, its path resolved inside the root
+interface DavCall {
+    req: http.IncomingMessage;
+    res: http.ServerResponse;
+    method: string;
+    root: string;
+    target: string;
+}
+
+function davOptions(res: http.ServerResponse): void {
+    res.writeHead(200, { Allow: DAV_ALLOW, DAV: "1", "MS-Author-Via": "DAV", "Content-Length": "0" });
+    res.end();
+}
+
+function davGet({ req, res, method, target }: DavCall): void {
+    if (!fs.existsSync(target)) return replyText(res, 404, "Not Found");
+    // lstat, not stat: a symlink is never served, even one pointing
+    // inside the tree (resolveDavPath refuses linked folders above it)
+    const st = fs.lstatSync(target);
+    if (!st.isFile() || st.isSymbolicLink()) return replyText(res, 403, "Not a file");
+    if (method === "GET") return sendFile(res, target, req.headers.range);
+    res.writeHead(200, fileHeaders(target, st));
+    res.end();
+}
+
+async function davPut({ req, res, root, target }: DavCall): Promise<void> {
+    if (target === root) return replyText(res, 403, "Forbidden");
+    if (!fs.existsSync(path.dirname(target))) return replyText(res, 409, "Parent collection missing");
+    const existed = fs.existsSync(target);
+    if (existed && fs.statSync(target).isDirectory()) return replyText(res, 403, "Target is a collection");
+    try {
+        await receiveFileAtomic(req, target, davMaxUploadBytes());
+    } catch (err) {
+        if (err instanceof UploadTooLargeError) return replyText(res, 413, "Upload too large");
+        throw err;
+    }
+    res.writeHead(existed ? 204 : 201);
+    res.end();
+}
+
+function davDelete({ res, root, target }: DavCall): void {
+    if (target === root) return replyText(res, 403, "Forbidden");
+    if (!fs.existsSync(target)) return replyText(res, 404, "Not Found");
+    fs.rmSync(target, { recursive: true, force: true });
+    res.writeHead(204);
+    res.end();
+}
+
+function davMkcol({ res, target }: DavCall): void {
+    if (fs.existsSync(target)) return replyText(res, 405, "Already exists");
+    if (!fs.existsSync(path.dirname(target))) return replyText(res, 409, "Parent collection missing");
+    fs.mkdirSync(target);
+    res.writeHead(201);
+    res.end();
+}
+
+function davCopyOrMove({ req, res, method, root, target }: DavCall): void {
+    if (target === root) return replyText(res, 403, "Forbidden");
+    const dRel = destRel(req, res);
+    if (dRel === null) return;
+    const dest = resolveDavPath(root, dRel);
+    if (!dest || dest === root) return replyText(res, 403, "Forbidden");
+    if (!fs.existsSync(target)) return replyText(res, 404, "Not Found");
+    const overwrite = ((req.headers.overwrite as string) || "T").toUpperCase() !== "F";
+    const destExists = fs.existsSync(dest);
+    if (destExists && !overwrite) return replyText(res, 412, "Destination exists");
+    if (!fs.existsSync(path.dirname(dest))) return replyText(res, 409, "Destination parent missing");
+    // the overwrite below deletes dest first: when dest is the source
+    // (same path, or a case variant on a case-insensitive filesystem),
+    // contains it, or lies inside it, that would delete the source
+    const overlap = davOverlap(target, dest, destExists);
+    if (overlap === "contained") return replyText(res, 403, "Destination overlaps the source");
+    // a case-only MOVE is a real rename, not an overwrite: it deletes nothing
+    const caseOnlyRename = overlap === "same-entry" && method === "MOVE" && path.basename(dest) !== path.basename(target);
+    if (overlap === "same-entry" && !caseOnlyRename) return replyText(res, 403, "Destination is the source");
+    if (destExists && !caseOnlyRename) fs.rmSync(dest, { recursive: true, force: true });
+    if (method === "COPY") fs.cpSync(target, dest, { recursive: true });
+    else fs.renameSync(target, dest);
+    res.writeHead(destExists ? 204 : 201);
+    res.end();
+}
+
+// locks are genuinely not stored anywhere: minting receipts we never honor
+// teaches clients to overwrite each other, and an honest refusal lets WebDAV
+// clients use their own safe save path
+function davLock({ res }: DavCall): void {
+    replyText(res, 501, "Locking is not implemented");
+}
+
+const DAV_METHODS: Record<string, (call: DavCall) => void | Promise<void>> = {
+    GET: davGet,
+    HEAD: davGet,
+    PUT: davPut,
+    DELETE: davDelete,
+    MKCOL: davMkcol,
+    COPY: davCopyOrMove,
+    MOVE: davCopyOrMove,
+    LOCK: davLock,
+    UNLOCK: davLock,
+};
+
+const DAV_ALLOW = "OPTIONS, PROPFIND, GET, HEAD, PUT, DELETE, MKCOL, COPY, MOVE";
+
+// Any failure past the checks (a filesystem call that throws, a body that
+// can't be read) is logged and answered: a mounted drive is never left
+// waiting on a request nobody will answer.
 export async function handleDavRequest(
     engine: PaperCraneEngine,
     sessions: DavSessionStore,
@@ -570,251 +505,42 @@ export async function handleDavRequest(
     req: http.IncomingMessage,
     res: http.ServerResponse,
 ): Promise<void> {
+    const method = (req.method || "GET").toUpperCase();
+    try {
+        await serveDav(engine, sessions, auth, method, req, res);
+    } catch (err) {
+        logger.warn(`[WebDAV] ${method} failed:`, (err as Error)?.message ?? err);
+        if (res.headersSent) res.destroy();
+        else replyText(res, 500, `${method} failed`);
+    }
+}
+
+async function serveDav(
+    engine: PaperCraneEngine,
+    sessions: DavSessionStore,
+    auth: PaperCraneAuth | undefined,
+    method: string,
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+): Promise<void> {
     let rel: string | null;
     try {
-        const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
-        rel = davRooted(url.pathname);
+        rel = davRooted(new URL(req.url || "/", `http://${req.headers.host || "localhost"}`).pathname);
     } catch {
-        res.writeHead(400, { "Content-Type": "text/plain" });
-        res.end("Bad Request");
-        return;
+        return replyText(res, 400, "Bad Request");
     }
-    if (rel === null) {
-        res.writeHead(404, { "Content-Type": "text/plain" });
-        res.end("Not Found");
-        return;
-    }
-    const cred = checkDavAuth(auth, sessions, req);
-    if (!cred) {
-        davUnauthorized(res);
-        return;
-    }
+    if (rel === null) return replyText(res, 404, "Not Found");
+    if (!checkDavAuth(auth, sessions, req)) return davUnauthorized(res);
     const root = engine.getAppDataDir();
-    const method = (req.method || "GET").toUpperCase();
-
-    if (method === "OPTIONS") {
-        res.writeHead(200, {
-            Allow: DAV_ALLOW,
-            DAV: "1",
-            "MS-Author-Via": "DAV",
-            "Content-Length": "0",
-        });
-        res.end();
-        return;
-    }
-    if (method === "PROPFIND") {
-        await handlePropfind(engine, req, res, rel);
-        return;
-    }
-
+    if (method === "OPTIONS") return davOptions(res);
+    if (method === "PROPFIND") return handlePropfind(root, req, res, rel);
     const target = resolveDavPath(root, rel);
-    if (!target) {
-        res.writeHead(rel === "/" ? 404 : 403, { "Content-Type": "text/plain" });
-        res.end("Forbidden");
-        return;
-    }
-    const isRoot = target === root;
-
-    if (method === "GET" || method === "HEAD") {
-        if (!fs.existsSync(target)) {
-            res.writeHead(404, { "Content-Type": "text/plain" });
-            res.end("Not Found");
-            return;
-        }
-        const st = fs.lstatSync(target);
-        // lstat, not stat: a symlink is never served, even one pointing
-        // inside the tree (resolveDavPath refuses linked folders above it)
-        if (!st.isFile() || st.isSymbolicLink()) {
-            res.writeHead(403, { "Content-Type": "text/plain" });
-            res.end("Not a file");
-            return;
-        }
-        if (method === "HEAD") {
-            res.writeHead(200, {
-                "Content-Type": lookupMime(path.extname(target)),
-                "Content-Length": String(st.size),
-                "Accept-Ranges": "bytes",
-                ETag: `"${st.size}-${Math.round(st.mtimeMs)}"`,
-                "Last-Modified": st.mtime.toUTCString(),
-            });
-            res.end();
-            return;
-        }
-        sendFile(res, target, req.headers.range);
-        return;
-    }
-
-    if (method === "PUT") {
-        if (isRoot) {
-            res.writeHead(403, { "Content-Type": "text/plain" });
-            res.end("Forbidden");
-            return;
-        }
-        const parent = path.dirname(target);
-        if (!fs.existsSync(parent)) {
-            res.writeHead(409, { "Content-Type": "text/plain" });
-            res.end("Parent collection missing");
-            return;
-        }
-        if (fs.existsSync(target) && fs.statSync(target).isDirectory()) {
-            res.writeHead(403, { "Content-Type": "text/plain" });
-            res.end("Target is a collection");
-            return;
-        }
-        const existed = fs.existsSync(target);
-        try {
-            await receiveFileAtomic(req, target, davMaxUploadBytes());
-        } catch (err) {
-            if (err instanceof UploadTooLargeError) {
-                res.writeHead(413, { "Content-Type": "text/plain" });
-                res.end("Upload too large");
-                return;
-            }
-            logger.warn("[WebDAV] PUT failed:", (err as Error)?.message ?? err);
-            res.writeHead(500, { "Content-Type": "text/plain" });
-            res.end("Write failed");
-            return;
-        }
-        res.writeHead(existed ? 204 : 201);
-        res.end();
-        return;
-    }
-
-    if (method === "DELETE") {
-        if (isRoot) {
-            res.writeHead(403, { "Content-Type": "text/plain" });
-            res.end("Forbidden");
-            return;
-        }
-        if (!fs.existsSync(target)) {
-            res.writeHead(404, { "Content-Type": "text/plain" });
-            res.end("Not Found");
-            return;
-        }
-        try {
-            fs.rmSync(target, { recursive: true, force: true });
-        } catch (err) {
-            logger.warn("[WebDAV] DELETE failed:", (err as Error)?.message ?? err);
-            res.writeHead(500, { "Content-Type": "text/plain" });
-            res.end("Delete failed");
-            return;
-        }
-        res.writeHead(204);
-        res.end();
-        return;
-    }
-
-    if (method === "MKCOL") {
-        if (fs.existsSync(target)) {
-            res.writeHead(405, { "Content-Type": "text/plain" });
-            res.end("Already exists");
-            return;
-        }
-        const parent = path.dirname(target);
-        if (!fs.existsSync(parent)) {
-            res.writeHead(409, { "Content-Type": "text/plain" });
-            res.end("Parent collection missing");
-            return;
-        }
-        try {
-            fs.mkdirSync(target);
-        } catch (err) {
-            logger.warn("[WebDAV] MKCOL failed:", (err as Error)?.message ?? err);
-            res.writeHead(500, { "Content-Type": "text/plain" });
-            res.end("Mkcol failed");
-            return;
-        }
-        res.writeHead(201);
-        res.end();
-        return;
-    }
-
-    if (method === "COPY" || method === "MOVE") {
-        if (isRoot) {
-            res.writeHead(403, { "Content-Type": "text/plain" });
-            res.end("Forbidden");
-            return;
-        }
-        const dRel = destRel(req, res);
-        if (dRel === null) return;
-        const dest = resolveDavPath(root, dRel);
-        if (!dest || dest === root) {
-            res.writeHead(403, { "Content-Type": "text/plain" });
-            res.end("Forbidden");
-            return;
-        }
-        if (!fs.existsSync(target)) {
-            res.writeHead(404, { "Content-Type": "text/plain" });
-            res.end("Not Found");
-            return;
-        }
-        const overwrite = ((req.headers.overwrite as string) || "T").toUpperCase() !== "F";
-        const destExists = fs.existsSync(dest);
-        if (destExists && !overwrite) {
-            res.writeHead(412, { "Content-Type": "text/plain" });
-            res.end("Destination exists");
-            return;
-        }
-        if (!fs.existsSync(path.dirname(dest))) {
-            res.writeHead(409, { "Content-Type": "text/plain" });
-            res.end("Destination parent missing");
-            return;
-        }
-        let caseOnlyRename = false;
-        try {
-            // the overwrite below deletes dest first: when dest is the source
-            // (same path, or a case variant on a case-insensitive filesystem),
-            // contains it, or lies inside it, that would delete the source
-            const overlap = davOverlap(target, dest, destExists);
-            if (overlap === "contained") {
-                res.writeHead(403, { "Content-Type": "text/plain" });
-                res.end("Destination overlaps the source");
-                return;
-            }
-            // a case-only MOVE is a real rename, not an overwrite: it deletes nothing
-            caseOnlyRename = overlap === "same-entry" && method === "MOVE" && path.basename(dest) !== path.basename(target);
-            if (overlap === "same-entry" && !caseOnlyRename) {
-                res.writeHead(403, { "Content-Type": "text/plain" });
-                res.end("Destination is the source");
-                return;
-            }
-        } catch (err) {
-            logger.warn(`[WebDAV] ${method} overlap check failed:`, (err as Error)?.message ?? err);
-            res.writeHead(500, { "Content-Type": "text/plain" });
-            res.end(`${method} failed`);
-            return;
-        }
-        try {
-            if (destExists && !caseOnlyRename) fs.rmSync(dest, { recursive: true, force: true });
-            if (method === "COPY") {
-                fs.cpSync(target, dest, { recursive: true });
-                res.writeHead(destExists ? 204 : 201);
-            } else {
-                fs.renameSync(target, dest);
-                res.writeHead(destExists ? 204 : 201);
-            }
-            res.end();
-        } catch (err) {
-            logger.warn(`[WebDAV] ${method} failed:`, (err as Error)?.message ?? err);
-            res.writeHead(500, { "Content-Type": "text/plain" });
-            res.end(`${method} failed`);
-        }
-        return;
-    }
-
-    if (method === "LOCK" || method === "UNLOCK") {
-        // locks are genuinely not stored anywhere — minting receipts we
-        // never honor teaches clients to overwrite each other. honest
-        // refusal lets WebDAV clients use their own safe save path
-        res.writeHead(501, { "Content-Type": "text/plain" });
-        res.end("Locking is not implemented");
-        return;
-    }
-
+    if (!target) return replyText(res, rel === "/" ? 404 : 403, "Forbidden");
+    const handler = DAV_METHODS[method];
     // PROPPATCH and anything else: properties are not stored, and a client
     // that tries is told so
-    res.writeHead(501, { "Content-Type": "text/plain" });
-    res.end("Not Implemented");
+    if (!handler) return replyText(res, 501, "Not Implemented");
+    await handler({ req, res, method, root, target });
 }
 
 /** POST /dav/session, main token only */
@@ -824,14 +550,8 @@ export async function handleDavSessionIssue(
     req: http.IncomingMessage,
     res: http.ServerResponse,
 ): Promise<void> {
-    const header = req.headers.authorization;
-    const token = /^Bearer\s+/i.test(header ?? "")
-        ? header!.replace(/^Bearer\s+/i, "").trim()
-        : parseBasic(header ?? "")?.pass ?? "";
-    if (sessions.isSessionSecret(token) || !isMainToken(auth, token)) {
-        davUnauthorized(res);
-        return;
-    }
+    const token = mainTokenOf(auth, sessions, req);
+    if (token === null) return davUnauthorized(res);
     let idleMs = DEFAULT_IDLE_MS;
     try {
         const raw = (await readBody(req, 4096)).toString("utf-8");
@@ -847,8 +567,7 @@ export async function handleDavSessionIssue(
         } catch (err) {
             // capped store: loud refusal, never a hung connection
             logger.warn("[dav] session issue refused:", (err as Error)?.message ?? err);
-            res.writeHead(503, { "Content-Type": "text/plain" });
-            res.end("Session store is full");
+            replyText(res, 503, "Session store is full");
             return null;
         }
     })();
@@ -864,14 +583,8 @@ export async function handleDavSessionRevoke(
     req: http.IncomingMessage,
     res: http.ServerResponse,
 ): Promise<void> {
-    const header = req.headers.authorization;
-    const token = /^Bearer\s+/i.test(header ?? "")
-        ? header!.replace(/^Bearer\s+/i, "").trim()
-        : parseBasic(header ?? "")?.pass ?? "";
-    if (sessions.isSessionSecret(token) || !isMainToken(auth, token)) {
-        davUnauthorized(res);
-        return;
-    }
+    const token = mainTokenOf(auth, sessions, req);
+    if (token === null) return davUnauthorized(res);
     let user = "";
     try {
         const raw = (await readBody(req, 4096)).toString("utf-8");
