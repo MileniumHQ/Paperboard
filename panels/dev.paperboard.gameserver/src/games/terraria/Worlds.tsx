@@ -14,7 +14,6 @@ import {
     PaperModal,
     PaperPageHeader,
     PaperQuote,
-    PaperSettingItem,
     PaperSettingList,
     PaperTable,
     PaperText,
@@ -23,7 +22,7 @@ import { fileApi } from "../../lib/api";
 import { serverBridge, serverStatus } from "../../lib/server";
 import { PANEL_ID } from "../../service/contract";
 import { errorMessage, type Outcome } from "../../lib/failure";
-import { GameOptionControl } from "../../components/GameOptions";
+import { GameOptionItem } from "../../components/GameOptions";
 import { options } from "./index";
 import { gameModeLabel, worldSizeLabel, type TerrariaWorldHeader } from "./worldFile";
 import type { TerrariaWorld } from "./worldStore";
@@ -473,13 +472,11 @@ export default function TerrariaWorlds() {
                     <PaperSettingList autoHeight>
                         <For each={GENERATION}>
                             {(field) => (
-                                <PaperSettingItem title={field.label} description={field.description}>
-                                    <GameOptionControl
-                                        field={field}
-                                        value={generation()[field.id]}
-                                        onChange={(value) => setGeneration((prev) => ({ ...prev, [field.id]: value }))}
-                                    />
-                                </PaperSettingItem>
+                                <GameOptionItem
+                                    field={field}
+                                    value={generation()[field.id]}
+                                    onChange={(value) => setGeneration((prev) => ({ ...prev, [field.id]: value }))}
+                                />
                             )}
                         </For>
                     </PaperSettingList>

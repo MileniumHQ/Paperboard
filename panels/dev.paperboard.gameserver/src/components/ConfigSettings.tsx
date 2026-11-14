@@ -1,6 +1,6 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
-import { PaperFlex, PaperQuote, PaperSettingItem, PaperSettingList, PaperText } from "@mileniumhq/paperui";
-import { FieldControl } from "./PropertyFieldControl";
+import { PaperFlex, PaperQuote, PaperSettingList, PaperText, showToast } from "@mileniumhq/paperui";
+import { FieldItem } from "./PropertyFieldControl";
 import type { LoaderGroupView, LoaderSettingView } from "../service/loaderSettings";
 import type { PropertyField } from "../lib/properties";
 
@@ -29,17 +29,25 @@ export default function ConfigSettings(props: {
         setValues(next);
     });
 
+    let left = false;
     const save = async (id: string, value: string) => {
         try {
             await props.write(id, value);
             setSaveError("");
         } catch (err) {
-            setSaveError(err instanceof Error ? err.message : String(err));
+            const message = err instanceof Error ? err.message : String(err);
+            // a save sent as the tab closed has nowhere on the tab to say so
+            if (left) {
+                showToast({ variant: "danger", title: "Setting not saved", message });
+                return;
+            }
+            setSaveError(message);
             await props.reload();
         }
     };
 
     onCleanup(() => {
+        left = true;
         // a pending edit is sent, not dropped, when leaving the tab
         for (const [id, timer] of timers) {
             clearTimeout(timer);
@@ -86,8 +94,8 @@ export default function ConfigSettings(props: {
     });
 
     const item = (setting: LoaderSettingView) => (
-        <PaperSettingItem
-            title={setting.title}
+        <FieldItem
+            field={asField(setting)}
             description={
                 setting.warning ? (
                     <>
@@ -97,13 +105,9 @@ export default function ConfigSettings(props: {
                     setting.description
                 )
             }
-        >
-            <FieldControl
-                field={asField(setting)}
-                value={() => values()[setting.id] ?? setting.value}
-                onUpdate={(value) => update(setting, value)}
-            />
-        </PaperSettingItem>
+            value={() => values()[setting.id] ?? setting.value}
+            onUpdate={(value) => update(setting, value)}
+        />
     );
 
     const fileError = (group: LoaderGroupView) => (

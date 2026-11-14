@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onMount, For, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, onMount, For, Show, untrack } from "solid-js";
 import {
     PaperButton,
     PaperCard,
@@ -21,12 +21,15 @@ import { errorMessage } from "../lib/failure";
 import { createSaves } from "../lib/saves";
 import { sameData } from "../core/state";
 import { CALLS } from "../service/contract";
-import { fitsNumber } from "../games/options";
+import { fitsNumber, numberRule } from "../games/options";
+import { describeWithProblem } from "./PropertyFieldControl";
 
 /**
  * One option's control. Toggles and menus report a change at once; text,
- * number and password fields report it when they lose focus, so a half-typed
- * value is never saved.
+ * number and password fields keep what is typed as a draft and report it
+ * when they lose focus or Enter is pressed, so a half-typed value is never
+ * saved. A number out of the option's range is not reported: `onProblem`
+ * hears why, and the field keeps it until it is corrected.
  */
 export function GameOptionControl(props: {
     field: GameOption;
@@ -35,6 +38,8 @@ export function GameOptionControl(props: {
     secretStored?: boolean;
     disabled?: boolean;
     onChange: (value: unknown) => void;
+    /** why the typed value can't be saved, or "" once it can */
+    onProblem?: (problem: string) => void;
 }) {
     // an option's kind is what it is; the rest follows the option as it is described again
     const field = <K extends GameOption["kind"]>(_kind: K) => props.field as Extract<GameOption, { kind: K }>;
@@ -51,6 +56,7 @@ export function GameOptionControl(props: {
             const [draft, setDraft] = createSignal<string | null>(null);
             const shown = () => draft() ?? String(props.value ?? "");
             const valid = (raw: string) => raw.trim() !== "" && fitsNumber(field("number"), Number(raw));
+            createEffect(() => props.onProblem?.(valid(shown()) ? "" : `${numberRule(field("number"))}.`));
             return (
                 <PaperInput
                     type="number"
@@ -64,8 +70,10 @@ export function GameOptionControl(props: {
                     onKeyDown={commitOnEnter}
                     onBlur={() => {
                         const raw = draft();
+                        // a value out of range stays, with its reason, until it is corrected
+                        if (raw === null || !valid(raw)) return;
                         setDraft(null);
-                        if (raw !== null && valid(raw) && Number(raw) !== props.value) props.onChange(Number(raw));
+                        if (Number(raw) !== props.value) props.onChange(Number(raw));
                     }}
                 />
             );
@@ -93,18 +101,23 @@ export function GameOptionControl(props: {
                 </PaperFlex>
             );
         }
-        case "secret":
+        case "secret": {
+            // what is typed; a stored secret is never shown, so the field empties once it is sent
+            const [draft, setDraft] = createSignal("");
             return (
                 <PaperFlex direction="row" gap="half" align="center">
                     <PaperInput
                         type="password"
                         placeholder={secretPlaceholder(field("secret").noun ?? "password", props.secretStored)}
                         disabled={props.disabled}
-                        onBlur={(e) => {
-                            const value = e.currentTarget.value;
-                            if (!value) return;
-                            e.currentTarget.value = "";
-                            props.onChange(value);
+                        value={draft()}
+                        onInput={(e) => setDraft(e.currentTarget.value)}
+                        onKeyDown={commitOnEnter}
+                        onBlur={() => {
+                            const typed = draft();
+                            if (!typed) return;
+                            setDraft("");
+                            props.onChange(typed);
                         }}
                     />
                     <Show when={props.secretStored}>
@@ -112,19 +125,51 @@ export function GameOptionControl(props: {
                     </Show>
                 </PaperFlex>
             );
-        default:
+        }
+        default: {
+            const [draft, setDraft] = createSignal<string | null>(null);
             return (
                 <PaperInput
-                    value={String(props.value ?? "")}
+                    value={draft() ?? String(props.value ?? "")}
                     maxLength={props.field.kind === "text" ? props.field.maxLength : undefined}
                     disabled={props.disabled}
+                    onInput={(e) => setDraft(e.currentTarget.value)}
                     onKeyDown={commitOnEnter}
-                    onBlur={(e) => {
-                        if (e.currentTarget.value !== String(props.value ?? "")) props.onChange(e.currentTarget.value);
+                    onBlur={() => {
+                        const typed = draft();
+                        setDraft(null);
+                        if (typed !== null && typed !== String(props.value ?? "")) props.onChange(typed);
                     }}
                 />
             );
+        }
     }
+}
+
+/**
+ * An option's row: its title, its description and, while the typed value
+ * can't be saved, why not.
+ */
+export function GameOptionItem(props: {
+    field: GameOption;
+    value: unknown;
+    secretStored?: boolean;
+    disabled?: boolean;
+    onChange: (value: unknown) => void;
+}) {
+    const [problem, setProblem] = createSignal("");
+    return (
+        <PaperSettingItem title={props.field.label} description={describeWithProblem(props.field.description, problem())}>
+            <GameOptionControl
+                field={props.field}
+                value={props.value}
+                secretStored={props.secretStored}
+                disabled={props.disabled}
+                onChange={props.onChange}
+                onProblem={setProblem}
+            />
+        </PaperSettingItem>
+    );
 }
 
 /** Enter in a field commits it, as leaving it does. */
@@ -215,15 +260,13 @@ export default function GameOptions(props: {
             },
         );
         return (
-            <PaperSettingItem title={field().label} description={field().description}>
-                <GameOptionControl
-                    field={field()}
-                    value={saved.value()}
-                    secretStored={Boolean(saved.value())}
-                    disabled={locked()}
-                    onChange={saved.set}
-                />
-            </PaperSettingItem>
+            <GameOptionItem
+                field={field()}
+                value={saved.value()}
+                secretStored={Boolean(saved.value())}
+                disabled={locked()}
+                onChange={saved.set}
+            />
         );
     };
 

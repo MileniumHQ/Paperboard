@@ -18,7 +18,6 @@ import {
     PaperModal,
     PaperPageHeader,
     PaperQuote,
-    PaperSettingItem,
     PaperSettingList,
     PaperTable,
     PaperText,
@@ -26,7 +25,7 @@ import {
     PaperAvatar,
 } from "@mileniumhq/paperui";
 import { fileApi } from "../lib/api";
-import { FieldControl } from "./PropertyFieldControl";
+import { FieldItem } from "./PropertyFieldControl";
 import { readServerPropertiesStrict, writeServerProperties } from "../lib/properties";
 import {
     deleteActiveWorldDirs,
@@ -570,16 +569,11 @@ export default function Worlds() {
                         <PaperSettingList autoHeight>
                             <For each={WORLD_CREATE_FIELDS}>
                                 {(field) => (
-                                    <PaperSettingItem
-                                        title={field.title}
-                                        description={field.description}
-                                    >
-                                        <FieldControl
-                                            field={field}
-                                            value={() => createValue(field.key, field.defaultValue)}
-                                            onUpdate={(value) => setCreateValue(field.key, value)}
-                                        />
-                                    </PaperSettingItem>
+                                    <FieldItem
+                                        field={field}
+                                        value={() => createValue(field.key, field.defaultValue)}
+                                        onUpdate={(value) => setCreateValue(field.key, value)}
+                                    />
                                 )}
                             </For>
                         </PaperSettingList>
