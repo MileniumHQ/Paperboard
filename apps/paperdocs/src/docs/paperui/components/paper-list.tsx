@@ -288,7 +288,7 @@ export function Example() {
                         <td><PaperCode>actions</PaperCode></td>
                         <td><PaperCode>JSX.Element</PaperCode></td>
                         <td>No default</td>
-                        <td>Trailing controls, such as a menu button. They sit inside the item's label, so each control must stop its own click and pointer events, or a press also selects the item. They keep their full width: the title shortens before they do.</td>
+                        <td>Trailing controls, such as a menu button. They sit inside the item's label, so each control must stop its own click and pointer events, or a press also selects the item. They keep their full width: the title shortens before they do, and every row's actions end at the same distance from the list's edge.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>disabled</PaperCode></td>
@@ -377,6 +377,7 @@ onClosed(value: string | number): void;`}
                 <li>A horizontal list is full width and auto height, with no right border.</li>
                 <li>A list scrolls rather than crushing its rows when it overflows.</li>
                 <li>A title stays on one line: one that doesn't fit, such as a long plugin or player name with no spaces, ends in an ellipsis before it reaches the item's actions. The description wraps instead.</li>
+                <li>Items keep the same padding whatever their actions hold, so a switch in a row of buttons lines up with a switch alone in another row. Only a closeable item's close button sits closer to its edge.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>

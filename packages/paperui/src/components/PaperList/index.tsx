@@ -445,6 +445,7 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
                     <span>{local.children}</span>
                     <Show when={isCloseable()}>
                         <PaperButton size="tiny"
+                            class={styles.closeButton}
                             icon
                             aria-label="Close"
                             onPointerDown={(e) => {

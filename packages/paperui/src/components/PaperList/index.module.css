@@ -110,7 +110,10 @@
     padding-right: var(--paper-uigap-double);
 }
 
-.PaperListItem:has([class*="PaperButton"]) {
+/* a closeable item's close button sits tight to its edge; an item with
+   other controls keeps the list's padding, so every row's controls end on
+   the same line */
+.PaperListItem:has(.closeButton) {
     padding-right: var(--paper-uigap-half) !important;
     padding-top: var(--paper-uigap-half);
 }
