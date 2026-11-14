@@ -1,8 +1,11 @@
 // What a command gives back, the Scratch "ask and wait" way with the answer
 // kept in the block: a command that gives something back has a gear, and
 // the gear opens a tray of reporters, the value and each of its fields.
-// Each reporter dragged out of it reads that one block's result, by its id.
+// Each reporter dragged out of it reads that one block's result, by its id,
+// so blocks copied together (pasted, duplicated, imported) are given new ids
+// and their reporters read the copies.
 import * as Blockly from "blockly";
+import { parseRegistryBlockType } from "./names";
 
 /** The mutator a result block keeps the block it reads in. */
 export const RESULT_SOURCE = "pb_result_source";
@@ -178,7 +181,59 @@ export function addResultsTray(workspace: Blockly.WorkspaceSvg, className: strin
     workspace.addChangeListener((event) => tray.follow(event));
 }
 
+type BlockState = Blockly.serialization.blocks.State;
+
+/**
+ * Saved blocks as they go onto `workspace`: each block whose id the canvas
+ * has already gets a new one, and every result block among them that read
+ * a renamed block reads its new id. A reporter copied without its command
+ * still reads the command it was made from.
+ */
+export function withFreshIds(states: BlockState[], workspace: Blockly.Workspace): BlockState[] {
+    const copies = structuredClone(states);
+    const renamed = new Map<string, string>();
+    const every: BlockState[] = [];
+    const walk = (state: BlockState | undefined) => {
+        if (!state) return;
+        every.push(state);
+        if (state.id && workspace.getBlockById(state.id)) renamed.set(state.id, Blockly.utils.idGenerator.genUid());
+        for (const input of Object.values(state.inputs ?? {})) {
+            walk(input.block);
+            walk(input.shadow);
+        }
+        walk(state.next?.block);
+        walk(state.next?.shadow);
+    };
+    copies.forEach(walk);
+    for (const state of every) {
+        if (state.id) state.id = renamed.get(state.id) ?? state.id;
+        const source = state.extraState as Partial<ResultSource> | undefined;
+        if (parseRegistryBlockType(state.type)?.kind === "result" && source?.from && renamed.has(source.from)) state.extraState = { from: renamed.get(source.from)! } satisfies ResultSource;
+    }
+    return copies;
+}
+
+/**
+ * Copy and Duplicate keep the blocks' ids, which Blockly leaves out, so a
+ * paste knows which reporters read which of the pasted commands; the paste
+ * gives them new ones (withFreshIds).
+ */
+class FreshIdsPaster extends Blockly.clipboard.BlockPaster {
+    override paste(copyData: Blockly.clipboard.BlockCopyData, workspace: Blockly.WorkspaceSvg, coordinate?: Blockly.utils.Coordinate): Blockly.BlockSvg | null {
+        return super.paste({ ...copyData, blockState: withFreshIds([copyData.blockState], workspace)[0]! }, workspace, coordinate);
+    }
+}
+
+const toCopyData = Blockly.BlockSvg.prototype.toCopyData;
+Blockly.BlockSvg.prototype.toCopyData = function (this: Blockly.BlockSvg, addNextBlocks = false): Blockly.clipboard.BlockCopyData | null {
+    const data = toCopyData.call(this, addNextBlocks);
+    if (!data) return null;
+    return { ...data, blockState: Blockly.serialization.blocks.save(this, { addCoordinates: true, addNextBlocks, saveIds: true })! };
+};
+
 function registerResults(): void {
+    Blockly.clipboard.registry.unregister(Blockly.clipboard.BlockPaster.TYPE);
+    Blockly.clipboard.registry.register(Blockly.clipboard.BlockPaster.TYPE, new FreshIdsPaster());
     if (!Blockly.Extensions.isRegistered(RESULT_SOURCE)) {
         Blockly.Extensions.registerMutator(RESULT_SOURCE, {
             saveExtraState(this: ResultBlock): ResultSource {

@@ -10,6 +10,7 @@ import { block, find, num, saved, steps, text, top, type Json } from "./helpers/
 import type { BlockInfo } from "@mileniumhq/paperapi";
 import { BUILTIN_BLOCKS, registryDefinitions } from "../src/lib/blockDefs";
 import { readFlows } from "../src/lib/flows";
+import { appendWorkspace } from "../src/lib/appendWorkspace";
 import { registerChoicesField } from "../src/lib/choicesField";
 import { BlockError, MAX_LOOP_ITERATIONS, hatInputs, runHat, type Host } from "../src/lib/interpreter";
 import { BUILTIN, choiceBlockType, propertyBlockType, registryBlockType } from "../src/lib/names";
@@ -232,6 +233,30 @@ describe("a flow the editor saved runs the way it reads", () => {
         await runHat(top(ws, BUILTIN.onRun), null, ws, r.host);
         // "none" leaves the input out; a text block put over the dropdown is what runs
         expect(r.calls.map((c) => c.inputs)).toEqual([{ team: "red" }, { team: "blue" }]);
+    });
+
+    test("a flow imported into the project it came from reads its own commands' results, not the ones already there", async () => {
+        const flow = saved([
+            {
+                type: BUILTIN.onRun,
+                id: "hat",
+                inputs: { DO: steps({ type: COUNT_KICKS, id: "count" }, { type: BUILTIN.log, inputs: { TEXT: block(KICKS, { extraState: { from: "count" } }) } }) },
+            },
+        ]);
+        const ws = new Blockly.Workspace();
+        try {
+            Blockly.serialization.workspaces.load(flow, ws);
+            appendWorkspace(ws, flow, 100);
+            const both = Blockly.serialization.workspaces.save(ws) as typeof flow;
+            const hats = both.blocks!.blocks.filter((b) => b.type === BUILTIN.onRun);
+            expect(hats).toHaveLength(2);
+            const copy = hats.find((b) => b.id !== "hat")!;
+            const r = recorder({ run: () => 5 });
+            await runHat(copy, null, both, r.host);
+            expect(r.logs).toEqual(["5"]);
+        } finally {
+            ws.dispose();
+        }
     });
 
     test("a command's result is empty until its block runs", async () => {
