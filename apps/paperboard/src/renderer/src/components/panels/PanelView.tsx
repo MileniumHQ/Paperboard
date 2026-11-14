@@ -1,16 +1,14 @@
 import { PaperFlex, playHaptic, swipeFromFrame } from "@mileniumhq/paperui";
-import { backupApi, backupProgressFraction, backupProgressText, HAPTIC_MESSAGE, LEAVE_ANSWER_MESSAGE, LEAVE_REQUEST_MESSAGE, SWIPE_BACK_MESSAGE, UNSAVED_CHANGES_MESSAGE, type BackupProgress } from "@mileniumhq/paperapi";
+import { backupApi, backupProgressFraction, backupProgressText, type BackupProgress } from "@mileniumhq/paperapi";
 import { type Component, type JSX, createEffect, createMemo, createSignal, For, on, Show, onCleanup, onMount } from "solid-js";
 import { recordUse, liveKeys, recordAway, withoutIdle, MAX_LIVE_IFRAMES, IDLE_UNLOAD_MS } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";
 import styles from "./frame.module.css";
 import { logToMain, panelUrl } from "../../lib/shell";
 import { MOBILE_MODE_MESSAGE, mobileMode, requireMobileMode } from "../../lib/mobileMode";
-import { FILE_TRANSFER_RESULT, parseFileTransferMessage, runPanelFileTransfer } from "../../lib/panelFileTransfer";
-import { createFrameLoopbackRedirects, LOOPBACK_REDIRECT_CANCEL, LOOPBACK_REDIRECT_REQUEST, LOOPBACK_REDIRECT_RESULT, parseLoopbackRedirectMessage } from "../../lib/panelLoopbackRedirect";
-import BackupLocationChooser, { type BackupLocationChoice } from "../backups/BackupLocationChooser";
-import { BACKUP_LOCATION_REQUEST, BACKUP_LOCATION_RESULT, parseBackupLocationRequest } from "../../lib/backupLocationRequest";
-import { setPanelUnsaved, unsavedPanels, type LeaveAnswer } from "../../lib/unsavedPanels";
+import BackupLocationChooser from "../backups/BackupLocationChooser";
+import { unsavedPanels } from "../../lib/unsavedPanels";
+import { createFrameDocument, type ChooserRequest } from "./frameMessages";
 import { errorMessage } from "../../lib/errorMessage";
 
 // restarting: the panel's service restarts; updating: a new release of the panel installs
@@ -37,7 +35,21 @@ export interface PanelViewProps {
     onPanelFailed?: (key: string) => void;
 }
 
-const PanelFrame: Component<{ panelKey: string; heading: PanelHeading; mobile: boolean; computerName: string; current: boolean; reload: number; retry: () => void; restart?: RestartState; retryRestart: () => void; failed: () => void }> = (props) => {
+interface PanelFrameProps {
+    panelKey: string;
+    heading: PanelHeading;
+    mobile: boolean;
+    computerName: string;
+    /** the frame on screen: only it swipes its page and plays haptics */
+    current: boolean;
+    reload: number;
+    retry: () => void;
+    restart?: RestartState;
+    retryRestart: () => void;
+    failed: () => void;
+}
+
+const PanelFrame: Component<PanelFrameProps> = (props) => {
     // the frame is keyed by its panel (PanelView's <For> over the keys), so these name one panel for its life
     const computerId = () => props.panelKey.split("::")[0];
     const panelId = () => props.panelKey.split("::")[1];
@@ -84,8 +96,8 @@ const PanelFrame: Component<{ panelKey: string; heading: PanelHeading; mobile: b
     createEffect(on(isHeld, (holding, wasHolding) => {
         if (wasHolding && !holding && (failure() || !ready())) props.retry();
     }));
-    // the backup location window this frame asked for, answered on it
-    const [chooser, setChooser] = createSignal<{ requestId: string; sourceId?: string; generation: string; target: Window } | null>(null);
+    // the backup location window this frame's document asked for, answered on it
+    const [chooser, setChooser] = createSignal<(ChooserRequest & { generation: string }) | null>(null);
     // only this frame's own reload token reloads it: the shell keeps every
     // panel's token in one record, and any other panel's restart or update
     // must leave this document alone
@@ -96,76 +108,30 @@ const PanelFrame: Component<{ panelKey: string; heading: PanelHeading; mobile: b
         setReady(false); setFailure("");
         if (frame) frame.src = panelUrl(computerId(), panelId(), `?_r=${reload}&generation=${generation}`);
         const timer = setTimeout(() => setFailure("The panel did not finish connecting to its service."), 25_000);
-        // a sign-in redirect this document asked the shell to catch
-        const loopback = createFrameLoopbackRedirects(computerId());
-        // what this document was asked about its unsaved work, by request
-        const leaving = new Map<string, (answer: LeaveAnswer) => void>();
-        const askToLeave = () => new Promise<LeaveAnswer>((resolve) => {
-            const target = frame?.contentWindow;
-            if (!target) return resolve({ leave: true });
-            const requestId = crypto.randomUUID();
-            leaving.set(requestId, resolve);
-            target.postMessage({ type: LEAVE_REQUEST_MESSAGE, generation: current, requestId }, "*");
-        });
-        const receive = (event: MessageEvent) => {
-            if (event.source !== frame?.contentWindow || event.data?.generation !== generation) return;
-            if (event.data.type === "paperboard:ready" && event.data.panelId === panelId()) {
-                clearTimeout(timer); setReady(true); setFailure("");
-            } else if (event.data.type === "paperboard:failed") {
+        const doc = createFrameDocument({
+            computerId: computerId(),
+            panelId: panelId(),
+            panelKey: props.panelKey,
+            generation: current,
+            window: () => frame?.contentWindow,
+            onReady: () => { clearTimeout(timer); setReady(true); setFailure(""); },
+            onFailed: (message) => {
                 clearTimeout(timer);
                 // a backup that just stopped the service explains the failure
-                const message = String(event.data.message || "Panel initialization failed");
                 void refreshBackups().then(() => { if (generation === current) setFailure(message); });
-            } else if (event.data.type === SWIPE_BACK_MESSAGE) {
-                // the panel's list had no page to go back from: this frame's page goes back
-                if (frame && props.current) swipeFromFrame(frame, event.data);
-            } else if (event.data.type === UNSAVED_CHANGES_MESSAGE) {
-                setPanelUnsaved(props.panelKey, event.data.unsaved === true ? askToLeave : null);
-            } else if (event.data.type === LEAVE_ANSWER_MESSAGE) {
-                const resolve = leaving.get(event.data.requestId);
-                leaving.delete(event.data.requestId);
-                resolve?.({ leave: event.data.leave === true, error: typeof event.data.error === "string" ? event.data.error : undefined });
-            } else if (event.data.type === HAPTIC_MESSAGE) {
-                // frames can't vibrate; the shell plays it, if it is a kind it knows
-                if (props.current) playHaptic(event.data.kind);
-            } else if (event.data.type === BACKUP_LOCATION_REQUEST) {
-                const target = frame?.contentWindow;
-                const request = parseBackupLocationRequest(event.data, panelId(), chooser() !== null);
-                if (!target || !request) return;
-                const answer = (result: BackupLocationChoice) => {
-                    target.postMessage({ type: BACKUP_LOCATION_RESULT, generation: current, requestId: request.requestId, result }, "*");
-                };
-                if (request.refused) answer({ status: "failed", message: request.refused });
-                else setChooser({ requestId: request.requestId, sourceId: request.sourceId, generation: current, target });
-            } else if (event.data.type === LOOPBACK_REDIRECT_REQUEST || event.data.type === LOOPBACK_REDIRECT_CANCEL) {
-                // a sign-in redirect to catch on this device, or one to stop catching
-                const message = parseLoopbackRedirectMessage(event.data);
-                const target = frame?.contentWindow;
-                if (!message) return;
-                if (message.kind === "cancel") loopback.cancel(message.requestId);
-                else if (target) void loopback.request(message.requestId, message.redirectUri).then((result) => {
-                    target.postMessage({ type: LOOPBACK_REDIRECT_RESULT, generation: current, requestId: message.requestId, result }, "*");
-                });
-            } else {
-                // a save or open dialog, answered on the frame that asked
-                const request = parseFileTransferMessage(event.data);
-                const target = frame?.contentWindow;
-                if (!request || !target) return;
-                void runPanelFileTransfer(computerId(), panelId(), request).then((result) => {
-                    target.postMessage({ type: FILE_TRANSFER_RESULT, generation: current, requestId: request.requestId, result }, "*");
-                });
-            }
-        };
-        window.addEventListener("message", receive);
-        // a reloaded document asked nothing; its open window closes unanswered
-        // a document that goes mid-swipe leaves its page where it was, not half dragged
-        // and its sign-in redirect stops being caught
-        // and its unsaved work is gone with it: nothing is left to ask
+            },
+            // the panel's list had no page to go back from: this frame's page goes back
+            onSwipeBack: (data) => { if (frame && props.current) swipeFromFrame(frame, data as Parameters<typeof swipeFromFrame>[1]); },
+            // frames can't vibrate; the shell plays it, if it is a kind it knows
+            onHaptic: (kind) => { if (props.current) playHaptic(kind as Parameters<typeof playHaptic>[0]); },
+            choosing: () => chooser() !== null,
+            onChooseLocation: (request) => setChooser({ ...request, generation: current }),
+        });
+        // a reloaded document asked nothing; its open window closes unanswered,
+        // and a document that goes mid-swipe leaves its page where it was
         onCleanup(() => {
             if (frame) swipeFromFrame(frame, { phase: "cancel", dx: 0, velocity: 0 });
-            clearTimeout(timer); window.removeEventListener("message", receive); setChooser(null); loopback.closeAll();
-            setPanelUnsaved(props.panelKey, null);
-            for (const resolve of leaving.values()) resolve({ leave: true });
+            clearTimeout(timer); setChooser(null); doc.close();
         });
     }));
     createEffect(on(failure, (message) => { if (message) props.failed(); }, { defer: true }));
@@ -180,7 +146,7 @@ const PanelFrame: Component<{ panelKey: string; heading: PanelHeading; mobile: b
         <BackupLocationChooser computerId={computerId()} computerName={props.computerName} panelId={panelId()} sourceId={chooser()?.sourceId} open={chooser() !== null} onDone={(result) => {
             const request = chooser();
             setChooser(null);
-            if (request && request.generation === generation) request.target.postMessage({ type: BACKUP_LOCATION_RESULT, generation: request.generation, requestId: request.requestId, result }, "*");
+            if (request && request.generation === generation) request.answer(result);
         }} />
         <Show when={props.restart}>{(restart) => (
             <LoadingOverlay
