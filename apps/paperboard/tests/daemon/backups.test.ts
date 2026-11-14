@@ -8,9 +8,9 @@ import { createPanelArchive, extractPanelArchive } from "../../papercrane/backup
 import { LocalBackupStore } from "../../papercrane/backups/localStore";
 import { S3BackupStore, signS3Request } from "../../papercrane/backups/s3Store";
 import { DriveBackupStore } from "../../papercrane/backups/driveStore";
-import { BUSY_RETRY_MS, MAX_KEEP, SCHEDULE_HOURS, SCHEDULED_LABEL } from "../../papercrane/backups/schedules";
+import { BUSY_RETRY_MS } from "../../papercrane/backups/schedules";
 import { backupTransferDeadlineMs, newBackupId, type BackupRecord } from "../../papercrane/backups/types";
-import { MAX_ROUTINE_BACKUPS_KEPT, ROUTINE_BACKUP_HOURS, ROUTINE_BACKUP_LABEL } from "../../../../packages/paperapi/src/backups";
+import { ROUTINE_BACKUP_LABEL } from "../../../../packages/paperapi/src/backups";
 import { tarGz } from "./support/archive";
 import { fakeDrive, fakeS3 } from "./support/cloud";
 import { killWorkloads, startCrane } from "./support/crane";
@@ -538,12 +538,6 @@ describe("unreadable backup metadata", () => {
 
 // Routine backups run, prune only routine copies, and retry.
 describe("routine backups", () => {
-	test("paperapi's routine backup constants equal the daemon's", () => {
-		expect([...ROUTINE_BACKUP_HOURS]).toEqual([...SCHEDULE_HOURS]);
-		expect(MAX_ROUTINE_BACKUPS_KEPT).toBe(MAX_KEEP);
-		expect(ROUTINE_BACKUP_LABEL).toBe(SCHEDULED_LABEL);
-	});
-
 	test("a schedule call that leaves the schedule out is refused and the routine stays; null removes it", async () => {
 		const dir = dataDir();
 		await installPanelFiles(dir, { id: "test.keepschedule" });
@@ -580,7 +574,7 @@ describe("routine backups", () => {
 			expect(schedule().last.ok).toBe(true);
 		}
 		const listed = await service.list("test.routine");
-		expect(listed.filter((r) => r.label === SCHEDULED_LABEL)).toHaveLength(1);
+		expect(listed.filter((r) => r.label === ROUTINE_BACKUP_LABEL)).toHaveLength(1);
 		expect(listed.map((r) => r.id)).toContain(manual.id);
 
 		await engine.uninstallPanel("test.routine");

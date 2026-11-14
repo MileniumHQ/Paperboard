@@ -275,8 +275,9 @@ export class PaperCraneAuth extends EventEmitter {
             this.lastSeenFlushTimer = null;
         }
         try {
-            // no eviction: every stored token is live user trust. Bounded by
-            // refusing NEW pairing past MAX_TOKENS (see pair/injectToken)
+            // no eviction: every stored token is live user trust. Bounded:
+            // pair refuses past MAX_TOKENS, mint reuses one panel or relay
+            // token per claim, and a host session replaces the last (injectToken)
             const list = Array.from(this.authorizedTokens.values());
             writeFileAtomicSync(this.tokensFile, JSON.stringify(list, null, 2), {
                 mode: 0o600,

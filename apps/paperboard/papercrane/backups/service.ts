@@ -35,12 +35,12 @@ import {
 import { DriveBackupStore, forgetDriveToken, GOOGLE_ENDPOINTS, type DriveEndpoints } from "./driveStore";
 import { LocalBackupStore } from "./localStore";
 import { normalizeS3Prefix, S3BackupStore } from "./s3Store";
+import { ROUTINE_BACKUP_LABEL } from "../../../../packages/paperapi/src/backups";
 import { BACKUP_ID_RE, BACKUP_LABEL_MAX, newBackupId, type BackupProgress, type BackupProgressChange, type BackupRecord, type BackupStep, type BackupStore, type BackupUsage } from "./types";
 import {
     BUSY_RETRY_MS,
     MAX_SCHEDULES,
     MAX_SLEEP_MS,
-    SCHEDULED_LABEL,
     backupsToPrune,
     duePanels,
     hours,
@@ -451,8 +451,8 @@ export class BackupService {
             throw invalidParams(`label must be at most ${BACKUP_LABEL_MAX} characters`);
         }
         // routine backups are told apart by their label, and only they are pruned
-        if (label?.trim().toLowerCase() === SCHEDULED_LABEL.toLowerCase()) {
-            throw invalidParams(`"${SCHEDULED_LABEL}" is kept for routine backups`);
+        if (label?.trim().toLowerCase() === ROUTINE_BACKUP_LABEL.toLowerCase()) {
+            throw invalidParams(`"${ROUTINE_BACKUP_LABEL}" is kept for routine backups`);
         }
         return this.makeBackup(panelId, label);
     }
@@ -701,7 +701,7 @@ export class BackupService {
             return this.recordRoutine(panelId, schedule.nextRunAt, result, false);
         }
         try {
-            await this.makeBackup(panelId, SCHEDULED_LABEL);
+            await this.makeBackup(panelId, ROUTINE_BACKUP_LABEL);
             const pruned = await this.prune(panelId, schedule.keep);
             result = { at: new Date(this.now()).toISOString(), ok: pruned.failed === null, message: pruned.failed };
         } catch (err) {

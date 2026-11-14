@@ -6,13 +6,10 @@ import * as fs from "fs";
 import { writeFileAtomic } from "../storage";
 import { invalidParams } from "../rpc/errors";
 import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
+import { MAX_ROUTINE_BACKUPS_KEPT, ROUTINE_BACKUP_HOURS, ROUTINE_BACKUP_LABEL } from "../../../../packages/paperapi/src/backups";
 
 export const SCHEDULE_FILE_VERSION = 1;
 export const MAX_SCHEDULES = 64;
-export const SCHEDULE_HOURS = [1, 3, 6, 12, 24, 48, 168] as const;
-export const MAX_KEEP = 100;
-/** what a routine backup is labelled; only these are pruned */
-export const SCHEDULED_LABEL = "Routine backup";
 /** a routine backup that found the panel busy tries again this soon */
 export const BUSY_RETRY_MS = 15 * 60 * 1000;
 /** the timer wakes at least this often, so a changed clock is noticed */
@@ -43,8 +40,8 @@ const iso = (value: unknown) => typeof value === "string" && Number.isFinite(Dat
 
 function validSchedule(value: any): value is BackupSchedule {
     return value && typeof value === "object"
-        && (SCHEDULE_HOURS as readonly number[]).includes(value.everyHours)
-        && Number.isInteger(value.keep) && value.keep >= 1 && value.keep <= MAX_KEEP
+        && (ROUTINE_BACKUP_HOURS as readonly number[]).includes(value.everyHours)
+        && Number.isInteger(value.keep) && value.keep >= 1 && value.keep <= MAX_ROUTINE_BACKUPS_KEPT
         && iso(value.nextRunAt)
         && (value.last === null || (value.last && iso(value.last.at) && typeof value.last.ok === "boolean"
             && (value.last.message === null || typeof value.last.message === "string")));
@@ -84,11 +81,11 @@ export function writeSchedules(file: string, schedules: ScheduleFile): Promise<v
 /** a schedule a caller asked for, checked */
 export function scheduleInput(input: any): { everyHours: number; keep: number } {
     if (!input || typeof input !== "object") throw invalidParams("schedule must be an object or null");
-    if (!(SCHEDULE_HOURS as readonly number[]).includes(input.everyHours)) {
-        throw invalidParams(`everyHours must be one of ${SCHEDULE_HOURS.join(", ")}`);
+    if (!(ROUTINE_BACKUP_HOURS as readonly number[]).includes(input.everyHours)) {
+        throw invalidParams(`everyHours must be one of ${ROUTINE_BACKUP_HOURS.join(", ")}`);
     }
-    if (!Number.isInteger(input.keep) || input.keep < 1 || input.keep > MAX_KEEP) {
-        throw invalidParams(`keep must be a whole number from 1 to ${MAX_KEEP}`);
+    if (!Number.isInteger(input.keep) || input.keep < 1 || input.keep > MAX_ROUTINE_BACKUPS_KEPT) {
+        throw invalidParams(`keep must be a whole number from 1 to ${MAX_ROUTINE_BACKUPS_KEPT}`);
     }
     return { everyHours: input.everyHours, keep: input.keep };
 }
@@ -113,7 +110,7 @@ export function sleepFor(schedules: ScheduleFile, now: number): number {
 /** routine backups beyond the newest `keep`; other backups are never pruned */
 export function backupsToPrune<T extends { id: string; label: string | null; createdAt: string }>(records: readonly T[], keep: number): T[] {
     return records
-        .filter((r) => r.label === SCHEDULED_LABEL)
+        .filter((r) => r.label === ROUTINE_BACKUP_LABEL)
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id.localeCompare(a.id))
         .slice(keep);
 }
