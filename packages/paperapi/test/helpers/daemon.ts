@@ -25,6 +25,10 @@ export interface Daemon {
     // starts a panel service from test/helpers/panelService.ts and resolves
     // once it reports its actions registered
     startPanel(panelId: string, scenario: string): Promise<PanelProcess>;
+    // the scoped token the host gives a panel's page and its service
+    panelToken(panelId: string): string;
+    // spawns one the way the daemon does, with its process channel open
+    spawnService(panelId: string, scenario: string): ChildProcess;
     stop(): Promise<void>;
 }
 
@@ -39,19 +43,22 @@ export async function startDaemon(): Promise<Daemon> {
     const mod = (await import(entry)) as { startPaperCraneServer(options: Record<string, unknown>): Promise<ServerInstance> };
     const instance = await mod.startPaperCraneServer({ host: "127.0.0.1", port: 0, headless: true, advertise: false });
     const children = new Set<ChildProcess>();
+    const serviceEnv = (panelId: string, scenario: string) => {
+        const env: Record<string, string | undefined> = {
+            ...process.env,
+            PAPERBOARD_PANEL_ID: panelId,
+            PAPERCRANE_PANEL_TOKEN: instance.auth.issuePanelToken(panelId),
+            PAPERCRANE_PORT: String(instance.localPort),
+            PANEL_SCENARIO: scenario,
+        };
+        delete env.PAPERCRANE_TOKEN;
+        return env;
+    };
     return {
         port: instance.localPort,
         startPanel: (panelId, scenario) =>
             new Promise<PanelProcess>((resolve, reject) => {
-                const env: Record<string, string | undefined> = {
-                    ...process.env,
-                    PAPERBOARD_PANEL_ID: panelId,
-                    PAPERCRANE_PANEL_TOKEN: instance.auth.issuePanelToken(panelId),
-                    PAPERCRANE_PORT: String(instance.localPort),
-                    PANEL_SCENARIO: scenario,
-                };
-                delete env.PAPERCRANE_TOKEN;
-                const child = spawn(process.execPath, [SERVICE_SCRIPT], { env, stdio: ["ignore", "pipe", "pipe"] });
+                const child = spawn(process.execPath, [SERVICE_SCRIPT], { env: serviceEnv(panelId, scenario), stdio: ["ignore", "pipe", "pipe"] });
                 children.add(child);
                 let out = "";
                 let err = "";
@@ -79,6 +86,12 @@ export async function startDaemon(): Promise<Daemon> {
                     reject(new Error(`${panelId} (${scenario}) exited ${code} before it was ready\n${out}\n${err}`));
                 });
             }),
+        panelToken: (panelId) => instance.auth.issuePanelToken(panelId),
+        spawnService: (panelId, scenario) => {
+            const child = spawn(process.execPath, [SERVICE_SCRIPT], { env: serviceEnv(panelId, scenario), stdio: ["ignore", "pipe", "pipe", "ipc"] });
+            children.add(child);
+            return child;
+        },
         stop: async () => {
             for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill();
             await new Promise<void>((resolve) => {

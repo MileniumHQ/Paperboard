@@ -248,7 +248,18 @@ async function caller(): Promise<void> {
     });
 }
 
-const scenarios: Record<string, () => Promise<void>> = { inputs, owner, blocks, caller, service };
+// a service whose start fails: it never reports ready
+async function brokenInit(): Promise<void> {
+    definePanelService({
+        state: {},
+        onInit: () => {
+            throw new Error("the config file is unreadable");
+        },
+    });
+    await new Promise(() => {});
+}
+
+const scenarios: Record<string, () => Promise<void>> = { inputs, owner, blocks, caller, service, brokenInit };
 const scenario = scenarios[process.env.PANEL_SCENARIO ?? ""];
 if (!scenario) throw new Error(`unknown PANEL_SCENARIO ${process.env.PANEL_SCENARIO}`);
 await scenario();

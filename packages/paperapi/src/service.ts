@@ -170,7 +170,14 @@ export function definePanelService<
         await options.onInit?.(ctx);
         answerTheDaemon(panelId, options, ctx);
     });
-    void ready.catch((err) => console.error(`[Service:${panelId}] initialization failed:`, err));
+    void ready.catch((err) => {
+        console.error(`[Service:${panelId}] initialization failed:`, err);
+        // a service the daemon spawned ends on it, so the daemon hears at
+        // once that it will never be ready (and restarts it on its backoff)
+        // instead of waiting out its readiness deadline; the reason above
+        // is on stderr, which the daemon logs
+        if (typeof process !== "undefined" && typeof process.send === "function") process.exit(1);
+    });
 
     return {
         panelId,
