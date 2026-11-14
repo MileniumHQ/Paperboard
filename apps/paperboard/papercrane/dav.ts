@@ -380,7 +380,11 @@ async function handlePropfind(
     // load-bearing here: stat follows links, so isSymbolicLink() on a
     // stat result is always false and the guard below would be theater.
     const isDir = st.isDirectory() && !st.isSymbolicLink();
-    const davPath = rel === "" || rel === "/" ? "/" : rel.replace(/\/+$/, "") || "/";
+    // hrefs are built from the decoded path and encoded once (hrefFor):
+    // building them from the request's still-encoded path encodes twice,
+    // and a mounted drive then cannot open "My Folder"
+    const decoded = decodeURIComponent(rel);
+    const davPath = decoded.replace(/\/+$/, "") || "/";
 
     const build = (p: string, abs: string, name: string): string => {
         const s = fs.lstatSync(abs);
@@ -404,8 +408,7 @@ async function handlePropfind(
     // request converts a whole-data-tree walk into unbounded memory
     const MAX_WALKED_ENTRIES = 5000;
     let walked = 0;
-    if (isDir && depth !== "0") {
-        const entries = depth === "1" || depth === "infinity" ? listDir(root, target) : [];
+    if (isDir && (depth === "1" || depth === "infinity")) {
         const walk = (dirAbs: string, dirDav: string, level: number): void => {
             if (depth === "1" && level > 1) return;
             if (walked >= MAX_WALKED_ENTRIES) return;
@@ -427,7 +430,7 @@ async function handlePropfind(
                 }
             }
         };
-        if (entries.length > 0) walk(target, davPath, 1);
+        walk(target, davPath, 1);
     }
     const xml = multiStatus(out);
     res.writeHead(207, { "Content-Type": 'application/xml; charset="utf-8"' });
@@ -472,7 +475,12 @@ export function sendFile(
         }
     }
     res.writeHead(status, headers);
-    fs.createReadStream(abs, { start, end }).pipe(res);
+    // a file removed after the stat, or a client that hangs up, ends the
+    // response and frees the file instead of raising an unhandled error
+    const body = fs.createReadStream(abs, { start, end });
+    body.on("error", (error) => res.destroy(error));
+    res.once("close", () => body.destroy());
+    body.pipe(res);
 }
 
 const DAV_ALLOW =
@@ -798,14 +806,8 @@ export async function handleDavRequest(
         return;
     }
 
-    if (method === "PROPPATCH") {
-        // dead-end properties are accepted-and-lost; clients that store
-        // live metadata get their writes back as no-ops
-        res.writeHead(501, { "Content-Type": "text/plain" });
-        res.end("Property storage not implemented");
-        return;
-    }
-
+    // PROPPATCH and anything else: properties are not stored, and a client
+    // that tries is told so
     res.writeHead(501, { "Content-Type": "text/plain" });
     res.end("Not Implemented");
 }

@@ -107,6 +107,27 @@ describe("WebDAV", () => {
 		for (const name of ["/dav/local", "/dav/sockets", "server.key", "nested.pem", "secrets.json"]) expect(listing).not.toContain(name);
 	});
 
+	test("a folder named with a space or an accent lists under hrefs a mounted drive can open", async () => {
+		const daemon = await startDaemon();
+		const port = daemon.instance.localPort;
+		const folder = path.join(daemon.dataDir, "files", "test.dav", "My Folder");
+		fs.mkdirSync(path.join(folder, "Café"), { recursive: true });
+		fs.writeFileSync(path.join(folder, "a b.txt"), "x");
+		const res = await request(port, { method: "PROPFIND", path: "/dav/files/test.dav/My%20Folder/", headers: { ...bearer(daemon.token), Depth: "1" } });
+		expect(res.status).toBe(207);
+		const hrefs = [...res.body.toString().matchAll(/<D:href>([^<]*)<\/D:href>/g)].map((m) => m[1]);
+		expect(hrefs.sort()).toEqual([
+			"/dav/files/test.dav/My%20Folder/",
+			"/dav/files/test.dav/My%20Folder/Caf%C3%A9/",
+			"/dav/files/test.dav/My%20Folder/a%20b.txt",
+		]);
+		expect(res.body.toString()).toContain("<D:displayname>My Folder</D:displayname>");
+		// each href opens what it names
+		for (const href of hrefs) {
+			expect((await request(port, { method: "PROPFIND", path: href, headers: { ...bearer(daemon.token), Depth: "0" } })).status).toBe(207);
+		}
+	});
+
 	test("encoded traversal, DELETE /dav/%2f, symlinks and a malformed Host leave the data dir intact and /health answering", async () => {
 		const daemon = await startDaemon();
 		const port = daemon.instance.localPort;
