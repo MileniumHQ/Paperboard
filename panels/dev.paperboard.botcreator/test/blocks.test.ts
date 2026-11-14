@@ -7,7 +7,7 @@ import { blockEvent, blockTypes, commandEvent, commandEventId, staticEvents } fr
 import { GLOBAL_SCOPE, type SlashCommandDefinition } from "../src/types";
 import { guild, slashCommand, snowflake, startFakeDiscord, userMessage, type FakeBot, type FakeDiscord, type FakeGuild } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, storedBot, stopServices } from "./helpers/service";
-import { stateWhere, within } from "./helpers/wait";
+import { nextEvent as nextEventOf, stateWhere, subscribed, within } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
@@ -57,15 +57,7 @@ const TRIGGERS = [
     "on-nickname-changed",
 ];
 
-/** Resolves with the next payload the bot's event fires. */
-function nextEvent(event: string): { payload: Promise<Record<string, unknown>>; ready: Promise<void> } {
-    let off = () => {};
-    const payload = within(`${event} to fire`, new Promise<Record<string, unknown>>((resolve) => {
-        off = blocksApi.onEvent(PANEL_ID, event, resolve, BOT);
-    })).finally(() => off());
-    // a subscription reaches the daemon on its own; let it land first
-    return { payload, ready: new Promise((resolve) => setTimeout(resolve, 300)) };
-}
+const nextEvent = (event: string) => nextEventOf(PANEL_ID, event, BOT);
 
 describe("each trigger a session fires is one of the bot's Blocks events, with a payload of its types", () => {
     // fired through PaperAPI's own checks, in memory: the payload is every value the event declares, of its type
@@ -316,16 +308,20 @@ describe("a bot is a Blocks project, used through the daemon", () => {
     });
 
     test("a bot that goes offline says Connected and its servers changed", async () => {
+        const values = ["connected", "status", "servers", "server-count"];
         const changed = new Set<string>();
-        const off = ["connected", "status", "servers", "server-count"].map((value) => blocksApi.onChange(PANEL_ID, value, () => changed.add(value), BOT));
+        let allDone = () => {};
+        const allChanged = new Promise<void>((resolve) => (allDone = resolve));
+        const off = values.map((value) =>
+            blocksApi.onChange(PANEL_ID, value, () => {
+                changed.add(value);
+                if (changed.size === values.length) allDone();
+            }, BOT),
+        );
         try {
-            await new Promise((resolve) => setTimeout(resolve, 300));
+            await subscribed();
             discord.closeSession(fake, 4014, "Disallowed intent(s).");
-            const deadline = Date.now() + 10_000;
-            while (changed.size < 4) {
-                if (Date.now() > deadline) throw new Error(`only ${[...changed].join(", ") || "nothing"} announced a change`);
-                await new Promise((resolve) => setTimeout(resolve, 20));
-            }
+            await within("connected, status, servers and server-count to announce a change", allChanged, 10_000, () => `only ${[...changed].join(", ") || "nothing"} did`);
             expect(await read("connected")).toBe(false);
             expect(await read("status")).toBe("offline");
             expect(await read("uptime")).toBe(0);

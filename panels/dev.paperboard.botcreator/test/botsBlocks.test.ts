@@ -10,7 +10,7 @@ import { createBotId, tokenName, type BotsServiceState } from "../src/bots";
 import { testDaemon } from "./helpers/daemon";
 import { guild, startFakeDiscord, type FakeBot, type FakeDiscord, type FakeGuild } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices } from "./helpers/service";
-import { stateWhere, within } from "./helpers/wait";
+import { heard as heardOn, stateWhere } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
@@ -20,20 +20,7 @@ const run = <T = any>(command: string, inputs: Record<string, unknown> = {}) => 
 const read = <T = any>(value: string, inputs?: Record<string, unknown>) => blocksApi.read<T>(PANEL_ID, value, inputs);
 const field = <T = any>(bot: string, name: string) => blocksApi.property<T>(type("bot"), name, bot);
 
-/** Every payload the panel's event fires from now on. */
-async function heard(event: string): Promise<{ payloads: Record<string, unknown>[]; next: () => Promise<Record<string, unknown>>; off: () => void }> {
-    const payloads: Record<string, unknown>[] = [];
-    const off = blocksApi.onEvent(PANEL_ID, event, (payload) => payloads.push(payload));
-    // a subscription reaches the daemon on its own; let it land first
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    let seen = 0;
-    const next = () =>
-        within(`${event} to fire`, (async () => {
-            while (payloads.length <= seen) await new Promise((resolve) => setTimeout(resolve, 20));
-            return payloads[seen++]!;
-        })());
-    return { payloads, next, off };
-}
+const heard = (event: string) => heardOn(PANEL_ID, event);
 
 describe("Bot Creator is run from Blocks by the panel's own blocks", () => {
     let discord: FakeDiscord;

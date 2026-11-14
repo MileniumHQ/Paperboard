@@ -5,7 +5,7 @@ import type { BotsServiceState } from "../src/bots";
 import { GLOBAL_SCOPE, type CommandMutationResult } from "../src/types";
 import { guild, slashCommand, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
-import { stateWhere, within } from "./helpers/wait";
+import { nextEvent as nextEventOf, stateWhere } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
@@ -23,14 +23,7 @@ async function registered(event: string): Promise<any | undefined> {
     return (await blocksApi.list(PANEL_ID)).find((b) => b.entry === `${BOT}/event.${event}`);
 }
 
-/** The next payload the bot's event fires; `ready` is when its subscription has reached the daemon. */
-function nextEvent(event: string): { payload: Promise<Record<string, unknown>>; ready: Promise<void> } {
-    let off = () => {};
-    const payload = within(`${event} to fire`, new Promise<Record<string, unknown>>((resolve) => {
-        off = blocksApi.onEvent(PANEL_ID, event, resolve, BOT);
-    })).finally(() => off());
-    return { payload, ready: new Promise((resolve) => setTimeout(resolve, 300)) };
-}
+const nextEvent = (event: string) => nextEventOf(PANEL_ID, event, BOT);
 
 // Command events stay bound.
 describe("command events stay bound", () => {
