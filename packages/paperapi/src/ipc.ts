@@ -234,6 +234,13 @@ export const RPC_ROUTES: Record<string, WsRoute> = {
         action: "panel:list",
         unwrap: (r) => r.panels ?? [],
     },
+    "panels-list-installed": {
+        action: "panel:list",
+        unwrap: (r) => {
+            if (!Array.isArray(r?.panels) || !Array.isArray(r?.invalid)) throw new Error("The computer answered the panel list with something that is not one");
+            return { panels: r.panels, invalid: r.invalid };
+        },
+    },
     "panel-uninstall": {
         // invoke("panel-uninstall", panelId, deleteData?) — the second
         // argument is the explicit delete-data opt-in; absent or false

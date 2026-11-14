@@ -31,6 +31,7 @@ await panelsApi.restartService("dev.example.weather");`}
             <PaperText preset="subheader" as="h2" id="api">API</PaperText>
             <PaperCode block language="tsx">
 {`panelsApi.list(scope?: string): Promise<PanelItem[]>;
+panelsApi.listInstalled(scope?: string): Promise<{ panels: PanelItem[]; invalid: InvalidPanel[] }>;
 panelsApi.registry(scope?: string): Promise<PanelItem[]>;
 /** false when the panel declares no service */
 panelsApi.restartService(panelId: string, scope?: string): Promise<boolean>;
@@ -52,6 +53,11 @@ panelsApi.install(panelId: string, scope?: string): Promise<PanelItem>;`}
                         <td><PaperCode>list</PaperCode></td>
                         <td>Any panel</td>
                         <td>Every installed panel on the computer, from its own manifest. A panel whose manifest the daemon refuses is left out; run <PaperLink href="/docs/paperapi/cli/#doctor">paperapi doctor</PaperLink> to see why.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>listInstalled</PaperCode></td>
+                        <td>Any panel</td>
+                        <td>The same panels as <PaperCode>list</PaperCode>, plus <PaperCode>invalid</PaperCode>: each installed panel the daemon refuses, as <PaperCode>{"{ id, error }"}</PaperCode>, where <PaperCode>id</PaperCode> is its folder name and <PaperCode>error</PaperCode> says what is wrong with its manifest. Paperboard lists these under the computer's panels.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>registry</PaperCode></td>

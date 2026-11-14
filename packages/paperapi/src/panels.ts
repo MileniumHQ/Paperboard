@@ -4,11 +4,22 @@ import { mergeRegistryWithInstalled, type PanelItem } from "./panelMerge";
 
 export type { PanelItem };
 
+/** an installed panel that isn't listed, because its manifest is unreadable or invalid */
+export interface InvalidPanel {
+    /** the panel's folder name */
+    id: string;
+    /** what is wrong with its manifest */
+    error: string;
+}
+
 // panel store and lifecycle; an omitted scope is the computer initPaperApi
 // bound, else the one this context was granted (identity.ts)
 export const panelsApi = {
     list: (scope?: string): Promise<PanelItem[]> =>
         invokeIn<PanelItem[]>(scope, "panels-list"),
+    /** every installed panel: the ones that load, and the ones whose manifest is broken, with why */
+    listInstalled: (scope?: string): Promise<{ panels: PanelItem[]; invalid: InvalidPanel[] }> =>
+        invokeIn(scope, "panels-list-installed"),
 
     /** merges registry index with installed panels */
     registry: async (scope?: string): Promise<PanelItem[]> => {

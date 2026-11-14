@@ -89,6 +89,9 @@
                 },
                 "terminal": {
                     "name": "Terminal API"
+                },
+                "unsaved-changes": {
+                    "name": "Unsaved changes"
                 }
             }
         }

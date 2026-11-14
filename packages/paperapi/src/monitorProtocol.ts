@@ -69,7 +69,7 @@ export interface MonitorServiceRecord {
     pid?: number;
     /** exit code, for exited and stopped */
     code?: number | null;
-    /** why, for failed */
+    /** why: for failed, and for exited when the service wrote it on stderr (its last lines) */
     error?: string;
 }
 
