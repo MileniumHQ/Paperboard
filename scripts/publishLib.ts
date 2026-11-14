@@ -24,10 +24,11 @@ export const DL_HOST = "i.paperboard.dev";
 export const ORIGAMI_HOST = "origami.ariapis.com";
 
 // Deploy targets. PAPERDL_R2_BUCKET and KV_PACKAGES_BINDING must match
-// apps/origami/wrangler.jsonc (bucket_name / binding); the tests below pin
-// them so a rename on either side fails loudly instead of uploading into
-// the void. R2 holds only small metadata (latest.yml feeds); binaries live
-// on GitHub Releases and Origami only 302-redirects to them.
+// apps/origami/wrangler.jsonc (bucket_name / binding); publishLib.test.ts
+// pins them so a rename on either side fails loudly instead of uploading
+// into the void. R2 holds only small metadata (latest.yml feeds, the crane
+// index, SHA256SUMS); binaries live on GitHub Releases and Origami only
+// 302-redirects to them.
 export const PAPERDL_R2_BUCKET = "paperboard-paperdl";
 export const KV_PACKAGES_BINDING = "PACKAGES";
 
@@ -187,13 +188,12 @@ export function expectedReleaseAssets(
     ];
 }
 
-// Direct GitHub release-asset URL. publish.ts uploads here; Origami only
-// ever 302-redirects here, it never proxies bytes.
-export function releaseAssetUrl(
-    version: string,
-    file: string,
-): string {
-    return `https://github.com/${GH_REPO}/releases/download/${tagFor(version)}/${file}`;
+// What building the Linux packages needs beyond electron-builder itself,
+// named before a Linux build starts rather than after the AppImage is built.
+export function missingLinuxPackageTools(which: (cmd: string) => string | null): string | null {
+    return which("rpmbuild")
+        ? null
+        : "Building the Linux rpm needs rpmbuild: install rpm (Debian, Ubuntu), rpm-tools (Arch) or rpm-build (Fedora).";
 }
 
 // Public download URL. versionOrLatest is a real version ("3.0.0-alpha")
@@ -362,21 +362,6 @@ export function buildSha256Sums(files: { file: string; sha256: string }[]): stri
             return `${sha256}  ${file}`;
         });
     return `${lines.join("\n")}\n`;
-}
-
-// Legacy /paperdl/<app>/<target>/download compatibility: maps an old
-// target to the canonical file so existing installs keep updating through
-// a 302 to the new scheme. Unknown targets return null (genuine 404).
-export function legacyDownloadRedirect(
-    app: "paperboard" | "crane",
-    target: string,
-): string | null {
-    const seg: DlApp = app === "paperboard" ? "pb" : "crane";
-    const t = (ALL_TARGETS as string[]).includes(target)
-        ? (target as Target)
-        : null;
-    if (!t) return null;
-    return dlFileUrl(seg, "latest", assetFileName(seg, t));
 }
 
 // The files a panel's store listing names, as publish-form parts. The

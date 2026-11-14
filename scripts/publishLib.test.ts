@@ -16,10 +16,12 @@ import {
     isUpdatePayload,
     isValidFileSegment,
     isValidVersionSegment,
-    legacyDownloadRedirect,
+    KV_PACKAGES_BINDING,
     mergeVersionRecord,
+    missingLinuxPackageTools,
     paperboardArtifacts,
     paperboardPackages,
+    PAPERDL_R2_BUCKET,
     r2YmlKey,
     tagFor,
     type Target,
@@ -187,14 +189,6 @@ describe("download URL segments cannot break out, and history is kept", () => {
         // the merge never mutates the record it was given
         expect(Object.keys(first.versions)).toEqual(["0.2.2"]);
     });
-
-    test("legacy per-target downloads map to the canonical latest URL, unknown targets to null", () => {
-        expect(legacyDownloadRedirect("paperboard", "macos-arm64")).toBe("https://i.paperboard.dev/pb/latest/paperboard-macos-arm64.zip");
-        expect(legacyDownloadRedirect("crane", "windows-x64")).toBe("https://i.paperboard.dev/crane/latest/crane-windows-x64.zip");
-        for (const t of ALL_TARGETS as Target[]) expect(legacyDownloadRedirect("crane", t)).toBe(dlFileUrl("crane", "latest", assetFileName("crane", t)));
-        expect(legacyDownloadRedirect("crane", "windows-arm64")).toBeNull();
-        expect(legacyDownloadRedirect("paperboard", "../x")).toBeNull();
-    });
 });
 
 // Releases compile only with the exact pinned Bun.
@@ -237,5 +231,25 @@ describe("the install scripts' checksum list", () => {
         expect(() => buildSha256Sums([{ file: "../x", sha256: a }])).toThrow();
         expect(() => buildSha256Sums([{ file: "x.deb", sha256: a.toUpperCase() }])).toThrow();
         expect(() => buildSha256Sums([{ file: "x.deb", sha256: a }, { file: "x.deb", sha256: a }])).toThrow();
+    });
+});
+
+describe("publishing writes where the download worker reads", () => {
+    test("the KV binding and R2 bucket are the ones apps/origami/wrangler.jsonc binds", () => {
+        const wrangler = require(join(ROOT, "apps/origami/wrangler.jsonc")) as {
+            kv_namespaces: { binding: string }[];
+            r2_buckets: { binding: string; bucket_name: string }[];
+        };
+        expect(wrangler.kv_namespaces.map((kv) => kv.binding)).toContain(KV_PACKAGES_BINDING);
+        expect(wrangler.r2_buckets.find((r2) => r2.binding === "PAPERDL_BUCKET")?.bucket_name).toBe(PAPERDL_R2_BUCKET);
+    });
+});
+
+describe("a Linux build names a missing packaging tool before it starts", () => {
+    test("rpmbuild on PATH passes; without it the message says what to install", () => {
+        expect(missingLinuxPackageTools((cmd) => (cmd === "rpmbuild" ? "/usr/bin/rpmbuild" : null))).toBeNull();
+        const missing = missingLinuxPackageTools(() => null);
+        expect(missing).toContain("needs rpmbuild");
+        expect(missing).toContain("rpm-build (Fedora)");
     });
 });
