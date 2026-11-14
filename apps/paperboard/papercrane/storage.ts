@@ -18,8 +18,14 @@ export function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
 /** Runs tasks one at a time, in the order given; one that fails does not stop the next. */
 export class SerialQueue {
     private tail: Promise<unknown> = Promise.resolve();
+    private pending = 0;
+    /** no task is waiting or running */
+    get idle(): boolean {
+        return this.pending === 0;
+    }
     run<T>(task: () => Promise<T> | T): Promise<T> {
-        const result = this.tail.then(task);
+        this.pending++;
+        const result = this.tail.then(task).finally(() => this.pending--);
         this.tail = result.then(() => undefined, () => undefined);
         return result;
     }
@@ -38,8 +44,9 @@ export class LimitError extends Error {
 
 // ─── Atomic JSON persistence ─────────────────────────────────────────────────
 
-// Serializes concurrent writes to the same path
-const writeQueues = new Map<string, Promise<void>>();
+// writes to one path land in the order they were asked for; a queue lives
+// while writes to its path are pending
+const writeQueues = new Map<string, SerialQueue>();
 
 // A failed write names the file it was saving and the system's reason in
 // its own words ("permission denied"), never the temp file it went
@@ -56,35 +63,33 @@ function saveFailed(filePath: string, tmp: string, err: unknown): Error {
     return failure;
 }
 
-// Writes a file atomically via temp plus rename
-export function writeFileAtomic(
-    filePath: string,
-    data: string,
-): Promise<void> {
-    const prev = writeQueues.get(filePath) || Promise.resolve();
-    const current = prev
-        .catch((err) => logger.debug("[storage] previous queued write failed:", err))
-        .then(async () => {
-            const dir = path.dirname(filePath);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            const nonce = crypto.randomBytes(6).toString("hex");
-            const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}-${nonce}`;
-            try {
-                await fs.promises.writeFile(tmp, data, "utf8");
-                await fs.promises.rename(tmp, filePath);
-            } catch (err) {
-                await fs.promises.rm(tmp, { force: true }).catch((cleanupErr) => logger.warn(`[storage] the temp file ${tmp} could not be removed and stays on disk:`, cleanupErr));
-                throw saveFailed(filePath, tmp, err);
-            }
-        })
-        .finally(() => {
-            if (writeQueues.get(filePath) === current) {
-                writeQueues.delete(filePath);
-            }
-        });
+// the temp file a write goes through, beside the file so the rename is atomic
+function tempFor(filePath: string): string {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return `${filePath}.tmp-${process.pid}-${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
+}
 
-    writeQueues.set(filePath, current);
-    return current;
+/** Writes a file atomically via temp plus rename; the mode, when given, applies at birth. */
+export function writeFileAtomic(filePath: string, data: string, options?: { mode?: number }): Promise<void> {
+    let queue = writeQueues.get(filePath);
+    if (!queue) writeQueues.set(filePath, (queue = new SerialQueue()));
+    const done = queue.run(async () => {
+        const tmp = tempFor(filePath);
+        try {
+            await fs.promises.writeFile(tmp, data, { encoding: "utf8", mode: options?.mode });
+            if (options?.mode !== undefined) await fs.promises.chmod(tmp, options.mode);
+            await fs.promises.rename(tmp, filePath);
+        } catch (err) {
+            await fs.promises.rm(tmp, { force: true }).catch((cleanupErr) => logger.warn(`[storage] the temp file ${tmp} could not be removed and stays on disk:`, cleanupErr));
+            throw saveFailed(filePath, tmp, err);
+        }
+    });
+    const forget = () => {
+        if (queue.idle && writeQueues.get(filePath) === queue) writeQueues.delete(filePath);
+    };
+    done.then(forget, forget);
+    return done;
 }
 
 export function writeJsonAtomicSync(
@@ -100,10 +105,7 @@ export function writeFileAtomicSync(
     data: string,
     options?: { mode?: number },
 ): void {
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const nonce = crypto.randomBytes(6).toString("hex");
-    const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}-${nonce}`;
+    const tmp = tempFor(filePath);
     try {
         fs.writeFileSync(tmp, data, { encoding: "utf8", mode: options?.mode });
         // the temp becomes the file, so requested mode applies at birth
