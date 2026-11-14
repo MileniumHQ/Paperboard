@@ -1,11 +1,12 @@
 // A bot's page as a person uses it: added through New bot, it opens on its
 // Overview with the avatar the service fetched (the page itself loads
-// nothing from Discord).
+// nothing from Discord), and the messages shown there stay right when a
+// read answers late.
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import type { BotsServiceState } from "../src/bots";
 import { panelBrowser, servePanel, type Page } from "./helpers/browser";
-import { startFakeDiscord, type FakeDiscord } from "./helpers/discord";
-import { call, PANEL_ID, savedBots, startService, stopServices } from "./helpers/service";
+import { guild, startFakeDiscord, userMessage, type FakeDiscord } from "./helpers/discord";
+import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
@@ -64,6 +65,46 @@ describe("a bot's page", () => {
             expect(page.exceptions).toEqual([]);
         } finally {
             stop();
+            await page.close();
+            served.stop();
+        }
+    });
+
+    test("a message heard while the Overview's first read is on its way stays when the read lands", async () => {
+        const home = guild("Home");
+        const fake = discord.addBot({ username: "Listener", guilds: [home] });
+        await savedBots([{ stored: storedBot("b-listen", fake.appId, { name: "Listener" }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "Listener to connect");
+        const served = await servePanel();
+        const page = await browser.open("about:blank");
+        try {
+            // the page's answer to getBotInfo (the only one that carries recentMessages) waits until the test lets it through
+            await page.send("Page.addScriptToEvaluateOnNewDocument", {
+                source: `(() => {
+                    const held = (window.__held = []);
+                    const add = WebSocket.prototype.addEventListener;
+                    WebSocket.prototype.addEventListener = function (type, listener, options) {
+                        if (type !== "message") return add.call(this, type, listener, options);
+                        return add.call(this, type, (event) => {
+                            if (typeof event.data === "string" && event.data.includes('"recentMessages"') && !window.__let) held.push(() => listener(event));
+                            else listener(event);
+                        }, options);
+                    };
+                    window.__release = () => { window.__let = true; for (const deliver of held.splice(0)) deliver(); };
+                })()`,
+            });
+            await page.navigate(served.url);
+            await page.waitFor(`document.body.innerText.includes("Listener")`, "the bot list");
+            await clickText(page, "[class*=card], [class*=Card]", "Listener");
+            await page.waitFor(`window.__held.length > 0`, "the Overview's first read");
+
+            discord.dispatch(fake, "MESSAGE_CREATE", userMessage(home, "heard live"));
+            await page.waitFor(`document.body.innerText.includes("heard live")`, "the live message");
+            await page.evaluate(`window.__release()`);
+            expect(await page.evaluate<boolean>(`document.body.innerText.includes("heard live")`)).toBe(true);
+            expect(page.exceptions).toEqual([]);
+        } finally {
             await page.close();
             served.stop();
         }

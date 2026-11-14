@@ -238,103 +238,103 @@ export default function Commands(props: { bot: () => BotSummary }) {
     return (
         <>
             <PaperPageHeader
-                        icon="terminal"
-                        title="Commands"
-                        subtitle="Slash commands this bot registers with Discord"
-                    >
-                        <PaperEffect>
-                            <PaperButton onClick={openCreate}>
-                                <PaperIcon>add</PaperIcon>
-                                Create command
-                            </PaperButton>
-                        </PaperEffect>
-                    </PaperPageHeader>
+                icon="terminal"
+                title="Commands"
+                subtitle="Slash commands this bot registers with Discord"
+            >
+                <PaperEffect>
+                    <PaperButton onClick={openCreate}>
+                        <PaperIcon>add</PaperIcon>
+                        Create command
+                    </PaperButton>
+                </PaperEffect>
+            </PaperPageHeader>
 
-                    <Show when={!props.bot().connected}>
-                        <PaperQuote variant="warning" icon="cloud_off" title="Bot offline">
-                            Commands are stored here and register the next time the bot
-                            connects.
-                        </PaperQuote>
-                    </Show>
+            <Show when={!props.bot().connected}>
+                <PaperQuote variant="warning" icon="cloud_off" title="Bot offline">
+                    Commands are stored here and register the next time the bot
+                    connects.
+                </PaperQuote>
+            </Show>
 
-                    <Show when={props.bot().connected && syncError()}>
-                        {(message) => (
-                            <PaperQuote variant="danger" icon="warning" title="Not live on Discord yet">
-                                {message()}
-                            </PaperQuote>
+            <Show when={props.bot().connected && syncError()}>
+                {(message) => (
+                    <PaperQuote variant="danger" icon="warning" title="Not live on Discord yet">
+                        {message()}
+                    </PaperQuote>
+                )}
+            </Show>
+
+            <Show when={actionError()}>
+                {(problem) => (
+                    <PaperQuote variant="danger" icon="warning" title={problem().title}>
+                        {problem().message}
+                    </PaperQuote>
+                )}
+            </Show>
+
+            <Show
+                when={commands().length > 0}
+                fallback={
+                    <PaperCard>
+                        <PaperEmptyState
+                            icon="terminal"
+                            title="No slash commands yet"
+                            description="Create one, then build a flow on its trigger to answer it."
+                        />
+                    </PaperCard>
+                }
+            >
+                <PaperSettingList autoHeight>
+                    <For each={commands()}>
+                        {(command) => (
+                            <PaperSettingItem
+                                title={
+                                    <PaperText preset="label" family="code">
+                                        /{command.name}
+                                    </PaperText>
+                                }
+                                description={command.description}
+                            >
+                                <PaperFlex direction="row" gap="half" align="center" wrap>
+                                    <Show when={command.options.length > 0}>
+                                        <PaperBadge>
+                                            {command.options.length} parameter
+                                            {command.options.length === 1 ? "" : "s"}
+                                        </PaperBadge>
+                                    </Show>
+                                    <Show when={command.userInstall}>
+                                        <PaperBadge>
+                                            User app
+                                        </PaperBadge>
+                                    </Show>
+                                    <PaperBadge
+                                        variant={
+                                            command.scope === GLOBAL_SCOPE
+                                                ? "monochrome"
+                                                : "primary"
+                                        }
+                                    >
+                                        {scopeLabel(command.scope)}
+                                    </PaperBadge>
+                                    <PaperCopyButton
+                                        text={`/${command.name}`}
+                                        title="Copy command"
+                                    />
+                                    <PaperButton size="tiny"
+                                        icon
+                                        variant="danger"
+                                        title="Delete command"
+                                        disabled={busy()}
+                                        onClick={() => setDeleteTarget(command)}>
+                                        <PaperIcon>delete</PaperIcon>
+                                    </PaperButton>
+                                </PaperFlex>
+                            </PaperSettingItem>
                         )}
-                    </Show>
-
-                    <Show when={actionError()}>
-                        {(problem) => (
-                            <PaperQuote variant="danger" icon="warning" title={problem().title}>
-                                {problem().message}
-                            </PaperQuote>
-                        )}
-                    </Show>
-
-                    <Show
-                        when={commands().length > 0}
-                        fallback={
-                            <PaperCard>
-                                <PaperEmptyState
-                                    icon="terminal"
-                                    title="No slash commands yet"
-                                    description="Create one, then build a flow on its trigger to answer it."
-                                />
-                            </PaperCard>
-                        }
-                    >
-                        <PaperSettingList autoHeight>
-                            <For each={commands()}>
-                                    {(command) => (
-                                        <PaperSettingItem
-                                            title={
-                                                <PaperText preset="label" family="code">
-                                                    /{command.name}
-                                                </PaperText>
-                                            }
-                                            description={command.description}
-                                        >
-                                            <PaperFlex direction="row" gap="half" align="center" wrap>
-                                                <Show when={command.options.length > 0}>
-                                                    <PaperBadge>
-                                                        {command.options.length} parameter
-                                                        {command.options.length === 1 ? "" : "s"}
-                                                    </PaperBadge>
-                                                </Show>
-                                                <Show when={command.userInstall}>
-                                                    <PaperBadge>
-                                                        User app
-                                                    </PaperBadge>
-                                                </Show>
-                                                <PaperBadge
-                                                    variant={
-                                                        command.scope === GLOBAL_SCOPE
-                                                            ? "monochrome"
-                                                            : "primary"
-                                                    }
-                                                >
-                                                    {scopeLabel(command.scope)}
-                                                </PaperBadge>
-                                                <PaperCopyButton
-                                                    text={`/${command.name}`}
-                                                    title="Copy command"
-                                                />
-                                                <PaperButton size="tiny"
-                                                    icon
-                                                    variant="danger"
-                                                    title="Delete command"
-                                                    disabled={busy()}
-                                                    onClick={() => setDeleteTarget(command)}>
-                                                    <PaperIcon>delete</PaperIcon>
-                                                </PaperButton>
-                                            </PaperFlex>
-                                        </PaperSettingItem>
-                                    )}
-                                </For>
-                        </PaperSettingList>
-                    </Show>
+                    </For>
+                </PaperSettingList>
+            </Show>
 
             <PaperModal
                 open={createOpen()}

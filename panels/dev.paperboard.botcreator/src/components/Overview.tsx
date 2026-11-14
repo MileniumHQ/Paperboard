@@ -47,28 +47,45 @@ export default function Overview(props: OverviewProps) {
     const connected = () => props.bot().connected;
     const connectionError = () => props.bot().lastError;
 
+    // a poll and a reconnect can overlap: only the newest read is shown
+    let infoAsked = 0;
+    let healthAsked = 0;
+    // the messages heard live since the newest getBotInfo was asked: its
+    // snapshot may have been taken before them
+    let heardSince: RecentMessage[] = [];
+
     const loadBotInfo = async () => {
+        const asked = ++infoAsked;
+        heardSince = [];
         setInfoError("");
         try {
             const info = await serviceApi.call<any>(PANEL_ID, "getBotInfo", { bot: props.bot().id });
+            if (asked !== infoAsked) return;
             if (!info || typeof info !== "object") throw new Error("getBotInfo returned no bot details");
             setTag(typeof info.tag === "string" ? info.tag : "");
-            if (Array.isArray(info.recentMessages)) setRecent(info.recentMessages);
+            if (Array.isArray(info.recentMessages)) {
+                const known = new Set(info.recentMessages.map((m: RecentMessage) => m.messageId));
+                setRecent(heardSince.filter((m) => !known.has(m.messageId)).reduce((list, m) => appendCapped(list, m, RECENT_MESSAGE_CAP), info.recentMessages as RecentMessage[]));
+            }
         } catch (err) {
+            if (asked !== infoAsked) return;
             console.error("[Overview] bot info read failed:", err);
             setInfoError(errorToMessage(err));
         }
     };
 
     const loadHealth = async () => {
+        const asked = ++healthAsked;
         try {
             const next = await serviceApi.call<Health>(PANEL_ID, "getHealth", { bot: props.bot().id });
+            if (asked !== healthAsked) return;
             if (!next || typeof next !== "object") {
                 throw new Error("getHealth returned no health payload");
             }
             setHealth(next);
             setHealthError("");
         } catch (err) {
+            if (asked !== healthAsked) return;
             // the last good reading stays on screen under the error
             console.error("[Overview] health read failed:", err);
             setHealthError(errorToMessage(err));
@@ -96,20 +113,16 @@ export default function Overview(props: OverviewProps) {
     onCleanup(
         serviceApi.on(PANEL_ID, "message", (msg: any) => {
             if (!msg || typeof msg !== "object" || msg.bot !== props.bot().id) return;
-            setRecent(
-                appendCapped(
-                    recent(),
-                    {
-                        content: String(msg.content ?? ""),
-                        author: String(msg.author ?? ""),
-                        authorId: String(msg.authorId ?? ""),
-                        channelId: String(msg.channelId ?? ""),
-                        guildId: msg.guildId ?? null,
-                        messageId: String(msg.messageId ?? ""),
-                    },
-                    RECENT_MESSAGE_CAP,
-                ),
-            );
+            const heard: RecentMessage = {
+                content: String(msg.content ?? ""),
+                author: String(msg.author ?? ""),
+                authorId: String(msg.authorId ?? ""),
+                channelId: String(msg.channelId ?? ""),
+                guildId: msg.guildId ?? null,
+                messageId: String(msg.messageId ?? ""),
+            };
+            heardSince = appendCapped(heardSince, heard, RECENT_MESSAGE_CAP);
+            setRecent(appendCapped(recent(), heard, RECENT_MESSAGE_CAP));
         }),
     );
 
@@ -138,141 +151,112 @@ export default function Overview(props: OverviewProps) {
     return (
         <>
             <PaperCard>
-                        <PaperFlex direction="row" padding="full" gap="full" align="center">
-                            <PaperAvatar
-                                src={picture(props.bot().avatar)}
-                                fallbackIcon="smart_toy"
-                                alt={props.bot().name}
-                                size="xlarge"
-                            />
-
-                            <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
-                                <PaperFlex direction="row" gap="half" align="baseline" wrap>
-                                    <PaperText preset="title">
-                                        {props.bot().name}
-                                    </PaperText>
-                                    <Show when={tag() && tag() !== props.bot().name}>
-                                        <PaperText preset="hint">
-                                            @{tag()}
-                                        </PaperText>
-                                    </Show>
-                                    <PaperBadge variant={connected() ? "success" : props.bot().connecting ? "warning" : props.bot().enabled ? "danger" : "monochrome"}>
-                                        {connected() ? "Online" : props.bot().connecting ? "Connecting" : "Offline"}
-                                    </PaperBadge>
+                <PaperFlex direction="row" padding="full" gap="full" align="center">
+                    <PaperAvatar src={picture(props.bot().avatar)} fallbackIcon="smart_toy" alt={props.bot().name} size="xlarge" />
+                    <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
+                        <PaperFlex direction="row" gap="half" align="baseline" wrap>
+                            <PaperText preset="title">{props.bot().name}</PaperText>
+                            <Show when={tag() && tag() !== props.bot().name}>
+                                <PaperText preset="hint">@{tag()}</PaperText>
+                            </Show>
+                            <PaperBadge variant={connected() ? "success" : props.bot().connecting ? "warning" : props.bot().enabled ? "danger" : "monochrome"}>
+                                {connected() ? "Online" : props.bot().connecting ? "Connecting" : "Offline"}
+                            </PaperBadge>
+                        </PaperFlex>
+                        <Show when={props.bot().applicationId}>
+                            {(appId) => (
+                                <PaperFlex direction="row" gap="half" align="center">
+                                    <PaperText preset="hint" family="code">{appId()}</PaperText>
+                                    <PaperCopyButton text={appId()} title="Copy application ID" />
                                 </PaperFlex>
-
-                                <Show when={props.bot().applicationId}>
-                                    <PaperFlex direction="row" gap="half" align="center">
-                                        <PaperText preset="hint" family="code">
-                                            {props.bot().applicationId}
-                                        </PaperText>
-                                        <PaperCopyButton text={props.bot().applicationId} title="Copy application ID" />
-                                    </PaperFlex>
-                                </Show>
-                            </PaperFlex>
-                            <PaperToggle
-                                checked={props.bot().enabled}
-                                aria-label={`${props.bot().name} is on`}
-                                title={props.bot().enabled ? "On: runs while Paperboard does" : "Off"}
-                                // the switch flips once the bot is on or off: its thump waits for the save
-                                onChange={setEnabled}
-                            />
+                            )}
+                        </Show>
+                    </PaperFlex>
+                    <PaperToggle
+                        checked={props.bot().enabled}
+                        aria-label={`${props.bot().name} is on`}
+                        title={props.bot().enabled ? "On: runs while Paperboard does" : "Off"}
+                        // the switch flips once the bot is on or off: its thump waits for the save
+                        onChange={setEnabled}
+                    />
                 </PaperFlex>
             </PaperCard>
 
             <Show when={infoError()}>
-                <PaperQuote variant="danger" icon="warning" title="Couldn't read the bot's details">
-                    {infoError()}
-                </PaperQuote>
+                {(text) => <PaperQuote variant="danger" icon="warning" title="Couldn't read the bot's details">{text()}</PaperQuote>}
             </Show>
 
             <Show when={toggleError()}>
-                <PaperQuote variant="danger" icon="warning" title="Couldn't turn the bot on or off" onDismiss={() => setToggleError("")}>
-                    {toggleError()}
-                </PaperQuote>
+                {(text) => (
+                    <PaperQuote variant="danger" icon="warning" title="Couldn't turn the bot on or off" onDismiss={() => setToggleError("")}>
+                        {text()}
+                    </PaperQuote>
+                )}
             </Show>
 
+            {/* a connection that failed, or blocks that couldn't be added to Blocks */}
             <Show when={connectionError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Connection error">
-                            {connectionError()}
-                        </PaperQuote>
-                    </Show>
+                {(text) => <PaperQuote variant="danger" icon="warning" title="This bot has a problem">{text()}</PaperQuote>}
+            </Show>
 
             <PaperCard>
                 <PaperFlex direction="column" gap="half" padding="full">
                     <PaperFlex direction="row" justify="space-between" align="center">
-                                <PaperText preset="heading">
-                                    Health
-                                </PaperText>
-                                <PaperText preset="hint">
-                                    Refreshes every {HEALTH_POLL_MS / 1000}s
-                                </PaperText>
-                            </PaperFlex>
+                        <PaperText preset="heading">Health</PaperText>
+                        <PaperText preset="hint">Refreshes every {HEALTH_POLL_MS / 1000}s</PaperText>
+                    </PaperFlex>
 
-                            <Show when={healthError()}>
-                                <PaperQuote variant="danger" icon="warning" title="Couldn't check health">
-                                    {healthError()}
-                                </PaperQuote>
-                            </Show>
+                    <Show when={healthError()}>
+                        {(text) => <PaperQuote variant="danger" icon="warning" title="Couldn't check health">{text()}</PaperQuote>}
+                    </Show>
 
-                            <Show
-                                when={health()}
-                                fallback={
-                                    <Show when={!healthError()}>
-                                        <PaperText preset="hint">
-                                            Checking health…
-                                        </PaperText>
-                                    </Show>
-                                }
-                            >
-                                {(h) => (
-                                <PaperTable>
-                                    <tbody>
-                                        <tr>
-                                            <th>Gateway status</th>
-                                            <td>{connected() ? "Connected" : "Disconnected"}</td>
-                                        </tr>
-                                        <tr>
-                                            <th>Gateway latency</th>
-                                            <td>{pingText()}</td>
-                                        </tr>
-                                        <tr>
-                                            <th>Uptime</th>
-                                            <td>{uptimeText()}</td>
-                                        </tr>
-                                        <tr>
-                                            <th>Servers</th>
-                                            <td>{h().guildCount}</td>
-                                        </tr>
-                                        <tr>
-                                            <th>Cached users / channels</th>
-                                            <td>
-                                                {h().cachedUsers} /{" "}
-                                                {h().cachedChannels}
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <th>Commands received</th>
-                                            <td>{h().commandsReceived}</td>
-                                        </tr>
-                                        <tr>
-                                            <th>Pending replies</th>
-                                            <td>{h().pendingInteractions}</td>
-                                        </tr>
-                                    </tbody>
-                                </PaperTable>
-                                )}
+                    <Show
+                        when={health()}
+                        fallback={
+                            <Show when={!healthError()}>
+                                <PaperText preset="hint">Checking health…</PaperText>
                             </Show>
+                        }
+                    >
+                        {(h) => (
+                            <PaperTable>
+                                <tbody>
+                                    <tr>
+                                        <th>Gateway status</th>
+                                        <td>{connected() ? "Connected" : "Disconnected"}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Gateway latency</th>
+                                        <td>{pingText()}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Uptime</th>
+                                        <td>{uptimeText()}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Servers</th>
+                                        <td>{h().guildCount}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Cached users / channels</th>
+                                        <td>{h().cachedUsers} / {h().cachedChannels}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Commands received</th>
+                                        <td>{h().commandsReceived}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Pending replies</th>
+                                        <td>{h().pendingInteractions}</td>
+                                    </tr>
+                                </tbody>
+                            </PaperTable>
+                        )}
+                    </Show>
 
-                            <Show when={health()?.commandSyncError}>
-                                <PaperQuote
-                                    variant="warning"
-                                    icon="warning"
-                                    title="Command sync"
-                                >
-                                    {health()!.commandSyncError}
-                                </PaperQuote>
-                            </Show>
+                    <Show when={health()?.commandSyncError}>
+                        {(text) => <PaperQuote variant="warning" icon="warning" title="Command sync">{text()}</PaperQuote>}
+                    </Show>
                 </PaperFlex>
             </PaperCard>
 
