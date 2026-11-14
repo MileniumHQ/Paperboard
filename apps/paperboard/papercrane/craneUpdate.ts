@@ -7,6 +7,7 @@ import { extractArchive, packageArchiveSuffix } from "./engineArchives";
 import { hashFile, writeJsonAtomicSync } from "./storage";
 import { streamToFileWithProgress } from "./download";
 import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "./releaseSignature";
+import { hostPlatformKey } from "./packageChecksum";
 
 export interface CraneRelease {
     downloadUrl: string;
@@ -103,8 +104,7 @@ export async function installCraneRelease(
     // Windows cannot replace a running executable. Keep its existing refusal
     // until a restart supervisor owns it.
     if (process.platform === "win32") throw new Error("Self-update is not supported on Windows yet");
-    const target = `${process.platform === "darwin" ? "macos" : "linux"}-${process.arch}`;
-    const name = `papercrane-${target}`;
+    const name = `papercrane-${hostPlatformKey()}`;
     if (packageArchiveSuffix(release.downloadUrl) !== ".tar.gz") throw new Error("Expected a published crane .tar.gz archive");
 
     // Exclusive, fixed per executable: at most one download/replacement and

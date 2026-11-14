@@ -137,6 +137,21 @@ describe("runtime packages install only signed bytes", () => {
 		await expect(engine.downloadPackage("huge", undefined, "a".repeat(64))).rejects.toThrow(`exceeds ${RECORD_MAX_BYTES} bytes`);
 	});
 
+	test("a computer whose architecture has no release installs nothing, not the nearest build", async () => {
+		const dir = dataDir();
+		const engine = engineFor(dir);
+		const sha = publish({ name: "otherarch", version: "1.0.0", bytes: toolArchive("true") });
+		const arch = Object.getOwnPropertyDescriptor(process, "arch")!;
+		Object.defineProperty(process, "arch", { ...arch, value: "ia32" });
+		try {
+			await expect(engine.downloadPackage("otherarch", undefined, sha)).rejects.toThrow("no release for this platform");
+		} finally {
+			Object.defineProperty(process, "arch", arch);
+		}
+		expect(downloadsOf("otherarch")).toEqual([]);
+		expect(listTree(path.join(dir, "packages"))).toEqual([]);
+	});
+
 	test("layouts install as declared, zips keep their modes, and recipes keep only what they take", async () => {
 		const dir = dataDir();
 		const engine = engineFor(dir);

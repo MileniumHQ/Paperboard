@@ -43,6 +43,14 @@ export function platformKeyFor(platform: string, arch: string): string | null {
     }
 }
 
+/** This computer's registry platform key; one Paperboard publishes no
+ * release for is refused, never named after the nearest supported one. */
+export function hostPlatformKey(): string {
+    const key = platformKeyFor(process.platform, process.arch);
+    if (!key) throw new Error(`Paperboard publishes no release for this platform (${process.platform}/${process.arch})`);
+    return key;
+}
+
 export function validSha256(value: unknown): value is string {
     return typeof value === "string" && SHA256_RE.test(value);
 }

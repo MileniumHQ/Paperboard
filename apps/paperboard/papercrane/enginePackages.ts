@@ -7,9 +7,10 @@ import { sanitizeId, writeJsonAtomicSync, LimitError } from "./storage";
 import { ProgressCallback, streamToFileWithProgress } from "./download";
 import { logger } from "./logger";
 import { applyPackageRecipe, extractPackageArchive, findBinDir, packageArchiveSuffix, parsePackageLayout, RECIPE_SUFFIX } from "./engineArchives";
-import { assertRecipeRunsHere, parsePackageRecipe, recipeDigest } from "./packageRecipe";
+import { assertRecipeRunsHere, parsePackageRecipe, recipeDigest, type PackageRecipe } from "./packageRecipe";
 import { requireReleaseOrder } from "./releasePolicy";
 import { fetchRegistryRecord } from "./registryRecord";
+import { hostPlatformKey } from "./packageChecksum";
 import { releaseMessage, requireReleaseSignature } from "./releaseSignature";
 import { recoverParked, swapParked } from "./parkedSwap";
 import type { WorkloadRegistry, WorkloadRuntime, WorkloadUse } from "./engineWorkloads";
@@ -39,6 +40,16 @@ export interface PackageInstallOutcome {
 }
 
 const MAX_STAGED_PACKAGES = 64;
+
+// a registry release for this platform whose checksum, signature and
+// version order have been checked
+interface VerifiedPackageRelease {
+    version: string;
+    sha256: string;
+    recipe: PackageRecipe | null;
+    // the record's entry for this platform: url, sha1, layout
+    download: { url: string; sha1?: string; layout?: unknown };
+}
 
 /** where releases come from and the key that must have signed them; shared
  * with the panel installer, fixed in production */
@@ -483,87 +494,17 @@ export class PackageManager implements WorkloadRuntime {
     }
 
     private async installPackageRelease(packageName: string, onProgress?: ProgressCallback, expectedSha256?: string, options: { allowDowngrade?: boolean } = {}): Promise<PackageInstallOutcome> {
-        // trust boundary: same rule as installPanel — no checksum fact from
-        // the anchor means no install, never proceed with sha256: undefined
-        if (typeof expectedSha256 !== "string" || !/^[a-f0-9]{64}$/i.test(expectedSha256)) {
-            throw new Error(
-                `Install refused for package "${packageName}": registry did not provide a sha256 checksum`,
-            );
-        }
         packageName = sanitizeIdOrThrow(packageName, "package");
-        const log = (msg: string) =>
-            logger.info(`[package:${packageName}] ${msg}`);
-
+        const release = await this.resolvePackageRelease(packageName, expectedSha256, options, onProgress);
         const targetDir = path.join(this.packagesDir, packageName);
-        const pkgDir = `${targetDir}.staging-${Date.now()}`;
 
-        const metaUrl = `${this.registry.url}/package/${encodeURIComponent(packageName)}.json`;
-        log(`resolving ${metaUrl}`);
-        onProgress?.({
-            stage: "checking",
-            percent: 0,
-            message: `Resolving package ${packageName}...`,
-        });
-
-        let meta: any;
-        try {
-            meta = await fetchRegistryRecord(metaUrl);
-        } catch (err) {
-            throw new Error(`Install refused for package "${packageName}": registry record unavailable (${err instanceof Error ? err.message : String(err)})`);
-        }
-
-        const currentOs =
-            process.platform === "win32"
-                ? "windows"
-                : process.platform === "darwin"
-                  ? "macos"
-                  : "linux";
-        const currentArch = process.arch === "arm64" ? "arm64" : "x64";
-        const platformKey = `${currentOs}-${currentArch}`;
-        // only the platforms map is a release record: the signature covers
-        // (name, version, platform, sha256) of exactly that entry
-        const downloadInfo = meta?.platforms?.[platformKey];
-        if (!downloadInfo?.url) {
-            throw new Error(
-                `No download available for ${packageName} on ${platformKey}`,
-            );
-        }
-        if (typeof meta.version !== "string" || !meta.version) {
-            throw new Error(`Install refused for package "${packageName}": registry did not provide a version`);
-        }
-        log(`source: ${downloadInfo.url}`);
-        // the caller's checksum fact must agree with the record; a mismatch
-        // (or a record without one) means one of the two sources is lying
-        if (typeof downloadInfo.sha256 !== "string" || downloadInfo.sha256.toLowerCase() !== expectedSha256.toLowerCase()) {
-            throw new Error(
-                `Install refused for package "${packageName}": checksum mismatch between update plan and registry metadata`,
-            );
-        }
-        // a recipe is part of what is signed: parse it before verifying
-        const recipe = downloadInfo.recipe === undefined ? null : parsePackageRecipe(downloadInfo.recipe);
-        if (recipe && downloadInfo.layout !== undefined) {
-            throw new Error(`Install refused for package "${packageName}": a recipe entry cannot also declare a layout`);
-        }
-        requireReleaseSignature(
-            releaseMessage.package(packageName, meta.version, platformKey, downloadInfo.sha256, recipe ? recipeDigest(recipe) : undefined),
-            downloadInfo.signature,
-            `package "${packageName}"`,
-            this.registry.key,
-        );
-
-        requireReleaseOrder(
-            { version: meta.version, sha256: expectedSha256 },
-            [this.getPackageIndex()[packageName], this.stagedPackages.get(packageName)],
-            options,
-        );
-
-        if (this.getPackageIndex()[packageName]?.sha256 === expectedSha256 && findBinDir(targetDir, 4)) {
+        if (this.getPackageIndex()[packageName]?.sha256 === release.sha256 && findBinDir(targetDir, 4)) {
             onProgress?.({ stage: "completed", percent: 100, message: "Requested release is installed" });
             return { path: targetDir };
         }
         // already downloaded and verified, still waiting on its workloads:
         // swap it now if they are gone, never download the same bytes again
-        if (this.stagedPackages.get(packageName)?.sha256 === expectedSha256) {
+        if (this.stagedPackages.get(packageName)?.sha256 === release.sha256) {
             await this.applyStagedPackage(packageName);
             const waiting = this.packageUpdateWait(packageName);
             onProgress?.({ stage: "completed", percent: 100, message: waiting ? "Update waits for running workloads" : "Installed successfully" });
@@ -571,86 +512,27 @@ export class PackageManager implements WorkloadRuntime {
         }
         // refused before any download: a layout this daemon does not know
         // would install binaries where no caller looks for them
-        const layout = parsePackageLayout(downloadInfo.layout);
-        if (recipe) assertRecipeRunsHere(recipe);
+        const layout = parsePackageLayout(release.download.layout);
+        if (release.recipe) assertRecipeRunsHere(release.recipe);
         // keep the URL extension so extraction dispatches on format
-        const urlExt = recipe ? RECIPE_SUFFIX[recipe.unpack] : packageArchiveSuffix(downloadInfo.url);
-        const tempArchive = path.join(
-            this.packagesDir,
-            `${packageName}-archive.tmp-${Date.now()}${urlExt}`,
-        );
+        const urlExt = release.recipe ? RECIPE_SUFFIX[release.recipe.unpack] : packageArchiveSuffix(release.download.url);
+        const tempArchive = path.join(this.packagesDir, `${packageName}-archive.tmp-${Date.now()}${urlExt}`);
+        const pkgDir = `${targetDir}.staging-${Date.now()}`;
+        const log = (msg: string) => logger.info(`[package:${packageName}] ${msg}`);
         try {
-            log("downloading...");
-            let lastMilestone = 0;
-            const milestoneProgress: ProgressCallback = (payload) => {
-                // log every 10% with byte counts
-                if (
-                    payload.stage === "downloading" &&
-                    payload.bytesTotal &&
-                    payload.percent - lastMilestone >= 10
-                ) {
-                    lastMilestone = Math.floor(payload.percent / 10) * 10;
-                    log(
-                        `${lastMilestone}% (${Math.round(payload.bytesLoaded! / 1048576)} MB)` +
-                            (payload.bytesTotal
-                                ? ` of ${Math.round(payload.bytesTotal! / 1048576)} MB`
-                                : ""),
-                    );
-                }
-                onProgress?.(payload);
-            };
-            await streamToFileWithProgress(
-                downloadInfo.url,
-                tempArchive,
-                milestoneProgress,
-                downloadInfo.sha1,
-                expectedSha256,
-            );
-            const archiveSize = fs.existsSync(tempArchive)
-                ? fs.statSync(tempArchive).size
-                : -1;
-            log(`download finished (${archiveSize} bytes)`);
-
-            onProgress?.({
-                stage: "extracting",
-                percent: 50,
-                message: "Extracting package...",
-            });
-
-            if (!fs.existsSync(pkgDir)) fs.mkdirSync(pkgDir, { recursive: true });
-            if (recipe) await applyPackageRecipe(tempArchive, pkgDir, recipe);
+            await this.downloadRelease(release, tempArchive, log, onProgress);
+            onProgress?.({ stage: "extracting", percent: 50, message: "Extracting package..." });
+            fs.mkdirSync(pkgDir, { recursive: true });
+            if (release.recipe) await applyPackageRecipe(tempArchive, pkgDir, release.recipe);
             else await extractPackageArchive(tempArchive, pkgDir, layout, urlExt);
-            log(
-                `extraction complete; bin present: ${findBinDir(pkgDir, 4) !== null}`,
-            );
-
+            const binPresent = findBinDir(pkgDir, 4) !== null;
+            log(`extraction complete; bin present: ${binPresent}`);
             // require bin/ before indexing, else remove and fail
-            if (!findBinDir(pkgDir, 4)) {
+            if (!binPresent) {
                 await fs.promises.rm(pkgDir, { recursive: true, force: true });
-                throw new Error(
-                    `Package ${packageName} extracted but no usable binary directory was found. Removed partial install.`,
-                );
+                throw new Error(`Package ${packageName} extracted but no usable binary directory was found. Removed partial install.`);
             }
-
-            const release: StagedPackage = { name: packageName, version: meta.version, sha256: expectedSha256 };
-            // Runtimes are shared host resources: a workload running from
-            // the installed release keeps it. The verified release is staged
-            // beside it and swapped in once the last of them exits.
-            if (fs.existsSync(targetDir) && this.packageUsers(packageName).length > 0) {
-                await this.stagePackage(release, pkgDir);
-                const waiting = this.packageUpdateWait(packageName)!;
-                log(`staged ${meta.version}; waiting for ${waiting.blockedBy.length} workload(s) to stop`);
-                onProgress?.({ stage: "completed", percent: 100, message: "Update waits for running workloads" });
-                return { path: targetDir, waiting };
-            }
-            await this.swapPackage(release, pkgDir);
-
-            onProgress?.({
-                stage: "completed",
-                percent: 100,
-                message: "Installed successfully",
-            });
-            return { path: targetDir };
+            return await this.placeRelease({ name: packageName, version: release.version, sha256: release.sha256 }, pkgDir, targetDir, log, onProgress);
         } catch (err: any) {
             log(`FAILED: ${err?.message || err}`);
             // every success path moves pkgDir away, so a copy still here is a leftover
@@ -666,5 +548,92 @@ export class PackageManager implements WorkloadRuntime {
                 await fs.promises.unlink(tempArchive).catch((err) => logger.warn(`[engine] the download ${tempArchive} was left on disk:`, err));
             }
         }
+    }
+
+    // The registry record of this platform's release, checked against the
+    // caller's checksum fact, the release key and the installed release's
+    // version. Nothing is downloaded before every check holds.
+    private async resolvePackageRelease(
+        packageName: string,
+        expectedSha256: string | undefined,
+        options: { allowDowngrade?: boolean },
+        onProgress?: ProgressCallback,
+    ): Promise<VerifiedPackageRelease> {
+        // trust boundary: same rule as installPanel — no checksum fact from
+        // the anchor means no install, never proceed with sha256: undefined
+        if (typeof expectedSha256 !== "string" || !/^[a-f0-9]{64}$/i.test(expectedSha256)) {
+            throw new Error(`Install refused for package "${packageName}": registry did not provide a sha256 checksum`);
+        }
+        const platformKey = hostPlatformKey();
+        const metaUrl = `${this.registry.url}/package/${encodeURIComponent(packageName)}.json`;
+        logger.info(`[package:${packageName}] resolving ${metaUrl}`);
+        onProgress?.({ stage: "checking", percent: 0, message: `Resolving package ${packageName}...` });
+        let meta: any;
+        try {
+            meta = await fetchRegistryRecord(metaUrl);
+        } catch (err) {
+            throw new Error(`Install refused for package "${packageName}": registry record unavailable (${err instanceof Error ? err.message : String(err)})`);
+        }
+        // only the platforms map is a release record: the signature covers
+        // (name, version, platform, sha256) of exactly that entry
+        const download = meta?.platforms?.[platformKey];
+        if (!download?.url) throw new Error(`No download available for ${packageName} on ${platformKey}`);
+        if (typeof meta.version !== "string" || !meta.version) {
+            throw new Error(`Install refused for package "${packageName}": registry did not provide a version`);
+        }
+        logger.info(`[package:${packageName}] source: ${download.url}`);
+        // the caller's checksum fact must agree with the record; a mismatch
+        // (or a record without one) means one of the two sources is lying
+        if (typeof download.sha256 !== "string" || download.sha256.toLowerCase() !== expectedSha256.toLowerCase()) {
+            throw new Error(`Install refused for package "${packageName}": checksum mismatch between update plan and registry metadata`);
+        }
+        // a recipe is part of what is signed: parse it before verifying
+        const recipe = download.recipe === undefined ? null : parsePackageRecipe(download.recipe);
+        if (recipe && download.layout !== undefined) {
+            throw new Error(`Install refused for package "${packageName}": a recipe entry cannot also declare a layout`);
+        }
+        requireReleaseSignature(
+            releaseMessage.package(packageName, meta.version, platformKey, download.sha256, recipe ? recipeDigest(recipe) : undefined),
+            download.signature,
+            `package "${packageName}"`,
+            this.registry.key,
+        );
+        requireReleaseOrder(
+            { version: meta.version, sha256: expectedSha256 },
+            [this.getPackageIndex()[packageName], this.stagedPackages.get(packageName)],
+            options,
+        );
+        return { version: meta.version, sha256: expectedSha256, recipe, download };
+    }
+
+    // the verified archive, with a log line every 10%
+    private async downloadRelease(release: VerifiedPackageRelease, tempArchive: string, log: (msg: string) => void, onProgress?: ProgressCallback): Promise<void> {
+        log("downloading...");
+        let lastMilestone = 0;
+        const milestoneProgress: ProgressCallback = (payload) => {
+            if (payload.stage === "downloading" && payload.bytesTotal && payload.percent - lastMilestone >= 10) {
+                lastMilestone = Math.floor(payload.percent / 10) * 10;
+                log(`${lastMilestone}% (${Math.round(payload.bytesLoaded! / 1048576)} MB) of ${Math.round(payload.bytesTotal / 1048576)} MB`);
+            }
+            onProgress?.(payload);
+        };
+        await streamToFileWithProgress(release.download.url, tempArchive, milestoneProgress, release.download.sha1, release.sha256);
+        log(`download finished (${fs.statSync(tempArchive).size} bytes)`);
+    }
+
+    // Runtimes are shared host resources: a workload running from the
+    // installed release keeps it. The verified release is staged beside it
+    // and swapped in once the last of them exits.
+    private async placeRelease(release: StagedPackage, pkgDir: string, targetDir: string, log: (msg: string) => void, onProgress?: ProgressCallback): Promise<PackageInstallOutcome> {
+        if (fs.existsSync(targetDir) && this.packageUsers(release.name).length > 0) {
+            await this.stagePackage(release, pkgDir);
+            const waiting = this.packageUpdateWait(release.name)!;
+            log(`staged ${release.version}; waiting for ${waiting.blockedBy.length} workload(s) to stop`);
+            onProgress?.({ stage: "completed", percent: 100, message: "Update waits for running workloads" });
+            return { path: targetDir, waiting };
+        }
+        await this.swapPackage(release, pkgDir);
+        onProgress?.({ stage: "completed", percent: 100, message: "Installed successfully" });
+        return { path: targetDir };
     }
 }
