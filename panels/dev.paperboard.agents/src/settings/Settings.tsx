@@ -27,18 +27,17 @@ import { BrainButtons, BrainStatus, SignInModal, brainLine, createBrainActions }
 import Providers from "./Providers";
 
 export default function Settings(props: { agent: Agent }) {
-    const { agent } = props;
     return (
         <PaperFlex gap="full">
-            <AgentSettings agent={agent} />
+            <AgentSettings agent={props.agent} />
             <PaperSeparator />
-            <BrainsSettings agent={agent} />
+            <BrainsSettings agent={props.agent} />
             <PaperSeparator />
-            <ComputerSettings agent={agent} />
+            <ComputerSettings agent={props.agent} />
             <PaperSeparator />
-            <ConversationSettings agent={agent} />
+            <ConversationSettings agent={props.agent} />
             <PaperSeparator />
-            <AutomationSettings agent={agent} />
+            <AutomationSettings agent={props.agent} />
         </PaperFlex>
     );
 }

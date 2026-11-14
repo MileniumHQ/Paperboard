@@ -12,8 +12,7 @@ import { holdPage } from "../lib/pageHold";
 import { errorText } from "../lib/failure";
 
 export default function Routines(props: { agent: Agent }) {
-    const { agent } = props;
-    const name = () => agent.state.settings?.name ?? "Your agent";
+    const name = () => props.agent.state.settings?.name ?? "Your agent";
     // reconciled by id, so a re-read changes what differs and every card stays the card it was
     const [state, setState] = createStore<{ routines: Routine[] | null }>({ routines: null });
     const list = () => state.routines;
@@ -27,7 +26,7 @@ export default function Routines(props: { agent: Agent }) {
     const load = async () => {
         const mine = ++reads;
         try {
-            const next = await agent.routines();
+            const next = await props.agent.routines();
             if (!gone && mine === reads) {
                 setState("routines", reconcile(next, { key: "id" }));
                 setError(null);
@@ -38,12 +37,12 @@ export default function Routines(props: { agent: Agent }) {
     };
     // the page before this one stays up until the first read is in
     holdPage(load());
-    createEffect(on(() => agent.state.routines.revision, () => void load(), { defer: true }));
+    createEffect(on(() => props.agent.state.routines.revision, () => void load(), { defer: true }));
 
     const stop = async (r: Routine) => {
         setFailed(null);
         try {
-            await agent.deleteRoutine(r.id);
+            await props.agent.deleteRoutine(r.id);
         } catch (e) {
             setFailed(errorText(e));
         }
@@ -51,7 +50,7 @@ export default function Routines(props: { agent: Agent }) {
 
     return (
         <Switch>
-            <Match when={error() ?? agent.state.routines.error}>
+            <Match when={error() ?? props.agent.state.routines.error}>
                 {(why) => (
                     <PaperEmptyState icon="error" title="Routines can't be read" description={why()}>
                         <PaperButton onClick={() => void load()}>Try again</PaperButton>

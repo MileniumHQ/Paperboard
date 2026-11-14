@@ -23,8 +23,7 @@ export default function Composer(props: {
     onCancelReply: () => void;
     tray: Tray;
 }) {
-    const { agent } = props;
-    const name = () => agent.state.settings?.name ?? "your agent";
+    const name = () => props.agent.state.settings?.name ?? "your agent";
 
     const [error, setError] = createSignal<Failure | null>(null);
     const [dragging, setDragging] = createSignal(false);
@@ -48,7 +47,7 @@ export default function Composer(props: {
         haptic("send");
         props.onSend();
         try {
-            await agent.send(text, props.replyTo?.id, tray().ids());
+            await props.agent.send(text, props.replyTo?.id, tray().ids());
             props.onDraft("");
             tray().clear();
             props.onCancelReply();

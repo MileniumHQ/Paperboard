@@ -25,8 +25,7 @@ import { holdPage } from "../lib/pageHold";
 import { errorText } from "../lib/failure";
 
 export default function Memories(props: { agent: Agent }) {
-    const { agent } = props;
-    const name = () => agent.state.settings?.name ?? "Your agent";
+    const name = () => props.agent.state.settings?.name ?? "Your agent";
     // facts by id and notes by key, so a re-read changes what differs and every card stays the card it was
     const [facts, setFacts] = createStore<MemoryList["facts"]>([]);
     const [notes, setNotes] = createStore<MemoryList["notes"]>([]);
@@ -42,7 +41,7 @@ export default function Memories(props: { agent: Agent }) {
     const load = async () => {
         const mine = ++reads;
         try {
-            const next = await agent.memory();
+            const next = await props.agent.memory();
             if (!gone && mine === reads) {
                 setFacts(reconcile(next.facts, { key: "id" }));
                 setNotes(reconcile(next.notes, { key: "key" }));
@@ -55,13 +54,13 @@ export default function Memories(props: { agent: Agent }) {
     };
     // the page before this one stays up until the first read is in
     holdPage(load());
-    createEffect(on(() => agent.state.memory.revision, () => void load(), { defer: true }));
+    createEffect(on(() => props.agent.state.memory.revision, () => void load(), { defer: true }));
 
     const empty = () => list() !== null && list()!.facts.length === 0 && list()!.notes.length === 0;
 
     return (
         <Switch>
-            <Match when={error() ?? agent.state.memory.error}>
+            <Match when={error() ?? props.agent.state.memory.error}>
                 {(why) => (
                     <PaperEmptyState icon="error" title="Memory can't be read" description={why()}>
                         <PaperButton onClick={() => void load()}>Try again</PaperButton>
@@ -72,14 +71,14 @@ export default function Memories(props: { agent: Agent }) {
                 <PaperLoader loaderStatus="indeterminate" label="Reading memory" />
             </Match>
             <Match when={open()}>
-                {(key) => <Note agent={agent} noteKey={key()} onDone={() => setOpen(null)} />}
+                {(key) => <Note agent={props.agent} noteKey={key()} onDone={() => setOpen(null)} />}
             </Match>
             <Match when={true}>
                 <PaperFlex gap="full">
                     <Show when={empty()}>
                         <PaperEmptyState icon="neurology" title="Nothing yet" description={`${name()} hasn't remembered anything. It will as you talk.`} />
                     </Show>
-                    <Facts agent={agent} facts={list()!.facts} />
+                    <Facts agent={props.agent} facts={list()!.facts} />
                     <PaperSectionHeader icon="description" title="Notes" count={list()!.notes.length} />
                     <For each={list()!.notes}>{(n) => <PaperMediaCard title={n.key} subtitle={n.when} onClick={() => setOpen(n.key)} />}</For>
                 </PaperFlex>

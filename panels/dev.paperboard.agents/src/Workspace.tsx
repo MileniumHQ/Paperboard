@@ -36,7 +36,6 @@ const SECTIONS: { id: Section; title: string; icon: string }[] = [
 const HOLD_MS = 300;
 
 export default function Workspace(props: { agent: Agent }) {
-    const { agent } = props;
     const [open, setOpen] = createSignal(false);
     // the last page stays chosen while the panel is open; only the open page is mounted,
     // and a newly chosen one beside it, out of sight, until its first read is in
@@ -55,7 +54,7 @@ export default function Workspace(props: { agent: Agent }) {
     narrow.addEventListener("change", onWidth);
     onCleanup(() => narrow.removeEventListener("change", onWidth));
 
-    const pages = createLauncher(agent);
+    const pages = createLauncher(props.agent);
     // the chat gone off to the left, the page the whole width; a phone only ever shows one
     const [extended, setExtended] = createSignal(false);
     // the page stays drawn while it slides away, and goes once it's off screen
@@ -72,19 +71,19 @@ export default function Workspace(props: { agent: Agent }) {
     const view = (p: Section) => {
         switch (p) {
             case "computer":
-                return <ComputerView agent={agent} />;
+                return <ComputerView agent={props.agent} />;
             case "pages":
-                return <Pages pages={pages} name={agent.state.settings?.name ?? "your agent"} onOpened={() => setOpen(false)} />;
+                return <Pages pages={pages} name={props.agent.state.settings?.name ?? "your agent"} onOpened={() => setOpen(false)} />;
             case "memories":
-                return <Memories agent={agent} />;
+                return <Memories agent={props.agent} />;
             case "routines":
-                return <Routines agent={agent} />;
+                return <Routines agent={props.agent} />;
             case "tools":
-                return <Tools agent={agent} />;
+                return <Tools agent={props.agent} />;
             case "access":
-                return <Access agent={agent} />;
+                return <Access agent={props.agent} />;
             case "settings":
-                return <Settings agent={agent} />;
+                return <Settings agent={props.agent} />;
         }
     };
 
@@ -93,7 +92,7 @@ export default function Workspace(props: { agent: Agent }) {
             <div class={styles.split} classList={{ [styles.open!]: !!pages.shown(), [styles.extended!]: !!pages.shown() && (extended() || phone()) }}>
                 <div class={styles.chatPane} inert={!!pages.shown() && (extended() || phone())}>
                     <div class={styles.chat}>
-                        <Chat agent={agent} face={face} pages={pages} onMenu={() => setOpen(true)} />
+                        <Chat agent={props.agent} face={face} pages={pages} onMenu={() => setOpen(true)} />
                     </div>
                 </div>
                 <div class={styles.pagePane} ref={pagePane} inert={!pages.shown()}>

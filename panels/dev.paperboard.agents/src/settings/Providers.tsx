@@ -16,10 +16,9 @@ const shown = (field: ProviderField, answers: Record<string, string>) =>
     !field.hidden && field.when.every((w) => (w.op === "eq" ? (answers[w.key] ?? "") === w.value : (answers[w.key] ?? "") !== w.value));
 
 export default function Providers(props: { agent: Agent; open: boolean; onClose: () => void }) {
-    const { agent } = props;
     const [providers, { refetch }] = createResource(
         () => props.open || undefined,
-        () => agent.providers(),
+        () => props.agent.providers(),
     );
     const [selected, setSelected] = createSignal<string>();
     const [error, setError] = createSignal<Failure | null>(null);
@@ -65,7 +64,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
 
     const connectKey = (p: ProviderInfo, m: ProviderMethod) =>
         act(`${p.name} not connected`, async () => {
-            await agent.connectKey(p.id, key(), answersFor(m));
+            await props.agent.connectKey(p.id, key(), answersFor(m));
             // the key is used once: it doesn't stay in the field
             setKey("");
             await refetch();
@@ -73,7 +72,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
 
     const begin = (p: ProviderInfo, m: ProviderMethod) =>
         act(`${p.name} not connected`, async () => {
-            setAttempt({ provider: p.id, info: await agent.beginProvider(p.id, m.id!, answersFor(m)) });
+            setAttempt({ provider: p.id, info: await props.agent.beginProvider(p.id, m.id!, answersFor(m)) });
         });
 
     const finishAttempt = async (title: string, body: { status: string; message?: string }) => {
@@ -87,7 +86,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         const a = attempt();
         if (!a) return;
         try {
-            const status = await agent.providerAttempt(a.provider, a.info.id, withCode);
+            const status = await props.agent.providerAttempt(a.provider, a.info.id, withCode);
             if (status.status !== "pending") await finishAttempt(`${current()?.name ?? "Provider"} not connected`, status);
         } catch (e) {
             setAttempt(null);
@@ -104,7 +103,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
         const a = attempt();
         setAttempt(null);
         setCode("");
-        if (a) await act("Sign-in not stopped", () => agent.cancelProvider(a.provider, a.info.id));
+        if (a) await act("Sign-in not stopped", () => props.agent.cancelProvider(a.provider, a.info.id));
     };
     const close = () => {
         void cancel();
@@ -150,7 +149,7 @@ export default function Providers(props: { agent: Agent; open: boolean; onClose:
                                                 <PaperButton
                                                     variant="text"
                                                     disabled={busy()}
-                                                    onClick={() => void act(`${p().name} not disconnected`, async () => (await agent.disconnectProvider(c.id), await refetch()))}
+                                                    onClick={() => void act(`${p().name} not disconnected`, async () => (await props.agent.disconnectProvider(c.id), await refetch()))}
                                                 >
                                                     Disconnect
                                                 </PaperButton>

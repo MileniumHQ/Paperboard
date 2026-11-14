@@ -71,7 +71,6 @@ async function played(el: Element | undefined) {
 }
 
 function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void }) {
-    const { agent } = props;
     const face = createFace({ expression: "happy" });
     onCleanup(face.dispose);
     const speaker = createSpeaker(face);
@@ -89,8 +88,8 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
         setSaveError(null);
         props.onSaving();
         try {
-            await agent.setup({ name: name().trim(), harness: harness()!, model: model() === DEFAULT_MODEL ? null : (model() ?? null), compaction: "summarize" });
-            if (computer() === "setup") await agent.installComputer();
+            await props.agent.setup({ name: name().trim(), harness: harness()!, model: model() === DEFAULT_MODEL ? null : (model() ?? null), compaction: "summarize" });
+            if (computer() === "setup") await props.agent.installComputer();
             return true;
         } catch (e) {
             setSaveError(errorText(e));
@@ -115,7 +114,7 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
             }}
         >
             <Scenes
-                agent={agent}
+                agent={props.agent}
                 face={face}
                 speaker={speaker}
                 name={name}
@@ -156,9 +155,8 @@ function Scenes(props: {
     onDone: () => void;
 }) {
     const wizard = useWizard()!;
-    const { agent, face, speaker } = props;
     const name = () => props.name().trim();
-    const machine = () => agent.state.computer;
+    const machine = () => props.agent.state.computer;
 
     // what the scene shows besides the speech, once the speech is done
     const [revealed, setRevealed] = createSignal(false);
@@ -166,9 +164,9 @@ function Scenes(props: {
     const [leaving, setLeaving] = createSignal(false);
 
     // the chosen brain is installed and signed in by the next step; its models can be listed once it is
-    const actions = createBrainActions(agent);
+    const actions = createBrainActions(props.agent);
     const [providers, setProviders] = createSignal(false);
-    const brain = () => (props.harness() ? agent.state.brains[props.harness()!] : undefined);
+    const brain = () => (props.harness() ? props.agent.state.brains[props.harness()!] : undefined);
     const brainReady = () => brain()?.phase === "ready";
     // each brain is installed and signed in once per visit to the step; stopping a sign-in doesn't start another by itself
     const started = new Set<string>();
@@ -187,7 +185,7 @@ function Scenes(props: {
     });
 
     // the chosen brain's own models; a model belongs to its harness, so another brain is chosen afresh
-    const models = createModels(agent, () => (brainReady() ? props.harness() : undefined));
+    const models = createModels(props.agent, () => (brainReady() ? props.harness() : undefined));
     createEffect(
         on(
             props.harness,
@@ -237,33 +235,33 @@ function Scenes(props: {
 
     const scenes: Record<number, () => Promise<boolean>> = {
         [STEP.name]: () =>
-            speaker.say(["[happy]Hi there! I'm your personal agent. I don't have a name yet though, that's your call."]),
-        [STEP.brain]: () => speaker.say(scriptFor(name()).named(name())),
-        [STEP.signIn]: () => speaker.say(scriptFor(name()).signIn),
+            props.speaker.say(["[happy]Hi there! I'm your personal agent. I don't have a name yet though, that's your call."]),
+        [STEP.brain]: () => props.speaker.say(scriptFor(name()).named(name())),
+        [STEP.signIn]: () => props.speaker.say(scriptFor(name()).signIn),
         [STEP.model]: async () => {
             setSpeakerShown(false);
-            speaker.clear();
+            props.speaker.clear();
             return true;
         },
         [STEP.computer]: async () => {
-            speaker.clear();
+            props.speaker.clear();
             setSpeakerShown(true);
-            face.look("home");
-            face.express("strain");
-            face.shake(true);
-            const ok = await speaker.wait(1800);
-            face.shake(false);
+            props.face.look("home");
+            props.face.express("strain");
+            props.face.shake(true);
+            const ok = await props.speaker.wait(1800);
+            props.face.shake(false);
             if (!ok) return false;
-            face.bounce();
-            return speaker.say(scriptFor(name()).computer);
+            props.face.bounce();
+            return props.speaker.say(scriptFor(name()).computer);
         },
         [STEP.last]: async () => {
-            if (props.computer() === "later") return speaker.say(scriptFor(name()).later);
-            const ok = await speaker.say(scriptFor(name()).install);
+            if (props.computer() === "later") return props.speaker.say(scriptFor(name()).later);
+            const ok = await props.speaker.say(scriptFor(name()).install);
             if (!ok) return false;
-            if (!(await speaker.wait(900))) return false;
+            if (!(await props.speaker.wait(900))) return false;
             setLeaving(true);
-            if (!(await speaker.wait(700))) return false;
+            if (!(await props.speaker.wait(700))) return false;
             setSpeakerShown(false);
             void props.save();
             return true;
@@ -275,9 +273,9 @@ function Scenes(props: {
         on(
             () => characterOf(name()),
             (character) => {
-                if (wizard.currentStep() !== STEP.name || speaker.speaking()) return;
-                face.express(character ? "wish" : "happy");
-                if (character) face.bounce();
+                if (wizard.currentStep() !== STEP.name || props.speaker.speaking()) return;
+                props.face.express(character ? "wish" : "happy");
+                if (character) props.face.bounce();
             },
             { defer: true },
         ),
@@ -303,18 +301,18 @@ function Scenes(props: {
             <Show when={speakerShown()}>
                 <div ref={speakerEl} class={styles.speaker} classList={{ [styles.leaving!]: leaving() }}>
                     <span class={styles.faceChip}>
-                        <Face face={face} size={64} frame="sphere" skin={skinFor(name())} />
+                        <Face face={props.face} size={64} frame="sphere" skin={skinFor(name())} />
                     </span>
                     <div
                         class={styles.bubble}
                         classList={{
-                            [styles.hidden!]: !speaker.shown(),
+                            [styles.hidden!]: !props.speaker.shown(),
                             // nothing said yet: fold the bubble away so the face stands alone
-                            [styles.folded!]: !speaker.shown() && speaker.segments().length === 0,
+                            [styles.folded!]: !props.speaker.shown() && props.speaker.segments().length === 0,
                         }}
                         aria-live="polite"
                     >
-                        <For each={speaker.segments()}>
+                        <For each={props.speaker.segments()}>
                             {(seg) => (seg.br ? <br /> : seg.bold ? <strong>{seg.text}</strong> : <>{seg.text}</>)}
                         </For>
                     </div>
@@ -368,10 +366,10 @@ function Scenes(props: {
                                     </Show>
                                     {/* only while there's something to show: an empty one would still take a gap */}
                                     <Show when={brain()?.phase !== "ready" && brain()?.phase !== "installed" || actions.error()}>
-                                        <BrainStatus agent={agent} harness={h()} actions={actions} />
+                                        <BrainStatus agent={props.agent} harness={h()} actions={actions} />
                                     </Show>
                                     <Show when={!["installing", "signing-in", "unsupported"].includes(brain()?.phase ?? "")}>
-                                        <BrainButtons agent={agent} harness={h()} actions={actions} onProviders={() => setProviders(true)} />
+                                        <BrainButtons agent={props.agent} harness={h()} actions={actions} onProviders={() => setProviders(true)} />
                                     </Show>
                                 </PaperCard>
                             </>
@@ -467,7 +465,7 @@ function Scenes(props: {
                 </Show>
             </PaperWizardStep>
             <div class={styles.below} />
-            <Providers agent={agent} open={providers()} onClose={() => setProviders(false)} />
+            <Providers agent={props.agent} open={providers()} onClose={() => setProviders(false)} />
         </div>
     );
 }

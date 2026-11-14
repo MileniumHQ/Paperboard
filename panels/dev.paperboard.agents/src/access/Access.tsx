@@ -15,8 +15,7 @@ import { itemText } from "../chat/AccessRequest";
 const grantKey = (g: AccessGrant) => `${g.kind}:${itemText(g).what}:${g.kind === "command" && g.anyArguments}:${g.once}:${g.at}`;
 
 export default function Access(props: { agent: Agent }) {
-    const { agent } = props;
-    const name = () => agent.state.settings?.name ?? "Your agent";
+    const name = () => props.agent.state.settings?.name ?? "Your agent";
     // the grants are a store reconciled by what each one is, so a change pushed to the page touches only what changed
     const [grants, setGrants] = createStore<{ key: string; grant: AccessGrant }[]>([]);
     const [view, setViewState] = createSignal<{ error: string | null } | null>(null);
@@ -32,7 +31,7 @@ export default function Access(props: { agent: Agent }) {
     // a change pushed while the first read is out is newer than it: the read doesn't replace it
     let pushed = false;
     onCleanup(
-        agent.onAccess((next) => {
+        props.agent.onAccess((next) => {
             pushed = true;
             if (!gone) setView(next);
         }),
@@ -40,7 +39,7 @@ export default function Access(props: { agent: Agent }) {
     const load = async () => {
         pushed = false;
         try {
-            const next = await agent.access();
+            const next = await props.agent.access();
             if (!gone && !pushed) setView(next);
             setError(null);
         } catch (e) {
@@ -52,7 +51,7 @@ export default function Access(props: { agent: Agent }) {
     const revoke = async (g: AccessGrant) => {
         setFailed(null);
         try {
-            setView(await agent.revokeAccess(g.kind === "folder" ? { kind: "folder", path: g.path } : { kind: "command", command: g.command, anyArguments: g.anyArguments }));
+            setView(await props.agent.revokeAccess(g.kind === "folder" ? { kind: "folder", path: g.path } : { kind: "command", command: g.command, anyArguments: g.anyArguments }));
         } catch (e) {
             setFailed(errorText(e));
         }

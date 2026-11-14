@@ -55,14 +55,13 @@ const stampText = (at: number) => {
 
 /** One conversation, like texting a friend. */
 export default function Chat(props: { agent: Agent; face: FaceController; pages: Launcher; onMenu: () => void }) {
-    const { agent, face } = props;
-    const name = () => agent.state.settings?.name ?? "Your agent";
+    const name = () => props.agent.state.settings?.name ?? "Your agent";
 
     // thinking while the agent is on it, working or writing
-    createEffect(() => face.ponder(agent.state.chat.busy));
+    createEffect(() => props.face.ponder(props.agent.state.chat.busy));
 
     const status = () => {
-        const c = agent.state.computer;
+        const c = props.agent.state.computer;
         if (c.userControl) return "Waiting while you use its computer";
         return (
             {
@@ -80,15 +79,15 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
 
     const [replyTo, setReplyTo] = createSignal<Said | null>(null);
     const [draft, setDraft] = createSignal("");
-    const tray = createTray(agent);
+    const tray = createTray(props.agent);
     const [notice, setNotice] = createSignal<Failure | null>(null);
     const [historyOpen, setHistoryOpen] = createSignal(false);
     const [startingNew, setStartingNew] = createSignal(false);
-    const canStartNew = () => !startingNew() && agent.entries.length > 0;
+    const canStartNew = () => !startingNew() && props.agent.entries.length > 0;
     const startNew = () => {
         setNotice(null);
         setStartingNew(true);
-        agent
+        props.agent
             .newConversation()
             .catch((e) => setNotice(failure("Conversation not started", e)))
             .finally(() => setStartingNew(false));
@@ -118,7 +117,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
             (e) => setNotice(failure("Message not copied", e)),
         );
     };
-    const byId = (id: string) => agent.entries.find((e): e is Said => e.id === id && (e.kind === "user" || e.kind === "agent"));
+    const byId = (id: string) => props.agent.entries.find((e): e is Said => e.id === id && (e.kind === "user" || e.kind === "agent"));
 
     // a waiting sign-in's or prompt's typed values outlive the row redraws; the card drops them when it's answered
     const drafts = new Map<string, SignInDraft>();
@@ -127,16 +126,16 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     // another conversation became current: a reply or a sign-in draft from the last one has nothing to point at
     createEffect(() => {
         const r = replyTo();
-        if (r && !agent.entries.some((e) => e.id === r.id)) setReplyTo(null);
-        for (const id of drafts.keys()) if (!agent.entries.some((e) => e.id === id)) drafts.delete(id);
+        if (r && !props.agent.entries.some((e) => e.id === r.id)) setReplyTo(null);
+        for (const id of drafts.keys()) if (!props.agent.entries.some((e) => e.id === id)) drafts.delete(id);
     });
 
     // Old transcripts held tool-call entries; only messages, errors, the agent's requests and pages are shown.
     const rows = createMemo<Row[]>(() => {
-        const shown = agent.entries.filter((e) => e.kind === "user" || e.kind === "agent" || e.kind === "error" || e.kind === "sign-in" || e.kind === "access" || e.kind === "prompt" || e.kind === "tool-server" || e.kind === "tool-sign-in" || e.kind === "app");
+        const shown = props.agent.entries.filter((e) => e.kind === "user" || e.kind === "agent" || e.kind === "error" || e.kind === "sign-in" || e.kind === "access" || e.kind === "prompt" || e.kind === "tool-server" || e.kind === "tool-sign-in" || e.kind === "app");
         const items: Pick<Row, "key" | "entry" | "waiting" | "side">[] = [
             ...shown.map((entry) => ({ key: entry.id, entry, waiting: null, side: sideOf(entry) })),
-            ...agent.state.chat.waiting.map((w) => ({ key: w.id, entry: null, waiting: w, side: "me" as const })),
+            ...props.agent.state.chat.waiting.map((w) => ({ key: w.id, entry: null, waiting: w, side: "me" as const })),
         ];
         const gap = (a: (typeof items)[number], b: (typeof items)[number]) => (a.entry && b.entry ? b.entry.at - a.entry.at : 0);
         const near = (a: (typeof items)[number] | undefined, b: (typeof items)[number] | undefined) =>
@@ -196,8 +195,8 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     // a reply that arrives while the chat is open is felt once, like a text coming in; a conversation loading (every id new) is not a reply
     let known = new Set<string>();
     createEffect(() => {
-        const ids = agent.entries.map((e) => e.id);
-        const fresh = agent.entries.filter((e) => !known.has(e.id));
+        const ids = props.agent.entries.map((e) => e.id);
+        const fresh = props.agent.entries.filter((e) => !known.has(e.id));
         if (known.size > 0 && fresh.length < ids.length && fresh.some((e) => e.kind === "agent")) haptic("receive");
         known = new Set(ids);
     });
@@ -260,10 +259,10 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     };
 
     return (
-        <MediaProvider files={agent.files}>
+        <MediaProvider files={props.agent.files}>
         <div class={styles.page}>
             {/* the conversation is being compacted: it goes on, and what's sent meanwhile waits for it */}
-            <Show when={agent.state.chat.compacting}>
+            <Show when={props.agent.state.chat.compacting}>
                 <PaperProgress class={styles.compacting} aria-label={`${name()} is compacting the conversation`} title="Compacting the conversation to save space" />
             </Show>
 
@@ -292,7 +291,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
             {/* who this is, in the middle, and tapping their name opens their computer and settings; the conversation's buttons on the right,
                 folded into one menu when the chat is narrow */}
             <div class={styles.header} ref={header}>
-                <Face class={styles.face} face={face} size={AVATAR_PX} frame="sphere" hologram skin={skinFor(agent.state.settings?.name)} />
+                <Face class={styles.face} face={props.face} size={AVATAR_PX} frame="sphere" hologram skin={skinFor(props.agent.state.settings?.name)} />
                 <div class={styles.who}>
                     <PaperButton variant="text" size="small" class={styles.name} aria-label={`${name()}: computer and settings`} title="Computer and settings" onClick={() => props.onMenu()}>
                         <span class={styles.nameText}>{name()}</span>
@@ -353,7 +352,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                                 </Show>
                                 <Show when={row.side === "card"}>
                                     <SignIn
-                                        agent={agent}
+                                        agent={props.agent}
                                         entry={row.entry as SignInEntry}
                                         name={name()}
                                         draft={draftOf(row.key)}
@@ -361,13 +360,13 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                                     />
                                 </Show>
                                 <Show when={row.side === "access"}>
-                                    <AccessRequest agent={agent} entry={row.entry as AccessEntry} name={name()} />
+                                    <AccessRequest agent={props.agent} entry={row.entry as AccessEntry} name={name()} />
                                 </Show>
                                 <Show when={row.side === "prompt"}>
-                                    <Prompt agent={agent} entry={row.entry as PromptEntry} name={name()} draft={draftOf(row.key)} onDone={() => drafts.delete(row.key)} />
+                                    <Prompt agent={props.agent} entry={row.entry as PromptEntry} name={name()} draft={draftOf(row.key)} onDone={() => drafts.delete(row.key)} />
                                 </Show>
                                 <Show when={row.side === "tool-server"}>
-                                    <ToolServerRequest agent={agent} entry={row.entry as ToolServerEntry} name={name()} />
+                                    <ToolServerRequest agent={props.agent} entry={row.entry as ToolServerEntry} name={name()} />
                                 </Show>
                                 <Show when={row.side === "tool-sign-in"}>
                                     <ToolSignIn entry={row.entry as ToolSignInEntry} name={name()} />
@@ -394,7 +393,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                     </For>
                     {/* only while it writes: working with its tools shows on its face, not as typing */}
                     {/* it pops in like a bubble, and goes at once: the reply it turns into takes its place */}
-                    <PaperPresence when={agent.state.chat.typing} appear motion="pop" exitClass="">
+                    <PaperPresence when={props.agent.state.chat.typing} appear motion="pop" exitClass="">
                         <div class={styles.row} classList={{ [styles.them!]: true, [styles.joinsPrev!]: typingJoins() }} role="status" aria-label={`${name()} is typing`}>
                             <div class={`${styles.bubble} ${styles.typing}`} classList={{ [styles.joinsPrev!]: typingJoins() }} aria-hidden="true">
                                 <span class={styles.dot} />
@@ -417,7 +416,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
             </Show>
 
             <Composer
-                agent={agent}
+                agent={props.agent}
                 draft={draft()}
                 onDraft={setDraft}
                 replyTo={replyTo()}
@@ -454,7 +453,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                 </PaperContextMenuItem>
             </PaperContextMenu>
             <History
-                agent={agent}
+                agent={props.agent}
                 open={historyOpen()}
                 onClose={() => setHistoryOpen(false)}
             />

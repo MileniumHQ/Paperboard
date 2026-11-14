@@ -13,7 +13,6 @@ import Picture from "./Picture";
 const own = (e: PointerEvent) => e.stopPropagation();
 
 export default function Pages(props: { pages: Launcher; name: string; onOpened: () => void }) {
-    const { pages } = props;
     const [openError, setOpenError] = createSignal<Failure | null>(null);
     const [deleteError, setDeleteError] = createSignal<string | null>(null);
     const [busy, setBusy] = createSignal(false);
@@ -26,7 +25,7 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
         setBusy(true);
         setOpenError(null);
         try {
-            await pages.open(name);
+            await props.pages.open(name);
             props.onOpened();
         } catch (e) {
             setOpenError(failure("Page not opened", e));
@@ -45,7 +44,7 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
         setBusy(true);
         setDeleteError(null);
         try {
-            await pages.remove(deleting()!.name);
+            await props.pages.remove(deleting()!.name);
             setDeleting(null);
         } catch (e) {
             setDeleteError(errorText(e));
@@ -57,21 +56,21 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
     return (
         <>
             <Switch>
-                <Match when={pages.list() === null && pages.listError()}>
+                <Match when={props.pages.list() === null && props.pages.listError()}>
                     {(why) => (
                         <PaperFlex padding="double">
                             <PaperEmptyState icon="error" title="The pages can't be read" description={why()}>
-                                <PaperButton onClick={() => pages.reload()}>Try again</PaperButton>
+                                <PaperButton onClick={() => props.pages.reload()}>Try again</PaperButton>
                             </PaperEmptyState>
                         </PaperFlex>
                     )}
                 </Match>
-                <Match when={pages.list() === null}>
+                <Match when={props.pages.list() === null}>
                     <PaperFlex padding="double">
                         <PaperLoader loaderStatus="indeterminate" label="Reading the pages" />
                     </PaperFlex>
                 </Match>
-                <Match when={pages.list()!.length === 0}>
+                <Match when={props.pages.list()!.length === 0}>
                     <PaperFlex padding="double">
                         <PaperEmptyState icon="web" title="No pages yet" description={`Ask ${props.name} for one, like a planner for your assignments or a birthday card, and it shows up here.`} />
                     </PaperFlex>
@@ -90,18 +89,18 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
                         {/* the page open beside the chat is marked */}
                         <PaperList
                             name="agents-pages"
-                            value={chosen() ?? pages.shown()?.name ?? ""}
+                            value={chosen() ?? props.pages.shown()?.name ?? ""}
                             onValueChange={(v) => void open(String(v))}
                             borderless
                             fullWidth
                             fullHeight
                         >
-                            <For each={pages.list()}>
+                            <For each={props.pages.list()}>
                                 {(a) => (
                                     <PaperListItem
                                         value={a.name}
                                         disabled={busy()}
-                                        icon={<Picture pages={pages} name={a.name} title={a.title} />}
+                                        icon={<Picture pages={props.pages} name={a.name} title={a.title} />}
                                         description={a.description || `~/Pages/${a.name}`}
                                         actions={
                                             <PaperFlex direction="row" align="center" gap="onefourth">

@@ -28,9 +28,8 @@ const TITLE_CHARS = 32;
 
 
 export default function ComputerView(props: { agent: Agent }) {
-    const { agent } = props;
-    const c = () => agent.state.computer;
-    const name = () => agent.state.settings?.name ?? "Your agent";
+    const c = () => props.agent.state.computer;
+    const name = () => props.agent.state.settings?.name ?? "Your agent";
     const ready = () => c().phase === "ready";
 
     const [busy, setBusy] = createSignal(false);
@@ -63,7 +62,7 @@ export default function ComputerView(props: { agent: Agent }) {
         if (!document.hidden) {
             try {
                 // tabs go by id, so a tab never jumps (and the window being used never loses focus to a move)
-                const list = (await agent.windows()).sort((a, b) => a.id - b.id);
+                const list = (await props.agent.windows()).sort((a, b) => a.id - b.id);
                 setWindows(reconcile(list, { key: "id" }));
                 setListed(true);
             } catch (e) {
@@ -99,7 +98,7 @@ export default function ComputerView(props: { agent: Agent }) {
 
     const closeWindow = (w: ComputerWindow) =>
         void act("Window not closed", async () => {
-            await agent.closeWindow(w.id);
+            await props.agent.closeWindow(w.id);
             setWindows(windows.filter((x) => x.id !== w.id));
         });
 
@@ -112,13 +111,13 @@ export default function ComputerView(props: { agent: Agent }) {
         clearTimeout(idle);
         if (!holding()) return;
         setHolding(false);
-        void agent.control(false).catch((e) => setError(failure("Computer not handed back", e)));
+        void props.agent.control(false).catch((e) => setError(failure("Computer not handed back", e)));
     };
     const use = async () => {
         clearTimeout(idle);
         idle = setTimeout(handBack, IDLE_MS);
         if (holding()) return;
-        taking ??= agent
+        taking ??= props.agent
             .control(true)
             .then(() => {
                 if (!disposed) setHolding(true);
@@ -130,7 +129,7 @@ export default function ComputerView(props: { agent: Agent }) {
         if (!holding()) return;
         const renew = setInterval(
             () =>
-                void agent.control(true).catch((e) => {
+                void props.agent.control(true).catch((e) => {
                     setHolding(false);
                     setError(failure("Control lost", e));
                 }),
@@ -175,7 +174,7 @@ export default function ComputerView(props: { agent: Agent }) {
                             <SetupProgress computer={c()} />
                             <Show when={c().phase === "failed"}>
                                 <PaperFlex direction="row">
-                                    <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not set up", agent.installComputer)}>
+                                    <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not set up", props.agent.installComputer)}>
                                         <PaperIcon>restart_alt</PaperIcon> Set up again
                                     </PaperButton>
                                 </PaperFlex>
@@ -188,7 +187,7 @@ export default function ComputerView(props: { agent: Agent }) {
                                 A web browser of its own that {name()} uses for its work, about 400 MB of storage. It reaches the internet, never your files or your network.
                             </PaperText>
                             <PaperFlex direction="row">
-                                <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not set up", agent.installComputer)}>
+                                <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not set up", props.agent.installComputer)}>
                                     <PaperIcon>computer</PaperIcon> Set up {name()}'s computer
                                 </PaperButton>
                             </PaperFlex>
@@ -201,14 +200,14 @@ export default function ComputerView(props: { agent: Agent }) {
                     </Match>
                     <Match when={c().phase === "stopped"}>
                         <PaperEmptyState icon="power_settings_new" title="The computer is off" description={`${name()} turns it on when it needs it, or you can now.`}>
-                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not turned on", agent.startComputer)}>
+                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not turned on", props.agent.startComputer)}>
                                 Turn on
                             </PaperButton>
                         </PaperEmptyState>
                     </Match>
                     <Match when={c().phase === "failed"}>
                         <PaperEmptyState icon="error" title="The computer stopped" description={c().error ?? undefined}>
-                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not turned on", agent.startComputer)}>
+                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not turned on", props.agent.startComputer)}>
                                 Try again
                             </PaperButton>
                         </PaperEmptyState>
@@ -233,7 +232,7 @@ export default function ComputerView(props: { agent: Agent }) {
                         <For each={windows}>
                             {(w) => (
                                 <div class={styles.pane} classList={{ [styles.shown!]: shown() === w.id }}>
-                                    <WindowView agent={agent} window={w} active={shown() === w.id} holding={holding()} onUse={use} />
+                                    <WindowView agent={props.agent} window={w} active={shown() === w.id} holding={holding()} onUse={use} />
                                 </div>
                             )}
                         </For>
