@@ -90,6 +90,19 @@ describe("PaperPanel phone layout", () => {
         expect(await page.eval("t.back()")).toBe(false);
     });
 
+    test("the panel resizing under an open modal leaves Back with the modal, opened last", async () => {
+        await openSettings();
+        await page.eval("t.openModal()");
+        await page.waitFor(`document.querySelector('[role="dialog"][aria-modal="true"]') !== null`, "the modal to open");
+        // still the phone layout: the page stays open, only its width changes
+        await page.send("Emulation.setDeviceMetricsOverride", { width: PHONE.width - 20, height: PHONE.height, deviceScaleFactor: 1, mobile: true });
+        await page.frames();
+
+        expect(await page.eval("t.back()")).toBe(true);
+        expect(await page.eval("t.modalOpen()")).toBe(false);
+        expect((await layout()).pageInert).toBe(false);
+    });
+
     test("a rightward swipe on the open page goes back", async () => {
         await openSettings();
         await page.touchDrag([
