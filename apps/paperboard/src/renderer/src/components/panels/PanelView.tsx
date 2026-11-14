@@ -4,7 +4,7 @@ import { type Component, type JSX, createEffect, createMemo, createSignal, For, 
 import { recordUse, liveKeys, recordAway, withoutIdle, MAX_LIVE_IFRAMES, IDLE_UNLOAD_MS } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";
 import styles from "./frame.module.css";
-import { panelUrl } from "../../lib/shell";
+import { logToMain, panelUrl } from "../../lib/shell";
 import { MOBILE_MODE_MESSAGE, mobileMode, requireMobileMode } from "../../lib/mobileMode";
 import { FILE_TRANSFER_RESULT, parseFileTransferMessage, runPanelFileTransfer } from "../../lib/panelFileTransfer";
 import { createFrameLoopbackRedirects, LOOPBACK_REDIRECT_CANCEL, LOOPBACK_REDIRECT_REQUEST, LOOPBACK_REDIRECT_RESULT, parseLoopbackRedirectMessage } from "../../lib/panelLoopbackRedirect";
@@ -37,7 +37,9 @@ export interface PanelViewProps {
 }
 
 const PanelFrame: Component<{ panelKey: string; heading: PanelHeading; mobile: boolean; computerName: string; current: boolean; reload: number; retry: () => void; restart?: RestartState; retryRestart: () => void; failed: () => void }> = (props) => {
-    const [computerId, panelId] = props.panelKey.split("::");
+    // the frame is keyed by its panel (PanelView's <For> over the keys), so these name one panel for its life
+    const computerId = () => props.panelKey.split("::")[0];
+    const panelId = () => props.panelKey.split("::")[1];
     const [ready, setReady] = createSignal(false);
     const [failure, setFailure] = createSignal("");
     let frame: HTMLIFrameElement | undefined;
@@ -47,48 +49,54 @@ const PanelFrame: Component<{ panelKey: string; heading: PanelHeading; mobile: b
     // failing to reach the service; by source ("" = the panel's own data).
     const [backups, setBackups] = createSignal<Record<string, BackupProgress>>({});
     const held = () => Object.values(backups()).find((p) => p.servicePaused) ?? null;
-    const refreshBackups = () => backupApi.progress(panelId, computerId).then(
-        (list) => setBackups(Object.fromEntries(list.map((p) => [p.sourceId ?? "", p]))),
-        (err) => console.error(`[panels] could not read ${panelId}'s running backups:`, err),
+    // a failed look says so under a failure it may have explained
+    const [backupsError, setBackupsError] = createSignal("");
+    const refreshBackups = () => backupApi.progress(panelId(), computerId()).then(
+        (list) => {
+            setBackups(Object.fromEntries(list.map((p) => [p.sourceId ?? "", p])));
+            setBackupsError("");
+        },
+        (err) => {
+            logToMain("error", `Couldn't read ${panelId()}'s running backups:`, err);
+            setBackupsError(`Couldn't check for a backup holding it: ${err instanceof Error ? err.message : String(err)}`);
+        },
     );
     onMount(() => {
-        const off = backupApi.onProgress(panelId, (change) => setBackups((prev) => {
+        const off = backupApi.onProgress(panelId(), (change) => setBackups((prev) => {
             const next = { ...prev };
             if (change.progress) next[change.sourceId ?? ""] = change.progress;
             else delete next[change.sourceId ?? ""];
             return next;
-        }), computerId);
+        }), computerId());
         onCleanup(off);
         void refreshBackups();
     });
+    const isHeld = () => held() !== null;
     // a socket that dropped meanwhile misses the end: look again while held
-    createEffect(() => {
-        if (!held()) return;
+    createEffect(on(isHeld, (holding) => {
+        if (!holding) return;
         const timer = setInterval(() => void refreshBackups(), 5_000);
         onCleanup(() => clearInterval(timer));
-    });
-    // the service is back: a page that lost it while held loads again
-    let wasHeld = false;
-    createEffect(() => {
-        const now = held() !== null;
-        if (wasHeld && !now && (failure() || !ready())) props.retry();
-        wasHeld = now;
-    });
+    }));
+    // the service is back: a page that lost it while held loads again. Only
+    // the hold ending triggers it, not the reload it starts.
+    createEffect(on(isHeld, (holding, wasHolding) => {
+        if (wasHolding && !holding && (failure() || !ready())) props.retry();
+    }));
     // the backup location window this frame asked for, answered on it
     const [chooser, setChooser] = createSignal<{ requestId: string; sourceId?: string; generation: string; target: Window } | null>(null);
     // only this frame's own reload token reloads it: the shell keeps every
     // panel's token in one record, and any other panel's restart or update
     // must leave this document alone
     const reloadToken = createMemo(() => props.reload);
-    createEffect(() => {
-        const reload = reloadToken();
+    createEffect(on(reloadToken, (reload) => {
         generation = crypto.randomUUID();
         const current = generation;
         setReady(false); setFailure("");
-        if (frame) frame.src = panelUrl(computerId, panelId, `?_r=${reload}&generation=${generation}`);
+        if (frame) frame.src = panelUrl(computerId(), panelId(), `?_r=${reload}&generation=${generation}`);
         const timer = setTimeout(() => setFailure("The panel did not finish connecting to its service."), 25_000);
         // a sign-in redirect this document asked the shell to catch
-        const loopback = createFrameLoopbackRedirects(computerId);
+        const loopback = createFrameLoopbackRedirects(computerId());
         // what this document was asked about its unsaved work, by request
         const leaving = new Map<string, (answer: LeaveAnswer) => void>();
         const askToLeave = () => new Promise<LeaveAnswer>((resolve) => {
@@ -100,7 +108,7 @@ const PanelFrame: Component<{ panelKey: string; heading: PanelHeading; mobile: b
         });
         const receive = (event: MessageEvent) => {
             if (event.source !== frame?.contentWindow || event.data?.generation !== generation) return;
-            if (event.data.type === "paperboard:ready" && event.data.panelId === panelId) {
+            if (event.data.type === "paperboard:ready" && event.data.panelId === panelId()) {
                 clearTimeout(timer); setReady(true); setFailure("");
             } else if (event.data.type === "paperboard:failed") {
                 clearTimeout(timer);
@@ -121,7 +129,7 @@ const PanelFrame: Component<{ panelKey: string; heading: PanelHeading; mobile: b
                 if (props.current) playHaptic(event.data.kind);
             } else if (event.data.type === BACKUP_LOCATION_REQUEST) {
                 const target = frame?.contentWindow;
-                const request = parseBackupLocationRequest(event.data, panelId, chooser() !== null);
+                const request = parseBackupLocationRequest(event.data, panelId(), chooser() !== null);
                 if (!target || !request) return;
                 const answer = (result: BackupLocationChoice) => {
                     target.postMessage({ type: BACKUP_LOCATION_RESULT, generation: current, requestId: request.requestId, result }, "*");
@@ -142,7 +150,7 @@ const PanelFrame: Component<{ panelKey: string; heading: PanelHeading; mobile: b
                 const request = parseFileTransferMessage(event.data);
                 const target = frame?.contentWindow;
                 if (!request || !target) return;
-                void runPanelFileTransfer(computerId, panelId, request).then((result) => {
+                void runPanelFileTransfer(computerId(), panelId(), request).then((result) => {
                     target.postMessage({ type: FILE_TRANSFER_RESULT, generation: current, requestId: request.requestId, result }, "*");
                 });
             }
@@ -158,17 +166,17 @@ const PanelFrame: Component<{ panelKey: string; heading: PanelHeading; mobile: b
             setPanelUnsaved(props.panelKey, null);
             for (const resolve of leaving.values()) resolve({ leave: true });
         });
-    });
+    }));
     createEffect(on(failure, (message) => { if (message) props.failed(); }, { defer: true }));
     // mobile mode turning on or off reaches a frame already challenged
     createEffect(on(mobileMode, (mobile) => { if (mobile !== null) frame?.contentWindow?.postMessage({ type: MOBILE_MODE_MESSAGE, generation, mobile }, "*"); }, { defer: true }));
     return <div class={styles.panelLayer} classList={{ [styles.away]: !props.current }}>
-        <iframe ref={frame} data-panel-key={props.panelKey} title={panelId}
+        <iframe ref={frame} data-panel-key={props.panelKey} title={panelId()}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="clipboard-read; clipboard-write; microphone; camera; display-capture"
             onLoad={() => { frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName, mobile: requireMobileMode() }, "*"); }}
             class={`${styles.frame} ${styles.panelFrame}`} classList={{ [styles.unpainted]: !ready() || Boolean(failure()) || Boolean(props.restart) || Boolean(held()) }} />
-        <BackupLocationChooser computerId={computerId} computerName={props.computerName} panelId={panelId} sourceId={chooser()?.sourceId} open={chooser() !== null} onDone={(result) => {
+        <BackupLocationChooser computerId={computerId()} computerName={props.computerName} panelId={panelId()} sourceId={chooser()?.sourceId} open={chooser() !== null} onDone={(result) => {
             const request = chooser();
             setChooser(null);
             if (request && request.generation === generation) request.target.postMessage({ type: BACKUP_LOCATION_RESULT, generation: request.generation, requestId: request.requestId, result }, "*");
@@ -199,7 +207,7 @@ const PanelFrame: Component<{ panelKey: string; heading: PanelHeading; mobile: b
                 compact={props.mobile}
                 label={failure() ? undefined : "Connecting panel…"}
                 error={failure() || undefined}
-                detail={failure() && props.heading.serviceError ? `Its service stopped: ${props.heading.serviceError}` : undefined}
+                detail={failure() ? (props.heading.serviceError ? `Its service stopped: ${props.heading.serviceError}` : backupsError() || undefined) : undefined}
                 retryLabel="Reload panel"
                 onRetry={props.retry}
             />
@@ -210,15 +218,11 @@ const PanelFrame: Component<{ panelKey: string; heading: PanelHeading; mobile: b
 const PanelView: Component<PanelViewProps> = (props) => {
     const [usageOrder, setUsageOrder] = createSignal<string[]>([]);
     const currentKey = () => `${props.activeComputerId}::${props.activePanel}`;
-    createEffect(() => setUsageOrder((prev) => recordUse(prev, props.openedPanels, currentKey())));
+    createEffect(on([() => props.openedPanels, currentKey], ([opened, current]) => setUsageOrder((prev) => recordUse(prev, opened, current))));
     // when each panel went out of view, and a clock to notice one has been away too long
     const [away, setAway] = createSignal<Record<string, number>>({});
     const [now, setNow] = createSignal(Date.now());
-    createEffect(() => {
-        const opened = props.openedPanels;
-        const current = currentKey();
-        setAway((prev) => recordAway(prev, opened, current, Date.now()));
-    });
+    createEffect(on([() => props.openedPanels, currentKey], ([opened, current]) => setAway((prev) => recordAway(prev, opened, current, Date.now()))));
     onMount(() => {
         const clock = setInterval(() => setNow(Date.now()), 60_000);
         onCleanup(() => clearInterval(clock));

@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, onCleanup, onMount, Show, type Component } from "solid-js";
+import { createEffect, createSignal, For, on, onCleanup, onMount, Show, type Component } from "solid-js";
 import { PaperButton, PaperFlex, PaperGrid, PaperMediaCard, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { panelPermissionsApi } from "../../lib/shell";
 import type { PanelPermission, PermissionAsk, ScreenPick, SystemBlock } from "../../../../shared/panelPermissions";
@@ -51,7 +51,10 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
         onCleanup(() => offs.forEach((off) => off()));
     });
 
+    // one answer per question: a dialog closed while its answer is on the
+    // way (Escape after Allow) must not send a second one
     const answer = async (askId: string, value: string | null) => {
+        if (busy()) return;
         setBusy(true);
         try {
             await panelPermissionsApi.answer(askId, value);
@@ -101,9 +104,9 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
     const [ask, setAsk] = createSignal<PermissionAsk | null>(null);
     const [pick, setPick] = createSignal<ScreenPick | null>(null);
     const [block, setBlock] = createSignal<SystemBlock | null>(null);
-    createEffect(() => asking() && setAsk(asking()));
-    createEffect(() => picking() && setPick(picking()));
-    createEffect(() => blocked() && setBlock(blocked()));
+    createEffect(on(asking, (q) => q && setAsk(q)));
+    createEffect(on(picking, (q) => q && setPick(q)));
+    createEffect(on(blocked, (q) => q && setBlock(q)));
     const system = () => SYSTEM_PATHS[block()?.platform ?? "darwin"];
     const blockedNoun = () => NOUNS[block()?.permission ?? "microphone"];
 

@@ -1,14 +1,10 @@
-import { createSignal, createEffect, onCleanup } from "solid-js";
+import { createSignal, createEffect, on, onCleanup } from "solid-js";
 import { config } from "@mileniumhq/paperapi";
 import { logToMain, notifyAppSettingsChanged, shellApi } from "../lib/shell";
 import { createSaveQueue } from "../lib/saveQueue";
 import { withAppSettingsDefaults } from "../../../shared/appSettingsDefaults";
 import { effectiveLook, type Graphics } from "../../../shared/graphics";
-import {
-    APP_SETTINGS_DEFAULTS,
-    APP_SETTINGS_ID,
-    type AppSettingsData,
-} from "../components/settings/AppSettings";
+import { APP_SETTINGS_DEFAULTS, APP_SETTINGS_ID, type AppSettingsData } from "../lib/appSettings";
 
 export interface SettingsFailure {
     /** which way it failed: settings that didn't load leave the defaults
@@ -38,27 +34,18 @@ export function useAppSettings() {
     });
 
     // Mirrors the motion preference onto the document for PaperUI tokens
-    createEffect(() => {
-        if (typeof document !== "undefined") {
-            if (look().disableAnimations) {
-                document.documentElement.setAttribute(
-                    "data-paperui-motion",
-                    "reduced",
-                );
-            } else {
-                document.documentElement.removeAttribute(
-                    "data-paperui-motion",
-                );
-            }
-        }
-    });
+    createEffect(on(() => look().disableAnimations, (reduced) => {
+        if (typeof document === "undefined") return;
+        if (reduced) document.documentElement.setAttribute("data-paperui-motion", "reduced");
+        else document.documentElement.removeAttribute("data-paperui-motion");
+    }));
 
     // Mirrors the blur preference the same way
-    createEffect(() => {
+    createEffect(on(() => look().disableBlur, (off) => {
         if (typeof document === "undefined") return;
-        if (look().disableBlur) document.documentElement.setAttribute("data-paperui-blur", "off");
+        if (off) document.documentElement.setAttribute("data-paperui-blur", "off");
         else document.documentElement.removeAttribute("data-paperui-blur");
-    });
+    }));
 
     // A change made while a load is out makes the load's answer old news: it
     // was read before the change was saved, and showing it would undo the

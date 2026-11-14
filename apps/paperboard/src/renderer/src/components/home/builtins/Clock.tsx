@@ -1,4 +1,4 @@
-import { type Component, createEffect, createSignal, For, onCleanup, Show } from "solid-js";
+import { type Component, createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
 import type { BuiltinWidgetProps } from "./types";
 import styles from "./Builtins.module.css";
 
@@ -6,8 +6,8 @@ import styles from "./Builtins.module.css";
 // while it is on screen.
 const Clock: Component<BuiltinWidgetProps> = (props) => {
     const [now, setNow] = createSignal(new Date());
-    createEffect(() => {
-        if (!props.visible) return;
+    createEffect(on(() => props.visible, (visible) => {
+        if (!visible) return;
         setNow(new Date());
         // land each tick on the second, so the face and the digits agree
         let timer: ReturnType<typeof setTimeout>;
@@ -17,7 +17,7 @@ const Clock: Component<BuiltinWidgetProps> = (props) => {
         };
         timer = setTimeout(tick, 1000 - (Date.now() % 1000));
         onCleanup(() => clearTimeout(timer));
-    });
+    }));
 
     const time = () => now().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     const weekday = () => now().toLocaleDateString([], { weekday: "long" });

@@ -3,6 +3,7 @@ import {
     createEffect,
     createMemo,
     createSignal,
+    on,
     onCleanup,
     onMount,
     Show,
@@ -50,9 +51,9 @@ export interface LibraryFrameProps {
      * fresh library document. The iframe src carries it, so a bump reloads
      * through Solid instead of a DOM mutation that bypasses the framework.
      */
-    reloadToken?: number;
+    reloadToken: number;
     /** Requests a fresh reload; the failure overlay's retry uses this too. */
-    onReload?: () => void;
+    onReload: () => void;
     /** Overridable for tests/dev; defaults to the registry origin's /library/. */
     libraryUrl?: string;
 }
@@ -163,63 +164,48 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
     // Lazy mount: launching Paperboard must not load remote content the
     // user never opened. Once mounted the frame stays alive so library
     // state survives tab switches.
-    createEffect(() => {
-        if (props.active) setMounted(true);
-    });
+    createEffect(on(() => props.active, (active) => {
+        if (active) setMounted(true);
+    }));
 
     // A reload is a fresh document: drop the previous page's connection and
     // readiness so the loader covers the frame until the new library reports
     // in, instead of revealing a blank reloading page.
-    createEffect<number>((previous) => {
-        const token = props.reloadToken ?? 0;
-        if (token !== previous) {
-            setConnected(false);
-            setReady(false);
-            setReadyCapable(false);
-            setFailure(false);
-        }
-        return token;
-    }, props.reloadToken ?? 0);
+    createEffect(on(() => props.reloadToken, () => {
+        setConnected(false);
+        setReady(false);
+        setReadyCapable(false);
+        setFailure(false);
+    }, { defer: true }));
 
-    createEffect(() => {
-        if (!mounted() || !props.active || connected() || failure()) return;
+    const active = () => mounted() && props.active;
+    createEffect(on([active, connected, failure], ([shown, isConnected, failed]) => {
+        if (!shown || isConnected || failed) return;
         const timer = setTimeout(
             () => setFailure(true),
             LIBRARY_CONNECT_TIMEOUT_MS,
         );
         onCleanup(() => clearTimeout(timer));
-    });
+    }));
 
-    createEffect(() => {
-        // only a library that promised the ready signal can fail to send it;
-        // a legacy library is revealed on connect and has nothing to wait on
-        if (
-            !mounted() ||
-            !props.active ||
-            !connected() ||
-            !readyCapable() ||
-            ready() ||
-            failure()
-        ) {
-            return;
-        }
+    // only a library that promised the ready signal can fail to send it;
+    // a legacy library is revealed on connect and has nothing to wait on
+    createEffect(on([active, connected, readyCapable, ready, failure], ([shown, isConnected, promised, isReady, failed]) => {
+        if (!shown || !isConnected || !promised || isReady || failed) return;
         const timer = setTimeout(
             () => setFailure(true),
             LIBRARY_READY_TIMEOUT_MS,
         );
         onCleanup(() => clearTimeout(timer));
-    });
+    }));
 
     // Installed facts are the daemon's; push every change so the library's
     // cards cannot go stale after an install/uninstall elsewhere. The theme
     // rides along so a settings change reaches the embedded page too.
-    createEffect(() => {
-        const list = installed();
-        const theme = props.theme;
-        if (!connected()) return;
-        if (!frame?.contentWindow) return;
+    createEffect(on([installed, () => props.theme, connected], ([list, theme, isConnected]) => {
+        if (!isConnected || !frame?.contentWindow) return;
         reply(shellToLibrary.installed(theme, list));
-    });
+    }));
 
     onMount(() => {
         window.addEventListener("message", receive);
@@ -239,7 +225,7 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
                 <iframe
                     ref={frame}
                     title="Panel Library"
-                    src={libraryFrameSrc(libraryUrl(), props.reloadToken ?? 0)}
+                    src={libraryFrameSrc(libraryUrl(), props.reloadToken)}
                     sandbox="allow-scripts allow-same-origin allow-downloads"
                     class={styles.frame}
                     classList={{
@@ -255,13 +241,7 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
                 <LoadingOverlay
                     error="Couldn't reach the panel library."
                     retryLabel="Reload library"
-                    onRetry={() => {
-                        setFailure(false);
-                        setConnected(false);
-                        setReady(false);
-                        setReadyCapable(false);
-                        props.onReload?.();
-                    }}
+                    onRetry={props.onReload}
                 />
             </Show>
         </PaperFlex>

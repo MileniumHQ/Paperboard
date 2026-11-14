@@ -50,7 +50,11 @@ const TopBar: Component<{
         shellApi
             .getAppVersion()
             .then((raw) => setVersionLabel(formatVersionLabel(raw)))
-            .catch((err) => console.error("[TopBar] failed to read app version:", err));
+            .catch((err) => {
+                // the label says so instead of going missing; the log says why
+                logToMain("error", "Couldn't read Paperboard's version:", err);
+                setVersionLabel("Version unknown");
+            });
     });
 
     const handleFolder = () => {

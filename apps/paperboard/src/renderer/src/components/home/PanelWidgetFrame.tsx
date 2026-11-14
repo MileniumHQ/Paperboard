@@ -111,11 +111,9 @@ const PanelWidgetFrame: Component<PanelWidgetFrameProps> = (props) => {
     createEffect(on(mobileMode, (mobile) => { if (mobile !== null && attempt?.initialized) post({ type: MOBILE_MODE_MESSAGE, mobile }); }, { defer: true }));
 
     // the shell owns size and visibility; the widget follows
-    createEffect(() => {
-        const size = props.size;
-        const visible = props.visible;
-        if (ready()) post({ type: "paperboard:widget-update", size, visible });
-    });
+    createEffect(on([() => props.size, () => props.visible, ready], ([size, visible, isReady]) => {
+        if (isReady) post({ type: "paperboard:widget-update", size, visible });
+    }));
 
     return (
         <>

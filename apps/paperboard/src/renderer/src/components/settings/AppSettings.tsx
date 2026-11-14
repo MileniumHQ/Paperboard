@@ -21,6 +21,7 @@ import {
 import { isBrowserShell, shellIpc, signOutOfBrowser } from "../../lib/shell";
 import type { SettingsFailure } from "../../hooks/useAppSettings";
 import { START_ON_HOME, startTarget } from "../../lib/startOn";
+import type { AppSettingsData } from "../../lib/appSettings";
 import { computerIcon } from "../computer/computerIcon";
 import PanelPermissionSettings from "./PanelPermissionSettings";
 import styles from "./AppSettings.module.css";
@@ -29,23 +30,6 @@ import styles from "./AppSettings.module.css";
 import paperboardLicenseText from "../../../../../LICENSE?raw";
 import mitLicenseText from "../../../../../../../packages/paperui/LICENSE?raw";
 import { effectiveLook } from "../../../../shared/graphics";
-
-export interface AppSettingsData {
-    darkMode: "system" | "light" | "dark";
-    /** absent until chosen: off on a GPU, on without one */
-    disableAnimations?: boolean;
-    /** absent until chosen, the same way */
-    disableBlur?: boolean;
-    runOnStartup: boolean;
-    /** where Paperboard opens: Home, or a computer's id */
-    startOn: string;
-}
-
-export const APP_SETTINGS_DEFAULTS: AppSettingsData = {
-    darkMode: "system",
-    runOnStartup: false,
-    startOn: START_ON_HOME,
-};
 
 /** a computer Paperboard can open on */
 export interface StartComputer {
@@ -77,8 +61,6 @@ function StartOnItems(props: { computers: StartComputer[]; startOn: string }) {
         </>
     );
 }
-
-export const APP_SETTINGS_ID = "app-settings";
 
 type LicenseKind = "paperboard" | "mit";
 
@@ -182,163 +164,164 @@ export default function AppSettings(props: {
         </Show>
     );
 
-    if (props.compact) {
-        return (
-            <CompactSettings
-                notice={failureNotice}
-                settings={props.settings}
-                gpu={props.gpu}
-                onChange={handleChange}
-                computers={props.computers}
-                onViewLicense={viewLicense}
-                licenseModal={licenseModal}
-            />
-        );
-    }
-
     return (
-        <PaperPage>
-            <PaperPageHeader
-                icon="settings"
-                title="App Settings"
-                subtitle={isBrowserShell() ? "Appearance, startup, and licenses." : "Appearance, startup, updates, and licenses."}
-            />
-            {failureNotice}
+        <Show
+            when={!props.compact}
+            fallback={
+                <CompactSettings
+                    notice={failureNotice}
+                    settings={props.settings}
+                    gpu={props.gpu}
+                    onChange={handleChange}
+                    computers={props.computers}
+                    onViewLicense={viewLicense}
+                    licenseModal={licenseModal}
+                />
+            }
+        >
+            <PaperPage>
+                <PaperPageHeader
+                    icon="settings"
+                    title="App Settings"
+                    subtitle={isBrowserShell() ? "Appearance, startup, and licenses." : "Appearance, startup, updates, and licenses."}
+                />
+                {failureNotice}
 
-            <PaperSettingList
-                autoHeight
-                value={settingsValue()}
-                onValueChange={handleChange}
-            >
-                <PaperSettingItem
-                    title="Appearance"
-                    description="Match the operating system appearance or force light or dark."
+                <PaperSettingList
+                    autoHeight
+                    value={settingsValue()}
+                    onValueChange={handleChange}
                 >
-                    <PaperSelectMenu
-                        name="darkMode"
-                        value={props.settings.darkMode}
-                        fullWidth
-                    >
-                        <PaperSelectMenuItem value="system" icon="contrast">
-                            System
-                        </PaperSelectMenuItem>
-                        <PaperSelectMenuItem value="light" icon="light_mode">
-                            Light
-                        </PaperSelectMenuItem>
-                        <PaperSelectMenuItem value="dark" icon="dark_mode">
-                            Dark
-                        </PaperSelectMenuItem>
-                    </PaperSelectMenu>
-                </PaperSettingItem>
-
-                <PaperSettingItem
-                    title="Disable animations"
-                    description={look().animationsByDefault ? NO_GPU : "Turns off animations and transitions."}
-                >
-                    <PaperToggle
-                        name="disableAnimations"
-                        checked={look().disableAnimations}
-                    />
-                </PaperSettingItem>
-
-                <PaperSettingItem
-                    title="Disable blur"
-                    description={look().blurByDefault ? NO_GPU : "Turns off the blur behind dialogs and overlays."}
-                >
-                    <PaperToggle
-                        name="disableBlur"
-                        checked={look().disableBlur}
-                    />
-                </PaperSettingItem>
-
-                <PaperSettingItem title="Start on" description={startOnMissing() ? START_ON_MISSING : START_ON_NOTE}>
-                    <PaperSelectMenu name="startOn" value={props.settings.startOn} fullWidth>
-                        <StartOnItems computers={props.computers} startOn={props.settings.startOn} />
-                    </PaperSelectMenu>
-                </PaperSettingItem>
-
-                <PaperSettingItem
-                    title="Run on startup"
-                    description="Launch Paperboard automatically when you log in."
-                >
-                    <PaperToggle
-                        name="runOnStartup"
-                        checked={props.settings.runOnStartup}
-                    />
-                </PaperSettingItem>
-
-                {/* browser mode runs no updates */}
-                <Show when={!isBrowserShell()}>
                     <PaperSettingItem
-                        title="Updates"
-                        description={UPDATE_NOTE}
+                        title="Appearance"
+                        description="Match the operating system appearance or force light or dark."
                     >
-                        <PaperEffect variant="primary">
-                            <PaperButton
-                                onClick={updateEverything}>
-                                <PaperIcon>update</PaperIcon>
-                                Update everything now
-                            </PaperButton>
-                        </PaperEffect>
+                        <PaperSelectMenu
+                            name="darkMode"
+                            value={props.settings.darkMode}
+                            fullWidth
+                        >
+                            <PaperSelectMenuItem value="system" icon="contrast">
+                                System
+                            </PaperSelectMenuItem>
+                            <PaperSelectMenuItem value="light" icon="light_mode">
+                                Light
+                            </PaperSelectMenuItem>
+                            <PaperSelectMenuItem value="dark" icon="dark_mode">
+                                Dark
+                            </PaperSelectMenuItem>
+                        </PaperSelectMenu>
                     </PaperSettingItem>
 
                     <PaperSettingItem
-                        title="Quit App"
-                        description={QUIT_NOTE}
+                        title="Disable animations"
+                        description={look().animationsByDefault ? NO_GPU : "Turns off animations and transitions."}
+                    >
+                        <PaperToggle
+                            name="disableAnimations"
+                            checked={look().disableAnimations}
+                        />
+                    </PaperSettingItem>
+
+                    <PaperSettingItem
+                        title="Disable blur"
+                        description={look().blurByDefault ? NO_GPU : "Turns off the blur behind dialogs and overlays."}
+                    >
+                        <PaperToggle
+                            name="disableBlur"
+                            checked={look().disableBlur}
+                        />
+                    </PaperSettingItem>
+
+                    <PaperSettingItem title="Start on" description={startOnMissing() ? START_ON_MISSING : START_ON_NOTE}>
+                        <PaperSelectMenu name="startOn" value={props.settings.startOn} fullWidth>
+                            <StartOnItems computers={props.computers} startOn={props.settings.startOn} />
+                        </PaperSelectMenu>
+                    </PaperSettingItem>
+
+                    <PaperSettingItem
+                        title="Run on startup"
+                        description="Launch Paperboard automatically when you log in."
+                    >
+                        <PaperToggle
+                            name="runOnStartup"
+                            checked={props.settings.runOnStartup}
+                        />
+                    </PaperSettingItem>
+
+                    {/* browser mode runs no updates */}
+                    <Show when={!isBrowserShell()}>
+                        <PaperSettingItem
+                            title="Updates"
+                            description={UPDATE_NOTE}
+                        >
+                            <PaperEffect variant="primary">
+                                <PaperButton
+                                    onClick={updateEverything}>
+                                    <PaperIcon>update</PaperIcon>
+                                    Update everything now
+                                </PaperButton>
+                            </PaperEffect>
+                        </PaperSettingItem>
+
+                        <PaperSettingItem
+                            title="Quit App"
+                            description={QUIT_NOTE}
+                        >
+                            <PaperButton
+                                variant="danger"
+                                onClick={quitApp}
+                                aria-label="Quit Paperboard"
+                            >
+                                <PaperIcon>close</PaperIcon>
+                                Quit App
+                            </PaperButton>
+                        </PaperSettingItem>
+                    </Show>
+
+                    <Show when={isBrowserShell()}>
+                        <PaperSettingItem title="Sign out" description={SIGN_OUT_NOTE}>
+                            <PaperButton onClick={signOut}>
+                                <PaperIcon>logout</PaperIcon>
+                                Sign Out
+                            </PaperButton>
+                        </PaperSettingItem>
+                    </Show>
+                </PaperSettingList>
+
+                {/* browser mode: the browser keeps its own permissions */}
+                <Show when={!isBrowserShell() && props.panelName}>
+                    {(panelName) => <PanelPermissionSettings panelName={panelName()} />}
+                </Show>
+
+                <PaperSectionHeader icon="license" title="Licenses" />
+                <PaperSettingList autoHeight>
+                    <PaperSettingItem
+                        title="PolyForm Noncommercial 1.0.0"
+                        description="Your Paperboard experience"
                     >
                         <PaperButton
-                            variant="danger"
-                            onClick={quitApp}
-                            aria-label="Quit Paperboard"
+                            size="small"
+                            onClick={() => viewLicense("paperboard")}
+                            aria-label="View PolyForm Noncommercial 1.0.0 license"
                         >
-                            <PaperIcon>close</PaperIcon>
-                            Quit App
+                            View
                         </PaperButton>
                     </PaperSettingItem>
-                </Show>
-
-                <Show when={isBrowserShell()}>
-                    <PaperSettingItem title="Sign out" description={SIGN_OUT_NOTE}>
-                        <PaperButton onClick={signOut}>
-                            <PaperIcon>logout</PaperIcon>
-                            Sign Out
+                    <PaperSettingItem title="MIT license" description="Applies to SDKs">
+                        <PaperButton
+                            size="small"
+                            onClick={() => viewLicense("mit")}
+                            aria-label="View MIT license"
+                        >
+                            View
                         </PaperButton>
                     </PaperSettingItem>
-                </Show>
-            </PaperSettingList>
+                </PaperSettingList>
 
-            {/* browser mode: the browser keeps its own permissions */}
-            <Show when={!isBrowserShell() && props.panelName}>
-                {(panelName) => <PanelPermissionSettings panelName={panelName()} />}
-            </Show>
-
-            <PaperSectionHeader icon="license" title="Licenses" />
-            <PaperSettingList autoHeight>
-                <PaperSettingItem
-                    title="PolyForm Noncommercial 1.0.0"
-                    description="Your Paperboard experience"
-                >
-                    <PaperButton
-                        size="small"
-                        onClick={() => viewLicense("paperboard")}
-                        aria-label="View PolyForm Noncommercial 1.0.0 license"
-                    >
-                        View
-                    </PaperButton>
-                </PaperSettingItem>
-                <PaperSettingItem title="MIT license" description="Applies to SDKs">
-                    <PaperButton
-                        size="small"
-                        onClick={() => viewLicense("mit")}
-                        aria-label="View MIT license"
-                    >
-                        View
-                    </PaperButton>
-                </PaperSettingItem>
-            </PaperSettingList>
-
-            {licenseModal}
-        </PaperPage>
+                {licenseModal}
+            </PaperPage>
+        </Show>
     );
 }
 
