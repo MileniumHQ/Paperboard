@@ -10,6 +10,7 @@ import {
     type UpdateQueueState,
     type UpdateStage,
 } from "../shared/updateQueue";
+import { pushToShells } from "./communication/shellPush";
 
 export type UpdateItemIdentity = Pick<UpdateItem, "key" | "kind" | "computerId" | "computerName" | "panelId" | "name" | "version">;
 
@@ -66,16 +67,17 @@ export class UpdateQueue {
      */
     enqueue(job: UpdateJob): Promise<UpdateItem[]> {
         if (job.items.length === 0) throw new Error("An update job needs an item");
-        const settled = Promise.all(job.items.map((identity) => new Promise<UpdateItem>((resolve) =>
-            this.settles.set(identity.key, [...(this.settles.get(identity.key) ?? []), resolve]))));
-        const active = (key: string) => {
-            const existing = this.state.items.find((item) => item.key === key);
+        const active = job.items.filter((identity) => {
+            const existing = this.state.items.find((item) => item.key === identity.key);
             return existing?.status === "queued" || existing?.status === "running";
-        };
-        if (job.items.every((identity) => active(identity.key))) return settled;
-        if (job.items.some((identity) => active(identity.key))) {
+        });
+        // refused before anyone waits on it, so no waiter outlives the refusal
+        if (active.length > 0 && active.length < job.items.length) {
             throw new Error("Part of that update is already in the list");
         }
+        const settled = Promise.all(job.items.map((identity) => new Promise<UpdateItem>((resolve) =>
+            this.settles.set(identity.key, [...(this.settles.get(identity.key) ?? []), resolve]))));
+        if (active.length > 0) return settled;
         this.startBatchIfIdle();
         const keys = new Set(job.items.map((identity) => identity.key));
         const items = job.items.map((identity): UpdateItem => ({
@@ -215,3 +217,6 @@ function clean(progress: UpdateProgress): Partial<UpdateItem> {
     if (progress.bytesTotal !== undefined) out.bytesTotal = progress.bytesTotal;
     return out;
 }
+
+/** the one update list every shell shows */
+export const updateQueue = new UpdateQueue((state) => pushToShells("update-queue", state));

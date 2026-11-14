@@ -32,11 +32,13 @@ export const SHELL_INVOKE_CHANNELS = [
     "panel-permission-set",
     "open-system-privacy",
     "app-settings-changed",
+    "quit-and-install",
+    "panels-unsaved",
+    "quit-answer",
 ] as const;
 
 export const SHELL_SEND_CHANNELS = [
     "ping",
-    "quit-and-install",
     "quit-app",
     "renderer-log",
 ] as const;
@@ -52,4 +54,5 @@ export const SHELL_ON_CHANNELS = [
     "panel-screen-pick",
     "panel-permission-system",
     "panel-permissions-changed",
+    "quit-ask",
 ] as const;

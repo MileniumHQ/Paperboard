@@ -6,11 +6,11 @@
 // The operating system has its own say on macOS and Windows: when it blocks
 // Paperboard, the window says so and opens the right system settings.
 import { desktopCapturer, shell, systemPreferences, webContents as allWebContents, type Session, type WebContents } from "electron";
-import { randomUUID } from "crypto";
 import * as path from "path";
 import { logger } from "../../papercrane/logger";
 import { getLocalDir } from "../../papercrane/paths";
 import { pushToShells } from "./communication/shellPush";
+import { answerShellAsk, askShell } from "./shellAsk";
 import {
     PanelPermissionStore,
     checkedPermission,
@@ -48,34 +48,9 @@ export function panelPermissionStore(): PanelPermissionStore {
     return store;
 }
 
-const pending = new Map<string, { wc: WebContents; settle: (value: unknown) => void }>();
-
-/** Ask the shell in `wc`; null when the window goes away before it answers. */
-function askShell(wc: WebContents | null, channel: string, payload: Record<string, unknown>): Promise<unknown> {
-    if (!wc || wc.isDestroyed()) return Promise.reject(new Error("there's no window to ask in"));
-    const askId = randomUUID();
-    return new Promise((resolve) => {
-        const gone = () => settle(null);
-        const settle = (value: unknown) => {
-            if (!pending.delete(askId)) return;
-            wc.off("destroyed", gone);
-            wc.off("render-process-gone", gone);
-            resolve(value);
-        };
-        pending.set(askId, { wc, settle });
-        wc.once("destroyed", gone);
-        wc.once("render-process-gone", gone);
-        wc.send(channel, { askId, ...payload });
-    });
-}
-
-/** The shell's answer to an ask; only the window that was asked may answer it. */
+/** The shell's answer to a permission ask or screen pick. */
 export function answerPanelPermissionAsk(sender: WebContents, args: unknown): void {
-    const a = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
-    const ask = typeof a.askId === "string" ? pending.get(a.askId) : undefined;
-    if (!ask) throw new Error("That question was already answered, or never asked");
-    if (ask.wc !== sender) throw new Error("Only the window that was asked can answer");
-    ask.settle(a.answer ?? null);
+    answerShellAsk(sender, ["panel-permission-ask", "panel-screen-pick"], args);
 }
 
 export function openSystemPrivacySettings(permission: unknown): Promise<void> {

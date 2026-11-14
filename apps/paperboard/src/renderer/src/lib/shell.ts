@@ -252,6 +252,15 @@ export function logToMain(
 
 // Panels ask for the microphone, camera or screen; main asks the window the
 // panel is in (PanelPermissionPrompt) and keeps the answers per panel.
+// A quit the person asks for waits for this window's pages with unsaved
+// work (main's quitGate.ts): the window says whether it holds any, and
+// answers main's ask once they had their say.
+export const quitApi = {
+    setUnsaved: (unsaved: boolean): Promise<void> => requireIpc().invoke<void>("panels-unsaved", unsaved),
+    onAsk: (cb: (ask: { askId: string }) => void) => listen("quit-ask", cb),
+    answer: (askId: string, quit: boolean): Promise<void> => requireIpc().invoke<void>("quit-answer", { askId, answer: quit }),
+};
+
 export const panelPermissionsApi = {
     list: (): Promise<PanelPermissionEntry[]> =>
         requireIpc().invoke<PanelPermissionEntry[]>("panel-permissions-list"),

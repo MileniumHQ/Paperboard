@@ -7,6 +7,7 @@ import { setRunOnStartup } from "./loginItem";
 import { withAppSettingsDefaults } from "../shared/appSettingsDefaults";
 import { effectiveLook, graphicsFrom, type Graphics } from "../shared/graphics";
 import { pushToShells } from "./communication/shellPush";
+import { getLocalDir } from "../../papercrane/paths";
 import {
     TITLEBAR_OVERLAY_COLORS,
     TITLEBAR_SYMBOL_COLORS,
@@ -29,12 +30,8 @@ const DEFAULTS: AppSettings = {
     runOnStartup: false,
 };
 
-// the daemon's paths module owns this fact (one implementation) — the
-// loader/restorer/etc. already resolve through it
-import { getPaperboardDir as paperboardDir } from "../../papercrane/paths";
-
 export function appSettingsPath(): string {
-    return path.join(paperboardDir(), "local", "app-settings.json");
+    return path.join(getLocalDir(), "app-settings.json");
 }
 
 export function readAppSettings(): AppSettings {

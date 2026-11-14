@@ -17,7 +17,9 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { startCommunicator, logRendererMessage } from "./communication/communication";
 import { allowDevShellOrigin, keepShellNavigation, opensExternally } from "./communication/shellGuard";
 import connectionPool from "./communication/papercrane/ConnectionPool";
-import { startBackgroundUpdates, disposeAppUpdater } from "./updater";
+import { startBackgroundUpdates, stopBackgroundUpdates } from "./updater";
+import { disposeAppUpdater } from "./appUpdater";
+import { agreeToQuit, holdQuit, quitWithoutAsking } from "./quitGate";
 import { initAppSettingsSync } from "./appSettings";
 import { logger } from "../../papercrane/logger";
 import {
@@ -235,6 +237,8 @@ function createWindow(): void {
     // closing the window hides Paperboard to the tray; running services keep
     // going and the tray icon brings the window back. Quit from the tray or
     // an explicit app.quit() really closes.
+    // Windows logging off or shutting down
+    mainWindow.on("session-end", agreeToQuit);
     mainWindow.on("close", (event) => {
         if (quitting) return;
         event.preventDefault();
@@ -411,7 +415,6 @@ app.whenReady().then(async () => {
             path.join(process.resourcesPath, "app.asar.unpacked", "resources", "icon.png"),
             path.join(__dirname, "../../resources/icon.png"),
         ];
-        // existsSync never throws meaningfully — no try/catch fallback needed
         const iconPath = iconCandidates.find((p) => fs.existsSync(p));
         app.setAboutPanelOptions({
             applicationName: "Paperboard",
@@ -524,12 +527,12 @@ app.whenReady().then(async () => {
         return new Response(new Uint8Array(file.data), { headers: file.headers });
     });
 
+    // a signal or the system shutting down quits without asking
+    for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, quitWithoutAsking);
+    powerMonitor.on("shutdown", quitWithoutAsking);
     if (browserMode) {
         // no background updates either: they run when Paperboard next
         // runs as a window
-        for (const signal of ["SIGINT", "SIGTERM"] as const) {
-            process.on(signal, () => app.quit());
-        }
         if (webLaunch) await openInBrowser();
         else await serveBrowserShell();
     } else {
@@ -559,9 +562,12 @@ app.on("window-all-closed", () => {
 });
 
 // kill local processes and disconnect clients on quit
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
+    // a quit the person asked for waits while pages with unsaved work ask
+    if (holdQuit(event)) return;
     stopScreenshotTool?.();
     disposeAppUpdater();
+    stopBackgroundUpdates();
     quitting = true;
     log.info("[Main] quitting; cleaning up local processes and connections");
     try {

@@ -1,6 +1,8 @@
-import { type Component, createSignal, Show } from "solid-js";
-import { PaperProvider, PaperFlex, PaperModal, PaperSlidePage } from "@mileniumhq/paperui";
-import { isBrowserShell } from "./lib/shell";
+import { type Component, createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
+import { PaperProvider, PaperFlex, PaperModal, PaperSlidePage, showToast } from "@mileniumhq/paperui";
+import { isBrowserShell, quitApi } from "./lib/shell";
+import { unsavedPanels } from "./lib/unsavedPanels";
+import { errorMessage } from "./lib/errorMessage";
 import AppSettings from "./components/settings/AppSettings";
 import PanelPermissionPrompt from "./components/panels/PanelPermissionPrompt";
 import type { UninstallTarget } from "./components/panels/UninstallPanelModal";
@@ -50,6 +52,20 @@ const App: Component = () => {
     const nav = useShellNavigation({ computers: computerState, panels: panelState, selection, panelName });
     const { mobile, listedComputers } = nav;
     useStartUp({ computers: computerState, panels: panelState, settings, navigation: nav });
+
+    // a quit asks this window's pages with unsaved work first (main's quitGate.ts)
+    if (!isBrowserShell()) {
+        const holdsUnsaved = createMemo(() => unsavedPanels().size > 0);
+        createEffect(on(holdsUnsaved, (unsaved) => {
+            quitApi.setUnsaved(unsaved).catch((err) =>
+                showToast({ variant: "danger", title: "Quitting won't ask about unsaved changes", message: errorMessage(err) }));
+        }));
+        onCleanup(quitApi.onAsk(async ({ askId }) => {
+            const quit = await nav.mayClosePanels([...unsavedPanels()]);
+            await quitApi.answer(askId, quit).catch((err) =>
+                showToast({ variant: "danger", title: "Paperboard couldn't quit", message: errorMessage(err) }));
+        }));
+    }
 
     const restarts = usePanelRestarts({
         updateQueue,

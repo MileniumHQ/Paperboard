@@ -1,25 +1,10 @@
-import { type IpcMain, type WebContents, webContents } from "electron";
+import { type IpcMain, webContents } from "electron";
 import shelldata from "./shelldata";
 import discovery from "./discovery";
 import connectionPool from "./papercrane/ConnectionPool";
 import { logger } from "../../../papercrane/logger";
-import { isRefusedFrame } from "./shellGuard";
+import { isRefusedFrame, isShellUrl } from "./shellGuard";
 import { addShellPushSink, pushToShells } from "./shellPush";
-
-// R11: event-push channels (discovery-changed, computers-changed, app-*)
-// broadcast to shell documents only. A panel iframe's URL is always
-// panel:// (same invariant shellGuard enforces per invoke channel); an
-// unreadable URL is treated as a panel frame — deny-by-default, same
-// polarity as isRefusedFrame.
-function isPanelWebContents(wc: WebContents): boolean {
-    try {
-        const url = wc.getURL?.() ?? "";
-        return url === "panel://" || url.startsWith("panel://");
-    } catch (err) {
-        logger.debug("[Shell] push filter could not read webContents URL:", err);
-        return true;
-    }
-}
 
 // renderer errors land in main log; call as logger.log() to preserve this.
 // Browser mode forwards its renderer-log sends here too.
@@ -52,14 +37,12 @@ export function startCommunicator(ipcMain: IpcMain) {
     });
     shelldata(ipcMain);
 
-    // R11: event-push channels go to shell documents only — panel iframes
-    // inherit this main process and must not receive shell discovery or
-    // pairing state. Browser-mode tabs attach their own sink (browserHost).
+    // event pushes go to shell documents only, by the same allowlist every
+    // shell channel answers by: a panel, the screenshot controller or any
+    // other page gets none. Browser-mode tabs attach their own sink (browserHost).
     const removeWindowSink = addShellPushSink((channel, payload) => {
         for (const wc of webContents.getAllWebContents()) {
-            if (!wc.isDestroyed() && !isPanelWebContents(wc)) {
-                wc.send(channel, payload);
-            }
+            if (!wc.isDestroyed() && isShellUrl(wc.getURL())) wc.send(channel, payload);
         }
     });
 

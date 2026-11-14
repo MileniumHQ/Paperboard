@@ -7,7 +7,7 @@ import { contextBridge, ipcRenderer } from "electron";
 // enforcement boundary: main answers a channel only when
 // event.senderFrame.url is the shell's own origin (shellGuard.ts), shell
 // windows refuse to navigate away from it, and the event-PUSH channels are
-// filtered at the broadcast (communication.ts isPanelWebContents). This
+// filtered at the broadcast (communication.ts, isShellUrl). This
 // allowlist is defense-in-depth.
 
 import {

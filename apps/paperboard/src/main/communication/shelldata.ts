@@ -7,7 +7,12 @@ import * as path from "path";
 import { sanitizeId } from "../../../papercrane/storage";
 import { logger } from "../../../papercrane/logger";
 import { getAppUpdateState } from "../appUpdateSession";
-import { appUpdateDownloadUrl, checkForUpdatesNow, quitAndInstallAppUpdate, releaseHolds, updateQueue } from "../updater";
+import { checkForUpdatesNow } from "../updater";
+import { appUpdateDownloadUrl, restartToUpdate } from "../appUpdater";
+import { releaseHolds } from "../updateHolds";
+import { updateQueue } from "../updateQueue";
+import { setShellUnsaved } from "../quitGate";
+import { answerShellAsk } from "../shellAsk";
 import { assertShellFrame, isRefusedFrame } from "./shellGuard";
 import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./shellHandlers";
 import { runPanelImport, runPanelExport, type PanelFileTransferDeps } from "../panelFileTransfer";
@@ -249,17 +254,21 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         await shell.openExternal(appUpdateDownloadUrl());
     });
 
-    // restart into staged update; no-op without a download
-    ipcMain.on("quit-and-install", (event) => {
-        if (isRefusedFrame(event)) {
-            logger.warn('[Shell] PANEL_IPC_REFUSED: channel "quit-and-install" is shell-only');
-            return;
-        }
-        try {
-            quitAndInstallAppUpdate();
-        } catch (err: any) {
-            logger.warn("[Shell] quit-and-install failed:", err?.message ?? err);
-        }
+    // Restart to update: false when a page with unsaved work kept
+    // Paperboard open; a refusal reaches the dialog that asked
+    ipcMain.handle("quit-and-install", (event) => {
+        assertShellFrame(event, "quit-and-install");
+        return restartToUpdate();
+    });
+
+    // whether this window's panels hold unsaved work, which a quit asks about
+    ipcMain.handle("panels-unsaved", (event, value) => {
+        assertShellFrame(event, "panels-unsaved");
+        setShellUnsaved(event.sender, value === true);
+    });
+    ipcMain.handle("quit-answer", (event, args) => {
+        assertShellFrame(event, "quit-answer");
+        answerShellAsk(event.sender, ["quit-ask"], args);
     });
 
     // full quit from the settings UI: the same path as the tray/menu Quit

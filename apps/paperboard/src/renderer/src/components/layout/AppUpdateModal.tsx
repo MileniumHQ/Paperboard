@@ -1,5 +1,5 @@
 import { createSignal, Show } from "solid-js";
-import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress } from "@mileniumhq/paperui";
+import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress, showToast } from "@mileniumhq/paperui";
 import type { AppUpdateState } from "../../../../shared/appUpdate";
 import { errorMessage } from "../../lib/errorMessage";
 import { shellIpc } from "../../lib/shell";
@@ -23,6 +23,12 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
         try { await shellIpc().invoke("open-update-download"); }
         catch (err) { setDownloadError(`Could not open downloads: ${errorMessage(err)}`); }
     };
+    // the dialog closes first: a page with unsaved work asks in its own
+    const restart = () => {
+        props.onClose();
+        shellIpc().invoke("quit-and-install").catch((err) =>
+            showToast({ variant: "danger", title: "Paperboard couldn't restart to update", message: errorMessage(err) }));
+    };
     return <PaperModal
         open={props.open}
         onClose={props.onClose}
@@ -41,7 +47,7 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
                 }}>{packageManaged() ? "Retry check" : "Retry update"}</PaperButton>
             </Show>
             <Show when={ready()}>
-                <PaperButton onClick={() => shellIpc().send("quit-and-install")}>Restart to update</PaperButton>
+                <PaperButton onClick={restart}>Restart to update</PaperButton>
             </Show>
         </>}
     >
