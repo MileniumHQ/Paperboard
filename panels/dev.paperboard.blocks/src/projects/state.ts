@@ -1,7 +1,7 @@
 // The project list as every window sees it: the service's state, kept live
 // through the panel bridge, and the changes a person makes to it. Every
 // change goes through the service, which writes the list and announces it.
-import { createSignal, onCleanup } from "solid-js";
+import { batch, createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { bridge } from "../bridge";
 import { SERVICE_CALLS, type PanelState } from "../panel";
@@ -13,10 +13,17 @@ export function createProjects() {
     // reconciled by id, so a project keeps its object across announcements and
     // its card stays mounted: a remounted switch would skip its slide
     const [state, setState] = createStore<PanelState>(structuredClone(bridge.getState()));
-    const apply = (full: PanelState) => setState(reconcile(structuredClone(full), { key: "id" }));
+    // only what the announcement carries: a log line is a patch of the log alone, so
+    // the projects aren't cloned and compared again with it
+    const apply = (patch: Partial<PanelState>) =>
+        batch(() => {
+            for (const [key, value] of Object.entries(patch) as [keyof PanelState, PanelState[keyof PanelState]][]) {
+                setState(key, reconcile(structuredClone(value), { key: "id" }));
+            }
+        });
     const [ready, setReady] = createSignal(false);
     const [loadError, setLoadError] = createSignal<string | null>(null);
-    const off = bridge.onStateChange((_patch, full) => apply(full));
+    const off = bridge.onStateChange((patch) => apply(patch));
     onCleanup(off);
 
     const load = async () => {

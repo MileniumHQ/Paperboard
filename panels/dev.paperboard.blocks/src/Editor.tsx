@@ -125,7 +125,9 @@ export default function Editor(props: {
     let trashTile!: HTMLDivElement;
     const [trash, setTrash] = createSignal<TrashState>({ dragging: false, over: false });
     let workspace: Blockly.WorkspaceSvg | undefined;
-    const [state, setState] = createSignal<PanelState>(bridge.getState());
+    // the bridge's state as the projects store keeps it (reconciled by id): a log line adds one row
+    // to the console rather than handing it a whole new list of rows
+    const state = props.projects.state;
     const [notice, setNotice] = createSignal<Notice | null>(null);
     const [registry, setRegistry] = createSignal<Registry>({ panels: [], projects: [], sections: [] });
     const [selected, setSelected] = createSignal(builtinId(BUILTIN_SECTIONS[0]!.name));
@@ -442,7 +444,6 @@ export default function Editor(props: {
         };
         const resize = new ResizeObserver(fit);
         const offState = bridge.onStateChange((_patch, full) => {
-            setState(full);
             showErrors(full);
         });
 
