@@ -3,7 +3,6 @@
  * publish.ts: interactive build & publish console for Paperboard.
  *
  *   bun scripts/publish.ts        # interactive menu (needs a TTY)
- *   bun scripts/publish.ts usb    # headless USB test bundle (bun run usb)
  *
  * Nothing leaves the machine except through the Publish flows, and each of
  * those confirms twice before any upload. Pure release-math (tags, asset
@@ -30,7 +29,6 @@ import {
     mkdirSync,
     rmSync,
     cpSync,
-    statSync,
     chmodSync,
 } from "fs";
 import { join, basename, extname } from "path";
@@ -52,7 +50,6 @@ import {
     paperboardPackages,
     isUpdatePayload,
     expectedReleaseAssets,
-    missingLinuxPackageTools,
     buildCraneIndex,
     buildSha256Sums,
     SHA256SUMS_KEY,
@@ -64,18 +61,12 @@ import {
     mergeVersionRecord,
     osOf,
     ORIGAMI_HOST,
-    parseUsbArgs,
     storeUploadParts,
     tagFor,
-    targetsForOses,
-    USB_ARCHES,
-    USB_OSES,
     ymlKeyFor,
-    type Arch,
     type DlApp,
     type DlAppRecord,
     type Feed,
-    type Os,
     type Target,
     type VersionFileEntry,
     type YmlEntry,
@@ -560,7 +551,7 @@ async function flowBuildBinaries(): Promise<void> {
 
     const built = await buildSelected(jobs);
 
-    // Local record (informational; the USB bundle rebuilds from scratch).
+    // Local record (informational).
     for (const app of ["pb", "crane"] as DlApp[]) {
         const mine = built.filter((b) => b.app === app);
         if (!mine.length) continue;
@@ -1227,298 +1218,6 @@ async function flowPublishPackages(): Promise<void> {
     p.outro("npm updated.");
 }
 
-// ─── USB test bundle (headless-capable, OS-selectable) ──────────────────────
-// Builds Paperboard installers + crane binaries + all panels into ../usb/:
-//
-//   usb/
-//     installers/    win setup exe, mac ZIP, linux AppImage/deb/rpm (per selected arch)
-//     crane/         papercrane-<target> binaries
-//     panels/        <board-id>/ (manifest.json + dist/ + branding/)
-//     link-panels.sh symlinks panels/ into ~/.paperboard/panels/ for testing
-//     README.txt
-//
-// Only the requested operating systems and architectures are bundled: a
-// Windows-only or arm64-only run skips the other crane/target builds and
-// stages only the selected installers. (macOS still compiles both arches in
-// its single electron-builder pass; only the selected ZIPs are copied.)
-//
-//   bun scripts/publish.ts usb                       # pick OSes+arches (TTY)
-//   bun scripts/publish.ts usb --os windows          # Windows only
-//   bun scripts/publish.ts usb --os linux,macos      # comma-separated
-//   bun scripts/publish.ts usb --arch arm64          # arm64 targets only
-//
-// Never publishes anything. Copy the folder onto a USB stick and test anywhere.
-
-function printUsbHelp(): void {
-    console.log(`Build a USB test bundle (never uploads).
-
-  bun scripts/publish.ts usb                       pick OSes+arches interactively
-  bun scripts/publish.ts usb --os windows          Windows only
-  bun scripts/publish.ts usb --os linux,macos      several, comma-separated
-  bun scripts/publish.ts usb --os windows --os macos
-  bun scripts/publish.ts usb --arch arm64          arm64 targets only
-  bun scripts/publish.ts usb --os linux --arch x64,arm64
-
-Options:
-  -o, --os <list>     windows, macos, linux (comma-separated or repeated)
-  -a, --arch <list>   x64, arm64 (comma-separated or repeated)
-  -h, --help          show this help`);
-}
-
-async function chooseUsbOses(requested: Os[] | null): Promise<Os[]> {
-    if (requested) return requested;
-    if (!process.stdin.isTTY || !process.stdout.isTTY) {
-        console.log("No TTY — bundling every OS (pass `--os <list>` to narrow it).");
-        return [...USB_OSES];
-    }
-    const picked = checkCancel(
-        await p.multiselect({
-            message: "Which operating systems to bundle?",
-            options: USB_OSES.map((os) => ({
-                value: os,
-                label: os,
-                hint: `${targetsForOses([os]).length} server target(s)`,
-            })),
-            required: true,
-        }),
-    ) as Os[];
-    if (!picked.length) cancelled();
-    return picked;
-}
-
-async function chooseUsbArches(requested: Arch[] | null): Promise<Arch[]> {
-    if (requested) return requested;
-    if (!process.stdin.isTTY || !process.stdout.isTTY) {
-        console.log("No TTY — bundling every architecture (pass `--arch <list>` to narrow it).");
-        return [...USB_ARCHES];
-    }
-    const picked = checkCancel(
-        await p.multiselect({
-            message: "Which architectures to bundle?",
-            options: USB_ARCHES.map((arch) => ({
-                value: arch,
-                label: arch,
-                hint: `${targetsForOses(USB_OSES, [arch]).length} server target(s)`,
-            })),
-            required: true,
-        }),
-    ) as Arch[];
-    if (!picked.length) cancelled();
-    return picked;
-}
-
-function assertLinuxPackageTools(): void {
-    const missing = missingLinuxPackageTools(Bun.which);
-    if (missing) throw new Error(missing);
-}
-
-const isLinuxInstaller = (f: string) => /\.(AppImage|deb|rpm)$/.test(f);
-
-async function buildUsbFolder(oses: Os[], arches: Arch[]) {
-    const USB = join(HERE, "..", "usb");
-    const usbDistDir = join(HERE, "dist");
-    const installersDir = join(USB, "installers");
-    const craneDir = join(USB, "crane");
-    const panelsDir = join(USB, "panels");
-    const selected = new Set(oses);
-    const selectedArches = new Set(arches);
-
-    console.log(
-        `\n💾 Building USB test bundle (paperboard v${version}; ${oses.join(", ")}; ${arches.join(", ")}) → ${USB}\n`,
-    );
-    rmSync(USB, { recursive: true, force: true });
-    mkdirSync(installersDir, { recursive: true });
-    mkdirSync(craneDir, { recursive: true });
-    mkdirSync(panelsDir, { recursive: true });
-
-    if (selected.has("macos")) {
-        for (const target of targetsForOses(["macos"], arches)) assertMacHost(target);
-    }
-
-    const snapshotDist = () => Date.now();
-    const copyNew = (buildStart: number, dest: string, match: (f: string) => boolean) => {
-        // Rebuilds overwrite the same filename, so freshness is by mtime.
-        const fresh = readdirSync(usbDistDir).filter((f) => {
-            if (!match(f)) return false;
-            try {
-                return statSync(join(usbDistDir, f)).mtimeMs >= buildStart - 5000;
-            } catch (err) {
-                console.debug("stat raced deletion, skipping:", String(err));
-                return false;
-            }
-        });
-        for (const f of fresh) cpSync(join(usbDistDir, f), join(dest, f));
-        return fresh;
-    };
-
-    // 1. Paperboard installers per OS (macOS ZIPs are copied below)
-    const osBuilds: {
-        os: Os;
-        arch: Arch;
-        script: string;
-        match: (f: string) => boolean;
-    }[] = [
-        { os: "windows", arch: "x64", script: "build:win", match: (f) => f.endsWith("-setup.exe") },
-        { os: "linux", arch: "x64", script: "build:linux", match: isLinuxInstaller },
-        { os: "linux", arch: "arm64", script: "build:linux-arm64", match: isLinuxInstaller },
-    ];
-    const installerFiles: string[] = [];
-    if (selected.has("linux")) assertLinuxPackageTools();
-    await buildWorkspacePackages();
-    for (const { os, arch, script, match } of osBuilds) {
-        if (!selected.has(os) || !selectedArches.has(arch)) continue;
-        console.log(`\n🔨 Building Paperboard for ${os}…\n`);
-        const before = snapshotDist();
-        await $`bun run ${script}`.cwd(HERE);
-        const fresh = copyNew(before, installersDir, match);
-        if (!fresh.length) throw new Error(`No fresh installer found in ${usbDistDir} after ${script}`);
-        installerFiles.push(...fresh.map((f) => `installers/${f}`));
-        console.log(`   → ${fresh.join(", ")}`);
-    }
-
-    // Bundle the same macOS ZIPs we publish (installer and updater payload).
-    if (selected.has("macos")) {
-        console.log(`\n🔨 Building Paperboard for macos…\n`);
-        const before = snapshotDist();
-        await $`bun run build:mac`.cwd(HERE);
-        for (const target of targetsForOses(["macos"], arches)) {
-            const installer = paperboardArtifacts(target, version);
-            const fresh = copyNew(before, installersDir, (f) => f === installer.buildFile);
-            if (!fresh.length) throw new Error(`No fresh macOS ZIP found: ${installer.buildFile}`);
-            installerFiles.push(...fresh.map((f) => `installers/${f}`));
-            console.log(`   → ${fresh.join(", ")}`);
-        }
-    }
-
-    // 2. Crane binaries, limited to the selected OSes
-    const craneFiles: string[] = [];
-    for (const target of targetsForOses(oses, arches)) {
-        const os = osOf(target);
-        const bunTarget = BUN_TARGET_MAP[target];
-        const outName = os === "windows" ? `papercrane-${target}.exe` : `papercrane-${target}`;
-        console.log(`\n🔨 Building Paperboard Server for ${target}…`);
-        await $`bun build --compile --target=${bunTarget} ${craneCompileFlags(target)} ./papercrane/main.ts ${buildSupervisor(target)} --outfile ./dist/${outName}`.cwd(HERE);
-        const built = join(usbDistDir, outName);
-        if (!existsSync(built)) throw new Error(`No Paperboard Server binary found at ${built}`);
-        if (os === "windows") applyCraneWindowsIcon(built);
-        if (os === "macos") await signMacBinary(built);
-        cpSync(built, join(craneDir, outName));
-        craneFiles.push(`crane/${outName}`);
-    }
-
-    // 3. All panels under panels/ (shared discovery with the publish flow —
-    // listPanels reads the same root, validates each manifest, and reports
-    // failures instead of silently bundling nothing).
-    const panelEntries: { id: string; name: string; version: string }[] = [];
-    for (const info of listPanels()) {
-        console.log(`\n📦 Building panel ${info.id}…\n`);
-        await $`bun run build`.cwd(info.dir);
-        assertRelativePanelBuild(info.dir, info.id);
-        const dest = join(panelsDir, info.id);
-        mkdirSync(dest, { recursive: true });
-        cpSync(join(info.dir, "manifest.json"), join(dest, "manifest.json"));
-        if (existsSync(join(info.dir, "dist"))) cpSync(join(info.dir, "dist"), join(dest, "dist"), { recursive: true });
-        if (existsSync(join(info.dir, "branding"))) {
-            cpSync(join(info.dir, "branding"), join(dest, "branding"), { recursive: true });
-        } else if (existsSync(join(info.dir, "icon.png"))) {
-            cpSync(join(info.dir, "icon.png"), join(dest, "icon.png"));
-        }
-        panelEntries.push({ id: info.id, name: info.name, version: info.version });
-    }
-    if (!panelEntries.length) {
-        throw new Error(
-            `No panels found under ${PANELS_ROOT} — the USB bundle would ship without panels.`,
-        );
-    }
-
-    // 4. Symlink helper: links every bundled panel into ~/.paperboard/panels/
-    // (the crane serves symlinked panels as-is and refuses to overwrite them
-    // on install, so they behave as dev-linked panels for testing).
-    const linkScript = `#!/bin/sh
-# Links every panel in this USB bundle into ~/.paperboard/panels/ for testing.
-# Usage: ./link-panels.sh
-set -eu
-SRC="$(cd "$(dirname "$0")/panels" && pwd)"
-DEST="\${PAPERBOARD_DIR:-\$HOME/.paperboard}/panels"
-mkdir -p "$DEST"
-for d in "$SRC"/*/; do
-    id="$(basename "$d")"
-    ln -sfn "$SRC/$id" "$DEST/$id"
-    echo "linked $id -> $DEST/$id"
-done
-echo "done. Restart Paperboard to pick up the panels."
-`;
-    const linkPath = join(USB, "link-panels.sh");
-    writeFileSync(linkPath, linkScript);
-    await $`chmod +x ${linkPath}`;
-
-    // Windows twin: directory junctions need no admin rights (unlike
-    // symlinks). Double-click to run.
-    const linkBat = `@echo off
-REM Links every panel in this USB bundle into %USERPROFILE%\\.paperboard\\panels\\ for testing.
-REM Usage: double-click link-panels.bat
-setlocal
-set "SRC=%~dp0panels"
-if "%PAPERBOARD_DIR%"=="" (set "DEST=%USERPROFILE%\\.paperboard\\panels") else (set "DEST=%PAPERBOARD_DIR%\\panels")
-if not exist "%DEST%" mkdir "%DEST%"
-for /d %%d in ("%SRC%\\*") do (
-    if exist "%DEST%\\%%~nxd" rmdir "%DEST%\\%%~nxd" 2>nul
-    mklink /J "%DEST%\\%%~nxd" "%%d" >nul 2>&1
-    if errorlevel 1 (
-        echo FAILED: %%~nxd ^(enable Developer Mode or run as admin^)
-    ) else (
-        echo linked %%~nxd
-    )
-)
-echo done. Restart Paperboard to pick up the panels.
-`;
-    writeFileSync(join(USB, "link-panels.bat"), linkBat);
-
-    const readme = `Paperboard v${version} USB test bundle (built ${new Date().toISOString()})
-
-INSTALLERS (installers/)
-${installerFiles.map((f) => `  ${f}`).join("\n")}
-
-  Install: Windows -> run the setup exe; macOS -> unzip and drag
-  Paperboard.app to Applications; Linux -> chmod +x the .AppImage and run it, or install the .deb / .rpm.
-
-  PAPERBOARD SERVER BINARIES (crane/)
-  Standalone Paperboard server daemon per target. Mostly useful for headless boxes:
-    ./papercrane-linux-x64 --help
-${craneFiles.map((f) => `  ${f}`).join("\n")}
-
-PANELS (panels/)
-${panelEntries.map((p) => `  ${p.id} (${p.name} v${p.version})`).join("\n")}
-
-  Panels are prebuilt (dist/ included). To test them:
-    1. Copy this folder anywhere, e.g. ~/paperboard-usb
-    2. USB sticks strip executable bits; restore them first:
-         macOS/Linux: chmod +x crane/* link-panels.sh
-         (Windows .exe files are unaffected.)
-    3. ./link-panels.sh  (macOS/Linux) or double-click link-panels.bat (Windows)
-       (symlinks/junctions each panel into ~/.paperboard/panels/)
-    4. (Re)start Paperboard; linked panels load as-is
-
-  Set PAPERBOARD_DIR=... before running the script to target a custom data dir.
-  The Paperboard Server never overwrites a symlinked panel on registry install.
-
-  LAN PAIRING / WINDOWS FIREWALL
-  Remote devices reach the Paperboard server daemon over TLS on its port (default 45464).
-  Pairing trusts the certificate the daemon shows the first time, and every later
-  connection is pinned to it, so pair on a home or other trusted network you control.
-  On Windows, accept the Firewall first-listen prompt for the server/app binary.
-  If remote pairing times out while localhost works, the prompt was declined
-  or the binary moved: add an inbound exception manually (Windows Defender
-  Firewall > Allow an app through firewall > papercrane). macOS/Linux need
-  nothing (no default firewall blocks).
-`;
-    writeFileSync(join(USB, "README.txt"), readme);
-
-    console.log(`\n✅ USB bundle ready → ${USB}`);
-    console.log(`   ${installerFiles.length} installer(s), ${craneFiles.length} server binaries, ${panelEntries.length} panel(s)`);
-    console.log(`   Copy the folder onto a USB stick and run ./link-panels.sh on the test machine.\n`);
-}
-
 // ─── Menu ───────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -1531,15 +1230,6 @@ async function main(): Promise<void> {
         console.error(bunMismatch);
         process.exit(1);
     }
-    if (argv[0] === "usb") {
-        const { oses, arches, help } = parseUsbArgs(argv.slice(1));
-        if (help) {
-            printUsbHelp();
-            return;
-        }
-        await buildUsbFolder(await chooseUsbOses(oses), await chooseUsbArches(arches));
-        return;
-    }
     if (argv[0] === "ci-build") {
         await flowCiBuild(argv.slice(1));
         return;
@@ -1549,7 +1239,7 @@ async function main(): Promise<void> {
         return;
     }
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
-        console.error("publish.ts is interactive — run it in a terminal (or `bun scripts/publish.ts usb` / `bun scripts/publish.ts republish-index --yes` headless).");
+        console.error("publish.ts is interactive — run it in a terminal (or `bun scripts/publish.ts republish-index --yes` headless).");
         process.exit(1);
     }
 
@@ -1563,7 +1253,6 @@ async function main(): Promise<void> {
                 { value: "panels", label: "Publish panels", hint: "pick panels, pack, upload to registry" },
                 { value: "unlist", label: "Unlist panels", hint: "take panels off the store, keep their records" },
                 { value: "packages", label: "Publish packages", hint: "pick npm packages, build, npm publish" },
-                { value: "usb", label: "Build USB test bundle", hint: "sneakernet testing, never uploads" },
             ],
         }),
     );
@@ -1583,9 +1272,6 @@ async function main(): Promise<void> {
             break;
         case "packages":
             await flowPublishPackages();
-            break;
-        case "usb":
-            await buildUsbFolder(await chooseUsbOses(null), await chooseUsbArches(null));
             break;
         default:
             cancelled();

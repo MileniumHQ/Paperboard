@@ -17,7 +17,6 @@
     "link:panels": "bun scripts/dev.ts link",
     "unlink:panels": "bun scripts/dev.ts unlink",
     "panels:status": "bun scripts/dev.ts status",
-    "usb": "bun scripts/publish.ts usb",
     "publish": "bun scripts/publish.ts"
   },
   "devDependencies": {

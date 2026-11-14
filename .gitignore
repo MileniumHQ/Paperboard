@@ -15,8 +15,6 @@ tmp/
 *.lcov
 .eslintcache
 coverage/
-# generated USB bundle (installers + panels), built by scripts/publish.ts
-apps/usb/
 # the workload supervisor, built from apps/paperboard/supervisor by scripts/supervisor.ts
 apps/paperboard/resources/supervisor/
 logs/
