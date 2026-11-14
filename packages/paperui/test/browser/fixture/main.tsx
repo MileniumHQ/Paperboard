@@ -7,11 +7,13 @@ import { createSignal, For, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import {
     PaperAudio,
+    PaperButton,
     PaperConsole,
     PaperContextMenu,
     PaperContextMenuHeader,
     PaperContextMenuItem,
     PaperContextMenuSub,
+    PaperInput,
     PaperInterfaceGroup,
     PaperInterfaceItem,
     PaperList,
@@ -22,6 +24,8 @@ import {
     PaperModal,
     PaperPanel,
     PaperProvider,
+    PaperRail,
+    PaperRailItem,
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperSlidePage,
@@ -68,6 +72,44 @@ const scenarios: Record<string, () => JSX.Element> = {
                     <p id="modal-body">The page under this dialog takes presses once it closes.</p>
                 </PaperModal>
             </>,
+        );
+    },
+
+    railReorder() {
+        const [order, setOrder] = createSignal(["home", "games", "files"]);
+        const [value, setValue] = createSignal("home");
+        const t = (window.t = { reorders: [] as string[][], order, value });
+        return shell(
+            <div style={{ padding: "24px", height: "400px", display: "flex" }}>
+                <PaperRail
+                    name="rail"
+                    value={value()}
+                    onValueChange={(v) => setValue(String(v))}
+                    onReorder={(next) => {
+                        t.reorders.push(next);
+                        setOrder(next);
+                    }}
+                >
+                    <For each={order()}>
+                        {(item) => <PaperRailItem value={item} icon="home" label={item} reorderable data-item={item} />}
+                    </For>
+                </PaperRail>
+            </div>,
+        );
+    },
+
+    modalFocus() {
+        const [open, setOpen] = createSignal(false);
+        window.t = { isOpen: () => open() };
+        return shell(
+            <div style={{ padding: "24px" }}>
+                <PaperButton id="opener" onClick={() => setOpen(true)}>
+                    Rename
+                </PaperButton>
+                <PaperModal open={open()} onClose={() => setOpen(false)} title="Rename">
+                    <input id="name" aria-label="Name" autofocus />
+                </PaperModal>
+            </div>,
         );
     },
 
@@ -195,6 +237,67 @@ const scenarios: Record<string, () => JSX.Element> = {
         );
     },
 
+    input() {
+        const [stored, setStored] = createSignal("Survival");
+        const [slow, setSlow] = createSignal("Survival");
+        const [code, setCode] = createSignal("");
+        const t = (window.t = {
+            saved: [] as string[],
+            slowSaved: [] as string[],
+            /** what the slow field showed while its save was under way */
+            slowSeen: [] as string[],
+            refused: [] as string[],
+            stored,
+            slow,
+            code,
+        });
+        return shell(
+            <div style={{ display: "flex", "flex-direction": "column", gap: "24px", padding: "24px", width: "320px" }}>
+                {/* saves on blur from the field itself, with no draft of its own */}
+                <PaperInput
+                    id="on-blur"
+                    label="Server name"
+                    value={stored()}
+                    onBlur={(e) => {
+                        t.saved.push(e.currentTarget.value);
+                        setStored(e.currentTarget.value);
+                    }}
+                />
+                {/* the same, answering once a save that takes a while is done */}
+                <PaperInput
+                    id="slow"
+                    label="Slow"
+                    value={slow()}
+                    onBlur={(e) => {
+                        const field = e.currentTarget;
+                        const next = field.value;
+                        return new Promise<void>((resolve) => {
+                            const watch = setInterval(() => t.slowSeen.push(field.value), 5);
+                            setTimeout(() => {
+                                clearInterval(watch);
+                                t.slowSaved.push(next);
+                                setSlow(next);
+                                resolve();
+                            }, 120);
+                        });
+                    }}
+                />
+                {/* reshapes every keystroke: capitals, no digits */}
+                <PaperInput
+                    id="sanitised"
+                    label="Code"
+                    value={code()}
+                    onInput={(e) => setCode(e.currentTarget.value.toUpperCase().replace(/[0-9]/g, ""))}
+                />
+                {/* keeps its value whatever is typed */}
+                <PaperInput id="refused" label="Fixed" value="fixed" onChange={(e) => t.refused.push(e.currentTarget.value)} />
+                <button id="elsewhere" type="button">
+                    elsewhere
+                </button>
+            </div>,
+        );
+    },
+
     toggle() {
         const [on, setOn] = createSignal(false);
         const t = (window.t = {
@@ -232,7 +335,8 @@ const scenarios: Record<string, () => JSX.Element> = {
         const [width, setWidth] = createSignal(400);
         const [open, setOpen] = createSignal<string | undefined>();
         const [compact, setCompact] = createSignal(false);
-        const t = (window.t = { collapsed: [] as boolean[], closes: 0, opens: [] as string[], setWidth });
+        const [names, setNames] = createSignal(["Alex", "Sam", "Kai"]);
+        const t = (window.t = { collapsed: [] as boolean[], closes: 0, opens: [] as string[], setWidth, setNames });
         return shell(
             <div id="split" style={{ width: `${width()}px`, height: "600px" }}>
                 <PaperSplit
@@ -248,7 +352,7 @@ const scenarios: Record<string, () => JSX.Element> = {
                     }}
                     side={
                         <PaperList name="players" value={open()} onValueChange={(v) => setOpen(String(v))}>
-                            <For each={["Alex", "Sam", "Kai"]}>
+                            <For each={names()}>
                                 {(name) => (
                                     <PaperListItem
                                         value={name}
@@ -338,6 +442,7 @@ const scenarios: Record<string, () => JSX.Element> = {
         const [entries, setEntries] = createSignal<string[]>(lines(0, Number(query.get("lines") ?? "0")));
         const t = (window.t = {
             flickerMeasures: 0,
+            commands: [] as string[],
             append(count: number) {
                 const current = entries();
                 setEntries([...current, ...lines(current.length, count)]);
@@ -361,7 +466,12 @@ const scenarios: Record<string, () => JSX.Element> = {
         }
         return shell(
             <div id="console" style={{ width: "600px", height: "400px", display: "flex", "flex-direction": "column" }}>
-                <PaperConsole entries={entries()} showInput={false} style={{ flex: "1", "min-height": "0" }} />
+                <PaperConsole
+                    entries={entries()}
+                    showInput={query.has("input")}
+                    onCommand={(command) => t.commands.push(command)}
+                    style={{ flex: "1", "min-height": "0" }}
+                />
             </div>,
         );
     },

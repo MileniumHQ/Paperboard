@@ -116,6 +116,8 @@ export interface PageOptions {
 export class Page {
     /** uncaught exceptions and console.error calls in the page */
     readonly errors: string[] = [];
+    /** console.warn calls in the page, such as Solid's development warnings */
+    readonly warnings: string[] = [];
     private readonly off: () => void;
 
     constructor(
@@ -130,6 +132,8 @@ export class Page {
                 this.errors.push(details.exception?.description ?? details.text);
             } else if (msg.method === "Runtime.consoleAPICalled" && msg.params.type === "error") {
                 this.errors.push(msg.params.args.map((a: any) => a.value ?? a.description ?? "").join(" "));
+            } else if (msg.method === "Runtime.consoleAPICalled" && msg.params.type === "warning") {
+                this.warnings.push(msg.params.args.map((a: any) => a.value ?? a.description ?? "").join(" "));
             }
         });
     }
@@ -218,6 +222,11 @@ export class Page {
         const base = { key, code: def.code, windowsVirtualKeyCode: def.keyCode, nativeVirtualKeyCode: def.keyCode, modifiers };
         await this.send("Input.dispatchKeyEvent", { type: def.text ? "keyDown" : "rawKeyDown", ...base, text: def.text });
         await this.send("Input.dispatchKeyEvent", { type: "keyUp", ...base });
+    }
+
+    /** Types `text` into the focused element, one keystroke's input per character. */
+    async type(text: string) {
+        for (const char of text) await this.send("Input.insertText", { text: char });
     }
 
     /** A one-finger drag through `points`, lifted at the last one. */
