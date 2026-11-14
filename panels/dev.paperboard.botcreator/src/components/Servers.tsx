@@ -44,6 +44,9 @@ const CHANNEL_KIND_ICONS: Record<DiscordChannelKind, string> = {
     other: "drafts",
 };
 
+/** "1 channel", "2 channels" */
+const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
 function formatJoined(iso: string | null): string {
     if (!iso) return "join date unknown";
     const date = new Date(iso);
@@ -264,12 +267,9 @@ export default function Servers(props: { bot: () => BotSummary }) {
         <>
                     <PaperPageHeader
                         icon="dns"
-                        title="Servers"
-                        subtitle={
-                            selectedId()
-                                ? detail()?.name ?? "Loading server…"
-                                : `${guilds().length} server${guilds().length === 1 ? "" : "s"}`
-                        }
+                        // a server's page is titled by the server, once: its card doesn't say the name again
+                        title={selectedId() ? (detail()?.name ?? "Loading server…") : "Servers"}
+                        subtitle={selectedId() ? undefined : count(guilds().length, "server")}
                     >
                         <Show when={selectedId()}>
                             <PaperButton
@@ -330,8 +330,8 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                         <PaperMediaCard
                                             icon={guild.icon || "dns"}
                                             title={guild.name}
-                                            subtitle={`${guild.memberCount} member${guild.memberCount === 1 ? "" : "s"}`}
-                                            description={`${guild.channelCount} channels · ${guild.roleCount} roles`}
+                                            subtitle={count(guild.memberCount, "member")}
+                                            description={`${count(guild.channelCount, "channel")} · ${count(guild.roleCount, "role")}`}
                                             onClick={() => void selectGuild(guild.id)}
                                         />
                                     )}
@@ -369,9 +369,6 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                             />
 
                                             <PaperFlex direction="column" gap="half" flex minWidth={0}>
-                                                <PaperText preset="title">
-                                                    {guild().name}
-                                                </PaperText>
                                                 <PaperFlex direction="row" gap="half" align="center" wrap>
                                                     <PaperText preset="hint" family="code">
                                                         {guild().id}
@@ -380,13 +377,13 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                                 </PaperFlex>
                                                 <PaperFlex direction="row" gap="half" wrap>
                                                     <PaperBadge>
-                                                        {guild().memberCount} members
+                                                        {count(guild().memberCount, "member")}
                                                     </PaperBadge>
                                                     <PaperBadge>
-                                                        {guild().channels.length} channels
+                                                        {count(guild().channels.length, "channel")}
                                                     </PaperBadge>
                                                     <PaperBadge>
-                                                        {guild().roles.length} roles
+                                                        {count(guild().roles.length, "role")}
                                                     </PaperBadge>
                                                     <PaperBadge>
                                                         Created {formatCreated(guild().createdAt)}
@@ -450,15 +447,13 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                                                     >
                                                                         <PaperSwatch color={roleColor(role.color)} />
                                                                         {role.name}
+                                                                        <Show when={role.managed}>
+                                                                            <PaperBadge variant="primary">
+                                                                                Managed
+                                                                            </PaperBadge>
+                                                                        </Show>
                                                                     </PaperFlex>
                                                                 </th>
-                                                                <td>
-                                                                    <Show when={role.managed}>
-                                                                        <PaperBadge variant="primary">
-                                                                            Managed
-                                                                        </PaperBadge>
-                                                                    </Show>
-                                                                </td>
                                                             </tr>
                                                         )}
                                                     </For>

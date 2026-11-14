@@ -12,6 +12,7 @@ import {
 } from "@mileniumhq/paperui";
 import { serviceApi } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
+import { createCompact } from "../compact";
 import {
     PERMISSION_DEFINITIONS,
     DEFAULT_SELECTED_PERMISSIONS,
@@ -19,6 +20,7 @@ import {
 } from "../types";
 
 export default function Invite(props: { bot: () => BotSummary }) {
+    const compact = createCompact();
     const [inviteUrl, setInviteUrl] = createSignal("");
     const [inviteError, setInviteError] = createSignal("");
     const [userInstallUrl, setUserInstallUrl] = createSignal("");
@@ -136,7 +138,8 @@ export default function Invite(props: { bot: () => BotSummary }) {
                 </PaperFlex>
             </PaperCard>
 
-            <PaperGrid>
+            {/* three groups fill the row; an auto-filling grid would leave a column empty */}
+            <PaperGrid columns={compact() ? 1 : 3}>
                 {permissionGroup(
                     "General",
                     PERMISSION_DEFINITIONS.filter((p) => p.category === "general"),
