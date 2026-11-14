@@ -6,7 +6,7 @@
 // service through calls that name the bot.
 import type { Client } from "discord.js";
 import { loadDiscord } from "./discord";
-import { InteractionOps, MessageOps, permissionNames } from "./discordOps";
+import { InteractionOps, MessageOps, permissionNames, searchMembers } from "./discordOps";
 import {
     definePanelService,
     secretsApi,
@@ -724,9 +724,7 @@ export const serviceCalls = {
     searchGuildMembers: async (_ctx: unknown, input: any) => {
         const guild = requireGuild(requireBot(input?.bot), input?.guildId);
         const query = typeof input?.query === "string" ? input.query.trim() : "";
-        // one bounded page; member search is a gateway request, never a
-        // full member download
-        const members = await guild.members.fetch({ query: query || undefined, limit: MEMBER_SEARCH_LIMIT });
+        const members = await searchMembers(guild, query, MEMBER_SEARCH_LIMIT);
         return buildMemberSummaries(members.values());
     },
 
