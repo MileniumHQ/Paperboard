@@ -62,6 +62,15 @@ export function tabTitle(tab: TerminalTab, live: Record<string, LiveSession>, fo
     return tab.named ? `${tab.label} — ${program}` : program;
 }
 
+/** the most characters a tab along the top shows of its title; a longer one ends in an ellipsis */
+export const TAB_TITLE_CHARS = 28;
+
+/** a title cut to fit a tab along the top (a tab down the side clips its own) */
+export function shortTitle(title: string): string {
+    const chars = [...title];
+    return chars.length <= TAB_TITLE_CHARS ? title : `${chars.slice(0, TAB_TITLE_CHARS - 1).join("").trimEnd()}…`;
+}
+
 function readSession(raw: any): TerminalSession | null {
     if (!raw || typeof raw.id !== "string" || !raw.id) return null;
     const session: TerminalSession = { id: raw.id };

@@ -41,7 +41,7 @@ import { createCompact } from "./lib/compact";
 import { watchKeyboardInset } from "./lib/keyboardInset";
 import { NO_MODIFIERS, type Modifiers, type NamedKey } from "./lib/softKeys";
 import { pasteLines } from "./lib/screen";
-import { tabSessions, tabTitle, type LiveSession, type SplitDirection, type TabLayout, type TerminalSession, type TerminalTab } from "./lib/tabs";
+import { shortTitle, tabSessions, tabTitle, type LiveSession, type SplitDirection, type TabLayout, type TerminalSession, type TerminalTab } from "./lib/tabs";
 
 const TERMINAL_PANEL_ID = "dev.paperboard.terminal";
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -280,15 +280,19 @@ export default function App() {
         if (!list.some((t) => t.id === activeTab())) setActiveTab(list[0]?.id ?? "");
     });
 
+    // a screen takes the keyboard once it is mounted and shown
+    const focusSession = (id: string) => queueMicrotask(() => activeTerminals.get(id)?.focus());
+
     const handleCloseTab = (closedId: string) => {
         const current = tabs();
         const closedIndex = current.findIndex((item) => item.id === closedId);
         if (closedIndex < 0) return;
         if (activeTab() === closedId) {
-            if (closedIndex > 0) {
-                setActiveTab(current[closedIndex - 1].id);
-            } else if (current.length > 1) {
-                setActiveTab(current[1].id);
+            const next = closedIndex > 0 ? current[closedIndex - 1] : current[1];
+            if (next) {
+                setActiveTab(next.id);
+                // the tab that comes forward has the keyboard, so typing goes on where it left off
+                focusSession(focusedOf(next));
             }
         }
         // the tab leaves when the service says it closed; a failed close
@@ -313,6 +317,7 @@ export default function App() {
             // tab is listed before it is shown
             applyTabs((await bridge.refreshState()).tabs);
             setActiveTab(id);
+            focusSession(id);
         } catch (err) {
             report("Tab not opened")(err);
         }
@@ -342,7 +347,12 @@ export default function App() {
         setFailure(null);
         serviceApi
             .call<string>(TERMINAL_PANEL_ID, "split-tab", { id: tabId, direction })
-            .then((pane) => setFocusedPane(tabId, pane))
+            .then(async (pane) => {
+                // the new shell is listed before it is shown
+                applyTabs((await bridge.refreshState()).tabs);
+                setFocusedPane(tabId, pane);
+                focusSession(pane);
+            })
             .catch(report("Tab not split"));
     };
     const unsplit = (tabId: string) => {
@@ -469,7 +479,8 @@ export default function App() {
         if (!tid) return;
         tabMenu.close();
         const currentTab = tabs().find((t) => t.id === tid);
-        setRenameValue(currentTab?.label || "");
+        // what the tab shows: a tab that was never named is called by its program, and that is the name to start from
+        setRenameValue(currentTab ? (currentTab.named ? currentTab.label : tabTitle(currentTab, mirror.live, currentTab.id)) : "");
         setRenameError("");
         setIsRenameOpen(true);
     };
@@ -596,6 +607,9 @@ export default function App() {
                 direction={vertical() ? "row" : "column"}
             >
                 <Show when={tabs().length > 0}>
+                {/* the buttons after the tabs stay where they are while the tabs scroll */}
+                <PaperFlex direction={vertical() ? "column" : "row"} align={vertical() ? undefined : "center"} fullHeight={vertical()} minWidth={0} minHeight={0}>
+                <PaperFlex flex minWidth={0} minHeight={0}>
                 <PaperList
                     reorderable
                     compact={vertical()}
@@ -636,11 +650,11 @@ export default function App() {
                                     icon={attention[tab.id]?.bell ? "notifications_active" : "terminal"}
                                     loaderStatus={statusOf(tab.id)}
                                     value={tab.id}
-                                    title={folderOfSession(tab)}
+                                    title={vertical() ? folderOfSession(tab) : [tabTitle(tab, mirror.live, tab.id), folderOfSession(tab)].filter(Boolean).join("\n")}
                                     onClosed={(closedId) => handleCloseTab(String(closedId))}
                                     onContextMenu={(e: MouseEvent) => openTabMenu(e, tab.id)}
                                 >
-                                    {tabTitle(tab, mirror.live, tab.id)}
+                                    {vertical() ? tabTitle(tab, mirror.live, tab.id) : shortTitle(tabTitle(tab, mirror.live, tab.id))}
                                 </PaperListItem>
                                 {/* a split's second shell is listed under its tab, to pick or close */}
                                 <Show when={tab.split}>
@@ -665,8 +679,10 @@ export default function App() {
                             </>
                         )}
                     </For>
-                    <Toolbar />
                 </PaperList>
+                </PaperFlex>
+                <Toolbar />
+                </PaperFlex>
                 </Show>
                 <PaperFlex direction="column" flex minWidth={0} minHeight={0} fullHeight={vertical()}>
                     <Show when={failure()}>
