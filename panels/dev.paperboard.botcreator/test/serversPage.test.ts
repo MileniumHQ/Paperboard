@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import type { BotsServiceState } from "../src/bots";
-import { openPage, servePanel } from "./helpers/browser";
+import { openPage, servePanel, type Page } from "./helpers/browser";
 import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";
@@ -16,7 +16,7 @@ afterAll(() => discord.stop());
 afterEach(stopServices);
 
 /** Clicks, as a mouse would, the innermost `selector` element whose text includes `text`. */
-async function clickText(page: Awaited<ReturnType<typeof openPage>>, selector: string, text: string): Promise<void> {
+async function clickText(page: Page, selector: string, text: string): Promise<void> {
     const tag = `t${Math.random().toString(36).slice(2)}`;
     const found = await page.evaluate<boolean>(`(() => {
         const all = [...document.querySelectorAll(${JSON.stringify(selector)})].filter((el) => el.innerText?.includes(${JSON.stringify(text)}));
@@ -51,6 +51,115 @@ describe("the server explorer", () => {
             expect(sent.bot).toBe(fake.token);
             expect(sent.body.content).toBe("Hello from Paperboard!");
             await page.waitFor(`document.body.innerText.includes("Posted to #general")`, "the confirmation");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+});
+
+// On a phone each level is a page over the one it was opened from, and back
+// (the bar's button, the host's back, a swipe) goes up one level at a time:
+// a server, the bot's servers, the bot's menu, the bots.
+describe("going back on a phone", () => {
+    /** the open page's title: the innermost page that isn't closed */
+    const top = `(() => { const open = [...document.querySelectorAll("[role=region]")].filter((el) => !el.inert); return open.at(-1)?.getAttribute("aria-label") ?? "the bots"; })()`;
+    /**
+     * the ways back the open page offers that a person can see and reach: its
+     * bar's (an outer page's bar above it goes further back, and in
+     * Paperboard the shell draws one bar for all of them)
+     */
+    const backs = `(() => {
+        const open = [...document.querySelectorAll("[role=region]")].filter((el) => !el.inert).at(-1);
+        return [...open.querySelectorAll("button")].filter((b) => {
+            if (b.closest("[role=region]") !== open || !/^(Back|arrow_back)/.test(b.getAttribute("aria-label") ?? b.innerText)) return false;
+            const r = b.getBoundingClientRect();
+            return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.closest("button") === b;
+        }).length;
+    })()`;
+    /** waits until `title` is the open page and it has finished sliding into place */
+    const at = async (page: Page, title: string) => {
+        await page.waitFor(`${top} === ${JSON.stringify(title)}`, `${title} to be the open page`);
+        await page.evaluate(`new Promise((resolve) => { const tick = () => (document.getAnimations().length ? requestAnimationFrame(tick) : resolve(true)); tick(); })`);
+    };
+    const backEvent = `window.dispatchEvent(new Event("paperboard:back", { cancelable: true }))`;
+
+    test("a server goes back to the servers, then the bot's menu, then the bots, one way at a time", async () => {
+        const home = guild("Home");
+        const fake = discord.addBot({ username: "Keeper", guilds: [home] });
+        await savedBots([{ stored: storedBot("b-keep", fake.appId, { name: "Keeper" }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots.find((b) => b.id === "b-keep")?.connected), "Keeper to connect");
+        const served = await servePanel();
+        const page = await openPage(served.url);
+        try {
+            await page.resize(400, 800);
+            await page.waitFor(`document.body.innerText.includes("Keeper")`, "the bot list");
+            const openServer = async () => {
+                await page.waitFor(`document.body.innerText.includes("1 member")`, "the server list");
+                await clickText(page, "[class*=card], [class*=Card]", "Home");
+                await at(page, "Home");
+                await page.waitFor(`document.body.innerText.includes("Send a message")`, "the server's page");
+                // one way back: the bar's, never a second control in the page
+                expect(await page.evaluate<number>(backs)).toBe(1);
+                expect(await page.evaluate<string>(`document.body.innerText`)).not.toContain("All servers");
+            };
+
+            await clickText(page, "[class*=card], [class*=Card]", "Keeper");
+            await at(page, "Keeper");
+            await page.click(`input[name=botMenu][value="servers"]`);
+            await at(page, "Servers");
+            await openServer();
+
+            // the bar's back: the server, then the servers
+            await page.click(`[role=region][aria-label="Home"] button[aria-label=Back]`);
+            await at(page, "Servers");
+            expect(await page.evaluate<number>(backs)).toBe(1);
+
+            // the host's back (a phone's back button, the browser's) goes the same way
+            await openServer();
+            await page.evaluate(backEvent);
+            await at(page, "Servers");
+            await page.evaluate(backEvent);
+            await at(page, "Keeper");
+
+            // and so does a swipe on the bar
+            await page.click(`input[name=botMenu][value="servers"]`);
+            await at(page, "Servers");
+            await openServer();
+            await page.drag(`[role=region][aria-label="Home"] header`, 300);
+            await at(page, "Servers");
+            await page.drag(`[role=region][aria-label="Servers"] header`, 300);
+            await at(page, "Keeper");
+            await page.evaluate(backEvent);
+            await at(page, "the bots");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
+    test("on a computer the server's page has its own way back to the list", async () => {
+        const home = guild("Home");
+        const fake = discord.addBot({ username: "Keeper", guilds: [home] });
+        await savedBots([{ stored: storedBot("b-keep", fake.appId, { name: "Keeper" }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots.find((b) => b.id === "b-keep")?.connected), "Keeper to connect");
+        const served = await servePanel();
+        const page = await openPage(served.url);
+        try {
+            await page.resize(1400, 900);
+            await page.waitFor(`document.body.innerText.includes("Keeper")`, "the bot list");
+            await clickText(page, "[class*=card], [class*=Card]", "Keeper");
+            await page.click(`input[name=botMenu][value="servers"]`);
+            await page.waitFor(`document.body.innerText.includes("1 member")`, "the server list");
+            await clickText(page, "[class*=card], [class*=Card]", "Home");
+            await page.waitFor(`document.body.innerText.includes("Send a message")`, "the server's page");
+            expect(await page.evaluate<number>(`document.querySelectorAll("[role=region]").length`)).toBe(0);
+            await clickText(page, "button", "All servers");
+            await page.waitFor(`document.body.innerText.includes("1 server") && !document.body.innerText.includes("Send a message")`, "the server list");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

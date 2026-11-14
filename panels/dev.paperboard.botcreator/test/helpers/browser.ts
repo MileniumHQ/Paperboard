@@ -70,6 +70,10 @@ export interface Page {
     insertText(text: string): Promise<void>;
     /** clicks the element `selector` finds, at its centre, as a mouse would */
     click(selector: string, button?: "left" | "right"): Promise<void>;
+    /** drags the element `selector` finds `dx` px to the right with the mouse, in steps, and lets go */
+    drag(selector: string, dx: number): Promise<void>;
+    /** lays the page out at this size (a phone's, a desktop's) */
+    resize(width: number, height: number): Promise<void>;
     /** what the page threw, and every message its sockets sent and received */
     exceptions: string[];
     frames: string[];
@@ -136,6 +140,8 @@ export async function openPage(url: string): Promise<Page> {
     await send("Network.enable");
     await send("Page.enable");
 
+    const centre = (selector: string) =>
+        evaluate<{ x: number; y: number } | null>(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return null; el.scrollIntoView({ block: "center" }); const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
     const evaluate = async <T>(expression: string): Promise<T> => {
         const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
         if (result.exceptionDetails) throw new Error(`In the page: ${result.exceptionDetails.exception?.description ?? result.exceptionDetails.text}`);
@@ -150,10 +156,24 @@ export async function openPage(url: string): Promise<Page> {
             await send("Input.insertText", { text });
         },
         async click(selector, button = "left") {
-            const box = await evaluate<{ x: number; y: number } | null>(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return null; el.scrollIntoView({ block: "center" }); const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+            const box = await centre(selector);
             if (!box) throw new Error(`Nothing to click matches ${selector}`);
             await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: box.x, y: box.y });
             for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x: box.x, y: box.y, button, clickCount: 1 });
+        },
+        async drag(selector, dx) {
+            const box = await centre(selector);
+            if (!box) throw new Error(`Nothing to drag matches ${selector}`);
+            await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: box.x, y: box.y });
+            await send("Input.dispatchMouseEvent", { type: "mousePressed", x: box.x, y: box.y, button: "left", buttons: 1, clickCount: 1 });
+            const steps = 10;
+            for (let step = 1; step <= steps; step++) {
+                await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: box.x + (dx * step) / steps, y: box.y, button: "left", buttons: 1 });
+            }
+            await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: box.x + dx, y: box.y, button: "left", buttons: 0, clickCount: 1 });
+        },
+        async resize(width, height) {
+            await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
         },
         waitFor: (predicate, what) =>
             evaluate(`new Promise((resolve, reject) => {
