@@ -20,6 +20,20 @@ interface Spring {
     v: number[];
 }
 
+/** a spring that has stopped: on its target, with no speed left */
+const REST = 1e-3;
+const atRest = (s: Spring, target: readonly number[]) => target.every((t, i) => Math.abs(t - s.x[i]!) < REST && Math.abs(s.v[i]!) < REST);
+
+interface Frame {
+    paths: string[];
+    facing: number;
+    dx: number;
+    dy: number;
+    cx: number;
+    cy: number;
+}
+const sameFrame = (a: Frame, b: Frame) => a.facing === b.facing && a.dx === b.dx && a.dy === b.dy && a.cx === b.cx && a.cy === b.cy && a.paths.every((p, i) => p === b.paths[i]);
+
 const spring = (s: Spring, target: readonly number[], k: number, c: number, dt: number) => {
     for (let i = 0; i < target.length; i++) {
         const a = k * (target[i]! - s.x[i]!) - c * s.v[i]!;
@@ -48,11 +62,29 @@ export function Face(props: {
 
     // vertical hop: bounce() kicks its velocity and a spring brings it home
     const hop: Spring = { x: [0], v: [0] };
-    const [frame, setFrame] = createSignal({ paths: FEATURES.map(() => ""), facing: 1, dx: 0, dy: 0, cx: 0, cy: 0 });
+    const [frame, setFrame] = createSignal<Frame>({ paths: FEATURES.map(() => ""), facing: 1, dx: 0, dy: 0, cx: 0, cy: 0 });
 
     let blinkAt = -Infinity;
-    createEffect(on(props.face.blinkRequest, () => (blinkAt = performance.now()), { defer: true }));
-    createEffect(on(props.face.bounceRequest, () => (hop.v[0] = reduced.matches ? 0 : 230), { defer: true }));
+    createEffect(
+        on(
+            props.face.blinkRequest,
+            () => {
+                blinkAt = performance.now();
+                wake();
+            },
+            { defer: true },
+        ),
+    );
+    createEffect(
+        on(
+            props.face.bounceRequest,
+            () => {
+                hop.v[0] = reduced.matches ? 0 : 230;
+                wake();
+            },
+            { defer: true },
+        ),
+    );
 
     // blink on its own every few seconds, like anything alive
     let blinkTimer: ReturnType<typeof setTimeout> | undefined;
@@ -60,6 +92,7 @@ export function Face(props: {
         blinkTimer = setTimeout(
             () => {
                 blinkAt = performance.now();
+                wake();
                 scheduleBlink();
             },
             2200 + Math.random() * 3800,
@@ -112,7 +145,7 @@ export function Face(props: {
         }
 
         const b = faceBasis(current);
-        setFrame({
+        const next: Frame = {
             paths: FEATURES.map((f) => strokePath(b, p[f], R, weight())),
             // fade the features as the face turns past the horizon
             facing: Math.min(1, Math.max(0, (b.c[2] + 0.15) / 0.3)),
@@ -120,12 +153,31 @@ export function Face(props: {
             dy: hop.x[0]! + (shaking ? 1.6 * Math.sin(t * 67 + 2) : 0),
             cx: b.c[0] * R,
             cy: -b.c[1] * R,
-        });
+        };
+        // a face that isn't moving draws nothing
+        if (!sameFrame(frame(), next)) setFrame(next);
+        const blinking = since >= 0 && since < BLINK_MS;
+        const resting = !talking && !shaking && !blinking && atRest(orient, [o.yaw, o.pitch, o.roll]) && atRest(pose, poseToArray(EXPRESSIONS[props.face.expression()])) && atRest(hop, [0]);
+        // everything has stopped: the loop stops with it, and starts again when something asks the face to move
+        raf = resting ? 0 : requestAnimationFrame(tick);
+    };
+    const wake = () => {
+        if (raf) return;
+        last = performance.now();
         raf = requestAnimationFrame(tick);
     };
+    // what moves the face: where it looks, how it feels, whether it talks or shakes, how big it draws
+    createEffect(() => {
+        props.face.orientation();
+        props.face.expression();
+        props.face.pondering();
+        props.face.shaking();
+        props.face.talking();
+        weight();
+        wake();
+    });
 
     onMount(() => {
-        raf = requestAnimationFrame(tick);
         scheduleBlink();
     });
     onCleanup(() => {
