@@ -1,5 +1,5 @@
 import GameOptions from "./components/GameOptions";
-import { createEffect, createMemo, createSignal, onMount, onCleanup, untrack, For, Index, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, getOwner, onMount, onCleanup, runWithOwner, untrack, For, Index, Show, type JSX } from "solid-js";
 import { tabIds } from "./lib/tabIds";
 import {
     PaperPanel, PaperPresence, PaperButton, PaperIcon, PaperQuote, PaperLoader, PaperFlex, PaperText,
@@ -217,9 +217,18 @@ export default function App() {
                         {(id) => {
                             const tab = () => features().tabs.find((t) => t.id === id)!;
                             const owner = untrack(() => tab().owner);
+                            // Files holds the editor's unsaved text: it is made the first
+                            // time it opens and kept while another tab shows, so leaving
+                            // the tab and coming back finds the edit where it was left
+                            const itemOwner = getOwner();
+                            let kept: JSX.Element | undefined;
+                            const content = () =>
+                                owner === "shared" && id === "files"
+                                    ? (kept ??= runWithOwner(itemOwner, () => untrack(() => renderTab(id, owner))))
+                                    : untrack(() => renderTab(id, owner));
                             return <PaperInterfaceItem value={id} variant={(compact() && tab().compactVariant) || tab().variant} width={tab().width}>
                                 {/* made once; its props follow the features, so a state change never remounts the tab */}
-                                {untrack(() => renderTab(id, owner))}
+                                {content()}
                             </PaperInterfaceItem>;
                         }}
                     </For>
@@ -228,6 +237,12 @@ export default function App() {
             </PaperPresence>
         </Show>
     );
+
+    // the server's page is made once and moved between the wide layout and
+    // the phone's sliding page, so crossing the width keeps its tab, its open
+    // player and its dialogs with what was typed in them
+    const pageHere = createMemo(() => servers() !== null && serverHere());
+    const page = createMemo(() => (pageHere() ? untrack(serverView) : null));
 
     const loading = () => (
         // centred, and only after a moment: opening a server reloads the page
@@ -243,7 +258,8 @@ export default function App() {
             fallback={
                 <Show when={servers()} fallback={loading()}>
                     <Show when={serverHere()} fallback={<ServersHome state={servers()!} onOpen={openServerPage} />}>
-                        {serverView()}
+                        {/* its own box: the layout that lets go of it removes this, never the page moved out of it */}
+                        <PaperFlex direction="column" fullWidth fullHeight>{page()}</PaperFlex>
                     </Show>
                 </Show>
             }
@@ -255,7 +271,7 @@ export default function App() {
                 <Show when={shown()}>
                     {(id) => (
                         <Show when={servers() && serverHere() && id() === selectedServerId} fallback={loading()}>
-                            {serverView()}
+                            <PaperFlex direction="column" fullWidth fullHeight>{page()}</PaperFlex>
                         </Show>
                     )}
                 </Show>

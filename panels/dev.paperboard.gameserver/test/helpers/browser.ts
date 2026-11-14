@@ -81,6 +81,8 @@ export interface Page {
     received(match: (frame: string) => boolean, what: string): Promise<void>;
     /** what the page shows, as a PNG, for a person to look at */
     screenshot(): Promise<Buffer>;
+    /** lays the page out at `width` by `height` CSS pixels, as a window resized to that would */
+    resize(width: number, height: number): Promise<void>;
     close(): Promise<void>;
 }
 
@@ -209,6 +211,11 @@ export async function openPage(url: string, windowSize = "1400,900"): Promise<Pa
         async screenshot() {
             const shot = await send<{ data: string }>("Page.captureScreenshot", { format: "png" });
             return Buffer.from(shot.data, "base64");
+        },
+        async resize(width, height) {
+            await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+            // the page has laid itself out again once a frame is drawn at the new size
+            await evaluate(`new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
         },
         async close() {
             if (closed) return;
