@@ -25,8 +25,14 @@ export function TokenField(props: { value: string; onInput: (value: string) => v
                 type="password"
                 label="Bot token"
                 value={props.value}
+                invalid={Boolean(props.value.trim()) && !props.appId}
                 onInput={(e) => props.onInput(e.currentTarget.value)}
             />
+            <Show when={props.value.trim() && !props.appId}>
+                <PaperQuote variant="danger" icon="error" title="That isn't a bot token">
+                    A bot token is a long line of three parts joined by dots, the first of which names the bot. Copy all of it from the Bot tab of your application in the Developer Portal; Reset Token shows it again.
+                </PaperQuote>
+            </Show>
             <Show when={props.appId}>
                 {(appId) => (
                     <Show
