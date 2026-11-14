@@ -15,6 +15,16 @@ export function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
     (timer as unknown as { unref?: () => void }).unref?.();
 }
 
+/** Runs tasks one at a time, in the order given; one that fails does not stop the next. */
+export class SerialQueue {
+    private tail: Promise<unknown> = Promise.resolve();
+    run<T>(task: () => Promise<T> | T): Promise<T> {
+        const result = this.tail.then(task);
+        this.tail = result.then(() => undefined, () => undefined);
+        return result;
+    }
+}
+
 // size-limit refusal thrown by engine-level code (file reads, config
 // writes). Carries a wire code so the RPC layer maps it without
 // message-text matching — see rpcErrorCode in rpc/params.ts.

@@ -9,7 +9,7 @@ import * as dgram from "dgram";
 import * as net from "net";
 import * as path from "path";
 import { isPanelId } from "../../../packages/paperapi/src/panelIdentity";
-import { readStateFileSync, writeJsonAtomic } from "./storage";
+import { readStateFileSync, SerialQueue, writeJsonAtomic } from "./storage";
 import { ErrorCode } from "./protocol";
 import { RpcError, invalidParams } from "./rpc/errors";
 
@@ -107,7 +107,7 @@ export class PortRegistry {
     private readonly file: string;
     private state: PortsFile;
     // one change at a time: two claims must not both see a port as free
-    private queue: Promise<unknown> = Promise.resolve();
+    private readonly queue = new SerialQueue();
 
     constructor(
         dataDir: string,
@@ -122,12 +122,6 @@ export class PortRegistry {
         };
     }
 
-    private serial<T>(task: () => Promise<T>): Promise<T> {
-        const run = this.queue.then(task, task);
-        this.queue = run.catch(() => undefined);
-        return run;
-    }
-
     private save(): Promise<void> {
         return writeJsonAtomic(this.file, this.state);
     }
@@ -138,7 +132,7 @@ export class PortRegistry {
 
     setPolicy(policy: unknown): Promise<PortPolicy> {
         if (policy !== "refuse" && policy !== "next-free") throw invalidParams(`Invalid port policy: ${JSON.stringify(policy)}`);
-        return this.serial(async () => {
+        return this.queue.run(async () => {
             this.state = { ...this.state, policy };
             await this.save();
             return policy;
@@ -200,7 +194,7 @@ export class PortRegistry {
         if (typeof label !== "string" || !label.trim() || label.length > LABEL_MAX) throw invalidParams("A port needs a label of at most 80 characters");
         if (!isProtocol(protocol)) throw invalidParams(`Invalid protocol: ${JSON.stringify(protocol)}`);
         if (!isPortNumber(preferred)) throw invalidParams(`Invalid port: ${JSON.stringify(preferred)}`);
-        return this.serial(async () => {
+        return this.queue.run(async () => {
             const held = this.find(panelId, name);
             if (held && held.port === preferred && held.protocol === protocol) {
                 return held.label === label ? { ...held } : this.store({ ...held, label });
@@ -217,7 +211,7 @@ export class PortRegistry {
      */
     prepare(panelId: string, name: unknown): Promise<PortClaim> {
         if (typeof name !== "string" || !NAME_RE.test(name)) throw invalidParams(`Invalid port name: ${JSON.stringify(name)}`);
-        return this.serial(async () => {
+        return this.queue.run(async () => {
             const held = this.find(panelId, name);
             if (!held) throw new RpcError(ErrorCode.NOT_FOUND, `No port named "${name}" is claimed; claim it first.`);
             const port = await this.allocate(held.port, held.protocol, panelId, name, held.label);
@@ -227,7 +221,7 @@ export class PortRegistry {
 
     release(panelId: string, name: unknown): Promise<void> {
         if (typeof name !== "string" || !NAME_RE.test(name)) throw invalidParams(`Invalid port name: ${JSON.stringify(name)}`);
-        return this.serial(async () => {
+        return this.queue.run(async () => {
             if (!this.find(panelId, name)) return;
             this.state = { ...this.state, claims: this.state.claims.filter((c) => !(c.panelId === panelId && c.name === name)) };
             await this.save();
@@ -235,7 +229,7 @@ export class PortRegistry {
     }
 
     forgetPanel(panelId: string): Promise<void> {
-        return this.serial(async () => {
+        return this.queue.run(async () => {
             if (!this.state.claims.some((c) => c.panelId === panelId)) return;
             this.state = { ...this.state, claims: this.state.claims.filter((c) => c.panelId !== panelId) };
             await this.save();

@@ -19,7 +19,7 @@ import { ErrorCode } from "../protocol";
 import { RpcError, invalidParams } from "../rpc/errors";
 import { logger } from "../logger";
 import { createPanelArchive, extractPanelArchive } from "./archive";
-import { hashFile } from "../storage";
+import { hashFile, SerialQueue } from "../storage";
 import {
     BACKUP_VAULT_OWNER,
     DESTINATION_LABEL_MAX,
@@ -127,9 +127,9 @@ export class BackupService {
     /** by backup key (a panel, or a panel's named source) */
     private readonly progress = new Map<string, BackupProgress & { sentAt: number }>();
     private readonly progressListeners = new Set<(change: BackupProgressChange) => void>();
-    private configWrites: Promise<unknown> = Promise.resolve();
+    private readonly configWrites = new SerialQueue();
     private readonly schedulesFile: string;
-    private scheduleWrites: Promise<unknown> = Promise.resolve();
+    private readonly scheduleWrites = new SerialQueue();
     private readonly now: () => number;
     private timer: ReturnType<typeof setTimeout> | null = null;
     private scheduling = false;
@@ -165,14 +165,12 @@ export class BackupService {
 
     /** read-modify-write of the locations file, one at a time */
     private mutate<T>(fn: (config: BackupConfig) => Promise<T> | T): Promise<T> {
-        const next = this.configWrites.then(async () => {
+        return this.configWrites.run(async () => {
             const config = this.config();
             const result = await fn(config);
             await writeBackupConfig(this.configFile, config);
             return result;
         });
-        this.configWrites = next.catch((err) => logger.debug("[backups] a locations change failed:", err));
-        return next;
     }
 
     /** null when the locations file reads fine (or does not exist yet);
@@ -192,9 +190,7 @@ export class BackupService {
      * under a new name and the list starts fresh. Panels that used a
      * location choose again; backups at the locations are untouched. */
     recoverLocations(): Promise<{ keptAs: string }> {
-        const next = this.configWrites.then(() => ({ keptAs: recoverBackupConfig(this.configFile) }));
-        this.configWrites = next.catch((err) => logger.debug("[backups] recovering the locations failed:", err));
-        return next;
+        return this.configWrites.run(() => ({ keptAs: recoverBackupConfig(this.configFile) }));
     }
 
     private destination(id: string, config = this.config()): Destination {
@@ -576,15 +572,13 @@ export class BackupService {
 
     /** read-modify-write of the schedules file, one at a time */
     private mutateSchedules<T>(fn: (schedules: ScheduleFile) => T): Promise<T> {
-        const next = this.scheduleWrites.then(async () => {
+        return this.scheduleWrites.run(async () => {
             const schedules = readSchedules(this.schedulesFile);
             const result = fn(schedules);
             fs.mkdirSync(this.root, { recursive: true });
             await writeSchedules(this.schedulesFile, schedules);
             return result;
         });
-        this.scheduleWrites = next.catch((err) => logger.debug("[backups] a schedule change failed:", err));
-        return next;
     }
 
     /** sets or (with null) removes the panel's routine backups */
