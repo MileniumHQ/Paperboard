@@ -15,6 +15,7 @@ import {
     type PaperLayoutProps,
     type PaperLayoutContextValue,
 } from "../../contexts/layout";
+import { mergeStyle } from "../../utils/style";
 
 export type PaperFlexSpacing = PaperSpacing;
 export type PaperFlexGap = PaperFlexSpacing;
@@ -199,9 +200,7 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
             base.flex = "0 1 auto";
         }
 
-        return typeof local.style === "object"
-            ? { ...base, ...local.style }
-            : base;
+        return mergeStyle(base, local.style);
     };
 
     const handleClass = () => {

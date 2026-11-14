@@ -109,7 +109,7 @@ export function PaperLoader(props: PaperLoaderProps) {
                 [styles[local.size ?? "medium"]]: true,
                 ...local.classList,
             }}
-            style={typeof local.style === "object" ? local.style : {}}
+            style={local.style}
         >
             <span class={loaderClass()}>
                 <svg viewBox="0 0 40 40" class={styles.loaderSvg}>

@@ -11,6 +11,7 @@ import {
 import { PaperText } from "../../components/PaperText";
 import { PaperFlex } from "../PaperFlex";
 import { PaperSettingListContext } from "../../contexts/settingList";
+import { mergeStyle } from "../../utils/style";
 
 export interface PaperSettingListProps
     extends JSX.HTMLAttributes<HTMLDivElement> {
@@ -99,10 +100,7 @@ export function PaperSettingList(props: ParentProps<PaperSettingListProps>) {
                         ? `${local.flex} ${local.flex} 0%`
                         : local.flex;
         }
-        return {
-            ...extra,
-            ...(typeof local.style === "object" ? local.style : {}),
-        };
+        return mergeStyle(extra, local.style);
     };
 
     return (

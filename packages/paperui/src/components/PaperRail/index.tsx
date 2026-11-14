@@ -8,6 +8,7 @@ import {
 } from "../contexts/selection";
 import { createReorder, type Reorder } from "../shared/reorder";
 import { HOLD_MS } from "../../utils/touchHold";
+import { mergeStyle } from "../../utils/style";
 
 const RailContext = createContext<{ showLabels?: boolean; reorder: Reorder }>();
 
@@ -189,10 +190,7 @@ export function PaperRailItem(props: PaperRailItemProps) {
             class={className()}
             classList={local.classList}
             {...{ [REORDER_ATTRIBUTE]: reorderable() ? String(value()) : undefined }}
-            style={{
-                ...(reorderable() ? railCtx?.reorder.itemStyle(value()) : {}),
-                ...(typeof local.style === "object" ? local.style : {}),
-            }}
+            style={mergeStyle((reorderable() ? railCtx?.reorder.itemStyle(value()) : undefined) ?? {}, local.style)}
             title={local.title ?? textLabel()}
             onClick={activate}
             onPointerDown={handlePointerDown}

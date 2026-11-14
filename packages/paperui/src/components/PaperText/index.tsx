@@ -6,6 +6,7 @@ import { PaperIcon } from "../PaperIcon";
 import type { PaperColor, PaperTextPreset } from "../../types";
 import { resolveColor, getVarCss } from "../../utils/theme";
 import { copyText } from "../../utils/clipboard";
+import { mergeStyle } from "../../utils/style";
 
 export interface PaperTextProps extends JSX.HTMLAttributes<HTMLElement> {
     weight?: number;
@@ -128,13 +129,15 @@ export function PaperText(props: PaperTextProps) {
             }
         }
 
-        return {
-            "font-weight": effectiveWeight(),
-            "font-size": fontSizeVar(),
-            color: resolvedColor(),
-            ...extra,
-            ...(typeof local.style === "object" ? local.style : {}),
-        };
+        return mergeStyle(
+            {
+                "font-weight": effectiveWeight(),
+                "font-size": fontSizeVar(),
+                color: resolvedColor(),
+                ...extra,
+            },
+            local.style,
+        );
     };
 
     return (

@@ -6,6 +6,7 @@ import {
     type PaperLayoutProps,
 } from "../../contexts/layout";
 import type { PaperSpacing } from "../../types";
+import { mergeStyle } from "../../utils/style";
 
 export type PaperPageWidth = "standard" | "wide" | "full";
 
@@ -60,13 +61,15 @@ export function PaperPage(props: ParentProps<PaperPageProps>) {
             .filter(Boolean)
             .join(" ");
 
-    const pageStyle = () => ({
-        // width names the column here, not a size token
-        ...resolveLayoutStyles(layout),
-        padding: resolveSpacing(local.padding ?? "double"),
-        gap: resolveSpacing(local.gap ?? "full"),
-        ...(typeof local.style === "object" ? local.style : {}),
-    });
+    const pageStyle = () => mergeStyle(
+        {
+            // width names the column here, not a size token
+            ...resolveLayoutStyles(layout),
+            padding: resolveSpacing(local.padding ?? "double"),
+            gap: resolveSpacing(local.gap ?? "full"),
+        },
+        local.style,
+    );
 
     return (
         <div {...rest} class={className()} classList={local.classList} style={pageStyle()}>

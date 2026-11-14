@@ -5,6 +5,7 @@ import { PaperText } from "../PaperText";
 import { PaperProgress } from "../PaperProgress";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import type { PaperRole } from "../../types";
+import { mergeStyle } from "../../utils/style";
 
 export interface PaperStatTileMeter {
     value: number;
@@ -58,7 +59,7 @@ export function PaperStatTile(props: PaperStatTileProps) {
             {...rest}
             class={className()}
             classList={local.classList}
-            style={{ ...roleStyle(), ...(typeof local.style === "object" ? local.style : {}) }}
+            style={mergeStyle(roleStyle(), local.style)}
         >
             <Show when={icon()}>
                 <span class={iconClass()}>

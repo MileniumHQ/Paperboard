@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import { splitProps, type JSX } from "solid-js";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import type { PaperRole } from "../../types";
+import { mergeStyle } from "../../utils/style";
 
 export interface PaperProgressProps extends JSX.HTMLAttributes<HTMLDivElement> {
     value?: number;
@@ -57,7 +58,7 @@ export function PaperProgress(props: PaperProgressProps) {
             }
             class={className()}
             classList={local.classList}
-            style={{ ...roleStyle(), ...(typeof local.style === "object" ? local.style : {}) }}
+            style={mergeStyle(roleStyle(), local.style)}
         >
             <div
                 class={styles.bar}

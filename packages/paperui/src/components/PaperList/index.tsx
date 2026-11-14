@@ -22,6 +22,7 @@ import {
 import type { LoaderStatus, PaperBackgroundSurface } from "../../types";
 import { resolveBackground } from "../../utils/theme";
 import { createReorder } from "../shared/reorder";
+import { mergeStyle } from "../../utils/style";
 
 export interface PaperListItemCloseEvent {
     value: string | number;
@@ -222,10 +223,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
                         ? "auto hidden"
                         : "hidden auto";
         }
-        return {
-            ...extra,
-            ...(typeof local.style === "object" ? local.style : {}),
-        };
+        return mergeStyle(extra, local.style);
     };
 
     return (
@@ -405,10 +403,7 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
             {...rest}
             class={className()}
             classList={local.classList}
-            style={{
-                ...(listCtx?.getItemStyle(local.value) ?? {}),
-                ...(typeof local.style === "object" ? local.style : {}),
-            }}
+            style={mergeStyle(listCtx?.getItemStyle(local.value) ?? {}, local.style)}
             onPointerDown={handlePointerDown}
         >
             <Show when={selectable()}>

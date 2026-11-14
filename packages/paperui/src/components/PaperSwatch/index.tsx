@@ -2,6 +2,7 @@ import { getVarCss, resolveColor } from "../../utils/theme";
 import type { PaperColor } from "../../types";
 import styles from "./index.module.css";
 import { splitProps, type JSX } from "solid-js";
+import { mergeStyle } from "../../utils/style";
 
 export type PaperSwatchSize = "small" | "medium" | "large";
 
@@ -31,10 +32,12 @@ export function PaperSwatch(props: PaperSwatchProps) {
             {...rest}
             class={className()}
             classList={local.classList}
-            style={{
-                background: resolveColor(local.color) || getVarCss("border"),
-                ...(typeof local.style === "object" ? local.style : {}),
-            }}
+            style={mergeStyle(
+                {
+                    background: resolveColor(local.color) || getVarCss("border"),
+                },
+                local.style,
+            )}
         />
     );
 }

@@ -6,6 +6,7 @@ import { Dynamic } from "solid-js/web";
 import { PaperText } from "../PaperText";
 import { PaperIcon } from "../PaperIcon";
 import { PaperEffect } from "../PaperEffect";
+import { mergeStyle } from "../../utils/style";
 
 export interface PaperMediaCardProps
     extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "title" | "onClick"> {
@@ -330,10 +331,10 @@ export function PaperMediaCardGroup(props: ParentProps<PaperMediaCardGroupProps>
             {...rest}
             class={[styles.cardGroup, local.class].filter(Boolean).join(" ")}
             classList={local.classList}
-            style={{
-                "grid-template-columns": `repeat(auto-fill, minmax(${resolveSize(local.minCardWidth ?? "card-min")}, 1fr))`,
-                ...(typeof local.style === "object" ? local.style : {}),
-            }}
+            style={mergeStyle(
+                { "grid-template-columns": `repeat(auto-fill, minmax(${resolveSize(local.minCardWidth ?? "card-min")}, 1fr))` },
+                local.style,
+            )}
         >
             {local.children}
         </div>

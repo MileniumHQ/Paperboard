@@ -24,6 +24,7 @@ import { callEventHandler } from "../../utils/events";
 
 import type { PaperSpacing } from "../../types";
 import { resolveSpacing } from "../../utils/theme";
+import { mergeStyle } from "../../utils/style";
 
 const MenuLevelContext = createContext<number>(0);
 // true for a PaperPanel's navigation menu: its entries open the panel's
@@ -91,10 +92,7 @@ export function PaperMenu(props: ParentProps<PaperMenuProps>) {
 
     const style = () => {
         const gapVal = resolvedSpacing();
-        return {
-            ...(gapVal ? { "--menu-spacing": gapVal } : {}),
-            ...(typeof local.style === "object" ? local.style : {}),
-        };
+        return mergeStyle(gapVal ? { "--menu-spacing": gapVal } : {}, local.style);
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -194,10 +192,12 @@ export function PaperMenuSection(props: ParentProps<PaperMenuSectionProps>) {
     const currentLevel = useMenuLevel();
     const nextLevel = currentLevel + 1;
 
-    const style = () => ({
-        "--menu-indent-level": currentLevel,
-        ...(typeof local.style === "object" ? local.style : {}),
-    });
+    const style = () => mergeStyle(
+        {
+            "--menu-indent-level": currentLevel,
+        },
+        local.style,
+    );
 
     return (
         <div
@@ -273,10 +273,12 @@ export function PaperMenuLabel(props: ParentProps<PaperMenuLabelProps>) {
             {...rest}
             preset="section"
             class={[styles.menuLabel, local.class].filter(Boolean).join(" ")}
-            style={{
-                "--menu-indent-level": level,
-                ...(typeof local.style === "object" ? local.style : {}),
-            }}
+            style={mergeStyle(
+                {
+                    "--menu-indent-level": level,
+                },
+                local.style,
+            )}
         >
             {local.children}
         </PaperText>
@@ -357,10 +359,12 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
             .filter(Boolean)
             .join(" ");
 
-    const style = () => ({
-        "--menu-indent-level": effectiveLevel(),
-        ...(typeof local.style === "object" ? local.style : {}),
-    });
+    const style = () => mergeStyle(
+        {
+            "--menu-indent-level": effectiveLevel(),
+        },
+        local.style,
+    );
 
     const content = () => (
         <>

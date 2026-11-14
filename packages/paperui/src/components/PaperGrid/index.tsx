@@ -2,6 +2,7 @@ import { getVarCss, resolveSize } from "../../utils/theme";
 import type { PaperSize } from "../../types";
 import styles from "./index.module.css";
 import { splitProps, type JSX, type ParentProps } from "solid-js";
+import { mergeStyle } from "../../utils/style";
 
 export interface PaperGridProps extends JSX.HTMLAttributes<HTMLDivElement> {
     /** minimum column width, a size token; defaults to the shared grid token */
@@ -34,12 +35,14 @@ export function PaperGrid(props: ParentProps<PaperGridProps>) {
     const className = () =>
         [styles.PaperGrid, local.class].filter(Boolean).join(" ");
 
-    const gridStyle = () => ({
-        "grid-template-columns": local.columns
-            ? `repeat(${local.columns}, minmax(0, 1fr))`
-            : `repeat(${local.fit ? "auto-fit" : "auto-fill"}, minmax(${local.min ? resolveSize(local.min) : getVarCss("grid-min")}, 1fr))`,
-        ...(typeof local.style === "object" ? local.style : {}),
-    });
+    const gridStyle = () => mergeStyle(
+        {
+            "grid-template-columns": local.columns
+                ? `repeat(${local.columns}, minmax(0, 1fr))`
+                : `repeat(${local.fit ? "auto-fit" : "auto-fill"}, minmax(${local.min ? resolveSize(local.min) : getVarCss("grid-min")}, 1fr))`,
+        },
+        local.style,
+    );
 
     return (
         <div

@@ -4,6 +4,7 @@ import { roleVars, isPaperRole } from "../../utils/colors";
 import { haptic } from "../../utils/haptics";
 import { pressedOutside } from "../../utils/pressCancel";
 import type { PaperRole } from "../../types";
+import { mergeStyle } from "../../utils/style";
 
 export interface PaperEffectProps extends JSX.HTMLAttributes<HTMLDivElement> {
     colorless?: boolean;
@@ -64,10 +65,7 @@ export function PaperEffect(props: PaperEffectProps) {
             {...rest}
             class={className()}
             classList={local.classList}
-            style={{
-                ...roleStyle(),
-                ...(typeof local.style === "object" ? local.style : {}),
-            }}
+            style={mergeStyle(roleStyle(), local.style)}
             on:pointerdown={onPress}
             on:pointerup={onRelease}
             on:pointercancel={onCancel}

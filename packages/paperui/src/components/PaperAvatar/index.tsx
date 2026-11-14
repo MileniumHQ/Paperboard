@@ -3,6 +3,7 @@ import { createSignal, splitProps, Show, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import type { PaperRole } from "../../types";
+import { mergeStyle } from "../../utils/style";
 
 export type PaperAvatarSize = "small" | "medium" | "large" | "xlarge";
 
@@ -67,10 +68,7 @@ export function PaperAvatar(props: PaperAvatarProps) {
             {...rest}
             class={className()}
             classList={local.classList}
-            style={{
-                ...(isPaperRole(local.accent) ? roleVars(local.accent) : {}),
-                ...(typeof local.style === "object" ? local.style : {}),
-            }}
+            style={mergeStyle(isPaperRole(local.accent) ? { ...roleVars(local.accent) } : {}, local.style)}
         >
             <Show
                 when={image()}

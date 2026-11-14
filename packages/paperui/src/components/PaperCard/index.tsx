@@ -7,6 +7,7 @@ import {
     type PaperLayoutProps,
 } from "../../contexts/layout";
 import type { PaperSpacing, PaperRole } from "../../types";
+import { mergeStyle } from "../../utils/style";
 
 /** surface tone; front is the standard panel card */
 export type PaperCardSurface =
@@ -84,22 +85,24 @@ export function PaperCard(props: ParentProps<PaperCardProps>) {
             local.paddingX !== undefined || local.paddingY !== undefined;
         const paddingX = resolveSpacing(local.paddingX ?? local.padding);
         const paddingY = resolveSpacing(local.paddingY ?? local.padding);
-        return {
-            // a growing card must also be able to shrink, or it overflows
-            ...(local.grow && local.shrink === undefined ? { "flex-shrink": 1 } : {}),
-            ...(isPaperRole(local.accent) ? roleVars(local.accent) : {}),
-            ...resolveLayoutStyles(local),
-            ...(axisPadding
-                ? {
-                      "padding-left": paddingX,
-                      "padding-right": paddingX,
-                      "padding-top": paddingY,
-                      "padding-bottom": paddingY,
-                  }
-                : { padding: resolveSpacing(local.padding) }),
-            gap: resolveSpacing(local.gap),
-            ...(typeof local.style === "object" ? local.style : {}),
-        };
+        return mergeStyle(
+            {
+                // a growing card must also be able to shrink, or it overflows
+                ...(local.grow && local.shrink === undefined ? { "flex-shrink": 1 } : {}),
+                ...(isPaperRole(local.accent) ? roleVars(local.accent) : {}),
+                ...resolveLayoutStyles(local),
+                ...(axisPadding
+                    ? {
+                          "padding-left": paddingX,
+                          "padding-right": paddingX,
+                          "padding-top": paddingY,
+                          "padding-bottom": paddingY,
+                      }
+                    : { padding: resolveSpacing(local.padding) }),
+                gap: resolveSpacing(local.gap),
+            },
+            local.style,
+        );
     };
 
     return (

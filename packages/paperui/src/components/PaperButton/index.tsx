@@ -4,6 +4,7 @@ import { Dynamic } from "solid-js/web";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import { PaperIcon } from "../PaperIcon";
 import type { PaperButtonVariant } from "../../types";
+import { mergeStyle } from "../../utils/style";
 
 export type PaperButtonSize = "tiny" | "small" | "medium" | "large";
 
@@ -80,10 +81,7 @@ export function PaperButton(props: PaperButtonProps) {
             ref={local.ref}
             class={className()}
             classList={local.classList}
-            style={{
-                ...roleStyle(),
-                ...(typeof local.style === "object" ? local.style : {}),
-            }}
+            style={mergeStyle(roleStyle(), local.style)}
             disabled={local.href ? undefined : local.disabled}
             aria-disabled={inertLink() ? "true" : undefined}
             onClick={inertLink() ? undefined : local.onClick}

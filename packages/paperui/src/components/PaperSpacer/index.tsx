@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import { splitProps, type JSX } from "solid-js";
 import type { PaperSpacing } from "../../types";
 import { resolveSpacing } from "../../utils/theme";
+import { mergeStyle } from "../../utils/style";
 
 export interface PaperSpacerProps extends JSX.HTMLAttributes<HTMLDivElement> {
     size?: PaperSpacing;
@@ -20,10 +21,12 @@ export function PaperSpacer(props: PaperSpacerProps) {
     const style = () => {
         if (local.size === undefined) return local.style;
         const sizeStr = resolveSpacing(local.size);
-        return {
-            "--spacer-size": sizeStr,
-            ...(typeof local.style === "object" ? local.style : {}),
-        };
+        return mergeStyle(
+            {
+                "--spacer-size": sizeStr,
+            },
+            local.style,
+        );
     };
 
     const className = () =>

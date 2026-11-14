@@ -11,6 +11,7 @@ import {
 } from "solid-js";
 import { Portal } from "solid-js/web";
 import { PaperText } from "../PaperText";
+import { mergeStyle } from "../../utils/style";
 
 export type PaperPopoverPlacement = "below" | "above";
 
@@ -145,12 +146,14 @@ export function PaperPopover(props: ParentProps<PaperPopoverProps>) {
                         [styles.flush]: Boolean(local.flush),
                         ...local.classList,
                     }}
-                    style={{
-                        left: `${position()?.left ?? 0}px`,
-                        top: `${position()?.top ?? 0}px`,
-                        "--popover-tail": `${position()?.tail ?? 0}px`,
-                        ...(typeof local.style === "object" ? local.style : {}),
-                    }}
+                    style={mergeStyle(
+                        {
+                            left: `${position()?.left ?? 0}px`,
+                            top: `${position()?.top ?? 0}px`,
+                            "--popover-tail": `${position()?.tail ?? 0}px`,
+                        },
+                        local.style,
+                    )}
                 >
                     <span class={styles.tail} aria-hidden="true" />
                     <Show when={title()}>

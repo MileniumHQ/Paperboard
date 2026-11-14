@@ -11,6 +11,7 @@ import { Dynamic } from "solid-js/web";
 import { PaperText, type PaperTextProps, PRESETS } from "../PaperText";
 import type { PaperColor, PaperTextPreset } from "../../types";
 import { getVarCss, resolveColor } from "../../utils/theme";
+import { mergeStyle } from "../../utils/style";
 
 export interface PaperTextListProps
     extends JSX.HTMLAttributes<HTMLUListElement | HTMLOListElement> {
@@ -90,7 +91,6 @@ export function PaperTextList(props: ParentProps<PaperTextListProps>) {
             .join(" ");
 
     const combinedStyle = () => {
-        const customStyle = typeof local.style === "object" ? local.style : {};
         const extra: JSX.CSSProperties = {};
 
         if (local.breakWord) {
@@ -112,14 +112,16 @@ export function PaperTextList(props: ParentProps<PaperTextListProps>) {
             }
         }
 
-        return {
-            "font-weight": effectiveWeight(),
-            "font-size": fontSizeVar(),
-            color: resolvedColor(),
-            ...(local.type ? { "list-style-type": local.type } : {}),
-            ...extra,
-            ...customStyle,
-        };
+        return mergeStyle(
+            {
+                "font-weight": effectiveWeight(),
+                "font-size": fontSizeVar(),
+                color: resolvedColor(),
+                ...(local.type ? { "list-style-type": local.type } : {}),
+                ...extra,
+            },
+            local.style,
+        );
     };
 
     const contextValue = () => ({
