@@ -30,6 +30,7 @@ let shared: PanelState = { ...DEFAULT_STATE, loaded: true, projects: [project(SE
 const failing = new Map<string, string>();
 const flows = new Map<string, SavedFlows>();
 const calls: { name: string; input: unknown }[] = [];
+let projectsMade = 0;
 
 export const service = {
     /** what the service announces next, as the daemon delivers it */
@@ -61,7 +62,7 @@ export function createPanelBridge() {
             listeners.add(listener);
             return () => listeners.delete(listener);
         },
-        call: async (name: string, input: { project?: string; flows?: SavedFlows; name?: string; enabled?: boolean } = {}): Promise<unknown> => {
+        call: async (name: string, input: { project?: string; flows?: SavedFlows; name?: string; enabled?: boolean; onlyDraft?: boolean } = {}): Promise<unknown> => {
             calls.push({ name, input: structuredClone(input) });
             // the service answers over the wire, never within the call
             await new Promise((resolve) => setTimeout(resolve, 0));
@@ -76,6 +77,18 @@ export function createPanelBridge() {
                 const projects = shared.projects.map((p) => (p.id === input.project ? { ...p, ...(input.name ? { name: input.name } : {}), ...(input.enabled !== undefined ? { enabled: input.enabled } : {}) } : p));
                 service.announce({ projects });
                 return projects.find((p) => p.id === input.project);
+            }
+            if (name === SERVICE_CALLS.createProject) {
+                const made = { ...project(`p-new-${++projectsMade}`, "Untitled project", Date.now()), draft: true };
+                service.announce({ projects: [...shared.projects, made] });
+                return made;
+            }
+            if (name === SERVICE_CALLS.deleteProject) {
+                // as the service does: a draft that has a block by now is kept
+                const kept = input.onlyDraft && Boolean(flows.get(input.project!)?.workspace.blocks?.blocks.length);
+                if (kept) return { deleted: false };
+                service.announce({ projects: shared.projects.filter((p) => p.id !== input.project) });
+                return { deleted: true };
             }
             throw new Error(`the fixture's service has no call "${name}"`);
         },

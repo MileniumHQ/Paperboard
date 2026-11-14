@@ -12,6 +12,7 @@ import * as Blockly from "blockly";
 import { PaperProvider } from "@mileniumhq/paperui";
 import App from "../../src/App";
 import { SERVICE_CALLS, type LogEntry } from "../../src/panel";
+import { BUILTIN } from "../../src/lib/names";
 import { project, registry, service, SERVICED_PROJECT } from "./serviceStub";
 
 const errors: string[] = [];
@@ -255,6 +256,72 @@ async function loadFailureChecks() {
     return { failed, retried: { readOnly: canvas()!.isReadOnly(), library: Boolean(byText("[role=radio], button, label", "Logic")) } };
 }
 
+const backButton = () => document.querySelector<HTMLElement>('[aria-label="All projects"]');
+/** The editor is open on `name` and its canvas takes edits. */
+const editing = async (name: string) => {
+    await until(`the editor of ${name}`, () => document.querySelector(`[role="menubar"][aria-label="${name}"]`) && canvas() && !canvas()!.isReadOnly());
+    await railItem("Flow");
+    await settle();
+};
+/** A block dropped on the canvas, which is saved a moment later (or at once, when the editor is left). */
+const addBlock = async (id: string) => {
+    Blockly.serialization.blocks.append({ type: BUILTIN.onRun, id, x: 40, y: 40 }, canvas()!);
+    // Blockly tells the editor a tick later, as it does a person's drop
+    await frame();
+};
+const callsOf = (name: string) => service.calls().filter((c) => c.name === name);
+const saveHolding = (blockId: string) => service.calls().findIndex((c) => c.name === SERVICE_CALLS.save && JSON.stringify(c.input.flows).includes(`"${blockId}"`));
+/** Home is shown: what was called by then. */
+const home = async () => {
+    await until("the home screen", () => !backButton() && byText("button", "New project"));
+    return service.calls().length;
+};
+
+/** Leaving the editor saves the latest edit first, and a new project left without a block is dropped. */
+async function leaveChecks() {
+    // the back arrow, before the edit's own save was due
+    await addBlock("edit-before-back");
+    backButton()!.click();
+    const callsAtHome = await home();
+    const savedBeforeHome = saveHolding("edit-before-back") >= 0 && saveHolding("edit-before-back") < callsAtHome;
+
+    // New project from the editor's menu: the edit is saved before anything is made
+    byText("*", "Renamed by hand")!.click();
+    await editing("Renamed by hand");
+    await addBlock("edit-before-new");
+    byText("button, [role=menuitem]", "Project")!.click();
+    (await until("the Project menu's New project", () => byText("[role=menuitem]", "New project")))!.click();
+    await editing("Untitled project");
+    const savedBeforeMade = saveHolding("edit-before-new") >= 0 && saveHolding("edit-before-new") < service.calls().findIndex((c) => c.name === SERVICE_CALLS.createProject);
+    const emptyDraft = callsOf(SERVICE_CALLS.createProject).length;
+
+    // left empty, it is dropped
+    const emptyId = (await until("the new project's id", () => service.state().projects.find((p) => p.draft)))!.id;
+    backButton()!.click();
+    await home();
+    const droppedEmpty = callsOf(SERVICE_CALLS.deleteProject).at(-1)?.input;
+
+    // given a block, it is saved before the service is asked to drop it, so the service keeps it
+    byText("button", "New project")!.click();
+    await editing("Untitled project");
+    const keptId = service.state().projects.find((p) => p.draft)!.id;
+    await addBlock("edit-in-draft");
+    backButton()!.click();
+    await home();
+    const keptDelete = service.calls().findIndex((c) => c.name === SERVICE_CALLS.deleteProject && c.input.project === keptId);
+    return {
+        savedBeforeHome,
+        savedBeforeMade,
+        emptyDraft,
+        droppedEmpty,
+        emptyId,
+        keptSavedFirst: saveHolding("edit-in-draft") >= 0 && saveHolding("edit-in-draft") < keptDelete,
+        keptAsked: service.calls()[keptDelete]?.input,
+        keptId,
+        keptListed: service.state().projects.some((p) => p.id === keptId),
+    };
+}
+
 async function run(): Promise<Record<string, unknown>> {
     render(
         () => (
@@ -275,7 +342,8 @@ async function run(): Promise<Record<string, unknown>> {
     const toggle = await toggleChecks();
     const refresh = await registryChecks();
     const loadFailure = await loadFailureChecks();
-    return { console: consoleResult, dialogs, library, createVariable, toggle, refresh, loadFailure, uncaught: [...errors] };
+    const leaving = await leaveChecks();
+    return { console: consoleResult, dialogs, library, createVariable, toggle, refresh, loadFailure, leaving, uncaught: [...errors] };
 }
 
 run()

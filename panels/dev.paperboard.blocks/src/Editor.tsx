@@ -281,38 +281,36 @@ export default function Editor(props: {
             setWorking(false);
         }
     };
-    // a new project left without a block is not kept: its last edit is saved
-    // first, so the service sees whether it has one by now
-    const leaveDraft = async () => {
-        if (!props.project().draft) return;
+    // the latest edits are saved before the canvas goes, before a copy is made
+    // of what was saved, and before anything new is made, so a save that fails
+    // leaves nothing made behind
+    const saveFirst = async (missing = "") => {
         const saved = await flows.flush();
-        if (!saved.ok) throw new Error(`Your latest changes are not saved: ${saved.message}`);
-        await props.projects.discardDraft(props.projectId);
+        if (!saved.ok) throw new Error(`Your latest changes are not saved${missing}: ${saved.message}`);
     };
-    const leave = async () => {
-        // the latest edits are saved before the canvas goes
-        const saved = await flows.flush();
-        if (!saved.ok) throw new Error(`Your latest changes are not saved: ${saved.message}`);
-        await leaveDraft();
+    // a new project left without a block is not kept: it is saved by now, so
+    // the service sees whether it has one
+    const leaveDraft = async () => {
+        if (props.project().draft) await props.projects.discardDraft(props.projectId);
     };
     const newProject = () =>
         change("Project not made", async () => {
+            await saveFirst();
             const made = await props.projects.create();
-            await leave();
+            await leaveDraft();
             props.onOpen(made);
         });
     const copyProject = () =>
         change("Project not copied", async () => {
-            // the copy is of what was saved, so the latest edits go first
-            const saved = await flows.flush();
-            if (!saved.ok) throw new Error(`Your latest changes are not saved, so the copy would miss them: ${saved.message}`);
+            await saveFirst(", so the copy would miss them");
             const copy = await props.projects.duplicate(props.projectId);
             await leaveDraft();
             props.onOpen(copy);
         });
     const goHome = () =>
         change("Project not closed", async () => {
-            await leave();
+            await saveFirst();
+            await leaveDraft();
             props.onHome();
         });
     // the switch flips on its own, never waiting on another change; it moves once the service says so

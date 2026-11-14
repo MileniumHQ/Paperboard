@@ -81,6 +81,21 @@ describe("the editor", () => {
     );
 
     test(
+        "saves the latest edit before it is left, and drops a new project left without a block",
+        async () => {
+            const { leaving } = await panelFixture();
+            expect(leaving.savedBeforeHome).toBe(true);
+            expect(leaving.savedBeforeMade).toBe(true);
+            expect(leaving.emptyDraft).toBe(1);
+            expect(leaving.droppedEmpty).toEqual({ project: leaving.emptyId, onlyDraft: true });
+            expect(leaving.keptSavedFirst).toBe(true);
+            expect(leaving.keptAsked).toEqual({ project: leaving.keptId, onlyDraft: true });
+            expect(leaving.keptListed).toBe(true);
+        },
+        TIMEOUT,
+    );
+
+    test(
         "flows that couldn't be loaded leave the canvas read-only, say so until they load, and Try again loads them",
         async () => {
             const { loadFailure } = await panelFixture();
