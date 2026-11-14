@@ -8,8 +8,8 @@
 // it is absent, so a fresh `bun install` leaves the app unable to start. This
 // module runs electron's own installer at the point the dev bootstrap needs it.
 //
-// Kept separate from dev.ts so the "is the binary present?" contract is
-// unit-tested (ensureElectron.test.ts) without downloading a binary.
+// Kept separate from dev.ts, which is only a driver: this module owns the
+// "is the binary present?" check and the installer run.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";

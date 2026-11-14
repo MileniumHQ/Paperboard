@@ -13,12 +13,13 @@
 // Link targets and the trash-rename recovery live in paperapi/src/link.ts, so
 // this script stays a thin driver and never re-implements that policy.
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { linkAllPanels, unlinkPanel, listLinkedPanels } from "../packages/paperapi/src/link";
 import { ensureElectron } from "./ensureElectron";
+import { discoverPanels, PANELS_ROOT, type DiscoveredPanel } from "./publishManifest";
 import { buildSupervisor } from "./supervisor";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -34,31 +35,15 @@ function run(label: string, command: string, args: string[], cwd = ROOT): void {
     }
 }
 
-interface PanelDir {
-    id: string;
-    dir: string;
-}
-
-// A panel is a directory with a manifest and a package.json build script.
-// Discovery reads the real tree; it never guesses an id from a name.
-function discoverPanels(): PanelDir[] {
-    const panelsRoot = join(ROOT, "panels");
-    const panels: PanelDir[] = [];
-    for (const entry of readdirSync(panelsRoot)) {
-        const dir = join(panelsRoot, entry);
-        if (!statSync(dir).isDirectory()) continue;
-        const manifestPath = join(dir, "manifest.json");
-        const pkgPath = join(dir, "package.json");
-        if (!existsSync(manifestPath) || !existsSync(pkgPath)) continue;
-        const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-        const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-        if (typeof manifest.id !== "string" || !manifest.id) {
-            throw new Error(`panels/${entry}/manifest.json has no id`);
-        }
-        if (!pkg.scripts?.build) continue; // not a buildable panel; nothing to do
-        panels.push({ id: manifest.id, dir });
-    }
-    return panels;
+// The panels to build: every panel Publish panels finds (one discovery, so
+// a broken manifest fails here too) that has a package.json build script.
+function buildablePanels(): DiscoveredPanel[] {
+    return discoverPanels(PANELS_ROOT).filter((panel) => {
+        const pkgPath = join(panel.dir, "package.json");
+        if (!existsSync(pkgPath)) return false;
+        const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { scripts?: Record<string, string> };
+        return Boolean(pkg.scripts?.build);
+    });
 }
 
 function install(): void {
@@ -73,7 +58,7 @@ function buildShared(): void {
 }
 
 function buildPanels(): void {
-    for (const panel of discoverPanels()) {
+    for (const panel of buildablePanels()) {
         run(`build panels/${panel.id}`, "bun", ["run", "build"], panel.dir);
     }
 }

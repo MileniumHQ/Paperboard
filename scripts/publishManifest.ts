@@ -1,11 +1,11 @@
-// Publish target resolution, extracted from publish.ts so the version-truth
-// rule is testable without running the build script's top-level side effects.
-// Half-finished panels are 0.x, never a fabricated 1.0.0 (AGENTS.md: version
-// numbers tell the truth). pack.ts refuses version-less too — same rule,
-// enforced at both exits.
+// Publish target resolution, kept apart from the publish flows so the
+// version rule is testable without running them. A panel publishes under the
+// version its manifest declares (0.x while unfinished), never a fabricated
+// 1.0.0; packages/paperapi/src/pack.ts refuses a version-less manifest too.
 //
-// Panel discovery lives here too because every consumer (publish panels, USB
-// bundle) must read the same root. A wrong root silently bundles zero panels.
+// Panel discovery lives here too because every consumer (Publish panels, the
+// dev bootstrap's panel builds) must read the same root: a wrong root
+// silently finds zero panels.
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { basename, join, relative } from "path";
 import { requirePanelId } from "../packages/paperapi/src/panelIdentity";

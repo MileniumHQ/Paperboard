@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * snapshot-acp-registry.ts — Captures the ACP agent registry for the AI panel
+ * snapshot-acp-registry.ts — Captures the ACP agent registry for the Agents panel
  *
  * Usage: bun scripts/snapshot-acp-registry.ts
  * Output: panels/dev.paperboard.agents/src/data/acp-agents.json

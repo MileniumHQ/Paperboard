@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Backstop for AGENTS.md "Legacy/fallback code needs TODO(remove after vX)
-# and dies in one release": fails when a TODO(remove after vX) or
-# TODO(deny after vX) names a version at or below the current app version.
-# Deprecations without enforcement dates are decorations; expired ones are
-# broken promises. Markdown files are excluded (docs discuss TODOs in prose).
+# Fails when a TODO(remove after vX) or TODO(deny after vX) names a version
+# at or below the current app version: a dated removal that is due is a
+# broken promise, so the gate holds the code to it. Markdown files are
+# excluded (docs discuss TODOs in prose).
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,6 +14,9 @@ if [ -z "$CUR_MAJOR" ] || [ -z "$CUR_MINOR" ]; then
     echo "FAIL: could not parse current version from apps/paperboard/package.json" >&2
     exit 1
 fi
+# base 10: a leading zero would otherwise read as octal (08 is an error)
+CUR_MAJOR=$((10#$CUR_MAJOR))
+CUR_MINOR=$((10#$CUR_MINOR))
 
 # rg exits 1 when nothing matches; anything above means the scan never
 # ran, which must fail rather than read as "zero expired TODOs"
@@ -34,9 +36,9 @@ while IFS= read -r line; do
     text="${rest#*:}"
     if [[ "$text" =~ TODO\((remove|deny)\ after\ v([0-9]+)\.([0-9]+) ]]; then
         kind="${BASH_REMATCH[1]}"
-        major="${BASH_REMATCH[2]}"
-        minor="${BASH_REMATCH[3]}"
-        # force base-10 (leading zeros would read as octal)
+        # base 10: a leading zero would otherwise read as octal
+        major=$((10#${BASH_REMATCH[2]}))
+        minor=$((10#${BASH_REMATCH[3]}))
         if [ "$major" -lt "$CUR_MAJOR" ] || { [ "$major" -eq "$CUR_MAJOR" ] && [ "$minor" -le "$CUR_MINOR" ]; }; then
             echo "FAIL: expired TODO($kind after v$major.$minor) at $loc:$lineno (current v$CUR_MAJOR.$CUR_MINOR)" >&2
             echo "      $text" | head -c 300 >&2
