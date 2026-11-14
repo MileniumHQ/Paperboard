@@ -1,8 +1,10 @@
 import {
     type Component,
+    createEffect,
     createSignal,
     For,
     type JSX,
+    on,
     onCleanup,
     onMount,
     Show,
@@ -115,6 +117,10 @@ const Screenshots: Component<{ panelName: string; shots: StoreScreenshot[] }> = 
         const gap = parseFloat(getComputedStyle(track).columnGap) || 0;
         track.scrollBy({ left: direction * ((frame?.offsetWidth ?? track.clientWidth) + gap), behavior: "smooth" });
     };
+
+    // frames added or removed move the end without resizing the track
+    // (it is a flex child at min-width 0), so the count re-syncs too
+    createEffect(on(() => props.shots.length, sync, { defer: true }));
 
     onMount(() => {
         sync();

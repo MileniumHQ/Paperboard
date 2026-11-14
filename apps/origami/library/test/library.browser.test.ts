@@ -19,14 +19,18 @@ const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js
 
 // The shell: it frames the library, says it is Paperboard with the
 // installed list from its query, and answers media requests with what
-// `window.mediaAnswer` returns. Installs wait until the test answers them
-// with `window.answerInstall`. Everything the library sent is kept.
+// `window.mediaAnswer` returns; with `?hold=1` they wait until the test
+// answers them with `window.answerMedia["<id>:<full>"]`. Installs wait until
+// the test answers them with `window.answerInstall`. Everything the library
+// sent is kept.
 const SHELL = `<!doctype html><html><head><meta charset="utf-8"><title>shell</title>
 <style>html, body { margin: 0; height: 100%; } iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }</style></head>
 <body><iframe id="library" src="/library/"></iframe><script>
-const installed = JSON.parse(new URLSearchParams(location.search).get("installed") || "[]");
+const query = new URLSearchParams(location.search);
+const installed = JSON.parse(query.get("installed") || "[]");
 window.sent = [];
-window.mediaAnswer = () => ({ ok: false, error: "Can't read store/ (EACCES)" });
+window.answerMedia = {};
+window.mediaAnswer = () => (query.get("hold") ? null : { ok: false, error: "Can't read store/ (EACCES)" });
 addEventListener("message", (event) => {
     const message = event.data;
     window.sent.push(message);
@@ -35,7 +39,12 @@ addEventListener("message", (event) => {
     const reply = (answer) => event.source.postMessage(answer, "*");
     if (message.type === "paperboard:library-hello") reply({ type: "paperboard:library-connected", theme: "light", installed });
     if (message.type === "paperboard:library-install") window.answerInstall = Object.assign(window.answerInstall || {}, { [message.panelId]: (answer) => reply({ type: "paperboard:library-install-result", requestId: message.requestId, panelId: message.panelId, ...answer }) });
-    if (message.type === "paperboard:library-media") reply({ type: "paperboard:library-media-result", requestId: message.requestId, panelId: message.panelId, ...window.mediaAnswer(message) });
+    if (message.type === "paperboard:library-media") {
+        const answer = (media) => reply({ type: "paperboard:library-media-result", requestId: message.requestId, panelId: message.panelId, ...media });
+        const media = window.mediaAnswer(message);
+        if (media) answer(media);
+        else window.answerMedia[message.panelId + ":" + message.full] = answer;
+    }
 });
 </script></body></html>`;
 
@@ -204,6 +213,27 @@ describe("the library, as a person uses it", () => {
 
         await press(page, doc, button("Library"), "the back button");
         await until(page, doc, `!doc.querySelector("h1") && Boolean(${card("Local Tool")})`, "the grid again");
+        expect(page.exceptions).toEqual([]);
+    }, 30_000);
+
+    test("screenshots that arrive while the gallery is open can be stepped through", async () => {
+        const installed = [{ id: "dev.local.shots", name: "Shots", version: "0.1.0" }];
+        const page = await chrome.open(`${origin}/shell.html?hold=1&installed=${encodeURIComponent(JSON.stringify(installed))}`);
+        const doc = FRAMED_DOC;
+        const PIXEL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        const shots = (count: number) => ({ ok: true, store: { screenshots: Array.from({ length: count }, (_, i) => ({ light: PIXEL, alt: `Shot ${i + 1}` })) } });
+        const gallery = (count: number) => `doc.querySelectorAll("[aria-label=Screenshots] img").length === ${count}`;
+        const next = `doc.querySelector("[aria-label='Next screenshot']")`;
+
+        // the grid's light read brings one screenshot; the page's full read is held
+        await until(page, doc, `Boolean(window.answerMedia["dev.local.shots:false"])`, "the grid's media request");
+        await page.evaluate(`window.answerMedia["dev.local.shots:false"](${JSON.stringify(shots(1))}); true`);
+        await press(page, doc, card("Shots"), "the Shots card");
+        await until(page, doc, `${gallery(1)} && ${next}.disabled && Boolean(window.answerMedia["dev.local.shots:true"])`, "one screenshot, nothing after it");
+
+        // the full listing lands on the open gallery: there is now more to see
+        await page.evaluate(`window.answerMedia["dev.local.shots:true"](${JSON.stringify(shots(3))}); true`);
+        await until(page, doc, `${gallery(3)} && !${next}.disabled`, "Next enabled for the new screenshots");
         expect(page.exceptions).toEqual([]);
     }, 30_000);
 
