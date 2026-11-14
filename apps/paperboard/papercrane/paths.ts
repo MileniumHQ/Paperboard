@@ -9,9 +9,14 @@ export function setPaperboardDir(dir: string): void {
     overrideDir = dir;
 }
 
+// "undefined" and "null" are what `process.env.X = previous` stores when the
+// variable was unset: data written there lands in a folder of that name in
+// the working directory, so they are refused rather than used.
 export function getPaperboardDir(): string {
     if (overrideDir) return overrideDir;
-    if (process.env.PAPERBOARD_DIR) return process.env.PAPERBOARD_DIR;
+    const dir = process.env.PAPERBOARD_DIR;
+    if (dir === "undefined" || dir === "null") throw new Error(`PAPERBOARD_DIR is the text "${dir}", not a folder: unset it or point it at a data folder`);
+    if (dir) return dir;
     return path.join(os.homedir(), ".paperboard");
 }
 

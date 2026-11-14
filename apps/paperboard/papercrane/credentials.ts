@@ -30,8 +30,6 @@ interface SecretEntry {
     updatedAt?: string;
 }
 
-type SecretFile = Record<string, SecretEntry>;
-
 function secretKey(panelId: string, name: string): string {
     return `${panelId}/${name}`;
 }
@@ -50,25 +48,27 @@ export class CredentialStore {
     private load(): void {
         // unparseable stores are quarantined by the shared state reader,
         // never overwritten (storage.readStateFileSync)
-        const parsed = readStateFileSync<SecretFile | null>(this.file, null, "secrets store");
-        if (!parsed || typeof parsed !== "object") return;
-        for (const [key, entry] of Object.entries(parsed as Record<string, SecretEntry>)) {
-            if (typeof entry?.value === "string") {
-                this.secrets.set(key, { ...entry, setAt: entry.setAt ?? new Date().toISOString() });
-            } else {
-                logger.debug(`[Credentials] skipping malformed entry ${key}`);
-            }
+        const parsed = readStateFileSync<unknown>(this.file, null, "secrets store");
+        if (parsed === null) return;
+        const isStore = typeof parsed === "object" && !Array.isArray(parsed);
+        const entries = isStore ? Object.entries(parsed as Record<string, Partial<SecretEntry>>) : [];
+        const malformed: string[] = [];
+        for (const [key, entry] of entries) {
+            if (typeof entry?.value === "string") this.secrets.set(key, { ...entry, value: entry.value, setAt: entry.setAt ?? new Date().toISOString() });
+            else malformed.push(key);
         }
+        if (isStore && malformed.length === 0) return;
+        // the next save rewrites the store from what was readable: a copy of
+        // the file as it was keeps what that would drop
+        const kept = `${this.file}.corrupt-${Date.now()}`;
+        fs.copyFileSync(this.file, kept);
+        const what = malformed.length > 0 ? `entries ${malformed.join(", ")} have no readable value` : "it is not an object of entries";
+        logger.error(`[Credentials] the secrets store is damaged (${what}); its bytes are kept in ${kept}`);
     }
 
     private save(): void {
-        const data: SecretFile = Object.fromEntries(this.secrets);
-        writeFileAtomicSync(this.file, JSON.stringify(data, null, 2), { mode: 0o600 });
-        try {
-            fs.chmodSync(this.file, 0o600);
-        } catch (err) {
-            logger.warn("[Credentials] chmod 0600 on secrets store failed:", err);
-        }
+        // writeFileAtomicSync gives the temp file 0600 before it becomes the store
+        writeFileAtomicSync(this.file, JSON.stringify(Object.fromEntries(this.secrets), null, 2), { mode: 0o600 });
     }
 
     private validatePanelId(panelId: string): string {

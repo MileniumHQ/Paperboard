@@ -9,7 +9,7 @@ import { PROTOCOL_VERSION as SDK_PROTOCOL_VERSION } from "../../../../packages/p
 import { PROTOCOL_VERSION } from "../../papercrane/protocol";
 import { DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, daemonProof } from "../../papercrane/handshake";
 import { childEnv, readHandshake, runCrane, startCrane } from "./support/crane";
-import { dataDir } from "./support/fs";
+import { dataDir, restoreEnv } from "./support/fs";
 import { startDaemon, stopDaemon } from "./support/inproc";
 import { installPanelFiles } from "./support/panels";
 import { Rpc } from "./support/rpc";
@@ -40,7 +40,7 @@ function withDataDir<T>(dir: string, run: () => Promise<T>): Promise<T> {
 	const previous = process.env.PAPERBOARD_DIR;
 	process.env.PAPERBOARD_DIR = dir;
 	return run().finally(() => {
-		process.env.PAPERBOARD_DIR = previous;
+		restoreEnv("PAPERBOARD_DIR", previous);
 	});
 }
 

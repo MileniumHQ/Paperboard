@@ -7,9 +7,10 @@ import { PaperCraneEngine } from "../../papercrane/engine";
 import { PaperCraneAuth } from "../../papercrane/auth";
 import { CredentialStore } from "../../papercrane/credentials";
 import { readRemotes } from "../../papercrane/remotes";
+import { getPaperboardDir } from "../../papercrane/paths";
 import { parseBackupLocationRequest } from "../../src/renderer/src/lib/backupLocationRequest";
 import { CraneTransport } from "../../../../packages/paperapi/src/ws";
-import { dataDir, listTree } from "./support/fs";
+import { dataDir, listTree, restoreEnv } from "./support/fs";
 import { startDaemon, stopDaemon, type InProcessDaemon } from "./support/inproc";
 import { installPanelFiles } from "./support/panels";
 import type { Rpc } from "./support/rpc";
@@ -106,6 +107,18 @@ describe("panel RPCs take their panel from the token claim", () => {
 
 // Config storage layout is stable and never overwrites what it can't read.
 describe("config storage layout", () => {
+	test("a data folder named \"undefined\" or \"null\" (an env var restored from unset) is refused, never created in the working folder", () => {
+		const previous = process.env.PAPERBOARD_DIR;
+		try {
+			for (const text of ["undefined", "null"]) {
+				process.env.PAPERBOARD_DIR = text;
+				expect(() => getPaperboardDir()).toThrow("PAPERBOARD_DIR");
+			}
+		} finally {
+			restoreEnv("PAPERBOARD_DIR", previous);
+		}
+	});
+
 	test("globals go in local/, panel configs in configs/, explicit paths in files/<panel>/, and data.json is never touched", async () => {
 		const dir = dataDir();
 		const legacy = path.join(dir, "files", "test.cfg", "data.json");
@@ -182,6 +195,18 @@ describe("unreadable state is quarantined", () => {
 		expect(() => readRemotes(remotes)).toThrow();
 	});
 
+	test("a vault entry with no readable value is kept aside, not dropped by the next save", () => {
+		const dir = dataDir();
+		const vault = path.join(dir, "local", "secrets.json");
+		const damaged = JSON.stringify({ "test.v/good": { value: "g", setAt: "2026-01-01T00:00:00.000Z" }, "test.v/bad": { value: 42 } });
+		fs.writeFileSync(vault, damaged);
+		const store = new CredentialStore(dir);
+		expect(store.get("good", "test.v")).toEqual({ found: true, value: "g" });
+		store.set("other", "o", "test.v");
+		const [copy] = corruptCopies(path.join(dir, "local"), "secrets.json");
+		expect(fs.readFileSync(path.join(dir, "local", copy!), "utf8")).toBe(damaged);
+	});
+
 	test("a daemon that cannot write crane.json does not start, and atomic writes leave no temp files", async () => {
 		const dir = dataDir();
 		fs.mkdirSync(path.join(dir, "local", "crane.json", "occupied"), { recursive: true });
@@ -209,7 +234,7 @@ describe("unreadable state is quarantined", () => {
 		const previous = process.env.PAPERBOARD_DIR;
 		const { startPaperCraneServer } = await import("../../papercrane/index");
 		await expect(startPaperCraneServer({ host: "127.0.0.1", port: 0, headless: true, advertise: false })).rejects.toThrow("already running");
-		process.env.PAPERBOARD_DIR = previous;
+		restoreEnv("PAPERBOARD_DIR", previous);
 		expect(fs.existsSync(path.join(packages, "java.tmp-123"))).toBe(true);
 		await crane.stop();
 

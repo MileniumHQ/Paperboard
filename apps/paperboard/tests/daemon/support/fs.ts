@@ -35,6 +35,13 @@ export function dataDir(): string {
 	return dir;
 }
 
+// Puts an environment variable back as it was. An unset one is deleted:
+// assigning undefined to process.env stores the text "undefined".
+export function restoreEnv(name: string, previous: string | undefined): void {
+	if (previous === undefined) delete process.env[name];
+	else process.env[name] = previous;
+}
+
 export function removeDir(dir: string): void {
 	fs.rmSync(dir, { recursive: true, force: true });
 }

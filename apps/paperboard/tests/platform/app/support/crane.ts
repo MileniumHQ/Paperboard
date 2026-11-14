@@ -5,6 +5,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { WebSocket } from "ws";
+import { childEnv } from "../../../daemon/support/crane";
 import { ownChild } from "./temp";
 
 export const WAIT_MS = 60_000;
@@ -72,12 +73,8 @@ export interface RunningCrane extends Watched {
 // `papercrane --headless` on a free loopback port. Resolves once it says it
 // listens and its crane.json handshake is on disk.
 export async function startCrane(binary: string, dataDir: string, extraEnv: Record<string, string> = {}): Promise<RunningCrane> {
-    const env: NodeJS.ProcessEnv = { ...process.env, PAPERBOARD_DIR: dataDir, ...extraEnv };
-    delete env.PAPERCRANE_PORT;
-    delete env.PAPERCRANE_HOST;
-    delete env.PAPERCRANE_TOKEN;
     const child = spawn(binary, ["--headless", "--port", "0", "--host", "127.0.0.1"], {
-        cwd: dataDir, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true,
+        cwd: dataDir, env: childEnv(dataDir, extraEnv), stdio: ["ignore", "pipe", "pipe"], windowsHide: true,
     });
     ownChild(child);
     const watched = watch(child, `crane ${path.basename(binary)}`);

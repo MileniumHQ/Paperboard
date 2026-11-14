@@ -8,35 +8,19 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { buildSupervisor } from "../../../../../scripts/supervisor";
+import { buildCrane } from "../../../../../scripts/testing/crane";
 import { registerTestCleanup, tempDir } from "./fs";
 import { Rpc } from "./rpc";
 import { isAlive, waitFor, within } from "./wait";
 
 export const APP_DIR = path.resolve(import.meta.dir, "../../..");
 export const REPO_DIR = path.resolve(APP_DIR, "../..");
-const EXE = process.platform === "win32" ? ".exe" : "";
 
 let compiled: Promise<string> | null = null;
 
-// The compiled crane binary (built on first use).
+// The compiled crane binary (built on first use), by the release's own recipe.
 export function craneBinary(): Promise<string> {
-	if (!compiled) {
-		compiled = (async () => {
-			const out = path.join(tempDir("pb-crane-bin-"), `papercrane${EXE}`);
-			// the server carries its workload supervisor inside itself
-			const supervisor = buildSupervisor();
-			const build = Bun.spawn(
-				[process.execPath, "build", "--compile", "./papercrane/main.ts", supervisor, "--outfile", out],
-				{ cwd: APP_DIR, stdout: "pipe", stderr: "pipe" },
-			);
-			const [code, stderr] = await Promise.all([build.exited, new Response(build.stderr).text()]);
-			if (code !== 0 || !fs.existsSync(out)) {
-				throw new Error(`Compiling the crane failed (exit ${code}): ${stderr}`);
-			}
-			return out;
-		})();
-	}
+	compiled ??= Promise.resolve().then(() => buildCrane(tempDir("pb-crane-bin-")));
 	return compiled;
 }
 

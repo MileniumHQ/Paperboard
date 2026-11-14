@@ -11,7 +11,7 @@
 // binary is not a crane. Workload tests use the compiled crane.
 import * as http from "node:http";
 import { startPaperCraneServer, type ServerInstance, type ServerOptions } from "../../../papercrane/index";
-import { dataDir as makeDataDir } from "./fs";
+import { dataDir as makeDataDir, restoreEnv } from "./fs";
 import { Rpc } from "./rpc";
 import { within } from "./wait";
 
@@ -46,7 +46,7 @@ export async function startDaemon(options: ServerOptions & { dataDir?: string } 
 			...options,
 		});
 	} catch (err) {
-		process.env.PAPERBOARD_DIR = previous;
+		restoreEnv("PAPERBOARD_DIR", previous);
 		throw err;
 	}
 	const token = options.noAuth ? "" : String(instance.auth.getAuthorizedClients().find((c) => c.clientName === "host")?.token ?? "");
@@ -67,7 +67,7 @@ export async function startDaemon(options: ServerOptions & { dataDir?: string } 
 			instance.stop();
 			await within("the in-process daemon to close", closed, 15_000);
 			current = null;
-			process.env.PAPERBOARD_DIR = previous;
+			restoreEnv("PAPERBOARD_DIR", previous);
 		},
 	};
 	current = daemon;
