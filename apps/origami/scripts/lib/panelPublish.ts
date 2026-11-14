@@ -278,6 +278,42 @@ function readStoreUpload(upload: PanelUpload): StoreMedia | null {
  * old release; the same version is then refused as already published, so
  * the repair is publishing the next version, which rewrites both.
  */
+// The record names this release's icon, so a new extension or no icon at
+// all replaces the old one instead of leaving it served.
+async function uploadIcon(upload: PanelUpload, ctx: PublishContext): Promise<Pick<PanelRecord, "iconKey" | "iconUrl">> {
+    if (!upload.icon) return {};
+    const ext = iconExtension(upload.icon.name)!;
+    const key = iconKey(upload.id, upload.version, ext);
+    // content type derived from the extension, never the uploader's
+    await ctx.storage.putObject(key, upload.icon.bytes, ICON_CONTENT_TYPES[ext]!, "public, max-age=31536000, immutable");
+    return { iconKey: key, iconUrl: `${ctx.origin}/panel/${upload.id}/icon` };
+}
+
+// Media keys are per version: a republish never overwrites bytes an older
+// record still references. Returns the listing with the registry's URLs.
+async function uploadStoreMedia(upload: PanelUpload, media: StoreMedia, ctx: PublishContext): Promise<StoreListing> {
+    const screenshots: StoreListing["screenshots"] = [];
+    for (const [index, shot] of media.screenshots.entries()) {
+        const urls: Partial<Record<"light" | "dark", string>> = {};
+        for (const file of shot.files) {
+            const name = `${index}-${file.theme}.${file.ext}`;
+            await ctx.storage.putObject(
+                `${storeMediaPrefix(upload.id)}${upload.version}/${name}`,
+                file.bytes,
+                STORE_IMAGE_TYPES[file.ext]!,
+                "public, max-age=31536000, immutable",
+            );
+            urls[file.theme] = `${ctx.origin}/panel/${upload.id}/media/${upload.version}/${name}`;
+        }
+        screenshots.push({
+            light: urls.light!,
+            ...(urls.dark ? { dark: urls.dark } : {}),
+            ...(shot.alt ? { alt: shot.alt } : {}),
+        });
+    }
+    return { ...media.listing, screenshots };
+}
+
 export async function publishPanel(
     upload: PanelUpload,
     ctx: PublishContext,
@@ -307,43 +343,8 @@ export async function publishPanel(
     const archiveKey = `panels/${upload.id}/${upload.id}-${upload.version}.tar.gz`;
     await storage.putObject(archiveKey, upload.archive, "application/gzip");
 
-    // the record names this release's icon, so a new extension or no icon
-    // at all replaces the old one instead of leaving it served
-    let icon: Pick<PanelRecord, "iconKey" | "iconUrl"> = {};
-    if (upload.icon) {
-        const ext = iconExtension(upload.icon.name)!;
-        const key = iconKey(upload.id, upload.version, ext);
-        // content type derived from the extension, never the uploader's
-        await storage.putObject(key, upload.icon.bytes, ICON_CONTENT_TYPES[ext]!, "public, max-age=31536000, immutable");
-        icon = { iconKey: key, iconUrl: `${ctx.origin}/panel/${upload.id}/icon` };
-    }
-
-    // media keys are per version: a republish never overwrites bytes an
-    // older record still references
-    let store: StoreListing | undefined;
-    if (storeMedia) {
-        const screenshots: StoreListing["screenshots"] = [];
-        for (const [index, shot] of storeMedia.screenshots.entries()) {
-            const urls: Partial<Record<"light" | "dark", string>> = {};
-            for (const file of shot.files) {
-                const name = `${index}-${file.theme}.${file.ext}`;
-                await storage.putObject(
-                    `${storeMediaPrefix(upload.id)}${upload.version}/${name}`,
-                    file.bytes,
-                    STORE_IMAGE_TYPES[file.ext]!,
-                    "public, max-age=31536000, immutable",
-                );
-                urls[file.theme] =
-                    `${ctx.origin}/panel/${upload.id}/media/${upload.version}/${name}`;
-            }
-            screenshots.push({
-                light: urls.light!,
-                ...(urls.dark ? { dark: urls.dark } : {}),
-                ...(shot.alt ? { alt: shot.alt } : {}),
-            });
-        }
-        store = { ...storeMedia.listing, screenshots };
-    }
+    const icon = await uploadIcon(upload, ctx);
+    const store = storeMedia ? await uploadStoreMedia(upload, storeMedia, ctx) : undefined;
 
     const record: PanelRecord = {
         id: upload.id,
