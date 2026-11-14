@@ -29,6 +29,7 @@
 
 .PaperSettingItem {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--paper-uigap);
@@ -42,9 +43,23 @@
     border-bottom: 0;
 }
 
+/* The title and description keep at least a field's width beside the
+   control. A control too wide to leave them that much goes under them,
+   while a switch or a short menu stays on the row. */
+.text {
+    flex: 1 1 var(--paper-size-field);
+    min-width: 0;
+}
+
+.control {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+}
+
 .disabled {
     pointer-events: none;
-    opacity: 0.5;
+    opacity: var(--paper-opacity-dim);
 }
 
 /* Multiline fields need the whole row, including when added dynamically. */

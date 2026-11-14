@@ -152,7 +152,7 @@ export function PaperSettingItem(props: ParentProps<PaperSettingItemProps>) {
                 .join(" ")}
             classList={local.classList}
         >
-            <PaperFlex direction="column" gap="onefourth" style={{ flex: 1, "min-width": 0 }}>
+            <PaperFlex direction="column" gap="onefourth" class={styles.text}>
                 <PaperText preset="label">
                     {local.title}
                 </PaperText>
@@ -163,7 +163,7 @@ export function PaperSettingItem(props: ParentProps<PaperSettingItemProps>) {
                 </Show>
             </PaperFlex>
 
-            <PaperFlex direction="row" align="center" justify="flex-end">
+            <PaperFlex direction="row" align="center" justify="flex-end" class={styles.control}>
                 {local.children}
             </PaperFlex>
         </div>

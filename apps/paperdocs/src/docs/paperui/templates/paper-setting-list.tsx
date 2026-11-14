@@ -175,6 +175,7 @@ export function Settings() {
             <PaperTextList>
                 <li>The list is 100% wide, with a raised surface, a border and rounded, clipped corners. Rows sit on the same surface, divided by a subtle rule, with none under the last row.</li>
                 <li>A row puts the title block on the left, taking the free width, and the control on the right.</li>
+                <li>The title and description keep at least a field's width (<PaperCode>size-field</PaperCode>) beside the control. A control too wide to leave them that goes under them, at its own width. A toggle or a short menu stays on the row.</li>
                 <li>A row that contains a <PaperCode>textarea</PaperCode> (a <PaperLink href="/docs/paperui/paperinput/">PaperInput</PaperLink> with <PaperCode>multiline</PaperCode>) stacks the control under the title at full width.</li>
                 <li>The list does not set a height. A row list in a bounded parent scrolls, and <PaperCode>autoHeight</PaperCode> turns that off: the list keeps its full height, and the parent scrolls instead.</li>
             </PaperTextList>
