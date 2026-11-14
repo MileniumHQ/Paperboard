@@ -4,6 +4,12 @@ import { mergeRegistryWithInstalled, type PanelItem } from "./panelMerge";
 
 export type { PanelItem };
 
+/** what an uninstall that worked left behind */
+export interface UninstallResult {
+    /** the packages only this panel used that could not be removed, each with why */
+    packagesWarning?: string;
+}
+
 /** an installed panel that isn't listed, because its manifest is unreadable or invalid */
 export interface InvalidPanel {
     /** the panel's folder name */
@@ -50,14 +56,17 @@ export const panelsApi = {
         invokeIn<PanelItem>(scope, "panel-install", panelId),
     /**
      * Removes the panel's code. Config, files and saved credentials are
-     * kept unless `deleteData` is explicitly true.
+     * kept unless `deleteData` is explicitly true. Rejects when the panel
+     * couldn't be uninstalled; resolves with `packagesWarning` when it is
+     * gone but packages only it used could not be removed, which the person
+     * who asked must be shown.
      */
     uninstall: (
         panelId: string,
         scope?: string,
         options?: { deleteData?: boolean },
-    ): Promise<boolean> =>
-        invokeIn<boolean>(scope, "panel-uninstall", panelId, options?.deleteData === true),
+    ): Promise<UninstallResult> =>
+        invokeIn<UninstallResult>(scope, "panel-uninstall", panelId, options?.deleteData === true),
     /** Restarts the panel's service; false when it declares none. */
     restartService: (panelId: string, scope?: string): Promise<boolean> =>
         invokeIn<boolean>(scope, "panel-restart-service", panelId),

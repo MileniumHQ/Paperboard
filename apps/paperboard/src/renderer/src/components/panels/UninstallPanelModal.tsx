@@ -7,7 +7,7 @@ import {
     PaperText,
     showToast,
 } from "@mileniumhq/paperui";
-import { getTransport, type PanelItem } from "@mileniumhq/paperapi";
+import { panelsApi, type PanelItem } from "@mileniumhq/paperapi";
 import { logToMain } from "../../lib/shell";
 
 export interface UninstallTarget {
@@ -21,15 +21,6 @@ export interface UninstallPanelModalProps {
     onClose: () => void;
     /** the panel is gone: the shell lets go of it before the dialog closes */
     onUninstalled: (target: UninstallTarget) => Promise<void>;
-}
-
-// panelsApi.uninstall answers only that it worked; the daemon also says
-// which of the panel's packages it could not remove, which the person who
-// asked must be told
-async function uninstallPanel(target: UninstallTarget, deleteData: boolean): Promise<{ packagesWarning?: string }> {
-    // as long as it takes: the daemon may still be removing a large panel
-    const result = await getTransport(target.compId).call("panel:uninstall", { panelId: target.panel.id, deleteData }, null);
-    return typeof result?.packagesWarning === "string" ? { packagesWarning: result.packagesWarning } : {};
 }
 
 // Confirmation dialog for uninstalling a panel. Data is kept unless the
@@ -59,7 +50,7 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
         setBusy(true);
         setError(null);
         try {
-            const { packagesWarning } = await uninstallPanel(target, deleteData());
+            const { packagesWarning } = await panelsApi.uninstall(target.panel.id, target.compId, { deleteData: deleteData() });
             await props.onUninstalled(target);
             if (packagesWarning) {
                 showToast({ variant: "warning", title: `${target.panel.name} is uninstalled`, message: packagesWarning, duration: null });

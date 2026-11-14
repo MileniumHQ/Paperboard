@@ -247,7 +247,7 @@ export const RPC_ROUTES: Record<string, WsRoute> = {
         // keeps the user's config, files and credentials
         action: "panel:uninstall",
         params: (args) => ({ panelId: args[0], deleteData: args[1] === true }),
-        unwrap: (r) => r.success ?? true,
+        unwrap: (r) => (typeof r?.packagesWarning === "string" ? { packagesWarning: r.packagesWarning } : {}),
         timeoutMs: null,
     },
     "panel-restart-service": {

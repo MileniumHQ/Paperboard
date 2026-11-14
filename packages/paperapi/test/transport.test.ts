@@ -404,7 +404,7 @@ describe("long operations are not cut off by the default deadline", () => {
             expect(restore.settled).toBe(false);
             jest.useRealTimers();
             held.resolve({ success: true });
-            expect(await uninstallCall).toBe(true);
+            expect(await uninstallCall).toEqual({});
             expect(await restoreCall).toEqual({ success: true });
         } finally {
             jest.useRealTimers();

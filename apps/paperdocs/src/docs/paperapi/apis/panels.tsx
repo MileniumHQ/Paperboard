@@ -35,7 +35,7 @@ panelsApi.listInstalled(scope?: string): Promise<{ panels: PanelItem[]; invalid:
 panelsApi.registry(scope?: string): Promise<PanelItem[]>;
 /** false when the panel declares no service */
 panelsApi.restartService(panelId: string, scope?: string): Promise<boolean>;
-panelsApi.uninstall(panelId: string, scope?: string, options?: { deleteData?: boolean }): Promise<boolean>;
+panelsApi.uninstall(panelId: string, scope?: string, options?: { deleteData?: boolean }): Promise<{ packagesWarning?: string }>;
 /** Paperboard only */
 /** resolves with the installed panel's manifest */
 panelsApi.install(panelId: string, scope?: string): Promise<PanelItem>;`}
@@ -72,7 +72,7 @@ panelsApi.install(panelId: string, scope?: string): Promise<PanelItem>;`}
                     <tr>
                         <td><PaperCode>uninstall</PaperCode></td>
                         <td>The panel itself</td>
-                        <td>Stops the service and every process the panel owns, removes its code and revokes its credentials. Its config, files, secrets and port claims stay, unless <PaperCode>deleteData</PaperCode> is <PaperCode>true</PaperCode>. The call has no timeout.</td>
+                        <td>Stops the service and every process the panel owns, removes its code and revokes its credentials. Its config, files, secrets and port claims stay, unless <PaperCode>deleteData</PaperCode> is <PaperCode>true</PaperCode>. The call has no timeout, and rejects when the panel couldn't be uninstalled. When the panel is gone but packages only it used could not be removed (they stay on disk), it resolves with <PaperCode>packagesWarning</PaperCode>, naming each package and why; show it to the person who asked.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>install</PaperCode></td>
