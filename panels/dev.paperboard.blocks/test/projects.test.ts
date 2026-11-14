@@ -4,7 +4,7 @@
 // same contract as the panel's config (JSON by path; no path is the config
 // document), so these run the real store with no daemon.
 import { describe, expect, test } from "bun:test";
-import { MIGRATED_PROJECT_NAME, PROJECTS_FILE, PROJECTS_VERSION, ProjectStore, projectFlowsPath, type ProjectStorage } from "../src/lib/projects";
+import { MAX_PROJECT_NAME, MIGRATED_PROJECT_NAME, PROJECTS_FILE, PROJECTS_VERSION, ProjectStore, projectFlowsPath, type ProjectStorage } from "../src/lib/projects";
 import type { SavedFlows } from "../src/panel";
 import { BUILTIN } from "../src/lib/names";
 
@@ -200,6 +200,16 @@ describe("changing a project", () => {
         expect(copy.name).toBe("Copy of Mine");
         expect(copy.draft).toBe(false);
         expect(mem.files.get(projectFlowsPath(copy.id))).toEqual(flows(BUILTIN.onRun, "text"));
+    });
+
+    test("a project with the longest name a person may type can be copied again and again", async () => {
+        const store = new ProjectStore(memory().storage);
+        await store.open();
+        const made = await store.create("x".repeat(MAX_PROJECT_NAME));
+        const first = await store.duplicate(made.id);
+        const second = await store.duplicate(made.id);
+        expect(first.name).toBe(`Copy of ${"x".repeat(MAX_PROJECT_NAME - 8)}`);
+        expect(second.name).toBe(`Copy of ${"x".repeat(MAX_PROJECT_NAME - 10)} 2`);
     });
 
     test("switched off, its flows don't run; deleted, its file is emptied", async () => {

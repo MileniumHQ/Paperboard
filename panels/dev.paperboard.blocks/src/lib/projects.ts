@@ -85,11 +85,14 @@ export function cleanProjectName(name: unknown): string {
     return clean;
 }
 
-/** "Untitled project", or "Untitled project 2" when that is taken. */
+/** "Untitled project", or "Untitled project 2" when that is taken; a long base is cut so the number still fits. */
 export function nextProjectName(names: readonly string[], base = NEW_PROJECT_NAME): string {
     const taken = new Set(names);
-    if (!taken.has(base)) return base;
-    for (let n = 2; ; n++) if (!taken.has(`${base} ${n}`)) return `${base} ${n}`;
+    for (let n = 1; ; n++) {
+        const suffix = n === 1 ? "" : ` ${n}`;
+        const name = base.slice(0, MAX_PROJECT_NAME - suffix.length).trimEnd() + suffix;
+        if (!taken.has(name)) return name;
+    }
 }
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -305,7 +308,7 @@ export class ProjectStore {
         const source = this.require(id);
         if (source.loadError) throw new Error(`"${source.meta.name}" couldn't be read, so it can't be copied: ${source.loadError}`);
         const names = [...this.projects.values()].map((p) => p.meta.name);
-        return this.create(nextProjectName(names, `Copy of ${source.meta.name}`.slice(0, MAX_PROJECT_NAME)), structuredClone(source.flows), source.meta.preview);
+        return this.create(nextProjectName(names, `Copy of ${source.meta.name}`), structuredClone(source.flows), source.meta.preview);
     }
 
     /** `onlyDraft`: a project kept by now stays, as leaving an empty new one asks. */
