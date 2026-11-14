@@ -24,24 +24,19 @@ import CanvasPreview from "./CanvasPreview";
 import { DeleteProjectModal, RenameProjectModal } from "./ProjectDialogs";
 import { editedText, switchFailed, type ProjectsState } from "./state";
 import { errorMessage } from "../lib/failure";
+import { oneAtATime } from "../lib/oneAtATime";
 import type { ProjectSummary } from "../lib/projects";
 
 
 export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (project: ProjectSummary) => void }) {
     const [failure, setFailure] = createSignal<{ title: string; text: string } | null>(null);
-    const [working, setWorking] = createSignal(false);
-    const change = async (failed: string, work: () => Promise<void>) => {
-        if (working()) return;
-        setWorking(true);
-        setFailure(null);
-        try {
+    const changes = oneAtATime();
+    const working = changes.busy;
+    const change = (failed: string, work: () => Promise<void>) =>
+        changes.run(async () => {
+            setFailure(null);
             await work();
-        } catch (err) {
-            setFailure({ title: failed, text: errorMessage(err) });
-        } finally {
-            setWorking(false);
-        }
-    };
+        }, (err) => setFailure({ title: failed, text: errorMessage(err) }));
 
     const create = () => change("Project not made", async () => props.onOpen(await props.projects.create()));
     const duplicate = (id: string) => change("Project not copied", async () => { await props.projects.duplicate(id); });

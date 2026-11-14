@@ -13,6 +13,7 @@ import { backupApi, fileApi, type BackupRecord, type BackupStatus } from "@milen
 import { PANEL_ID, type SavedFlows } from "./panel";
 import type { Notice } from "./bridge";
 import { errorMessage } from "./lib/failure";
+import { oneAtATime } from "./lib/oneAtATime";
 import { flowFileText, MAX_FLOW_FILE_BYTES, parseFlowFile } from "./lib/flowFile";
 
 const FLOW_FILE_FILTERS = [{ name: "Flow files", extensions: ["json"] }];
@@ -51,20 +52,14 @@ export function createFileActions(props: {
 }) {
     // this window's own temporary file names, so two windows never share one
     const clientId = crypto.randomUUID();
-    const [busy, setBusy] = createSignal(false);
+    const changes = oneAtATime();
+    const busy = changes.busy;
 
-    const run = async (titles: { done: string; failed: string }, work: () => Promise<string | null>) => {
-        if (busy()) return;
-        setBusy(true);
-        try {
+    const run = (titles: { done: string; failed: string }, work: () => Promise<string | null>) =>
+        changes.run(async () => {
             const done = await work();
             if (done) props.onNotice({ kind: "done", title: titles.done, text: done });
-        } catch (err) {
-            props.onNotice({ kind: "failed", title: titles.failed, text: errorMessage(err) });
-        } finally {
-            setBusy(false);
-        }
-    };
+        }, (err) => props.onNotice({ kind: "failed", title: titles.failed, text: errorMessage(err) }));
 
     // the export and import copy through a file in Blocks' own storage,
     // which is removed again whatever happens: a removal that fails is said

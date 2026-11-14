@@ -19,22 +19,18 @@ import {
 } from "@mileniumhq/paperui";
 import { BUILTIN_BLOCKS, builtinPlaceholder } from "./lib/blockDefs";
 import { registerChoicesField, setChoicesProject } from "./lib/choicesField";
-import { LIBRARY_FLYOUT, setLibraryTop, uiGap, type LibraryFlyout } from "./lib/libraryFlyout";
-import { loadBlockFonts, PAPER_RENDERER, paperTheme } from "./lib/paperRenderer";
+import { setLibraryTop } from "./lib/libraryFlyout";
+import { loadBlockFonts } from "./lib/paperRenderer";
 import { setPanelIcons } from "./lib/blockStyles";
 import { HEADING_KIND, type HeadingInfo } from "./lib/libraryHeading";
 import { setTextPlaceholders } from "./lib/textField";
-import { addTrash, type TrashState } from "./lib/trashZone";
-import { addResultsTray } from "./lib/results";
-import { cullOffscreenStacks } from "./lib/culling";
-import { nativeTooltips } from "./lib/nativeTooltips";
+import type { TrashState } from "./lib/trashZone";
+import { createCanvas, type Canvas } from "./lib/canvas";
 import "./lib/undrawnFields";
 import { parseEntry, parseRegistryBlockType } from "./lib/names";
-import { tokenPixels } from "./lib/tokens";
 import { Console } from "./Console";
-import { paperContextMenus } from "./lib/contextMenu";
-import { paperDropdowns } from "./lib/dropdownPlacement";
 import { errorMessage } from "./lib/failure";
+import { oneAtATime } from "./lib/oneAtATime";
 import { SERVICE_CALLS, type PanelState } from "./panel";
 import { bridge, type Notice } from "./bridge";
 import type { ProjectSummary } from "./lib/projects";
@@ -129,59 +125,28 @@ export default function Editor(props: {
             return named;
         });
         let closed = false;
+        let canvas: Canvas | undefined;
         let offRegistry: (() => void) | undefined;
-        let offTooltips: (() => void) | undefined;
-        let offCulling: (() => void) | undefined;
-        // The canvas is laid out again when its size changes, but not under a
-        // block being dragged: Blockly would scroll to fit the block where it
-        // was picked up, and it would leave the pointer. That waits for the drop.
-        let fitWaiting = false;
-        const fit = () => {
-            if (!workspace) return;
-            fitWaiting = workspace.isDragging();
-            if (!fitWaiting) Blockly.svgResize(workspace);
-        };
-        const resize = new ResizeObserver(fit);
-        const offState = bridge.onStateChange((_patch, full) => {
-            showErrors(full);
-        });
+        const offState = bridge.onStateChange((_patch, full) => showErrors(full));
 
         const start = () => {
             if (closed) return;
-            paperContextMenus();
-            paperDropdowns();
-            workspace = Blockly.inject(host, {
-                renderer: PAPER_RENDERER,
-                theme: paperTheme(),
-                toolbox: { kind: "flyoutToolbox", contents: [] },
-                plugins: { flyoutsVerticalToolbox: LIBRARY_FLYOUT },
-                media: "./blockly-media/",
-                // the trash and zoom are PaperUI's, over the canvas (below)
-                trashcan: false,
-                zoom: { controls: false, wheel: true, startScale: 1 },
-                // the canvas's dots: one at every double gap, drawn by Editor.module.css
-                grid: { spacing: tokenPixels("--paper-uigap") * 2, length: 1, colour: "transparent", snap: false },
-                move: { scrollbars: true, drag: true, wheel: false },
-                // the app makes no sounds; neither do its blocks
-                sounds: false,
+            canvas = createCanvas(host, {
+                trash: trashTile,
+                onTrash: setTrash,
+                resultsTrayClass: styles.resultsTray!,
+                onThemeFailed: fail("The blocks couldn't follow the theme"),
+                onChange: (event) => {
+                    if (event.type === Blockly.Events.VAR_CREATE || event.type === Blockly.Events.VAR_DELETE || event.type === Blockly.Events.VAR_RENAME) {
+                        library.variablesChanged();
+                    }
+                    if (!event.isUiEvent) library.setFunctionsShape(JSON.stringify(Blockly.Procedures.allProcedures(workspace!)));
+                    if (!flows.loaded() || event.isUiEvent) return;
+                    if (event.type === Blockly.Events.BLOCK_CREATE || event.type === Blockly.Events.BLOCK_DELETE) flows.markResults();
+                    flows.edited();
+                },
             });
-            offTooltips = nativeTooltips(host);
-            offCulling = cullOffscreenStacks(workspace);
-            resize.observe(host);
-            addTrash(workspace, trashTile, setTrash);
-            addResultsTray(workspace, styles.resultsTray!, uiGap());
-            followTheme();
-
-            workspace.addChangeListener((event: Blockly.Events.Abstract) => {
-                if (fitWaiting) fit();
-                if (event.type === Blockly.Events.VAR_CREATE || event.type === Blockly.Events.VAR_DELETE || event.type === Blockly.Events.VAR_RENAME) {
-                    library.variablesChanged();
-                }
-                if (!event.isUiEvent) library.setFunctionsShape(JSON.stringify(Blockly.Procedures.allProcedures(workspace!)));
-                if (!flows.loaded() || event.isUiEvent) return;
-                if (event.type === Blockly.Events.BLOCK_CREATE || event.type === Blockly.Events.BLOCK_DELETE) flows.markResults();
-                flows.edited();
-            });
+            workspace = canvas.workspace;
             offRegistry = blocksApi.onRegistryChange(flows.registryChanged);
             flows.load().catch(fail("Your flows couldn't be loaded"));
             setReady(true);
@@ -189,35 +154,12 @@ export default function Editor(props: {
         // Blockly measures text as it draws, so it waits for the font
         loadBlockFonts().then(start, fail("The blocks couldn't be drawn"));
 
-        /** Light or dark, as the app switches: Blockly takes colours, not variables, so the theme is made again. */
-        const themeChanges = new MutationObserver(() => retheme());
-        const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
-        const retheme = () => {
-            if (!workspace) return;
-            try {
-                workspace.setTheme(paperTheme());
-                // a collapsed Library stays hidden
-                (workspace.getFlyout() as LibraryFlyout | null)?.redisplay();
-            } catch (err) {
-                fail("The blocks couldn't follow the theme")(err);
-            }
-        };
-        const followTheme = () => {
-            themeChanges.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-paperui-theme", "class"] });
-            darkQuery.addEventListener("change", retheme);
-        };
-
         onCleanup(() => {
             closed = true;
-            themeChanges.disconnect();
-            darkQuery.removeEventListener("change", retheme);
             flows.dispose();
-            resize.disconnect();
             offState();
             offRegistry?.();
-            offTooltips?.();
-            offCulling?.();
-            workspace?.dispose();
+            canvas?.dispose();
         });
     });
 
@@ -272,19 +214,13 @@ export default function Editor(props: {
     };
 
     // the project changes the menus make, each reporting what failed
-    const [working, setWorking] = createSignal(false);
-    const change = async (failed: string, work: () => Promise<void>) => {
-        if (working()) return;
-        setWorking(true);
-        try {
+    const changes = oneAtATime();
+    const working = changes.busy;
+    const change = (failed: string, work: () => Promise<void>) =>
+        changes.run(async () => {
             await work();
             worked(failed);
-        } catch (err) {
-            fail(failed)(err);
-        } finally {
-            setWorking(false);
-        }
-    };
+        }, fail(failed));
     // the latest edits are saved before the canvas goes, before a copy is made
     // of what was saved, and before anything new is made, so a save that fails
     // leaves nothing made behind

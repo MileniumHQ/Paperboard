@@ -372,9 +372,8 @@ async function openChecks() {
     await editing(name);
     await until("the project's blocks on the canvas", () => canvas()!.getTopBlocks(false).length > 0);
     await settle();
-    document.documentElement.setAttribute("data-paperui-theme", "dark");
-    await settle();
-    document.documentElement.removeAttribute("data-paperui-theme");
+    // drawn in both themes, which Blockly reports as changes
+    await shoot("editor-opened");
     registry.changed();
     await settle();
     backButton()!.click();
