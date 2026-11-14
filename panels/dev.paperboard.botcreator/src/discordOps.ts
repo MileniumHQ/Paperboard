@@ -678,12 +678,14 @@ export async function resolveMember(
         const guild = await resolveGuild(bot, guildId);
         return guild.members.fetch(userId.trim());
     }
+    const { RESTJSONErrorCodes } = await loadDiscord();
     for (const guild of bot.guilds.cache.values()) {
         try {
             return await guild.members.fetch(userId.trim());
-        } catch {
-            // not a member of this server: bounded search continues
-            continue;
+        } catch (err) {
+            // not a member of this server: the search goes on. Anything else
+            // (a missing permission, a rate limit) is why it failed
+            if ((err as { code?: unknown })?.code !== RESTJSONErrorCodes.UnknownMember) throw err;
         }
     }
     throw new Error(
