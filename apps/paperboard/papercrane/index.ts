@@ -300,13 +300,6 @@ function listenPaperCraneServer(
             const sessions = new DavSessionStore();
             if (staticToken && !noAuth) auth.injectToken(staticToken, "host");
 
-            engine.recoverRunningSupervisors().catch((err) => {
-                console.error(
-                    "[Paperboard Server] Failed to recover running supervisors:",
-                    err,
-                );
-            });
-
             const allowsHost = createHostAuthorityCheck(host);
             const allowsLocalHost = createHostAuthorityCheck();
             const onRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
@@ -459,6 +452,10 @@ function listenPaperCraneServer(
                     localServer?.close();
                     server.close();
                 } catch (closeErr) { logger.warn("[Paperboard Server] the servers that failed to listen did not close:", closeErr) }
+                // this attempt is over: a retry builds its own
+                engine.releaseAllClients();
+                try { auth.dispose(); }
+                catch (disposeErr) { logger.error("[Paperboard Server] the failed attempt's token store did not close:", disposeErr) }
 
                 const msg = err?.message || "";
                 const inUse =
@@ -492,6 +489,11 @@ function listenPaperCraneServer(
             });
 
             const onListening = () => {
+                // adopted only once the port is ours: an attempt that loses
+                // it to a stale daemon holds no supervisor
+                engine.recoverRunningSupervisors().catch((err) => {
+                    logger.error("[Paperboard Server] Failed to recover running supervisors:", err);
+                });
                 const addr = server.address();
                 const actualPort =
                     typeof addr === "object" && addr ? addr.port : currentPort;
