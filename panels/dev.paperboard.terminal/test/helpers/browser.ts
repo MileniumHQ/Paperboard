@@ -32,7 +32,33 @@ function panelUi(): string {
     return out;
 }
 
-/** serves the built UI with a panel credential the test daemon issued */
+// Home's side of a widget frame, as the shell does it: the widget page in a
+// frame the size of a 2x1 tile, asked to show the Pinned command widget for
+// the command in this page's ?command=, and what it said back
+const WIDGET_HOST = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">
+<iframe id="widget" src="/widget.html" style="width:320px;height:150px;border:0"></iframe>
+<script>
+const frame = document.getElementById("widget");
+window.widgetSaid = [];
+// a wait in this page wakes on this page's changes: each change in the frame is one here too
+let changes = 0;
+const changed = () => (document.body.dataset.changes = String(++changes));
+addEventListener("message", (e) => {
+    if (e.source !== frame.contentWindow) return;
+    window.widgetSaid.push(e.data?.type);
+    changed();
+});
+frame.addEventListener("load", () => {
+    new MutationObserver(changed).observe(frame.contentDocument, { subtree: true, childList: true, attributes: true, characterData: true });
+    frame.contentWindow.postMessage({
+        type: "paperboard:initialize",
+        generation: "g1",
+        widget: { id: "pinned-command", instanceId: "w1", size: { w: 2, h: 1 }, visible: true, options: { command: new URLSearchParams(location.search).get("command") } },
+    }, "*");
+});
+</script></body></html>`;
+
+/** serves the built UI with a panel credential the test daemon issued; /widget-host.html?command=… shows the Home widget */
 export async function servePanel(): Promise<{ url: string; stop: () => void }> {
     const daemon = await testDaemon();
     const dist = panelUi();
@@ -43,6 +69,7 @@ export async function servePanel(): Promise<{ url: string; stop: () => void }> {
         hostname: "127.0.0.1",
         async fetch(req) {
             const pathname = new URL(req.url).pathname;
+            if (pathname === "/widget-host.html") return new Response(WIDGET_HOST, { headers: { "content-type": "text/html; charset=utf-8" } });
             const file = path.join(dist, pathname === "/" ? "index.html" : pathname);
             if (!file.startsWith(dist) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return new Response("Not found", { status: 404 });
             if (file.endsWith(".html")) {
