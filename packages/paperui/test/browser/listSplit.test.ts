@@ -31,6 +31,8 @@ describe("PaperList rows in a collapsed PaperSplit", () => {
     test("PaperSplit reports crossing between collapsed and side by side", async () => {
         page = await browser.open("listSplit");
         await page.waitFor("t.collapsed.at(-1) === true", "the 400px split to report collapsed");
+        // measured before its first report: a narrow split never says side by side first
+        expect(await page.eval("t.collapsed")).toEqual([true]);
 
         await page.eval("t.setWidth(900)");
         await page.waitFor("t.collapsed.at(-1) === false", "the 900px split to report side by side");
@@ -38,6 +40,21 @@ describe("PaperList rows in a collapsed PaperSplit", () => {
 
         await page.eval("t.setWidth(400)");
         await page.waitFor("t.collapsed.at(-1) === true", "the split to collapse again");
+        expect(await page.eval("t.collapsed")).toEqual([true, false, true]);
+    });
+
+    test("crossing the width keeps both panes' elements: nothing in them is built again", async () => {
+        page = await browser.open("listSplit");
+        await page.waitFor("t.collapsed.at(-1) === true", "the split to collapse");
+        await page.eval(`(window.kept = { side: document.querySelector('${row("Alex")}'), detail: document.querySelector('#detail') }, 0)`);
+
+        await page.eval("t.setWidth(900)");
+        await page.waitFor("t.collapsed.at(-1) === false", "the split to go side by side");
+        expect(await page.eval(`kept.side === document.querySelector('${row("Alex")}') && kept.detail === document.querySelector('#detail')`)).toBe(true);
+
+        await page.eval("t.setWidth(400)");
+        await page.waitFor("t.collapsed.at(-1) === true", "the split to collapse again");
+        expect(await page.eval(`kept.side === document.querySelector('${row("Alex")}') && kept.detail === document.querySelector('#detail') && kept.side.isConnected`)).toBe(true);
     });
 
     test("a row that prevents default opens its detail on every click, the same row again after closing", async () => {

@@ -28,6 +28,11 @@
     display: flex;
 }
 
+/* collapsed, the detail is a page out of the row's flow: the side has it all */
+.main.collapsed {
+    display: contents;
+}
+
 .single {
     width: 100%;
     height: 100%;

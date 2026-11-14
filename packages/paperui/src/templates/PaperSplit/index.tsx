@@ -1,11 +1,11 @@
 import styles from "./index.module.css";
 import {
     createEffect,
+    createMemo,
     createSignal,
     on,
     onCleanup,
     onMount,
-    Show,
     splitProps,
     type JSX,
     type ParentProps,
@@ -50,14 +50,20 @@ const DEFAULT_COLLAPSE_WIDTH = 680;
  * `collapseWidth` the side pane fills the space and the detail slides in over
  * it as a page with a back bar (and the back swipe), so a panel works at
  * Paperboard's minimum window size and on a phone without any per-panel
- * media queries.
+ * media queries. Both layouts are the same elements: crossing the width
+ * restyles the panes, it never moves or rebuilds what's in them.
  */
 export function PaperSplit(props: ParentProps<PaperSplitProps>) {
     let rootRef: HTMLDivElement | undefined;
-    const [width, setWidth] = createSignal<number | undefined>(undefined);
+    // Until it is measured, a split is as wide as its document (a split
+    // usually fills its panel): a phone's first paint is already collapsed.
+    // A server render has no document width and draws the panes side by side.
+    const [width, setWidth] = createSignal<number | null>(typeof window === "undefined" ? null : window.innerWidth);
 
+    // measured before the first notice below runs, then followed
     onMount(() => {
         if (!rootRef || typeof ResizeObserver === "undefined") return;
+        setWidth(rootRef.getBoundingClientRect().width);
         const observer = new ResizeObserver((entries) => {
             const w = entries[0]?.contentRect.width;
             if (typeof w === "number") setWidth(w);
@@ -66,14 +72,13 @@ export function PaperSplit(props: ParentProps<PaperSplitProps>) {
         onCleanup(() => observer.disconnect());
     });
 
-    const collapsed = () => {
+    const collapsed = createMemo(() => {
         const w = width();
-        return w !== undefined && w < (props.collapseWidth ?? DEFAULT_COLLAPSE_WIDTH);
-    };
-
-    createEffect(() => {
-        props.onCollapsedChange?.(collapsed());
+        return w !== null && w < (props.collapseWidth ?? DEFAULT_COLLAPSE_WIDTH);
     });
+
+    // once with the first layout, then once per crossing
+    createEffect(on(collapsed, (isCollapsed) => props.onCollapsedChange?.(isCollapsed)));
 
     // Back slides the page away first; the consumer hears of it after
     const [closing, setClosing] = createSignal(false);
@@ -106,34 +111,27 @@ export function PaperSplit(props: ParentProps<PaperSplitProps>) {
             class={[styles.PaperSplit, local.class].filter(Boolean).join(" ")}
             classList={local.classList}
         >
-            <Show
-                when={!collapsed()}
-                fallback={
-                    <>
-                        <div class={styles.single}>{local.side}</div>
-                        {/* over the whole panel: in a frame, fixed is the panel's own screen */}
-                        <PaperSlidePage
-                            enabled
-                            position="fixed"
-                            open={Boolean(local.detailActive) && !closing()}
-                            title={local.detailTitle ?? ""}
-                            onBack={() => setClosing(true)}
-                            onClosed={() => {
-                                if (closing()) local.onDetailClose?.();
-                            }}
-                        >
-                            {local.children}
-                        </PaperSlidePage>
-                    </>
-                }
-            >
-                <div class={styles.row}>
-                    <div class={styles.side} style={sideStyle()}>
-                        {local.side}
-                    </div>
-                    <div class={styles.main}>{local.children}</div>
+            <div class={styles.row}>
+                <div class={collapsed() ? styles.single : styles.side} style={collapsed() ? {} : sideStyle()}>
+                    {local.side}
                 </div>
-            </Show>
+                <div class={styles.main} classList={{ [styles.collapsed!]: collapsed() }}>
+                    {/* collapsed, a page over the whole panel (in a frame, fixed
+                        is the panel's own screen); side by side, it draws nothing */}
+                    <PaperSlidePage
+                        enabled={collapsed()}
+                        position="fixed"
+                        open={Boolean(local.detailActive) && !closing()}
+                        title={local.detailTitle ?? ""}
+                        onBack={() => setClosing(true)}
+                        onClosed={() => {
+                            if (closing()) local.onDetailClose?.();
+                        }}
+                    >
+                        {local.children}
+                    </PaperSlidePage>
+                </div>
+            </div>
         </div>
     );
 }

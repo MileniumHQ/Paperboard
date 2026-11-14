@@ -154,10 +154,10 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
                 <li>The root is 100% wide and tall. Give it a parent with a height, such as a page item with the <PaperCode>fill</PaperCode> variant.</li>
-                <li>The layout is chosen from the root's own width, measured with a resize observer, not from the screen. The first render is side by side, and it collapses once the width is below <PaperCode>collapseWidth</PaperCode>.</li>
+                <li>The layout is chosen from the root's own width, measured with a resize observer, not from the screen. Until it is measured it takes the window's width, so a phone's first paint is already collapsed, and it is measured before <PaperCode>onCollapsedChange</PaperCode> first reports.</li>
                 <li>Side by side, the panes are a row with a <PaperCode>full</PaperCode> gap. The side pane is fixed, the detail pane flexes. <PaperCode>detailActive</PaperCode> is ignored and the detail always shows, so draw an empty state in it when nothing is selected.</li>
                 <li>Collapsed, the side pane fills the root and the detail is a fixed <PaperLink href="/docs/paperui/paperslidepage/">PaperSlidePage</PaperLink> (in a panel, it covers the panel), open while <PaperCode>detailActive</PaperCode> is true. Its back button, the system Back action and the back swipe slide it away, then call <PaperCode>onDetailClose</PaperCode>.</li>
-                <li>Crossing the breakpoint rebuilds the panes, so state held inside the side or detail content is lost. Keep selection and drafts in signals outside the split.</li>
+                <li>Both layouts are the same elements. Crossing the breakpoint restyles the panes and never moves or rebuilds their content, so scroll positions, typed text and anything mounted inside keep their state.</li>
                 <li>Each pane is a flex box. Give a card that should fill its pane <PaperCode>fullHeight</PaperCode>, as the samples do.</li>
             </PaperTextList>
 
