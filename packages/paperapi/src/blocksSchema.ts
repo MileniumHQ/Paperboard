@@ -253,6 +253,24 @@ export function blockEntry(kind: BlockKind, id: string, project?: string): strin
 
 const describe = (kind: BlockKind, id: unknown) => `${kind[0]!.toUpperCase()}${kind.slice(1)} "${String(id)}"`;
 
+/**
+ * What is wrong with a list of dropdown choices, or null: each a label and a
+ * text, number or true/false value, no value offered twice. One rule for
+ * the choices a definition declares and the ones its function lists.
+ */
+export function choicesProblem(choices: unknown): string | null {
+    if (!Array.isArray(choices)) return "choices must be a list";
+    const seen = new Set<unknown>();
+    for (const choice of choices) {
+        if (typeof choice?.label !== "string" || !choice.label.trim() || !["string", "number", "boolean"].includes(typeof choice.value)) {
+            return "offers a choice that isn't a label and a text, number or true/false value";
+        }
+        if (seen.has(choice.value)) return `offers the value ${JSON.stringify(choice.value)} twice`;
+        seen.add(choice.value);
+    }
+    return null;
+}
+
 function assertLabel(value: unknown, what: string, max = MAX_NAME): void {
     if (typeof value !== "string" || !value.trim()) throw new Error(`${what} needs a name`);
     if (value.length > max) throw new Error(`${what} is longer than ${max} characters`);
@@ -306,15 +324,12 @@ function assertInputs(def: BlockDefinitionBase, label: string, known: (t: Parsed
         if (typeof input.choices === "function") {
             // asked for when needed; checked then
         } else if (input.choices !== undefined) {
-            if (!Array.isArray(input.choices) || input.choices.length === 0) throw new Error(`${what} declares choices, but none`);
+            const problem = choicesProblem(input.choices);
+            if (problem) throw new Error(`${what} ${problem}`);
+            // a declared list travels in the registration: bounded, named like the rest of it
+            if (input.choices.length === 0) throw new Error(`${what} declares choices, but none`);
             if (input.choices.length > MAX_CHOICES) throw new Error(`${what} has more than ${MAX_CHOICES} choices`);
-            const seen = new Set<unknown>();
-            for (const choice of input.choices) {
-                assertLabel(choice?.label, `${what} choice`);
-                if (!["string", "number", "boolean"].includes(typeof choice.value)) throw new Error(`${what} choice "${choice.label}" needs a text, number or boolean value`);
-                if (seen.has(choice.value)) throw new Error(`${what} offers the value ${JSON.stringify(choice.value)} twice`);
-                seen.add(choice.value);
-            }
+            for (const choice of input.choices) assertLabel(choice.label, `${what} choice`);
         }
         if (input.default !== undefined) {
             if (!["string", "number", "boolean"].includes(typeof input.default)) throw new Error(`${what} default must be text, a number or true/false`);

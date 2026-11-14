@@ -12,6 +12,7 @@ import {
     withDefaults,
     qualifyTypeRef,
     validateBlockDefinitions,
+    choicesProblem,
     valueProblem,
     type BlockChoice,
     type BlockCommandDefinition,
@@ -179,13 +180,9 @@ async function choicesOf(defs: BlockDefinitionBaseInputs | undefined, key: unkno
 
 /** A list of choices as a panel gave it, refused where it's broken. */
 function checkChoices(choices: unknown, owner: string): BlockChoice[] {
-    if (!Array.isArray(choices)) throw new Error(`${owner} choices must be a list`);
-    for (const choice of choices) {
-        if (typeof choice?.label !== "string" || !choice.label.trim() || !["string", "number", "boolean"].includes(typeof choice.value)) {
-            throw new Error(`${owner} offers a choice that isn't a label and a text, number or true/false value`);
-        }
-    }
-    return choices;
+    const problem = choicesProblem(choices);
+    if (problem) throw new Error(`${owner} ${problem}`);
+    return choices as BlockChoice[];
 }
 
 /** A type's values as its panel lists them now, in a project of the panel when one is named. */

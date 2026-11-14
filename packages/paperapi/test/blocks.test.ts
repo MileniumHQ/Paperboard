@@ -358,6 +358,9 @@ describe("a registry in memory checks what the daemon's does, for a panel's test
         expect(await memory.typeChoices("player")).toHaveLength(2);
         await expect(memory.typeChoices("player", { project: "s9" })).rejects.toThrow('Player: there is no project "s9"');
         await expect(memory.typeChoices("kit")).rejects.toThrow("Kit doesn't list its values");
+        // listed values follow the rule declared ones do: no value offered twice
+        online.s1 = ["alex", "alex"];
+        await expect(memory.typeChoices("player", { project: "s1" })).rejects.toThrow('Player offers the value "alex" twice');
         expect(() => validateBlockDefinitions({ types: [{ id: "a", name: "A", base: "text", choices: [] as never }] }, "dev.test.choices")).toThrow("choices must be a function");
     });
 });
