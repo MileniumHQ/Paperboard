@@ -203,11 +203,14 @@ async function untilShell(port: number, expression: string, output: () => string
 }
 
 // One evaluation in a page over the DevTools protocol: its value, or why
-// there is none (a thrown error, or the page navigating away mid-call)
-function evaluate(wsUrl: string, expression: string): Promise<{ value?: unknown; error?: string }> {
+// there is none (a thrown error, or the page navigating away mid-call). A
+// target that closes before it answers (the window recreated while the app
+// starts) is a reason too, so the poll looks the page up again.
+export function evaluate(wsUrl: string, expression: string): Promise<{ value?: unknown; error?: string }> {
     const ws = new WebSocket(wsUrl);
     return new Promise((resolve, reject) => {
         ws.once("error", reject);
+        ws.once("close", () => resolve({ error: "the shell's DevTools target closed before it answered" }));
         ws.once("open", () => ws.send(JSON.stringify({ id: 1, method: "Runtime.evaluate", params: { expression, returnByValue: true } })));
         ws.on("message", (raw) => {
             const msg = JSON.parse(raw.toString());
@@ -231,7 +234,9 @@ async function main(): Promise<void> {
     }
 }
 
-main().catch((err) => {
-    console.error(`\n❌ ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
-    process.exit(1);
-});
+if (import.meta.main) {
+    main().catch((err) => {
+        console.error(`\n❌ ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
+        process.exit(1);
+    });
+}
