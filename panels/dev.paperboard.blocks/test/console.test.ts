@@ -1,29 +1,11 @@
-// The run log's scrolling and layout (headless Chrome).
+// The run log in the editor (headless Chrome), over announcements as the
+// daemon delivers them: each one a new list of new objects
+// (test/helpers/panelFixture.ts).
 import { expect, test } from "bun:test";
-import { runBrowserFixture } from "./browserFixture";
 import { panelFixture } from "./helpers/panelFixture";
 
 test(
-    "the console follows new lines only while its reader is at the end",
-    async () => {
-        const { checks, error } = await runBrowserFixture("test/fixtures/consoleFixture.html", {});
-        expect(error, "the fixture threw").toBe("");
-        expect(checks.startsAtEnd).toBeLessThanOrEqual(1);
-        expect(checks.followedAtEnd).toBeLessThanOrEqual(1);
-        // lines arrived while the reader was at the top, who stayed there
-        expect(checks.stayedWhileReading).toBe(0);
-        expect(checks.followedAgain).toBeLessThanOrEqual(1);
-        // a wrapped entry has its time on its first line
-        expect(checks.textLines).toBeGreaterThan(1);
-        expect(checks.timeTopMinusTextTop).toBeLessThanOrEqual(1);
-    },
-    120_000,
-);
-
-// The same, in the editor, over announcements as the daemon delivers them:
-// each one a new list of new objects (test/helpers/panelFixture.ts).
-test(
-    "in the editor, a log line the service announces adds one row, and the rows and selection already there stay",
+    "a log line the service announces adds one row, the rows and selection already there stay, and the log follows new lines only while its reader is at the end",
     async () => {
         const { console: log } = await panelFixture();
         expect(log.rows).toBe(31);
@@ -33,9 +15,14 @@ test(
         // what the reader had selected is still selected, in the page
         expect(log.selection).toBe("line 3");
         expect(log.selectionInPage).toBe(true);
+        expect(log.startsAtEnd).toBeLessThanOrEqual(1);
         expect(log.followedAtEnd).toBeLessThanOrEqual(1);
+        // lines arrived while the reader was at the top, who stayed there
         expect(log.stayedWhileReading).toBe(0);
         expect(log.followedAgain).toBeLessThanOrEqual(1);
+        // a wrapped entry has its time on its first line
+        expect(log.textLines).toBeGreaterThan(1);
+        expect(log.timeTopMinusTextTop).toBeLessThanOrEqual(1);
     },
     180_000,
 );

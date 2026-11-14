@@ -1,14 +1,86 @@
-// The SDK as the panel fixture sees it: paperapiStub's registry, and a bridge
-// that behaves as the real one does over the wire. The service's state lives
-// in this page; `service.announce` sends a patch of it the way the daemon
-// delivers one (parsed from JSON: every object in it is new), and the bridge
-// hands its listeners that patch and the merged state, exactly as
-// createPanelBridge does. Calls answer from that state, and a call can be
-// told to fail. Every answer comes a task later, as one over the wire does.
+// The SDK as the browser fixtures see it: everything real except what needs
+// a daemon. The registry lists one panel's blocks, and the bridge behaves as
+// the real one does over the wire. The service's state lives in this page;
+// `service.announce` sends a patch of it the way the daemon delivers one
+// (parsed from JSON: every object in it is new), and the bridge hands its
+// listeners that patch and the merged state, exactly as createPanelBridge
+// does. Calls answer from that state, and a call can be told to fail. Every
+// answer comes a task later, as one over the wire does.
+import type { BlockInfo, BlockProjectInfo, PanelItem } from "@mileniumhq/paperapi";
 import type { ProjectSummary } from "../../src/lib/projects";
 import { DEFAULT_STATE, SERVICE_CALLS, type PanelState, type SavedFlows } from "../../src/panel";
 
-export * from "./paperapiStub";
+export * from "../../../../packages/paperapi/dist/paperapi.es.js";
+
+export const FIXTURE_PANEL = "dev.test.fixture";
+export const FIXTURE_PANEL_NAME = "Fixture Panel";
+
+const ENTRIES = [
+    {
+        panelId: FIXTURE_PANEL,
+        entry: "command.greet",
+        schema: { kind: "command", id: "greet", name: "Greet", text: "Greet {who}", inputs: { who: { type: "text", name: "Who" } } },
+    },
+    {
+        panelId: FIXTURE_PANEL,
+        entry: "command.count",
+        schema: { kind: "command", id: "count", name: "Count Players", text: "Count players", output: "number", outputName: "Players" },
+    },
+    {
+        panelId: FIXTURE_PANEL,
+        entry: "event.joined",
+        schema: { kind: "event", id: "joined", name: "Someone Joined", values: { who: { type: "text", name: "Who" } } },
+    },
+] as BlockInfo[];
+
+let entries = structuredClone(ENTRIES);
+let panels: PanelItem[] = [{ id: FIXTURE_PANEL, name: FIXTURE_PANEL_NAME } as PanelItem];
+const registryListeners = new Set<(change: unknown) => void>();
+let held: Promise<void> | null = null;
+
+/** The registry as other panels change it. */
+export const registry = {
+    /** the next listing is of the registry as it is now, but answers only once released */
+    hold(): () => void {
+        let release!: () => void;
+        held = new Promise((resolve) => (release = resolve));
+        return release;
+    },
+    /** a panel starts offering a block */
+    offer(panel: PanelItem, entry: BlockInfo): void {
+        panels = [...panels, panel];
+        entries = [...entries, entry];
+    },
+    /** tells every listener the registry changed */
+    changed(): void {
+        for (const listener of [...registryListeners]) listener(null);
+    },
+};
+
+export const blocksApi = {
+    list: async (): Promise<BlockInfo[]> => {
+        const answer = structuredClone(entries);
+        const wait = held;
+        held = null;
+        if (wait) await wait;
+        return answer;
+    },
+    projects: async (): Promise<BlockProjectInfo[]> => [],
+    choices: async (panelId: string, entry: string, input: string): Promise<never> => {
+        throw new Error(`the fixture has no choices for ${panelId} ${entry} ${input}`);
+    },
+    typeChoices: async (typeRef: string): Promise<never> => {
+        throw new Error(`the fixture has no choices for ${typeRef}`);
+    },
+    onRegistryChange: (listener: (change: unknown) => void): (() => void) => {
+        registryListeners.add(listener);
+        return () => registryListeners.delete(listener);
+    },
+};
+
+export const panelsApi = {
+    list: async (): Promise<PanelItem[]> => structuredClone(panels),
+};
 
 export const SERVICED_PROJECT = "p-serviced";
 

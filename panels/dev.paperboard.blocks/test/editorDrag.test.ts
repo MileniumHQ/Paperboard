@@ -1,7 +1,7 @@
 // Dragging and copying blocks in the editor (real browser).
 //
 // The editor is bundled with Vite and mounted in headless Chrome over an SDK
-// with no daemon behind it (fixtures/paperapiStub.ts); the fixture drags
+// with no daemon behind it (fixtures/serviceStub.ts); the fixture drags
 // blocks out of the Library with pointer events and reports what the canvas
 // held and what the editor saved. Only a browser can prove this: Blockly
 // draws a preview of the block where it would snap on, and a renderer that
@@ -10,12 +10,10 @@
 import { describe, expect, test } from "bun:test";
 import { BUILTIN } from "../src/lib/names";
 import { runHat, type SavedBlock } from "../src/lib/interpreter";
-import { runBrowserFixture, type FixtureResults } from "./browserFixture";
+import { browserFixture } from "./browserFixture";
 
-let results: Promise<FixtureResults> | undefined;
 const fixture = async () => {
-    results ??= runBrowserFixture("test/fixtures/editorFixture.html", { "@mileniumhq/paperapi": "test/fixtures/paperapiStub.ts" });
-    const { checks, error } = await results;
+    const { checks, error } = await browserFixture("editor");
     expect(error, "the fixture threw").toBe("");
     return checks;
 };

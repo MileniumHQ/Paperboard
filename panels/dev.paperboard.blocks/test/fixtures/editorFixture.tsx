@@ -1,6 +1,8 @@
 // The real editor in a real browser, used the way a person uses it: blocks
 // are dragged out of the Library with pointer events, onto the canvas and
-// into each other. What happened is posted back to the test as JSON.
+// into each other. What happened is posted back to the test as JSON. A
+// block a drag left behind by mistake shows on the canvas, which each check
+// reads once the drop is saved.
 import { render } from "solid-js/web";
 import * as Blockly from "blockly";
 import { PaperProvider } from "@mileniumhq/paperui";
@@ -9,7 +11,8 @@ import "@mileniumhq/paperui/panel.css";
 import Editor from "../../src/Editor";
 import { createProjects } from "../../src/projects/state";
 import { BUILTIN, registryBlockType } from "../../src/lib/names";
-import { FIXTURE_PANEL, FIXTURE_PANEL_NAME, FIXTURE_PROJECT, saves } from "./paperapiStub";
+import { SERVICE_CALLS, type SavedFlows } from "../../src/panel";
+import { FIXTURE_PANEL, FIXTURE_PANEL_NAME, service, SERVICED_PROJECT } from "./serviceStub";
 
 /** Where on a block the pointer takes hold of it, from its top left. */
 const GRIP = 8;
@@ -22,6 +25,16 @@ window.addEventListener("error", (event) => errors.push(event.error instanceof E
 window.addEventListener("unhandledrejection", (event) => errors.push(event.reason instanceof Error ? event.reason.message : String(event.reason)));
 
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+const task = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+/** Until Blockly has told the editor what changed: it fires its events a frame and then a task later (events/utils.ts fireInternal). */
+const settle = async () => {
+    for (let i = 0; i < 3; i++) {
+        await frame();
+        await task();
+    }
+};
+/** every save the editor made, oldest first */
+const saves = (): SavedFlows[] => service.calls().filter((c) => c.name === SERVICE_CALLS.save).map((c) => c.input.flows);
 
 async function until<T>(what: string, look: () => T | null | undefined | false): Promise<T> {
     const deadline = performance.now() + 15_000;
@@ -103,15 +116,22 @@ function onPage(connection: Blockly.Connection): { x: number; y: number } {
     return { x: at.x, y: at.y };
 }
 
-/** What the editor has saved once a save holds `blocks` blocks (typed-in values aside), with the canvas as it is then. */
+/**
+ * What the editor has saved once the canvas holds `blocks` blocks (typed-in
+ * values aside) and its latest save is of the canvas as it is, with the canvas
+ * as it is then: a block a drag left behind is in both.
+ */
 async function savedWith(blocks: number) {
     const count = (b: { inputs?: Record<string, { block?: unknown }>; next?: { block?: unknown } } | undefined): number =>
         b ? 1 + Object.values(b.inputs ?? {}).reduce((n, input) => n + count(input.block as never), 0) + count(b.next?.block as never) : 0;
-    await until(`a save of ${blocks} blocks`, () => (saves.at(-1)?.workspace.blocks?.blocks ?? []).reduce((n, b) => n + count(b as never), 0) === blocks);
-    // long enough for a save of anything that came after: a block nobody dropped would be in it
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    await settle();
+    const shown = JSON.stringify(Blockly.serialization.workspaces.save(canvas()!));
+    await until(`a save of the canvas with ${blocks} blocks`, () => {
+        const last = saves().at(-1)?.workspace;
+        return JSON.stringify(last) === shown && (last?.blocks?.blocks ?? []).reduce((n, b) => n + count(b as never), 0) === blocks;
+    });
     return {
-        saved: saves.at(-1)!.workspace.blocks?.blocks ?? [],
+        saved: saves().at(-1)!.workspace.blocks?.blocks ?? [],
         onCanvas: canvas()!
             .getAllBlocks(false)
             .map((b) => b.type)
@@ -122,15 +142,17 @@ async function savedWith(blocks: number) {
 
 async function run(): Promise<Record<string, unknown>> {
     const projects = createProjects();
-    const project = await until("the project", () => projects.find(FIXTURE_PROJECT));
+    const project = await until("the project", () => projects.find(SERVICED_PROJECT));
     render(
         () => (
             <PaperProvider fullWidth fullHeight>
-                <Editor projectId={FIXTURE_PROJECT} project={() => project} projects={projects} onHome={() => {}} onOpen={() => {}} />
+                <Editor projectId={SERVICED_PROJECT} project={() => project} projects={projects} onHome={() => {}} onOpen={() => {}} />
             </PaperProvider>
         ),
         document.getElementById("app")!,
     );
+    // the flows are loaded: until then the canvas is read-only, and takes no drop
+    await until("the flows to load", () => canvas() && !canvas()!.isReadOnly());
     await libraryBlock(BUILTIN.onRun);
     const stage = canvas()!.getInjectionDiv().getBoundingClientRect();
 
