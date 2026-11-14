@@ -85,8 +85,14 @@ export function Example() {
                     <tr>
                         <td><PaperCode>columns</PaperCode></td>
                         <td><PaperCode>number</PaperCode></td>
-                        <td>No default (auto-fit by <PaperCode>min</PaperCode>)</td>
+                        <td>No default (as many as fit by <PaperCode>min</PaperCode>)</td>
                         <td>A fixed number of equal columns that never reflow. Columns can shrink to zero width, so give narrow screens a smaller count yourself.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>fit</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td>No default (off)</td>
+                        <td>Stretches the items across the whole row when there are fewer of them than columns that fit, instead of leaving empty columns at its end. Each column is still at least <PaperCode>min</PaperCode> wide, so they wrap the same way. Ignored when <PaperCode>columns</PaperCode> is set.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode>, <PaperCode>style</PaperCode></td>
@@ -106,7 +112,8 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
                 <li>The grid is a CSS grid with a gap of <PaperCode>--paper-uigap</PaperCode> (12 pixels), full width of its parent, with no padding.</li>
-                <li>Auto-fit uses <PaperCode>repeat(auto-fill, minmax(min, 1fr))</PaperCode>. Rows size to their tallest cell, and a short last row leaves empty tracks instead of stretching its cells.</li>
+                <li>The default uses <PaperCode>repeat(auto-fill, minmax(min, 1fr))</PaperCode>. Rows size to their tallest cell, and a short last row leaves empty tracks instead of stretching its cells.</li>
+                <li>With <PaperCode>fit</PaperCode> it uses <PaperCode>repeat(auto-fit, minmax(min, 1fr))</PaperCode>: a single row of fewer items than fit shares the whole width. Once the items fill more than one row, it looks the same as the default.</li>
                 <li>Children are not wrapped. Put a <PaperCode>PaperCard</PaperCode> or <PaperCode>PaperStatTile</PaperCode> directly inside.</li>
                 <li>The grid has no role, no scrolling, and no empty state. Render a <PaperLink href="/docs/paperui/paperemptystate/">PaperEmptyState</PaperLink> instead of an empty grid.</li>
             </PaperTextList>
@@ -142,6 +149,33 @@ export function Example() {
             </PaperText>
             <PaperCode block language="tsx">
 {`<PaperGrid min="field">
+    <For each={cells}>
+        {(cell) => (
+            <PaperCard padding="full" surface="back">
+                <PaperText preset="body" as="p">{cell}</PaperText>
+            </PaperCard>
+        )}
+    </For>
+</PaperGrid>`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="fit">Filling the row</PaperText>
+            <PaperText preset="body" as="p">
+                With <PaperCode>fit</PaperCode>, two items in a grid wide enough for four share the whole row instead of leaving two empty columns.
+            </PaperText>
+            <PaperCard data-docs-demo padding="double" surface="front">
+                <PaperGrid min="field" fit>
+                    <For each={cells.slice(0, 2)}>
+                        {(cell) => (
+                            <PaperCard padding="full" surface="back">
+                                <PaperText preset="body" as="p">{cell}</PaperText>
+                            </PaperCard>
+                        )}
+                    </For>
+                </PaperGrid>
+            </PaperCard>
+            <PaperCode block language="tsx">
+{`<PaperGrid min="field" fit>
     <For each={cells}>
         {(cell) => (
             <PaperCard padding="full" surface="back">

@@ -8,16 +8,23 @@ export interface PaperGridProps extends JSX.HTMLAttributes<HTMLDivElement> {
     min?: PaperSize | (string & {});
     /** fixed column count instead of an auto-fill track */
     columns?: number;
+    /**
+     * Auto-fit instead of auto-fill: when there are fewer items than columns
+     * fit, they stretch to share the whole row instead of leaving empty
+     * columns at its end. Ignored with columns.
+     */
+    fit?: boolean;
 }
 
 /**
  * Responsive grid without per-panel inline styles. Auto-fill by default,
- * fixed columns when asked.
+ * auto-fit or fixed columns when asked.
  */
 export function PaperGrid(props: ParentProps<PaperGridProps>) {
     const [local, rest] = splitProps(props, [
         "min",
         "columns",
+        "fit",
         "class",
         "classList",
         "style",
@@ -30,7 +37,7 @@ export function PaperGrid(props: ParentProps<PaperGridProps>) {
     const gridStyle = () => ({
         "grid-template-columns": local.columns
             ? `repeat(${local.columns}, minmax(0, 1fr))`
-            : `repeat(auto-fill, minmax(${local.min ? resolveSize(local.min) : getVarCss("grid-min")}, 1fr))`,
+            : `repeat(${local.fit ? "auto-fit" : "auto-fill"}, minmax(${local.min ? resolveSize(local.min) : getVarCss("grid-min")}, 1fr))`,
         ...(typeof local.style === "object" ? local.style : {}),
     });
 
