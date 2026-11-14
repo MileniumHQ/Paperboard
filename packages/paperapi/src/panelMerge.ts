@@ -106,7 +106,9 @@ export function mergeRegistryWithInstalled(
                   record.manifest?.publisher ||
                   record.manifest?.author,
             icon: localPanel?.icon || record.icon,
-            iconUrl: record.iconUrl || `${base}/panel/${id}/icon`,
+            // a release published without an icon has no iconUrl: leave it
+            // out so the card shows its glyph, not a broken image
+            ...(record.iconUrl ? { iconUrl: record.iconUrl } : {}),
             downloadUrl:
                 record.downloadUrl || `${base}/panel/${id}/download`,
             // facts the registry does not give stay absent: a card shows
