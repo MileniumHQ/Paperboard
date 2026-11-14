@@ -2,7 +2,7 @@
 // Electron IPC (shelldata.ts) and the browser-mode bridge (browserHost.ts)
 // register the SAME functions; each transport owns its own caller check
 // (senderFrame origin for IPC, session cookie + Origin for HTTP). Only
-// requests both shells need live here — window, clipboard and updater
+// requests both shells need live here — window and updater
 // channels stay Electron-only in shelldata.ts.
 import * as path from "path";
 import connectionPool from "./papercrane/ConnectionPool";

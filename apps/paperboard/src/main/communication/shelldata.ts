@@ -1,7 +1,7 @@
 // shell-only IPC; data operations flow through daemon.
 // Every handler below validates event.senderFrame.url via shellGuard:
 // panel:// origins get a typed PANEL_IPC_REFUSED, never an answer.
-import { type IpcMain, type IpcMainInvokeEvent, type WebContents, BrowserWindow, app, clipboard, dialog, nativeTheme, shell } from "electron";
+import { type IpcMain, type IpcMainInvokeEvent, type WebContents, BrowserWindow, app, dialog, nativeTheme, shell } from "electron";
 import { broadcastAppSettings, syncTitleBarOverlays, applyNativeTheme, applyRunOnStartup, currentGraphics } from "../appSettings";
 import * as path from "path";
 import { sanitizeId } from "../../../papercrane/storage";
@@ -95,20 +95,6 @@ export async function applySavedAppSettings(): Promise<string | null> {
 }
 
 export default function registerShellIpc(ipcMain: IpcMain) {
-    // Electron 44 rearchitected the clipboard module to the W3C shape: the
-    // read/write methods now return Promises. Awaiting is correct on both the
-    // old and new APIs (await on a non-Promise resolves it), so write success
-    // reflects the actual write instead of reporting true unconditionally.
-    ipcMain.handle("clipboard-read", async (event) => {
-        assertShellFrame(event, "clipboard-read");
-        return await clipboard.readText();
-    });
-    ipcMain.handle("clipboard-write", async (event, text: string) => {
-        assertShellFrame(event, "clipboard-write");
-        await clipboard.writeText(text);
-        return true;
-    });
-
     // settings saved over WS still need main-side side effects
     ipcMain.handle("app-settings-changed", (event) => {
         assertShellFrame(event, "app-settings-changed");

@@ -2,8 +2,6 @@
 
 export const SHELL_INVOKE_CHANNELS = [
     "crane-credentials",
-    "clipboard-read",
-    "clipboard-write",
     "computers-list",
     "computer-probe",
     "computer-pair",
@@ -38,13 +36,11 @@ export const SHELL_INVOKE_CHANNELS = [
 ] as const;
 
 export const SHELL_SEND_CHANNELS = [
-    "ping",
     "quit-app",
     "renderer-log",
 ] as const;
 
 export const SHELL_ON_CHANNELS = [
-    "pong",
     "app-update-state",
     "update-queue",
     "computers-changed",

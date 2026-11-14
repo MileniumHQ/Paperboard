@@ -1,6 +1,7 @@
-// mDNS discovery, deduped by machine id + port; fails soft
+// mDNS discovery, deduped by machine id + port. A failure is said by
+// found(), and the next refresh starts browsing again.
 import { EventEmitter } from "events";
-import { Bonjour, type Browser } from "bonjour-service";
+import { Bonjour } from "bonjour-service";
 import { logger } from "../../../papercrane/logger";
 import { PAPERCRANE_MDNS_TYPE } from "../../../papercrane/discovery";
 
@@ -18,24 +19,36 @@ interface DiscoveredEntry extends DiscoveredComputer {
     fqdn: string;
 }
 
+// what browsing needs of bonjour-service; a test hands in its own network
+export interface MdnsBrowser {
+    on(event: string, listener: (arg: any) => void): unknown;
+    update(): void;
+    stop(): void;
+}
+export interface Mdns {
+    find(options: { type: string }): MdnsBrowser;
+    destroy(): void;
+}
+
 export class DiscoveryService extends EventEmitter {
-    private bonjour: Bonjour | null = null;
-    private browser: Browser | null = null;
+    private mdns: Mdns | null = null;
+    private browser: MdnsBrowser | null = null;
     private services = new Map<string, DiscoveredEntry>();
     private started = false;
     // why browsing stopped working, which the Add computer list shows
     private failure: string | null = null;
+
+    constructor(private readonly openMdns: () => Mdns = () => new Bonjour()) {
+        super();
+    }
 
     public start(): void {
         if (this.started) return;
         this.started = true;
         this.failure = null;
         try {
-            this.bonjour = new Bonjour();
-            this.browser = this.bonjour.find({
-                type: PAPERCRANE_MDNS_TYPE,
-            }) as Browser;
-
+            this.mdns = this.openMdns();
+            this.browser = this.mdns.find({ type: PAPERCRANE_MDNS_TYPE });
             this.browser.on("up", (service: any) => {
                 try {
                     this.handleUp(service);
@@ -47,28 +60,14 @@ export class DiscoveryService extends EventEmitter {
                 try {
                     this.handleDown(service);
                 } catch (err) {
-                    logger.warn(
-                        "[Discovery] failed to process mDNS 'down':",
-                        err,
-                    );
+                    logger.warn("[Discovery] failed to process mDNS 'down':", err);
                 }
             });
-            // error event untyped; listen defensively
-            (this.browser as any).on("error", (err: unknown) => {
-                logger.warn("[Discovery] mDNS browser error:", err);
-                this.failure = err instanceof Error ? err.message : String(err);
-            });
-
-            logger.info(
-                `[Discovery] browsing for _${PAPERCRANE_MDNS_TYPE}._tcp services`,
-            );
+            // the browser's socket failed (a network change)
+            this.browser.on("error", (err: unknown) => this.fail(err));
+            logger.info(`[Discovery] browsing for _${PAPERCRANE_MDNS_TYPE}._tcp services`);
         } catch (err) {
-            logger.warn(
-                "[Discovery] mDNS unavailable; network discovery disabled:",
-                err,
-            );
-            this.failure = err instanceof Error ? err.message : String(err);
-            this.started = false;
+            this.fail(err);
         }
     }
 
@@ -77,8 +76,15 @@ export class DiscoveryService extends EventEmitter {
         try {
             this.browser?.update();
         } catch (err) {
-            logger.debug("[Discovery] failed to trigger mDNS update:", err);
+            this.fail(err);
         }
+    }
+
+    // browsing stopped: found() says why until the next refresh starts it again
+    private fail(err: unknown): void {
+        logger.warn("[Discovery] mDNS browsing failed:", err);
+        this.stop();
+        this.failure = err instanceof Error ? err.message : String(err);
     }
 
     private serviceKey(service: any): string | null {
@@ -207,12 +213,12 @@ export class DiscoveryService extends EventEmitter {
             logger.debug("[Discovery] failed to stop mDNS browser:", err);
         }
         try {
-            this.bonjour?.destroy();
+            this.mdns?.destroy();
         } catch (err) {
             logger.debug("[Discovery] failed to destroy mDNS instance:", err);
         }
         this.browser = null;
-        this.bonjour = null;
+        this.mdns = null;
         this.services.clear();
         this.started = false;
     }

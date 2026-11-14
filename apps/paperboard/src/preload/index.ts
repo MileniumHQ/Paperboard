@@ -79,14 +79,11 @@ const guardedIpcRenderer = {
     },
 };
 
+// a failure to expose the bridge throws: the shell can't run without it
 if (process.contextIsolated) {
-    try {
-        contextBridge.exposeInMainWorld("electron", {
-            ipcRenderer: guardedIpcRenderer,
-        });
-    } catch (error) {
-        console.error(error);
-    }
+    contextBridge.exposeInMainWorld("electron", {
+        ipcRenderer: guardedIpcRenderer,
+    });
 } else {
     // @ts-ignore
     window.electron = { ipcRenderer: guardedIpcRenderer };

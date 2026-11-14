@@ -15,19 +15,6 @@ export function logRendererMessage(level: unknown, message: unknown): void {
 
 // privileged/host-coupled channels only; data flows through daemon
 export function startCommunicator(ipcMain: IpcMain) {
-    ipcMain.on("ping", (event) => {
-        if (isRefusedFrame(event)) {
-            logger.warn('[Shell] PANEL_IPC_REFUSED: channel "ping" is shell-only');
-            return;
-        }
-        const frame = (event as any).senderFrame;
-        if (frame && typeof frame.send === "function") {
-            frame.send("pong", "pong");
-        } else {
-            event.sender.send("pong", "pong");
-        }
-    });
-
     ipcMain.on("renderer-log", (event, level, message) => {
         if (isRefusedFrame(event)) {
             logger.warn('[Shell] PANEL_IPC_REFUSED: channel "renderer-log" is shell-only');
@@ -47,12 +34,9 @@ export function startCommunicator(ipcMain: IpcMain) {
     });
 
     const onDiscovery = (services: unknown) => pushToShells("discovery-changed", services);
-    try {
-        discovery.start();
-        discovery.on("update", onDiscovery);
-    } catch (err) {
-        logger.warn("[Discovery] failed to start network browsing:", err);
-    }
+    // a failure to browse is kept and said by discovery-list
+    discovery.start();
+    discovery.on("update", onDiscovery);
 
     // mirror pool changes; payload matches computers-list
     const onPoolChange = () => {
