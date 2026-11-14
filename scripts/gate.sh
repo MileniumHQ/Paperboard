@@ -195,7 +195,7 @@ lib_build() {
 want paperapi-build && lib_build paperapi
 want paperui-build && lib_build paperui
 gstep create-panel-build "create-panel build" run_in "$ROOT/packages/create-panel" bun run build
-gstep packages "packed external consumers" node "$ROOT/scripts/check-package-artifacts.mjs"
+gstep packages "packed external consumers" bun "$ROOT/scripts/check-package-artifacts.mjs"
 
 # ── Paperboard app: node + web typechecks, full suite, lint, silent-catches ──
 gstep paperboard "paperboard typecheck:node" run_in "$ROOT/apps/paperboard" bun run typecheck:node
@@ -283,7 +283,7 @@ gstep platform "agents platform tests" run_in "$ROOT/panels/dev.paperboard.agent
 gstep platform "terminal platform tests" run_in "$ROOT/panels/dev.paperboard.terminal" bun test ./test/platform
 gstep platform "crane-launcher platform tests" run_in "$ROOT/packages/crane-launcher" bash -c "bun run build && bun test ./test/platform"
 
-# ── repo-wide checks (full gate only) ────────────────────────────────────────
+# ── repo-wide checks (full gate, or `global`) ────────────────────────────────
 if want global; then
     # changelog-existence gate: changelogs are suspended, zero CHANGELOG.md files
     echo "--- gate: changelog-existence"
