@@ -7,6 +7,11 @@
 // under Node (vitest). Every wait is on something the page
 // does (a DOM change, a socket message), never on a fixed delay.
 //
+// openChrome() starts a Chrome for one page. A suite that opens many pages
+// starts one Chrome with launchChrome() and opens each page in a browser
+// context of its own, so pages share no cookies, storage or cache, and
+// Chrome starts once instead of once per page.
+//
 // Chrome leaves nothing behind: its profile is its temp dir too (Chrome
 // puts its singleton socket under TMPDIR), and the profile is removed and
 // Chrome killed on every way out: close(), a failed start, and the test
@@ -63,18 +68,16 @@ export interface Page {
     close(): Promise<void>;
 }
 
-export interface ChromeOptions {
+export interface LaunchOptions {
     /** "width,height" */
     windowSize?: string;
     /** told Chrome's DevTools port, for a suite that only lets known ports through */
     onPort?: (port: number) => void;
-    /** which socket messages the page sent are calls that get an answer (settled() waits for those) */
-    isCall?: (frame: string) => boolean;
-    /** a script run in every document before its own, to watch or hold what the page does */
-    init?: string;
     /** more Chrome switches, after the ones every suite gets */
     args?: string[];
 }
+
+export type ChromeOptions = LaunchOptions & PageOptions;
 
 // Stops Chrome's process group and removes its profile once this test
 // process ends without having done so. The reaper waits on a FIFO that only
@@ -125,8 +128,42 @@ async function reaper(group: number, profile: string): Promise<Reaper> {
     };
 }
 
-/** opens `url` in a fresh headless Chrome with a throwaway profile */
+/** a headless Chrome of its own, with a throwaway profile, that pages open in */
+export interface Chrome {
+    /** loads `url` in a new page of its own browser context: no cookies, storage or cache shared with the browser's other pages */
+    open(url: string, options?: PageOptions): Promise<Page>;
+    /** stops Chrome and removes its profile; pages still open fail with why */
+    close(): Promise<void>;
+}
+
+export interface PageOptions {
+    /** which socket messages the page sent are calls that get an answer (settled() waits for those) */
+    isCall?: (frame: string) => boolean;
+    /** a script run in every document before its own, to watch or hold what the page does */
+    init?: string;
+}
+
+/** opens `url` in a fresh headless Chrome with a throwaway profile; closing the page stops that Chrome */
 export async function openChrome(url: string, options: ChromeOptions = {}): Promise<Page> {
+    const chrome = await launchChrome(options);
+    let page: Page;
+    try {
+        page = await chrome.open(url, options);
+    } catch (err) {
+        await chrome.close();
+        throw err;
+    }
+    const closePage = page.close;
+    let closing: Promise<void> | null = null;
+    page.close = () => {
+        closing ??= closePage().finally(() => chrome.close());
+        return closing;
+    };
+    return page;
+}
+
+/** starts a headless Chrome with a throwaway profile, for a suite to open many pages in */
+export async function launchChrome(options: LaunchOptions = {}): Promise<Chrome> {
     // short: the singleton socket's path (<profile>/com.google.Chrome.XXXXXX/
     // SingletonSocket) must fit in 108 bytes, under a suite's own TMPDIR too
     const profile = fs.mkdtempSync(path.join(os.tmpdir(), "pb-chrome-"));
@@ -141,11 +178,15 @@ export async function openChrome(url: string, options: ChromeOptions = {}): Prom
         process.kill(-chrome.pid, "SIGKILL");
     };
     let exited: Promise<void> = Promise.resolve();
-    const shutdown = async () => {
-        kill();
-        await exited;
-        reap?.dismiss();
-        fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10 });
+    let stopping: Promise<void> | null = null;
+    const shutdown = () => {
+        stopping ??= (async () => {
+            kill();
+            await exited;
+            reap?.dismiss();
+            fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10 });
+        })();
+        return stopping;
     };
     try {
         chrome = spawn(chromeBinary(), [
@@ -160,7 +201,33 @@ export async function openChrome(url: string, options: ChromeOptions = {}): Prom
         });
         const start = watchStart(started);
         if (started.pid) reap = await reaper(started.pid, profile);
-        return await drive(started, start, url, options, shutdown);
+        const port = await start.port;
+        if (port instanceof Error) throw port;
+        options.onPort?.(port);
+        const stderr = () => start.stderr().trim();
+        const version = (await (await fetch(`http://127.0.0.1:${port}/json/version`)).json()) as { webSocketDebuggerUrl: string };
+        const browser = await connect(version.webSocketDebuggerUrl, started, stderr);
+        return {
+            async open(url, pageOptions = {}) {
+                const { browserContextId } = await browser.send<{ browserContextId: string }>("Target.createBrowserContext");
+                // its pages go with it
+                const dispose = async () => {
+                    if (!browser.gone()) await browser.send("Target.disposeBrowserContext", { browserContextId });
+                };
+                try {
+                    const { targetId } = await browser.send<{ targetId: string }>("Target.createTarget", { url: "about:blank", browserContextId });
+                    const connection = await connect(`ws://127.0.0.1:${port}/devtools/page/${targetId}`, started, stderr);
+                    return await drive(connection, url, pageOptions, dispose);
+                } catch (err) {
+                    await dispose();
+                    throw err;
+                }
+            },
+            async close() {
+                browser.close();
+                await shutdown();
+            },
+        };
     } catch (err) {
         await shutdown();
         throw err;
@@ -201,15 +268,21 @@ function watchStart(chrome: ChildProcess): Start {
     return { port, stderr: () => stderr };
 }
 
-async function drive(chrome: ChildProcess, start: Start, url: string, options: ChromeOptions, shutdown: () => Promise<void>): Promise<Page> {
-    const port = await start.port;
-    if (port instanceof Error) throw port;
-    const stderr = () => start.stderr().trim();
-    options.onPort?.(port);
-    const targets = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()) as { type: string; webSocketDebuggerUrl: string }[];
-    const target = targets.find((t) => t.type === "page");
-    if (!target) throw new Error("Chrome opened no page");
-    const socket = new WebSocket(target.webSocketDebuggerUrl);
+interface Connection {
+    send<T = any>(method: string, params?: Record<string, unknown>): Promise<T>;
+    /** every DevTools event on this connection */
+    listeners: Set<(event: CdpEvent) => void>;
+    /** told why, once, when the connection is lost */
+    onGone: Set<(why: Error) => void>;
+    /** why the connection is lost, or null while it is up */
+    gone(): Error | null;
+    close(): void;
+}
+
+// once the connection to Chrome is gone, every call and wait still pending
+// fails with why, instead of hanging until a timeout
+async function connect(url: string, chrome: ChildProcess, stderr: () => string): Promise<Connection> {
+    const socket = new WebSocket(url);
     await new Promise<void>((resolve, reject) => {
         socket.onopen = () => resolve();
         socket.onerror = () => reject(new Error("Could not connect to Chrome's DevTools"));
@@ -217,8 +290,6 @@ async function drive(chrome: ChildProcess, start: Start, url: string, options: C
     let nextId = 1;
     const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
     const listeners = new Set<(event: CdpEvent) => void>();
-    // once the connection to Chrome is gone, every call and wait still
-    // pending fails with why, instead of hanging until a timeout
     let gone: Error | null = null;
     const onGone = new Set<(why: Error) => void>();
     const lose = (why: Error) => {
@@ -229,8 +300,12 @@ async function drive(chrome: ChildProcess, start: Start, url: string, options: C
         for (const fail of onGone) fail(why);
         onGone.clear();
     };
-    socket.onclose = () => lose(new Error(`Chrome's DevTools connection closed${stderr() ? `:\n${stderr()}` : ""}`));
-    chrome.once("exit", (code, signal) => lose(new Error(`Chrome exited (${code ?? signal})${stderr() ? `:\n${stderr()}` : ""}`)));
+    const exit = (code: number | null, signal: NodeJS.Signals | null) => lose(new Error(`Chrome exited (${code ?? signal})${stderr() ? `:\n${stderr()}` : ""}`));
+    socket.onclose = () => {
+        chrome.off("exit", exit);
+        lose(new Error(`Chrome's DevTools connection closed${stderr() ? `:\n${stderr()}` : ""}`));
+    };
+    chrome.once("exit", exit);
     socket.onmessage = (message) => {
         const data = JSON.parse(String(message.data));
         if (data.id && pending.has(data.id)) {
@@ -240,14 +315,23 @@ async function drive(chrome: ChildProcess, start: Start, url: string, options: C
             else call.resolve(data.result);
         } else if (data.method) for (const listener of listeners) listener(data);
     };
-    const send = <T = any>(method: string, params: Record<string, unknown> = {}): Promise<T> =>
-        new Promise((resolve, reject) => {
-            if (gone) return reject(gone);
-            const id = nextId++;
-            pending.set(id, { resolve, reject });
-            socket.send(JSON.stringify({ id, method, params }));
-        });
+    return {
+        send: (method, params = {}) =>
+            new Promise((resolve, reject) => {
+                if (gone) return reject(gone);
+                const id = nextId++;
+                pending.set(id, { resolve, reject });
+                socket.send(JSON.stringify({ id, method, params }));
+            }),
+        listeners,
+        onGone,
+        gone: () => gone,
+        close: () => socket.close(),
+    };
+}
 
+async function drive(connection: Connection, url: string, options: PageOptions, dispose: () => Promise<void>): Promise<Page> {
+    const { send, listeners, onGone } = connection;
     const exceptions: string[] = [];
     const consoleErrors: string[] = [];
     const sentFrames: string[] = [];
@@ -316,7 +400,7 @@ async function drive(chrome: ChildProcess, start: Start, url: string, options: C
         received: (match, what) =>
             new Promise((resolve, reject) => {
                 if (receivedFrames.some(match)) return resolve();
-                if (gone) return reject(gone);
+                if (connection.gone()) return reject(connection.gone());
                 const stop = () => {
                     clearTimeout(timer);
                     listeners.delete(listener);
@@ -378,8 +462,8 @@ async function drive(chrome: ChildProcess, start: Start, url: string, options: C
                     // working on one when the daemon goes would answer into nothing
                     await page.settled();
                 } finally {
-                    socket.close();
-                    await shutdown();
+                    connection.close();
+                    await dispose();
                 }
             })();
             return closing;
@@ -388,7 +472,7 @@ async function drive(chrome: ChildProcess, start: Start, url: string, options: C
     try {
         await navigate(url);
     } catch (err) {
-        socket.close();
+        connection.close();
         throw err;
     }
     return page;

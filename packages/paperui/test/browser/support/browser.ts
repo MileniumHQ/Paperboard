@@ -3,10 +3,10 @@
 // launch, its DevTools connection, and removing it and its profile on every
 // way out) is scripts/testing/chrome.ts; this adds the fixture page
 // (test/browser/fixture), real pointer, touch and key input, and the page's
-// errors in the order it reported them. Each test opens its own Chrome on one
-// scenario.
-import { afterEach, inject } from "vitest";
-import { type Page as ChromePage, openChrome } from "../../../../../scripts/testing/chrome.ts";
+// errors in the order it reported them. A test file starts one Chrome, and
+// each scenario opens in a browser context of its own.
+import { afterAll, afterEach, inject } from "vitest";
+import { type Chrome, type Page as ChromePage, launchChrome } from "../../../../../scripts/testing/chrome.ts";
 
 const WAIT_TIMEOUT_MS = 10_000;
 
@@ -189,9 +189,9 @@ export class Page {
     }
 }
 
-/** Opens one fixture scenario in a Chrome of its own, ready once the scenario has mounted. */
-async function openScenario(scenario: string, options: PageOptions = {}): Promise<Page> {
-    const page = new Page(await openChrome("about:blank", { args: CHROME_ARGS }));
+/** Opens one fixture scenario in a fresh browser context, ready once the scenario has mounted. */
+async function openScenario(chrome: Chrome, scenario: string, options: PageOptions = {}): Promise<Page> {
+    const page = new Page(await chrome.open("about:blank"));
     try {
         await page.send("Emulation.setDeviceMetricsOverride", {
             width: options.width ?? 1200,
@@ -218,26 +218,31 @@ async function openScenario(scenario: string, options: PageOptions = {}): Promis
 }
 
 /**
- * The browser for one test file. Each `open` starts a Chrome of its own, so
- * a missing or broken Chrome fails every test with the reason instead of
- * leaving them unrun. After each test its pages are checked for page errors
- * and their Chromes closed.
+ * The browser for one test file: one Chrome, started by the first `open`,
+ * so a missing or broken Chrome fails every test with the reason instead of
+ * leaving them unrun. After each test every page it opened is checked for
+ * page errors and closed; after the file, Chrome is.
  */
 export function useBrowser() {
+    let chrome: Promise<Chrome> | null = null;
     let opened: Page[] = [];
     afterEach(async () => {
         const pages = opened;
         opened = [];
-        if (!pages.length) return;
         try {
-            pages[pages.length - 1].expectNoErrors();
+            const failures = pages.flatMap((page) => page.errors);
+            if (failures.length) throw new Error(`the page reported errors:\n${failures.join("\n")}`);
         } finally {
             await Promise.all(pages.map((page) => page.close()));
         }
     });
+    afterAll(async () => {
+        if (chrome) await (await chrome).close();
+    });
     return {
         async open(scenario: string, options?: PageOptions): Promise<Page> {
-            const page = await openScenario(scenario, options);
+            chrome ??= launchChrome({ args: CHROME_ARGS });
+            const page = await openScenario(await chrome, scenario, options);
             opened.push(page);
             return page;
         },
