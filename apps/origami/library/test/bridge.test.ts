@@ -67,6 +67,10 @@ describe("only an embedding Paperboard can install, and only valid identities co
         // a later list replaces it under the same rules
         host.reply({ type: "paperboard:library-installed", installed: [{ id: "library", name: "x" }, { id: "dev.example.notes", name: "Notes" }] });
         expect(bridge.installed().map((p) => p.id)).toEqual(["dev.example.notes"]);
+        // a push that changes nothing keeps the list, so nothing downstream re-runs
+        const before = bridge.installed();
+        host.reply({ type: "paperboard:library-installed", installed: [{ id: "dev.example.notes", name: "Notes" }] });
+        expect(bridge.installed()).toBe(before);
         bridge.dispose();
     });
 

@@ -91,7 +91,7 @@ function parseTheme(value: unknown): LibraryTheme {
 let requestSeq = 0;
 function nextRequestId(): string {
     requestSeq += 1;
-    return `install-${Date.now()}-${requestSeq}`;
+    return `request-${Date.now()}-${requestSeq}`;
 }
 
 export function createLibraryBridge(
@@ -106,7 +106,11 @@ export function createLibraryBridge(
     const [mode, setMode] = createSignal<LibraryMode>(
         host ? "detecting" : "standalone",
     );
-    const [installed, setInstalled] = createSignal<PanelItem[]>([]);
+    // the shell repeats the whole list on every push; one that changes
+    // nothing must not re-merge the store or re-ask for media
+    const [installed, setInstalled] = createSignal<PanelItem[]>([], {
+        equals: (prev, next) => JSON.stringify(prev) === JSON.stringify(next),
+    });
     const [theme, setTheme] = createSignal<LibraryTheme>("system");
     const pending = new Map<string, PendingInstall>();
     const pendingMedia = new Map<

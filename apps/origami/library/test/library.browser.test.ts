@@ -281,6 +281,9 @@ describe("the library, as a person uses it", () => {
             const page = await chrome.open(`${origin}/library/`);
             const doc = "document";
             await press(page, doc, card("Alpha"), "the Alpha card");
+            // the page's facts are a listing section like the others, never a hand-built strip
+            const information = `doc.querySelector("section[aria-label=Information]")?.textContent`;
+            await until(page, doc, `${information}?.includes("PublisherPublisher not provided") && ${information}.includes("Versionv1.0.0")`, "Alpha's information");
             await press(page, doc, button("Download"), "Alpha's Download");
             await requested;
             expect(archiveRequests).toEqual(["/panel/dev.example.alpha/download"]);

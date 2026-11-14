@@ -6,10 +6,10 @@
 import { createSignal, onCleanup } from "solid-js";
 import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
 
-export const PANEL_QUERY = "panel";
+const PANEL_QUERY = "panel";
 
 /** Panel id named by a location's query, or null for the grid (invalid ids included). */
-export function panelIdFromSearch(search: string): string | null {
+function panelIdFromSearch(search: string): string | null {
     const id = new URLSearchParams(search).get(PANEL_QUERY);
     return isPanelId(id) ? id : null;
 }

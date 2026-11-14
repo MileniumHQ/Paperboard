@@ -46,33 +46,6 @@
     min-width: var(--paper-size-field);
 }
 
-/* the horizontal fact strip under the hero */
-.facts {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: 1fr;
-    row-gap: var(--paper-uigap);
-    padding: var(--paper-uigap-half) 0;
-}
-
-.fact {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: var(--paper-uigap-onefourth);
-    padding: 0 var(--paper-uigap);
-}
-
-.fact > * {
-    max-width: 100%;
-}
-
-.fact + .fact {
-    border-left: var(--paper-border-width) solid var(--paper-border-subtle);
-}
-
 /* screenshots: one row, moved by the arrow buttons rather than a scrollbar */
 .gallery {
     display: flex;
@@ -116,7 +89,7 @@
     display: none;
 }
 
-/* narrow frames: the hero stacks and centers, the facts fold into two rows */
+/* narrow frames: the hero stacks and centers */
 /* paper-literal-ok: media queries cannot read custom properties */
 @media (max-width: 40rem) {
     .hero {
@@ -128,13 +101,6 @@
     }
     .heroAction {
         align-items: center;
-    }
-    .facts {
-        grid-auto-flow: row;
-        grid-template-columns: 1fr 1fr;
-    }
-    .fact:nth-child(odd) {
-        border-left: none;
     }
 }
 

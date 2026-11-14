@@ -3,7 +3,6 @@ import {
     createEffect,
     createSignal,
     For,
-    type JSX,
     on,
     onCleanup,
     onMount,
@@ -35,7 +34,7 @@ export function publisherLabel(panel: PanelItem): string {
 }
 
 /** Archive size in the units a person reads: KB under a megabyte, MB above. */
-export function formatBytes(bytes: number | undefined): string | null {
+function formatBytes(bytes: number | undefined): string | null {
     if (bytes === undefined) return null;
     if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -50,9 +49,9 @@ export function iconGlyph(panel: PanelItem): string {
     return "dashboard";
 }
 
-export type PanelAction = "open" | "install" | "download" | "busy" | "detecting";
+type PanelAction = "open" | "install" | "download" | "busy" | "detecting";
 
-export function panelAction(
+function panelAction(
     panel: PanelItem,
     mode: LibraryMode,
     busy: boolean,
@@ -182,17 +181,6 @@ const Screenshots: Component<{ panelName: string; shots: StoreScreenshot[] }> = 
     );
 };
 
-const Fact: Component<{ label: string; children: JSX.Element }> = (props) => (
-    <div class={styles.fact}>
-        <PaperText preset="section" color="text-faint" rounded>
-            {props.label}
-        </PaperText>
-        <PaperText size={5} weight={700} color="text-muted" rounded truncate>
-            {props.children}
-        </PaperText>
-    </div>
-);
-
 export interface PanelPageProps {
     panel: PanelItem;
     mode: LibraryMode;
@@ -208,7 +196,21 @@ export interface PanelPageProps {
 const PanelPage: Component<PanelPageProps> = (props) => {
     const action = () => panelAction(props.panel, props.mode, props.busy);
     const store = () => props.panel.store;
-    const size = () => formatBytes(props.panel.archiveBytes);
+    // the facts every panel has, last on the page like any listing's details
+    const information = (): StoreRow[] => {
+        const panel = props.panel;
+        const size = formatBytes(panel.archiveBytes);
+        return [
+            { name: "Publisher", detail: publisherLabel(panel) },
+            ...(size ? [{ name: "Size", detail: size }] : []),
+            { name: panel.isInstalled ? "Installed" : "Version", detail: panel.version ? `v${panel.version}` : "Unknown" },
+            // installed panels report their own manifest's version; the
+            // registry's newest release is a separate fact
+            ...(panel.isInstalled && panel.latestVersion && panel.latestVersion !== panel.version
+                ? [{ name: "Latest", detail: `v${panel.latestVersion}` }]
+                : []),
+        ];
+    };
 
     return (
         <PaperPage role="article" aria-label={props.panel.name} gap="double">
@@ -270,25 +272,6 @@ const PanelPage: Component<PanelPageProps> = (props) => {
                 </div>
             </header>
 
-            <section class={styles.facts} aria-label="Details">
-                <Fact label="Publisher">{publisherLabel(props.panel)}</Fact>
-                <Show when={size()}>{(known) => <Fact label="Size">{known()}</Fact>}</Show>
-                <Fact label={props.panel.isInstalled ? "Installed" : "Version"}>
-                    {props.panel.version ? `v${props.panel.version}` : "Unknown"}
-                </Fact>
-                {/* installed panels report their own manifest's version; the
-                    registry's newest release is a separate fact */}
-                <Show
-                    when={
-                        props.panel.isInstalled &&
-                        props.panel.latestVersion &&
-                        props.panel.latestVersion !== props.panel.version
-                    }
-                >
-                    <Fact label="Latest">v{props.panel.latestVersion}</Fact>
-                </Show>
-            </section>
-
             <Show when={props.mediaError}>
                 {(why) => (
                     <PaperFlex direction="row" gap="half" align="center" wrap>
@@ -323,6 +306,8 @@ const PanelPage: Component<PanelPageProps> = (props) => {
                     </>
                 )}
             </Show>
+
+            <InfoSection icon="info" title="Information" rows={information()} />
         </PaperPage>
     );
 };
