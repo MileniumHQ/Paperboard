@@ -169,12 +169,15 @@ export default function ResourcePack(props: { active: boolean }) {
                                             title="Prompt"
                                             description="The message players see when asked to accept the pack. Leave empty for the default."
                                         >
-                                            <PaperInput
-                                                placeholder="Text"
-                                                value={values().prompt}
-                                                invalid={promptProblem(values().prompt) !== ""}
-                                                onInput={(e) => change({ prompt: e.currentTarget.value })}
-                                            />
+                                            <PaperFlex width="field-wide">
+                                                <PaperInput
+                                                    fullWidth
+                                                    placeholder="Text"
+                                                    value={values().prompt}
+                                                    invalid={promptProblem(values().prompt) !== ""}
+                                                    onInput={(e) => change({ prompt: e.currentTarget.value })}
+                                                />
+                                            </PaperFlex>
                                         </PaperSettingItem>
                                     </Show>
                                     <Show when={supports("resourcePackId")}>
@@ -182,12 +185,15 @@ export default function ResourcePack(props: { active: boolean }) {
                                             title="Pack ID"
                                             description="A UUID clients use to tell this pack from others. Leave empty to let the game choose."
                                         >
-                                            <PaperInput
-                                                placeholder="UUID"
-                                                value={values().id}
-                                                invalid={idProblem(values().id) !== ""}
-                                                onInput={(e) => change({ id: e.currentTarget.value })}
-                                            />
+                                            <PaperFlex width="field-wide">
+                                                <PaperInput
+                                                    fullWidth
+                                                    placeholder="UUID"
+                                                    value={values().id}
+                                                    invalid={idProblem(values().id) !== ""}
+                                                    onInput={(e) => change({ id: e.currentTarget.value })}
+                                                />
+                                            </PaperFlex>
                                         </PaperSettingItem>
                                     </Show>
                                 </PaperSettingList>

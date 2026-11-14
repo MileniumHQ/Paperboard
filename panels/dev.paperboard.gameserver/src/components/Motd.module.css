@@ -32,6 +32,12 @@
     overflow: hidden;
 }
 
+/* a line too long for the box ends in an ellipsis, so it reads as cut off */
+.listBox > div {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* the editable box in the MOTD editor */
 .editor {
     padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);

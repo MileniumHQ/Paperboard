@@ -27,9 +27,11 @@ export function isServerId(id: unknown): id is string {
 export function createServerId(): string {
     return `s-${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 }
+/** the longest name a server takes; its name field stops there */
+export const SERVER_NAME_MAX = 100;
 export function serverName(name: unknown): string {
-    if (typeof name !== "string" || !name.trim() || name.trim().length > 100)
-        throw new Error("Give the server a name of 1–100 characters");
+    if (typeof name !== "string" || !name.trim() || name.trim().length > SERVER_NAME_MAX)
+        throw new Error(`Give the server a name of 1–${SERVER_NAME_MAX} characters`);
     return name.trim();
 }
 const newServersDirectory = () => `servers-${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;

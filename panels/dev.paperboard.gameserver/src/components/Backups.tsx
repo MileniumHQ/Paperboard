@@ -288,14 +288,17 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
 
             <PaperFlex direction="column" gap="half" fullWidth>
                 <PaperSectionHeader icon="history" title="Saved Backups" count={backups()?.length || undefined} />
-                <Show when={backups()} fallback={<Show when={!loadError()}><PaperText size={2} color="text-subtle">Loading backups…</PaperText></Show>}>
+                <Show when={backups()} fallback={<Show when={!loadError()}><PaperFlex paddingX="full"><PaperText size={2} color="text-subtle">Loading backups…</PaperText></PaperFlex></Show>}>
                     {(list) => (
                         <Show
                             when={list().length > 0}
                             fallback={
-                                <PaperText size={2} color="text-subtle">
-                                    {status()?.location ? "No backups here yet." : "Choose where backups go, then back up the server."}
-                                </PaperText>
+                                // under the header's title, which sits in from the card edge by a gap
+                                <PaperFlex paddingX="full">
+                                    <PaperText size={2} color="text-subtle">
+                                        {status()?.location ? "No backups here yet." : "Choose where backups go, then back up the server."}
+                                    </PaperText>
+                                </PaperFlex>
                             }
                         >
                             <PaperSettingList autoHeight>

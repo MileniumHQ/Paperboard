@@ -106,22 +106,25 @@ export function FieldControl(props: {
             };
             createEffect(() => props.onProblem?.(invalid() ? numberRange(field) : ""));
             return (
-                <PaperInput
-                    type="number"
-                    min={field.min}
-                    max={field.max}
-                    step={field.step}
-                    value={shown()}
-                    invalid={invalid()}
-                    disabled={!hasKnownMcVersion()}
-                    onInput={(e) => {
-                        setDraft(e.currentTarget.value);
-                        props.onUpdate(e.currentTarget.value);
-                    }}
-                    onBlur={() => {
-                        if (!invalid()) setDraft(null);
-                    }}
-                />
+                <PaperFlex width="field">
+                    <PaperInput
+                        fullWidth
+                        type="number"
+                        min={field.min}
+                        max={field.max}
+                        step={field.step}
+                        value={shown()}
+                        invalid={invalid()}
+                        disabled={!hasKnownMcVersion()}
+                        onInput={(e) => {
+                            setDraft(e.currentTarget.value);
+                            props.onUpdate(e.currentTarget.value);
+                        }}
+                        onBlur={() => {
+                            if (!invalid()) setDraft(null);
+                        }}
+                    />
+                </PaperFlex>
             );
         }
         case "slider": {
@@ -157,12 +160,15 @@ export function FieldControl(props: {
         }
         default:
             return (
-                <PaperInput
-                    value={props.value()}
-                    maxLength={props.field.maxLength}
-                    disabled={!hasKnownMcVersion()}
-                    onInput={(e) => props.onUpdate(e.currentTarget.value)}
-                />
+                <PaperFlex width="field-wide">
+                    <PaperInput
+                        fullWidth
+                        value={props.value()}
+                        maxLength={props.field.maxLength}
+                        disabled={!hasKnownMcVersion()}
+                        onInput={(e) => props.onUpdate(e.currentTarget.value)}
+                    />
+                </PaperFlex>
             );
     }
 }

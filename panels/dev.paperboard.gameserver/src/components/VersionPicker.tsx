@@ -12,6 +12,7 @@ import {
 import type { ServerSoftwareType, VersionItem } from "../lib/software";
 import { serverBridge } from "../lib/server";
 import { CALLS } from "../service/contract";
+import FailureText from "./FailureText";
 
 // Shared Minecraft version picker: search, release-channel filters and the
 // version list. Used by onboarding (Setup) and the Versions tab so there is
@@ -115,8 +116,10 @@ export default function VersionPicker(props: {
 
             <Show when={error()}>
                 <PaperQuote variant="danger" title="Could not load versions">
-                    {error()}
-                    <PaperButton onClick={() => void loadVersions()}>Retry loading versions</PaperButton>
+                    <PaperFlex direction="column" gap="half" align="flex-start">
+                        <FailureText message={error()} />
+                        <PaperButton onClick={() => void loadVersions()}>Retry loading versions</PaperButton>
+                    </PaperFlex>
                 </PaperQuote>
             </Show>
 
@@ -134,11 +137,14 @@ export default function VersionPicker(props: {
                     <Show
                         when={filteredVersions().length > 0}
                         fallback={
-                            <PaperFlex padding="full" center>
-                                <PaperText preset="body" color="text-subtle">
-                                    No versions matching your filters.
-                                </PaperText>
-                            </PaperFlex>
+                            // a list that failed to load says so above, not that nothing matched
+                            <Show when={!error()}>
+                                <PaperFlex padding="full" center>
+                                    <PaperText preset="body" color="text-subtle">
+                                        No versions matching your filters.
+                                    </PaperText>
+                                </PaperFlex>
+                            </Show>
                         }
                     >
                         <PaperList

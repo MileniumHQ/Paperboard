@@ -58,24 +58,28 @@ export function GameOptionControl(props: {
             const valid = (raw: string) => raw.trim() !== "" && fitsNumber(field("number"), Number(raw));
             createEffect(() => props.onProblem?.(valid(shown()) ? "" : `${numberRule(field("number"))}.`));
             return (
-                <PaperInput
-                    type="number"
-                    min={field("number").min}
-                    max={field("number").max}
-                    step={field("number").step ?? 1}
-                    value={shown()}
-                    invalid={!valid(shown())}
-                    disabled={props.disabled}
-                    onInput={(e) => setDraft(e.currentTarget.value)}
-                    onKeyDown={commitOnEnter}
-                    onBlur={() => {
-                        const raw = draft();
-                        // a value out of range stays, with its reason, until it is corrected
-                        if (raw === null || !valid(raw)) return;
-                        setDraft(null);
-                        if (Number(raw) !== props.value) props.onChange(Number(raw));
-                    }}
-                />
+                // every number field is as wide as a menu, whatever its range
+                <PaperFlex width="field">
+                    <PaperInput
+                        fullWidth
+                        type="number"
+                        min={field("number").min}
+                        max={field("number").max}
+                        step={field("number").step ?? 1}
+                        value={shown()}
+                        invalid={!valid(shown())}
+                        disabled={props.disabled}
+                        onInput={(e) => setDraft(e.currentTarget.value)}
+                        onKeyDown={commitOnEnter}
+                        onBlur={() => {
+                            const raw = draft();
+                            // a value out of range stays, with its reason, until it is corrected
+                            if (raw === null || !valid(raw)) return;
+                            setDraft(null);
+                            if (Number(raw) !== props.value) props.onChange(Number(raw));
+                        }}
+                    />
+                </PaperFlex>
             );
         }
         case "slider": {
@@ -129,18 +133,21 @@ export function GameOptionControl(props: {
         default: {
             const [draft, setDraft] = createSignal<string | null>(null);
             return (
-                <PaperInput
-                    value={draft() ?? String(props.value ?? "")}
-                    maxLength={props.field.kind === "text" ? props.field.maxLength : undefined}
-                    disabled={props.disabled}
-                    onInput={(e) => setDraft(e.currentTarget.value)}
-                    onKeyDown={commitOnEnter}
-                    onBlur={() => {
-                        const typed = draft();
-                        setDraft(null);
-                        if (typed !== null && typed !== String(props.value ?? "")) props.onChange(typed);
-                    }}
-                />
+                <PaperFlex width="field-wide">
+                    <PaperInput
+                        fullWidth
+                        value={draft() ?? String(props.value ?? "")}
+                        maxLength={props.field.kind === "text" ? props.field.maxLength : undefined}
+                        disabled={props.disabled}
+                        onInput={(e) => setDraft(e.currentTarget.value)}
+                        onKeyDown={commitOnEnter}
+                        onBlur={() => {
+                            const typed = draft();
+                            setDraft(null);
+                            if (typed !== null && typed !== String(props.value ?? "")) props.onChange(typed);
+                        }}
+                    />
+                </PaperFlex>
             );
         }
     }

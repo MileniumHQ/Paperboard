@@ -23,6 +23,7 @@ import { serversBridge, openServer } from "../lib/api";
 import type { ServerSummary, ServersState } from "../service";
 import { gameFor, games, serverSubtitle } from "../games";
 import GamePicker from "./GamePicker";
+import { SERVER_NAME_MAX } from "../servers";
 export default function ServersHome(props: {
     state: ServersState;
     /** opens a server; on a phone its page slides in first */
@@ -267,6 +268,7 @@ export default function ServersHome(props: {
                         fullWidth
                         autofocus
                         label="Server name"
+                        maxLength={SERVER_NAME_MAX}
                         value={name()}
                         onInput={(e) => setName(e.currentTarget.value)}
                         onKeyDown={(e) => {
