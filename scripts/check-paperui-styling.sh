@@ -74,12 +74,22 @@ if [ -n "$hex_out" ]; then
     fail=1
 fi
 
-# (c) literal units in component CSS (token files are the one exception)
+# (c) literal units in component CSS (token files are the one exception).
+# A standalone 0px is not a size; a line is flagged when a literal is left
+# once those are gone (`0px 12px` still has its 12px, `10px` is no zero).
 scan '[0-9.]+(px|rem|em)\b' "$SRC/components" "$SRC/templates" --include='*.css'
 unit_out="$(printf '%s\n' "$SCAN" \
     | grep -vE ':[0-9]+:[[:space:]]*\*' \
     | grep -vE ':[0-9]+:[[:space:]]*@(container|media)[[:space:]]' \
-    | grep -vE '0px|^$')"
+    | sed -nE 'h
+s/^[^:]*:[0-9]+://
+:zero
+s/(^|[^0-9.])0px([^a-zA-Z0-9_]|$)/\1\2/
+t zero
+/[0-9.]+(px|rem|em)([^a-zA-Z0-9_]|$)/{
+g
+p
+}')"
 if [ -n "$unit_out" ]; then
     echo "FAIL: literal px/rem/em in component CSS (use tokens from src/styles):" >&2
     printf '%s\n' "$unit_out" >&2
