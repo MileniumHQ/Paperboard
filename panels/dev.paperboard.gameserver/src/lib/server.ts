@@ -29,7 +29,7 @@ import {
     type PlayerStatSummary,
 } from "./players";
 import { setActiveIssue, type ServerIssue } from "./diagnostics";
-import { applyStatePatch } from "../core/state";
+import { applyStatePatch, createStateSignal } from "../core/state";
 import type { ServerStatus as CoreServerStatus, ChatMessage as CoreChatMessage } from "../core/state";
 import { PLAYER_NAME_PATTERN as CORE_PLAYER_NAME_PATTERN, SERVER_PROC_ID as CORE_SERVER_PROC_ID } from "../core/players";
 
@@ -41,16 +41,12 @@ export { stripAnsi };
 export const PLAYER_NAME_PATTERN = CORE_PLAYER_NAME_PATTERN;
 
 export const [serverStatus, setServerStatus] = createSignal<ServerStatus>("offline");
-export const [serverEntries, setServerEntries] = createSignal<PaperConsoleEntry[]>([]);
-const [chatMessages, setChatList] = createSignal<ChatMessage[]>([]);
-export { chatMessages };
-/** Each state patch carries fresh copies of every message. Keeping the ones
- * already shown lets the chat add only the new rows, instead of redrawing
- * every row and its player head. */
-export function setChatMessages(next: ChatMessage[]): void {
-    const shown = new Map(chatMessages().map((m) => [m.id, m]));
-    setChatList(next.map((m) => shown.get(m.id) ?? m));
-}
+// Every push carries fresh copies of the whole state. The signals below that
+// hold objects keep what did not change (createStateSignal): a push that says
+// nothing new notifies no one, and the chat keeps the messages it shows, so it
+// adds only the new rows instead of redrawing every row and its player head.
+export const [serverEntries, setServerEntries] = createStateSignal<PaperConsoleEntry[]>([]);
+export const [chatMessages, setChatMessages] = createStateSignal<ChatMessage[]>([]);
 export const [localIp, setLocalIp] = createSignal("127.0.0.1");
 export const [serverPort, setServerPort] = createSignal("25565");
 export const [serverMotd, setServerMotd] = createSignal(DEFAULT_MOTD);
@@ -61,13 +57,12 @@ export const [maxPlayers, setMaxPlayers] = createSignal<number | null>(null);
 /** when the server came online, in milliseconds since 1970; null while it is not */
 export const [onlineSince, setOnlineSince] = createSignal<number | null>(null);
 export const [serverSoftware, setServerSoftware] = createSignal<string>("paper");
-export const [gameSettings, setGameSettings] = createSignal<Readonly<Record<string, unknown>>>({});
+export const [gameSettings, setGameSettings] = createStateSignal<Readonly<Record<string, unknown>>>({});
 export const [serverVersion, setServerVersion] = createSignal("");
 export const [ramAllocation, setRamAllocation] = createSignal(4);
-export const [gamerules, setGamerules] = createSignal<Record<string, string>>({});
-export const [installProgress, setInstallProgress] =
-    createSignal<InstallProgress | null>(null);
-export const [modpackProgress, setModpackProgress] = createSignal<ModpackProgress | null>(null);
+export const [gamerules, setGamerules] = createStateSignal<Record<string, string>>({});
+export const [installProgress, setInstallProgress] = createStateSignal<InstallProgress | null>(null);
+export const [modpackProgress, setModpackProgress] = createStateSignal<ModpackProgress | null>(null);
 // why an interrupted install could not be settled; starting and installing refuse while set
 export const [recoveryBlock, setRecoveryBlock] = createSignal<string | null>(null);
 // last lifecycle (start/stop/restart) failure, surfaced on the Overview
@@ -132,9 +127,9 @@ export async function updatePanelConfig(patch: Record<string, unknown>) {
     applyStatePatch(await serverBridge.refreshState() as any, currentSetters());
 }
 
+/** loads the server's config once, which also reads its state */
 export async function initServerListeners() {
     await loadServerConfig();
-    applyStatePatch(await serverBridge.refreshState() as any, currentSetters());
 }
 
 function reportActionError(action: string, err: unknown): void {

@@ -17,7 +17,8 @@ import {
     NETHERNET_PORT_NAME,
 } from "../core/portNames";
 import { scopedFiles } from "../scopedFiles";
-import { PANEL_ID, serverStateOf } from "../servers";
+import { PANEL_ID, serverStateKey, serverStateOf } from "../servers";
+import { sameData } from "../core/state";
 import type { ServersState, ServerSummary } from "../service";
 export const selectedServerId =
     typeof window === "undefined" ? null : new URL(window.location.href).searchParams.get("server");
@@ -82,17 +83,29 @@ export function createPanelBridge(_options: any) {
             const state = await serversBridge.refreshState();
             return serverStateOf(state, selectedServer(state).id);
         },
-        onStateChange: (handler: (patch: any, full?: any) => void) =>
-            serversBridge.onStateChange((_patch, full) => {
+        // The handler hears what changed on this server: another server's
+        // activity, or the list of servers, is not a change here, and a push
+        // carries this server's whole state, so it is narrowed to the keys
+        // whose values differ from the last push.
+        onStateChange: (handler: (patch: any, full?: any) => void) => {
+            let last: Record<string, unknown> | null = null;
+            return serversBridge.onStateChange((patch, full) => {
                 // App owns the missing/deleted-server error; let its listener run.
                 if (
                     !selectedServerId ||
                     full.serversError ||
-                    !full.servers.some((s) => s.id === selectedServerId)
+                    !full.servers.some((s) => s.id === selectedServerId) ||
+                    !(serverStateKey(selectedServerId) in patch)
                 )
                     return;
-                const state = serverStateOf(full, selectedServer(full).id);
-                handler(state, state);
-            }),
+                const state = serverStateOf(full, selectedServer(full).id) as unknown as Record<string, unknown>;
+                const changed: Record<string, unknown> = {};
+                for (const [key, value] of Object.entries(state)) {
+                    if (!last || !sameData(last[key], value)) changed[key] = value;
+                }
+                last = state;
+                if (Object.keys(changed).length > 0) handler(changed, state);
+            });
+        },
     };
 }

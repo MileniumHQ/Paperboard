@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createStateSignal } from "../core/state";
 import { serverBridge } from "./server";
 import { CALLS } from "../service/contract";
 import type { PlayerStatData, PlayerPosition } from "../core/players";
@@ -8,29 +8,24 @@ export type { PlayerStatData, PlayerPosition, PlayerStatSummary };
 export { PLAYER_NAME_PATTERN, SERVER_PROC_ID } from "../core/players";
 
 // presence tracked from the service
-export const [onlinePlayerNames, setOnlinePlayerNames] = createSignal<Set<string>>(new Set());
+// every push and poll is a fresh copy; these keep what did not change
+// (createStateSignal), so an unchanged copy notifies no one
+export const [onlinePlayerNames, setOnlinePlayerNames] = createStateSignal<Set<string>>(new Set());
 
-export const [seenPlayerNames, setSeenPlayerNames] = createSignal<Set<string>>(new Set());
+export const [seenPlayerNames, setSeenPlayerNames] = createStateSignal<Set<string>>(new Set());
 
-export const [playerStats, setPlayerStats] = createSignal<Map<string, PlayerStatData>>(
-    new Map(),
-);
+export const [playerStats, setPlayerStats] = createStateSignal<Map<string, PlayerStatData>>(new Map());
 
-export const [playerPlaytime, setPlayerPlaytime] = createSignal<Map<string, number>>(
-    new Map(),
-);
+export const [playerPlaytime, setPlayerPlaytime] = createStateSignal<Map<string, number>>(new Map());
 
 // live coordinates for the map, synced from the service
-export const [playerPositions, setPlayerPositions] = createSignal<
-    Map<string, PlayerPosition>
->(new Map());
+export const [playerPositions, setPlayerPositions] = createStateSignal<Map<string, PlayerPosition>>(new Map());
 
 // offline statistics read from the world's stats files, keyed by uuid
-export const [playerStatSummaries, setPlayerStatSummaries] = createSignal<
-    Map<string, PlayerStatSummary>
->(new Map());
+export const [playerStatSummaries, setPlayerStatSummaries] = createStateSignal<Map<string, PlayerStatSummary>>(new Map());
 
-// rejects when the stats can't be read; the caller shows why
+// rejects when the stats can't be read; the caller shows why. A poll that
+// reads the same numbers keeps the map and every entry it had
 export async function loadPlayerStats(): Promise<void> {
     const list = await serverBridge.call<PlayerStatSummary[]>(CALLS.listPlayerStats);
     const next = new Map<string, PlayerStatSummary>();
