@@ -70,6 +70,10 @@ export default function Commands(props: { bot: () => BotSummary; active: boolean
     const [actionError, setActionError] = createSignal<Outcome | null>(null);
 
     const [createOpen, setCreateOpen] = createSignal(false);
+    // a field shows as wrong only once it has been used: a form that opens empty isn't a mistake
+    const [touched, setTouched] = createSignal<ReadonlySet<string>>(new Set<string>());
+    const touch = (field: string) => setTouched((prev) => (prev.has(field) ? prev : new Set(prev).add(field)));
+    const wrong = (field: string, bad: boolean) => bad && touched().has(field);
     const [name, setName] = createSignal("");
     const [description, setDescription] = createSignal("");
     const [scope, setScope] = createSignal(GLOBAL_SCOPE);
@@ -137,6 +141,7 @@ export default function Commands(props: { bot: () => BotSummary; active: boolean
     };
 
     const openCreate = () => {
+        setTouched(new Set<string>());
         setName("");
         setDescription("");
         // if the bot is only in one server, scope the command there by
@@ -400,7 +405,7 @@ export default function Commands(props: { bot: () => BotSummary; active: boolean
                 size="large"
                 footer={
                     <>
-                        <PaperButton onClick={() => setCreateOpen(false)}>
+                        <PaperButton variant="text" onClick={() => setCreateOpen(false)}>
                             Cancel
                         </PaperButton>
                         <PaperButton
@@ -422,19 +427,21 @@ export default function Commands(props: { bot: () => BotSummary; active: boolean
                             // one extra char so the optional leading slash fits
                             maxLength={33}
                             value={name()}
-                            invalid={!isCommandNameValid(name()) || isDuplicate()}
+                            invalid={wrong("name", !isCommandNameValid(name()) || isDuplicate())}
+                            onBlur={() => touch("name")}
                             // case is validated, never silently rewritten:
                             // typing "Ping" shows the requirement instead of
                             // turning into "ping" under the author's hands
-                            onInput={(e) => setName(e.currentTarget.value)}
+                            onInput={(e) => (touch("name"), setName(e.currentTarget.value))}
                         />
                         <PaperInput
                             fullWidth
                             label="Description"
                             maxLength={COMMAND_DESCRIPTION_MAX_LENGTH}
                             value={description()}
-                            invalid={!isCommandDescriptionValid(description())}
-                            onInput={(e) => setDescription(e.currentTarget.value)}
+                            invalid={wrong("description", !isCommandDescriptionValid(description()))}
+                            onBlur={() => touch("description")}
+                            onInput={(e) => (touch("description"), setDescription(e.currentTarget.value))}
                         />
 
                         <PaperSelectMenu
@@ -537,11 +544,12 @@ export default function Commands(props: { bot: () => BotSummary; active: boolean
                                                         fullWidth
                                                         label="Parameter name"
                                                         value={option().name}
-                                                        invalid={optionNameInvalid(index)}
+                                                        invalid={wrong(`${option().id}:name`, optionNameInvalid(index))}
+                                                        onBlur={() => touch(`${option().id}:name`)}
                                                         onInput={(e) =>
-                                                            updateOption(option().id, {
+                                                            (touch(`${option().id}:name`), updateOption(option().id, {
                                                                 name: e.currentTarget.value,
-                                                            })
+                                                            }))
                                                         }
                                                     />
                                                 </PaperFlex>
@@ -574,11 +582,13 @@ export default function Commands(props: { bot: () => BotSummary; active: boolean
                                                 fullWidth
                                                 label="Parameter description"
                                                 value={option().description}
-                                                invalid={optionDescriptionInvalid(index)}
+                                                invalid={wrong(`${option().id}:description`, optionDescriptionInvalid(index))}
+                                                onBlur={() => touch(`${option().id}:description`)}
                                                 onInput={(e) =>
+                                                    (touch(`${option().id}:description`),
                                                     updateOption(option().id, {
                                                         description: e.currentTarget.value,
-                                                    })
+                                                    }))
                                                 }
                                             />
 
@@ -619,7 +629,7 @@ export default function Commands(props: { bot: () => BotSummary; active: boolean
                 size="small"
                 footer={
                     <>
-                        <PaperButton onClick={() => setDeleteTarget(null)}>
+                        <PaperButton variant="text" onClick={() => setDeleteTarget(null)}>
                             Cancel
                         </PaperButton>
                         <PaperButton
