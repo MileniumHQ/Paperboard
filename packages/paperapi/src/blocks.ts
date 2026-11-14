@@ -174,11 +174,15 @@ async function choicesOf(defs: BlockDefinitionBaseInputs | undefined, key: unkno
     const input = typeof key === "string" ? defs?.[key] : undefined;
     if (!input) throw new Error(`${what} has no input "${String(key)}"`);
     if (!input.choices) throw new Error(`${what} input "${input.name}" has no choices`);
-    const choices = typeof input.choices === "function" ? await input.choices(ctx) : input.choices;
-    if (!Array.isArray(choices)) throw new Error(`${what} input "${input.name}" choices must be a list`);
+    return checkChoices(typeof input.choices === "function" ? await input.choices(ctx) : input.choices, `${what} input "${input.name}"`);
+}
+
+/** A list of choices as a panel gave it, refused where it's broken. */
+function checkChoices(choices: unknown, owner: string): BlockChoice[] {
+    if (!Array.isArray(choices)) throw new Error(`${owner} choices must be a list`);
     for (const choice of choices) {
         if (typeof choice?.label !== "string" || !choice.label.trim() || !["string", "number", "boolean"].includes(typeof choice.value)) {
-            throw new Error(`${what} input "${input.name}" offers a choice that isn't a label and a text, number or true/false value`);
+            throw new Error(`${owner} offers a choice that isn't a label and a text, number or true/false value`);
         }
     }
     return choices;
@@ -188,14 +192,14 @@ async function choicesOf(defs: BlockDefinitionBaseInputs | undefined, key: unkno
 async function typeChoicesOf(type: BlockTypeDefinition, project: unknown, panelId: string, registered: Registered): Promise<BlockChoice[]> {
     if (!type.choices) throw new Error(`${type.name} doesn't list its values`);
     if (project !== undefined && (typeof project !== "string" || !registered.projects.has(`${panelId}:${project}`))) throw new Error(`${type.name}: there is no project "${String(project)}"`);
-    const choices = await type.choices(project ? { panelId, project } : { panelId });
-    if (!Array.isArray(choices)) throw new Error(`${type.name} choices must be a list`);
-    for (const choice of choices) {
-        if (typeof choice?.label !== "string" || !choice.label.trim() || !["string", "number", "boolean"].includes(typeof choice.value)) {
-            throw new Error(`${type.name} offers a choice that isn't a label and a text, number or true/false value`);
-        }
-    }
-    return choices;
+    return checkChoices(await type.choices(project ? { panelId, project } : { panelId }), type.name);
+}
+
+/** A "panel.id:type" reference, split into its panel and its type's entry. */
+function splitTypeRef(typeRef: string, call: string): { panelId: string; entry: string } {
+    const colon = typeRef.indexOf(":");
+    if (colon === -1) throw new Error(`${call} needs the type as "panel.id:type", got "${typeRef}"`);
+    return { panelId: typeRef.slice(0, colon), entry: blockEntry("type", typeRef.slice(colon + 1)) };
 }
 
 /**
@@ -404,10 +408,9 @@ export const blocksApi = {
      * Reads one field of a value of a type, as the type's panel answers it.
      * A per-project field needs the project it's read in.
      */
-    property: <T = unknown>(typeRef: string, field: string, value: unknown, options?: BlockCallOptions & { project?: string }): Promise<T> => {
-        const colon = typeRef.indexOf(":");
-        if (colon === -1) throw new Error(`property needs the type as "panel.id:type", got "${typeRef}"`);
-        return callEntry<T>(typeRef.slice(0, colon), blockEntry("type", typeRef.slice(colon + 1)), { field, value, ...(options?.project ? { project: options.project } : {}) }, options);
+    property: async <T = unknown>(typeRef: string, field: string, value: unknown, options?: BlockCallOptions & { project?: string }): Promise<T> => {
+        const { panelId, entry } = splitTypeRef(typeRef, "property");
+        return callEntry<T>(panelId, entry, { field, value, ...(options?.project ? { project: options.project } : {}) }, options);
     },
 
     /**
@@ -421,10 +424,9 @@ export const blocksApi = {
      * The values of a type there are now ("panel.id:type"), for a type that
      * lists them: in one of its panel's projects, when given.
      */
-    typeChoices: (typeRef: string, options?: BlockCallOptions & { project?: string }): Promise<BlockChoice[]> => {
-        const colon = typeRef.indexOf(":");
-        if (colon === -1) throw new Error(`typeChoices needs the type as "panel.id:type", got "${typeRef}"`);
-        return callEntry<BlockChoice[]>(typeRef.slice(0, colon), blockEntry("type", typeRef.slice(colon + 1)), { choices: true, ...(options?.project ? { project: options.project } : {}) }, options);
+    typeChoices: async (typeRef: string, options?: BlockCallOptions & { project?: string }): Promise<BlockChoice[]> => {
+        const { panelId, entry } = splitTypeRef(typeRef, "typeChoices");
+        return callEntry<BlockChoice[]>(panelId, entry, { choices: true, ...(options?.project ? { project: options.project } : {}) }, options);
     },
 
     /** Calls back each time a panel's event fires, with its payload. */

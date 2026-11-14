@@ -4,22 +4,17 @@ import { mergeRegistryWithInstalled, type PanelItem } from "./panelMerge";
 
 export type { PanelItem };
 
-// panel store and lifecycle, scope omitted = ambient
+// panel store and lifecycle; an omitted scope is the computer initPaperApi
+// bound, else the one this context was granted (identity.ts)
 export const panelsApi = {
     list: (scope?: string): Promise<PanelItem[]> =>
         invokeIn<PanelItem[]>(scope, "panels-list"),
 
     /** merges registry index with installed panels */
     registry: async (scope?: string): Promise<PanelItem[]> => {
-        let installed: PanelItem[] = [];
-        try {
-            installed = await panelsApi.list(scope);
-        } catch (err) {
-            // The caller needs the failure to show recovery, not an empty
-            // installed set that would turn Open buttons into Download.
-            console.debug("[panels] installed list unavailable:", err);
-            throw err;
-        }
+        // a failure here reaches the caller, which shows recovery rather
+        // than an empty installed set that turns Open buttons into Download
+        const installed = await panelsApi.list(scope);
 
         try {
             const registryData = await fetchRegistryIndex();
@@ -55,8 +50,6 @@ export const panelsApi = {
     /** Restarts the panel's service; false when it declares none. */
     restartService: (panelId: string, scope?: string): Promise<boolean> =>
         invokeIn<boolean>(scope, "panel-restart-service", panelId),
-    remove: (panelId: string, scope?: string): Promise<boolean> =>
-        invokeIn<boolean>(scope, "panel-uninstall", panelId),
 };
 
 export const panels = panelsApi;

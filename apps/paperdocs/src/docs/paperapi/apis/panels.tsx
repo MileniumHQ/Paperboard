@@ -35,8 +35,6 @@ panelsApi.registry(scope?: string): Promise<PanelItem[]>;
 /** false when the panel declares no service */
 panelsApi.restartService(panelId: string, scope?: string): Promise<boolean>;
 panelsApi.uninstall(panelId: string, scope?: string, options?: { deleteData?: boolean }): Promise<boolean>;
-/** uninstall, keeping the data */
-panelsApi.remove(panelId: string, scope?: string): Promise<boolean>;
 /** Paperboard only */
 /** resolves with the installed panel's manifest */
 panelsApi.install(panelId: string, scope?: string): Promise<PanelItem>;`}
