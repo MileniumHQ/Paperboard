@@ -5,8 +5,9 @@
 // boundary is the harness's: mDNS discovery (it finds nothing here) and the
 // system work main does after a settings save. A test can hold a probe of an
 // address, to answer it after a newer one, and count the probes; make the
-// next forget fail; and hold or fail the saves of panel permissions, which
-// it keeps in the store main keeps them in.
+// next forget fail; hold or fail the saves of panel permissions, which it
+// keeps in the store main keeps them in; and push the update queue's states,
+// making the next Stop and update fail.
 //
 // The test drives it over stdin, one JSON command per line, and reads each
 // answer as one stdout line starting with ANSWER (the daemon client logs to
@@ -24,6 +25,7 @@ import { launchOptionsFromArgv } from "../../../src/shared/launchOptions";
 import { PanelPermissionStore } from "../../../src/main/panelPermissions";
 import type { PanelPermission, PermissionAnswer } from "../../../src/shared/panelPermissions";
 import { initialAppUpdateState } from "../../../src/shared/appUpdate";
+import { initialUpdateQueueState, type UpdateQueueState } from "../../../src/shared/updateQueue";
 import { ANSWER } from "./protocol";
 
 const rendererDir = process.argv[2];
@@ -60,7 +62,21 @@ invoke["computer-remove"] = (args) => {
 };
 // an Electron window also asks for its updates: there are none here
 invoke["app-update-state"] = () => initialAppUpdateState;
-invoke["update-queue"] = () => ({ revision: 0, checking: false, items: [], holds: [], checkError: null });
+// the update queue is the test's: it pushes each state, as main's queue does
+// while it runs, and can make the next Stop and update fail
+let updateQueue: UpdateQueueState = { ...initialUpdateQueueState };
+let failRelease: string | null = null;
+const releases: string[][] = [];
+const releaseWaiters: (() => void)[] = [];
+invoke["update-queue"] = () => updateQueue;
+invoke["update-release"] = (args) => {
+    const refused = failRelease;
+    failRelease = null;
+    if (refused) throw new Error(refused);
+    releases.push((args as { keys: string[] }).keys);
+    for (const wake of releaseWaiters.splice(0)) wake();
+    return null;
+};
 // panel permissions are an Electron window's (the browser asks for itself):
 // the shell shows them only when it runs in one
 const permissions = new PanelPermissionStore(path.join(getLocalDir(), "panel-permissions.json"));
@@ -114,7 +130,10 @@ type Command =
     | { cmd: "permission"; panelId: string; permission: PanelPermission }
     | { cmd: "hold-permission-saves" }
     | { cmd: "held-permission-save" }
-    | { cmd: "release-permission-save"; fail?: string };
+    | { cmd: "release-permission-save"; fail?: string }
+    | { cmd: "push-update-queue"; state: UpdateQueueState }
+    | { cmd: "fail-release"; message: string }
+    | { cmd: "next-release" };
 
 async function run(command: Command): Promise<unknown> {
     switch (command.cmd) {
@@ -163,6 +182,17 @@ async function run(command: Command): Promise<unknown> {
             save.run();
             return true;
         }
+        case "push-update-queue":
+            updateQueue = command.state;
+            pushToShells("update-queue", updateQueue);
+            return true;
+        case "fail-release":
+            failRelease = command.message;
+            return true;
+        case "next-release":
+            // resolves with the keys of the oldest Stop and update that ran, once one has
+            while (releases.length === 0) await new Promise<void>((wake) => releaseWaiters.push(wake));
+            return releases.shift();
     }
 }
 

@@ -1,52 +1,10 @@
 // Panel permissions in App Settings, which the shell shows only in an
-// Electron window (a browser asks for itself). The preload's ipcRenderer is
-// stood in for by the same calls carried over the shell host's HTTP bridge,
-// the boundary the browser shell crosses too, so the shell runs its Electron
-// path against the host's real permission store.
+// Electron window (a browser asks for itself), run as one (ELECTRON_PRELOAD)
+// against the host's real permission store.
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { ELECTRON_PRELOAD } from "./support/electronPreload";
 import { bootShell, type Shell } from "./support/shell";
 
-const ELECTRON_PRELOAD = `(() => {
-    if (window.top !== window) return;
-    const listeners = new Map();
-    let source = null;
-    const post = async (kind, channel, args) => {
-        const res = await fetch("/_shell/" + kind + "/" + encodeURIComponent(channel), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ args }),
-        });
-        if (!res.ok) throw new Error(channel + " failed: HTTP " + res.status + " " + (await res.text()));
-        return res;
-    };
-    const ipcRenderer = {
-        async invoke(channel, ...args) {
-            const body = await (await post("invoke", channel, args)).json();
-            if (!body.ok) throw new Error(body.error || channel + " failed");
-            return body.result;
-        },
-        send(channel, ...args) {
-            post("send", channel, args).catch((err) => console.error(err));
-        },
-        on(channel, listener) {
-            source ??= new EventSource("/_shell/events");
-            if (!listeners.has(channel)) {
-                listeners.set(channel, new Set());
-                source.addEventListener(channel, (message) => {
-                    for (const l of listeners.get(channel)) l({}, JSON.parse(message.data));
-                });
-            }
-            listeners.get(channel).add(listener);
-        },
-        once(channel, listener) {
-            const wrapped = (event, ...args) => { ipcRenderer.removeListener(channel, wrapped); listener(event, ...args); };
-            ipcRenderer.on(channel, wrapped);
-        },
-        removeListener(channel, listener) { listeners.get(channel)?.delete(listener); },
-        removeAllListeners(channel) { listeners.get(channel)?.clear(); },
-    };
-    window.electron = { ipcRenderer };
-})()`;
 
 const PANEL = "dev.example.notes";
 const SWITCH = `[role=switch][aria-label='Let ${PANEL} use the microphone']`;
