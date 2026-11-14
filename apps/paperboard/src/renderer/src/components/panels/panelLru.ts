@@ -1,4 +1,4 @@
-// Live-iframe LRU policy (T6). Pure so it stays unit-tested; PanelView
+// Live-iframe LRU policy. Pure so it stays unit-tested; PanelView
 // owns the signals and calls into this.
 
 // Bound: at most MAX_LIVE_IFRAMES panel iframes stay mounted. Every mounted

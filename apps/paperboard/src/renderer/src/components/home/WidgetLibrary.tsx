@@ -8,6 +8,7 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperText,
+    getVarCss,
 } from "@mileniumhq/paperui";
 import { type Component, createMemo, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import {
@@ -456,8 +457,8 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                                         <span
                                             class={styles.sizeGlyph}
                                             style={{
-                                                width: `calc(var(--paper-uigap-half) * ${shape.w})`,
-                                                height: `calc(var(--paper-uigap-half) * ${shape.h})`,
+                                                width: `calc(${getVarCss("uigap-half")} * ${shape.w})`,
+                                                height: `calc(${getVarCss("uigap-half")} * ${shape.h})`,
                                             }}
                                             aria-hidden="true"
                                         />

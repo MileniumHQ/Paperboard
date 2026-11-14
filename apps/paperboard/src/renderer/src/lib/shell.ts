@@ -191,7 +191,7 @@ export function logToMain(
     level: "info" | "warn" | "error",
     ...args: unknown[]
 ): void {
-    // R12: serialization happens INSIDE the try — a circular payload must
+    // serialization happens INSIDE the try — a circular payload must
     // degrade to a safe string here, not throw in the caller's context
     // and defeat "logging must never break the caller".
     let message = "";

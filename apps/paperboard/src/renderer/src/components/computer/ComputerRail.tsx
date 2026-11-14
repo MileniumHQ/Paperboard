@@ -27,8 +27,7 @@ interface ComputerRailProps {
     onComputerContextMenu?: (compId: string, e: MouseEvent) => void;
     /** the listed computers' ids, in the order they were dragged into */
     onReorder?: (ids: string[]) => void;
-    // R9: the initial computers-list failed — the rail shows only "local"
-    // and the user needs a way to retry instead of a silently broken rail
+    /** the computer list didn't load: the rail shows This Computer, says so, and offers a retry */
     loadFailed?: boolean;
     onRetryLoad?: () => void;
     /** the phone layout's open page covers the rail */

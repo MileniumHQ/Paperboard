@@ -101,7 +101,7 @@ export function useAppSettings() {
 
     const persistAppSettings = async (next: AppSettingsData, superseded: () => boolean) => {
         // Persist BEFORE notifying main: main re-reads the file during sync.
-        // R3: a failed persist must NOT notify — main would broadcast the
+        // A failed persist must NOT notify — main would broadcast the
         // stale file while the UI shows the new values, and the states
         // silently diverge until the next load reverts the UI.
         try {

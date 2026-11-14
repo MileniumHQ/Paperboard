@@ -1,6 +1,7 @@
 // Turns a usage report into donut segments: each panel, Paperboard,
 // everything else, and what's free. Pure, so the arithmetic is tested.
 import type { UsageReport } from "@mileniumhq/paperapi";
+import { getVarCss } from "@mileniumhq/paperui";
 
 export type UsageMetric = "cpu" | "memory";
 
@@ -44,17 +45,17 @@ export const MAX_PANEL_SEGMENTS = 5;
 // panel colors are assigned by panel id, so a panel keeps its color while
 // its rank changes from one reading to the next
 const PANEL_COLORS = [
-    "var(--paper-extra-1)",
-    "var(--paper-extra-2)",
-    "var(--paper-attention)",
-    "var(--paper-extra-3)",
-    "var(--paper-warning)",
+    getVarCss("extra-1"),
+    getVarCss("extra-2"),
+    getVarCss("attention"),
+    getVarCss("extra-3"),
+    getVarCss("warning"),
 ];
-const PAPERBOARD_COLOR = "var(--paper-primary)";
-const MORE_PANELS_COLOR = "var(--paper-success)";
-const OTHER_COLOR = "var(--paper-border-emphasis)";
+const PAPERBOARD_COLOR = getVarCss("primary");
+const MORE_PANELS_COLOR = getVarCss("success");
+const OTHER_COLOR = getVarCss("border-emphasis");
 // a step above the card in either theme, lighter than "Other apps"
-const FREE_COLOR = "color-mix(in srgb, var(--paper-contrast) 16%, var(--paper-surface-raised))";
+const FREE_COLOR = `color-mix(in srgb, ${getVarCss("contrast")} 16%, ${getVarCss("surface-raised")})`;
 
 export function formatBytes(bytes: number): string {
     const units = ["B", "KB", "MB", "GB", "TB"];

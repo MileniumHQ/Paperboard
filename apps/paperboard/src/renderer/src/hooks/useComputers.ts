@@ -34,10 +34,7 @@ export function useComputers() {
         createSignal<string>("local");
     const [offlineTarget, setOfflineTarget] =
         createSignal<ComputerInfo | null>(null);
-    // R9: a failed startup load degrades the rail to "local" only, with
-    // nothing telling the user why or offering a way out. A typed failed
-    // flag gives App the hook for a retry affordance (same pattern the
-    // panels path already has).
+    // the list didn't load: the rail keeps This Computer, and says so with a retry
     const [computersLoadFailed, setComputersLoadFailed] =
         createSignal<boolean>(false);
     // the list above is a placeholder until the first load answers

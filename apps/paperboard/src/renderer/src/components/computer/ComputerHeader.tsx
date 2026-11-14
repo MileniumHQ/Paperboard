@@ -91,26 +91,11 @@ export function getOsBrandInfo(comp?: ComputerItem): OsBrandInfo {
         rawOs === "darwin" ||
         rawOs.includes("mac")
     ) {
-        // R10: the old heuristic (rawNum >= 20 ? rawNum - 9 : 10.x) predates
-        // Apple's year-based versioning — a truthful osVersion of 26 rendered
-        // as "macOS 17". Versions 26+ are already the human-facing major
-        // number and pass through verbatim; the legacy map applies only to
-        // the pre-Ventura range it was written for (4..19 → 10.x).
-        if (!version || version.includes(".")) {
-            const rawNum = parseInt(
-                (version || comp.osVersion || "").split(".")[0],
-                10,
-            );
-            if (!isNaN(rawNum) && rawNum >= 4) {
-                if (rawNum >= 26) {
-                    version = rawNum.toString();
-                } else if (rawNum >= 20) {
-                    version = (rawNum - 9).toString();
-                } else {
-                    version = `10.${rawNum - 4}`;
-                }
-            }
-        }
+        // The daemon sends the macOS major for Darwin 20 and later
+        // (macosVersionFromDarwin) and the raw Darwin release before that,
+        // which was macOS 10.x.
+        const darwin = parseInt(version.split(".")[0], 10);
+        if (version.includes(".") && darwin >= 4 && darwin < 20) version = `10.${darwin - 4}`;
     }
 
     let display = brand.name;

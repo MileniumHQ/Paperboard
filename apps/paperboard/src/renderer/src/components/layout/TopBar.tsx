@@ -1,5 +1,5 @@
 import { type Component, createSignal, onMount, onCleanup, Show } from "solid-js";
-import { PaperText, PaperButton, PaperIcon, PaperModal } from "@mileniumhq/paperui";
+import { PaperText, PaperButton, PaperIcon, PaperModal, getVarCss } from "@mileniumhq/paperui";
 import { shellApi, logToMain, isBrowserShell } from "../../lib/shell";
 import { versionLabel as formatVersionLabel } from "../../lib/versionLabel";
 import { isShellTab } from "../../lib/shellTabs";
@@ -97,7 +97,7 @@ const TopBar: Component<{
                 </Show>
                 <div
                     class={styles.controls}
-                    style={{ right: `calc(var(--paper-uigap-threefourths) + ${props.mobile ? 0 : captionReserve()}px)` }}
+                    style={{ right: `calc(${getVarCss("uigap-threefourths")} + ${props.mobile ? 0 : captionReserve()}px)` }}
                 >
                     <Show when={!props.mobile}>
                         <PaperButton size="tiny"
