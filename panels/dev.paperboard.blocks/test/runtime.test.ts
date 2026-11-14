@@ -178,19 +178,29 @@ describe("the service's runtime", () => {
         expect(s.said(broken)[1]).toBe('error: "When a Flow Fails" didn\'t hear this failure: the registry is away');
     });
 
-    test("a change to the project list that doesn't reach the registry is shown", async () => {
+    test("a change to the project list that doesn't reach the registry is shown, and told again once it is back", async () => {
+        let away = true;
         const s = setup({
             handle: (handle) => ({
                 ...handle,
-                changed: async () => {
-                    throw new Error("the registry is away");
+                changed: async (value) => {
+                    if (away) throw new Error("the registry is away");
+                    return handle.changed(value);
                 },
             }),
         });
         await s.ready;
-        await s.make("New", flows(onRun(say("hi"))));
+        const id = await s.make("New", flows(onRun(say("hi"))));
         await until("the failure to show", () => s.state().blocksError !== null);
         expect(s.state().blocksError).toBe("The other panels weren't told the projects changed: the registry is away");
+        expect(s.changed).toEqual([]);
+
+        // the same project list again: the registry never heard it, so it is told now, and the banner goes
+        away = false;
+        await s.call(SERVICE_CALLS.updateProject, { project: id, name: "Renamed" });
+        await until("the list to be told", () => s.changed.length === 1);
+        expect(s.changed).toEqual(["projects"]);
+        await until("the banner to clear", () => s.state().blocksError === null);
     });
 
     test("refuses every call while the projects can't be read", async () => {

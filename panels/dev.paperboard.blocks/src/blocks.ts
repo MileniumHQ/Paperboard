@@ -125,22 +125,37 @@ export function blocksPanelBlocks(host: BlocksPanelHost): BlockSet {
  */
 export class BlocksAnnouncer {
     private registered = false;
-    private last = "";
+    // the ids the registry has heard: only an announcement that reached it moves this
+    private heard = "";
+    // the newest announcement: an older one's answer is dropped
+    private latest = 0;
 
     constructor(private readonly handle: BlocksHandle) {}
 
     async register(set: BlockSet, projects: string[]): Promise<void> {
         await this.handle.register(set);
-        this.last = JSON.stringify(projects);
+        this.heard = JSON.stringify(projects);
         this.registered = true;
     }
 
-    async projects(ids: string[]): Promise<void> {
-        if (!this.registered) return;
+    /**
+     * Resolves true once the registry knows these ids (also when it knew them
+     * already), false when a newer announcement answers for it instead.
+     * Rejects when this, the newest, didn't reach the registry.
+     */
+    async projects(ids: string[]): Promise<boolean> {
+        const turn = ++this.latest;
         const key = JSON.stringify(ids);
-        if (key === this.last) return;
-        this.last = key;
-        await this.handle.changed("projects");
+        if (!this.registered || key === this.heard) return true;
+        try {
+            await this.handle.changed("projects");
+        } catch (err) {
+            if (turn !== this.latest) return false;
+            throw err;
+        }
+        if (turn !== this.latest) return false;
+        this.heard = key;
+        return true;
     }
 
     async failed(project: string, error: string): Promise<void> {

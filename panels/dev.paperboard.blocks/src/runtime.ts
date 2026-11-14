@@ -55,10 +55,24 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
 
     const runningCount = (project: string) => [...runs.values()].filter((owner) => owner === project).length;
 
+    // the registry missed the latest project list: the home screen says so until an announcement reaches it.
+    // An announcement needs the Projects blocks registered, so this never hides why they weren't
+    let announceFailed = false;
+
     /** The project list changed: every window hears it, the registry is told, and the listening follows. */
     function publishProjects(): void {
         setState({ projects: store.list() });
-        announcer.projects(keptProjects()).catch((err: unknown) => setState({ blocksError: `The other panels weren't told the projects changed: ${errorMessage(err)}` }));
+        announcer.projects(keptProjects()).then(
+            (current) => {
+                if (!current || !announceFailed) return;
+                announceFailed = false;
+                setState({ blocksError: null });
+            },
+            (err: unknown) => {
+                announceFailed = true;
+                setState({ blocksError: `The other panels weren't told the projects changed: ${errorMessage(err)}` });
+            },
+        );
         listen();
     }
 
