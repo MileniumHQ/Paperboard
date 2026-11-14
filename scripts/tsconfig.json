@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+        "lib": ["ESNext"],
+        "target": "ESNext",
+        "module": "Preserve",
+        "moduleDetection": "force",
+        "moduleResolution": "bundler",
+        "types": ["node", "@types/bun"],
+        "paths": {
+            "typescript": ["../packages/paperui/node_modules/typescript"]
+        },
+        "allowImportingTsExtensions": true,
+        "noEmit": true,
+        "strict": true,
+        "skipLibCheck": true
+    },
+    "include": ["**/*.ts"]
+}

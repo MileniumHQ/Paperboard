@@ -131,13 +131,13 @@ function parseRuleList(wikitext: string): GameruleEntry[] {
             continue;
         }
         span = null;
-        row.lines.forEach((cell, index) => {
+        for (const [index, cell] of row.lines.entries()) {
             const match = cell.match(/^rowspan\s*=\s*"?(\d+)"?\s*\|\s*/i);
-            if (!match) return;
+            if (!match) continue;
             row.lines[index] = cell.slice(match[0].length);
             span = { index, rows: Number(match[1]) - 1 };
             spanned.add(row);
-        });
+        }
     }
 
     // A cell can carry both editions: "{{cd|3}}{{only|je}}<br/>{{cd|1}}{{only|be}}".

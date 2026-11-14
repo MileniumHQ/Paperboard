@@ -25,7 +25,7 @@
 #     origami-library  library UI: tests, build, silent-catches
 #     pbd            pbd.lc short-link worker: typecheck, tests, silent-catches
 #     panelapis      third-party API proxy worker: typecheck, tests, silent-catches
-#     scripts        root dev/publish scripts: tests, silent-catches
+#     scripts        root dev/publish scripts: typecheck, tests, silent-catches
 #     actions agents ai blocks botcreator gameserver terminal   first-party panels
 #     global         repo-wide checks (changelog-existence, todo-expiry)
 #     platform       the cross-platform suites only: each `tests/platform` or
@@ -208,7 +208,10 @@ gstep paperboard "paperboard silent-catches" run_in "$ROOT/apps/paperboard" bash
 gstep paperboard "paperboard solid check" run_in "$ROOT" bun scripts/check-solid.ts apps/paperboard/src/renderer
 gwarn paperboard "paperboard styling literals" bash "$ROOT/scripts/check-app-styling.sh" apps/paperboard
 
-# ── root dev scripts: publisher release-math proofs + silent-catch backstop ──
+# ── root dev scripts: typecheck, publisher release-math proofs, the browser
+# test drivers, silent-catch backstop. The compiler is packages/paperui's, the
+# same one check-solid.ts loads; the root package depends on none. ──────────
+gstep scripts "root scripts typecheck" run_in "$ROOT" bun packages/paperui/node_modules/typescript/bin/tsc -p scripts/tsconfig.json
 gstep scripts "root scripts tests" run_in "$ROOT" bun test scripts
 gstep scripts "root scripts silent-catches" run_in "$ROOT" bash "$CATCH" scripts
 
