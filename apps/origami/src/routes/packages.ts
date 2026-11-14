@@ -13,6 +13,14 @@ async function readPackage(kv: KVNamespace, name: string): Promise<unknown> {
     }
 }
 
+// Package records share the namespace with panel records, the panel index,
+// trashed records, the binary download-version database (dl/*) and the
+// pre-rename board:*/boards:* keys no code reads; none of those are packages.
+const NOT_PACKAGES = ["panel:", "panels:", "trash:", "dl/", "board:", "boards:"];
+function isPackageKey(name: string): boolean {
+    return !NOT_PACKAGES.some((prefix) => name.startsWith(prefix));
+}
+
 export async function handlePackagesRoutes(
     request: Request,
     env: Env,
@@ -34,61 +42,27 @@ export async function handlePackagesRoutes(
             );
         }
 
-        // page cap: the index lists at most MAX_KEYS packages per request
-        // — unbounded cursor loops die the day the registry grows
-        const MAX_KEYS = 200;
-        const packageIndex: Record<string, unknown> = {};
-        let cursor: string | undefined = undefined;
-        let collected = 0;
-        let capped = false;
-
+        // The index is one document of every package, read in one request.
+        // Past the cap it fails instead of answering a partial map: a daemon
+        // reading a cut list would silently stop updating what was cut.
+        const MAX_PACKAGES = 200;
+        const names: string[] = [];
+        let cursor: string | undefined;
         do {
-            const listResult: KVNamespaceListResult<unknown> =
-                await env.PACKAGES.list({
-                    cursor,
-                });
-
-            const keys = listResult.keys
-                .map((k) => k.name)
-                .filter(
-                    (name) =>
-                        // only package records belong in the package index.
-                        // panel records, the panel index, trashed records,
-                        // and the binary download-version database (dl/*)
-                        // share this namespace and must not leak as packages.
-                        !name.startsWith("panel:") &&
-                        !name.startsWith("panels:") &&
-                        !name.startsWith("trash:") &&
-                        !name.startsWith("dl/") &&
-                        // pre-rename deployed KV still holds board:*/boards:*
-                        // keys; no code reads them, but they must not leak
-                        // into the package listing either
-                        !name.startsWith("board:") &&
-                        !name.startsWith("boards:"),
+            const page: KVNamespaceListResult<unknown> = await env.PACKAGES.list({ cursor });
+            names.push(...page.keys.map((k) => k.name).filter(isPackageKey));
+            if (names.length > MAX_PACKAGES) {
+                console.error(`[origami] package index holds more than ${MAX_PACKAGES} packages`);
+                return jsonResponse(
+                    { error: `The registry holds more than the ${MAX_PACKAGES} packages its index can list` },
+                    500,
                 );
-
-            const values = await Promise.all(
-                keys.map(async (key) => ({ key, val: await readPackage(env.PACKAGES, key) })),
-            );
-
-            for (const { key, val } of values) {
-                if (collected >= MAX_KEYS) {
-                    capped = true;
-                    break;
-                }
-                packageIndex[key] = val ?? null;
-                collected++;
             }
+            cursor = page.list_complete ? undefined : page.cursor;
+        } while (cursor);
 
-            cursor = listResult.list_complete
-                ? undefined
-                : listResult.cursor;
-        } while (cursor && collected < MAX_KEYS);
-
-        return jsonResponse({
-            ...packageIndex,
-            ...(capped ? { truncated: `listing capped at ${MAX_KEYS} keys` } : {}),
-        });
+        const values = await Promise.all(names.map((name) => readPackage(env.PACKAGES, name)));
+        return jsonResponse(Object.fromEntries(names.map((name, i) => [name, values[i] ?? null])));
     }
 
     const singlePackageMatch = pathname.match(

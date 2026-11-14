@@ -125,6 +125,18 @@ describe("the worker is read-only and its indexes are faithful", () => {
         expect(Object.keys((await res.json()) as object).sort()).toEqual(["java-21", "ollama"]);
     });
 
+    test("a package index past its cap fails instead of listing some packages", async () => {
+        for (let n = 0; n <= 200; n++) registry.kv.setJson(`pkg-${n}`, { name: `pkg-${n}`, version: "1.0.0", platforms: {} });
+        const res = await request("/package/index.json");
+        expect(res.status).toBe(500);
+        expect((await res.json()) as object).toEqual({ error: "The registry holds more than the 200 packages its index can list" });
+        // at the cap every package is listed
+        await registry.kv.delete("pkg-0");
+        const full = await request("/package/index.json");
+        expect(full.status).toBe(200);
+        expect(Object.keys((await full.json()) as object)).toHaveLength(200);
+    });
+
     test("an unreadable panel record fails the panels index instead of dropping the panel", async () => {
         await publishPanel(upload("dev.example.clock", "1.0.0"), ctx);
         await publishPanel(upload("dev.example.notes", "1.0.0"), ctx);
