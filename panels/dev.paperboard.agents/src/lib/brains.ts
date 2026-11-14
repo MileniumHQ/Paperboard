@@ -16,9 +16,17 @@ const BRAINS: Record<Harness, { name: string; description: string }> = {
 export const harnessName = (id: string) => BRAINS[id as Harness]?.name ?? id;
 export const harnessDescription = (id: string) => BRAINS[id as Harness]?.description;
 
-/** The models a harness offers, fetched again whenever the harness changes. */
+/** The models a harness offers, fetched again whenever the harness changes, or its brain is installed, signed in or removed (what it lists, or can't, depends on that). */
 export function createModels(agent: Agent, harness: () => Harness | undefined): Resource<BrainModel[]> {
-    const [models] = createResource(harness, (h) => agent.models(h));
+    const [models] = createResource(
+        () => {
+            const h = harness();
+            const b = h && agent.state.brains[h];
+            // one string: the list is read again only when one of these changes
+            return h && b ? `${h}|${b.phase}|${b.signedIn}` : undefined;
+        },
+        (key) => agent.models(key.split("|")[0] as Harness),
+    );
     return models;
 }
 

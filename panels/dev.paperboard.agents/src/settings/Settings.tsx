@@ -71,8 +71,7 @@ function AgentSettings(props: { agent: Agent }) {
             })
             .catch((e) => {
                 setError(failure(title, e));
-                // what's saved is what shows
-                setName(current().name);
+                // a name stays as typed, to be saved again; a choice goes back to what's saved
                 setModel(current().model ?? "");
             });
     };
@@ -165,7 +164,7 @@ function AgentSettings(props: { agent: Agent }) {
             </PaperSettingList>
             <Show when={models.error}>
                 <PaperQuote variant="danger" icon="error" title="Models not listed" role="alert">
-                    {errorText(models.error)} Type a model's id instead.
+                    {errorText(models.error).replace(/[.\s]+$/, "")}. Type a model's id instead.
                 </PaperQuote>
             </Show>
             <Show when={error()}>
@@ -410,10 +409,8 @@ function AutomationSettings(props: { agent: Agent }) {
                 const { automationInstructions: _, ...rest } = cur;
                 return next ? { ...rest, automationInstructions: next } : rest;
             })
-            .catch((e) => {
-                setError(errorText(e));
-                setText(current().automationInstructions ?? "");
-            });
+            // what was typed stays in the field, to be saved again
+            .catch((e) => setError(errorText(e)));
     };
     return (
         <PaperFlex gap="full" role="region" aria-label="Flows">
