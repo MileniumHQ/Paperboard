@@ -231,30 +231,43 @@ export class ProjectStore {
 
     /** A new project; with no blocks it is a draft, written once it has one. */
     create(name?: unknown, initial: SavedFlows = EMPTY, preview: CanvasPreview | null = null): Promise<ProjectSummary> {
-        return this.serial(async () => {
-            this.requireOpen();
-            if (this.projects.size >= MAX_PROJECTS) throw new Error(`Blocks holds at most ${MAX_PROJECTS} projects`);
+        return this.serial(() => this.make(name, initial, preview));
+    }
+
+    /** A copy named "Copy of ...", with the flows the source has once the changes before it are written. */
+    duplicate(id: unknown): Promise<ProjectSummary> {
+        return this.serial(() => {
+            const source = this.require(id);
+            if (source.loadError) throw new Error(`"${source.meta.name}" couldn't be read, so it can't be copied: ${source.loadError}`);
             const names = [...this.projects.values()].map((p) => p.meta.name);
-            const clean = name === undefined || name === "" ? nextProjectName(names) : cleanProjectName(name);
-            const now = Date.now();
-            const meta: ProjectMeta = { id: createProjectId(), name: clean, enabled: true, createdAt: now, editedAt: now, preview };
-            const project: Project = { meta, flows: initial, draft: !hasBlocks(initial), loadError: null };
-            if (!project.draft) await this.storage.set(initial, projectFlowsPath(meta.id));
-            this.projects.set(meta.id, project);
-            if (!project.draft) {
-                try {
-                    await this.writeIndex();
-                } catch (err) {
-                    this.projects.delete(meta.id);
-                    // what is said is why the project wasn't made, and the cleanup's failure after it
-                    await this.storage.set(null, projectFlowsPath(meta.id)).catch((why: unknown) => {
-                        throw new Error(`${errorMessage(err)} Its file ${projectFlowsPath(meta.id)} wasn't removed either: ${errorMessage(why)}`);
-                    });
-                    throw err;
-                }
-            }
-            return this.summary(project);
+            return this.make(nextProjectName(names, `Copy of ${source.meta.name}`), structuredClone(source.flows), source.meta.preview);
         });
+    }
+
+    /** create's work, run in its turn of `serial`. */
+    private async make(name: unknown, initial: SavedFlows, preview: CanvasPreview | null): Promise<ProjectSummary> {
+        this.requireOpen();
+        if (this.projects.size >= MAX_PROJECTS) throw new Error(`Blocks holds at most ${MAX_PROJECTS} projects`);
+        const names = [...this.projects.values()].map((p) => p.meta.name);
+        const clean = name === undefined || name === "" ? nextProjectName(names) : cleanProjectName(name);
+        const now = Date.now();
+        const meta: ProjectMeta = { id: createProjectId(), name: clean, enabled: true, createdAt: now, editedAt: now, preview };
+        const project: Project = { meta, flows: initial, draft: !hasBlocks(initial), loadError: null };
+        if (!project.draft) await this.storage.set(initial, projectFlowsPath(meta.id));
+        this.projects.set(meta.id, project);
+        if (!project.draft) {
+            try {
+                await this.writeIndex();
+            } catch (err) {
+                this.projects.delete(meta.id);
+                // what is said is why the project wasn't made, and the cleanup's failure after it
+                await this.storage.set(null, projectFlowsPath(meta.id)).catch((why: unknown) => {
+                    throw new Error(`${errorMessage(err)} Its file ${projectFlowsPath(meta.id)} wasn't removed either: ${errorMessage(why)}`);
+                });
+                throw err;
+            }
+        }
+        return this.summary(project);
     }
 
     /** A project's canvas as the page saved it. A draft is written from its first block on. */
@@ -302,14 +315,6 @@ export class ProjectStore {
             }
             return this.summary(project);
         });
-    }
-
-    /** A copy named "Copy of ...", with the same flows. */
-    async duplicate(id: unknown): Promise<ProjectSummary> {
-        const source = this.require(id);
-        if (source.loadError) throw new Error(`"${source.meta.name}" couldn't be read, so it can't be copied: ${source.loadError}`);
-        const names = [...this.projects.values()].map((p) => p.meta.name);
-        return this.create(nextProjectName(names, `Copy of ${source.meta.name}`), structuredClone(source.flows), source.meta.preview);
     }
 
     /** `onlyDraft`: a project kept by now stays, as leaving an empty new one asks. */

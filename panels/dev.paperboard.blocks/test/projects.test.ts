@@ -202,6 +202,19 @@ describe("changing a project", () => {
         expect(mem.files.get(projectFlowsPath(copy.id))).toEqual(flows(BUILTIN.onRun, "text"));
     });
 
+    test("a copy asked for while a save of its project is waiting has what that save wrote", async () => {
+        const mem = memory();
+        const store = new ProjectStore(mem.storage);
+        await store.open();
+        const made = await store.create("Mine");
+        await store.save(made.id, flows(BUILTIN.onRun), null);
+        // another window's save, still queued when this window asks for the copy
+        const saving = store.save(made.id, flows(BUILTIN.onRun, "text"), null);
+        const copy = await store.duplicate(made.id);
+        await saving;
+        expect(store.flows(copy.id)).toEqual(flows(BUILTIN.onRun, "text"));
+    });
+
     test("a project with the longest name a person may type can be copied again and again", async () => {
         const store = new ProjectStore(memory().storage);
         await store.open();
