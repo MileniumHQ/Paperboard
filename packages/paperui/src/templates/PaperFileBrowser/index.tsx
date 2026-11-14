@@ -9,6 +9,7 @@ import { PaperLoader } from "../../components/PaperLoader";
 import { PaperModal } from "../../components/PaperModal";
 import { PaperSplit } from "../PaperSplit";
 import { copyText } from "../../utils/clipboard";
+import { escapeAttributeValue } from "../../utils/selector";
 import { createFileDocument } from "./fileDocument";
 import {
     PAPER_FILE_BROWSER_ICONS as ICONS,
@@ -20,6 +21,7 @@ import {
 } from "./files";
 import { createFolderTree } from "./folderTree";
 import type { PaperFileBrowserProps, PaperFileContent, PaperFileEntry, PaperFileReveal } from "./types";
+import { cx } from "../../utils/cx";
 
 export {
     PAPER_FILE_BROWSER_ICONS,
@@ -43,11 +45,7 @@ export type {
 } from "./types";
 
 function rowSelector(path: string): string {
-    const escaped =
-        typeof CSS !== "undefined" && typeof CSS.escape === "function"
-            ? CSS.escape(path)
-            : path.replace(/["\\]/g, "\\$&");
-    return `[data-path="${escaped}"]`;
+    return `[data-path="${escapeAttributeValue(path)}"]`;
 }
 
 function Icon(props: { name: string; class?: string }) {
@@ -526,7 +524,7 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
     return (
         <>
             <PaperSplit
-                class={[styles.PaperFileBrowser, props.class].filter(Boolean).join(" ")}
+                class={cx(styles.PaperFileBrowser, props.class)}
                 side={treePane}
                 sideWidth={props.sideWidth}
                 detailActive={openPath() !== null}
