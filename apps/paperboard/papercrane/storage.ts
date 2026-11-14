@@ -45,6 +45,21 @@ export class LimitError extends Error {
 // Serializes concurrent writes to the same path
 const writeQueues = new Map<string, Promise<void>>();
 
+// A failed write names the file it was saving and the system's reason in
+// its own words ("permission denied"), never the temp file it went
+// through. The errno code stays on the error for callers that check it.
+function saveFailed(filePath: string, tmp: string, err: unknown): Error {
+    const cause = err as NodeJS.ErrnoException;
+    const message = String(cause?.message ?? err);
+    const reason = /^[A-Z]+: ([^,]+)/.exec(message)?.[1] ?? message.split(tmp).join(filePath);
+    const failure = new Error(`Couldn't save ${filePath}: ${reason}`, { cause: err }) as NodeJS.ErrnoException;
+    failure.code = cause?.code;
+    failure.errno = cause?.errno;
+    failure.syscall = cause?.syscall;
+    failure.path = filePath;
+    return failure;
+}
+
 // Writes a file atomically via temp plus rename
 export function writeFileAtomic(
     filePath: string,
@@ -65,7 +80,7 @@ export function writeFileAtomic(
                 try {
                     if (fs.existsSync(tmp)) await fs.promises.unlink(tmp);
                 } catch (err) { logger.debug("[storage.ts] op failed:", err) }
-                throw err;
+                throw saveFailed(filePath, tmp, err);
             }
         })
         .finally(() => {
@@ -106,7 +121,7 @@ export function writeFileAtomicSync(
         } catch (cleanupErr) {
             console.error(`[storage] failed to clean tmp artifact ${tmp}:`, cleanupErr);
         }
-        throw err;
+        throw saveFailed(filePath, tmp, err);
     }
 }
 
