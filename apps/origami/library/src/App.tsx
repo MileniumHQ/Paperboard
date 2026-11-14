@@ -70,8 +70,10 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
     const [registrySettled, setRegistrySettled] = createSignal(false);
     const [pendingMedia, setPendingMedia] = createSignal(0);
     const route = createLibraryRoute();
-    const [busyPanelId, setBusyPanelId] = createSignal<string | null>(null);
-    const [installError, setInstallError] = createSignal<string | null>(null);
+    // Install state is per panel: installs run side by side (the shell
+    // answers each request on its own), and a failure stays on the page of
+    // the panel that failed until that panel's next attempt.
+    const [installs, setInstalls] = createStore<Record<string, { busy: boolean; error: string | null }>>({});
 
     // A reload is a retry for a library that is open but wrong: a transient
     // registry read that came back empty or malformed leaves the frame alive
@@ -231,16 +233,15 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
             downloadArchive(panel);
             return;
         }
-        if (busyPanelId()) return;
-        setBusyPanelId(panel.id);
-        setInstallError(null);
+        if (installs[panel.id]?.busy) return;
+        setInstalls(panel.id, { busy: true, error: null });
         const result = await props.bridge.install(panel.id);
-        setBusyPanelId(null);
-        if (!result.ok) {
-            setInstallError(
-                `Couldn't install ${panel.name}${result.error ? `: ${result.error}` : ""}`,
-            );
-        }
+        setInstalls(panel.id, {
+            busy: false,
+            error: result.ok
+                ? null
+                : `Couldn't install ${panel.name}${result.error ? `: ${result.error}` : ""}`,
+        });
     };
 
     // one scroll area, edge to edge, around either page's PaperPage column
@@ -327,10 +328,7 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
                                                     {panel.version ? `v${panel.version}` : "–"}
                                                 </PaperText>
                                             }
-                                            onClick={() => {
-                                                setInstallError(null);
-                                                route.navigate(panel.id);
-                                            }}
+                                            onClick={() => route.navigate(panel.id)}
                                         />
                                     )}
                                 </For>
@@ -343,13 +341,10 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
                     <PanelPage
                         panel={panel()}
                         mode={props.bridge.mode()}
-                        busy={busyPanelId() === panel().id}
-                        error={installError()}
+                        busy={installs[panel().id]?.busy ?? false}
+                        error={installs[panel().id]?.error ?? null}
                         mediaError={mediaErrors()[panel().id] ?? null}
-                        onNavigateHome={() => {
-                            setInstallError(null);
-                            route.navigate(null);
-                        }}
+                        onNavigateHome={() => route.navigate(null)}
                         onAction={() => void handleAction(panel())}
                         onRetryMedia={() => retryMedia(panel().id)}
                     />

@@ -11,7 +11,7 @@ import { launchChrome, type Chrome, type Page } from "../../../../scripts/testin
 
 // The production build of the library in a real Chrome, embedded the way
 // Paperboard embeds it. This loopback server is the registry
-// (/panels/index.json, listing nothing) and the shell (/shell.html, which frames /library/
+// (/panels/index.json, listing `registry`) and the shell (/shell.html, which frames /library/
 // and answers it).
 const LIBRARY = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".webp": "image/webp" };
@@ -19,7 +19,8 @@ const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js
 
 // The shell: it frames the library, says it is Paperboard with the
 // installed list from its query, and answers media requests with what
-// `window.mediaAnswer` returns. Everything the library sent is kept.
+// `window.mediaAnswer` returns. Installs wait until the test answers them
+// with `window.answerInstall`. Everything the library sent is kept.
 const SHELL = `<!doctype html><html><head><meta charset="utf-8"><title>shell</title>
 <style>html, body { margin: 0; height: 100%; } iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }</style></head>
 <body><iframe id="library" src="/library/"></iframe><script>
@@ -29,8 +30,11 @@ window.mediaAnswer = () => ({ ok: false, error: "Can't read store/ (EACCES)" });
 addEventListener("message", (event) => {
     const message = event.data;
     window.sent.push(message);
+    // a DOM change, so a test waiting on what was sent wakes up
+    document.body.dataset.sent = String(window.sent.length);
     const reply = (answer) => event.source.postMessage(answer, "*");
     if (message.type === "paperboard:library-hello") reply({ type: "paperboard:library-connected", theme: "light", installed });
+    if (message.type === "paperboard:library-install") window.answerInstall = Object.assign(window.answerInstall || {}, { [message.panelId]: (answer) => reply({ type: "paperboard:library-install-result", requestId: message.requestId, panelId: message.panelId, ...answer }) });
     if (message.type === "paperboard:library-media") reply({ type: "paperboard:library-media-result", requestId: message.requestId, panelId: message.panelId, ...window.mediaAnswer(message) });
 });
 </script></body></html>`;
@@ -39,6 +43,7 @@ let out: string;
 let server: Server;
 let origin: string;
 let chrome: Chrome;
+let registry: Record<string, unknown> = {};
 
 beforeAll(async () => {
     out = await mkdtemp(path.join(tmpdir(), "library-build-"));
@@ -51,7 +56,7 @@ beforeAll(async () => {
     server = createServer((req, res) => {
         const url = new URL(req.url ?? "/", "http://127.0.0.1");
         if (url.pathname === "/shell.html") return void res.writeHead(200, { "Content-Type": MIME[".html"] }).end(SHELL);
-        if (url.pathname === "/panels/index.json") return void res.writeHead(200, { "Content-Type": "application/json" }).end("{}");
+        if (url.pathname === "/panels/index.json") return void res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(registry));
         if (!url.pathname.startsWith("/library/")) return void res.writeHead(404).end();
         const file = url.pathname === "/library/" ? "index.html" : url.pathname.slice("/library/".length);
         const target = path.resolve(out, file);
@@ -127,9 +132,47 @@ async function press(page: Page, doc: string, element: string, what: string): Pr
 
 const card = (name: string) => `[...doc.querySelectorAll("[role=button]")].find((el) => el.textContent.includes(${JSON.stringify(name)}))`;
 const button = (label: string) => `[...doc.querySelectorAll("button, a")].find((el) => el.textContent.trim().endsWith(${JSON.stringify(label)}))`;
+const installsSent = (ids: string[]) => `JSON.stringify(window.sent.filter((m) => m.type === "paperboard:library-install").map((m) => m.panelId)) === ${JSON.stringify(JSON.stringify(ids))}`;
 const shows = (text: string) => `doc.body.textContent.includes(${JSON.stringify(text)})`;
 
 describe("the library, as a person uses it", () => {
+    test("a second panel installs while the first is still installing, and each page shows only its own failure", async () => {
+        registry = {
+            "dev.example.alpha": { id: "dev.example.alpha", name: "Alpha", version: "1.0.0", description: "First." },
+            "dev.example.beta": { id: "dev.example.beta", name: "Beta", version: "1.0.0", description: "Second." },
+        };
+        try {
+            const page = await chrome.open(`${origin}/shell.html`);
+            const doc = FRAMED_DOC;
+            const heading = (name: string) => `doc.querySelector("h1")?.textContent === ${JSON.stringify(name)}`;
+
+            await press(page, doc, card("Alpha"), "the Alpha card");
+            await until(page, doc, heading("Alpha"), "Alpha's page");
+            await press(page, doc, button("Install"), "Alpha's Install");
+            await until(page, doc, `${button("Installing…")} && ${installsSent(["dev.example.alpha"])}`, "Alpha installing");
+
+            await press(page, doc, button("Library"), "the back button");
+            await press(page, doc, card("Beta"), "the Beta card");
+            await until(page, doc, heading("Beta"), "Beta's page");
+            // Alpha's install is Alpha's: Beta's button is its own and works
+            await press(page, doc, button("Install"), "Beta's Install");
+            await until(page, doc, `${button("Installing…")} && ${installsSent(["dev.example.alpha", "dev.example.beta"])}`, "Beta installing");
+
+            // Alpha failing while Beta's page is open says nothing on Beta's page
+            await page.evaluate(`window.answerInstall["dev.example.alpha"]({ ok: false, error: "Disk full" }); true`);
+            await press(page, doc, button("Library"), "the back button");
+            await press(page, doc, card("Alpha"), "the Alpha card");
+            await until(page, doc, `${heading("Alpha")} && doc.querySelector("[role=alert]")?.textContent === "Couldn't install Alpha: Disk full"`, "Alpha's failure on Alpha's page");
+            await press(page, doc, button("Library"), "the back button");
+            await press(page, doc, card("Beta"), "the Beta card");
+            await until(page, doc, `${heading("Beta")} && Boolean(${button("Installing…")})`, "Beta still installing");
+            expect(await page.evaluate<boolean>(`Boolean(${FRAMED_DOC}.querySelector("[role=alert]"))`)).toBe(false);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            registry = {};
+        }
+    }, 30_000);
+
     test("an installed panel the registry doesn't list shows a glyph, and its page says why its listing failed and retries", async () => {
         const installed = [{ id: "dev.local.tool", name: "Local Tool", version: "0.1.0" }];
         const page = await chrome.open(`${origin}/shell.html?installed=${encodeURIComponent(JSON.stringify(installed))}`);
