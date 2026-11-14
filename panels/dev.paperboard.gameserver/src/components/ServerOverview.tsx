@@ -1,4 +1,4 @@
-import { createSignal, For, onMount, Show, type JSX } from "solid-js";
+import { createSignal, Index, onMount, Show, type JSX } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -23,7 +23,6 @@ import {
     serverPort,
     serverVersion,
     loadServerConfig,
-    initServerListeners,
     startServer,
     stopServer,
     restartServer,
@@ -78,10 +77,8 @@ export default function ServerOverview(props: {
     /** false for a game that keeps no world, which has no Save world */
     world?: boolean;
 }) {
-    onMount(() => {
-        void loadServerConfig();
-        void initServerListeners();
-    });
+    // loading the config also reads the server's state
+    onMount(() => void loadServerConfig());
 
     const [saving, setSaving] = createSignal(false);
     const [saveError, setSaveError] = createSignal("");
@@ -164,9 +161,10 @@ export default function ServerOverview(props: {
             <Show when={serverStatus() === "online" && props.stats}>
                 {(stats) => (
                     <PaperGrid columns={compact() ? 2 : 4}>
-                        <For each={stats()}>
-                            {(stat) => <PaperStatTile icon={stat.icon} label={stat.label} value={stat.value} tone={stat.tone} />}
-                        </For>
+                        {/* by position: the uptime's tick makes four new readouts every second, and each tile stays */}
+                        <Index each={stats()}>
+                            {(stat) => <PaperStatTile icon={stat().icon} label={stat().label} value={stat().value} tone={stat().tone} />}
+                        </Index>
                     </PaperGrid>
                 )}
             </Show>

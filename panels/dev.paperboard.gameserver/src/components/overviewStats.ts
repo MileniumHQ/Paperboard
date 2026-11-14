@@ -55,13 +55,19 @@ export function createMetrics<T>(call: string): { value: () => T | undefined; er
         setValue(undefined);
         setError("");
         if (status !== "online") return;
+        // an answer that lands after the server stopped, or after the
+        // Overview closed, is about a server that is no longer running
+        let current = true;
         const load = () => serverBridge.call<T>(call).then(
-            (answer) => { setValue(() => answer); setError(""); },
-            (err) => setError(errorMessage(err)),
+            (answer) => { if (current) { setValue(() => answer); setError(""); } },
+            (err) => { if (current) setError(errorMessage(err)); },
         );
         void load();
         const timer = setInterval(() => void load(), METRICS_MS);
-        onCleanup(() => clearInterval(timer));
+        onCleanup(() => {
+            current = false;
+            clearInterval(timer);
+        });
     }));
     return { value, error };
 }
