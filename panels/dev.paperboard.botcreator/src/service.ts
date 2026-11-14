@@ -97,6 +97,8 @@ interface BotEntry {
 }
 
 const bots = new Map<string, BotEntry>();
+// the applications of bots still logging in to be added: a second add of the same token is a twin
+const adding = new Set<string>();
 // the config as read, so fields this version doesn't know are written back
 let savedExtras: Record<string, unknown> = {};
 // why the saved bots couldn't be read; nothing is written over them meanwhile
@@ -538,7 +540,6 @@ async function addBot(id: unknown): Promise<BotSummary> {
     requireReadable();
     if (!isBotId(id)) throw new Error("A bot id is required.");
     if (bots.has(id)) throw new Error("This bot is already added.");
-    if (bots.size >= MAX_BOTS) throw new Error(`Bot Creator runs at most ${MAX_BOTS} bots.`);
     const saved = await readToken(id);
     if (!saved) throw new Error("No token was saved for the new bot.");
     const forget = () => secretsApi.delete(tokenName(id), PANEL_ID).catch(logFailure("forgetting the refused token failed"));
@@ -548,10 +549,15 @@ async function addBot(id: unknown): Promise<BotSummary> {
         throw new Error("That isn't a Discord bot token.");
     }
     const twin = [...bots.values()].find((entry) => entry.stored.applicationId === applicationId);
-    if (twin) {
+    if (twin || adding.has(applicationId)) {
         await forget();
-        throw new Error(`${twin.stored.name} already uses this bot. One bot can only run once.`);
+        throw new Error(`${twin ? twin.stored.name : "Another bot being added"} already uses this bot. One bot can only run once.`);
     }
+    if (bots.size + adding.size >= MAX_BOTS) {
+        await forget();
+        throw new Error(`Bot Creator runs at most ${MAX_BOTS} bots.`);
+    }
+    adding.add(applicationId);
     const entry = createEntry({
         id,
         name: "Discord bot",
@@ -574,6 +580,8 @@ async function addBot(id: unknown): Promise<BotSummary> {
         if (entry.blocks) await entry.blocks.remove().catch(logFailure("removing the refused bot's Blocks project failed"));
         await forget();
         throw err;
+    } finally {
+        adding.delete(applicationId);
     }
     publish();
     botsChanged();
