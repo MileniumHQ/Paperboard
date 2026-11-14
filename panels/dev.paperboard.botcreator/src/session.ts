@@ -882,6 +882,14 @@ export class BotSession {
         this.host.changed();
     }
 
+    /** Takes every stored command off Discord while the bot is online; throws what Discord refused. */
+    async unregisterCommands(): Promise<void> {
+        const bot = this.client;
+        if (!bot || !this.connected() || this.commands.length === 0) return;
+        const errors = await syncSlashCommands(bot, [], [...new Set(this.commands.map((c) => c.scope))]);
+        if (errors.length > 0) throw new Error(errors.join(" "));
+    }
+
     // save-then-sync for UI mutations: offline is reported as "not
     // registered" rather than as an error, because the stored definition is
     // not a lie

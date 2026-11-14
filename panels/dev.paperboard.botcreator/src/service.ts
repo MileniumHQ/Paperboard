@@ -606,14 +606,17 @@ async function replaceToken(entry: BotEntry): Promise<void> {
     else publish();
 }
 
-/** Stops a bot and removes it, its token, its commands, and its Blocks project; gives its id. */
+/** Clears a bot's commands on Discord while it is online, stops it and removes it, its token and its Blocks project; gives its id. */
 async function deleteBot(entry: BotEntry): Promise<string> {
     requireReadable();
     const id = entry.stored.id;
     // each step lands before the next, so a retry picks up where a
     // failed one stopped
-    let step = "stop the bot";
+    let step = "remove its slash commands from Discord";
     try {
+        // while it is online: a bot that is off can't reach Discord, and its commands stay there
+        await entry.session.unregisterCommands();
+        step = "stop the bot";
         await entry.session.stop();
         step = "remove its blocks from Blocks";
         if (entry.blocks) {
@@ -713,8 +716,15 @@ export const serviceCalls = {
     /** The setup guide was finished or skipped: it never shows again. Saved with the bots. */
     markSetupGuideSeen: async () => {
         requireReadable();
+        const before = savedExtras;
         savedExtras = { ...savedExtras, [SETUP_GUIDE_FIELD]: true };
-        await saveBots();
+        try {
+            await saveBots();
+        } catch (err) {
+            // the guide stays, as it is saved, and the page says why
+            savedExtras = before;
+            throw err;
+        }
         publish();
         return true;
     },

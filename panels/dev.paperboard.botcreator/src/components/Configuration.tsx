@@ -48,7 +48,7 @@ export default function Configuration(props: ConfigurationProps) {
 
                 <PaperSettingItem
                     title="Delete Bot"
-                    description="Take the bot offline and delete its token and slash commands"
+                    description="Remove its slash commands from Discord, take it offline and delete its token"
                 >
                     <PaperButton variant="danger" onClick={() => setDeleting(true)}>
                         Delete

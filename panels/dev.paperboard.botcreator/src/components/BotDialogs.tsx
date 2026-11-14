@@ -178,7 +178,7 @@ export function ReplaceTokenModal(props: {
 }
 
 export function DeleteBotModal(props: {
-    bot: { id: string; name: string } | null;
+    bot: { id: string; name: string; connected: boolean; commands: readonly unknown[] } | null;
     onDelete: (id: string) => Promise<unknown>;
     onClose: () => void;
 }) {
@@ -218,9 +218,14 @@ export function DeleteBotModal(props: {
         >
             <PaperFlex direction="column" gap="half">
                 <PaperText preset="text">
-                    {props.bot?.name} goes offline, and its token and slash commands are deleted from Paperboard.
+                    {props.bot?.name}'s slash commands are removed from Discord, it goes offline, and its token is deleted from Paperboard.
                     Flows that use it stop working. The application stays in the Discord Developer Portal.
                 </PaperText>
+                <Show when={props.bot && !props.bot.connected && props.bot.commands.length > 0}>
+                    <PaperQuote variant="warning" icon="cloud_off" title="Its commands stay on Discord">
+                        The bot is offline, so it can't take its slash commands off Discord. Turn it on first to remove them.
+                    </PaperQuote>
+                </Show>
                 <Show when={error()}>
                     {(text) => <PaperQuote variant="danger" icon="error" title="Not deleted" role="alert">{text()}</PaperQuote>}
                 </Show>

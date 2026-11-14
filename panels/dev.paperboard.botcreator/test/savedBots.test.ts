@@ -81,3 +81,26 @@ describe("the saved bots", () => {
         expect(JSON.parse(fs.readFileSync(file, "utf8")).bots[0].enabled).toBe(true);
     });
 });
+
+// A deleted bot's commands don't outlive it on Discord: once its token is
+// gone nothing can take them off the server's command picker.
+describe("deleting a bot", () => {
+    test("an online bot's slash commands are taken off Discord in every scope before it goes", async () => {
+        const home = guild("Home");
+        const fake = discord.addBot({ username: "Leaver", guilds: [home] });
+        const commands = [command("ping"), { ...command("hello"), id: "c-home", scope: home.id }];
+        await savedBots([{ stored: storedBot("b-leave", fake.appId, { name: "Leaver", commands }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "Leaver to connect");
+        const guildCommands = `/applications/${fake.appId}/guilds/${home.id}/commands`;
+        await discord.request((r) => r.method === "PUT" && r.path === guildCommands, "the commands synced at login");
+
+        const before = discord.requests.length;
+        expect(await call("deleteBot", { bot: "b-leave" })).toEqual({ deleted: "b-leave" });
+        const cleared = discord.requests.slice(before).filter((r) => r.method === "PUT" && r.path.startsWith(`/applications/${fake.appId}/`));
+        expect(cleared.map((r) => [r.path, r.body]).sort()).toEqual([
+            [`/applications/${fake.appId}/commands`, []],
+            [guildCommands, []],
+        ].sort());
+    });
+});
