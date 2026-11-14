@@ -9,8 +9,7 @@ export const WEB_TIMEOUT_MS = 30_000;
 export const WEB_MAX_CHARS = 5_000_000;
 
 /**
- * https anywhere, plain http only to this machine: the same rule the
- * Actions panel's web blocks had.
+ * https anywhere, plain http only to this machine.
  */
 export function webRefusal(raw: string): string | null {
     let url: URL;
@@ -29,26 +28,52 @@ export function webRefusal(raw: string): string | null {
 
 export type WebAnswer = "TEXT" | "JSON";
 
-/** Fetches a URL and reads the answer as text or JSON; a non-2xx answer fails. */
+/** The answer's text, or null once it runs past `max` characters: what is past that is not read. */
+async function textUpTo(response: Response, max: number): Promise<string | null> {
+    if (!response.body) return "";
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) return text + decoder.decode();
+        text += decoder.decode(value, { stream: true });
+        if (text.length > max) {
+            await reader.cancel();
+            return null;
+        }
+    }
+}
+
+/**
+ * Fetches a URL and reads the answer as text or JSON; a non-2xx answer
+ * fails, and so does one longer than WEB_MAX_CHARS.
+ */
 export async function web(method: "GET" | "POST", url: string, body: unknown, answer: WebAnswer, signal: AbortSignal): Promise<unknown> {
     const refused = webRefusal(url);
     if (refused) throw new Error(refused);
     const timeout = AbortSignal.timeout(WEB_TIMEOUT_MS);
+    // a stop or the time running out says so, whether it came while asking or while reading
+    const failed = (err: unknown) => {
+        if (signal.aborted) return new Error("The run was stopped");
+        if (timeout.aborted) return new Error(`${url} didn't answer within ${WEB_TIMEOUT_MS / 1000} seconds`);
+        return new Error(`${method} ${url} failed: ${err instanceof Error ? err.message : String(err)}`);
+    };
     let response: Response;
+    let text: string | null = "";
     try {
         response = await fetch(url, {
             method,
             signal: AbortSignal.any([signal, timeout]),
             ...(method === "POST" ? { body: JSON.stringify(body ?? null), headers: { "content-type": "application/json" } } : {}),
         });
+        if (response.ok) text = await textUpTo(response, WEB_MAX_CHARS);
+        else await response.body?.cancel();
     } catch (err) {
-        if (signal.aborted) throw new Error("The run was stopped");
-        if (timeout.aborted) throw new Error(`${url} didn't answer within ${WEB_TIMEOUT_MS / 1000} seconds`);
-        throw new Error(`${method} ${url} failed: ${err instanceof Error ? err.message : String(err)}`);
+        throw failed(err);
     }
-    const text = await response.text();
     if (!response.ok) throw new Error(`${method} ${url} answered ${response.status} ${response.statusText}`.trim());
-    if (text.length > WEB_MAX_CHARS) throw new Error(`${url} answered with more than ${WEB_MAX_CHARS} characters`);
+    if (text === null) throw new Error(`${url} answered with more than ${WEB_MAX_CHARS} characters`);
     if (answer === "TEXT") return text;
     try {
         return JSON.parse(text);

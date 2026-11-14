@@ -32,7 +32,7 @@ const fileName = (name: string) => name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, ""
 const dateText = (iso: string) => new Date(iso).toLocaleString();
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-// The File and Backup menus' work, as the Actions editor has them: a
+// The File and Backup menus' work: a
 // project's flows out to a file and back in, and backups of everything
 // Blocks keeps (every project and its flows). The operations go in the
 // menus; the Load Backup window is drawn by the returned component.
@@ -67,19 +67,31 @@ export function createFileActions(props: {
     };
 
     // the export and import copy through a file in Blocks' own storage,
-    // which is removed again whatever happens
+    // which is removed again whatever happens: a removal that fails is said
+    // too, after what the work itself did
+    const removedAfter = async <T,>(path: string, work: () => Promise<T>): Promise<T> => {
+        let done: T;
+        try {
+            done = await work();
+        } catch (err) {
+            await fileApi.delete(path, PANEL_ID).catch((why: unknown) => {
+                throw new Error(`${message(err)} The temporary file ${path} wasn't removed either: ${message(why)}`);
+            });
+            throw err;
+        }
+        await fileApi.delete(path, PANEL_ID).catch((why: unknown) => {
+            throw new Error(`That much worked, but the temporary file ${path} wasn't removed: ${message(why)}`);
+        });
+        return done;
+    };
     const exportFlows = () => run({ done: "Flows exported", failed: "Flows not exported" }, async () => {
         const path = `flows-export-${clientId}.json`;
         // what is exported is what is saved, so the latest edits go first
         const saved = await props.flush();
         if (!saved.ok) throw new Error(`Your latest changes are not saved, so the file would miss them: ${saved.message}`);
         await fileApi.write(path, flowFileText(props.snapshot()), PANEL_ID);
-        try {
-            const result = await fileApi.exportFile(path, PANEL_ID, { suggestedName: `${fileName(props.name())}.json`, filters: FLOW_FILE_FILTERS });
-            return result.status === "exported" ? `Exported to ${result.name}.` : null;
-        } finally {
-            await fileApi.delete(path, PANEL_ID);
-        }
+        const result = await removedAfter(path, () => fileApi.exportFile(path, PANEL_ID, { suggestedName: `${fileName(props.name())}.json`, filters: FLOW_FILE_FILTERS }));
+        return result.status === "exported" ? `Exported to ${result.name}.` : null;
     });
 
     const importFlows = () => run({ done: "Flows imported", failed: "Flows not imported" }, async () => {
@@ -87,13 +99,10 @@ export function createFileActions(props: {
         const path = `flows-import-${clientId}.json`;
         const result = await fileApi.importFile(path, PANEL_ID, { filters: FLOW_FILE_FILTERS });
         if (result.status === "canceled") return null;
-        let text: string | null;
-        try {
+        const text = await removedAfter(path, async () => {
             if (result.bytes > MAX_FLOW_FILE_BYTES) throw new Error("This file is too big to be a flow file.");
-            text = await fileApi.read(path, PANEL_ID);
-        } finally {
-            await fileApi.delete(path, PANEL_ID);
-        }
+            return fileApi.read(path, PANEL_ID);
+        });
         if (text === null) throw new Error("The imported file could not be read.");
         const file = parseFlowFile(text);
         await props.add(file);

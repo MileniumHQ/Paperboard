@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as Blockly from "blockly";
 import { BUILTIN_BLOCKS } from "../src/lib/blockDefs";
 import { MAX_CALL_DEPTH, runHat, type Host } from "../src/lib/interpreter";
-import { webRefusal } from "../src/lib/library";
+import { WEB_MAX_CHARS, web, webRefusal } from "../src/lib/library";
 import { BUILTIN } from "../src/lib/names";
 import { block, find, num, saved, steps, text, top, type Json } from "./helpers/workspace";
 
@@ -258,6 +258,7 @@ describe("functions", () => {
 describe("web blocks", () => {
     let server: ReturnType<typeof Bun.serve>;
     let base: string;
+    let reading: () => void = () => {};
     beforeAll(() => {
         server = Bun.serve({
             hostname: "127.0.0.1",
@@ -266,6 +267,21 @@ describe("web blocks", () => {
                 const path = new URL(req.url).pathname;
                 if (path === "/status") return Response.json({ online: 3, name: "Survival" });
                 if (path === "/echo") return Response.json({ got: await req.json() });
+                // an answer that never ends, a megabyte at a time
+                if (path === "/endless") return new Response(new ReadableStream({ pull: (c) => c.enqueue(new Uint8Array(1_000_000).fill(97)) }));
+                // an answer whose first part comes, then nothing: the test is told once it's being read
+                if (path === "/stalls") {
+                    let pulls = 0;
+                    return new Response(
+                        new ReadableStream({
+                            pull: (c) => {
+                                if (++pulls === 1) return c.enqueue(new TextEncoder().encode("first part"));
+                                reading();
+                                return new Promise(() => {});
+                            },
+                        }),
+                    );
+                }
                 return new Response("nope", { status: 404, statusText: "Not Found" });
             },
         });
@@ -287,6 +303,18 @@ describe("web blocks", () => {
         const err = await runHat(top(ws, BUILTIN.onRun), null, ws, host().host).catch((e) => e);
         expect(err.message).toBe(`GET ${base}/missing answered 404 Not Found`);
         expect(err.blockId).toBe(find(ws, BUILTIN.webGet).id);
+    });
+
+    test("an answer longer than the most a block takes fails, and is read no further", async () => {
+        const err = await web("GET", `${base}/endless`, null, "TEXT", new AbortController().signal).catch((e) => e);
+        expect(err.message).toBe(`${base}/endless answered with more than ${WEB_MAX_CHARS} characters`);
+    });
+
+    test("a stop while the answer is being read stops the block, and says so", async () => {
+        const stop = new AbortController();
+        reading = () => stop.abort();
+        const err = await web("GET", `${base}/stalls`, null, "TEXT", stop.signal).catch((e) => e);
+        expect(err.message).toBe("The run was stopped");
     });
 
     test("plain http reaches only this computer, and only web addresses are fetched", () => {
