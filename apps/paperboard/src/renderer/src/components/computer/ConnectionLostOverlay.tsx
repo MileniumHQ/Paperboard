@@ -1,41 +1,21 @@
-import { type Component, createSignal, Show } from "solid-js";
+import { type Component, Show } from "solid-js";
 import { PaperFlex, PaperText, PaperButton, PaperIcon } from "@mileniumhq/paperui";
 import styles from "./ConnectionLostOverlay.module.css";
 import type { ComputerItem } from "../../App";
-import { computersApi, logToMain } from "../../lib/shell";
+import { createReachCheck } from "../../lib/reachCheck";
 
 export interface ConnectionLostOverlayProps {
     computer: ComputerItem;
-    onReconnectSuccess?: () => void;
+    /** Attempt Reconnect reached it: the caller reconnects to it */
+    onReconnectSuccess: () => void;
 }
 
 export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
     props,
 ) => {
-    const [isReconnecting, setIsReconnecting] = createSignal(false);
-    const [lastError, setLastError] = createSignal<string | null>(null);
-
+    const reach = createReachCheck();
     const handleReconnect = async () => {
-        if (isReconnecting()) return;
-        setIsReconnecting(true);
-        setLastError(null);
-        try {
-            const probe = await computersApi.probe(
-                props.computer.host,
-                props.computer.port,
-            );
-            if (probe && probe.reachable) {
-                await computersApi.switch(props.computer.id);
-                props.onReconnectSuccess?.();
-            } else {
-                setLastError(probe?.error || "Unreachable");
-            }
-        } catch (err: any) {
-            logToMain("error", "Reconnect attempt failed:", err);
-            setLastError(err?.message || "Unreachable");
-        } finally {
-            setIsReconnecting(false);
-        }
+        if (!reach.checking() && (await reach.check(props.computer))) props.onReconnectSuccess();
     };
 
     return (
@@ -68,14 +48,14 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
 
             <PaperFlex center direction="column" gap="half">
                 <PaperButton size="tiny"
-                    disabled={isReconnecting()}
+                    disabled={reach.checking()}
                     onClick={handleReconnect}>
                     <PaperIcon>restart_alt</PaperIcon>
-                    {isReconnecting() ? "Reconnecting..." : "Attempt Reconnect"}
+                    {reach.checking() ? "Reconnecting..." : "Attempt Reconnect"}
                 </PaperButton>
-                <Show when={lastError()}>
+                <Show when={reach.error()}>
                     <PaperText preset="error">
-                        Last error: {lastError()}
+                        Last error: {reach.error()}
                     </PaperText>
                 </Show>
             </PaperFlex>

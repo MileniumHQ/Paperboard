@@ -1,10 +1,8 @@
-import { type Component, Show, createSignal } from "solid-js";
+import { type Component, Show } from "solid-js";
 import {
-    PaperText,
     PaperButton,
     PaperFlex,
     PaperIcon,
-    PaperModal,
     PaperPage,
     PaperPageHeader,
 } from "@mileniumhq/paperui";
@@ -15,38 +13,16 @@ import ComputerPorts from "./ComputerPorts";
 
 export interface ComputerSettingsProps {
     computer?: ComputerItem;
-    onRemove?: (
-        id: string,
-    ) => Promise<{ ok: boolean; error?: string } | void> | void;
+    /** opens the Forget Computer dialog, the same one the rail's menu opens */
+    onForget: () => void;
     onChangeName: () => void;
 }
 
 const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
-    const [isRemoving, setIsRemoving] = createSignal(false);
-    const [isConfirmOpen, setIsConfirmOpen] = createSignal(false);
-    const [removeError, setRemoveError] = createSignal<string | null>(null);
-
     const isLocal = () => Boolean(props.computer?.isLocal);
     const address = () => {
         const host = props.computer?.networkAddress || props.computer?.host || "127.0.0.1";
         return isLocal() ? host : `${host}:${props.computer?.port || 45464}`;
-    };
-
-    const handleConfirmRemove = async () => {
-        if (!props.computer || props.computer.isLocal) return;
-        setIsRemoving(true);
-        try {
-            // R4: the modal closes only on success; a failure keeps it
-            // open with the reason, mirroring the forget-confirm flow
-            const result = await props.onRemove?.(props.computer.id);
-            if (result && !result.ok) {
-                setRemoveError(result.error ?? "Couldn't forget this computer.");
-                return;
-            }
-            setIsConfirmOpen(false);
-        } finally {
-            setIsRemoving(false);
-        }
     };
 
     return (
@@ -72,50 +48,12 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
 
                 <Show when={!isLocal()}>
                     <PaperFlex direction="row" justify="flex-start">
-                        <PaperButton
-                            variant="danger"
-                            disabled={isRemoving()}
-                            onClick={() => setIsConfirmOpen(true)}
-                        >
-                            {isRemoving() ? "Removing..." : "Forget Computer"}
+                        <PaperButton variant="danger" onClick={() => props.onForget()}>
+                            Forget Computer
                         </PaperButton>
                     </PaperFlex>
                 </Show>
             </PaperFlex>
-
-            <PaperModal
-                open={isConfirmOpen()}
-                onClose={() => setIsConfirmOpen(false)}
-                title="Forget Computer"
-                size="small"
-                footer={
-                    <>
-                        <PaperButton
-                            variant="text"
-                            onClick={() => setIsConfirmOpen(false)}
-                            disabled={isRemoving()}>
-                            Cancel
-                        </PaperButton>
-                        <PaperButton
-                            variant="danger"
-                            disabled={isRemoving()}
-                            onClick={handleConfirmRemove}>
-                            {isRemoving() ? "Removing..." : "Forget Computer"}
-                        </PaperButton>
-                    </>
-                }
-            >
-                <PaperText preset="text">
-                    Are you sure you want to forget{" "}
-                    <strong>{props.computer?.name || "this computer"}</strong>?
-                    This will disconnect all panels on this machine.
-                </PaperText>
-                <Show when={removeError()}>
-                    <PaperText preset="error">
-                        {removeError()}
-                    </PaperText>
-                </Show>
-            </PaperModal>
         </PaperPage>
     );
 };

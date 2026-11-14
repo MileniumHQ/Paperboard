@@ -1,4 +1,5 @@
 import { type Component, createSignal, For, onMount, Show } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import { PaperButton, PaperCard, PaperFlex, PaperModal, PaperSectionHeader, PaperText } from "@mileniumhq/paperui";
 import { backupLocationLabel, backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
 import { isBrowserShell, shellIpc } from "../../lib/shell";
@@ -11,7 +12,10 @@ import styles from "./BackupLocations.module.css";
 // panels can keep backups in, what each holds and has free, adding one, and
 // removing one. Removing a location keeps the backups already there.
 const BackupLocations: Component<{ computerId: string; computerName: string }> = (props) => {
-    const [locations, setLocations] = createSignal<BackupLocation[] | null>(null);
+    // reconciled by id: a reload keeps each card, and its space line, as it is
+    const [state, setState] = createStore<{ locations: BackupLocation[] | null }>({ locations: null });
+    const locations = () => state.locations;
+    const setLocations = (list: BackupLocation[] | null) => setState("locations", list ? reconcile(list, { key: "id" }) : null);
     const [usage, setUsage] = createSignal<Record<string, UsageState>>({});
     const [loadError, setLoadError] = createSignal("");
     // the locations file is damaged: shown with its own recovery action
@@ -22,23 +26,31 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
     const [removeBusy, setRemoveBusy] = createSignal(false);
     const [removeError, setRemoveError] = createSignal("");
 
+    // a newer load (after an add, a remove, a reconnect) wins over an older one still out
+    let loads = 0;
     const load = async () => {
+        const request = ++loads;
         setLoadError("");
         setProblem("");
         try {
             const damaged = await backupLocationsApi.problem(props.computerId);
+            if (request !== loads) return;
             if (damaged) {
                 setLocations(null);
                 setProblem(damaged);
                 return;
             }
             const list = await backupLocationsApi.list(props.computerId);
+            if (request !== loads) return;
             setLocations(list);
+            // a location keeps the space it showed until its new answer is in
             for (const location of list) {
-                setUsage((prev) => ({ ...prev, [location.id]: { kind: "loading" } }));
-                void loadUsage(location.id, props.computerId).then((state) => setUsage((prev) => ({ ...prev, [location.id]: state })));
+                void loadUsage(location.id, props.computerId).then((usage) => {
+                    if (request === loads) setUsage((prev) => ({ ...prev, [location.id]: usage }));
+                });
             }
         } catch (err) {
+            if (request !== loads) return;
             setLocations(null);
             setLoadError(`Backup locations could not be loaded: ${(err as Error)?.message ?? err}`);
         }

@@ -1,7 +1,7 @@
-import { type Component, createEffect, createSignal, on, Show } from "solid-js";
+import { type Component, createEffect, on, Show } from "solid-js";
 import { PaperFlex, PaperText, PaperButton, PaperIcon, PaperModal } from "@mileniumhq/paperui";
 import type { ComputerItem } from "../../App";
-import { computersApi } from "../../lib/shell";
+import { createReachCheck } from "../../lib/reachCheck";
 
 export interface OfflineComputerModalProps {
     computer?: ComputerItem;
@@ -9,7 +9,7 @@ export interface OfflineComputerModalProps {
     onClose: () => void;
     /** User chose to forget the unreachable computer. */
     onForget: () => void;
-    /** Try Again reached it: the caller selects the computer normally. */
+    /** Try Again reached it: the caller reconnects to it */
     onReconnectSuccess: () => void;
 }
 
@@ -18,33 +18,10 @@ export interface OfflineComputerModalProps {
 export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
     props,
 ) => {
-    const [isProbing, setIsProbing] = createSignal(false);
-    const [error, setError] = createSignal<string | null>(null);
-
-    // a newer probe, or the dialog closing, makes an older probe's answer moot
-    let probeRequest = 0;
+    const reach = createReachCheck();
     const attemptReconnect = async () => {
         const target = props.computer;
-        if (!target) return;
-        const request = ++probeRequest;
-        setIsProbing(true);
-        setError(null);
-        try {
-            const probe = await computersApi.probe(target.host, target.port);
-            if (request !== probeRequest) return;
-            if (probe?.reachable) {
-                props.onReconnectSuccess();
-                return;
-            }
-            setError(probe?.error || "Unreachable");
-        } catch (err: any) {
-            if (request !== probeRequest) return;
-            setError(err?.message || "Unreachable");
-        } finally {
-            // only the current probe may clear the busy flag: a stale one
-            // would re-enable "Try Again" while a newer probe is in flight
-            if (request === probeRequest) setIsProbing(false);
-        }
+        if (target && (await reach.check(target))) props.onReconnectSuccess();
     };
 
     // The dialog opens on the answer of the probe that found the computer
@@ -54,11 +31,7 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
     createEffect(
         on(
             () => (props.open ? props.computer?.id : undefined),
-            (id) => {
-                probeRequest++;
-                setIsProbing(false);
-                setError(id ? (props.computer?.status?.error ?? null) : null);
-            },
+            (id) => reach.reset(id ? (props.computer?.status?.error ?? null) : null),
         ),
     );
 
@@ -75,9 +48,9 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
                         onClick={props.onForget}>
                         Forget Computer
                     </PaperButton>
-                    <PaperButton disabled={isProbing()} onClick={attemptReconnect}>
+                    <PaperButton disabled={reach.checking()} onClick={attemptReconnect}>
                         <PaperIcon>restart_alt</PaperIcon>
-                        {isProbing() ? "Checking…" : "Try Again"}
+                        {reach.checking() ? "Checking…" : "Try Again"}
                     </PaperButton>
                 </>
             }
@@ -94,9 +67,9 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
                     )}
                 </Show>
 
-                <Show when={error()}>
+                <Show when={reach.error()}>
                     <PaperText preset="error">
-                        Last error: {error()}
+                        Last error: {reach.error()}
                     </PaperText>
                 </Show>
             </PaperFlex>

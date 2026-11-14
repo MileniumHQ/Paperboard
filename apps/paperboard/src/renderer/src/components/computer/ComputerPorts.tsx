@@ -1,6 +1,7 @@
 import { type Component, createSignal, For, onMount, Show } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperSectionHeader, PaperSettingItem, PaperSettingList, PaperText, PaperToggle } from "@mileniumhq/paperui";
 import { portSettingsApi, type PortClaim, type PortPolicy, type PortProtocol } from "@mileniumhq/paperapi";
+import { createSavedValue } from "../../lib/saveQueue";
 
 const PROTOCOL_NAMES: Record<PortProtocol, string> = { tcp: "TCP", udp: "UDP", "tcp+udp": "TCP and UDP" };
 
@@ -8,9 +9,10 @@ const PROTOCOL_NAMES: Record<PortProtocol, string> = { tcp: "TCP", udp: "UDP", "
 // panels hold, and what happens when one a panel asks for is taken.
 const ComputerPorts: Component<{ computerId: string }> = (props) => {
     const [claims, setClaims] = createSignal<PortClaim[] | null>(null);
-    const [policy, setPolicy] = createSignal<PortPolicy>("next-free");
+    const policy = createSavedValue<PortPolicy>("next-free", async (next) => {
+        await portSettingsApi.setPolicy(next, props.computerId);
+    });
     const [loadError, setLoadError] = createSignal("");
-    const [saving, setSaving] = createSignal(false);
     const [saveError, setSaveError] = createSignal("");
 
     const load = async () => {
@@ -18,7 +20,7 @@ const ComputerPorts: Component<{ computerId: string }> = (props) => {
         try {
             const state = await portSettingsApi.all(props.computerId);
             setClaims([...state.claims].sort((a, b) => a.port - b.port));
-            setPolicy(state.policy);
+            policy.loaded(state.policy);
         } catch (err) {
             setClaims(null);
             setLoadError(`Ports could not be loaded: ${(err as Error)?.message ?? err}`);
@@ -26,16 +28,11 @@ const ComputerPorts: Component<{ computerId: string }> = (props) => {
     };
     onMount(() => void load());
 
-    const setRefuse = async (refuse: boolean) => {
-        setSaving(true);
+    const setRefuse = (refuse: boolean) => {
         setSaveError("");
-        try {
-            setPolicy(await portSettingsApi.setPolicy(refuse ? "refuse" : "next-free", props.computerId));
-        } catch (err) {
+        return policy.change(refuse ? "refuse" : "next-free").catch((err) => {
             setSaveError(`The setting was not saved: ${(err as Error)?.message ?? err}`);
-        } finally {
-            setSaving(false);
-        }
+        });
     };
 
     return (
@@ -59,7 +56,7 @@ const ComputerPorts: Component<{ computerId: string }> = (props) => {
                                     title="Refuse taken ports"
                                     description="When a port a panel asks for is in use, show an error instead of giving it the next free one."
                                 >
-                                    <PaperToggle checked={policy() === "refuse"} disabled={saving()} onChange={(checked) => void setRefuse(checked)} />
+                                    <PaperToggle checked={policy.value() === "refuse"} onChange={setRefuse} />
                                 </PaperSettingItem>
                             </PaperSettingList>
                             <Show when={saveError()}>

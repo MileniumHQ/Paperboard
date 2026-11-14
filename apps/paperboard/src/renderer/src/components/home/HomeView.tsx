@@ -5,6 +5,7 @@ import {
     createMemo,
     createSignal,
     For,
+    on,
     onCleanup,
     onMount,
     Show,
@@ -370,7 +371,8 @@ const HomeView: Component<HomeViewProps> = (props) => {
     // Home spans every paired computer, so it asks each one for its panels
     // once; a failure is shown with a retry on the tile and in the library.
     const requested = new Set<string>();
-    createEffect(() => {
+    // tracks the computers only: the lists it asks for land in panelsByComputer
+    createEffect(on(() => props.computers.map((c) => c.id).join("\n"), () => {
         const ids = new Set(props.computers.map((c) => c.id));
         for (const id of [...requested]) if (!ids.has(id)) requested.delete(id);
         for (const id of ids) {
@@ -378,7 +380,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
             requested.add(id);
             props.onRefreshPanels(id);
         }
-    });
+    }));
 
     // ── live frames ──────────────────────────────────────────────────────
     let observer: IntersectionObserver | undefined;

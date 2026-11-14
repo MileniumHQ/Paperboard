@@ -4,7 +4,9 @@
 // over the test's throwaway PAPERBOARD_DIR. Only what is a network or an OS
 // boundary is the harness's: mDNS discovery (it finds nothing here) and the
 // system work main does after a settings save. A test can hold a probe of an
-// address, to answer it after a newer one, and count the probes.
+// address, to answer it after a newer one, and count the probes; make the
+// next forget fail; and hold or fail the saves of panel permissions, which
+// it keeps in the store main keeps them in.
 //
 // The test drives it over stdin, one JSON command per line, and reads each
 // answer as one stdout line starting with ANSWER (the daemon client logs to
@@ -19,6 +21,9 @@ import connectionPool from "../../../src/main/communication/papercrane/Connectio
 import { servePanelAsset } from "../../../src/main/panelServe";
 import { getLocalDir } from "../../../papercrane/paths";
 import { launchOptionsFromArgv } from "../../../src/shared/launchOptions";
+import { PanelPermissionStore } from "../../../src/main/panelPermissions";
+import type { PanelPermission, PermissionAnswer } from "../../../src/shared/panelPermissions";
+import { initialAppUpdateState } from "../../../src/shared/appUpdate";
 import { ANSWER } from "./protocol";
 
 const rendererDir = process.argv[2];
@@ -46,6 +51,40 @@ invoke["computer-probe"] = async (args) => {
     return answer;
 };
 invoke["discovery-list"] = () => [];
+let failRemove: string | null = null;
+invoke["computer-remove"] = (args) => {
+    const refused = failRemove;
+    failRemove = null;
+    if (refused) throw new Error(refused);
+    return shared["computer-remove"](args);
+};
+// an Electron window also asks for its updates: there are none here
+invoke["app-update-state"] = () => initialAppUpdateState;
+invoke["update-queue"] = () => ({ revision: 0, checking: false, items: [], holds: [], checkError: null });
+// panel permissions are an Electron window's (the browser asks for itself):
+// the shell shows them only when it runs in one
+const permissions = new PanelPermissionStore(path.join(getLocalDir(), "panel-permissions.json"));
+permissions.onChange(() => pushToShells("panel-permissions-changed", null));
+const permissionSaves: { answer: PermissionAnswer; run: () => void }[] = [];
+const permissionSaveWaiters: (() => void)[] = [];
+let holdPermissionSaves = false;
+let failPermissionSave: string | null = null;
+invoke["panel-permissions-list"] = () => permissions.list();
+invoke["panel-permission-set"] = (args) => {
+    const { panelId, permission, answer } = args as { panelId: string; permission: PanelPermission; answer: PermissionAnswer };
+    return new Promise<void>((resolve, reject) => {
+        const run = () => {
+            const refused = failPermissionSave;
+            failPermissionSave = null;
+            if (refused) return reject(new Error(refused));
+            permissions.set(panelId, permission, answer);
+            resolve();
+        };
+        if (!holdPermissionSaves) return run();
+        permissionSaves.push({ answer, run });
+        for (const wake of permissionSaveWaiters.splice(0)) wake();
+    });
+};
 // main applies the saved theme and login item to the OS; nothing to apply here
 invoke["app-settings-changed"] = () => null;
 
@@ -69,7 +108,13 @@ type Command =
     | { cmd: "hold-probe"; host: string }
     | { cmd: "release-probe"; host: string }
     | { cmd: "pair"; host: string; port: number; code: string; name: string }
-    | { cmd: "rename"; id: string; name: string };
+    | { cmd: "rename"; id: string; name: string }
+    | { cmd: "fail-remove"; message: string }
+    | { cmd: "set-permission"; panelId: string; permission: PanelPermission; answer: PermissionAnswer }
+    | { cmd: "permission"; panelId: string; permission: PanelPermission }
+    | { cmd: "hold-permission-saves" }
+    | { cmd: "held-permission-save" }
+    | { cmd: "release-permission-save"; fail?: string };
 
 async function run(command: Command): Promise<unknown> {
     switch (command.cmd) {
@@ -95,6 +140,29 @@ async function run(command: Command): Promise<unknown> {
         case "rename":
             // as another window of this app renaming it would: the change is pushed to every shell
             return connectionPool.updateComputer(command.id, { name: command.name });
+        case "fail-remove":
+            failRemove = command.message;
+            return true;
+        case "set-permission":
+            permissions.set(command.panelId, command.permission, command.answer);
+            return true;
+        case "permission":
+            return permissions.list().find((e) => e.panelId === command.panelId && e.permission === command.permission)?.answer ?? null;
+        case "hold-permission-saves":
+            holdPermissionSaves = true;
+            return true;
+        case "held-permission-save":
+            // resolves with the answer the oldest held save asks for, once one is held
+            while (permissionSaves.length === 0) await new Promise<void>((wake) => permissionSaveWaiters.push(wake));
+            return permissionSaves[0].answer;
+        case "release-permission-save": {
+            // the oldest held save answers: as it was asked, or refused
+            const save = permissionSaves.shift();
+            if (!save) throw new Error("No permission save is held");
+            if (command.fail) failPermissionSave = command.fail;
+            save.run();
+            return true;
+        }
     }
 }
 
