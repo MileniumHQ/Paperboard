@@ -6,6 +6,7 @@ import { getSupervisorSocketPath, supervisorEndpointName, supervisorPresent } fr
 import { supervisorLaunch } from "../../../papercrane/supervisorLaunch";
 import { PaperCraneAuth } from "../../../papercrane/auth";
 import { PanelServicesManager } from "../../../papercrane/panelServices";
+import { WorkloadRegistry } from "../../../papercrane/engineWorkloads";
 import { killWorkloads, startCrane, workloadRecords, type CraneProcess } from "../../daemon/support/crane";
 import { dataDir, restoreEnv, tempDir } from "../../daemon/support/fs";
 import { installPanelFiles, serviceCall, serviceSource, stateRead } from "../../daemon/support/panels";
@@ -150,6 +151,39 @@ describe("supervised workloads are reported faithfully", () => {
 		await again.ok("process:kill", { id: "deep" });
 		await exitOf(again, "deep");
 		await again.close();
+	});
+
+	// an attach can reach a supervisor before adoption does: it is then the
+	// same live workload, and its exit frees what it ran from
+	test("a workload an attach reconnects to before adoption ends here when it exits", async () => {
+		const dir = dataDir();
+		const first = await crane(dir);
+		const rpc = await first.rpc();
+		await rpc.ok("process:run", { id: "early", ...forever });
+		const [record] = await waitFor("the workload's metadata", () => workloadRecords(dir).length === 1 && workloadRecords(dir));
+		await rpc.close();
+		await stopped(first);
+
+		const previous = process.env.PAPERBOARD_DIR;
+		process.env.PAPERBOARD_DIR = dir;
+		try {
+			let ended = 0;
+			const registry = new WorkloadRegistry(path.join(dir, "local"), { beforeStart: async () => {}, requireNotReplacing: () => {}, ended: () => { ended++; } });
+			const changes: Array<{ id: string; state: string }> = [];
+			registry.onLifecycle((change) => { if (change.type === "workload") changes.push(change); });
+			const attaches = [registry.attachProcess("early", {}), registry.attachProcess("early", {})];
+			expect(await Promise.all(attaches)).toEqual([true, true]);
+			await registry.recoverRunningSupervisors();
+			expect(registry.workloadRoots()).toHaveLength(1);
+			expect(registry.users(() => true).map((use) => use.processId)).toEqual(["early"]);
+
+			process.kill(record!.childPid, "SIGKILL");
+			await waitFor("the workload's exit", () => changes.some((change) => change.id === "early" && change.state === "exited"));
+			expect(registry.users(() => true)).toEqual([]);
+			expect(ended).toBe(1);
+		} finally {
+			restoreEnv("PAPERBOARD_DIR", previous);
+		}
 	});
 
 	test("output printed between a socket's connect and its attach arrives once, in the replay", async () => {

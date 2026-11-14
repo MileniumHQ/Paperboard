@@ -8,7 +8,6 @@ import {
     SupervisedProcessClient,
     supervisorPresent,
     supervisorEndpointName,
-    supervisorSocketPathForName,
     type InputEncoding,
 } from "./supervisor";
 import { readStateFileSync, writeJsonAtomicSync, LimitError } from "./storage";
@@ -34,6 +33,8 @@ export interface TerminalStreams {
     /** the shell changed folder */
     cwd?: (cwd: string) => void;
 }
+/** what a supervisor's metadata file says about the workload it runs */
+type SupervisorMeta = { config: { command?: unknown; noStdin?: unknown; important?: unknown }; startedAt?: unknown };
 type StreamClient = { on: (event: string, fn: any) => unknown; off: (event: string, fn: any) => unknown };
 
 /** a live workload, as the runtime packages see it */
@@ -266,27 +267,54 @@ export class WorkloadRegistry {
         return roots;
     }
 
+    // one connect per id at a time: an attach that races adoption shares the
+    // same socket instead of opening a second one
+    private connecting = new Map<string, Promise<SupervisedProcessClient | null>>();
+
     // lookup with reconnect, shared by attach/isRunning
-    private async getOrConnectClient(
-        id: string,
-    ): Promise<SupervisedProcessClient | null> {
-        let client = this.clients.get(id);
-        if (!client) {
-            // Windows supervisors listen on a named pipe, which fs cannot
-            // stat: supervisorPresent keys off the metadata file there so an
-            // orphaned Ollama is found and stopped instead of a second
-            // supervisor racing the same pipe name.
-            if (!supervisorPresent(id)) return null;
-            client = new SupervisedProcessClient(id);
-            if (!(await client.connect())) return null;
+    private async getOrConnectClient(id: string): Promise<SupervisedProcessClient | null> {
+        const live = this.clients.get(id);
+        if (live) return live;
+        // Windows supervisors listen on a named pipe, which fs cannot
+        // stat: supervisorPresent keys off the metadata file there so an
+        // orphaned Ollama is found and stopped instead of a second
+        // supervisor racing the same pipe name.
+        if (!supervisorPresent(id)) return null;
+        return this.connectSupervisor(id, () => this.supervisorMeta(id));
+    }
+
+    // Connects to a supervisor that is already running and takes it on as a
+    // live workload, the same way whether an attach or adoption found it:
+    // its streams, what it runs, and its exit, which ends it here.
+    private connectSupervisor(id: string, readMeta: () => SupervisorMeta | null): Promise<SupervisedProcessClient | null> {
+        const pending = this.connecting.get(id);
+        if (pending) return pending;
+        const attempt = (async () => {
+            const client = new SupervisedProcessClient(id);
+            if (!(await client.connect())) {
+                client.destroy();
+                return null;
+            }
+            const live = this.clients.get(id);
+            if (live) {
+                client.destroy();
+                return live;
+            }
+            const meta = readMeta();
             this.clients.set(id, client);
             this.wireStreams(id, client);
-            const meta = this.supervisorMeta(id);
             this.clientCommands.set(id, typeof meta?.config.command === "string" ? meta.config.command : null);
             if (meta?.config.noStdin === true) this.inputless.add(id);
             this.rememberWorkload(id, meta?.startedAt, meta?.config.important === true);
-        }
-        return client;
+            client.on("exit", (code: number | null) => {
+                if (this.clients.get(id) !== client) return;
+                this.clients.delete(id);
+                this.workloadEnded(id, code);
+            });
+            return client;
+        })().finally(() => this.connecting.delete(id));
+        this.connecting.set(id, attempt);
+        return attempt;
     }
 
     // Terminal management
@@ -565,19 +593,13 @@ export class WorkloadRegistry {
             if (!file.endsWith(".json")) continue;
             const stem = file.slice(0, -".json".length);
             let id: unknown;
-            let command: unknown;
-            let noStdin: unknown;
-            let startedAt: unknown;
-            let important = false;
+            let meta: SupervisorMeta;
             let mountHolderPid: unknown;
             try {
-                const meta = JSON.parse(await fs.promises.readFile(path.join(socketsDir, file), "utf8"));
-                id = meta?.id;
-                command = meta?.config?.command;
-                noStdin = meta?.config?.noStdin;
-                startedAt = meta?.startedAt;
-                important = meta?.config?.important === true;
-                mountHolderPid = meta?.config?.mountHolderPid;
+                const parsed = JSON.parse(await fs.promises.readFile(path.join(socketsDir, file), "utf8"));
+                id = parsed?.id;
+                meta = { config: parsed?.config && typeof parsed.config === "object" ? parsed.config : {}, startedAt: parsed?.startedAt };
+                mountHolderPid = parsed?.config?.mountHolderPid;
             } catch (err) {
                 logger.warn(`[Paperboard Server] unreadable supervisor metadata ${file}; not adopting it:`, err);
                 continue;
@@ -587,19 +609,7 @@ export class WorkloadRegistry {
                 logger.warn(`[Paperboard Server] supervisor metadata ${file} names "${id}", which does not own that endpoint; not adopting it`);
                 continue;
             }
-            const client = new SupervisedProcessClient(id, supervisorSocketPathForName(stem));
-            if (await client.connect()) {
-                this.clients.set(id, client);
-                this.clientCommands.set(id, typeof command === "string" ? command : null);
-                if (noStdin === true) this.inputless.add(id);
-                this.rememberWorkload(id, startedAt, important);
-                client.on("exit", (code: number | null) => {
-                    if (this.clients.get(id) !== client) return;
-                    this.clients.delete(id);
-                    this.workloadEnded(id, code);
-                });
-            } else {
-                client.destroy();
+            if (!(await this.connectSupervisor(id, () => meta))) {
                 // A supervisor that was killed outright never stopped the
                 // AppImage mount it ran from (supervisorLaunch.ts). Its
                 // metadata goes too, so a later start never signals that pid
@@ -661,7 +671,7 @@ export class WorkloadRegistry {
         this.runtime.ended();
     }
 
-    private supervisorMeta(id: string): { config: { command?: unknown; noStdin?: unknown; important?: unknown }; startedAt?: unknown } | null {
+    private supervisorMeta(id: string): SupervisorMeta | null {
         try {
             const meta = JSON.parse(fs.readFileSync(path.join(getSocketsDir(), `${supervisorEndpointName(id)}.json`), "utf8"));
             return meta?.config && typeof meta.config === "object" ? { config: meta.config, startedAt: meta.startedAt } : null;
@@ -731,6 +741,8 @@ export class WorkloadRegistry {
             } finally { client.off("exit", onExit); }
         }
         client.destroy();
+        // its own exit listener may have ended it already
+        if (this.clients.get(id) !== client) return;
         this.clients.delete(id);
         this.workloadEnded(id, exitCode);
     }}
