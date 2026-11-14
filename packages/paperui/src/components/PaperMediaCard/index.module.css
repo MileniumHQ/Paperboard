@@ -143,6 +143,10 @@
     display: block;
 }
 
+.iconStandaloneRow {
+    margin-bottom: var(--paper-uigap-half);
+}
+
 .iconStandalone {
     width: var(--paper-media-icon-size);
     height: var(--paper-media-icon-size);
@@ -205,6 +209,10 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--paper-uigap-half);
+}
+
+.badge {
+    flex-shrink: 0;
 }
 
 .titleColumn {

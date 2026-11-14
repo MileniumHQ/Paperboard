@@ -1,4 +1,4 @@
-import { getVarCss, resolveSize } from "../../utils/theme";
+import { resolveSize } from "../../utils/theme";
 import type { PaperSize } from "../../types";
 import styles from "./index.module.css";
 import { children, splitProps, For, Show, type JSX, type ParentProps } from "solid-js";
@@ -256,7 +256,7 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                 </Show>
 
                 <Show when={!hasBanner() && !local.poster && icon()}>
-                    <div style={{ "margin-bottom": `${getVarCss("uigap-half")}` }}>{renderIcon(styles.iconStandalone)}</div>
+                    <div class={styles.iconStandaloneRow}>{renderIcon(styles.iconStandalone)}</div>
                 </Show>
 
                 <div class={styles.headerRow}>
@@ -272,7 +272,7 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                     </div>
 
                     <Show when={badge()}>
-                        <div style={{ "flex-shrink": 0 }}>{badge()}</div>
+                        <div class={styles.badge}>{badge()}</div>
                     </Show>
                 </div>
 
