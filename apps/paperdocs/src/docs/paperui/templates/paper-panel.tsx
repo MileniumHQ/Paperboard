@@ -104,7 +104,8 @@ export default function App() {
             <PaperTextList>
                 <li>The menu fills the panel. Picking an entry slides that entry's interface in over it as a page, with a top bar that shows the entry's title and icon and a back button.</li>
                 <li>Back is the bar's button, the system Back action, or a rightward swipe. See <PaperLink href="/docs/paperui/utilities/">Utilities</PaperLink> for the swipe rules.</li>
-                <li>Opening is by picking an entry, so the page stays closed on first render even when the menu already has a value.</li>
+                <li>Opening is by picking an entry, so a panel that loads at phone width starts on the menu even when the menu already has a value.</li>
+                <li>A wide panel narrowed into the phone layout keeps showing what was open: the interface group's entry opens at once as its page, without sliding in. Back from it goes to the menu. When the group's value is not one of the menu's entries, the menu shows.</li>
                 <li>A closed page stays mounted off-screen and inert, so its state survives going back to the menu.</li>
                 <li>Only a vertical <PaperCode>PaperMenu</PaperCode> inside the panel is the navigation. A horizontal menu or one with <PaperCode>embedded</PaperCode> is not.</li>
             </PaperTextList>

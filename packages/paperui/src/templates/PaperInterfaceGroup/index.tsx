@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { createContext, useContext, Show, splitProps, type JSX, type ParentProps } from "solid-js";
+import { createContext, onCleanup, useContext, Show, splitProps, type JSX, type ParentProps } from "solid-js";
 import { PaperPage, type PaperPageWidth } from "../PaperPage";
 import { usePaperPanel } from "../../contexts/panel";
 import { PaperSlidePage } from "../../components/PaperSlidePage";
@@ -43,6 +43,9 @@ export function PaperInterfaceGroup(props: ParentProps<PaperInterfaceGroupProps>
 
     // a phone-width PaperPanel: the group is the page its menu opens
     const entry = () => panel?.entry?.(local.value);
+    // the panel reopens what this shows when it narrows into the phone layout
+    const unregisterShown = panel?.registerShown?.(() => local.value);
+    if (unregisterShown) onCleanup(unregisterShown);
 
     return (
         <InterfaceGroupContext.Provider value={() => local.value}>

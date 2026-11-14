@@ -58,6 +58,22 @@ describe("PaperPanel phone layout", () => {
         expect(await layout()).toMatchObject({ pageInert: false, menuInert: true, title: "Settings" });
     });
 
+    test("narrowed into the phone layout, the entry that was open shows as its page; Back returns to the menu", async () => {
+        page = await browser.open("panel", { width: 1200, height: 844 });
+        await page.click(entry("settings"));
+        await page.waitFor(`document.getElementById("settings-page") !== null`, "the settings entry to show");
+
+        await page.send("Emulation.setDeviceMetricsOverride", { width: PHONE.width, height: PHONE.height, deviceScaleFactor: 1, mobile: false });
+        await page.frames();
+        // in place at once, not sliding in over the menu
+        expect(await page.eval(`Math.abs(document.querySelector('${PAGE}').getBoundingClientRect().left)`)).toBeLessThan(1);
+        expect(await layout()).toMatchObject({ pageInert: false, menuInert: true, title: "Settings" });
+
+        await page.click(`${PAGE} button[aria-label="Back"]`);
+        await settled(false);
+        expect(await layout()).toMatchObject({ pageInert: true, menuInert: false });
+    });
+
     test("a cancelable paperboard:back closes the top modal, then the page, then is left for the host", async () => {
         await openSettings();
         await page.eval("t.openModal()");

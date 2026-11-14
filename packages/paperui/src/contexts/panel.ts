@@ -26,6 +26,8 @@ export interface PaperPanelContextValue {
     /** menu entries announce their title and icon for the page bar */
     registerEntry?: (value: string | number, entry: PaperPanelEntry) => () => void;
     entry?: (value: string | number) => PaperPanelEntry | undefined;
+    /** the interface group announces the value it shows */
+    registerShown?: (value: () => string | number) => () => void;
 }
 
 export const PaperPanelContext = createContext<PaperPanelContextValue>();

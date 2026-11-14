@@ -1,5 +1,6 @@
 import styles from "./index.module.css";
 import {
+    batch,
     createSignal,
     onCleanup,
     onMount,
@@ -32,7 +33,9 @@ export const PAPER_PANEL_COMPACT_WIDTH = 520;
  * takes the remaining space and scrolls. No panel-level layout styles needed.
  *
  * On a phone-width panel the menu fills the panel instead, and picking an
- * entry slides its interface in over the menu as a page with a back bar.
+ * entry slides its interface in over the menu as a page with a back bar. A
+ * panel that loads at that width starts on the menu; one narrowed into it
+ * keeps showing the entry that was open, as that entry's page.
  */
 export function PaperPanel(props: ParentProps<PaperPanelProps>) {
     let ref: HTMLDivElement | undefined;
@@ -49,6 +52,8 @@ export function PaperPanel(props: ParentProps<PaperPanelProps>) {
     const [width, setWidth] = createSignal<number | null>(typeof window === "undefined" ? null : window.innerWidth);
     const [pageOpen, setPageOpen] = createSignal(false);
     const [entries, setEntries] = createSignal<ReadonlyMap<string | number, PaperPanelEntry>>(new Map());
+    // what the interface group shows, when it is one of the menu's entries
+    const [shown, setShown] = createSignal<(() => string | number) | null>(null);
 
     const compact = () => {
         const w = width();
@@ -61,7 +66,19 @@ export function PaperPanel(props: ParentProps<PaperPanelProps>) {
         if (typeof ResizeObserver === "undefined") return;
         const observer = new ResizeObserver((items) => {
             const w = items[0]?.contentRect.width;
-            if (w !== undefined) setWidth(w);
+            if (w === undefined) return;
+            const wasCompact = compact();
+            // one change: the page is already in place as the layout turns,
+            // rather than sliding in over the menu
+            batch(() => {
+                setWidth(w);
+                // narrowed into the phone layout: the person stays on the
+                // entry they were looking at, as its page, rather than being
+                // sent back to the menu (the first measurement above opens
+                // nothing, so a phone still starts on the menu)
+                const value = shown()?.();
+                if (!wasCompact && compact() && value !== undefined && entries().has(value)) setPageOpen(true);
+            });
         });
         observer.observe(ref);
         onCleanup(() => observer.disconnect());
@@ -97,6 +114,10 @@ export function PaperPanel(props: ParentProps<PaperPanelProps>) {
                 closePage: () => setPageOpen(false),
                 registerEntry,
                 entry: (value) => entries().get(value),
+                registerShown: (value) => {
+                    setShown(() => value);
+                    return () => setShown((current) => (current === value ? null : current));
+                },
             }}
         >
             <div ref={ref} {...rest} class={className()} classList={local.classList}>
