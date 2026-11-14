@@ -277,7 +277,7 @@ export class WorkloadRegistry {
         if (live) return live;
         // Windows supervisors listen on a named pipe, which fs cannot
         // stat: supervisorPresent keys off the metadata file there so an
-        // orphaned Ollama is found and stopped instead of a second
+        // orphaned workload is found and stopped instead of a second
         // supervisor racing the same pipe name.
         if (!supervisorPresent(id)) return null;
         return this.connectSupervisor(id, () => this.supervisorMeta(id));

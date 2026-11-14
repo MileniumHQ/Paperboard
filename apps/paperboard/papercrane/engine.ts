@@ -311,7 +311,7 @@ export class PaperCraneEngine {
             return finalDest;
         } catch (err: any) {
             if (fs.existsSync(tempPath))
-                await fs.promises.unlink(tempPath).catch((err) => logger.debug("[engine] temp unlink failed:", err));
+                await fs.promises.unlink(tempPath).catch((err) => logger.warn(`[engine] ${tempPath} was left on disk:`, err));
             onProgress?.({ stage: "error", percent: 0, message: err.message });
             throw err;
         }

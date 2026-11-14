@@ -352,7 +352,7 @@ export class PanelInstaller {
             });
             await fs.promises
                 .rm(stagingDir, { recursive: true, force: true })
-                .catch((err) => logger.debug("[engine] staging cleanup failed:", err));
+                .catch((err) => logger.warn(`[engine] the staging copy ${stagingDir} was left on disk:`, err));
 
             return {
                 ...(manifest as PanelManifest),
@@ -365,11 +365,11 @@ export class PanelInstaller {
         } catch (err) {
             await fs.promises
                 .rm(stagingDir, { recursive: true, force: true })
-                .catch((cleanupErr) => logger.debug("[engine] staging cleanup failed:", cleanupErr));
+                .catch((cleanupErr) => logger.warn(`[engine] the staging copy ${stagingDir} was left on disk:`, cleanupErr));
             throw err;
         } finally {
             if (fs.existsSync(tempArchive))
-                await fs.promises.unlink(tempArchive).catch((err) => logger.debug("[engine] archive cleanup failed:", err));
+                await fs.promises.unlink(tempArchive).catch((err) => logger.warn(`[engine] the download ${tempArchive} was left on disk:`, err));
         }
     }
 

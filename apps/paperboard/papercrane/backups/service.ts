@@ -317,8 +317,10 @@ export class BackupService {
                 if (target.kind === "gdrive") target.drive.clientId = clientId;
             });
         } catch (err) {
+            // the vault goes back to what it held: the old value, or nothing
             for (const [name, { found, value }] of previous) {
                 if (found && value) this.engine.setSecret(`${dest.id}.${name}`, value, BACKUP_VAULT_OWNER);
+                else this.engine.deleteSecret(`${dest.id}.${name}`, BACKUP_VAULT_OWNER);
             }
             throw err;
         } finally {
@@ -680,7 +682,13 @@ export class BackupService {
     }
 
     private async runRoutine(panelId: string): Promise<void> {
-        const schedule = readSchedules(this.schedulesFile).panels[panelId];
+        let schedule: BackupSchedule | undefined;
+        try {
+            schedule = readSchedules(this.schedulesFile).panels[panelId];
+        } catch (err) {
+            logger.error(`[backups] the routine backup for ${panelId} cannot run:`, err instanceof Error ? err.message : err);
+            return;
+        }
         if (!schedule) return;
         let result: ScheduleResult;
         let retrySoon = false;

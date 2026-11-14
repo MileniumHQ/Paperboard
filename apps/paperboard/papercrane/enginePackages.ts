@@ -659,13 +659,15 @@ export class PackageManager implements WorkloadRuntime {
         } catch (err: any) {
             log(`FAILED: ${err?.message || err}`);
             if (fs.existsSync(pkgDir) && !findBinDir(pkgDir, 4)) {
-                await fs.promises.rm(pkgDir, { recursive: true, force: true }).catch((err) => logger.debug("[engine] package dir cleanup failed:", err));
-                log("removed partial install");
+                await fs.promises.rm(pkgDir, { recursive: true, force: true }).then(
+                    () => log("removed partial install"),
+                    (err) => logger.warn(`[engine] the partial install ${pkgDir} was left on disk:`, err),
+                );
             }
             throw err;
         } finally {
             if (fs.existsSync(tempArchive)) {
-                await fs.promises.unlink(tempArchive).catch((err) => logger.debug("[engine] archive cleanup failed:", err));
+                await fs.promises.unlink(tempArchive).catch((err) => logger.warn(`[engine] the download ${tempArchive} was left on disk:`, err));
             }
         }
     }

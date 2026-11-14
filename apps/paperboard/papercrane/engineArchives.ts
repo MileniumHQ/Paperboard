@@ -78,7 +78,7 @@ export function findBinDir(dir: string, maxDepth: number): string | null {
 // installed package directory (Origami writes these; see
 // apps/origami/scripts/lib/records.ts). The installed package always ends
 // up with a bin/ directory at its root, which is what getPackagePath and
-// every consumer (`${path}/bin/java`, `${path}/bin/ollama`) rely on.
+// every consumer (`${path}/bin/<program>`) relies on.
 //
 // - wrapped (default): one top-level wrapper dir around bin/ (JDKs); a
 //   wrapper-less archive is re-extracted flat
