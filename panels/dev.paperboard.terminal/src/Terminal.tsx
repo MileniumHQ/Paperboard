@@ -3,13 +3,14 @@ import { Terminal, type IMarker } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { copyText, getVar, pasteText } from "@mileniumhq/paperui";
+import { copyText, pasteText } from "@mileniumhq/paperui";
 import { serviceApi, terminalApi } from "@mileniumhq/paperapi";
 import { terminalKeyAction, type TerminalKeyAction } from "./keys";
 import { keyBytes, withModifiers, type Modifiers, type NamedKey } from "./lib/softKeys";
 import { errorMessage, type Outcome } from "./lib/failure";
 import { joinScrollback } from "./lib/scrollback";
 import { linkOpens, outputText, pasteRunsAtOnce, promptTarget, type ScreenLine } from "./lib/screen";
+import { onThemeChange, screenColors, token } from "./lib/theme";
 import { writeRefusal, writeTerminal } from "./lib/terminalWrite";
 import styles from "./Terminal.module.css";
 import "@xterm/xterm/css/xterm.css";
@@ -36,14 +37,6 @@ export interface TerminalHandle {
 }
 
 export const activeTerminals = new Map<string, TerminalHandle>();
-
-// xterm paints a canvas, so it needs the theme's resolved values; a token
-// that isn't defined is a broken stylesheet, not a reason to guess a color
-function token(name: string): string {
-    const value = getVar(name);
-    if (!value) throw new Error(`PaperUI token --paper-${name} is not defined`);
-    return value;
-}
 
 export async function copySelection(id: string) {
     const term = activeTerminals.get(id)?.term;
@@ -94,14 +87,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
     let containerRef!: HTMLDivElement;
 
     onMount(() => {
-        // the screen is the paper its active tab sits on
-        const bg = token("surface-raised");
-        const fg = token("text");
-        const blue = token("primary");
-        const red = token("danger");
-        const green = token("success");
-        const yellow = token("warning");
-        const lightText = token("text-subtle");
+        const colors = screenColors();
 
         const openLink = (uri: string) => {
             if (!linkOpens(uri)) {
@@ -118,24 +104,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
             allowProposedApi: true,
             // links a program prints as links (OSC 8), such as ls --hyperlink
             linkHandler: { activate: (_event, uri) => openLink(uri) },
-            theme: {
-                background: bg,
-                foreground: fg,
-                cursor: blue,
-                selectionBackground: token("selection"),
-                black: token("surface-sunken"),
-                red,
-                green,
-                yellow,
-                blue,
-                white: fg,
-                brightBlack: lightText,
-                brightRed: red,
-                brightGreen: green,
-                brightYellow: yellow,
-                brightBlue: blue,
-                brightWhite: fg,
-            },
+            theme: colors.theme,
         });
         const fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
@@ -175,14 +144,19 @@ export function TerminalComponent(props: TerminalComponentProps) {
             }
             return true;
         });
-        term.onBell(() => props.onBell?.());
+        // the history written back after a reload holds bells that rang long ago: only a bell rung now is news
+        let replaying = false;
+        term.onBell(() => {
+            if (!replaying) props.onBell?.();
+        });
 
-        const searchDecorations = {
-            matchBackground: token("selection"),
-            matchOverviewRuler: blue,
-            activeMatchBackground: yellow,
-            activeMatchColorOverviewRuler: yellow,
-        };
+        let searchDecorations = colors.search;
+        // the app's theme switched: the screen takes the new colors, and so do the matches it highlights
+        const offTheme = onThemeChange(() => {
+            const next = screenColors();
+            term.options.theme = next.theme;
+            searchDecorations = next.search;
+        });
 
         // the pty follows the screen: a resize the daemon refused is sent
         // again on the next fit instead of leaving the shell's wrapping wrong
@@ -204,8 +178,21 @@ export function TerminalComponent(props: TerminalComponentProps) {
         };
         // fit before attach so the pty starts at its real size
         fit();
-        // the cell size changes when the code font finishes loading
-        document.fonts.ready.then(fit);
+        // The code font loads when something first draws with it, so the cells were measured with the fallback
+        // until then: measure again once it is in, and fit to the true cell size.
+        const codeFont = `${term.options.fontSize}px ${term.options.fontFamily}`;
+        if (!document.fonts.check(codeFont)) {
+            document.fonts.load(codeFont).then(
+                () => {
+                    // xterm measures a cell when its font option changes, so the option is set again
+                    const family = term.options.fontFamily;
+                    term.options.fontFamily = "monospace";
+                    term.options.fontFamily = family;
+                    fit();
+                },
+                (err) => props.onFailure({ title: "Font not loaded", message: errorMessage(err) }),
+            );
+        }
         const resizeObserver = new ResizeObserver(fit);
         resizeObserver.observe(containerRef);
 
@@ -244,6 +231,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
             stopped = false;
             disconnect?.();
             term.reset();
+            replaying = false;
             prompts = [];
             commands = [];
             // output that arrives while the scrollback is on its way waits
@@ -265,7 +253,8 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 .call<string>(TERMINAL_PANEL_ID, "open-tab", { id, cols: term.cols, rows: term.rows })
                 .then((scrollback) => {
                     if (current !== attempt) return;
-                    term.write(joinScrollback(scrollback, pending!));
+                    replaying = true;
+                    term.write(joinScrollback(scrollback, pending!), () => (replaying = false));
                     pending = null;
                 })
                 .catch((err) => {
@@ -385,6 +374,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
             containerRef.removeEventListener("paste", onPasteHere, true);
             containerRef.removeEventListener("focusin", onFocusIn);
             resizeObserver.disconnect();
+            offTheme();
             disconnect?.();
             activeTerminals.delete(props.id);
             // Sessions are service-owned and survive UI reloads; only the
