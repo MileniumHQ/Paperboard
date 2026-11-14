@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { children, splitProps, For, Show, type JSX } from "solid-js";
+import { children, createMemo, splitProps, Index, Show, type JSX } from "solid-js";
 import { resolveColor } from "../../utils/theme";
 import type { PaperColor } from "../../types";
 
@@ -159,17 +159,18 @@ function LineChart(props: PaperChartLineProps) {
     return (
         <div {...rest} role="img" aria-label={name()} class={className()}>
             {/* stretched to the box it is given; strokes keep their width */}
+            {/* by position: a new reading updates each series' line in place */}
             <svg class={styles.plot} viewBox="0 0 100 100" preserveAspectRatio="none">
-                <For each={linesOf(props)}>
+                <Index each={linesOf(props)}>
                     {(line) => (
-                        <Show when={line.points}>
+                        <Show when={line().points}>
                             <Show when={local.fill}>
-                                <path class={styles.area} d={line.area} style={{ fill: line.color }} />
+                                <path class={styles.area} d={line().area} style={{ fill: line().color }} />
                             </Show>
-                            <polyline class={styles.stroke} points={line.points} style={{ stroke: line.color }} />
+                            <polyline class={styles.stroke} points={line().points} style={{ stroke: line().color }} />
                         </Show>
                     )}
-                </For>
+                </Index>
             </svg>
         </div>
     );
@@ -187,7 +188,7 @@ function PartsChart(props: PaperChartPartsProps) {
     ]);
 
     const center = children(() => local.children);
-    const parts = () => partsOf(local.segments, local.total);
+    const parts = createMemo(() => partsOf(local.segments, local.total));
     const isBar = () => local.type === "bar";
     const thickness = () => Math.min(50, Math.max(1, local.thickness ?? DEFAULT_THICKNESS));
     const radius = () => 50 - thickness() / 2;
@@ -197,16 +198,18 @@ function PartsChart(props: PaperChartPartsProps) {
     };
     // each slice starts where the one before it ended. A share no wider
     // than the gaps between slices would draw as a hairline tick, so it is
-    // left off the ring; the legend and the label still name it.
-    const slices = () => {
+    // left off the ring; the legend and the label still name it. One slice
+    // per segment, by position: new data moves the slices that are there,
+    // so they slide to their new sizes.
+    const slices = createMemo(() => {
         let start = 0;
-        return parts().flatMap((part) => {
+        return parts().map((part) => {
             const length = part.fraction * 100;
-            const slice = { part, start, length: length - SLICE_GAP };
+            const slice = { part, start, length: length - SLICE_GAP, shown: length > SLICE_GAP * 2 };
             start += length;
-            return length > SLICE_GAP * 2 ? [slice] : [];
+            return slice;
         });
-    };
+    });
 
     const className = () =>
         [styles.PaperChart, isBar() ? styles.bar : styles.donut, local.class].filter(Boolean).join(" ");
@@ -216,33 +219,35 @@ function PartsChart(props: PaperChartPartsProps) {
             <Show
                 when={!isBar()}
                 fallback={
-                    <For each={parts()}>
+                    <Index each={parts()}>
                         {(part) => (
-                            <Show when={part.fraction > 0}>
-                                <span class={styles.barPart} style={{ width: `${part.fraction * 100}%`, background: part.color }} />
+                            <Show when={part().fraction > 0}>
+                                <span class={styles.barPart} style={{ width: `${part().fraction * 100}%`, background: part().color }} />
                             </Show>
                         )}
-                    </For>
+                    </Index>
                 }
             >
                 <svg class={styles.ring} viewBox="0 0 100 100">
                     <circle class={styles.track} cx="50" cy="50" r={radius()} stroke-width={thickness()} />
-                    <For each={slices()}>
+                    <Index each={slices()}>
                         {(slice) => (
-                            <circle
-                                class={styles.slice}
-                                cx="50"
-                                cy="50"
-                                r={radius()}
-                                pathLength="100"
-                                stroke-width={thickness()}
-                                // a style, not the attribute: presentation attributes don't read var()
-                                style={{ stroke: slice.part.color }}
-                                stroke-dasharray={`${slice.length} ${100 - slice.length}`}
-                                stroke-dashoffset={-slice.start}
-                            />
+                            <Show when={slice().shown}>
+                                <circle
+                                    class={styles.slice}
+                                    cx="50"
+                                    cy="50"
+                                    r={radius()}
+                                    pathLength="100"
+                                    stroke-width={thickness()}
+                                    // a style, not the attribute: presentation attributes don't read var()
+                                    style={{ stroke: slice().part.color }}
+                                    stroke-dasharray={`${slice().length} ${100 - slice().length}`}
+                                    stroke-dashoffset={-slice().start}
+                                />
+                            </Show>
                         )}
-                    </For>
+                    </Index>
                 </svg>
                 <Show when={center()}>
                     <div class={styles.center}>{center()}</div>
@@ -258,17 +263,17 @@ export function PaperChartLegend(props: PaperChartLegendProps) {
     const className = () => [styles.legend, local.class].filter(Boolean).join(" ");
     return (
         <ul {...rest} class={className()}>
-            <For each={partsOf(local.segments, local.total)}>
+            <Index each={partsOf(local.segments, local.total)}>
                 {(part) => (
                     <li class={styles.legendRow}>
-                        <span class={styles.swatch} style={{ background: part.color }} />
-                        <span class={styles.legendLabel}>{part.segment.label}</span>
+                        <span class={styles.swatch} style={{ background: part().color }} />
+                        <span class={styles.legendLabel}>{part().segment.label}</span>
                         <Show when={!local.compact}>
-                            <span class={styles.legendDetail}>{part.detail}</span>
+                            <span class={styles.legendDetail}>{part().detail}</span>
                         </Show>
                     </li>
                 )}
-            </For>
+            </Index>
         </ul>
     );
 }
