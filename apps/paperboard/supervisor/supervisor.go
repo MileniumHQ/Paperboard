@@ -70,7 +70,7 @@ func runSupervisor(dataDir, id string) error {
 	if err != nil {
 		return err
 	}
-	cfg, err := readConfig(os.Stdin)
+	cfg, err := readConfig(os.Stdin, configReadTimeout)
 	if err != nil {
 		// a supervisor that cannot read its spawn config must die loudly,
 		// never sit on the socket with no config
@@ -101,10 +101,13 @@ func runSupervisor(dataDir, id string) error {
 	// read a speculative success while the workload is still starting.
 	s.startWorkload()
 
+	// Past this point the workload runs and its metadata is on disk, so
+	// every way out is cleanupAndExit: it stops the workload and removes the
+	// metadata, which would otherwise make a dead supervisor look adoptable.
 	listener, err := listen(at.address)
 	if err != nil {
-		s.stopWorkload()
-		return err
+		at.logf("ERROR", "[supervisor:%s] could not listen on %s: %v", id, at.address, err)
+		s.cleanupAndExit(1)
 	}
 	s.mu.Lock()
 	s.listener = listener
@@ -112,8 +115,15 @@ func runSupervisor(dataDir, id string) error {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			// the endpoint is closed during teardown; the exit is already under way
-			select {}
+			s.mu.Lock()
+			tearingDown := s.exited
+			s.mu.Unlock()
+			// a Windows endpoint is closed by the teardown itself; any other
+			// accept failure (out of descriptors) ends the supervisor loudly
+			if !tearingDown {
+				at.logf("ERROR", "[supervisor:%s] stopped accepting connections: %v", id, err)
+			}
+			s.cleanupAndExit(1)
 		}
 		go s.serve(conn)
 	}
@@ -174,9 +184,6 @@ func (s *supervisor) startWorkload() {
 		work = started
 	} else {
 		command := cfg.command
-		if command == "" {
-			command = "sh"
-		}
 		if refusal := batchFileRefusal(command); refusal != "" {
 			s.failStart(refusal)
 			return

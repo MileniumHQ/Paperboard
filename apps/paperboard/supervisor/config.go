@@ -28,10 +28,11 @@ type spawnConfig struct {
 	consoleInput  bool
 }
 
-// how long the daemon has to write the config before it counts as empty
+// how long the daemon has to write the config: a supervisor still waiting
+// after that exits with an error rather than guess what to run
 const configReadTimeout = 3 * time.Second
 
-func readConfig(stdin io.Reader) (*spawnConfig, error) {
+func readConfig(stdin io.Reader, timeout time.Duration) (*spawnConfig, error) {
 	type result struct {
 		data []byte
 		err  error
@@ -41,21 +42,22 @@ func readConfig(stdin io.Reader) (*spawnConfig, error) {
 		data, err := io.ReadAll(stdin)
 		done <- result{data, err}
 	}()
-	var data []byte
 	select {
 	case got := <-done:
-		// a closed or missing stdin reads as no config, like an empty one
-		data = got.data
-	case <-time.After(configReadTimeout):
+		if got.err != nil {
+			return nil, fmt.Errorf("could not read the spawn config on stdin: %w", got.err)
+		}
+		return parseConfig(got.data)
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("no spawn config arrived on stdin within %s", timeout)
 	}
-	return parseConfig(data)
 }
 
 func parseConfig(data []byte) (*spawnConfig, error) {
 	cfg := &spawnConfig{raw: map[string]any{}}
 	text := strings.TrimSpace(string(data))
 	if text == "" {
-		return cfg, nil
+		return nil, fmt.Errorf("no spawn config arrived on stdin")
 	}
 	if err := json.Unmarshal([]byte(text), &cfg.raw); err != nil {
 		return nil, fmt.Errorf("invalid spawn config on stdin: %w", err)
@@ -78,6 +80,10 @@ func parseConfig(data []byte) (*spawnConfig, error) {
 	}
 	if env, ok := cfg.raw["env"].(map[string]any); ok {
 		cfg.env = env
+	}
+	// a terminal with no command runs the user's shell; a process names what it runs
+	if !cfg.pty && cfg.command == "" {
+		return nil, fmt.Errorf("invalid spawn config on stdin: it names no command")
 	}
 	if cfg.inputEncoding != "" && cfg.inputEncoding != "utf8" && cfg.inputEncoding != "utf16le" {
 		return nil, fmt.Errorf("invalid spawn config on stdin: inputEncoding %q is not utf8 or utf16le", cfg.inputEncoding)

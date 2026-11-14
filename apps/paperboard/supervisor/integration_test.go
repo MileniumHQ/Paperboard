@@ -544,3 +544,20 @@ func mustEndpoint(t *testing.T, s *session) endpoint {
 	}
 	return at
 }
+
+// a force stop reaches a terminal whose job ignores the hangup a plain stop sends
+func TestATerminalThatIgnoresTheHangupStopsOnSIGKILL(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a Windows terminal has no hangup: every stop is taskkill /F")
+	}
+	s := supervise(t, "trapped", map[string]any{"isPty": true, "command": "/bin/sh"})
+	s.status()
+	s.send(map[string]any{"type": "attach"})
+	s.send(map[string]any{"type": "stdin", "data": "trap '' HUP; echo HUP-IG''NORED\n"})
+	s.await("the trap", func() bool { return strings.Contains(s.output(""), "HUP-IGNORED") })
+	s.send(map[string]any{"type": "kill", "signal": "SIGKILL"})
+	if code := s.exitCode(); code != 137 {
+		t.Fatalf("exit code = %d, not 137 (SIGKILL)", code)
+	}
+	s.supervisorExit()
+}

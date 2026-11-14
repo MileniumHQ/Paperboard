@@ -1,12 +1,15 @@
 package main
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // papercrane/supervisor.ts computes the same names to connect
@@ -42,13 +45,25 @@ func TestConfigIsReadAsTheDaemonWritesIt(t *testing.T) {
 			t.Fatalf("%s is a terminal: %+v %v", text, pty, err)
 		}
 	}
-	if empty, err := parseConfig([]byte("  \n")); err != nil || empty.command != "" {
-		t.Fatalf("an empty config is a default shell: %+v %v", empty, err)
-	}
-	for _, bad := range []string{`{`, `[]`, `{"inputEncoding":"latin1"}`} {
+	// nothing on stdin, or a process with nothing to run, never starts a guess
+	for _, bad := range []string{"  \n", `{}`, `{`, `[]`, `{"command":"x","inputEncoding":"latin1"}`} {
 		if _, err := parseConfig([]byte(bad)); err == nil {
 			t.Fatalf("%s was accepted", bad)
 		}
+	}
+}
+
+// a daemon that never writes the config, or a stdin that fails, is an error, never an empty config
+func TestConfigThatNeverArrivesIsAnError(t *testing.T) {
+	never, writer := io.Pipe()
+	defer writer.Close()
+	if _, err := readConfig(never, 50*time.Millisecond); err == nil || !strings.Contains(err.Error(), "no spawn config arrived") {
+		t.Fatalf("a config that never arrived read as %v", err)
+	}
+	broken, brokenWriter := io.Pipe()
+	brokenWriter.CloseWithError(errors.New("stdin broke"))
+	if _, err := readConfig(broken, time.Second); err == nil || !strings.Contains(err.Error(), "stdin broke") {
+		t.Fatalf("a failed read read as %v", err)
 	}
 }
 

@@ -39,9 +39,15 @@ func (w *ptyWorkload) resize(cols, rows int) error {
 	return pty.Setsize(w.master, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
 }
 
-// A hangup, as closing a terminal window sends: an interactive shell ignores
-// SIGTERM but ends on this one, and takes its jobs with it.
-func (w *ptyWorkload) kill(string) error { return signalGroup(w.process.Pid, "SIGHUP") }
+// A stop is a hangup, as closing a terminal window sends: an interactive
+// shell ignores SIGTERM but ends on this one, and takes its jobs with it.
+// Any other signal (SIGKILL, for a job that traps the hangup) is sent as asked.
+func (w *ptyWorkload) kill(signal string) error {
+	if signal == "SIGTERM" {
+		signal = "SIGHUP"
+	}
+	return signalGroup(w.process.Pid, signal)
+}
 
 // The terminal's foreground process group is the job the keyboard reaches:
 // the shell at its prompt, or what it runs. Its leader names it (the first
