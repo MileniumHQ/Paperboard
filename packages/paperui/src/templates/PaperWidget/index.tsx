@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { For, Show, children, createMemo, splitProps, type JSX, type ParentProps } from "solid-js";
+import { For, Show, children, createMemo, onCleanup, onMount, splitProps, type JSX, type ParentProps } from "solid-js";
 import { PaperIcon } from "../../components/PaperIcon";
 import { PaperProgress } from "../../components/PaperProgress";
 import type { PaperRole } from "../../types";
@@ -13,7 +13,7 @@ const toneStyle = (tone: PaperRole | "none" | undefined): JSX.CSSProperties | un
  * One Home widget, laid out the same way as every other:
  *
  *   ┌───────────────────────────────┐
- *   │ ◇ Title               detail ⋯ │  header: a long title wraps to a second line
+ *   │ ◇ Title               detail ⋯ │  header: one line; a long title ends in "…"
  *   │                               │
  *   │ body: a stat, rows, a chart,  │  everything starts at the same
  *   │ or a message                  │  left edge as the title
@@ -25,6 +25,11 @@ const toneStyle = (tone: PaperRole | "none" | undefined): JSX.CSSProperties | un
  * widget reads the same on the smallest cell and the largest. Compose the
  * body from PaperWidgetStat, PaperWidgetRows and PaperWidgetMessage
  * rather than hand-rolled CSS, so widgets from different panels line up.
+ *
+ * Nothing is cut: the detail shows whole or not at all, a stat's value
+ * shrinks to fit its width, and a body too short for everything leaves out
+ * stat captions and message descriptions, then stat meters, before a
+ * value is made smaller to fit.
  */
 export interface PaperWidgetProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "title"> {
     /** the header's title; omit only for a widget that is a face, like a clock */
@@ -54,6 +59,25 @@ export function PaperWidget(props: ParentProps<PaperWidgetProps>) {
     const detail = children(() => local.detail);
     const action = children(() => local.action);
     const footer = children(() => local.footer);
+    let body: HTMLDivElement | undefined;
+    onMount(() => {
+        if (!body || typeof ResizeObserver === "undefined") return;
+        const el = body;
+        const refit = () => fitBody(el);
+        const resized = new ResizeObserver(refit);
+        resized.observe(el);
+        // a new reading changes what has to fit; the fitting itself only
+        // sets attributes and styles, which are not watched
+        const changed = new MutationObserver(refit);
+        changed.observe(el, { childList: true, subtree: true, characterData: true });
+        // a font arriving changes how wide and tall the same text is
+        document.fonts?.addEventListener("loadingdone", refit);
+        onCleanup(() => {
+            resized.disconnect();
+            changed.disconnect();
+            document.fonts?.removeEventListener("loadingdone", refit);
+        });
+    });
     return (
         <div {...rest} class={[styles.PaperWidget, local.class].filter(Boolean).join(" ")} classList={local.classList} data-pressable={local.onPress ? "" : undefined}>
             <Show when={local.onPress}>
@@ -76,22 +100,59 @@ export function PaperWidget(props: ParentProps<PaperWidgetProps>) {
                                 icon()
                             )}
                         </Show>
-                        <span class={styles.title}>{title()}</span>
-                        <Show when={detail() !== undefined}>
-                            <span class={styles.detail}>{detail()}</span>
-                        </Show>
+                        {/* a detail with no room beside the title wraps onto a
+                            line the heading hides: whole, or not at all */}
+                        <span class={styles.heading}>
+                            <span class={styles.title}>{title()}</span>
+                            <Show when={detail() !== undefined}>
+                                <span class={styles.detail}>{detail()}</span>
+                            </Show>
+                        </span>
                         <Show when={action()}>
                             <span class={styles.headerAction}>{action()}</span>
                         </Show>
                     </div>
                 </Show>
-                <div class={styles.body}>{local.children}</div>
+                <div ref={body} class={styles.body}>
+                    {local.children}
+                </div>
                 <Show when={footer()}>
                     <div class={styles.footer}>{footer()}</div>
                 </Show>
             </div>
         </div>
     );
+}
+
+/**
+ * Fits a widget body's content to it without cutting anything. Each stat's
+ * value takes the font size that fits its width (never larger than its
+ * own). While the body overflows, it leaves out captions and message
+ * descriptions, then meters and the second line of a message's title,
+ * and last makes the values smaller still.
+ */
+function fitBody(body: HTMLElement) {
+    const values = Array.from(body.querySelectorAll<HTMLElement>(`.${styles.statValue}`));
+    delete body.dataset.tight;
+    for (const value of values) value.style.removeProperty("--paper-widget-fit");
+    for (const value of values) {
+        if (value.scrollWidth > value.clientWidth && value.clientWidth > 0) {
+            value.style.setProperty("--paper-widget-fit", String(value.clientWidth / value.scrollWidth));
+        }
+    }
+    const overflows = () => body.scrollHeight > body.clientHeight;
+    if (!overflows()) return;
+    body.dataset.tight = "1";
+    if (!overflows()) return;
+    body.dataset.tight = "2";
+    // line boxes round to whole pixels: a few passes settle it
+    for (let pass = 0; pass < 3 && values.length > 0 && overflows(); pass++) {
+        const shrink = body.clientHeight / body.scrollHeight;
+        for (const value of values) {
+            const fit = Number(value.style.getPropertyValue("--paper-widget-fit") || 1);
+            value.style.setProperty("--paper-widget-fit", String(fit * shrink));
+        }
+    }
 }
 
 export interface PaperWidgetStatMeter {

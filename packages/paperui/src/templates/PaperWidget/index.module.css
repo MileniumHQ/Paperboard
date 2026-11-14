@@ -72,8 +72,7 @@
     pointer-events: auto;
 }
 
-/* one line tall, the same in every widget, whatever sits at its end; a
-   title too long for the tile wraps to a second line before it is cut */
+/* one line tall, the same in every widget, whatever sits at its end */
 .header {
     --line: calc(var(--paper-text-size-2) * var(--paper-leading-snug));
     flex-shrink: 0;
@@ -101,28 +100,33 @@
     }
 }
 
-/* the title gives way last: the detail shrinks long before it does */
-.title {
-    flex: 0 1 auto;
-    /* never cut mid-word beside the detail: that gives way instead */
-    min-width: min-content;
-    max-width: 100%;
+/* The title and the detail share one line. The title comes first: when
+   the whole of both doesn't fit, the detail wraps onto a second line,
+   which is hidden, and a title longer than the line ends in "…". */
+.heading {
+    flex: 1 1 0;
+    min-width: 0;
+    height: var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: var(--paper-uigap-half);
     overflow: hidden;
-    overflow-wrap: break-word;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
+}
+
+.title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: var(--line);
     font-weight: var(--paper-weight-bold);
 }
 
 .detail {
-    flex: 0 1000 auto;
-    min-width: 0;
-    max-width: 100%;
+    flex: 0 0 auto;
     margin-inline-start: auto;
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
     line-height: var(--line);
     font-size: var(--paper-text-size-1);
@@ -140,9 +144,6 @@
     margin-inline-end: calc(var(--paper-uigap-onefourth) * -1);
 }
 
-.detail + .headerAction {
-    margin-inline-start: 0;
-}
 
 .body {
     flex: 1;
@@ -179,26 +180,43 @@
     min-width: 0;
 }
 
+/* one line, never cut: PaperWidget scales the size down by
+   --paper-widget-fit until the whole value fits */
 .statValue {
+    --size: clamp(var(--paper-text-size-3), min(40cqh, 20cqw), var(--paper-text-size-12));
     overflow: hidden;
-    overflow-wrap: break-word;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    font-size: clamp(var(--paper-text-size-3), min(40cqh, 20cqw), var(--paper-text-size-12));
+    white-space: nowrap;
+    font-size: calc(var(--size) * var(--paper-widget-fit, 1));
     font-weight: var(--paper-weight-bold);
     line-height: var(--paper-leading-none);
     font-variant-numeric: tabular-nums;
 }
 
 .stat:not(:has(.statCaption)) .statValue {
-    font-size: clamp(var(--paper-text-size-3), min(60cqh, 20cqw), var(--paper-text-size-14));
+    --size: clamp(var(--paper-text-size-3), min(60cqh, 20cqw), var(--paper-text-size-14));
 }
 
 /* a meter takes a line of its own, so the value gives up a little height */
 .stat:has(.statMeter) .statValue {
-    font-size: clamp(var(--paper-text-size-3), min(30cqh, 20cqw), var(--paper-text-size-12));
+    --size: clamp(var(--paper-text-size-3), min(30cqh, 20cqw), var(--paper-text-size-12));
+}
+
+/* a body too short for everything: captions and descriptions go first,
+   then meters (PaperWidget sets data-tight) */
+.body[data-tight] .statCaption,
+.body[data-tight] .messageDescription {
+    display: none;
+}
+
+.body[data-tight="2"] .statMeter {
+    display: none;
+}
+
+/* a body one short line tall still shows a message's title, on one line */
+.body[data-tight="2"] .messageTitle {
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    line-height: var(--paper-leading-none);
 }
 
 .stat[data-tone] .statValue {
@@ -354,12 +372,10 @@ button.rowInner {
     color: var(--role-base, var(--paper-text));
 }
 
+/* whole, never cut off after a line or two: a body without room for all
+   of it leaves it out (data-tight) */
 .messageDescription {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    overflow: hidden;
+    overflow-wrap: break-word;
     color: var(--paper-text-subtle);
 }
 
