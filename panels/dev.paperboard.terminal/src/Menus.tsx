@@ -55,23 +55,14 @@ export function TabMenu(props: {
     onUnsplit: () => void;
     onCloseTab: () => void;
 }) {
-    // each item closes the menu, then acts on the tab it was opened on
-    const then = (act: () => void) => () => {
-        props.state.close();
-        act();
-    };
+    // each item acts on the tab the menu was opened on; the menu closes after it
     return (
         <Menu state={props.state} onClose={props.onClose}>
-            <PaperContextMenuItem icon="edit" onClick={then(props.onRename)}>
+            <PaperContextMenuItem icon="edit" onClick={() => props.onRename()}>
                 Rename Tab
             </PaperContextMenuItem>
-            <SplitItems
-                split={props.split}
-                compact={props.compact}
-                onSplit={(direction) => then(() => props.onSplit(direction))()}
-                onUnsplit={then(props.onUnsplit)}
-            />
-            <PaperContextMenuItem icon="close" danger onClick={then(props.onCloseTab)}>
+            <SplitItems split={props.split} compact={props.compact} onSplit={props.onSplit} onUnsplit={props.onUnsplit} />
+            <PaperContextMenuItem icon="close" danger onClick={() => props.onCloseTab()}>
                 Close Tab
             </PaperContextMenuItem>
         </Menu>
@@ -117,13 +108,9 @@ export function ScreenMenu(props: {
 }
 
 export function SplitMenu(props: { state: MenuState; onSplit: (direction: SplitDirection) => void }) {
-    const split = (direction: SplitDirection) => {
-        props.state.close();
-        props.onSplit(direction);
-    };
     return (
         <Menu state={props.state}>
-            <SplitItems split={false} compact={false} onSplit={split} />
+            <SplitItems split={false} compact={false} onSplit={props.onSplit} />
         </Menu>
     );
 }
@@ -139,10 +126,7 @@ export function ShellMenu(props: { state: MenuState; shells: TerminalShell[]; on
                         icon="terminal"
                         description={shell.path}
                         keybind={index() === 0 ? "Default" : undefined}
-                        onClick={() => {
-                            props.state.close();
-                            props.onPick(shell.path);
-                        }}
+                        onClick={() => props.onPick(shell.path)}
                     >
                         {shell.name}
                     </PaperContextMenuItem>
