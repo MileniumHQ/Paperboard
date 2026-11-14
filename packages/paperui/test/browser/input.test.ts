@@ -14,9 +14,14 @@ async function typeInto(id: string, text: string) {
     await page.type(text);
 }
 
-/** what the field shows a task after an edit is left: any resync has run */
+/**
+ * What the field shows once the parent's answer to a left edit is in. The
+ * field resyncs on a zero-delay timer queued by the edit's change event; a
+ * zero-delay timer queued after it runs after it (timers of equal delay run
+ * in order), so this reads the field after any resync, with no sleep.
+ */
 async function settled(id: string) {
-    await page.eval("new Promise((resolve) => setTimeout(resolve, 20))");
+    await page.eval("new Promise((resolve) => setTimeout(resolve, 0))");
     return shown(id);
 }
 
