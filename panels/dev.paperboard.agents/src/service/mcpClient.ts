@@ -265,7 +265,7 @@ export class StdioWire implements McpWire {
             this.pending.set(id, { resolve, reject, timer });
         });
         // the server can end while the request is still being written, before `done` is awaited: not an unhandled rejection
-        done.catch(() => {});
+        void Promise.allSettled([done]); // marks it handled here; the failure itself is thrown where it is awaited
         try {
             await this.send({ jsonrpc: "2.0", id, method, params });
         } catch (e) {
@@ -616,7 +616,7 @@ export class SseWire implements McpWire {
             this.waiting.set(id, { ok, fail, timer });
         });
         // the stream can end while the request is still being posted, before `answer` is awaited: not an unhandled rejection
-        answer.catch(() => {});
+        void Promise.allSettled([answer]); // marks it handled here; the failure itself is thrown where it is awaited
         return this.post({ jsonrpc: "2.0", id, method, params }).then(
             () => answer,
             (e: Error) => {

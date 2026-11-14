@@ -139,7 +139,7 @@ export async function askClaudeModels(host: TurnHost, launch: ClaudeLaunch): Pro
     const answered = new Promise<unknown>((ok, fail) => (settle = { ok, fail }));
     // Claude can end (or time out) while the request is still being written, before anything awaits `answered`: that
     // rejection must not be unhandled, which would stop the whole service. `await answered` below still throws it.
-    answered.catch(() => {});
+    void Promise.allSettled([answered]); // marks it handled here; the failure itself is thrown where it is awaited
     const onLine = (line: string) => {
         let ev: any;
         try {
