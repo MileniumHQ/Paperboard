@@ -1,6 +1,4 @@
-/* The shell's frame. Layers in the main area stay mounted while another
- * one shows, so an open panel or the library keeps its frame and comes
- * back as it was left. */
+/* The shell's frame: the top bar over the rail and the main area. */
 .window {
     width: 100vw;
     height: 100vh;
@@ -12,20 +10,4 @@
 
 .main.underTopBar {
     height: calc(100vh - var(--paperboard-titlebar-height));
-}
-
-/* visibility, not display: a hidden iframe keeps its compositor state, so
- * switching back does not repaint a white frame */
-.frameLayer {
-    position: absolute;
-    inset: 0;
-}
-
-.frameLayer.away {
-    visibility: hidden;
-    pointer-events: none;
-}
-
-.computerArea {
-    position: relative;
 }

@@ -1,0 +1,15 @@
+.computerArea {
+    position: relative;
+}
+
+/* visibility, not display: a hidden iframe keeps its compositor state, so
+ * switching back does not repaint a white frame */
+.frameLayer {
+    position: absolute;
+    inset: 0;
+}
+
+.frameLayer.away {
+    visibility: hidden;
+    pointer-events: none;
+}

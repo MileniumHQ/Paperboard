@@ -1,7 +1,10 @@
 import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
+import { showToast } from "@mileniumhq/paperui";
 import { computersApi, logToMain, type ComputerInfo } from "../lib/shell";
 import { DAEMON_PORT } from "../lib/daemonPort";
+import { errorMessage } from "../lib/errorMessage";
+import { orderWithShown } from "../lib/phoneComputers";
 
 // computers list + active selection
 export function useComputers() {
@@ -85,9 +88,29 @@ export function useComputers() {
             apply({ computers: data.computers, activeId: data.activeId });
         });
 
+    // the rail moves at once; a failed save says so and puts it back
+    const reorderComputers = async (shownIds: string[]) => {
+        const before = [...computers()];
+        const ids = orderWithShown(before.map((c) => c.id), shownIds);
+        const byId = new Map(before.map((c) => [c.id, c]));
+        setComputers(ids.map((id) => byId.get(id)!));
+        try {
+            await computersApi.reorder(ids);
+        } catch (err) {
+            logToMain("error", "Failed to reorder computers:", err);
+            setComputers(before);
+            showToast({
+                variant: "danger",
+                title: "Couldn't move that computer",
+                message: errorMessage(err),
+            });
+            void refreshComputers();
+        }
+    };
+
     return {
         computers,
-        setComputers,
+        reorderComputers,
         activeComputerId,
         setActiveComputerId,
         offlineTarget,
