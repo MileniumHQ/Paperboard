@@ -176,7 +176,7 @@ export function Topbar(props: TopbarProps) {
                             {DOWNLOAD.label}
                         </PaperButton>
                     </Show>
-                    <Show when={props.search}>{props.search}</Show>
+                    {props.search}
                     <PaperButton
                         icon
                         variant="text"
