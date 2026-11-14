@@ -1,4 +1,4 @@
-import { splitProps, Show, type JSX, type ParentProps } from "solid-js";
+import { children, splitProps, Show, type JSX, type ParentProps } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import styles from "./menu.module.css";
 
@@ -31,6 +31,9 @@ export function MenuItem(props: ParentProps<MenuItemProps>) {
         "children",
     ]);
 
+    const icon = children(() => local.icon);
+    const description = children(() => local.description);
+
     const className = () =>
         [
             styles.item,
@@ -44,18 +47,18 @@ export function MenuItem(props: ParentProps<MenuItemProps>) {
 
     return (
         <div {...rest} class={className()} classList={local.classList}>
-            <Show when={local.icon}>
-                {typeof local.icon === "string" ? (
-                    <PaperIcon class={styles.itemIcon}>{local.icon}</PaperIcon>
+            <Show when={icon()}>
+                {typeof icon() === "string" ? (
+                    <PaperIcon class={styles.itemIcon}>{icon()}</PaperIcon>
                 ) : (
-                    <span class={styles.itemIcon}>{local.icon}</span>
+                    <span class={styles.itemIcon}>{icon()}</span>
                 )}
             </Show>
 
             <div class={styles.itemContent}>
                 <span class={styles.itemLabel}>{local.children}</span>
-                <Show when={local.description}>
-                    <span class={styles.itemDescription}>{local.description}</span>
+                <Show when={description()}>
+                    <span class={styles.itemDescription}>{description()}</span>
                 </Show>
             </div>
 

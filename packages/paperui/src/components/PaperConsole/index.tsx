@@ -1,6 +1,7 @@
 import styles from "./index.module.css";
 import {
     batch,
+    children,
     createSignal,
     createEffect,
     createMemo,
@@ -351,9 +352,15 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
         ),
     );
 
+    // resolved once: an entry flush must not build the caller's elements again
+    const title = children(() => local.title);
+    const banner = children(() => local.banner);
+    const content = children(() => local.children);
+    const empty = children(() => local.empty);
+
     createEffect(
         on(
-            () => [local.children, local.text, local.banner],
+            () => [content(), local.text, banner()],
             () => {
                 if (stuck()) setTimeout(scrollToBottom, 0);
             },
@@ -480,9 +487,9 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
                 .join(" ")}
             classList={local.classList}
         >
-            <Show when={local.title || local.onClear}>
+            <Show when={title() || local.onClear}>
                 <div class={styles.header}>
-                    <span class={styles.headerTitle}>{local.title}</span>
+                    <span class={styles.headerTitle}>{title()}</span>
                     <Show when={local.onClear}>
                         <PaperButton size="tiny"
                             icon
@@ -495,8 +502,8 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
             </Show>
 
             <div ref={outputRef} class={styles.outputArea} onScroll={handleScroll}>
-                <Show when={local.banner}>
-                    <div class={styles.banner}>{local.banner}</div>
+                <Show when={banner()}>
+                    <div class={styles.banner}>{banner()}</div>
                 </Show>
 
                 <Show when={local.text !== undefined}>
@@ -536,10 +543,10 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
                     </div>
                 </Show>
 
-                {local.children}
+                {content()}
 
-                <Show when={local.empty && items().length === 0 && !local.text}>
-                    <div class={styles.empty}>{local.empty}</div>
+                <Show when={empty() && items().length === 0 && !local.text}>
+                    <div class={styles.empty}>{empty()}</div>
                 </Show>
             </div>
 

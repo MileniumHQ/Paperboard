@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { splitProps, Show, type JSX } from "solid-js";
+import { splitProps, Show, children, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 
 export interface PaperChipProps
@@ -28,6 +28,8 @@ export function PaperChip(props: PaperChipProps) {
         "children",
     ]);
 
+    const icon = children(() => local.icon);
+
     const className = () =>
         [
             styles.PaperChip,
@@ -47,12 +49,8 @@ export function PaperChip(props: PaperChipProps) {
             disabled={local.disabled}
             aria-pressed={local.selected === true ? "true" : "false"}
         >
-            <Show when={local.icon}>
-                {typeof local.icon === "string" ? (
-                    <PaperIcon zeroHeight>{local.icon}</PaperIcon>
-                ) : (
-                    local.icon
-                )}
+            <Show when={icon()}>
+                {typeof icon() === "string" ? <PaperIcon zeroHeight>{icon()}</PaperIcon> : icon()}
             </Show>
             {local.children}
             <Show when={local.count !== undefined}>

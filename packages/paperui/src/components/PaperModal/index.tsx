@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { splitProps, createUniqueId, Show, type JSX, type ParentProps } from "solid-js";
+import { children, splitProps, createUniqueId, Show, type JSX, type ParentProps } from "solid-js";
 import { ModalLayer } from "./layer";
 import { PaperText } from "../PaperText";
 import { PaperIcon } from "../PaperIcon";
@@ -45,6 +45,8 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
         "classList",
         "children",
     ]);
+    // resolved once, and kept across openings: the dialog's name is read from it too
+    const title = children(() => local.title);
 
     const sizeClass = () => {
         if (local.fullscreen) return styles.fullscreen;
@@ -69,22 +71,24 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
             closeOnEsc={local.closeOnEsc}
             placement={local.placement}
             concealed={local.concealed}
-            aria-labelledby={local.title && !local.noHeader ? titleId : undefined}
+            aria-labelledby={title() && !local.noHeader ? titleId : undefined}
             {...rest}
             class={[styles.modalBox, sizeClass(), local.class].filter(Boolean).join(" ")}
             classList={local.classList}
-            content={() => (
+            content={() => {
+                const footer = children(() => local.footer);
+                return (
                                 <>
                                 <Show
                                     when={
                                         !local.noHeader &&
-                                        (local.title || local.onClose)
+                                        (title() || local.onClose)
                                     }
                                 >
                                     <div class={styles.header}>
-                                        <Show when={local.title}>
+                                        <Show when={title()}>
                                             <span id={titleId}><PaperText size={4} weight={700}>
-                                                {local.title}
+                                                {title()}
                                             </PaperText></span>
                                         </Show>
 
@@ -129,11 +133,12 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
                                     {local.children}
                                 </div>
 
-                                <Show when={local.footer}>
-                                    <div class={styles.footer}>{local.footer}</div>
+                                <Show when={footer()}>
+                                    <div class={styles.footer}>{footer()}</div>
                                 </Show>
                                 </>
-            )}
+                );
+            }}
         />
     );
 }

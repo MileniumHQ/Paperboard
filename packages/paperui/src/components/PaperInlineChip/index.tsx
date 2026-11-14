@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { Show, splitProps, type JSX } from "solid-js";
+import { Show, splitProps, children, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 
 export interface PaperInlineChipProps
@@ -17,6 +17,7 @@ export interface PaperInlineChipProps
  */
 export function PaperInlineChip(props: PaperInlineChipProps) {
     const [local, rest] = splitProps(props, ["icon", "type", "class", "classList", "children"]);
+    const icon = children(() => local.icon);
 
     return (
         <button
@@ -25,8 +26,8 @@ export function PaperInlineChip(props: PaperInlineChipProps) {
             class={[styles.PaperInlineChip, local.class].filter(Boolean).join(" ")}
             classList={local.classList}
         >
-            <Show when={local.icon}>
-                {typeof local.icon === "string" ? <PaperIcon class={styles.icon}>{local.icon}</PaperIcon> : local.icon}
+            <Show when={icon()}>
+                {typeof icon() === "string" ? <PaperIcon class={styles.icon}>{icon()}</PaperIcon> : icon()}
             </Show>
             <span class={styles.label}>{local.children}</span>
         </button>

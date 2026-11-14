@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { createEffect, createSignal, on, onCleanup, splitProps, Show, type JSX } from "solid-js";
+import { children, createEffect, createSignal, on, onCleanup, splitProps, Show, type JSX } from "solid-js";
 import { haptic } from "../../utils/haptics";
 import { LoaderStatus } from "../../types";
 import { PaperIcon } from "../PaperIcon";
@@ -69,6 +69,10 @@ export function PaperLoader(props: PaperLoaderProps) {
         const timer = setTimeout(() => setDue(true), local.delay);
         onCleanup(() => clearTimeout(timer));
     }
+
+    const center = children(() => local.children);
+    const label = children(() => local.label);
+    const subtitle = children(() => local.subtitle);
 
     const loaderClass = () =>
         [styles.PaperLoader, local.class].filter(Boolean).join(" ");
@@ -149,8 +153,8 @@ export function PaperLoader(props: PaperLoaderProps) {
                         stroke-width="7"
                     />
                 </svg>
-                <Show when={local.children !== undefined && local.children !== null && !isFull()}>
-                    <span class={styles.center}>{local.children}</span>
+                <Show when={center() !== undefined && center() !== null && !isFull()}>
+                    <span class={styles.center}>{center()}</span>
                 </Show>
                 <span
                     class={styles.statusFinisher}
@@ -168,14 +172,14 @@ export function PaperLoader(props: PaperLoaderProps) {
                     </Show>
                 </span>
             </span>
-            <Show when={local.label || local.subtitle}>
+            <Show when={label() || subtitle()}>
                 <span class={styles.text}>
-                    <Show when={local.label}>
+                    <Show when={label()}>
                         {/* a small loader sits in lists of many steps: its label shrinks with it */}
-                        <PaperText size={local.size === "small" ? 2 : 4}>{local.label}</PaperText>
+                        <PaperText size={local.size === "small" ? 2 : 4}>{label()}</PaperText>
                     </Show>
-                    <Show when={local.subtitle}>
-                        <PaperText preset="section" class={styles.subtitle}>{local.subtitle}</PaperText>
+                    <Show when={subtitle()}>
+                        <PaperText preset="section" class={styles.subtitle}>{subtitle()}</PaperText>
                     </Show>
                 </span>
             </Show>

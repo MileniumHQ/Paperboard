@@ -831,7 +831,8 @@ export function PaperContextMenuSub(
     // An id, not the label: two submenus may share a label, and the id is
     // also this row's item value for keyboard highlight and activedescendant.
     const subId = `sub-${createUniqueId()}`;
-    const subLabel = () => local.label || local.title || "";
+    const subLabel = resolveChildren(() => local.label || local.title || "");
+    const icon = resolveChildren(() => local.icon);
     const ctx = useContextMenu();
     const subCtx = useContext(SubMenuLevelContext);
     const [childActiveSubMenu, setChildActiveSubMenu] = createSignal<string | null>(null);
@@ -944,11 +945,11 @@ export function PaperContextMenuSub(
             // touch has no hover: a tap on the row opens it
             onClick={open}
         >
-            <Show when={local.icon}>
-                {typeof local.icon === "string" ? (
-                    <PaperIcon class={menuStyles.itemIcon}>{local.icon}</PaperIcon>
+            <Show when={icon()}>
+                {typeof icon() === "string" ? (
+                    <PaperIcon class={menuStyles.itemIcon}>{icon()}</PaperIcon>
                 ) : (
-                    <span class={menuStyles.itemIcon}>{local.icon}</span>
+                    <span class={menuStyles.itemIcon}>{icon()}</span>
                 )}
             </Show>
 

@@ -1,7 +1,7 @@
 import { getVarCss, resolveSize } from "../../utils/theme";
 import type { PaperSize } from "../../types";
 import styles from "./index.module.css";
-import { splitProps, For, Show, type JSX, type ParentProps } from "solid-js";
+import { children, splitProps, For, Show, type JSX, type ParentProps } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { PaperText } from "../PaperText";
 import { PaperIcon } from "../PaperIcon";
@@ -112,13 +112,27 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
 
     const isLink = () => Boolean(local.href);
 
+    // each JSX prop is resolved once: reading one again would build it again
+    const banner = children(() => local.banner as JSX.Element);
+    const icon = children(() => local.icon);
+    const title = children(() => local.title);
+    const subtitle = children(() => local.subtitle);
+    const description = children(() => local.description);
+    const descriptionExtra = children(() => local.descriptionExtra);
+    const badge = children(() => local.badge);
+    const content = children(() => local.children);
+    const footerLeft = children(() => local.footerLeft);
+    const footerRight = children(() => local.footerRight);
+
     /** the addresses of a tiled banner; undefined for any other */
     const tiles = () => {
-        const banner = local.banner;
-        return Array.isArray(banner) && banner.every((tile) => typeof tile === "string") ? (banner as readonly string[]).slice(0, MOSAIC_MAX) : undefined;
+        const resolved = banner();
+        return Array.isArray(resolved) && resolved.every((tile) => typeof tile === "string")
+            ? (resolved as string[]).slice(0, MOSAIC_MAX)
+            : undefined;
     };
-    const hasBanner = () => (tiles() ? tiles()!.length > 0 : Boolean(local.banner));
-    const hasOverlappingIcon = () => hasBanner() && !local.poster && Boolean(local.icon);
+    const hasBanner = () => (tiles() ? tiles()!.length > 0 : Boolean(banner()));
+    const hasOverlappingIcon = () => hasBanner() && !local.poster && Boolean(icon());
     const hasOverlappingPoster = () => hasBanner() && Boolean(local.poster);
 
     // the whole card opens it, footer row included; a control inside it (a
@@ -154,7 +168,19 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
         }
     };
 
-    const cardContent = () => (
+    // an icon is a picture's address, a glyph name, or an element
+    const renderIcon = (imageClass: string) => {
+        const resolved = icon();
+        if (typeof resolved !== "string") return resolved;
+        if (resolved.startsWith("http") || resolved.startsWith("/") || resolved.startsWith("data:")) {
+            return <img src={resolved} alt="" class={imageClass} />;
+        }
+        return <PaperIcon class={styles.iconGlyph}>{resolved}</PaperIcon>;
+    };
+
+    // built once: turning the press effect on or off moves this card into or
+    // out of its wrapper, and never builds it again
+    const card = (
         <Dynamic
             component={isLink() ? "a" : "div"}
             {...rest}
@@ -192,16 +218,16 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                                 {(src) => <img src={src} alt="" class={styles.bannerImage} loading="lazy" decoding="async" />}
                             </For>
                         </div>
-                    ) : typeof local.banner === "string" ? (
+                    ) : typeof banner() === "string" ? (
                         <img
-                            src={local.banner}
+                            src={banner() as string}
                             alt={local.bannerAlt || ""}
                             class={styles.bannerImage}
                             loading="lazy"
                             decoding="async"
                         />
                     ) : (
-                        (local.banner as JSX.Element)
+                        banner()
                     )}
 
                     <Show when={local.poster}>
@@ -210,26 +236,8 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                         </div>
                     </Show>
 
-                    <Show when={!local.poster && local.icon}>
-                        <div class={styles.iconWrapper}>
-                            {typeof local.icon === "string" ? (
-                                local.icon.startsWith("http") ||
-                                local.icon.startsWith("/") ||
-                                local.icon.startsWith("data:") ? (
-                                    <img
-                                        src={local.icon}
-                                        alt=""
-                                        class={styles.iconImage}
-                                    />
-                                ) : (
-                                    <PaperIcon class={styles.iconGlyph}>
-                                        {local.icon}
-                                    </PaperIcon>
-                                )
-                            ) : (
-                                local.icon
-                            )}
-                        </div>
+                    <Show when={!local.poster && icon()}>
+                        <div class={styles.iconWrapper}>{renderIcon(styles.iconImage)}</div>
                     </Show>
                 </div>
             </Show>
@@ -249,67 +257,45 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                     <img src={local.poster} alt={local.posterAlt || ""} class={styles.posterStandalone} />
                 </Show>
 
-                <Show when={!hasBanner() && !local.poster && local.icon}>
-                    <div style={{ "margin-bottom": `${getVarCss("uigap-half")}` }}>
-                        {typeof local.icon === "string" ? (
-                            local.icon.startsWith("http") ||
-                            local.icon.startsWith("/") ||
-                            local.icon.startsWith("data:") ? (
-                                <img
-                                    src={local.icon}
-                                    alt=""
-                                    class={styles.iconStandalone}
-                                />
-                            ) : (
-                                <PaperIcon class={styles.iconGlyph}>
-                                    {local.icon}
-                                </PaperIcon>
-                            )
-                        ) : (
-                            local.icon
-                        )}
-                    </div>
+                <Show when={!hasBanner() && !local.poster && icon()}>
+                    <div style={{ "margin-bottom": `${getVarCss("uigap-half")}` }}>{renderIcon(styles.iconStandalone)}</div>
                 </Show>
 
                 <div class={styles.headerRow}>
                     <div class={styles.titleColumn}>
                         <PaperText size={4} weight={700} breakWord class={styles.title}>
-                            {local.title}
+                            {title()}
                         </PaperText>
-                        <Show when={local.subtitle}>
+                        <Show when={subtitle()}>
                             <PaperText size={1} color="text-subtle">
-                                {local.subtitle}
+                                {subtitle()}
                             </PaperText>
                         </Show>
                     </div>
 
-                    <Show when={local.badge}>
-                        <div style={{ "flex-shrink": 0 }}>{local.badge}</div>
+                    <Show when={badge()}>
+                        <div style={{ "flex-shrink": 0 }}>{badge()}</div>
                     </Show>
                 </div>
 
-                <Show when={local.description}>
+                <Show when={description()}>
                     <PaperText size={2} class={styles.description}>
-                        {local.description}
+                        {description()}
                     </PaperText>
                 </Show>
 
-                <Show when={local.descriptionExtra}>
-                    <div class={styles.descriptionExtra}>
-                        {local.descriptionExtra}
-                    </div>
+                <Show when={descriptionExtra()}>
+                    <div class={styles.descriptionExtra}>{descriptionExtra()}</div>
                 </Show>
 
-                <Show when={local.children}>
-                    <div class={styles.contentArea}>{local.children}</div>
+                <Show when={content()}>
+                    <div class={styles.contentArea}>{content()}</div>
                 </Show>
 
-                <Show when={Boolean(local.footerLeft) || Boolean(local.footerRight)}>
+                <Show when={Boolean(footerLeft()) || Boolean(footerRight())}>
                     <div class={styles.footer}>
-                        <div class={styles.footerLeft}>{local.footerLeft}</div>
-                        <div class={styles.footerRight}>
-                            {local.footerRight}
-                        </div>
+                        <div class={styles.footerLeft}>{footerLeft()}</div>
+                        <div class={styles.footerRight}>{footerRight()}</div>
                     </div>
                 </Show>
             </div>
@@ -317,16 +303,9 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
     );
 
     return (
-        <Show
-            when={(local.effect ?? true) && isInteractive()}
-            fallback={cardContent()}
-        >
-            <PaperEffect
-                disabled={local.disabled}
-                colorless
-                class={styles.cardWrapper}
-            >
-                {cardContent()}
+        <Show when={(local.effect ?? true) && isInteractive()} fallback={card}>
+            <PaperEffect disabled={local.disabled} colorless class={styles.cardWrapper}>
+                {card}
             </PaperEffect>
         </Show>
     );

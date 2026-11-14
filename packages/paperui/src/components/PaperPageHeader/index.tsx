@@ -1,5 +1,6 @@
 import styles from "./index.module.css";
 import {
+    children,
     createEffect,
     createSignal,
     onCleanup,
@@ -34,6 +35,10 @@ export function PaperPageHeader(props: ParentProps<PaperPageHeaderProps>) {
         "classList",
         "children",
     ]);
+
+    const icon = children(() => local.icon);
+    const subtitle = children(() => local.subtitle);
+    const actions = children(() => local.children);
 
     let rootRef: HTMLDivElement | undefined;
     let headingRef: HTMLDivElement | undefined;
@@ -74,30 +79,26 @@ export function PaperPageHeader(props: ParentProps<PaperPageHeaderProps>) {
             classList={local.classList}
         >
             <div class={styles.heading} ref={headingRef}>
-                <Show when={local.icon}>
+                <Show when={icon()}>
                     <span class={styles.iconChip}>
-                        {typeof local.icon === "string" ? (
-                            <PaperIcon>{local.icon}</PaperIcon>
-                        ) : (
-                            local.icon
-                        )}
+                        {typeof icon() === "string" ? <PaperIcon>{icon()}</PaperIcon> : icon()}
                     </span>
                 </Show>
                 <div class={styles.text}>
                     <PaperText preset="title" class={styles.title}>
                         {local.title}
                     </PaperText>
-                    <Show when={local.subtitle}>
+                    <Show when={subtitle()}>
                         <PaperText size={3} color="text-subtle">
-                            {local.subtitle}
+                            {subtitle()}
                         </PaperText>
                     </Show>
                 </div>
             </div>
 
-            <Show when={local.children}>
+            <Show when={actions()}>
                 <div class={styles.actions} ref={actionsRef}>
-                    {local.children}
+                    {actions()}
                 </div>
             </Show>
         </div>

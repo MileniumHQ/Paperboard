@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { splitProps, type JSX } from "solid-js";
+import { children, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import { PaperIcon } from "../PaperIcon";
@@ -39,6 +39,8 @@ export function PaperButton(props: PaperButtonProps) {
         "rel",
         "onClick",
     ]);
+
+    const content = children(() => local.children);
 
     // a disabled anchor drops its href: without one it is not a link, so it
     // cannot be followed, focused, or clicked into its handler
@@ -87,11 +89,7 @@ export function PaperButton(props: PaperButtonProps) {
             onClick={inertLink() ? undefined : local.onClick}
             aria-label={ariaLabel()}
         >
-            {local.icon && typeof local.children === "string" ? (
-                <PaperIcon>{local.children}</PaperIcon>
-            ) : (
-                local.children
-            )}
+            {local.icon && typeof content() === "string" ? <PaperIcon>{content()}</PaperIcon> : content()}
         </Dynamic>
     );
 }

@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { splitProps, Show, type JSX, type ParentProps } from "solid-js";
+import { splitProps, Show, children, type JSX, type ParentProps } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
 
@@ -20,30 +20,27 @@ export function PaperEmptyState(props: ParentProps<PaperEmptyStateProps>) {
         "children",
     ]);
 
+    const icon = children(() => local.icon);
+    const title = children(() => local.title);
+    const description = children(() => local.description);
+    const actions = children(() => local.children);
+
     const className = () =>
         [styles.PaperEmptyState, local.class].filter(Boolean).join(" ");
 
     return (
         <div {...rest} class={className()} classList={local.classList}>
-            <Show when={local.icon}>
-                {typeof local.icon === "string" ? (
-                    <PaperIcon class={styles.icon}>{local.icon}</PaperIcon>
-                ) : (
-                    local.icon
-                )}
+            <Show when={icon()}>
+                {typeof icon() === "string" ? <PaperIcon class={styles.icon}>{icon()}</PaperIcon> : icon()}
             </Show>
-            <Show when={local.title}>
-                <PaperText preset="label">
-                    {local.title}
-                </PaperText>
+            <Show when={title()}>
+                <PaperText preset="label">{title()}</PaperText>
             </Show>
-            <Show when={local.description}>
-                <PaperText preset="hint">
-                    {local.description}
-                </PaperText>
+            <Show when={description()}>
+                <PaperText preset="hint">{description()}</PaperText>
             </Show>
-            <Show when={local.children}>
-                <div class={styles.actions}>{local.children}</div>
+            <Show when={actions()}>
+                <div class={styles.actions}>{actions()}</div>
             </Show>
         </div>
     );

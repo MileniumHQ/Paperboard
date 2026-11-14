@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { splitProps, Show, type JSX } from "solid-js";
+import { children, splitProps, Show, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
 import { PaperProgress } from "../PaperProgress";
@@ -40,6 +40,8 @@ export function PaperStatTile(props: PaperStatTileProps) {
         "style",
     ]);
 
+    const icon = children(() => local.icon);
+
     const roleStyle = () =>
         isPaperRole(local.tone) ? roleVars(local.tone) : {};
 
@@ -58,13 +60,9 @@ export function PaperStatTile(props: PaperStatTileProps) {
             classList={local.classList}
             style={{ ...roleStyle(), ...(typeof local.style === "object" ? local.style : {}) }}
         >
-            <Show when={local.icon}>
+            <Show when={icon()}>
                 <span class={iconClass()}>
-                    {typeof local.icon === "string" ? (
-                        <PaperIcon zeroHeight>{local.icon}</PaperIcon>
-                    ) : (
-                        local.icon
-                    )}
+                    {typeof icon() === "string" ? <PaperIcon zeroHeight>{icon()}</PaperIcon> : icon()}
                 </span>
             </Show>
             <div class={styles.text}>

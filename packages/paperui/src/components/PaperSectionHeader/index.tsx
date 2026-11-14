@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { splitProps, Show, type JSX, type ParentProps } from "solid-js";
+import { children, splitProps, Show, type JSX, type ParentProps } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
 import { PaperBadge } from "../PaperBadge";
@@ -22,18 +22,17 @@ export function PaperSectionHeader(props: ParentProps<PaperSectionHeaderProps>) 
         "children",
     ]);
 
+    const icon = children(() => local.icon);
+    const actions = children(() => local.children);
+
     const className = () =>
         [styles.PaperSectionHeader, local.class].filter(Boolean).join(" ");
 
     return (
         <div {...rest} class={className()} classList={local.classList}>
             <div class={styles.title}>
-                <Show when={local.icon}>
-                    {typeof local.icon === "string" ? (
-                        <PaperIcon class={styles.icon}>{local.icon}</PaperIcon>
-                    ) : (
-                        local.icon
-                    )}
+                <Show when={icon()}>
+                    {typeof icon() === "string" ? <PaperIcon class={styles.icon}>{icon()}</PaperIcon> : icon()}
                 </Show>
                 <PaperText preset="heading">
                     {local.title}
@@ -42,8 +41,8 @@ export function PaperSectionHeader(props: ParentProps<PaperSectionHeaderProps>) 
                     <PaperBadge variant="monochrome">{local.count}</PaperBadge>
                 </Show>
             </div>
-            <Show when={local.children}>
-                <div class={styles.actions}>{local.children}</div>
+            <Show when={actions()}>
+                <div class={styles.actions}>{actions()}</div>
             </Show>
         </div>
     );

@@ -1,5 +1,6 @@
 import styles from "./index.module.css";
 import {
+    children,
     createEffect,
     createSignal,
     onCleanup,
@@ -81,6 +82,7 @@ export function PaperPopover(props: ParentProps<PaperPopoverProps>) {
         "style",
         "children",
     ]);
+    const title = children(() => local.title);
     let box: HTMLDivElement | undefined;
     const [position, setPosition] = createSignal<ReturnType<typeof placePopover> | null>(null);
 
@@ -151,19 +153,19 @@ export function PaperPopover(props: ParentProps<PaperPopoverProps>) {
                     }}
                 >
                     <span class={styles.tail} aria-hidden="true" />
-                    <Show when={local.title}>
-                        {typeof local.title === "string" ? (
+                    <Show when={title()}>
+                        {typeof title() === "string" ? (
                             local.flush ? (
                                 <PaperText as="div" preset="section" color="text-subtle" class={styles.title}>
-                                    {local.title}
+                                    {title()}
                                 </PaperText>
                             ) : (
                                 <PaperText preset="label" class={styles.title}>
-                                    {local.title}
+                                    {title()}
                                 </PaperText>
                             )
                         ) : (
-                            local.title
+                            title()
                         )}
                     </Show>
                     <div class={styles.body}>{local.children}</div>

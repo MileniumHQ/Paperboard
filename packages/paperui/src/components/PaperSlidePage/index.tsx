@@ -1,4 +1,4 @@
-import { type JSX, For, Show, createEffect, on, onCleanup } from "solid-js";
+import { type JSX, For, Show, children, createEffect, on, onCleanup } from "solid-js";
 import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
@@ -66,6 +66,7 @@ export interface PaperSlidePageProps {
  * re-parented either way, so nothing inside remounts or reloads.
  */
 export function PaperSlidePage(props: PaperSlidePageProps) {
+    const icon = children(() => props.icon);
     createNavigationBack(() => props.enabled && props.open, () => props.onBack());
     // a page inside a panel names itself to the shell's bar; a fixed one too,
     // which in a frame covers the panel, not the screen
@@ -143,9 +144,9 @@ export function PaperSlidePage(props: PaperSlidePageProps) {
                     <PaperButton icon variant="text" aria-label="Back" onClick={() => props.onBack()}>
                         <PaperIcon>arrow_back</PaperIcon>
                     </PaperButton>
-                    <Show when={props.icon}>
+                    <Show when={icon()}>
                         <span class={styles.icon} aria-hidden="true">
-                            {typeof props.icon === "string" ? <PaperIcon>{props.icon}</PaperIcon> : props.icon}
+                            {typeof icon() === "string" ? <PaperIcon>{icon()}</PaperIcon> : icon()}
                         </span>
                     </Show>
                     <span class={styles.trail}>
