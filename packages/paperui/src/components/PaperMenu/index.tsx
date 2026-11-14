@@ -4,6 +4,7 @@ import {
     createContext,
     useContext,
     createEffect,
+    on,
     createSignal,
     splitProps,
     onCleanup,
@@ -326,10 +327,10 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
 
     // the phone layout's page bar names the open entry with its title and icon
     // (after render: the title is read from the rendered label)
-    createEffect(() => {
+    createEffect(on([isPanelNav, () => local.value], ([panelNav, value]) => {
         const register = panel?.registerEntry;
-        if (!isPanelNav() || !register) return;
-        const unregister = register(local.value, {
+        if (!panelNav || !register) return;
+        const unregister = register(value, {
             // the title is the text block's first element; the description follows
             title: () => textRef?.firstElementChild?.textContent?.trim() || String(local.value),
             get icon() {
@@ -338,7 +339,7 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
             },
         });
         onCleanup(unregister);
-    });
+    }));
 
     // tapping an entry opens its page, even the entry already selected
     const activate = () => {

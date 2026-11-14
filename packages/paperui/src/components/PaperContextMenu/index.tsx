@@ -437,8 +437,11 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
         findItem(value)?.scrollIntoView?.({ block: "nearest" });
     };
 
-    createEffect(() => {
-        if (!local.open) {
+    // runs as the menu opens and closes, and on nothing else: a parent that
+    // changes initialHighlight (a select's value) while the menu is open must
+    // not hand focus back to the trigger and rebuild every listener
+    createEffect(on(() => local.open, (open) => {
+        if (!open) {
             setActiveSubMenu(null);
             return;
         }
@@ -656,7 +659,7 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
             window.removeEventListener("scroll", handleScroll, true);
             document.removeEventListener("pointerdown", handleOutsidePointerDown, true);
         });
-    });
+    }));
 
     const contextValue: ContextMenuContextType = {
         rootId,

@@ -91,4 +91,18 @@ describe("PaperSelectMenu", () => {
         await page.eval('document.getElementById("scroller").scrollTop = 200');
         await page.waitFor(`!(${popupOpen("fast")})`, "the scroll to close the menu");
     });
+
+    test("a value changed by the parent while the menu is open leaves the open menu and its search field as they are", async () => {
+        page = await browser.open("selectMenu");
+        await openMenu("searchControlled", "free");
+        const searchFocused = `document.activeElement?.matches('[role="listbox"] input[type="search"]') === true`;
+        await page.waitFor(searchFocused, "the search field to take focus");
+        await page.type("t");
+
+        await page.eval('t.setPlan("team")');
+        expect(await triggerText("searchControlled")).toContain("Team");
+        expect(await page.eval(popupOpen("team"))).toBe(true);
+        expect(await page.eval(searchFocused)).toBe(true);
+        expect(await page.eval("document.activeElement.value")).toBe("t");
+    });
 });

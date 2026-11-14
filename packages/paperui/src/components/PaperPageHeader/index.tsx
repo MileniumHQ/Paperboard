@@ -3,6 +3,7 @@ import {
     children,
     createEffect,
     createSignal,
+    on,
     onCleanup,
     splitProps,
     Show,
@@ -64,9 +65,8 @@ export function PaperPageHeader(props: ParentProps<PaperPageHeaderProps>) {
     // actions that start below the heading have wrapped under it. Stacked
     // actions only grow to fill their row, which never changes where the row
     // wraps, so the measurement can't flip back and forth.
-    createEffect(() => {
-        const heading = headingShown();
-        if (!actions() || !rootRef || typeof ResizeObserver === "undefined") {
+    createEffect(on([headingShown, actions], ([heading, shownActions]) => {
+        if (!shownActions || !rootRef || typeof ResizeObserver === "undefined") {
             setStacked(!heading);
             return;
         }
@@ -83,7 +83,7 @@ export function PaperPageHeader(props: ParentProps<PaperPageHeaderProps>) {
         observer.observe(rootRef);
         measure();
         onCleanup(() => observer.disconnect());
-    });
+    }));
 
     return (
         <Show when={headingShown() || actions()}>

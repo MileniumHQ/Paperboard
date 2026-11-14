@@ -7,6 +7,7 @@ import { createNavigationBack } from "../../utils/navigationBack";
 import styles from "./index.module.css";
 import {
     createEffect,
+    on,
     createMemo,
     createSignal,
     onCleanup,
@@ -142,8 +143,8 @@ export function ModalLayer(props: ModalLayerProps) {
         });
     });
 
-    createEffect(() => {
-        if (!local.open) return;
+    createEffect(on(() => local.open, (open) => {
+        if (!open) return;
 
         const previousActiveElement = opener();
         const layer = {};
@@ -208,7 +209,7 @@ export function ModalLayer(props: ModalLayerProps) {
             // back where it was, if that is still on the page
             if (previousActiveElement?.isConnected) previousActiveElement.focus();
         });
-    });
+    }));
 
     const handleBackdropClick = (e: MouseEvent) => {
         if (e.target === e.currentTarget && (local.closeOnBackdropClick ?? true)) {

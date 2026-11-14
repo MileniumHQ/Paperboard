@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import {
     children,
     createEffect,
+    on,
     createSignal,
     onCleanup,
     Show,
@@ -101,15 +102,16 @@ export function PaperPopover(props: ParentProps<PaperPopoverProps>) {
         );
     };
 
-    createEffect(() => {
-        if (!local.open) {
+    // open, and the anchor it observes: a new anchor is watched instead
+    createEffect(on([() => local.open, () => local.anchor], ([open, anchor]) => {
+        if (!open) {
             setPosition(null);
             return;
         }
         // the anchor moves with layout, the box with its content
         const observer = new ResizeObserver(place);
         if (box) observer.observe(box);
-        if (local.anchor) observer.observe(local.anchor);
+        if (anchor) observer.observe(anchor);
         window.addEventListener("resize", place);
         const onKey = (e: KeyboardEvent) => {
             if (e.key === "Escape") local.onClose?.();
@@ -130,7 +132,7 @@ export function PaperPopover(props: ParentProps<PaperPopoverProps>) {
             window.removeEventListener("keydown", onKey);
             document.removeEventListener("pointerdown", onOutside, true);
         });
-    });
+    }));
 
     return (
         <Show when={local.open}>

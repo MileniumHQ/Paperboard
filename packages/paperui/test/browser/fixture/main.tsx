@@ -121,8 +121,10 @@ const scenarios: Record<string, () => JSX.Element> = {
         const [size, setSize] = createSignal("s");
         const [added, setAdded] = createSignal(false);
         const [label, setLabel] = createSignal("Ex");
+        const [plan, setPlan] = createSignal("free");
         const t = (window.t = {
             changes: [] as unknown[],
+            setPlan,
             formEvents: [] as string[],
             controlledChanges: [] as unknown[],
             setSize,
@@ -167,6 +169,13 @@ const scenarios: Record<string, () => JSX.Element> = {
                     <PaperSelectMenu name="model" searchable onValueChange={(v) => t.changes.push(v)}>
                         <PaperSelectMenuItem value="fast">Fast</PaperSelectMenuItem>
                         <PaperSelectMenuItem value="smart">Smart</PaperSelectMenuItem>
+                    </PaperSelectMenu>
+                </div>
+                <div id="searchControlled">
+                    <PaperSelectMenu name="plan" searchable value={plan()} onValueChange={(v) => setPlan(String(v))}>
+                        <PaperSelectMenuItem value="free">Free</PaperSelectMenuItem>
+                        <PaperSelectMenuItem value="pro">Pro</PaperSelectMenuItem>
+                        <PaperSelectMenuItem value="team">Team</PaperSelectMenuItem>
                     </PaperSelectMenu>
                 </div>
                 <div id="scroller" style={{ height: "160px", overflow: "auto" }}>
