@@ -179,15 +179,17 @@ async function readRelease(tag: string): Promise<HostedRelease> {
 // Hashes every asset a release must hold, as hosted: the bytes are
 // downloaded and checked against GitHub's own size and sha256, so the index
 // can only ever record files that are really there. The downloads are
-// removed however it ends.
-async function hashReleaseAssets(tag: string, releaseAssets: Map<string, ReleaseAsset>): Promise<BuiltBinary[]> {
+// removed however it ends, so the result carries no file path.
+type IndexedAsset = Omit<BuiltBinary, "filePath">;
+
+async function hashReleaseAssets(tag: string, releaseAssets: Map<string, ReleaseAsset>): Promise<IndexedAsset[]> {
     const jobs = expectedReleaseAssets(new Set(releaseAssets.keys()), version);
     const missing = jobs.filter((j) => !releaseAssets.has(j.file)).map((j) => j.file);
     if (missing.length) {
         fail(`Release ${tag} is missing expected asset(s):\n  ${missing.join("\n  ")}`);
     }
     const dir = mkdtempSync(join(tmpdir(), "paperboard-index-"));
-    const staged: BuiltBinary[] = [];
+    const staged: IndexedAsset[] = [];
     try {
         const dl = bar(jobs.length);
         for (const j of jobs) {
@@ -208,7 +210,7 @@ async function hashReleaseAssets(tag: string, releaseAssets: Map<string, Release
                     throw new Error(`${j.file}: sha256 does not match the release digest; refusing to index changed bytes`);
                 }
             }
-            staged.push({ app: j.app, target: j.target, filePath, filename: j.file, releaseFile: j.file, sha256, sha512, size });
+            staged.push({ app: j.app, target: j.target, filename: j.file, releaseFile: j.file, sha256, sha512, size });
             dl.increment(1, { task: j.file });
         }
         dl.stop();
@@ -220,7 +222,7 @@ async function hashReleaseAssets(tag: string, releaseAssets: Map<string, Release
 
 // Move the live index to a finished release: KV version records, the signed
 // crane update index on R2, and the electron-updater feeds.
-async function publishIndex(signingKey: KeyObject, v: string, staged: BuiltBinary[]): Promise<void> {
+async function publishIndex(signingKey: KeyObject, v: string, staged: IndexedAsset[]): Promise<void> {
     // one signature per file, recorded in KV and (for the server) in the crane index
     const signatures = new Map(
         staged.map((b) => [
