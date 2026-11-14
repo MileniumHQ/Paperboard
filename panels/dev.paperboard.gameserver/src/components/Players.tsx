@@ -1,5 +1,5 @@
 import { PANEL_ID } from "../service/types";
-import { createSignal, createEffect, For, onCleanup, onMount, Show } from "solid-js";
+import { createSignal, createEffect, createMemo, For, on, onCleanup, onMount, Show } from "solid-js";
 import {
     PaperBadge,
     PaperButton,
@@ -42,9 +42,13 @@ import { bedrockPlayerName, gamertagOf, isFloodgateUuid, type BedrockNaming } fr
 import PlayerHead from "./PlayerHead";
 import PlayerRoster, { statusColor } from "./PlayerRoster";
 import { errorMessage, type Outcome } from "../lib/failure";
+import { keepUnchanged } from "../core/state";
 
 const LIST_POLL_MS = 15000;
 const STATS_POLL_MS = 30000;
+// how often an online player's open page asks the game for their health,
+// food and experience: each ask is four console commands
+const LIVE_STATS_MS = 15000;
 
 interface PlayerInfo {
     name: string;
@@ -230,12 +234,16 @@ export default function Players() {
     // the roster is the server's lists plus everyone with data in this
     // world, one row per uuid; usercache.json is only a name book (the
     // server keeps writing it back), so a player whose data was deleted
-    // and who is on no list is gone for good
-    const allPlayers = () => {
+    // and who is on no list is gone for good. Each player keeps one object
+    // (by uuid, else by name) for as long as nothing about them changes, so
+    // their row, and its head, stays while the rest of the roster updates.
+    let known = new Map<string, PlayerInfo>();
+    const playerKey = (player: PlayerInfo) => (player.uuid ?? player.name).toLowerCase();
+    const allPlayers = createMemo(() => {
         const byUuid = new Map<string, PlayerInfo>();
-        const known: PlayerInfo[] = [];
+        const list: PlayerInfo[] = [];
         for (const player of players()) {
-            known.push(player);
+            list.push(player);
             if (player.uuid) byUuid.set(player.uuid.toLowerCase(), player);
         }
         for (const summary of playerStatSummaries().values()) {
@@ -244,21 +252,30 @@ export default function Players() {
             const entry = { name: summary.name, uuid, whitelisted: false, op: false };
             entry.name = nameOf(entry);
             byUuid.set(uuid, entry);
-            known.push(entry);
+            list.push(entry);
         }
         // online and recently seen players not on file yet (their first
         // session has not been saved)
-        const listed = new Set(known.map((p) => p.name.toLowerCase()));
+        const listed = new Set(list.map((p) => p.name.toLowerCase()));
         for (const name of [...seenPlayerNames(), ...onlinePlayerNames()]) {
             if (listed.has(name)) continue;
             listed.add(name);
-            known.push({ name, whitelisted: false, op: false });
+            list.push({ name, whitelisted: false, op: false });
         }
-        return known;
-    };
+        const kept = new Map<string, PlayerInfo>();
+        const stable = list.map((player) => {
+            const key = playerKey(player);
+            const previous = known.get(key);
+            const same = previous ? keepUnchanged(previous, player) : player;
+            kept.set(key, same);
+            return same;
+        });
+        known = kept;
+        return stable;
+    });
 
     // Unflagged players are always shown so offline ones don't vanish
-    const visiblePlayers = () => {
+    const visiblePlayers = createMemo(() => {
         const online = onlinePlayerNames();
         const query = searchQuery().trim().toLowerCase();
         return allPlayers().filter((player) => {
@@ -270,7 +287,7 @@ export default function Players() {
             if (player.op && showOp()) return true;
             return !isOn && !player.whitelisted && !player.op;
         });
-    };
+    });
 
     // offline stats come from the world's stats/<uuid>.json (loaded on mount
     // and by a slow poll); a missing entry is just "no data", never a zero
@@ -324,7 +341,7 @@ export default function Players() {
     };
 
     // leaderboard: highest first for stats, alphabetical for names
-    const sortedPlayers = () => {
+    const sortedPlayers = createMemo(() => {
         const key = sortBy();
         const list = visiblePlayers().slice();
         if (key === "name") {
@@ -333,13 +350,17 @@ export default function Players() {
         }
         list.sort((a, b) => statNumber(b, key) - statNumber(a, key));
         return list;
-    };
+    });
 
     const isPlayerOn = (name: string) => onlinePlayerNames().has(name.toLowerCase());
-    const onlineSorted = () => sortedPlayers().filter((p) => isPlayerOn(p.name));
-    const offlineSorted = () => sortedPlayers().filter((p) => !isPlayerOn(p.name));
+    const onlineSorted = createMemo(() => sortedPlayers().filter((p) => isPlayerOn(p.name)));
+    const offlineSorted = createMemo(() => sortedPlayers().filter((p) => !isPlayerOn(p.name)));
+    const sections = createMemo(() => [
+        { label: "Online", players: onlineSorted() },
+        { label: "Offline", players: offlineSorted() },
+    ]);
 
-    const openPlayer = () => allPlayers().find((p) => p.name === openPlayerName());
+    const openPlayer = createMemo(() => allPlayers().find((p) => p.name === openPlayerName()));
     const openIsBanned = () =>
         bannedNames().has((openPlayer()?.name ?? "").toLowerCase());
 
@@ -368,6 +389,17 @@ export default function Players() {
         }
     };
 
+    // the switch moves at once; a refusal puts it back and says why
+    const setFlag = (playerName: string, uuid: string | undefined, field: "op" | "whitelisted", value: boolean) => {
+        const key = playerName.toLowerCase();
+        setPlayers((prev) =>
+            prev.some((p) => p.name.toLowerCase() === key)
+                ? prev.map((p) => (p.name.toLowerCase() === key ? { ...p, [field]: value } : p))
+                // a player known only from their stats or a session joins the lists
+                : [...prev, { name: playerName, uuid, whitelisted: false, op: false, [field]: value }],
+        );
+    };
+
     const togglePlayerFlag = async (
         playerName: string,
         field: "op" | "whitelisted",
@@ -378,23 +410,19 @@ export default function Players() {
                 ? value ? CALLS.opPlayer : CALLS.deopPlayer
                 : value ? CALLS.whitelistPlayer : CALLS.unwhitelistPlayer;
         const failure = field === "op" ? (value ? "made an operator" : "removed as an operator") : value ? "whitelisted" : "removed from the whitelist";
-        const uuid = allPlayers().find((p) => p.name === playerName)?.uuid;
-        const ok = await callPlayerAction(actionId, playerName, failure, { uuid });
-        if (!ok) return; // state stays as the server reports it
-        // a stopped server's files were edited in place: read them back.
-        // A running one writes them a moment after the command, so the
-        // change is echoed instead
-        if (serverStatus() === "offline") {
-            await loadRoster();
+        const player = allPlayers().find((p) => p.name === playerName);
+        const listed = players().some((p) => p.name.toLowerCase() === playerName.toLowerCase());
+        setFlag(playerName, player?.uuid, field, value);
+        const ok = await callPlayerAction(actionId, playerName, failure, { uuid: player?.uuid });
+        if (!ok) {
+            if (listed) setFlag(playerName, player?.uuid, field, !value);
+            else setPlayers((prev) => prev.filter((p) => p.name.toLowerCase() !== playerName.toLowerCase()));
             return;
         }
-        setPlayers((prev) =>
-            prev.map((p) =>
-                p.name.toLowerCase() === playerName.toLowerCase()
-                    ? { ...p, [field]: value }
-                    : p,
-            ),
-        );
+        // a stopped server's files were edited in place: read them back.
+        // A running one writes them a moment after the command, so the
+        // switch already shows what it will write
+        if (serverStatus() === "offline") await loadRoster();
     };
 
     const setPlayerBanned = (playerName: string, banned: boolean, reason?: string): Promise<boolean> => {
@@ -561,10 +589,7 @@ export default function Players() {
                 ]}
                 feedback={feedback()}
                 onDismissFeedback={() => setFeedback(undefined)}
-                sections={[
-                    { label: "Online", players: onlineSorted() },
-                    { label: "Offline", players: offlineSorted() },
-                ]}
+                sections={sections()}
                 icon={(player) => <PlayerHead name={player.name} uuid={player.uuid} size="medium" />}
                 description={(player) =>
                     isPlayerOn(player.name) ? `Playing · ${statText(player, "playtime")}` : `Played ${statText(player, "playtime")}`
@@ -737,12 +762,17 @@ function PlayerInspector(props: {
             ? playerStatSummaries().get(props.player.uuid.toLowerCase())
             : undefined;
 
-    // refresh live stats while the inspector shows an online player
-    createEffect(() => {
-        if (props.player && isPlayerOnline()) {
-            queryPlayerStats(name());
-        }
-    });
+    // live stats for an online player: asked when their page opens or they
+    // come online, then on a slow poll, never because other state arrived
+    const liveName = createMemo(() => (props.player && isPlayerOnline() ? name() : undefined));
+    createEffect(
+        on(liveName, (player) => {
+            if (!player) return;
+            queryPlayerStats(player);
+            const poll = setInterval(() => queryPlayerStats(player), LIVE_STATS_MS);
+            onCleanup(() => clearInterval(poll));
+        }),
+    );
 
     const playtimeText = () => {
         const s = summary();

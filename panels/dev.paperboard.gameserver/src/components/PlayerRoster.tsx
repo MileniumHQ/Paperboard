@@ -1,4 +1,4 @@
-import { createSignal, For, Index, Show, type JSX } from "solid-js";
+import { createMemo, createSignal, For, Index, Show, type JSX } from "solid-js";
 import {
     PaperChip,
     PaperFlex,
@@ -62,11 +62,16 @@ export default function PlayerRoster<T extends { name: string }>(props: {
     const [detailOpen, setDetailOpen] = createSignal(false);
     const any = () => props.sections.some((section) => section.players.length > 0);
     // Another player's detail is a new view, built again: it opens at its top,
-    // not scrolled to where the last player's was left.
-    const detail = () => {
-        void props.open;
-        return props.children;
-    };
+    // not scrolled to where the last player's was left. The same player's
+    // stays the view it is while their data changes, so a switch pressed on
+    // it slides where it is and the page keeps its scroll.
+    const openName = createMemo(() => props.open);
+    const opened = createMemo(() => ({ name: openName() }));
+    const detail = () => (
+        <Show when={opened()} keyed>
+            {(_opened) => props.children}
+        </Show>
+    );
 
     return (
         <PaperFlex grow minHeight={0} fullWidth>
@@ -84,13 +89,14 @@ export default function PlayerRoster<T extends { name: string }>(props: {
                                 onInput={(e) => props.onSearch(e.currentTarget.value)}
                             />
                             <PaperFlex direction="row" gap="half" wrap>
-                                <For each={props.filters}>
+                                {/* by position: the filters are a fresh list on every update, and each chip stays */}
+                                <Index each={props.filters}>
                                     {(filter) => (
-                                        <PaperChip selected={filter.selected} count={filter.count} onClick={() => filter.onToggle()}>
-                                            {filter.label}
+                                        <PaperChip selected={filter().selected} count={filter().count} onClick={() => filter().onToggle()}>
+                                            {filter().label}
                                         </PaperChip>
                                     )}
-                                </For>
+                                </Index>
                             </PaperFlex>
                             <Show when={props.feedback}>
                                 {(note) => (
