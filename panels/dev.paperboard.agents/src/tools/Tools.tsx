@@ -7,7 +7,7 @@
 // says why. Secret values are typed into password fields and go straight to
 // the daemon's vault; this page only ever sees their names.
 
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, on } from "solid-js";
+import { For, Match, Show, Switch, createComputed, createEffect, createMemo, createSignal, on } from "solid-js";
 import {
     PaperButton,
     PaperEmptyState,
@@ -25,6 +25,7 @@ import {
     PaperText,
     PaperToggle,
 } from "@mileniumhq/paperui";
+import { createStore, reconcile } from "solid-js/store";
 import type { Agent } from "../lib/agent";
 import { holdPage } from "../lib/pageHold";
 import { errorText, failure, type Failure } from "../lib/failure";
@@ -325,6 +326,9 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
         ),
     );
     const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((cur) => ({ ...cur, [k]: v }));
+    // the rows are a store kept by row.key, so typing in one changes that row in place and nothing remounts
+    const [rows, setRows] = createStore<Row[]>([]);
+    createComputed(() => setRows(reconcile(f().rows, { key: "key" })));
     const setRow = (key: number, patch: Partial<Row>) => setF((cur) => ({ ...cur, rows: cur.rows.map((r) => (r.key === key ? { ...r, ...patch } : r)) }));
     const http = () => f().transport === "http";
     const saved = (row: Row) => (props.tools.view()?.secrets[f().name.trim()] ?? []).includes(secretNameOf(row.name.trim()));
@@ -429,7 +433,7 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
                                 A secret header holds the whole value, like “Bearer abc123”.
                             </PaperText>
                         </Show>
-                        <For each={f().rows}>
+                        <For each={rows}>
                             {(row) => (
                                 <PaperFlex direction="row" align="end" gap="half" role="group" aria-label={row.name || valuesLabel()}>
                                     <PaperFlex flex minWidth={0}>
