@@ -265,7 +265,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
 
     const startLibraryDrag = (entry: LibraryEntry, event: PointerEvent) => {
         const size = parseWidgetSize(entry.size);
-        if (!size) return;
+        if (!size) throw new Error(`The widget size "${entry.size}" is not WxH`);
         // the ghost hangs from the pointer near its top, like picking up a card
         carrying.beginDrag(event, { kind: "new", entry }, entry.widget.name, size, { x: size.w / 2, y: 0.3 });
     };

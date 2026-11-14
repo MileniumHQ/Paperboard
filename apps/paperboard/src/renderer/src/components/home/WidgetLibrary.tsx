@@ -44,8 +44,8 @@ export function sizeLabel(size: string): string {
     return size.replace("x", "×");
 }
 
-// previews are the real widget, drawn at Home's cell size and scaled to this
-// previews fill the card's width, up to a cell this big
+// a preview is the real widget, scaled to fill the card's width
+// (PREVIEW_WIDTH) with cells no bigger than PREVIEW_CELL
 const PREVIEW_CELL = 88;
 const PREVIEW_WIDTH = 252;
 
