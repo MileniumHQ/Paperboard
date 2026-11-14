@@ -1,6 +1,7 @@
 import { createSignal, createEffect, onCleanup } from "solid-js";
 import { config } from "@mileniumhq/paperapi";
 import { logToMain, notifyAppSettingsChanged, shellApi } from "../lib/shell";
+import { createSaveQueue } from "../lib/saveQueue";
 import { withAppSettingsDefaults } from "../../../shared/appSettingsDefaults";
 import { effectiveLook, type Graphics } from "../../../shared/graphics";
 import {
@@ -65,10 +66,8 @@ export function useAppSettings() {
             const stored = await config.get<Partial<AppSettingsData>>(
                 APP_SETTINGS_ID,
             );
-            if (stored) {
-                const merged = withAppSettingsDefaults(APP_SETTINGS_DEFAULTS, stored);
-                setAppSettings(merged);
-            }
+            // nothing saved yet is the defaults, also when a first change didn't save
+            setAppSettings(stored ? withAppSettingsDefaults(APP_SETTINGS_DEFAULTS, stored) : APP_SETTINGS_DEFAULTS);
             return true;
         } catch (err) {
             logToMain("error", "Failed to load app settings; showing the defaults:", err);
@@ -82,27 +81,38 @@ export function useAppSettings() {
         await loadAppSettings();
     };
 
-    const handleAppSettingsChange = async (next: AppSettingsData) => {
+    // A change shows at once, and the next change is built on it: settings
+    // that only changed once the save came back would hand a second change,
+    // made while the first was saving, the old settings, and its save would
+    // undo the first. The saves themselves run one at a time, in order.
+    const saves = createSaveQueue();
+    const handleAppSettingsChange = (next: AppSettingsData): Promise<void> => {
+        setAppSettings(next);
+        return saves((superseded) => persistAppSettings(next, superseded));
+    };
+
+    const persistAppSettings = async (next: AppSettingsData, superseded: () => boolean) => {
         // Persist BEFORE notifying main: main re-reads the file during sync.
         // R3: a failed persist must NOT notify — main would broadcast the
         // stale file while the UI shows the new values, and the states
-        // silently diverge until the next load reverts the UI. Re-read
-        // from the store instead: the UI falls back to persisted truth.
+        // silently diverge until the next load reverts the UI.
         try {
             await config.set(next, APP_SETTINGS_ID);
         } catch (err) {
             logToMain("error", "Failed to persist app settings; native side not notified:", err);
+            // a newer change is already waiting and carries this one in it:
+            // its save tries again, and clears this failure if it lands
+            if (superseded()) {
+                setSettingsFailure({ kind: "save", message: messageOf(err) });
+                return;
+            }
+            // Nothing newer: the UI falls back to the persisted truth, and
             // the save's failure is what to show, even if the re-read fails too
             if (await loadAppSettings()) setSettingsFailure({ kind: "save", message: messageOf(err) });
             else setSettingsFailure({ kind: "save", message: `${messageOf(err)}. The saved settings couldn't be read back either.` });
             return;
         }
         if (settingsFailure()?.kind === "save") setSettingsFailure(null);
-        // commit to renderer state: PaperSelectMenu/PaperToggle are controlled
-        // (their display follows the value prop), and the theme/motion effects
-        // read this signal, so a successful persist must update it or the UI
-        // keeps showing the previous selection.
-        setAppSettings(next);
         try {
             const refused = await notifyAppSettingsChanged();
             if (refused) setSettingsFailure({ kind: "apply", message: refused });

@@ -1,4 +1,4 @@
-import { For, createSignal, type JSX, Show } from "solid-js";
+import { For, createMemo, createSignal, type JSX, Show } from "solid-js";
 import {
     PaperSettingList,
     PaperSettingItem,
@@ -130,6 +130,8 @@ export default function AppSettings(props: {
     };
 
     const startOnMissing = () => startTarget(props.settings.startOn, props.computers).missing;
+    // one value object per settings change, not a new one on every read
+    const settingsValue = createMemo(() => ({ ...props.settings }) as Record<string, any>);
 
     // what shows, and whether it's on only because there's no GPU
     const look = () => ({
@@ -205,7 +207,7 @@ export default function AppSettings(props: {
 
             <PaperSettingList
                 autoHeight
-                value={{ ...props.settings } as Record<string, any>}
+                value={settingsValue()}
                 onValueChange={handleChange}
             >
                 <PaperSettingItem
@@ -351,6 +353,7 @@ function CompactSettings(props: {
     licenseModal: JSX.Element;
     notice: JSX.Element;
 }) {
+    const settingsValue = createMemo(() => ({ ...props.settings }) as Record<string, any>);
     const ActionRow = (row: { label: string; onClick: () => void; chevron?: boolean }) => (
         <button
             type="button"
@@ -371,7 +374,7 @@ function CompactSettings(props: {
                 flat
                 autoHeight
                 class={styles.form}
-                value={{ ...props.settings } as Record<string, any>}
+                value={settingsValue()}
                 onValueChange={props.onChange}
             >
                 <section class={styles.group} aria-labelledby="settings-appearance">
