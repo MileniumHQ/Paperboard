@@ -1,5 +1,5 @@
 import { PaperFlex, playHaptic, swipeFromFrame } from "@mileniumhq/paperui";
-import { backupApi, backupProgressFraction, backupProgressText, HAPTIC_MESSAGE, SWIPE_BACK_MESSAGE, type BackupProgress } from "@mileniumhq/paperapi";
+import { backupApi, backupProgressFraction, backupProgressText, HAPTIC_MESSAGE, LEAVE_ANSWER_MESSAGE, LEAVE_REQUEST_MESSAGE, SWIPE_BACK_MESSAGE, UNSAVED_CHANGES_MESSAGE, type BackupProgress } from "@mileniumhq/paperapi";
 import { type Component, type JSX, createEffect, createMemo, createSignal, For, on, Show, onCleanup, onMount } from "solid-js";
 import { recordUse, liveKeys, recordAway, withoutIdle, MAX_LIVE_IFRAMES, IDLE_UNLOAD_MS } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";
@@ -10,6 +10,7 @@ import { FILE_TRANSFER_RESULT, parseFileTransferMessage, runPanelFileTransfer } 
 import { createFrameLoopbackRedirects, LOOPBACK_REDIRECT_CANCEL, LOOPBACK_REDIRECT_REQUEST, LOOPBACK_REDIRECT_RESULT, parseLoopbackRedirectMessage } from "../../lib/panelLoopbackRedirect";
 import BackupLocationChooser, { type BackupLocationChoice } from "../backups/BackupLocationChooser";
 import { BACKUP_LOCATION_REQUEST, BACKUP_LOCATION_RESULT, parseBackupLocationRequest } from "../../lib/backupLocationRequest";
+import { setPanelUnsaved, unsavedPanels, type LeaveAnswer } from "../../lib/unsavedPanels";
 
 // restarting: the panel's service restarts; updating: a new release of the panel installs
 export type RestartState = { kind: "restarting" } | { kind: "updating" } | { kind: "failed"; message: string };
@@ -83,6 +84,15 @@ const PanelFrame: Component<{ panelKey: string; heading: { icon: JSX.Element; na
         const timer = setTimeout(() => setFailure("The panel did not finish connecting to its service."), 25_000);
         // a sign-in redirect this document asked the shell to catch
         const loopback = createFrameLoopbackRedirects(computerId);
+        // what this document was asked about its unsaved work, by request
+        const leaving = new Map<string, (answer: LeaveAnswer) => void>();
+        const askToLeave = () => new Promise<LeaveAnswer>((resolve) => {
+            const target = frame?.contentWindow;
+            if (!target) return resolve({ leave: true });
+            const requestId = crypto.randomUUID();
+            leaving.set(requestId, resolve);
+            target.postMessage({ type: LEAVE_REQUEST_MESSAGE, generation: current, requestId }, "*");
+        });
         const receive = (event: MessageEvent) => {
             if (event.source !== frame?.contentWindow || event.data?.generation !== generation) return;
             if (event.data.type === "paperboard:ready" && event.data.panelId === panelId) {
@@ -95,6 +105,12 @@ const PanelFrame: Component<{ panelKey: string; heading: { icon: JSX.Element; na
             } else if (event.data.type === SWIPE_BACK_MESSAGE) {
                 // the panel's list had no page to go back from: this frame's page goes back
                 if (frame && props.current) swipeFromFrame(frame, event.data);
+            } else if (event.data.type === UNSAVED_CHANGES_MESSAGE) {
+                setPanelUnsaved(props.panelKey, event.data.unsaved === true ? askToLeave : null);
+            } else if (event.data.type === LEAVE_ANSWER_MESSAGE) {
+                const resolve = leaving.get(event.data.requestId);
+                leaving.delete(event.data.requestId);
+                resolve?.({ leave: event.data.leave === true, error: typeof event.data.error === "string" ? event.data.error : undefined });
             } else if (event.data.type === HAPTIC_MESSAGE) {
                 // frames can't vibrate; the shell plays it, if it is a kind it knows
                 if (props.current) playHaptic(event.data.kind);
@@ -130,9 +146,14 @@ const PanelFrame: Component<{ panelKey: string; heading: { icon: JSX.Element; na
         // a reloaded document asked nothing; its open window closes unanswered
         // a document that goes mid-swipe leaves its page where it was, not half dragged
         // and its sign-in redirect stops being caught
-        onCleanup(() => { if (frame) swipeFromFrame(frame, { phase: "cancel", dx: 0, velocity: 0 }); clearTimeout(timer); window.removeEventListener("message", receive); setChooser(null); loopback.closeAll(); });
+        // and its unsaved work is gone with it: nothing is left to ask
+        onCleanup(() => {
+            if (frame) swipeFromFrame(frame, { phase: "cancel", dx: 0, velocity: 0 });
+            clearTimeout(timer); window.removeEventListener("message", receive); setChooser(null); loopback.closeAll();
+            setPanelUnsaved(props.panelKey, null);
+            for (const resolve of leaving.values()) resolve({ leave: true });
+        });
     });
-    onMount(() => { if (frame) frame.src = panelUrl(computerId, panelId, `?_r=${props.reload}&generation=${generation}`); });
     // mobile mode turning on or off reaches a frame already challenged
     createEffect(on(mobileMode, (mobile) => { if (mobile !== null) frame?.contentWindow?.postMessage({ type: MOBILE_MODE_MESSAGE, generation, mobile }, "*"); }, { defer: true }));
     return <div class={styles.panelLayer} classList={{ [styles.away]: !props.current }}>
@@ -195,7 +216,12 @@ const PanelView: Component<PanelViewProps> = (props) => {
         const clock = setInterval(() => setNow(Date.now()), 60_000);
         onCleanup(() => clearInterval(clock));
     });
-    const live = createMemo(() => withoutIdle(liveKeys(props.openedPanels, usageOrder(), currentKey(), MAX_LIVE_IFRAMES), away(), currentKey(), now(), IDLE_UNLOAD_MS));
+    // a page holding unsaved work stays loaded, however long it has been away
+    const live = createMemo(() => {
+        const kept = withoutIdle(liveKeys(props.openedPanels, usageOrder(), currentKey(), MAX_LIVE_IFRAMES), away(), currentKey(), now(), IDLE_UNLOAD_MS);
+        for (const key of unsavedPanels()) if (props.openedPanels.includes(key)) kept.add(key);
+        return kept;
+    });
     return <PaperFlex fullWidth fullHeight background="surface-raised" flex={1} overflow="hidden" class={styles.area}>
         <For each={props.openedPanels}>{(key) => {
             const heading = props.panelHeading(key);

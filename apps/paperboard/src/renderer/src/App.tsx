@@ -1,4 +1,4 @@
-import { type Component, type JSX, createSignal, createEffect, createMemo, onMount, onCleanup, For, Show } from "solid-js";
+import { type Component, type JSX, createSignal, createEffect, createMemo, on, onMount, onCleanup, For, Show } from "solid-js";
 import {
     PaperProvider,
     PaperFlex,
@@ -67,6 +67,7 @@ import { useAppSettings } from "./hooks/useAppSettings";
 import { START_ON_HOME, startTarget } from "./lib/startOn";
 import { useComputers } from "./hooks/useComputers";
 import { usePanels } from "./hooks/usePanels";
+import { askPanelToLeave, unsavedPanels } from "./lib/unsavedPanels";
 
 export type { ComputerItem };
 const App: Component = () => {
@@ -87,6 +88,7 @@ const App: Component = () => {
     } = useComputers();
     const {
         panelsByComputer,
+        invalidPanelsByComputer,
         forgetPanels,
         activeTabByComputer,
         setActiveTabByComputer,
@@ -114,7 +116,8 @@ const App: Component = () => {
     const [libraryReloadToken, setLibraryReloadToken] = createSignal(0);
     const reloadLibrary = () =>
         setLibraryReloadToken((token) => token + 1);
-    const [isForgetConfirmOpen, setIsForgetConfirmOpen] = createSignal(false);
+    // the computer the Forget Computer dialog is open for
+    const [forgetTarget, setForgetTarget] = createSignal<string | null>(null);
     const [isForgetting, setIsForgetting] = createSignal(false);
     const [forgetError, setForgetError] = createSignal<string | null>(null);
     const [renameComputerId, setRenameComputerId] = createSignal<string | null>(null);
@@ -204,9 +207,30 @@ const App: Component = () => {
             return next;
         });
 
+    // A panel page holding unsaved work is shown and asked (its own dialog)
+    // before the shell takes it away; false when one chose to stay.
+    const mayClosePanels = async (keys: string[]): Promise<boolean> => {
+        for (const key of keys) {
+            if (!unsavedPanels().has(key)) continue;
+            const [compId, panelId] = key.split("::");
+            setRailMode("computer");
+            setComputerTab(compId, panelId);
+            openMobilePage();
+            if (activeComputerId() !== compId) finishComputerSelect(compId);
+            const answer = await askPanelToLeave(key);
+            if (answer.error) {
+                const name = panelsByComputer()[compId]?.find((p) => p.id === panelId)?.name || panelId;
+                showToast({ variant: "danger", title: `${name} couldn't ask about its unsaved changes`, message: answer.error });
+            }
+            if (!answer.leave) return false;
+        }
+        return true;
+    };
+
     const restartPanel = async (compId: string, panelId: string, name: string) => {
         const key = `${compId}::${panelId}`;
         if (restartStates()[key]?.kind === "restarting") return;
+        if (!(await mayClosePanels([key]))) return;
         setComputerTab(compId, panelId);
         setRestartState(key, { kind: "restarting" });
         try {
@@ -234,8 +258,8 @@ const App: Component = () => {
         ),
     );
     const panelUpdateSeen = new Map<string, string>();
-    createEffect(() => {
-        for (const item of updateQueue.state().items) {
+    createEffect(on(updateQueue.state, (state) => {
+        for (const item of state.items) {
             if (item.kind !== "panel" || !item.panelId) continue;
             const key = `${item.computerId}::${item.panelId}`;
             const before = panelUpdateSeen.get(item.key);
@@ -251,7 +275,7 @@ const App: Component = () => {
                 void refreshPanelsForComputer(item.computerId);
             }
         }
-    });
+    }));
 
     const handleRestartPanel = () => {
         const target = contextMenuPanel();
@@ -260,10 +284,11 @@ const App: Component = () => {
         void restartPanel(target.compId, target.panel.id, target.panel.name);
     };
 
-    const handleRequestUninstall = () => {
+    const handleRequestUninstall = async () => {
         const target = contextMenuPanel();
         if (!target) return;
         panelContextMenu.close();
+        if (!(await mayClosePanels([`${target.compId}::${target.panel.id}`]))) return;
         setUninstallTarget(target);
         setUninstallDeleteData(false);
         setIsUninstallModalOpen(true);
@@ -300,24 +325,26 @@ const App: Component = () => {
         }
     };
 
-    const handleReconnectSuccess = async () => {
-        const compId = activeComputerId();
+    // a computer a dialog found answering again: the one way back to it,
+    // switching to it and listing its panels (connectComputer)
+    const reconnected = async (compId: string) => {
         await refreshComputers();
-        await refreshPanelsForComputer(compId);
+        finishComputerSelect(compId);
     };
 
-    // re-fetch failed panel list on reconnect
+    // a panel list that failed is fetched again once its computer reconnects;
+    // tracks the computer and its connection, not the list it fetches
     const wasConnected: Record<string, boolean | undefined> = {};
-    createEffect(() => {
-        const id = activeComputerId();
-        const comp = computers().find((c) => c.id === id);
-        const connected = comp?.status?.connected === true;
-        const was = wasConnected[id];
-        wasConnected[id] = connected;
-        if (was === false && connected && panelsLoadFailed()[id]) {
-            void refreshPanelsForComputer(id);
-        }
-    });
+    createEffect(on(
+        [activeComputerId, () => computers().find((c) => c.id === activeComputerId())?.status?.connected === true],
+        ([id, connected]) => {
+            const was = wasConnected[id];
+            wasConnected[id] = connected;
+            if (was === false && connected && panelsLoadFailed()[id]) {
+                void refreshPanelsForComputer(id);
+            }
+        },
+    ));
 
     onMount(async () => {
         let options: LaunchOptions;
@@ -435,9 +462,7 @@ const App: Component = () => {
         finishComputerSelect(compId);
     };
 
-    // R4: removal is a destructive action whose failure must be visible.
-    // Returns a typed result so the confirm modal can show what happened
-    // instead of closing identically for success and failure.
+    // a failed forget keeps the dialog open with why
     const handleRemoveComputer = async (
         compId: string,
     ): Promise<{ ok: boolean; error?: string }> => {
@@ -456,7 +481,8 @@ const App: Component = () => {
                 return copy;
             });
             await refreshComputers();
-            await handleComputerSelect("local");
+            // forgetting another computer leaves you where you are
+            if (activeComputerId() === compId) await handleComputerSelect("local");
             // Paperboard can't open on a computer it forgot
             if (appSettings().startOn === compId) {
                 await handleAppSettingsChange({ ...appSettings(), startOn: START_ON_HOME });
@@ -528,34 +554,45 @@ const App: Component = () => {
         }
     };
 
+    // The one Forget Computer dialog, from the rail's menu, the can't-reach
+    // dialog and the computer's info page. Each opening starts clean, after
+    // the computer's panels with unsaved work have had their say.
+    const openForget = async (compId: string) => {
+        if (!(await mayClosePanels(openedPanels().filter((key) => key.startsWith(`${compId}::`))))) return;
+        setForgetError(null);
+        setForgetTarget(compId);
+    };
+
+    const closeForget = () => {
+        if (!isForgetting()) setForgetTarget(null);
+    };
+
     const handleForgetFromMenu = () => {
         computerContextMenu.close();
-        setForgetError(null);
-        setIsForgetConfirmOpen(true);
+        const compId = contextMenuComputerId();
+        setContextMenuComputerId(null);
+        if (compId) void openForget(compId);
     };
 
     const handleConfirmForget = async () => {
-        const compId = contextMenuComputerId();
-        if (!compId) return;
+        const compId = forgetTarget();
+        if (!compId || isForgetting()) return;
         setIsForgetting(true);
+        setForgetError(null);
         try {
             const result = await handleRemoveComputer(compId);
-            // R4: the modal only closes on success; a failure keeps it
-            // open with the reason, so a failed forget never masquerades
-            // as a successful one
             if (!result.ok) {
                 setForgetError(result.error ?? "Couldn't forget this computer.");
                 return;
             }
-            setIsForgetConfirmOpen(false);
-            setContextMenuComputerId(null);
+            setForgetTarget(null);
         } finally {
             setIsForgetting(false);
         }
     };
 
     const forgetTargetName = () =>
-        computers().find((c) => c.id === contextMenuComputerId())?.name ||
+        computers().find((c) => c.id === forgetTarget())?.name ||
         "this computer";
 
     // The library runs in an iframe and asks for installs over postMessage;
@@ -751,7 +788,7 @@ const App: Component = () => {
                         >
                             <ConnectionLostOverlay
                                 computer={activeComputer()!}
-                                onReconnectSuccess={handleReconnectSuccess}
+                                onReconnectSuccess={() => void reconnected(activeComputerId())}
                             />
                         </Show>
 
@@ -842,6 +879,15 @@ const App: Component = () => {
                                                         >
                                                             {panel.name}
                                                         </PaperListItem>
+                                                    )}
+                                                </For>
+                                                <For each={invalidPanelsByComputer()[comp.id] ?? []}>
+                                                    {(broken) => (
+                                                        <PaperFlex direction="column" padding="half">
+                                                            <PaperQuote variant="danger" icon="error" title="Panel can't load" role="alert">
+                                                                {`${broken.id}: ${broken.error}`}
+                                                            </PaperQuote>
+                                                        </PaperFlex>
                                                     )}
                                                 </For>
                                                 <Show when={switchError()[comp.id]}>
@@ -950,7 +996,7 @@ const App: Component = () => {
                                         >
                                             <ComputerSettings
                                                 computer={comp}
-                                                onRemove={handleRemoveComputer}
+                                                onForget={() => void openForget(comp.id)}
                                                 onChangeName={() => setRenameComputerId(comp.id)}
                                             />
                                         </PaperFlex>
@@ -1051,16 +1097,13 @@ const App: Component = () => {
                     const comp = offlineTarget();
                     if (!comp) return;
                     setOfflineTarget(null);
-                    setForgetError(null);
-                    setContextMenuComputerId(comp.id);
-                    setIsForgetConfirmOpen(true);
+                    void openForget(comp.id);
                 }}
-                onReconnectSuccess={async () => {
+                onReconnectSuccess={() => {
                     const comp = offlineTarget();
                     if (!comp) return;
                     setOfflineTarget(null);
-                    await refreshComputers();
-                    finishComputerSelect(comp.id);
+                    void reconnected(comp.id);
                 }}
             />
 
@@ -1113,23 +1156,15 @@ const App: Component = () => {
             />
 
             <PaperModal
-                open={isForgetConfirmOpen()}
-                onClose={() => {
-                    if (!isForgetting()) {
-                        setIsForgetConfirmOpen(false);
-                        setContextMenuComputerId(null);
-                    }
-                }}
+                open={forgetTarget() !== null}
+                onClose={closeForget}
                 title="Forget Computer"
                 size="small"
                 footer={
                     <>
                         <PaperButton
                             variant="text"
-                            onClick={() => {
-                                setIsForgetConfirmOpen(false);
-                                setContextMenuComputerId(null);
-                            }}
+                            onClick={closeForget}
                             disabled={isForgetting()}>
                             Cancel
                         </PaperButton>
@@ -1145,6 +1180,7 @@ const App: Component = () => {
                 <PaperText preset="text">
                     Are you sure you want to forget{" "}
                     <strong>{forgetTargetName()}</strong>?
+                    This will disconnect all panels on this machine.
                 </PaperText>
                 <Show when={forgetError()}>
                     <PaperText preset="error">

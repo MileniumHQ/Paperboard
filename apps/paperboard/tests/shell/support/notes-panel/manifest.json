@@ -1,0 +1,8 @@
+{
+    "name": "Notes",
+    "id": "dev.paperboard.testnotes",
+    "version": "0.0.1",
+    "description": "A shell test fixture: a note with unsaved edits. Not released.",
+    "publisher": "Paperboard",
+    "service": "./dist/service.js"
+}

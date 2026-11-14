@@ -20,7 +20,7 @@ import { installDevPanelInto, type DevPanel } from "../../../scripts/devPanel";
 import viteConfig from "../../../electron.vite.config";
 import { ANSWER } from "./protocol";
 
-export { API_DEMO, WIDGET_DEMO } from "../../../scripts/devPanel";
+export { API_DEMO, WIDGET_DEMO, type DevPanel } from "../../../scripts/devPanel";
 export type { Page } from "../../../../../scripts/testing/chrome";
 
 const APP = path.resolve(import.meta.dir, "../../..");

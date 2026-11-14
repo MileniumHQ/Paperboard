@@ -1,8 +1,9 @@
-import { createMemo, createSignal } from "solid-js";
+import { batch, createMemo, createSignal } from "solid-js";
 import { createStore, produce, reconcile } from "solid-js/store";
-import { panelsApi, type PanelItem } from "@mileniumhq/paperapi";
+import { panelsApi, type InvalidPanel, type PanelItem } from "@mileniumhq/paperapi";
 import { logToMain } from "../lib/shell";
 import { isShellTab } from "../lib/shellTabs";
+import { unsavedPanels } from "../lib/unsavedPanels";
 
 // placeholder divs render per opened key (PanelView), so the list itself
 // must be bounded: most-recent-first, oldest dropped past the cap.
@@ -17,11 +18,19 @@ export function usePanels() {
     // A panel stays the same object and only what changed notifies.
     const [panelStore, setPanelStore] = createStore<Record<string, PanelItem[]>>({});
     const panelsByComputer = () => panelStore;
+    // installed panels whose manifest the computer refuses, with why
+    const [invalidStore, setInvalidStore] = createStore<Record<string, InvalidPanel[]>>({});
+    const invalidPanelsByComputer = () => invalidStore;
     /** a forgotten computer's panels are gone with it */
     const forgetPanels = (compId: string) =>
-        setPanelStore(produce((panels) => {
-            delete panels[compId];
-        }));
+        batch(() => {
+            setPanelStore(produce((panels) => {
+                delete panels[compId];
+            }));
+            setInvalidStore(produce((invalid) => {
+                delete invalid[compId];
+            }));
+        });
     const [activeTabByComputer, setActiveTabByComputer] = createSignal<
         Record<string, string>
     >({
@@ -59,29 +68,40 @@ export function usePanels() {
                 const next = [...prev, key];
                 if (next.length <= MAX_OPENED_PANELS) return next;
                 // drop the oldest placeholder, never the panel just selected
-                const drop = next.findIndex((k) => k !== key);
-                next.splice(drop, 1);
+                // nor one whose page holds unsaved work
+                const holding = unsavedPanels();
+                const drop = next.findIndex((k) => k !== key && !holding.has(k));
+                if (drop !== -1) next.splice(drop, 1);
                 return next;
             });
         }
     };
 
-    // fetches name their computer explicitly
+    // Fetches name their computer explicitly. Many things refresh a
+    // computer's list at once (an uninstall, an update, a reconnect, Home):
+    // only the newest request's answer lands, so an older list answering
+    // last can't bring back a panel that is gone.
+    const latestRequest: Record<string, number> = {};
     const refreshPanelsForComputer = async (compId: string) => {
+        const request = (latestRequest[compId] = (latestRequest[compId] ?? 0) + 1);
         try {
-            const installed = await panelsApi.list(compId);
-            if (Array.isArray(installed)) {
-                setPanelStore(compId, reconcile(installed, { key: "id" }));
-                setPanelsLoadError((prev) => ({ ...prev, [compId]: "" }));
-            }
+            const { panels, invalid } = await panelsApi.listInstalled(compId);
+            if (latestRequest[compId] !== request) return;
+            batch(() => {
+                setPanelStore(compId, reconcile(panels, { key: "id" }));
+                setInvalidStore(compId, reconcile(invalid, { key: "id" }));
+                setPanelsLoadError((prev) => (prev[compId] === "" ? prev : { ...prev, [compId]: "" }));
+            });
         } catch (err) {
             logToMain("error", "Failed to load installed panels for", compId, err);
+            if (latestRequest[compId] !== request) return;
             setPanelsLoadError((prev) => ({ ...prev, [compId]: err instanceof Error ? err.message : String(err) }));
         }
     };
 
     return {
         panelsByComputer,
+        invalidPanelsByComputer,
         forgetPanels,
         activeTabByComputer,
         setActiveTabByComputer,
