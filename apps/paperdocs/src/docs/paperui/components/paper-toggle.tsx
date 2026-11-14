@@ -124,7 +124,7 @@ export function Example() {
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
                 <li>A click, or Space or Enter while the switch has focus, flips it. Controlled and uncontrolled work as in a form.</li>
-                <li>The switch is one tab stop. A disabled switch has <PaperCode>tabindex="-1"</PaperCode> and <PaperCode>aria-disabled="true"</PaperCode>.</li>
+                <li>The switch is one tab stop. A disabled switch has <PaperCode>tabindex="-1"</PaperCode> and <PaperCode>aria-disabled="true"</PaperCode>, and is dimmed and colorless, on or off, like every disabled control.</li>
                 <li><PaperCode>aria-checked</PaperCode> follows the state.</li>
                 <li>On a flip, the hidden checkbox is set and fires bubbling <PaperCode>change</PaperCode> and <PaperCode>input</PaperCode> events, so a parent that listens for them, such as a form handler, sees the change. Where the device supports it, the flip is felt: a faint rumble while the knob slides, then a thump as it lands (the <PaperCode>toggle</PaperCode> haptic). A switch whose <PaperCode>checked</PaperCode> follows a slow save feels it when the knob moves, not when it is pressed, and a change nobody pressed for is not felt.</li>
                 <li>A switch inside a <PaperCode>label</PaperCode> changes once when you press the switch, and once when you press the label's text. Both call <PaperCode>onChange</PaperCode>.</li>
@@ -163,6 +163,23 @@ export function EnabledSetting(props: { enabled: boolean; save: (enabled: boolea
         </PaperFlex>
     );
 }`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h3" id="disabled">Disabled</PaperText>
+            <PaperText preset="body" as="p">
+                A disabled switch still shows its state, dimmed and without color, so it reads as off limits whether it is on or off.
+            </PaperText>
+            <PaperCard data-docs-demo padding="double" surface="front">
+                <PaperFlex direction="row" gap="full" align="center">
+                    <PaperToggle checked disabled aria-label="On, disabled" />
+                    <PaperToggle checked={false} disabled aria-label="Off, disabled" />
+                </PaperFlex>
+            </PaperCard>
+            <PaperCode block language="tsx">
+{`<PaperFlex direction="row" gap="full" align="center">
+    <PaperToggle checked disabled aria-label="On, disabled" />
+    <PaperToggle checked={false} disabled aria-label="Off, disabled" />
+</PaperFlex>`}
             </PaperCode>
 
             <PaperText preset="subheader" as="h3" id="plain-knob">Without icons</PaperText>

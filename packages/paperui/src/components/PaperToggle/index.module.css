@@ -9,6 +9,14 @@
     flex-shrink: 0;
 }
 
+/* dimmed and colorless like every disabled control, in either state; it
+   keeps its pointer so a title can still say why it is off limits */
+.PaperToggle.disabled {
+    cursor: not-allowed;
+    opacity: var(--paper-opacity-disabled);
+    filter: grayscale(1);
+}
+
 @media (hover: hover) {
     .PaperToggle:focus-visible .track {
         outline: var(--paper-focus-ring);
@@ -65,19 +73,19 @@
 }
 
 @media (hover: hover) {
-    .PaperToggle:hover:not(:active):not(.animating) .knob {
+    .PaperToggle:hover:not(:active):not(.animating):not(.disabled) .knob {
         transform: translate3d(0, calc(-50% - var(--paper-thickest-border-width)), 0);
         box-shadow: 0 var(--paper-thickest-border-width) 0 var(--paper-border-strong);
     }
 }
 
 @media (hover: hover) {
-    .PaperToggle.checked:hover:not(:active):not(.animating) .knob {
+    .PaperToggle.checked:hover:not(:active):not(.animating):not(.disabled) .knob {
         box-shadow: 0 var(--paper-thickest-border-width) 0 var(--paper-primary-deep);
     }
 }
 
-.PaperToggle:active:not([data-paper-press-out]) .knob,
+.PaperToggle:active:not([data-paper-press-out]):not(.disabled) .knob,
 .PaperToggle.animating .knob {
     transform: translate3d(0, -50%, 0) !important;
     box-shadow: 0 0 0 transparent !important;
