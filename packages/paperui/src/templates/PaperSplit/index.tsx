@@ -84,6 +84,9 @@ export function PaperSplit(props: ParentProps<PaperSplitProps>) {
     const [closing, setClosing] = createSignal(false);
     createEffect(on(() => props.detailActive, () => setClosing(false)));
 
+    // the collapsed page is open while the detail is and Back hasn't closed it
+    const pageOpen = () => Boolean(props.detailActive) && !closing();
+
     const sideStyle = () => ({
         width:
             typeof props.sideWidth === "number"
@@ -121,7 +124,7 @@ export function PaperSplit(props: ParentProps<PaperSplitProps>) {
                     <PaperSlidePage
                         enabled={collapsed()}
                         position="fixed"
-                        open={Boolean(local.detailActive) && !closing()}
+                        open={pageOpen()}
                         title={local.detailTitle ?? ""}
                         onBack={() => setClosing(true)}
                         onClosed={() => {

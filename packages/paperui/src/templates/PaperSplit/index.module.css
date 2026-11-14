@@ -21,6 +21,13 @@
     box-sizing: border-box;
 }
 
+/* the side's content takes the side's whole width, whatever it holds, so
+   the pane never narrows or widens with a filtered list */
+.side > * {
+    flex: 1 1 0%;
+    min-width: 0;
+}
+
 .main {
     flex: 1 1 0%;
     min-width: 0;
