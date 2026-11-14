@@ -386,9 +386,8 @@ function listenPaperCraneServer(
                     else engine.killAllClients();
                 }
             };
-            const onSignal = () => {
+            const onSignal = async () => {
                 removeHandshake();
-                panelServices.stopAll();
                 // SIGTERM/SIGINT ends the daemon, never the workloads it
                 // supervises: a service manager's stop or restart (an OS
                 // update, a crane update) must not take a game server down.
@@ -398,6 +397,8 @@ function listenPaperCraneServer(
                 try {
                     advertisement?.stop();
                 } catch (err) { logger.warn("[Paperboard Server] the mDNS advertisement did not stop:", err); }
+                // panel services get their grace to finish a write
+                await panelServices.stopAllServices();
                 removePidFile();
                 process.exit(0);
             };
@@ -419,6 +420,8 @@ function listenPaperCraneServer(
                 step("saving the paired tokens", () => auth.flushTokenStore());
                 step("closing the token store", () => auth.dispose());
                 step("stopping routine backups", () => backupServiceFor(engine).dispose());
+                // synchronous: an embedded daemon restarted right after
+                // never overlaps the services of this one
                 step("stopping panel services", () => panelServices.stopAll());
                 step("stopping the mDNS advertisement", () => {
                     advertisement?.stop();

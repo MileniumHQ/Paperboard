@@ -378,7 +378,13 @@ export class PanelServicesManager {
         this.auth?.revokePanelTokens(requirePanelId(id));
         this.failures.delete(id);
     }
-    /** Synchronous last-resort exit hook; normal removal awaits stopService. */
+    /** Stops every service with its SIGTERM grace; one that will not stop is named and left to stopAll. */
+    public async stopAllServices(graceMs = 3000): Promise<void> {
+        await Promise.all([...this.services.keys()].map((id) =>
+            this.stopService(id, graceMs).catch((err) => logger.error(`[services] ${id} did not stop:`, err)),
+        ));
+    }
+    /** Synchronous last-resort exit hook: a SIGKILL, with no grace. */
     public stopAll(): void {
         for (const entry of this.services.values()) {
             entry.stopped = true;

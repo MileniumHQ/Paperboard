@@ -486,6 +486,28 @@ describe("panel services start and hydrate", () => {
 		await rpc.close();
 	});
 
+	// a signal is how a service manager stops or restarts the daemon, and
+	// Windows has none to give a service time with
+	if (process.platform !== "win32") {
+		test("a daemon stopped by a signal gives its panel services their grace to finish", async () => {
+			const dir = dataDir();
+			const marker = path.join(dir, "finished-on-stop");
+			await installPanelFiles(dir, {
+				id: "test.graceful",
+				service: serviceSource({
+					extra: `process.on("SIGTERM", () => setTimeout(() => { require("fs").writeFileSync(${JSON.stringify(marker)}, "done"); process.exit(0); }, 200));`,
+					calls: "{ ping: () => true }",
+				}),
+			});
+			const c = await crane(dir);
+			const rpc = await c.rpc();
+			await waitFor("the service to register", async () => !(await rpc.call("blocks:call", serviceCall("test.graceful", "ping"))).error);
+			await rpc.close();
+			expect((await stopped(c)).code).toBe(0);
+			expect(fs.readFileSync(marker, "utf8")).toBe("done");
+		});
+	}
+
 	test("stopService resolves only once the service process has exited", async () => {
 		const dir = dataDir();
 		await installPanelFiles(dir, { id: "test.stopper", service: serviceSource({ extra: "process.on('SIGTERM', () => setTimeout(() => process.exit(0), 300));" }) });
