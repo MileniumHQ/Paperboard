@@ -44,6 +44,9 @@ let server: Server;
 let origin: string;
 let chrome: Chrome;
 let registry: Record<string, unknown> = {};
+// every archive the page asked the server for, and who waits for the next
+const archiveRequests: string[] = [];
+let onArchiveRequest: (() => void) | undefined;
 
 beforeAll(async () => {
     out = await mkdtemp(path.join(tmpdir(), "library-build-"));
@@ -57,6 +60,11 @@ beforeAll(async () => {
         const url = new URL(req.url ?? "/", "http://127.0.0.1");
         if (url.pathname === "/shell.html") return void res.writeHead(200, { "Content-Type": MIME[".html"] }).end(SHELL);
         if (url.pathname === "/panels/index.json") return void res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(registry));
+        if (url.pathname.endsWith(".tar.gz") || url.pathname.endsWith("/download")) {
+            archiveRequests.push(url.pathname);
+            onArchiveRequest?.();
+            return void res.writeHead(200, { "Content-Type": "application/gzip", "Content-Disposition": "attachment" }).end();
+        }
         if (!url.pathname.startsWith("/library/")) return void res.writeHead(404).end();
         const file = url.pathname === "/library/" ? "index.html" : url.pathname.slice("/library/".length);
         const target = path.resolve(out, file);
@@ -197,5 +205,25 @@ describe("the library, as a person uses it", () => {
         await press(page, doc, button("Library"), "the back button");
         await until(page, doc, `!doc.querySelector("h1") && Boolean(${card("Local Tool")})`, "the grid again");
         expect(page.exceptions).toEqual([]);
+    }, 30_000);
+
+    test("Download outside Paperboard fetches the archive the registry hosts, never a record's own URL", async () => {
+        // a legacy record that names an off-registry archive
+        registry = { "dev.example.alpha": { id: "dev.example.alpha", name: "Alpha", version: "1.0.0", downloadUrl: `${origin}/elsewhere/alpha.tar.gz` } };
+        archiveRequests.length = 0;
+        try {
+            const requested = new Promise<void>((resolve) => (onArchiveRequest = resolve));
+            // opened directly, the library is standalone: Download, not Install
+            const page = await chrome.open(`${origin}/library/`);
+            const doc = "document";
+            await press(page, doc, card("Alpha"), "the Alpha card");
+            await press(page, doc, button("Download"), "Alpha's Download");
+            await requested;
+            expect(archiveRequests).toEqual(["/panel/dev.example.alpha/download"]);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            registry = {};
+            onArchiveRequest = undefined;
+        }
     }, 30_000);
 });

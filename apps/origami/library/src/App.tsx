@@ -34,12 +34,11 @@ import type { InstalledPanelMedia } from "../../../../packages/paperapi/src/stor
 import { fetchRegistryJson } from "../../../../packages/paperapi/src/registryFetch";
 import { waitForContentPainted } from "../../../../packages/paperapi/src/paintReady";
 
-// The library runs on the registry origin, so archive URLs resolve
-// same-origin; the registry record's own downloadUrl stays authoritative
-// when present.
+// The library runs on the registry origin, and the registry serves only the
+// archive it hosts, so that is the one Download fetches.
 function downloadArchive(panel: PanelItem) {
     const link = document.createElement("a");
-    link.href = panel.downloadUrl || `/panel/${panel.id}/download`;
+    link.href = `/panel/${panel.id}/download`;
     link.download = `${panel.id}${panel.version ? `-${panel.version}` : ""}.tar.gz`;
     link.rel = "noopener";
     document.body.appendChild(link);
@@ -218,10 +217,9 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
     // its media arrive, and only what changed is redrawn.
     const [panelList, setPanelList] = createStore<PanelItem[]>([]);
     createComputed(() => setPanelList(reconcile(merged(), { key: "id" })));
-    const panels = () => panelList;
 
     const selectedPanel = createMemo(
-        () => panels().find((p) => p.id === route.panelId()) ?? null,
+        () => panelList.find((p) => p.id === route.panelId()) ?? null,
     );
 
     const handleAction = async (panel: PanelItem) => {
@@ -294,7 +292,7 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
 
                             {/* loaded and empty is a different fact from failed:
                                 the registry answered, and it holds no panels */}
-                            <Show when={!loadFailed() && registry() !== null && panels().length === 0}>
+                            <Show when={!loadFailed() && registry() !== null && panelList.length === 0}>
                                 <PaperEmptyState
                                     icon="dashboard"
                                     title="No panels published yet"
@@ -303,7 +301,7 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
                             </Show>
 
                             <PaperMediaCardGroup>
-                                <For each={panels()}>
+                                <For each={panelList}>
                                     {(panel) => (
                                         <PaperMediaCard
                                             icon={panel.iconUrl ?? iconGlyph(panel)}
