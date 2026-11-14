@@ -46,7 +46,7 @@ async function fetchPicture(url: URL): Promise<string> {
 }
 
 /** A Discord avatar or server icon as a data: address, for a page to show. */
-export function discordPicture(raw: unknown): Promise<string> {
+export async function discordPicture(raw: unknown): Promise<string> {
     const url = cdnAddress(raw);
     const key = url.href;
     const known = cache.get(key);
