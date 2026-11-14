@@ -197,7 +197,7 @@ export function Example() {
                         <td><PaperCode>onStepActive</PaperCode></td>
                         <td><PaperCode>() =&gt; void</PaperCode></td>
                         <td>No default</td>
-                        <td>Called when the step becomes the active one, including the first step on mount. It runs again whenever this step's <PaperCode>canProceed</PaperCode> changes while it is active, so keep it safe to repeat.</td>
+                        <td>Called once each time the step becomes the active one, including the first step on mount. Nothing it reads, and no change to <PaperCode>canProceed</PaperCode> or <PaperCode>hideBack</PaperCode>, calls it again.</td>
                     </tr>
                 </tbody>
             </PaperTable>

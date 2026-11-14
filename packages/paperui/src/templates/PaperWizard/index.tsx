@@ -13,6 +13,8 @@ import {
     createContext,
     useContext,
     createEffect,
+    createMemo,
+    on,
     splitProps,
     type ParentProps,
 } from "solid-js";
@@ -279,19 +281,22 @@ export function PaperWizardStep(props: ParentProps<PaperWizardStepProps>) {
         wizard?.registerStep(local.index);
     });
 
-    createEffect(() => {
-        if (wizard?.currentStep() === local.index) {
-            local.onStepActive?.();
-            wizard.setBackHidden(local.hideBack ?? false);
-            if (local.canProceed !== undefined) {
-                wizard.setCanProceed(local.canProceed);
-            } else {
-                wizard.setCanProceed(true);
-            }
-        }
-    });
+    const isActive = createMemo(() => wizard?.currentStep() === local.index);
 
-    const isActive = () => wizard?.currentStep() === local.index;
+    // once each time the step becomes the current one; what the callback
+    // reads is its own business, so nothing it reads fires it again
+    createEffect(
+        on(isActive, (active) => {
+            if (active) local.onStepActive?.();
+        }),
+    );
+
+    // the current step's settings follow its props for as long as it is current
+    createEffect(() => {
+        if (!isActive() || !wizard) return;
+        wizard.setBackHidden(local.hideBack ?? false);
+        wizard.setCanProceed(local.canProceed ?? true);
+    });
 
     const className = () =>
         [styles.PaperWizardStep, local.class].filter(Boolean).join(" ");
