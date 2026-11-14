@@ -537,6 +537,8 @@ export interface PageInfo {
     kind: PageKind;
     /** a picture of it was taken when the agent last showed it */
     picture: boolean;
+    /** when that picture was taken (ms since the epoch), 0 if there is none: a new one is a new stamp */
+    pictureAt: number;
 }
 
 /**

@@ -101,7 +101,7 @@ export default function Pages(props: { pages: Launcher; name: string; onOpened: 
                                     <PaperListItem
                                         value={a.name}
                                         disabled={busy()}
-                                        icon={<Picture pages={pages} name={a.name} title={a.title} taken={a.picture} />}
+                                        icon={<Picture pages={pages} name={a.name} title={a.title} />}
                                         description={a.description || `~/Pages/${a.name}`}
                                         actions={
                                             <PaperFlex direction="row" align="center" gap="onefourth">

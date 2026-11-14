@@ -31,7 +31,7 @@ export default function PageCard(props: { entry: PageEntry; pages: Launcher }) {
                     text instead of squeezing it to a word per line */}
                 <PaperFlex direction="row" align="center" gap="full" wrap>
                     <Show when={there()} fallback={<PaperIcon>delete</PaperIcon>}>
-                        <Picture pages={props.pages} name={e().app} title={e().title} taken />
+                        <Picture pages={props.pages} name={e().app} title={e().title} />
                     </Show>
                     <PaperFlex class={styles.text} gap="onefourth">
                         <PaperText preset="label">

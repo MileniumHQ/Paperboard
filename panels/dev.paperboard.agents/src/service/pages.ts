@@ -342,15 +342,27 @@ export class Pages {
             const st = fs.statSync(this.folder(name).dir);
             return st.birthtimeMs || st.mtimeMs;
         };
+        const pictureAt = (name: string) => {
+            try {
+                return fs.statSync(path.join(this.o.picturesDir, `${name}.jpg`)).mtimeMs;
+            } catch (e) {
+                if ((e as NodeJS.ErrnoException).code === "ENOENT") return 0;
+                throw e;
+            }
+        };
         return names
             .sort((a, b) => made(b) - made(a))
-            .map((name) => ({
-                name,
-                title: infos[name]?.title ?? name,
-                description: infos[name]?.description ?? "",
-                kind: infos[name]?.kind ?? "app",
-                picture: fs.existsSync(path.join(this.o.picturesDir, `${name}.jpg`)),
-            }));
+            .map((name) => {
+                const at = pictureAt(name);
+                return {
+                    name,
+                    title: infos[name]?.title ?? name,
+                    description: infos[name]?.description ?? "",
+                    kind: infos[name]?.kind ?? "app",
+                    picture: at > 0,
+                    pictureAt: at,
+                };
+            });
     }
 
     /** Where the user's view opens a page: its address and kind, with the server started for it. */
