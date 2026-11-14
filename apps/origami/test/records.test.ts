@@ -85,4 +85,39 @@ describe("package records are valid and signed, recipe included", () => {
         expect(() => signRecord(input, other.privateKey, PUBLIC)).toThrow(/does not match/);
         expect(spawned).toEqual([]);
     });
+
+    describe("a record already served exactly as signed is not written again", () => {
+        const input = () => record({ "linux-x64": { url: "https://example.test/a.tgz", sha256: SHA, recipe } });
+        // the worker re-serializes what it serves, so the live copy comes back in another key order
+        const reordered = (value: unknown): unknown =>
+            Array.isArray(value) ? value.map(reordered)
+            : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).reverse().map(([k, v]) => [k, reordered(v)]))
+            : value;
+
+        test("the live record matches: nothing is written", async () => {
+            const { run, spawned } = recorder();
+            const live = reordered(signRecord(input(), keys.privateKey, PUBLIC));
+            expect(await putRecord(input(), keys.privateKey, run, PUBLIC, async () => live)).toBe("unchanged");
+            expect(spawned).toEqual([]);
+        });
+
+        test("the live record differs, or there is none: the new one is written", async () => {
+            const older = signRecord({ ...input(), version: "0.5.0" }, keys.privateKey, PUBLIC);
+            for (const live of [older, undefined]) {
+                const { run, spawned, values } = recorder();
+                expect(await putRecord(input(), keys.privateKey, run, PUBLIC, async () => live)).toBe("written");
+                expect(spawned).toHaveLength(1);
+                expect((JSON.parse(values[0]!) as PackageRecord).version).toBe("0.5.1");
+            }
+        });
+
+        test("reading the live record fails: the write still goes ahead", async () => {
+            const { run, spawned } = recorder();
+            const failed = async () => {
+                throw new Error("reading the published helium record failed: HTTP 503");
+            };
+            expect(await putRecord(input(), keys.privateKey, run, PUBLIC, failed)).toBe("written");
+            expect(spawned).toHaveLength(1);
+        });
+    });
 });

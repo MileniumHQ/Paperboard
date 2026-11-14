@@ -13,6 +13,7 @@ import { buildLatestOpencodeRecord } from "../scripts/update-opencode";
 import { buildLatestCodexRecord, TARGETS } from "../scripts/update-codex";
 import { buildLatestDotnetRecord, RIDS } from "../scripts/update-dotnet";
 import { buildLatestProtonRecord } from "../scripts/update-proton";
+import { buildLatestHeliumRecord, REPOS as HELIUM_REPOS, type HeliumRepo } from "../scripts/update-helium";
 import { type AdoptiumAsset, buildJavaRecords } from "../scripts/update-java";
 import { PLATFORM_KEYS } from "../scripts/lib/records";
 import { requested, resetUpstream, serve, upstreamFetch } from "./helpers/upstream";
@@ -320,6 +321,30 @@ describe("updaters publish only bytes that match a trusted digest", () => {
                 // refused from the release metadata alone: no checksum file was fetched
                 expect(requested).toEqual([PROTON_LATEST]);
             }
+        });
+    });
+
+    describe("Helium writes one version for every platform, or nothing", () => {
+        const latest = (repo: HeliumRepo) => `https://api.github.com/repos/imputnet/${repo}/releases/latest`;
+        const files = (repo: HeliumRepo, v: string): Record<string, string> =>
+            repo === "helium-linux" ? { [`helium-${v}-x86_64_linux.tar.xz`]: "linux x64", [`helium-${v}-arm64_linux.tar.xz`]: "linux arm64" }
+            : repo === "helium-macos" ? { [`helium_${v}_x86_64-macos.dmg`]: "macos x64", [`helium_${v}_arm64-macos.dmg`]: "macos arm64" }
+            : { [`helium_${v}_x64-windows.zip`]: "windows x64", [`helium_${v}_arm64-windows.zip`]: "windows arm64" };
+        function serveHelium(versions: Record<HeliumRepo, string>) {
+            for (const repo of HELIUM_REPOS) serve(latest(repo), release(versions[repo], files(repo, versions[repo])));
+        }
+
+        test("all three repos on the same stable version build a record for every platform", async () => {
+            serveHelium({ "helium-linux": "0.5.1.1", "helium-macos": "0.5.1.1", "helium-windows": "0.5.1.1" });
+            const record = await buildLatestHeliumRecord(upstreamFetch);
+            expect(record.version).toBe("0.5.1.1");
+            expect(Object.keys(record.platforms).sort()).toEqual([...PLATFORM_KEYS].sort());
+            expect(record.platforms["windows-arm64"]?.sha256).toBe(sha256("windows arm64"));
+        });
+
+        test("a repo on another version fails the whole record", async () => {
+            serveHelium({ "helium-linux": "0.5.1.1", "helium-macos": "0.5.2.1", "helium-windows": "0.5.1.1" });
+            await expect(buildLatestHeliumRecord(upstreamFetch)).rejects.toThrow(/different versions/);
         });
     });
 
