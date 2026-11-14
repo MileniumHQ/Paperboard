@@ -4,6 +4,7 @@ import {
     createEffect,
     createSignal,
     createUniqueId,
+    on,
     onCleanup,
     splitProps,
     useContext,
@@ -71,27 +72,28 @@ export function PaperMenuBar(props: ParentProps<PaperMenuBarProps>) {
     // PaperContextMenu); the bar adds Left/Right between menus. It listens on
     // the window, not the label, because focus may be anywhere once a menu is
     // open. Left/Right inside a submenu stay the submenu's.
-    createEffect(() => {
-        const id = openId();
-        if (id === null) return;
+    createEffect(
+        on(openId, (id) => {
+            if (id === null) return;
 
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-            const menu = document.querySelector(`[data-menubar-menu="${id}"]`);
-            const active = menu?.getAttribute("aria-activedescendant");
-            const item = active ? document.getElementById(active) : null;
-            if (e.key === "ArrowRight" && item?.hasAttribute("data-context-sub")) return;
-            if (e.key === "ArrowLeft" && item?.closest("[data-context-parent]")) return;
+            const handleKeyDown = (e: KeyboardEvent) => {
+                if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+                const menu = document.querySelector(`[data-menubar-menu="${id}"]`);
+                const active = menu?.getAttribute("aria-activedescendant");
+                const item = active ? document.getElementById(active) : null;
+                if (e.key === "ArrowRight" && item?.hasAttribute("data-context-sub")) return;
+                if (e.key === "ArrowLeft" && item?.closest("[data-context-parent]")) return;
 
-            const from = triggerFor(id);
-            if (!from) return;
-            e.preventDefault();
-            moveFrom(from, e.key === "ArrowRight" ? 1 : -1);
-        };
+                const from = triggerFor(id);
+                if (!from) return;
+                e.preventDefault();
+                moveFrom(from, e.key === "ArrowRight" ? 1 : -1);
+            };
 
-        window.addEventListener("keydown", handleKeyDown);
-        onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
-    });
+            window.addEventListener("keydown", handleKeyDown);
+            onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
+        }),
+    );
 
     // Keys on a focused label while every menu is closed.
     const handleKeyDown: JSX.EventHandler<HTMLDivElement, KeyboardEvent> = (e) => {

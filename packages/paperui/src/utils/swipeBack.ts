@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import { createEffect, createSignal, on, onCleanup } from "solid-js";
 import { haptic } from "./haptics";
 
 // Phone layouts: an open page goes back when it is dragged to the right, like
@@ -262,9 +262,11 @@ export function createSwipeBack(opts: {
         const target: SwipeTarget = { el, active, width: opts.width, offset, setOffset, onBack: () => opts.onBack() };
         targets.add(target);
         // a page that closes mid-swipe springs back
-        createEffect(() => {
-            if (!active() && !drag) setOffset(null);
-        });
+        createEffect(
+            on(active, (isActive) => {
+                if (!isActive && !drag) setOffset(null);
+            }),
+        );
         onCleanup(() => {
             targets.delete(target);
             if (touch?.target === target) touch = null;

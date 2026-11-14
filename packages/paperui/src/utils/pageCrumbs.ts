@@ -1,4 +1,4 @@
-import { createEffect, createMemo, onCleanup } from "solid-js";
+import { createEffect, createMemo, on, onCleanup } from "solid-js";
 
 // A phone layout's open pages, outermost first. In a framed document (a
 // panel) they are reported on window (PAGE_CRUMBS_EVENT) so the shell holding
@@ -45,20 +45,22 @@ export function createPageCrumb(active: () => boolean, title: () => string): voi
     // changing without closing it (a page's position) must not move it after
     // a later one, as in createNavigationBack
     const open = createMemo(active);
-    createEffect(() => {
-        if (!open()) return;
-        const crumb: Crumb = { title };
-        crumbs.push(crumb);
-        onCleanup(() => {
-            const index = crumbs.indexOf(crumb);
-            if (index !== -1) crumbs.splice(index, 1);
-            report();
-        });
-    });
+    createEffect(
+        on(open, (isOpen) => {
+            if (!isOpen) return;
+            const crumb: Crumb = { title };
+            crumbs.push(crumb);
+            onCleanup(() => {
+                const index = crumbs.indexOf(crumb);
+                if (index !== -1) crumbs.splice(index, 1);
+                report();
+            });
+        }),
+    );
     // a title change, or a page opening, is reported once its effects settle
-    createEffect(() => {
-        if (!open()) return;
-        title();
-        queueMicrotask(report);
-    });
+    createEffect(
+        on([open, title], ([isOpen]) => {
+            if (isOpen) queueMicrotask(report);
+        }),
+    );
 }

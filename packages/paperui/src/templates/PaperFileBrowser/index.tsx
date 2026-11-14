@@ -7,6 +7,7 @@ import { PaperEmptyState } from "../../components/PaperEmptyState";
 import { PaperIcon } from "../../components/PaperIcon";
 import { PaperLoader } from "../../components/PaperLoader";
 import { PaperModal } from "../../components/PaperModal";
+import { PaperText } from "../../components/PaperText";
 import { PaperSplit } from "../PaperSplit";
 import { copyText } from "../../utils/clipboard";
 import { escapeAttributeValue } from "../../utils/selector";
@@ -208,12 +209,13 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
     };
 
     // the roving tab stop must sit on a row that exists
-    createEffect(() => {
-        const list = entryRows();
-        if (list.length > 0 && !list.some((row) => row.entry.path === focused())) {
-            setFocused(list[0]!.entry.path);
-        }
-    });
+    createEffect(
+        on([entryRows, focused], ([list, path]) => {
+            if (list.length > 0 && !list.some((row) => row.entry.path === path)) {
+                setFocused(list[0]!.entry.path);
+            }
+        }),
+    );
 
     // ─── render ───────────────────────────────────────────────────────
 
@@ -576,7 +578,7 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
                     </div>
                 }
             >
-                <p class={styles.modalText}>Your changes will be lost if you don't save them.</p>
+                <PaperText color="text-subtle">Your changes will be lost if you don't save them.</PaperText>
             </PaperModal>
         </>
     );

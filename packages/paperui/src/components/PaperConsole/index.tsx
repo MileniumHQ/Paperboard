@@ -140,11 +140,14 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
     const [historyIndex, setHistoryIndex] = createSignal<number>(-1);
     const [tempInput, setTempInput] = createSignal<string>("");
 
-    createEffect(() => {
-        if (local.value !== undefined) {
-            setInputValue(local.value);
-        }
-    });
+    createEffect(
+        on(
+            () => local.value,
+            (value) => {
+                if (value !== undefined) setInputValue(value);
+            },
+        ),
+    );
     // the command line as shown: the parent's value when it holds one
     const shownInput = () => (local.value !== undefined ? local.value : inputValue());
 
@@ -217,6 +220,13 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
         outputRef.scrollTop = outputRef.scrollHeight;
         setScrollTop(outputRef.scrollTop);
     };
+    // once what was just rendered is laid out; a later call replaces it
+    let pendingScroll: ReturnType<typeof setTimeout> | undefined;
+    const scrollToBottomSoon = () => {
+        clearTimeout(pendingScroll);
+        pendingScroll = setTimeout(scrollToBottom, 0);
+    };
+    onCleanup(() => clearTimeout(pendingScroll));
 
     // apply a change that moves rows (new entries, re-measured heights)
     // without moving what the reader is looking at: stay on the tail while
@@ -365,7 +375,7 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
         on(
             () => [content(), local.text, banner()],
             () => {
-                if (stuck()) setTimeout(scrollToBottom, 0);
+                if (stuck()) scrollToBottomSoon();
             },
             { defer: true },
         ),
@@ -396,7 +406,7 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
         // sending a command returns to the newest output
         if (local.autoScroll !== false) {
             setStuck(true);
-            setTimeout(scrollToBottom, 0);
+            scrollToBottomSoon();
         }
     };
 

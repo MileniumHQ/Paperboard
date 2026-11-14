@@ -298,7 +298,3 @@
     gap: var(--paper-uigap-half);
 }
 
-.modalText {
-    margin: 0;
-    color: var(--paper-text-subtle);
-}

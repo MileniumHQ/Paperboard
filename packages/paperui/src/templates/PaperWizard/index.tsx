@@ -317,11 +317,13 @@ export function PaperWizardStep(props: ParentProps<PaperWizardStepProps>) {
     );
 
     // the current step's settings follow its props for as long as it is current
-    createEffect(() => {
-        if (!isActive() || !wizard) return;
-        wizard.setBackHidden(local.hideBack ?? false);
-        wizard.setCanProceed(local.canProceed ?? true);
-    });
+    createEffect(
+        on([isActive, () => local.hideBack, () => local.canProceed], ([active, hideBack, canProceed]) => {
+            if (!active || !wizard) return;
+            wizard.setBackHidden(hideBack ?? false);
+            wizard.setCanProceed(canProceed ?? true);
+        }),
+    );
 
     const className = () =>
         cx(styles.PaperWizardStep, local.class);

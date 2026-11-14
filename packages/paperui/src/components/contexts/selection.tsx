@@ -1,6 +1,7 @@
 import {
     createContext,
     createEffect,
+    on,
     useContext,
     createSignal,
     createSelector,
@@ -130,10 +131,11 @@ export function SelectionRadioInput(props: SelectionRadioInputProps) {
     // keeps another value (or holds it for later), every input in the group
     // goes back to showing what is actually chosen, so pressing it again
     // still sends a change.
-    createEffect(() => {
-        context.choices();
-        input.checked = isSelected();
-    });
+    createEffect(
+        on([context.choices, isSelected], ([, selected]) => {
+            input.checked = selected;
+        }),
+    );
 
     return (
         <input

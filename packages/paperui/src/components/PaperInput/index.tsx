@@ -6,6 +6,7 @@ import {
     createMemo,
     createSignal,
     createEffect,
+    on,
     createUniqueId,
     onCleanup,
     type JSX,
@@ -77,10 +78,11 @@ export function PaperInput(props: PaperInputProps) {
 
     const [internalValue, setInternalValue] = createSignal(controlled() ?? String(local.defaultValue ?? ""));
 
-    createEffect(() => {
-        const value = controlled();
-        if (value !== undefined) setInternalValue(value);
-    });
+    createEffect(
+        on(controlled, (value) => {
+            if (value !== undefined) setInternalValue(value);
+        }),
+    );
 
     // in a PaperSettingList, the list's record holds the value
     const listValue = useSettingListText(() => rest.name, "PaperInput");

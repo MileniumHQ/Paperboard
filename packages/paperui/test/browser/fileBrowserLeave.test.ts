@@ -26,9 +26,17 @@ async function answer(name: "Save" | "Discard" | "Cancel") {
     await page.waitFor(QUESTION, "the question about the unsaved edit");
     await page.eval(`[...${QUESTION}.querySelectorAll("button")].find((b) => b.innerText.trim().endsWith(${JSON.stringify(name)})).id = "answer"`);
     // pressed where it rests: on a busy machine the question can still be
-    // sliding in when its button is measured
+    // sliding in when its button is measured. What moves the button is an
+    // animation on a box around it; the button's own hover fade doesn't.
     await page.waitFor(
-        `document.getAnimations().every((a) => a.playState !== "running" || !Number.isFinite(a.effect?.getComputedTiming().endTime))`,
+        `(() => {
+            const button = document.getElementById("answer");
+            return document.getAnimations().every((a) => {
+                const target = a.effect?.target;
+                const moves = target !== button && target?.contains(button);
+                return !moves || a.playState !== "running" || !Number.isFinite(a.effect.getComputedTiming().endTime);
+            });
+        })()`,
         "the question to come to rest",
     );
     await page.click("#answer");
@@ -123,7 +131,7 @@ describe("PaperFileBrowser on a phone", () => {
         // the swipe lifted off where it started, so pressCancel takes the next
         // click as the swipe's own: a tap on the question's text gives it one
         await page.waitFor(QUESTION, "the question after the swipe");
-        await page.eval(`${QUESTION}.querySelector("p").id = "question-text"`);
+        await page.eval(`[...${QUESTION}.querySelectorAll("span")].find((el) => el.textContent === "Your changes will be lost if you don't save them.").id = "question-text"`);
         await page.tap("#question-text");
         await answer("Discard");
         await page.waitFor(`!${FILE_PAGE} || ${FILE_PAGE}.inert`, "the file's page to close");

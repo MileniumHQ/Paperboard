@@ -12,6 +12,7 @@ import {
     onCleanup,
     Show,
     createEffect,
+    on,
     type ParentProps,
     type JSX,
     type Accessor,
@@ -141,9 +142,11 @@ function SelectMenuInner(
     const query = () => (local.searchable ? search().trim().toLowerCase() : "");
     const noMatches = () => query() !== "" && !options().some((o) => o.matches());
     // a closed menu forgets its search: it opens on the whole list
-    createEffect(() => {
-        if (!open()) setSearch("");
-    });
+    createEffect(
+        on(open, (isOpen) => {
+            if (!isOpen) setSearch("");
+        }),
+    );
     let hiddenInputRef: HTMLInputElement | undefined;
     let triggerEl: HTMLButtonElement | undefined;
 
@@ -232,8 +235,6 @@ function SelectMenuInner(
     // Dismissal on presses outside the popup belongs to PaperContextMenu: it
     // is the one that knows where its panel is, and it treats this trigger as
     // inside so a press on either the trigger or an option reaches its click.
-    // A second document listener here used to close the portaled popup on the
-    // press that started an option click, so no option ever committed.
 
     const className = () =>
         cx(
@@ -336,9 +337,16 @@ function SelectMenuInner(
 function SearchField(props: { open: boolean; value: string; placeholder: string; onInput: (v: string) => void }) {
     const ctx = useContextMenu();
     let input: HTMLInputElement | undefined;
-    createEffect(() => {
-        if (props.open) requestAnimationFrame(() => input?.focus());
-    });
+    createEffect(
+        on(
+            () => props.open,
+            (open) => {
+                if (!open) return;
+                const frame = requestAnimationFrame(() => input?.focus());
+                onCleanup(() => cancelAnimationFrame(frame));
+            },
+        ),
+    );
     const highlightFirst = () =>
         queueMicrotask(() => {
             const first = input
@@ -421,11 +429,15 @@ export function PaperSelectMenuItem(
 
     // registered under its current value: an option whose value changes
     // leaves its old entry and labels the trigger under the new one
-    createEffect(() => {
-        const value = local.value;
-        menu?.register({ value, label, icon: () => local.icon, matches });
-        onCleanup(() => menu?.unregister(value));
-    });
+    createEffect(
+        on(
+            () => local.value,
+            (value) => {
+                menu?.register({ value, label, icon: () => local.icon, matches });
+                onCleanup(() => menu?.unregister(value));
+            },
+        ),
+    );
 
     // filtered out: still registered, so a selected option keeps its label on the trigger
     return (
