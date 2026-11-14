@@ -15,17 +15,9 @@ import {
     type BlocksProjectHandle,
     type ServiceContext,
 } from "@mileniumhq/paperapi";
-import {
-    blockEvent,
-    botBlocks,
-    botStatus,
-    commandEvent,
-    commandEventId,
-    panelBlocks,
-    valueChanges,
-    type BotBlocksHost,
-    type BotsBlocksHost,
-} from "./blocks";
+import { botBlocks, valueChanges, type BotBlocksHost } from "./blocks/bot";
+import { blockEvent, commandEvent, commandEventId } from "./blocks/events";
+import { botStatus, panelBlocks, type BotsBlocksHost } from "./blocks/bots";
 import { randomUUID } from "node:crypto";
 import {
     DEFAULT_SELECTED_PERMISSIONS,
@@ -59,11 +51,8 @@ import {
     type BotsServiceState,
     type StoredBot,
 } from "./bots";
-import {
-    BotSession,
-    buildGuildDetail,
-    buildMemberSummaries,
-} from "./session";
+import { BotSession } from "./session";
+import { buildGuildDetail, buildMemberSummaries } from "./explorer";
 
 export async function buildInviteUrl(appId: string, permissions: string[]): Promise<string> {
     if (!appId) {
@@ -340,8 +329,7 @@ async function setEnabled(entry: BotEntry, enabled: boolean): Promise<void> {
 }
 
 // The one bot from before several bots becomes the first of them: its
-// token moves to its own vault name, its commands come along, and flows
-// that used it keep running through the deprecated forwarders.
+// token moves to its own vault name and its commands come along.
 async function migrateLegacyBot(saved: Record<string, unknown>, legacy: { applicationId: string; commands: SlashCommandDefinition[] }): Promise<void> {
     const old = await secretsApi.get(LEGACY_TOKEN_NAME, PANEL_ID);
     const token = old.found && old.value ? old.value : null;
@@ -371,7 +359,7 @@ async function loadBots(): Promise<void> {
         await migrateLegacyBot(saved as Record<string, unknown>, read);
         return;
     }
-    // legacyBot named the bot the old action forwarders ran against; it is dropped from the saved config
+    // legacyBot is a field older versions saved; nothing reads it, so it is dropped
     const { bots: _bots, version: _version, legacyBot: _legacyBot, ...extras } = (saved ?? {}) as Record<string, unknown>;
     savedExtras = extras;
     for (const stored of read.config.bots) bots.set(stored.id, createEntry(stored, false));
@@ -424,8 +412,8 @@ async function setCommands(entry: BotEntry, commands: SlashCommandDefinition[]):
     publish();
 }
 
-// one event action per command: registering is part of creating the
-// command, so a command whose event action is missing is reported, never
+// one Blocks event per command: registering is part of creating the
+// command, so a command whose event is missing is reported, never
 // quietly half-created
 async function registerCommandTrigger(entry: BotEntry, command: SlashCommandDefinition): Promise<string | null> {
     try {
@@ -433,7 +421,7 @@ async function registerCommandTrigger(entry: BotEntry, command: SlashCommandDefi
         await entry.blocks.register({ events: [commandEvent(command)] });
         return null;
     } catch (err) {
-        console.error(`[DiscordService] event action registration failed for /${command.name}:`, err);
+        console.error(`[DiscordService] registering the Blocks event for /${command.name} failed:`, err);
         return `Could not register the trigger for /${command.name}: ${errorToMessage(err)}`;
     }
 }
@@ -443,7 +431,7 @@ async function unregisterCommandTrigger(entry: BotEntry, command: SlashCommandDe
         if (entry.blocks) await entry.blocks.unregister("event", commandEventId(command));
         return null;
     } catch (err) {
-        console.error(`[DiscordService] event action removal failed for /${command.name}:`, err);
+        console.error(`[DiscordService] removing the Blocks event for /${command.name} failed:`, err);
         return `Could not remove the trigger for /${command.name}: ${errorToMessage(err)}`;
     }
 }
@@ -655,7 +643,7 @@ function requireGuild(entry: BotEntry, guildId: unknown) {
 
 /**
  * What the panel's own page and widgets ask the service (serviceApi.call). Each takes the bot's id in its input, and
- * none of them is a block: what a person automates is in blocks.ts.
+ * none of them is a block: what a person automates is in blocks/.
  */
 export const serviceCalls = {
     /** Identity and recent messages, for a bot's Overview. */

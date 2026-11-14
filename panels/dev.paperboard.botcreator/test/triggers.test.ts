@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { blocksApi } from "@mileniumhq/paperapi";
-import { commandEventId } from "../src/blocks";
+import { commandEventId } from "../src/blocks/events";
 import type { BotsServiceState } from "../src/bots";
 import { GLOBAL_SCOPE, type CommandMutationResult } from "../src/types";
 import { guild, slashCommand, startFakeDiscord, type FakeDiscord } from "./helpers/discord";

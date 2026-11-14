@@ -1,6 +1,6 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { Client, GatewayIntentBits } from "discord.js";
-import { syncSlashCommands } from "../src/session";
+import { syncSlashCommands } from "../src/commandSync";
 import { GLOBAL_SCOPE, type SlashCommandDefinition } from "../src/types";
 import { guild, snowflake, type RecordedRequest } from "./helpers/discord";
 import { recordedSession, useFakeDiscord } from "./helpers/session";

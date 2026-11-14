@@ -1,5 +1,5 @@
 // What a bot does in Discord, once: each operation takes the bot's client
-// and plain inputs. Blocks (blocks.ts) calls these and only shapes what it
+// and plain inputs. Blocks (blocks/) calls these and only shapes what it
 // returns.
 import type {
     Client,
@@ -38,18 +38,6 @@ export const MAX_LISTED_MEMBERS = 100;
 
 // ─── finding things ─────────────────────────────────────────────────────────
 
-export async function verifyChannel(bot: Client, channelId: string): Promise<string> {
-    const channel = await bot.channels.fetch(channelId.trim());
-    if (!channel) throw new Error(`Channel ${channelId} not found`);
-    return channelId.trim();
-}
-
-export async function verifyUser(bot: Client, userId: string): Promise<string> {
-    const user = await bot.users.fetch(userId.trim());
-    if (!user) throw new Error(`User ${userId} not found`);
-    return userId.trim();
-}
-
 export async function fetchMessageIn(bot: Client, channelId: string, messageId: string): Promise<Message> {
     const channel = await bot.channels.fetch(channelId.trim());
     if (channel && "messages" in channel) {
@@ -58,23 +46,6 @@ export async function fetchMessageIn(bot: Client, channelId: string, messageId: 
         return msg;
     }
     throw new Error(`Channel ${channelId} not found or not text-based`);
-}
-
-export function describeMember(member: GuildMember) {
-    return {
-        userId: member.id,
-        username: member.user.username,
-        displayName: member.displayName,
-        nickname: member.nickname,
-        bot: member.user.bot,
-        roles: memberRoles(member).map((role) => ({ id: role.id, name: role.name })),
-        joinedAt: member.joinedAt ? member.joinedAt.toISOString() : null,
-        timedOutUntil: member.communicationDisabledUntil && member.communicationDisabledUntil.getTime() > Date.now()
-            ? member.communicationDisabledUntil.toISOString()
-            : null,
-        voiceChannelId: member.voice?.channelId ?? null,
-        guildId: member.guild.id,
-    };
 }
 
 /** A member's roles, highest first, without the server's everyone role. */

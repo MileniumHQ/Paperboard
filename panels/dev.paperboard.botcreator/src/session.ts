@@ -2,13 +2,7 @@
 // interactions, recent messages and slash-command sync. Every bot gets its
 // own, so two bots share nothing but the code; the service owns the list
 // and tells each session where its triggers go.
-import type {
-    Client,
-    ApplicationCommandOptionData,
-    ChatInputApplicationCommandData,
-    ChatInputCommandInteraction,
-    RepliableInteraction,
-} from "discord.js";
+import type { Client, ChatInputCommandInteraction, RepliableInteraction } from "discord.js";
 import { discord, loadDiscord } from "./discord";
 import {
     AUTO_ACK_DELAY_MS,
@@ -17,28 +11,23 @@ import {
     modalSubmitPayload,
 } from "./discordOps";
 import { CommandActivityRecorder, CommandUseCounter } from "./commandActivity";
+import { syncSlashCommands } from "./commandSync";
 import {
     appendCapped,
     RECENT_MESSAGE_CAP,
-    GLOBAL_SCOPE,
     INTERACTION_TTL_MS,
     PENDING_INTERACTION_CAP,
-    MEMBER_SEARCH_LIMIT,
     commandTriggerId,
     findCommandForInteraction,
     errorToMessage,
     type SlashCommandDefinition,
-    type SlashCommandOption,
-    type DiscordChannelKind,
     type Health,
     type GuildSummary,
-    type GuildDetail,
-    type MemberSummary,
 } from "./types";
 
 // connection state is explicit, never inferred: a failed login nulls the
-// client and records the typed error here (surfaced via get-bot-info and
-// the on-connection-error trigger), so the UI can never show "online"
+// client and records the typed error here (surfaced via getBotInfo and
+// the bot's When the Connection Fails event), so the UI can never show "online"
 // for a bot that isn't running. The same rule applies mid-session:
 // gateway disconnects invalidate the status (see attachListeners), and a
 // successful reconnect marks it live again via clientReady/shardReady.
@@ -166,7 +155,7 @@ export class BotSession {
     applicationId = "";
     /**
      * The live view of the bot's stored commands: the interaction handler
-     * needs a synchronous lookup, and the trigger registry mirrors this list.
+     * needs a synchronous lookup.
      */
     commands: SlashCommandDefinition[] = [];
     /**
@@ -738,8 +727,8 @@ export class BotSession {
 
         bot.on("interactionCreate", (interaction) => {
             if (!ownsSession()) return;
-            // button clicks and menu picks route through the parameterized
-            // interaction-triggered event by custom id
+            // button clicks and menu picks become the bot's component-used
+            // Blocks event, which flows tell apart by component id
             if (interaction.isButton() || interaction.isAnySelectMenu()) {
                 this.rememberInteraction(interaction);
                 emit("interaction-triggered", componentClickPayload(interaction));
@@ -903,193 +892,4 @@ export class BotSession {
             return { registered: false, syncError: this.commandSyncError };
         }
     }
-}
-
-function optionPayload(option: SlashCommandOption): ApplicationCommandOptionData {
-    const { ApplicationCommandOptionType } = discord();
-    const base = {
-        name: option.name,
-        description: option.description,
-        required: option.required,
-    };
-    switch (option.type) {
-        case "string":
-            return { ...base, type: ApplicationCommandOptionType.String };
-        case "integer":
-            return { ...base, type: ApplicationCommandOptionType.Integer };
-        case "number":
-            return { ...base, type: ApplicationCommandOptionType.Number };
-        case "boolean":
-            return { ...base, type: ApplicationCommandOptionType.Boolean };
-        case "user":
-            return { ...base, type: ApplicationCommandOptionType.User };
-        case "channel":
-            return { ...base, type: ApplicationCommandOptionType.Channel };
-        case "role":
-            return { ...base, type: ApplicationCommandOptionType.Role };
-        case "mentionable":
-            return { ...base, type: ApplicationCommandOptionType.Mentionable };
-    }
-    // unreachable: CommandOptionType is exhausted above
-    throw new Error(`Unsupported command option type: ${String(option.type)}`);
-}
-
-export function commandPayload(
-    def: SlashCommandDefinition,
-): ChatInputApplicationCommandData {
-    // Always explicit: omitting integration types inherits the app's
-    // configured contexts, which would silently promote a guild-only
-    // command to user installs once the portal enables them. contexts is
-    // left unset so a user-install command works on every surface.
-    const { ApplicationCommandType, ApplicationIntegrationType } = discord();
-    return {
-        type: ApplicationCommandType.ChatInput,
-        name: def.name,
-        description: def.description,
-        options: def.options.map(optionPayload),
-        integrationTypes: def.userInstall
-            ? [
-                ApplicationIntegrationType.GuildInstall,
-                ApplicationIntegrationType.UserInstall,
-            ]
-            : [ApplicationIntegrationType.GuildInstall],
-    };
-}
-
-/**
- * Declarative registration: each scope is set to exactly the stored list, so
- * deleted commands disappear. `scopesToClear` carries scopes that no longer
- * have any command (an empty list cannot be inferred from the commands).
- * Returns human-readable errors instead of throwing so partial success is
- * reported truthfully.
- */
-export async function syncSlashCommands(
-    bot: Client,
-    commands: SlashCommandDefinition[],
-    scopesToClear: string[] = [],
-): Promise<string[]> {
-    await loadDiscord();
-    const application = bot.application;
-    if (!application) {
-        throw new Error(
-            "Discord application is not available on this client; commands were not registered.",
-        );
-    }
-
-    const errors: string[] = [];
-    const byScope = new Map<string, SlashCommandDefinition[]>();
-    for (const command of commands) {
-        const list = byScope.get(command.scope) ?? [];
-        list.push(command);
-        byScope.set(command.scope, list);
-    }
-
-    try {
-        await application.commands.set(
-            (byScope.get(GLOBAL_SCOPE) ?? []).map(commandPayload),
-        );
-    } catch (err) {
-        errors.push(`Global commands: ${errorToMessage(err)}`);
-    }
-
-    for (const scope of new Set([...byScope.keys(), ...scopesToClear])) {
-        if (scope === GLOBAL_SCOPE) continue;
-        const definitions = byScope.get(scope) ?? [];
-        const guild = bot.guilds.cache.get(scope);
-        if (!guild) {
-            errors.push(
-                `Guild ${scope} is not in this bot's server list; its commands were not registered.`,
-            );
-            continue;
-        }
-        try {
-            await guild.commands.set(definitions.map(commandPayload));
-        } catch (err) {
-            errors.push(`Guild ${guild.name}: ${errorToMessage(err)}`);
-        }
-    }
-
-    return errors;
-}
-
-// ---------------------------------------------------------------------------
-// server explorer
-// ---------------------------------------------------------------------------
-
-// Discord's channel types by number, as its API defines them (discord.js's
-// ChannelType has the same values). Fixed here, so a trigger is described
-// whether or not a bot has loaded discord.js yet.
-const CHANNEL_KIND_BY_TYPE: Record<number, DiscordChannelKind> = {
-    0: "text",
-    2: "voice",
-    4: "category",
-    5: "announcement",
-    13: "stage",
-    15: "forum",
-    16: "media",
-};
-
-export function describeChannelKind(type: number): DiscordChannelKind {
-    return CHANNEL_KIND_BY_TYPE[type] ?? "other";
-}
-
-// bounded slices: Discord caps channels and roles per guild, and these caps
-// keep the wire shape finite even if a future API does not
-const GUILD_CHANNEL_CAP = 500;
-const GUILD_ROLE_CAP = 250;
-
-export function buildGuildDetail(guild: {
-    id: string;
-    name: string;
-    iconURL: () => string | null;
-    memberCount: number;
-    ownerId: string;
-    createdAt: Date | null;
-    channels: { cache: Map<string, any> };
-    roles: { cache: Map<string, any> };
-}): GuildDetail {
-    const channels = [...guild.channels.cache.values()]
-        .slice(0, GUILD_CHANNEL_CAP)
-        .map((channel) => ({
-            id: String(channel.id),
-            name: String(channel.name ?? channel.id),
-            kind: describeChannelKind(Number(channel.type)),
-            parentId:
-                typeof channel.parentId === "string" ? channel.parentId : null,
-            position: typeof channel.position === "number" ? channel.position : 0,
-        }))
-        .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
-
-    const roles = [...guild.roles.cache.values()]
-        .slice(0, GUILD_ROLE_CAP)
-        .map((role) => ({
-            id: String(role.id),
-            name: String(role.name),
-            color: typeof role.color === "number" ? role.color : 0,
-            position: typeof role.position === "number" ? role.position : 0,
-            managed: Boolean(role.managed),
-        }))
-        .sort((a, b) => b.position - a.position || a.name.localeCompare(b.name));
-
-    return {
-        id: guild.id,
-        name: guild.name,
-        icon: guild.iconURL() ?? "",
-        memberCount: guild.memberCount,
-        ownerId: guild.ownerId,
-        createdAt: guild.createdAt ? guild.createdAt.toISOString() : "",
-        channels,
-        roles,
-    };
-}
-
-export function buildMemberSummaries(members: Iterable<any>): MemberSummary[] {
-    return [...members].slice(0, MEMBER_SEARCH_LIMIT).map((member) => ({
-        id: String(member.id),
-        username: String(member.user?.username ?? ""),
-        displayName: String(member.displayName ?? member.user?.username ?? ""),
-        avatar: member.displayAvatarURL ? member.displayAvatarURL() : "",
-        joinedAt: member.joinedAt ? member.joinedAt.toISOString() : null,
-        bot: Boolean(member.user?.bot),
-    }));
 }

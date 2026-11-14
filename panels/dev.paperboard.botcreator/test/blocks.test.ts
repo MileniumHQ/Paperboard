@@ -3,7 +3,8 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { blocksApi, memoryBlocks, type BlockEventDefinition } from "@mileniumhq/paperapi";
 import type { BotsServiceState } from "../src/bots";
-import { blockEvent, blockTypes, commandEvent, commandEventId, staticEvents } from "../src/blocks";
+import { blockTypes } from "../src/blocks/blockTypes";
+import { blockEvent, commandEvent, commandEventId, staticEvents } from "../src/blocks/events";
 import { GLOBAL_SCOPE, type SlashCommandDefinition } from "../src/types";
 import { guild, slashCommand, snowflake, startFakeDiscord, userMessage, type FakeBot, type FakeDiscord, type FakeGuild } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, storedBot, stopServices } from "./helpers/service";

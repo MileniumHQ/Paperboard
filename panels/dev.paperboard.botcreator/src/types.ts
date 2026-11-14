@@ -528,16 +528,6 @@ export function formatDuration(ms: number): string {
     return `${secs}s`;
 }
 
-export function formatBytes(bytes: number): string {
-    if (!Number.isFinite(bytes) || bytes < 0) return "—";
-    if (bytes >= 1024 * 1024 * 1024) {
-        return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-    }
-    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${Math.round(bytes)} B`;
-}
-
 // wire shapes shared by the service and the UI: the service fills them from
 // discord.js, the UI renders them, and neither side redefines the other's
 // fields (drift between the two is how a dashboard starts lying)

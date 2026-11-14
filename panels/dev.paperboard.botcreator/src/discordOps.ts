@@ -1,6 +1,6 @@
 // One implementation for every "reach a channel, then operate on a message"
 // and "answer a pending interaction" operation. The blocks in
-// blocks.ts stay thin: they parse inputs and call these classes — channel
+// blocks/ stay thin: they parse inputs and call these classes — channel
 // resolution, embed/component payload building, and the Discord
 // not-text-based errors live here once, not per action.
 import type {
@@ -386,11 +386,6 @@ function selectToApi({ ComponentType }: Discord, component: DiscordSelectMenuDat
                 })),
             };
     }
-}
-
-/** Discord API action rows for the Components field, or none when empty. */
-export async function componentsToActionRows(input: unknown) {
-    return actionRows(await loadDiscord(), input);
 }
 
 function actionRows(lib: Discord, input: unknown) {
