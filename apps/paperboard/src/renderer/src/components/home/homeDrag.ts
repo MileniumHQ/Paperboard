@@ -48,7 +48,8 @@ export interface HomeDragOptions {
     pages: Accessor<number>;
     showPage: (index: number) => void;
     /** a press that didn't drag: a gallery entry goes in the first free spot */
-    onAdd: (entry: LibraryEntry) => void;
+    /** true once it is on Home */
+    onAdd: (entry: LibraryEntry) => boolean;
     /** a press that didn't drag: a tile is selected */
     onSelect: (itemId: string) => void;
     onDropNew: (entry: LibraryEntry, p: Placement) => void;
@@ -213,8 +214,7 @@ export function createHomeDrag(options: HomeDragOptions) {
             if (e.pointerId !== pointerId) return;
             cancelHold();
             // a tap adds it where it fits and shows where
-            options.onAdd(entry);
-            options.onSheetDone();
+            if (options.onAdd(entry)) options.onSheetDone();
         };
         const timer = setTimeout(() => {
             cancelHold();

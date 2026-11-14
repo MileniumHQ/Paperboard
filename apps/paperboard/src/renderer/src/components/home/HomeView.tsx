@@ -1,4 +1,4 @@
-import { PaperButton, PaperEmptyState, PaperModal, PaperPresence, PaperText } from "@mileniumhq/paperui";
+import { haptic, PaperButton, PaperEmptyState, PaperModal, PaperPresence, PaperText, showToast } from "@mileniumhq/paperui";
 import {
     batch,
     type Component,
@@ -84,8 +84,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
         setEditingNow(next);
     };
     const [selectedId, setSelectedId] = createSignal<string | null>(null);
-    // phones: the gallery's sheet; the page on screen; a tick per scroll,
-    // for what moves with it
+    // the room inside Home's scroller, less its padding
     const [viewport, setViewport] = createSignal({ width: 0, height: 0 });
     // room between a phone page's cells and the screen's sides: PaperUI's gap
     const [gutter, setGutter] = createSignal(0);
@@ -231,14 +230,28 @@ const HomeView: Component<HomeViewProps> = (props) => {
         layout.commit([...items(), entry.source === "builtin" ? { ...base, source: "builtin" } : { ...base, source: "panel", panelId: entry.panelId }]);
         setSelectedId(id);
     };
-    const addToFirstFreeSpot = (entry: LibraryEntry) => {
+    /** true once it is on Home; when nothing of its size fits, a toast says so */
+    const addToFirstFreeSpot = (entry: LibraryEntry): boolean => {
         const size = parseWidgetSize(entry.size);
-        if (!size) return;
+        if (!size) throw new Error(`The widget size "${entry.size}" is not WxH`);
         // a phone fills the page on screen first
         const spot = phone() ? findPhoneSpot(items(), size, phoneRows(), page()) : findFreeSpot(items(), size, Math.min(geometry().across, visibleAcross()));
-        if (!spot) return;
+        if (!spot) {
+            const smaller = entry.widget.sizes.some((s) => {
+                const other = parseWidgetSize(s);
+                return other !== null && other.w * other.h < size.w * size.h;
+            });
+            haptic("warning");
+            showToast({
+                variant: "warning",
+                title: `No room for ${entry.widget.name} at ${sizeLabel(entry.size)}`,
+                message: `${phone() ? "Every page is full. Remove a widget" : "Remove or move a widget"}${smaller ? ", or pick a smaller size" : ""}.`,
+            });
+            return false;
+        }
         addAt(entry, spot);
         if (phone()) queueMicrotask(() => showPage(pageOf(spot)));
+        return true;
     };
     const moveTo = (id: string, p: Placement) => {
         if (!fits(p, id)) return false;
@@ -552,8 +565,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                             onRetry={props.onRefreshPanels}
                             onStartDrag={carrying.holdLibraryEntry}
                             onAdd={(entry) => {
-                                addToFirstFreeSpot(entry);
-                                closeSheet();
+                                if (addToFirstFreeSpot(entry)) closeSheet();
                             }}
                             onDone={closeSheet}
                         />
