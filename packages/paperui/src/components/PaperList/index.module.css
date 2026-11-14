@@ -138,6 +138,16 @@
     gap: var(--paper-uigap-half);
 }
 
+/* The title keeps to one line and ends in an ellipsis: however long a name
+   (a plugin's, a player's), it shrinks before the item's actions do, so they
+   always keep their room. The description below wraps instead. */
+.listTitle > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .PaperListItem :global([class*="PaperButton"]) {
     margin-left: auto;
     flex-shrink: 0;
@@ -202,8 +212,7 @@
 }
 
 /* compact: a dense sidebar, such as a vertical tab strip. Smaller rows,
-   smaller text and icon, and a title that ends in an ellipsis instead of
-   wrapping, so every row keeps one height. */
+   smaller text and icon. */
 .PaperList.compact .PaperListItem {
     padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
 }
@@ -219,11 +228,4 @@
 
 .PaperList.compact .listIcon {
     font-size: var(--paper-icon-size-small);
-}
-
-.PaperList.compact .listTitle > span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }

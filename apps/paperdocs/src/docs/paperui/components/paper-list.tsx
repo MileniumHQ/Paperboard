@@ -222,7 +222,7 @@ export function Example() {
                         <td><PaperCode>compact</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td><PaperCode>false</PaperCode></td>
-                        <td>Smaller rows for a dense sidebar, such as vertical tabs. Titles are a size smaller, icons are small, padding is tighter, and a long title ends in an ellipsis instead of wrapping.</td>
+                        <td>Smaller rows for a dense sidebar, such as vertical tabs. Titles are a size smaller, icons are small, and padding is tighter.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>class</PaperCode>, <PaperCode>classList</PaperCode>, <PaperCode>style</PaperCode></td>
@@ -288,7 +288,7 @@ export function Example() {
                         <td><PaperCode>actions</PaperCode></td>
                         <td><PaperCode>JSX.Element</PaperCode></td>
                         <td>No default</td>
-                        <td>Trailing controls, such as a menu button. They sit inside the item's label, so each control must stop its own click and pointer events, or a press also selects the item.</td>
+                        <td>Trailing controls, such as a menu button. They sit inside the item's label, so each control must stop its own click and pointer events, or a press also selects the item. They keep their full width: the title shortens before they do.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>disabled</PaperCode></td>
@@ -376,7 +376,7 @@ onClosed(value: string | number): void;`}
                 <li>Left alone, a vertical list is a sidebar: 190 pixels wide, full height, a right border, on the inset surface. Set <PaperCode>fullWidth</PaperCode> and <PaperCode>borderless</PaperCode> to use it inside a card, as the gameserver panel does.</li>
                 <li>A horizontal list is full width and auto height, with no right border.</li>
                 <li>A list scrolls rather than crushing its rows when it overflows.</li>
-                <li>A <PaperCode>compact</PaperCode> list keeps every row one line high: a title that doesn't fit ends in an ellipsis.</li>
+                <li>A title stays on one line: one that doesn't fit, such as a long plugin or player name with no spaces, ends in an ellipsis before it reaches the item's actions. The description wraps instead.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>

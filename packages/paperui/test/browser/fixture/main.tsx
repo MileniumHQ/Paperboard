@@ -7,6 +7,7 @@ import { createSignal, For, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import {
     PaperAudio,
+    PaperBadge,
     PaperButton,
     PaperConsole,
     PaperContextMenu,
@@ -372,6 +373,33 @@ const scenarios: Record<string, () => JSX.Element> = {
                 >
                     <p id="detail">{open() ?? "nobody"}</p>
                 </PaperSplit>
+            </div>,
+        );
+    },
+
+    listOverflow() {
+        const long = "SuperLongPluginNameForTestingOverflowBehaviour";
+        const rows = (compact: boolean) => (
+            <PaperList id={compact ? "compact" : "regular"} selectable={false} compact={compact} fullWidth>
+                <PaperListItem
+                    value="long"
+                    icon="extension"
+                    description={`${long}.jar · v1.0.0`}
+                    actions={
+                        <>
+                            <PaperBadge variant="primary">OP</PaperBadge>
+                            <PaperBadge variant="danger">Banned</PaperBadge>
+                        </>
+                    }
+                >
+                    {long}
+                </PaperListItem>
+            </PaperList>
+        );
+        return shell(
+            <div style={{ width: "400px" }}>
+                {rows(false)}
+                {rows(true)}
             </div>,
         );
     },
