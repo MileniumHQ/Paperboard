@@ -75,7 +75,7 @@ function BotView(props: { id: string; bots: BotsState; compact: boolean; onHome:
                     <Overview bot={bot} onSetEnabled={(enabled) => props.bots.setEnabled(props.id, enabled)} />
                 </PaperInterfaceItem>
                 <PaperInterfaceItem value="commands">
-                    <Commands bot={bot} />
+                    <Commands bot={bot} active={activeTab() === "commands"} />
                 </PaperInterfaceItem>
                 <PaperInterfaceItem value="servers">
                     <Servers bot={bot} />

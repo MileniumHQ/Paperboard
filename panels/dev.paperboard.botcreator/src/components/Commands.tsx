@@ -1,4 +1,4 @@
-import { createSignal, onMount, Show, For, Index } from "solid-js";
+import { createEffect, createSignal, on, onMount, Show, For, Index } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -58,7 +58,7 @@ function newOptionId(): string {
     return `opt-${Date.now().toString(36)}-${nextOptionId++}`;
 }
 
-export default function Commands(props: { bot: () => BotSummary }) {
+export default function Commands(props: { bot: () => BotSummary; active: boolean }) {
     const bot = () => props.bot().id;
     const [commands, setCommands] = createSignal<SlashCommandDefinition[]>([]);
     const [guilds, setGuilds] = createSignal<GuildSummary[]>([]);
@@ -119,6 +119,11 @@ export default function Commands(props: { bot: () => BotSummary }) {
     onMount(() => {
         void load();
     });
+    // the service has no announcement for a command made elsewhere (a Blocks flow, another
+    // window), so the list is read again each time this tab is opened
+    createEffect(on(() => props.active, (active) => {
+        if (active) void load();
+    }, { defer: true }));
 
     const mutationProblem = (result: CommandMutationResult): Outcome | null => {
         if (result.triggerError) return { title: "Flow trigger not registered", message: result.triggerError };
