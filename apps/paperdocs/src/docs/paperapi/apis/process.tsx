@@ -81,10 +81,13 @@ processApi.write(id: string, data: string): Promise<void>;
 processApi.closeInput(id: string): Promise<void>;
 processApi.kill(id: string, signal?: string): Promise<void>;
 
-processApi.onData(id: string, callback: (text: string) => void): () => void;
-processApi.onStdout(id: string, callback: (text: string) => void): () => void;
-processApi.onStderr(id: string, callback: (text: string) => void): () => void;
-processApi.onExit(id: string, callback: (exitCode?: number) => void): () => void;
+processApi.onData(id: string, callback: (text: string) => void): StreamSubscription;
+processApi.onStdout(id: string, callback: (text: string) => void): StreamSubscription;
+processApi.onStderr(id: string, callback: (text: string) => void): StreamSubscription;
+processApi.onExit(id: string, callback: (exitCode?: number) => void): StreamSubscription;
+
+/** call it to unsubscribe */
+type StreamSubscription = (() => void) & { attached: Promise<boolean> };
 
 interface ProcessStartOptions {
     /** names the process for every later call; at most 128 characters */
@@ -108,7 +111,7 @@ interface ProcessStartOptions {
                 <li>The id belongs to the panel that started it. Another panel's calls with that id are refused.</li>
                 <li>Starting an id that is running rejects with <PaperCode>Process &lt;id&gt; is already running</PaperCode>. Check <PaperCode>exists</PaperCode> first, as the sample does, so a page reopened later picks up the same process.</li>
                 <li>Subscribe with <PaperCode>onData</PaperCode> and the others before <PaperCode>start</PaperCode> to see the first lines. Each returns the function that unsubscribes.</li>
-                <li>Subscribing with <PaperCode>onData</PaperCode>, <PaperCode>onStdout</PaperCode> or <PaperCode>onStderr</PaperCode> attaches the connection to the process, so a new page or a restarted service sees the output of a process that was already running. <PaperCode>attach</PaperCode> does the same with no callback, and resolves <PaperCode>{"{ success: false }"}</PaperCode> when no process has that id. After a reconnect, the SDK attaches again.</li>
+                <li>Subscribing with <PaperCode>onData</PaperCode>, <PaperCode>onStdout</PaperCode> or <PaperCode>onStderr</PaperCode> attaches the connection to the process, so a new page or a restarted service sees the output of a process that was already running. <PaperCode>onExit</PaperCode> attaches too. A subscription's <PaperCode>attached</PaperCode> resolves <PaperCode>true</PaperCode> once the connection is attached, <PaperCode>false</PaperCode> when no process has that id yet (one this connection starts later streams all the same), and rejects with the daemon's reason when the attach is refused. <PaperCode>attach</PaperCode> does the same with no callback, and resolves <PaperCode>{"{ success: false }"}</PaperCode> when no process has that id. After a reconnect, the SDK attaches again to each process that was attached.</li>
                 <li><PaperCode>write</PaperCode> sends text as it is, with no newline added, at most 64 KB a call.</li>
                 <li><PaperCode>closeInput</PaperCode> ends the process's input once everything written before it has arrived, as the end of a pipe does. A program that reads its input to the end (<PaperCode>codex exec -</PaperCode>, <PaperCode>sort</PaperCode>) goes on. Later writes fail. A long text can go this way instead of in <PaperCode>args</PaperCode>, which every system limits in size and other users can read.</li>
                 <li><PaperCode>kill</PaperCode> sends the signal, <PaperCode>SIGTERM</PaperCode> by default. It resolves when the id is not running. Rejects with the daemon's reason when the kill is refused.</li>

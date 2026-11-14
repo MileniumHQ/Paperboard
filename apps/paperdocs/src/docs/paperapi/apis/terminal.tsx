@@ -42,11 +42,14 @@ terminalApi.write(id: string, data: string): Promise<void>;
 terminalApi.resize(id: string, cols: number, rows: number): Promise<void>;
 terminalApi.destroy(id: string): Promise<void>;
 
-terminalApi.onData(id: string, callback: (text: string) => void): () => void;
-terminalApi.onExit(id: string, callback: (exitCode?: number) => void): () => void;
-terminalApi.onForeground(id: string, callback: (name: string) => void): () => void;
-terminalApi.onCommand(id: string, callback: (finished: { command: string; exitCode: number }) => void): () => void;
-terminalApi.onCwd(id: string, callback: (cwd: string) => void): () => void;`}
+terminalApi.onData(id: string, callback: (text: string) => void): StreamSubscription;
+terminalApi.onExit(id: string, callback: (exitCode?: number) => void): StreamSubscription;
+terminalApi.onForeground(id: string, callback: (name: string) => void): StreamSubscription;
+terminalApi.onCommand(id: string, callback: (finished: { command: string; exitCode: number }) => void): StreamSubscription;
+terminalApi.onCwd(id: string, callback: (cwd: string) => void): StreamSubscription;
+
+/** call it to unsubscribe */
+type StreamSubscription = (() => void) & { attached: Promise<boolean> };`}
             </PaperCode>
             <PaperTable>
                 <thead>
@@ -78,7 +81,7 @@ terminalApi.onCwd(id: string, callback: (cwd: string) => void): () => void;`}
                     </tr>
                     <tr>
                         <td><PaperCode>onData</PaperCode></td>
-                        <td>Subscribes to the output, and attaches the connection to a shell that was already running. Each callback returns the function that unsubscribes.</td>
+                        <td>Subscribes to the output, and attaches the connection to a shell that was already running. Each subscription is the function that unsubscribes. Its <PaperCode>attached</PaperCode> resolves <PaperCode>true</PaperCode> once the connection is attached, <PaperCode>false</PaperCode> when no shell has that id yet, and rejects with the daemon's reason when the attach is refused, such as another panel's id.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>onExit</PaperCode></td>
@@ -112,7 +115,7 @@ terminalApi.onCwd(id: string, callback: (cwd: string) => void): () => void;`}
 
             <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
             <PaperText preset="body" as="p">
-                <PaperCode>create</PaperCode> and <PaperCode>destroy</PaperCode> never reject. Their failures reach only the console, such as <PaperCode>Process &lt;id&gt; is already running</PaperCode> for a second <PaperCode>create</PaperCode>, <PaperCode>spawn cwd does not exist: &lt;path&gt;</PaperCode>, or a refused credential key in <PaperCode>env</PaperCode>.
+                <PaperCode>create</PaperCode> and <PaperCode>destroy</PaperCode> reject with the daemon's reason, such as <PaperCode>Process &lt;id&gt; is already running</PaperCode> for a second <PaperCode>create</PaperCode>, <PaperCode>spawn cwd does not exist: &lt;path&gt;</PaperCode>, or a refused credential key in <PaperCode>env</PaperCode>.
                 <PaperCode>write</PaperCode> rejects with <PaperCode>Terminal "&lt;id&gt;" is not running</PaperCode>. <PaperCode>write</PaperCode>, <PaperCode>resize</PaperCode> and <PaperCode>exists</PaperCode> reject with <PaperCode>"&lt;id&gt;" belongs to another panel</PaperCode> (<PaperCode>FORBIDDEN</PaperCode>) for another panel's id.
             </PaperText>
         </PaperFlex>

@@ -1,6 +1,7 @@
 // transport router, every channel rides the WebSocket
 import { CraneTransport } from "./ws";
 import { debugErr } from "./debug";
+import { attachShared, dropAttachmentLedger, releaseAttachment, type Resource } from "./attachments";
 import { fetchRegistryIndex } from "./config";
 import { grantedComputerId, resolvePanelId } from "./identity";
 
@@ -527,10 +528,21 @@ export function send(channel: string, ...args: unknown[]): Promise<void> {
     }
 }
 
+/**
+ * A stream subscription: call it to unsubscribe. `attached` says whether the
+ * connection is attached to the terminal or process the stream reads: true
+ * once it is, false when nothing has that id yet (start it on this
+ * connection and the stream flows), and it rejects with the daemon's reason
+ * when the attach is refused. A connection lost before the answer rejects
+ * too, and the SDK attaches again once it reconnects. A stream that reads no resource (download
+ * progress) has nothing to attach and resolves true.
+ */
+export type StreamSubscription = (() => void) & { readonly attached: Promise<boolean> };
+
 export function on(
     channel: string,
     listener: (event: any, ...args: any[]) => void,
-): () => void {
+): StreamSubscription {
     // Stream channels look like "<kind>:<resource-id>"
     const colonIndex = channel.indexOf(":");
     const kind = colonIndex === -1 ? channel : channel.slice(0, colonIndex);
@@ -559,106 +571,21 @@ export function on(
     // eager connect so streams flow before first invoke
     t.ensureConnected().catch((err) => debugErr("stream eager connect", err));
 
-    // replay attachments this client owns — refcounted per resource id:
-    // multiple subscribers to the same id share ONE attachment (one remote
-    // attach RPC, one replay entry), so an unsubscribe only tears down when
-    // the LAST subscriber leaves; untracking on the first would lose the
-    // reconnect replay for the listeners that remain. Exit counts too: the daemon
-    // sends a resource's exit only to connections attached to it, so an exit
-    // listener on a connection that did not start the resource (a restarted
-    // service taking back a run) would otherwise never hear it.
-    const tracked: "terminal" | "process" | null =
+    // Exit counts too: the daemon sends a resource's exit only to
+    // connections attached to it, so an exit listener on a connection that
+    // did not start the resource (a restarted service taking back a run)
+    // would otherwise never hear it.
+    const tracked: Resource | null =
         kind.startsWith("terminal-")
             ? "terminal"
-            : kind === "process-data" ||
-                kind === "process-stdout" ||
-                kind === "process-stderr" ||
-                kind === "process-exit"
+            : kind.startsWith("process-")
             ? "process"
             : null;
-    if (tracked) {
-        attachRefcounts(tracked, suffix, t);
-    }
+    const attached = tracked ? attachShared(tracked, suffix, t) : Promise.resolve(true);
 
-    return () => {
+    const off = () => {
         t.unsubscribeSource(route.source, wrapped);
-        if (tracked) {
-            releaseAttachment(tracked, suffix, t);
-        }
+        if (tracked) releaseAttachment(tracked, suffix, t);
     };
-}
-
-// attach refcount ledger keyed PER TRANSPORT, then BY RESOURCE
-// (${tracked}:${id}) — the ONE place "one live attachment per resource" is
-// implemented. count>0 means the transport tracks and the daemon has been
-// asked to attach. All three process channel kinds map to the same
-// "process" resource key. Per-transport keying matters: transports are
-// per-scope and replaceable (closeTransport drops the whole instance), and
-// a transport-global ledger would leak refcounts into a replacement
-// transport, which would then silently never re-attach. A WeakMap entry
-// dies with its transport, so the ledger needs no teardown hook.
-const attachRefs = new WeakMap<
-    CraneTransport,
-    Map<string, number>
->();
-
-function ledgerFor(t: CraneTransport): Map<string, number> {
-    let ledger = attachRefs.get(t);
-    if (!ledger) {
-        ledger = new Map();
-        attachRefs.set(t, ledger);
-    }
-    return ledger;
-}
-
-function attachRefcounts(
-    tracked: "terminal" | "process",
-    id: string,
-    t: ReturnType<typeof getTransport>,
-): void {
-    const ledger = ledgerFor(t);
-    const key = `${tracked}:${id}`;
-    const count = (ledger.get(key) ?? 0) + 1;
-    ledger.set(key, count);
-    if (count > 1) return; // attachment already live; nothing to redo
-    if (tracked === "terminal") {
-        t.call("term:attach", { id }).catch((err) =>
-            debugErr(`term:attach ${id}`, err),
-        );
-        t.trackTerminal(id);
-    } else {
-        t.call("process:attach", { id }).catch((err) =>
-            debugErr(`process:attach ${id}`, err),
-        );
-        t.trackProcess(id);
-    }
-    // a failed attach still had the id tracked so reconnect replays it; the
-    // attach retry rides the daemon's own attach semantics
-}
-
-function releaseAttachment(
-    tracked: "terminal" | "process",
-    id: string,
-    t: ReturnType<typeof getTransport>,
-): void {
-    const ledger = ledgerFor(t);
-    const key = `${tracked}:${id}`;
-    const count = ledger.get(key);
-    if (count === undefined || count <= 1) {
-        ledger.delete(key);
-        if (tracked === "terminal") t.untrackTerminal(id);
-        else t.untrackProcess(id);
-        return;
-    }
-    ledger.set(key, count - 1);
-}
-
-// a destroyed/kill'ed resource tears its ledger entry down so a later
-// resubscribe re-attaches fresh instead of inheriting a stale count
-function dropAttachmentLedger(
-    tracked: "terminal" | "process",
-    id: string,
-    t?: ReturnType<typeof getTransport>,
-): void {
-    ledgerFor(t ?? getTransport()).delete(`${tracked}:${id}`);
+    return Object.assign(off, { attached });
 }

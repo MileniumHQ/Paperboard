@@ -304,6 +304,7 @@ describe("subscriptions and stream attaches survive reconnect and teardown", () 
         await initPaperApi({ port: server.port, token: server.token });
         // keeps an announcement on every connection, so each replay has an end to wait for
         getTransport().subscribeEvent("keepalive", () => {});
+        server.answer = (action) => (action === "term:attach" ? { success: true } : {});
         const offFirst = on("terminal-data:t1", () => {});
         const offSecond = on("terminal-data:t1", () => {});
         await server.next("the attach", isAction("term:attach", 0));
@@ -472,6 +473,34 @@ describe("failures reach the caller", () => {
         expect(server.frames.filter(isAction("process:attach", 1)).map((f) => f.msg.params.id)).toEqual(["alive"]);
     });
 
+    test("a stream whose attach fails says so to its subscriber and is not replayed on reconnect", async () => {
+        await initPaperApi({ port: server.port, token: server.token });
+        getTransport().subscribeEvent("keepalive", () => {});
+        server.answer = (action, params) => {
+            if (action === "term:attach") throw new Error("not this panel's terminal");
+            if (action === "process:attach") return { success: params.id === "alive" };
+            return {};
+        };
+        const consoleError = console.error;
+        console.error = () => {};
+        try {
+            const refused = terminalApi.onData("theirs", () => {});
+            await expect(refused.attached).rejects.toThrow("not this panel's terminal");
+            const gone = processApi.onExit("gone", () => {});
+            const alive = processApi.onExit("alive", () => {});
+            // a second subscriber shares the first one's answer
+            expect(await processApi.onData("gone", () => {}).attached).toBe(false);
+            expect(await gone.attached).toBe(false);
+            expect(await alive.attached).toBe(true);
+        } finally {
+            console.error = consoleError;
+        }
+        await server.dropConnections();
+        await server.next("the second connection's announcement", isAction("events:subscribe", 1));
+        await server.next("the second connection's state", (f) => f.conn === 1 && f.msg?.action === "auth:verify");
+        expect(server.frames.filter((f) => f.conn === 1 && /:attach$/.test(f.msg?.action ?? "")).map((f) => f.msg.params.id)).toEqual(["alive"]);
+    });
+
     test("a process.run timeout kills the child and resolves RUN_TIMEOUT", async () => {
         await initPaperApi({ port: server.port, token: server.token });
         server.answer = (action) => (action === "process:run" ? { success: true } : {});
@@ -517,14 +546,18 @@ describe("failures reach the caller", () => {
         const unhandled: unknown[] = [];
         const onUnhandled = (reason: unknown) => unhandled.push(reason);
         process.on("unhandledRejection", onUnhandled);
+        jest.useFakeTimers();
         try {
             await expect(processApi.run({ command: "refused" }, 50)).rejects.toThrow("env PATH is not allowed");
-            // past the run's deadline: a timer left behind would send its kill by now
-            await new Promise((r) => setTimeout(r, 300));
+            // past the run's deadline: a timer left behind sends its kill now
+            jest.advanceTimersByTime(60_000);
             await flushMicrotasks();
+            // one socket keeps its order: a kill sent before this answer was heard before it
+            await invoke("system-get-ip");
             expect(server.requests("process:kill")).toEqual([]);
             expect(unhandled).toEqual([]);
         } finally {
+            jest.useRealTimers();
             process.off("unhandledRejection", onUnhandled);
         }
     });

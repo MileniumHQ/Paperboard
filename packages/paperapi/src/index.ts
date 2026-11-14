@@ -1,4 +1,4 @@
-import { invoke, send, on } from "./ipc";
+import { invoke, send, on, type StreamSubscription } from "./ipc";
 import "./readiness";
 import "./swipeBack";
 import "./haptics";
@@ -86,7 +86,7 @@ export const terminalApi = {
     exists: async (id: string): Promise<boolean> =>
         invoke<boolean>("terminal-exists", { id }),
 
-    onData: (id: string, callback: (data: string) => void): (() => void) => {
+    onData: (id: string, callback: (data: string) => void): StreamSubscription => {
         return on(`terminal-data:${id}`, (_event: unknown, data: unknown) => {
             if (typeof data === "string" && data) callback(data);
         });
@@ -96,7 +96,7 @@ export const terminalApi = {
      * The program in front of the terminal (its shell at the prompt, or
      * what the shell runs), each time it changes and once on subscribing.
      */
-    onForeground: (id: string, callback: (name: string) => void): (() => void) => {
+    onForeground: (id: string, callback: (name: string) => void): StreamSubscription => {
         return on(`terminal-foreground:${id}`, (_event: unknown, name: unknown) => {
             if (typeof name === "string" && name) callback(name);
         });
@@ -106,20 +106,20 @@ export const terminalApi = {
      * Each command the terminal's shell runs, when it ends. bash, zsh, fish
      * and PowerShell say so; another shell (sh, cmd) says nothing.
      */
-    onCommand: (id: string, callback: (finished: TerminalCommand) => void): (() => void) => {
+    onCommand: (id: string, callback: (finished: TerminalCommand) => void): StreamSubscription => {
         return on(`terminal-command:${id}`, (_event: unknown, finished: unknown) => {
             if (finished && typeof finished === "object") callback(finished as TerminalCommand);
         });
     },
 
     /** the folder the terminal's shell is in, each time it changes and once on subscribing */
-    onCwd: (id: string, callback: (cwd: string) => void): (() => void) => {
+    onCwd: (id: string, callback: (cwd: string) => void): StreamSubscription => {
         return on(`terminal-cwd:${id}`, (_event: unknown, cwd: unknown) => {
             if (typeof cwd === "string" && cwd) callback(cwd);
         });
     },
 
-    onExit: (id: string, callback: (exitCode?: number) => void): (() => void) => {
+    onExit: (id: string, callback: (exitCode?: number) => void): StreamSubscription => {
         return on(`terminal-exit:${id}`, (_event: unknown, exit: { exitCode?: number }) => {
             callback(exit.exitCode);
         });

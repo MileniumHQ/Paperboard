@@ -1,4 +1,4 @@
-import { invoke, send, on } from "./ipc";
+import { invoke, send, on, type StreamSubscription } from "./ipc";
 import { newClientId } from "./channels";
 
 export interface ProcessRunResult {
@@ -34,7 +34,7 @@ export interface ProcessStartOptions {
 }
 
 // a process stream's text, empty chunks dropped; returns its teardown
-function onText(stream: "process-data" | "process-stdout" | "process-stderr", id: string, callback: (data: string) => void): () => void {
+function onText(stream: "process-data" | "process-stdout" | "process-stderr", id: string, callback: (data: string) => void): StreamSubscription {
     return on(`${stream}:${id}`, (_event: unknown, data: unknown) => {
         if (typeof data === "string" && data) callback(data);
     });
@@ -42,18 +42,9 @@ function onText(stream: "process-data" | "process-stdout" | "process-stderr", id
 
 // supervised background processes
 export const processApi = {
+    // the router shapes the wire params, one place for every start option
     start: async (options: ProcessStartOptions): Promise<{ success: boolean }> =>
-        invoke("process-start", {
-            id: options.id,
-            command: options.command,
-            args: options.args || [],
-            cwd: options.cwd,
-            env: options.env,
-            ...(options.stdin === false ? { stdin: false } : {}),
-            ...(options.inputEncoding ? { inputEncoding: options.inputEncoding } : {}),
-            ...(options.consoleInput ? { consoleInput: true } : {}),
-            ...(options.important ? { important: true } : {}),
-        }),
+        invoke("process-start", options),
 
     write: (id: string, data: string): Promise<void> =>
         send("process-write", { id, data }),
@@ -71,13 +62,13 @@ export const processApi = {
     attach: async (id: string): Promise<{ success: boolean }> =>
         invoke<{ success: boolean }>("process-attach", { id }),
 
-    onData: (id: string, callback: (data: string) => void): (() => void) => onText("process-data", id, callback),
+    onData: (id: string, callback: (data: string) => void): StreamSubscription => onText("process-data", id, callback),
 
-    onStdout: (id: string, callback: (data: string) => void): (() => void) => onText("process-stdout", id, callback),
+    onStdout: (id: string, callback: (data: string) => void): StreamSubscription => onText("process-stdout", id, callback),
 
-    onStderr: (id: string, callback: (data: string) => void): (() => void) => onText("process-stderr", id, callback),
+    onStderr: (id: string, callback: (data: string) => void): StreamSubscription => onText("process-stderr", id, callback),
 
-    onExit: (id: string, callback: (exitCode?: number) => void): (() => void) => {
+    onExit: (id: string, callback: (exitCode?: number) => void): StreamSubscription => {
         return on(`process-exit:${id}`, (_event: unknown, exit: { exitCode?: number }) => {
             callback(exit.exitCode);
         });
