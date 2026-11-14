@@ -66,6 +66,8 @@ export interface WidgetLibraryProps {
     onStartDrag: (entry: LibraryEntry, event: PointerEvent) => void;
     onAdd: (entry: LibraryEntry) => void;
     onDone: () => void;
+    /** the Done button, which takes focus when the gallery opens */
+    doneRef?: (el: HTMLButtonElement) => void;
     /** the room the gallery takes from Home's right edge, in px */
     onWidth?: (px: number) => void;
     /** shown in a phone's sheet: it fills the sheet, and widgets are held to be placed */
@@ -153,7 +155,7 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
                 </div>
                 {/* a sheet is closed by its own button; Home's toolbar has Done */}
                 <Show when={!props.sheet}>
-                    <PaperButton size="small" variant="primary" onClick={props.onDone}>Done</PaperButton>
+                    <PaperButton ref={(el: HTMLButtonElement) => props.doneRef?.(el)} size="small" variant="primary" onClick={props.onDone}>Done</PaperButton>
                 </Show>
             </div>
             <Show when={props.full}>

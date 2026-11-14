@@ -726,9 +726,14 @@ const HomeView: Component<HomeViewProps> = (props) => {
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         scroller?.scrollTo({ left: index * pageWidth(), behavior: reduce ? "auto" : "smooth" });
     };
+    // the gallery's Done button: where focus goes when editing starts, so the
+    // keyboard is in the gallery instead of on the page's body
+    let doneButton: HTMLButtonElement | undefined;
     const startEditing = () => {
         setEditing(true);
+        // a phone's sheet is a dialog, which takes focus itself
         if (phone) setSheetOpen(true);
+        else queueMicrotask(() => doneButton?.focus());
     };
     const startLibraryDrag = (entry: LibraryEntry, event: PointerEvent) => {
         const size = parseWidgetSize(entry.size);
@@ -769,6 +774,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
     };
 
     let editButton: HTMLButtonElement | undefined;
+    let emptyAddButton: HTMLButtonElement | undefined;
     const finishEditing = () => {
         cancelHold();
         endDrag();
@@ -780,9 +786,27 @@ const HomeView: Component<HomeViewProps> = (props) => {
         }
         setEditing(false);
         setSelectedId(null);
-        // the Done button is gone; focus lands on the button that comes back
-        queueMicrotask(() => editButton?.focus());
+        // the Done button is gone; focus lands on the button that comes back:
+        // Edit Home, or Add widgets on a Home left empty
+        queueMicrotask(() => [editButton, emptyAddButton].find((button) => button?.isConnected)?.focus());
     };
+
+    // Escape leaves editing, once whatever is open over Home (a dialog, a
+    // menu, a list of choices, a carried widget) has had it
+    createEffect(() => {
+        if (!editing() || !props.visible) return;
+        const leave = (event: KeyboardEvent) => {
+            if (event.key !== "Escape" || event.defaultPrevented || drag()) return;
+            const open = document.querySelectorAll('[role="dialog"][aria-modal="true"], [role="menu"], [role="listbox"]');
+            // a closed menu stays mounted, hidden
+            if (Array.from(open).some((el) => el.getAttribute("aria-hidden") !== "true" && el.getClientRects().length > 0)) return;
+            event.preventDefault();
+            finishEditing();
+        };
+        // capture: what is open is seen before Escape closes it
+        window.addEventListener("keydown", leave, true);
+        onCleanup(() => window.removeEventListener("keydown", leave, true));
+    });
 
     // what the ghost draws; the same widget stays the same object while the
     // pointer moves, so the ghost's content isn't rebuilt on every move
@@ -969,7 +993,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                             title="Welcome home"
                             description="Widgets from your panels, on every computer, in one place."
                         >
-                            <PaperButton variant="primary" onClick={startEditing}>Add widgets</PaperButton>
+                            <PaperButton ref={emptyAddButton} variant="primary" onClick={startEditing}>Add widgets</PaperButton>
                         </PaperEmptyState>
                     </div>
                 </Show>
@@ -1077,6 +1101,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                     onStartDrag={startLibraryDrag}
                     onAdd={addToFirstFreeSpot}
                     onDone={finishEditing}
+                    doneRef={(el) => (doneButton = el)}
                 />
             </PaperPresence>
 
