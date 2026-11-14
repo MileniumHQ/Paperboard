@@ -18,6 +18,7 @@ import {
     type WidgetChoice,
     type WidgetDeclaration,
     type WidgetOptionValues,
+    type WidgetSize,
 } from "@mileniumhq/paperapi";
 import { type ComputerInfo, logToMain } from "../../lib/shell";
 import PanelIcon from "../computer/PanelIcon";
@@ -278,11 +279,18 @@ const SourceRow: Component<{ key: string; icon: JSX.Element; name: string; detai
     </PaperListItem>
 );
 
+/** a size the widget declares; the manifest's sizes are checked as it is read, so one that isn't WxH is a bug */
+function declaredSize(size: string): WidgetSize {
+    const parsed = parseWidgetSize(size);
+    if (!parsed) throw new Error(`The widget size "${size}" is not WxH`);
+    return parsed;
+}
+
 const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; entryAt: (size: string) => LibraryEntry }> = (props) => {
     const [size, setSize] = createSignal(props.widget.sizes[0]);
-    const parsed = () => parseWidgetSize(size()) ?? { w: 1, h: 1 };
-    const tallest = () => Math.max(...props.widget.sizes.map((s) => parseWidgetSize(s)?.h ?? 1));
-    const widest = () => Math.max(...props.widget.sizes.map((s) => parseWidgetSize(s)?.w ?? 1));
+    const parsed = () => declaredSize(size());
+    const tallest = () => Math.max(...props.widget.sizes.map((s) => declaredSize(s).h));
+    const widest = () => Math.max(...props.widget.sizes.map((s) => declaredSize(s).w));
     // what a panel widget's options offer comes from the panel's service, asked
     // when the card appears; a built-in's are its own. Until every option has
     // a value there is nothing to add
@@ -439,7 +447,7 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                 <div class={styles.chipRow} role="group" aria-label={`${props.widget.name} size`}>
                     <For each={props.widget.sizes}>
                         {(option) => {
-                            const shape = parseWidgetSize(option) ?? { w: 1, h: 1 };
+                            const shape = declaredSize(option);
                             return (
                                 <PaperChip
                                     selected={size() === option}

@@ -6,7 +6,7 @@ import { isShellTab } from "../../lib/shellTabs";
 import type { AppUpdateState } from "../../../../shared/appUpdate";
 import type { UpdateQueueState } from "../../../../shared/updateQueue";
 import UpdatesButton from "./UpdatesButton";
-import { leftReserve, rightReserve, type OverlayLike } from "./titlebarInsets";
+import { DEFAULT_LEFT_RESERVE, leftReserve, rightReserve, type OverlayLike } from "./titlebarInsets";
 import styles from "./TopBar.module.css";
 import { errorMessage } from "../../lib/errorMessage";
 
@@ -24,7 +24,7 @@ const TopBar: Component<{
     inert?: boolean;
 }> = (props) => {
     const [captionReserve, setCaptionReserve] = createSignal(0);
-    const [labelInset, setLabelInset] = createSignal(12);
+    const [labelInset, setLabelInset] = createSignal(DEFAULT_LEFT_RESERVE);
     const [versionLabel, setVersionLabel] = createSignal<string | null>(null);
     // why the last folder didn't open; it stays in the modal as it fades out
     const [folderError, setFolderError] = createSignal("");
