@@ -85,6 +85,10 @@ export function createEditorFlows(options: {
     let saving: Promise<void> = Promise.resolve();
     // the refresh of the blocks in flight, which the next one waits for
     let refreshing: Promise<void> = Promise.resolve();
+    // the canvas as the service holds it (once the saves sent have landed), or null when
+    // that isn't known: Blockly reports a load, a theme or a warning as a change too, and a
+    // change that leaves the canvas as it is stored is not an edit, so it saves nothing
+    let stored: string | null = null;
 
     /** Defines every block the registry and `saved` name, and keeps what the Library shows. */
     async function defineBlocks(saved: Schemas): Promise<void> {
@@ -168,19 +172,26 @@ export function createEditorFlows(options: {
     }
 
     /**
-     * Saves the canvas now; rejects with why it didn't save. A canvas whose
-     * flows didn't load is read-only, so it has nothing to save.
+     * Saves the canvas now, when it differs from what the service holds;
+     * rejects with why it didn't save. A canvas whose flows didn't load is
+     * read-only, so it has nothing to save.
      */
     function saveNow(): Promise<void> {
         clearTimeout(saveTimer);
         const workspace = options.workspace();
         if (!workspace || !loaded()) return saving;
         const flows = snapshot();
+        const text = JSON.stringify(flows.workspace);
+        if (text === stored) return saving;
+        stored = text;
         const preview = canvasPreview(workspace);
         saving = saving
             .catch(() => undefined)
             .then(() => bridge.call(SERVICE_CALLS.save, { project: options.project(), flows, preview }))
-            .then(options.onSaved);
+            .then(options.onSaved, (err: unknown) => {
+                stored = null;
+                throw err;
+            });
         return saving;
     }
 
@@ -224,6 +235,7 @@ export function createEditorFlows(options: {
             workspace.setIsReadOnly(false);
             setLoadError(null);
             setLoaded(true);
+            stored = JSON.stringify(snapshot().workspace);
             options.onLoaded();
         } catch (err) {
             if (mine === loads) setLoadError(errorMessage(err));

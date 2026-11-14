@@ -98,6 +98,15 @@ describe("the editor", () => {
     );
 
     test(
+        "opening a project and leaving it without an edit saves nothing, so it isn't marked as just edited",
+        async () => {
+            const { opening } = await panelFixture();
+            expect(opening.saves).toBe(0);
+        },
+        TIMEOUT,
+    );
+
+    test(
         "flows that couldn't be loaded leave the canvas read-only, say so until they load, and Try again loads them",
         async () => {
             const { loadFailure } = await panelFixture();

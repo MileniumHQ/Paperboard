@@ -20,12 +20,18 @@ window.addEventListener("error", (event) => errors.push(event.error instanceof E
 window.addEventListener("unhandledrejection", (event) => errors.push(event.reason instanceof Error ? event.reason.message : String(event.reason)));
 
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-/** long enough for Blockly's events (fired a tick later) and the effects after them */
+const task = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+/**
+ * Until what was changed has been drawn and told: Blockly fires its events a
+ * frame and then a task after a change (events/utils.ts fireInternal), and
+ * what its listeners do in turn fires on the next round, as do the stub
+ * service's answers (a task each).
+ */
 const settle = async () => {
-    for (let i = 0; i < 4; i++) await frame();
-    await pause(200);
-    for (let i = 0; i < 2; i++) await frame();
+    for (let i = 0; i < 3; i++) {
+        await frame();
+        await task();
+    }
 };
 
 async function until<T>(what: string, look: () => T | null | undefined | false): Promise<T> {
@@ -79,7 +85,9 @@ async function consoleChecks() {
     const rows = () => [...panel.querySelectorAll<HTMLElement>('[class*="_line_"]')];
     await until("30 console rows", () => rows().length === 30);
     const body = rows()[0]!.parentElement!;
+    const fromEnd = () => Math.round(body.scrollHeight - body.scrollTop - body.clientHeight);
     await settle();
+    const startsAtEnd = fromEnd();
     const before = rows();
     // the reader selects a line to copy it
     const selected = before[3]!.querySelector('[class*="_text_"]')!;
@@ -98,7 +106,6 @@ async function consoleChecks() {
         selection: selection.toString(),
         selectionInPage: Boolean(selection.anchorNode?.isConnected),
     };
-    const fromEnd = () => Math.round(body.scrollHeight - body.scrollTop - body.clientHeight);
     const followedAtEnd = fromEnd();
     body.scrollTop = 0;
     await settle();
@@ -109,7 +116,22 @@ async function consoleChecks() {
     await settle();
     say("after coming back");
     await settle();
-    return { ...lineCheck, followedAtEnd, stayedWhileReading, followedAgain: fromEnd() };
+    const followedAgain = fromEnd();
+    // a long entry wraps: its time sits on its first line
+    say("a very long line ".repeat(30));
+    await settle();
+    const wrapped = rows().at(-1)!;
+    const time = wrapped.querySelector<HTMLElement>('[class*="_time_"]')!.getBoundingClientRect();
+    const text = wrapped.querySelector<HTMLElement>('[class*="_text_"]')!.getBoundingClientRect();
+    return {
+        ...lineCheck,
+        startsAtEnd,
+        followedAtEnd,
+        stayedWhileReading,
+        followedAgain,
+        timeTopMinusTextTop: Math.round(time.top - text.top),
+        textLines: Math.round(text.height / parseFloat(getComputedStyle(wrapped).lineHeight)),
+    };
 }
 
 /** The project list changes under the editor's Rename and Delete dialogs. */
@@ -194,7 +216,6 @@ async function createVariableChecks() {
     await typeText("score");
     await press("Enter");
     await settle();
-    await pause(300);
     const names = variableNames();
     return {
         focusedOnOpen,
@@ -338,6 +359,30 @@ async function leaveChecks() {
 }
 
 /**
+ * Opening a project is not editing it: the load, a theme change and a
+ * registry change all reach Blockly's change listener, and none of them is
+ * saved, so the project is not stamped as just edited. Not when it is left
+ * again either, which saves what is new first.
+ */
+async function openChecks() {
+    const name = "Renamed by hand";
+    const saves = () => callsOf(SERVICE_CALLS.save).length;
+    const before = saves();
+    byText("*", name)!.click();
+    await editing(name);
+    await until("the project's blocks on the canvas", () => canvas()!.getTopBlocks(false).length > 0);
+    await settle();
+    document.documentElement.setAttribute("data-paperui-theme", "dark");
+    await settle();
+    document.documentElement.removeAttribute("data-paperui-theme");
+    registry.changed();
+    await settle();
+    backButton()!.click();
+    await home();
+    return { saves: saves() - before };
+}
+
+/**
  * What the page shows now, at phone and desktop width in both themes, saved
  * by the harness when BLOCKS_FIXTURE_SHOTS names a folder (a person looks at them).
  */
@@ -409,8 +454,9 @@ async function run(): Promise<Record<string, unknown>> {
     const refresh = await registryChecks();
     const loadFailure = await loadFailureChecks();
     const leaving = await leaveChecks();
+    const opening = await openChecks();
     const homeScreen = await homeChecks();
-    return { console: consoleResult, dialogs, library, createVariable, toggle, refresh, loadFailure, leaving, home: homeScreen, uncaught: [...errors] };
+    return { console: consoleResult, dialogs, library, createVariable, toggle, refresh, loadFailure, leaving, opening, home: homeScreen, uncaught: [...errors] };
 }
 
 run()
