@@ -243,7 +243,14 @@ const App: Component = () => {
         // blame. Home's widgets each fail inside their own tile.
         if (computersLoaded()) {
             const start = startTarget(appSettings().startOn, listedComputers());
-            if (start.missing) logToMain("error", `Paperboard starts on computer "${appSettings().startOn}", which isn't listed; opening Home.`);
+            if (start.missing) {
+                logToMain("error", `Paperboard starts on computer "${appSettings().startOn}", which isn't listed; opening Home.`);
+                showToast({
+                    variant: "warning",
+                    title: "Opened Home instead",
+                    message: "Paperboard is set to open on a computer that isn't listed anymore. Choose where it opens in App Settings.",
+                });
+            }
             if (start.computerId) handleRailSelect(start.computerId);
         }
     };
