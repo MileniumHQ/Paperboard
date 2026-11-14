@@ -8,8 +8,6 @@ export interface RpcContext {
     ws: WebSocket;
     engine: PaperCraneEngine;
     auth: PaperCraneAuth;
-    isAuthenticated: () => boolean;
-    setAuthenticated: (v: boolean) => void;
     // panel scope granted at token issuance (auth panelId claim). Null =
     // full-authority caller (master/host token or noAuth dev mode).
     // Handlers derive identity from this, never from a caller parameter.

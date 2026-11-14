@@ -2,10 +2,7 @@ import * as path from "path";
 import * as crypto from "crypto";
 import { isIP } from "node:net";
 import { EventEmitter } from "events";
-import {
-    readStateFileSync,
-    writeFileAtomicSync,
-} from "./storage";
+import { readStateFileSync, writeFileAtomicSync } from "./storage";
 import { getLocalDir } from "./paths";
 import { secretsMatch } from "./secretCompare";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";

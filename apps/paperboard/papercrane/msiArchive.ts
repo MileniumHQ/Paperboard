@@ -12,7 +12,7 @@
 import fs from "fs";
 import path from "path";
 import zlib from "zlib";
-import { TAR_BUDGET } from "./storage";
+import { TAR_BUDGET } from "./tarSafety";
 
 const CFB_MAGIC = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
 const FREE = 0xffffffff;

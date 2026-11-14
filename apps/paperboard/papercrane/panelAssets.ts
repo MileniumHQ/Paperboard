@@ -2,10 +2,12 @@
 // decided here so both the local panel:// protocol handler and the
 // daemon /panel/ HTTP route serve from ONE implementation — mirrors
 // drift, extracts don't. Dist builds win over loose files, containment
-// is enforced before touching disk, lost races read as not-found.
+// is enforced before touching disk, lost races read as not-found and
+// any other filesystem failure throws.
 import * as fs from "fs";
 import * as path from "path";
 import { sanitizeId } from "./storage";
+import { isMissingPathError } from "./pathContainment";
 
 export type PanelAssetResolution =
     | { kind: "invalid" }
@@ -67,9 +69,11 @@ export function resolveLocalPanelFile(
         }
         if (fs.realpathSync(targetFile) !== intended) return { kind: "forbidden" };
         if (!fs.statSync(targetFile).isFile()) return { kind: "not-found" };
-    } catch {
-        // lost race with deletion — read as not-found
-        return { kind: "not-found" };
+    } catch (err) {
+        // a lost race with deletion reads as not-found; anything else
+        // (permissions, I/O) is a real failure the caller reports
+        if (isMissingPathError(err)) return { kind: "not-found" };
+        throw err;
     }
     return { kind: "ok", file: targetFile };
 }

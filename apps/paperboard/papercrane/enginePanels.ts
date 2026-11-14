@@ -4,7 +4,9 @@
 import path from "path";
 import fs from "fs";
 import { PanelManifest } from "./types";
-import { ProgressCallback, streamToFileWithProgress, moveFileSafe, panelFilesDirName, validatePanelManifest, LimitError } from "./storage";
+import { moveFileSafe, panelFilesDirName, LimitError } from "./storage";
+import { validatePanelManifest } from "./panelManifest";
+import { ProgressCallback, streamToFileWithProgress } from "./download";
 import { logger } from "./logger";
 import { extractArchive } from "./engineArchives";
 import type { PanelServicesManager } from "./panelServices";

@@ -10,25 +10,26 @@ import { isAllowedOrigin } from "./ws";
 import { lookupMime } from "./mime";
 import { buildPanelCsp } from "./panelNet";
 import { resolveLocalPanelFile } from "./panelAssets";
-import { DAV_PREFIX, handleDavRequest, handleDavSessionIssue, handleDavSessionRevoke } from "./dav";
-import { DavSessionStore, isMainBearer } from "./davAuth";
+import { isMissingPathError } from "./pathContainment";
+import { DAV_PREFIX, handleDavRequest, handleDavSessionIssue, handleDavSessionRevoke, sendFileStream } from "./dav";
+import { type DavSessionStore, isMainBearer } from "./davAuth";
 import type { PaperCraneAuth } from "./auth";
 import { handlePanelFileRequest, PANEL_FILES_PREFIX } from "./panelFiles";
 
 export interface HttpContext {
-    auth?: PaperCraneAuth;
-    sessions?: DavSessionStore;
+    auth: PaperCraneAuth;
+    sessions: DavSessionStore;
     allowsHost?: (authority: string | undefined) => boolean;
 }
 
 const allowsLoopbackHost = createHostAuthorityCheck();
 
-// HTTP router for health, shutdown, and panel assets
+// HTTP router for health, WebDAV, panel files and panel assets
 export function handleHttpRequest(
     engine: PaperCraneEngine,
     req: http.IncomingMessage,
     res: http.ServerResponse,
-    ctx: HttpContext = {},
+    ctx: HttpContext,
 ) {
     // no CORS by default, cross-origin browser reads denied
 
@@ -48,12 +49,12 @@ export function handleHttpRequest(
         res.end("Misdirected Request");
         return;
     }
-    if (ctx.auth?.noAuth && req.headers.origin && !isAllowedOrigin(req.headers.origin)) {
+    if (ctx.auth.noAuth && req.headers.origin && !isAllowedOrigin(req.headers.origin)) {
         res.writeHead(403, { "Content-Type": "text/plain" });
         res.end("Forbidden Origin");
         return;
     }
-    const sessions = ctx.sessions ?? new DavSessionStore();
+    const { sessions } = ctx;
 
     // WebDAV access plus session minting, matched before the prefix
     if (pathname === "/dav/session") {
@@ -81,34 +82,6 @@ export function handleHttpRequest(
     if (req.method === "OPTIONS") {
         res.writeHead(204);
         res.end();
-        return;
-    }
-
-    // shutdown needs localhost plus custom header (blocks CSRF) plus a
-    // valid bearer token: killing the daemon (and every supervised child
-    // via the exit hooks) is irreversible destruction on a single RPC, and
-    // a one-byte magic header is not a credential. Same main-token Bearer
-    // check as the /panel/ surface.
-    if (pathname === "/shutdown" && req.method === "POST") {
-        const ip = req.socket.remoteAddress || "";
-        const isLocal =
-            ip === "127.0.0.1" ||
-            ip === "::1" ||
-            ip === "::ffff:127.0.0.1" ||
-            ip.endsWith("127.0.0.1");
-
-        const hasGuard =
-            req.headers["x-papercrane-shutdown"] === "1";
-
-        if (!isLocal || !hasGuard || !isMainBearer(ctx.auth, req)) {
-            res.writeHead(403, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Shutdown not allowed" }));
-            return;
-        }
-
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true, pid: process.pid }));
-        setTimeout(() => process.exit(0), 100);
         return;
     }
 
@@ -166,29 +139,42 @@ export function handleHttpRequest(
             return;
         }
         const filePath = resolution.file;
-
         const ext = path.extname(filePath).toLowerCase();
-        const contentType = lookupMime(ext);
+
+        // the file is opened once and everything after reads that handle: a
+        // panel update that removes it after resolution is a 404, never an
+        // open that fails after the headers went out
+        let fd: number;
+        try {
+            fd = fs.openSync(filePath, "r");
+        } catch (err) {
+            if (!isMissingPathError(err)) throw err;
+            res.writeHead(404, { "Content-Type": "text/plain" });
+            res.end("File Not Found");
+            return;
+        }
+        const body = fs.createReadStream(filePath, { fd, autoClose: true });
+        const stat = fs.fstatSync(fd);
 
         // a panel's files change only when it's installed or updated, so a
         // client that has one asks again with its ETag and gets a 304
         // instead of the file (remote computers pay for every byte)
-        const stat = fs.statSync(filePath);
         const etag = `W/"${stat.size.toString(36)}-${Math.floor(stat.mtimeMs).toString(36)}"`;
+        const ifNoneMatch = req.headers["if-none-match"];
+        if (ifNoneMatch && (ifNoneMatch.trim() === "*" || ifNoneMatch.split(",").some((tag) => tag.trim() === etag))) {
+            body.destroy();
+            res.writeHead(304, { ETag: etag, "Cache-Control": "no-cache" });
+            res.end();
+            return;
+        }
         const headers: Record<string, string> = {
-            "Content-Type": contentType,
+            "Content-Type": lookupMime(ext),
             "Content-Length": String(stat.size),
             "X-Content-Type-Options": "nosniff",
             "Cache-Control": "no-cache",
             ETag: etag,
             "Last-Modified": stat.mtime.toUTCString(),
         };
-        const ifNoneMatch = req.headers["if-none-match"];
-        if (ifNoneMatch && (ifNoneMatch.trim() === "*" || ifNoneMatch.split(",").some((tag) => tag.trim() === etag))) {
-            res.writeHead(304, { ETag: etag, "Cache-Control": "no-cache" });
-            res.end();
-            return;
-        }
         // one fixed panel CSP (panelNet) — same builder electron uses
         if (ext === ".html") {
             headers["Content-Security-Policy"] = [
@@ -198,7 +184,7 @@ export function handleHttpRequest(
         }
 
         res.writeHead(200, headers);
-        fs.createReadStream(filePath).pipe(res);
+        sendFileStream(res, body);
         return;
     }
 

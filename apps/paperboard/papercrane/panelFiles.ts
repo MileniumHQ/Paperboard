@@ -8,12 +8,12 @@ import * as fs from "fs";
 import * as path from "path";
 import type { PaperCraneEngine } from "./engine";
 import type { PaperCraneAuth } from "./auth";
-import { davMaxUploadBytes, replyText as reply } from "./dav";
+import { davMaxUploadBytes, replyText as reply, sendFileStream } from "./dav";
 import { isMainBearer } from "./davAuth";
 import { receiveFileAtomic, UploadTooLargeError } from "./atomicUpload";
 import { isPanelId } from "../../../packages/paperapi/src/panelIdentity";
 import { logger } from "./logger";
-import { openResolvedFile } from "./storage";
+import { openResolvedFile } from "./pathContainment";
 
 export const PANEL_FILES_PREFIX = "/panel-files/";
 export const PANEL_FILE_PATH_MAX = 1024;
@@ -109,10 +109,7 @@ async function servePanelFile(
         const fd = openResolvedFile(target, validate);
         const opened = fs.fstatSync(fd);
         res.writeHead(200, { "Content-Length": String(opened.size), "Content-Type": "application/octet-stream" });
-        const body = fs.createReadStream(target, { fd, autoClose: true });
-        body.on("error", (error) => res.destroy(error));
-        res.once("close", () => body.destroy());
-        body.pipe(res);
+        sendFileStream(res, fs.createReadStream(target, { fd, autoClose: true }));
         return;
     }
 

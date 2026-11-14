@@ -7,7 +7,8 @@ import * as path from "path";
 import * as tar from "tar";
 import * as zlib from "zlib";
 import { logger } from "../logger";
-import { hashFile, LimitError, makeSafeTarFilter, scanTarMembers, TAR_BUDGET } from "../storage";
+import { hashFile, LimitError } from "../storage";
+import { makeSafeTarFilter, scanTarMembers, TAR_BUDGET } from "../tarSafety";
 
 export interface PanelDataEntries {
     /** "files/<dir>" */

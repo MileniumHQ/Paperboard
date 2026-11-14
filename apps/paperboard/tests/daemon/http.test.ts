@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, setDefaultTimeout, setSystemTime, test } from "bun:test";
 import * as fs from "node:fs";
+import * as http from "node:http";
 import * as net from "node:net";
 import * as path from "node:path";
 import { PANEL_TRAVERSAL_VECTORS, resolveLocalPanelFile } from "../../papercrane/panelAssets";
-import { startCrane } from "./support/crane";
-import { dataDir, listTree, tempDir } from "./support/fs";
+import { listTree, tempDir } from "./support/fs";
 import { type InProcessDaemon, request, startDaemon, stopDaemon } from "./support/inproc";
 import { installPanelFiles } from "./support/panels";
 import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
@@ -189,22 +189,6 @@ describe("WebDAV", () => {
 		}
 	});
 
-	test("/shutdown needs the guard header and a valid token", async () => {
-		const daemon = await startDaemon();
-		const port = daemon.instance.localPort;
-		expect((await request(port, { method: "POST", path: "/shutdown", headers: { "X-PaperCrane-Shutdown": "1" } })).status).toBe(403);
-		expect((await request(port, { method: "POST", path: "/shutdown", headers: { "X-PaperCrane-Shutdown": "1", ...bearer("wrong") } })).status).toBe(403);
-		expect((await request(port, { method: "POST", path: "/shutdown", headers: bearer(daemon.token) })).status).toBe(403);
-		await daemon.stop();
-
-		// the accepted request really stops a daemon, so it runs against a crane of its own
-		const crane = await startCrane({ dataDir: dataDir() });
-		expect((await request(crane.localPort, { method: "POST", path: "/shutdown", headers: { "X-PaperCrane-Shutdown": "1" } })).status).toBe(403);
-		const ok = await request(crane.localPort, { method: "POST", path: "/shutdown", headers: { "X-PaperCrane-Shutdown": "1", ...bearer(crane.token) } });
-		expect(ok.status).toBe(200);
-		expect((await crane.exited).code).toBe(0);
-	});
-
 	test("MOVE or COPY onto its own source, ancestor or descendant is 403 and the source stays; a hard-linked destination overwrites normally", async () => {
 		const daemon = await startDaemon();
 		const port = daemon.instance.localPort;
@@ -287,6 +271,29 @@ describe("panel assets and /panel-files", () => {
 		const changed = await request(port, { path: "/panel/test.assets/app.js", headers: { ...auth, "If-None-Match": etag } });
 		expect(changed.status).toBe(200);
 		expect(changed.body.toString()).toBe("console.log('changed panel')");
+	});
+
+	test("an asset whose client hangs up mid-download is closed, not left open in the daemon", async () => {
+		const daemon = await withPanel();
+		const asset = path.join(fs.realpathSync(daemon.dataDir), "panels", "test.assets", "big.bin");
+		// far more than the socket buffers hold, so the read waits on the client
+		fs.writeFileSync(asset, Buffer.alloc(64 * 1024 * 1024, 1));
+		// Linux names every descriptor this process holds; the daemon runs in it
+		const openOnAsset = () => fs.readdirSync("/proc/self/fd").some((fd) => {
+			// a descriptor closed between the listing and the read is not the asset
+			try { return fs.readlinkSync(`/proc/self/fd/${fd}`) === asset; }
+			catch (err) {
+				if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+				return false;
+			}
+		});
+		const req = http.get({ host: "127.0.0.1", port: daemon.instance.localPort, path: "/panel/test.assets/big.bin", headers: bearer(daemon.token) });
+		const res = await new Promise<http.IncomingMessage>((resolve, reject) => req.once("response", resolve).once("error", reject));
+		expect(res.statusCode).toBe(200);
+		res.pause();
+		await waitFor("the daemon to open the asset", openOnAsset);
+		res.destroy();
+		await waitFor("the daemon to close the asset after the client left", () => !openOnAsset());
 	});
 
 	test("every traversal vector is refused, raw or encoded, and the outside bytes never leave; reserved ids get 400", async () => {

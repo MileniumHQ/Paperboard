@@ -4,7 +4,7 @@ import * as cp from "child_process";
 import * as crypto from "crypto";
 import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
-import { validatePanelManifest } from "./storage";
+import { validatePanelManifest } from "./panelManifest";
 import { DEFAULT_LISTEN_PORT } from "./cli";
 import { isPanelId, requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import type { PaperCraneAuth } from "./auth";

@@ -3,16 +3,9 @@
 // (enginePanels.ts), plus the panel files, configs and secrets it serves
 import path from "path";
 import fs from "fs";
-import {
-    ProgressCallback,
-    streamToFileWithProgress,
-    hashFile,
-    moveFileSafe,
-    resolveSecureTargetPath,
-    openResolvedFile,
-    writeFileAtomic,
-    LimitError,
-} from "./storage";
+import { hashFile, moveFileSafe, writeFileAtomic, LimitError } from "./storage";
+import { resolveSecureTargetPath, openResolvedFile } from "./pathContainment";
+import { ProgressCallback, streamToFileWithProgress } from "./download";
 import { getPaperboardDir } from "./paths";
 import { extractArchive } from "./engineArchives";
 import { panelServices, PanelServicesManager } from "./panelServices";
@@ -305,7 +298,8 @@ export class PaperCraneEngine {
                 throw new Error("SHA512 mismatch");
             }
 
-            await moveFileSafe(tempPath, finalDest);
+            // the download took a while: containment is proven again right before the move
+            await moveFileSafe(tempPath, this.resolveSecureTargetPath(targetPath, appId));
             onProgress?.({ stage: "completed", percent: 100 });
             return finalDest;
         } catch (err: any) {

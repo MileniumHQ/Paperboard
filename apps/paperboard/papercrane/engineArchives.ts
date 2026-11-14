@@ -5,7 +5,8 @@ import fs from "fs";
 import AdmZip from "adm-zip";
 import { spawn } from "child_process";
 import { extractMsi } from "./msiArchive";
-import { moveFileSafe, extractTarSafely, validateExtractedLinks, TAR_BUDGET } from "./storage";
+import { moveFileSafe } from "./storage";
+import { extractTarSafely, validateExtractedLinks, TAR_BUDGET } from "./tarSafety";
 import type { PackageRecipe } from "./packageRecipe";
 
 // Extracts .tar.gz, .tgz, .zip or single files
@@ -173,6 +174,11 @@ function runTool(command: string, args: string[], stdout?: fs.WriteStream, limit
                 }
             });
             child.stdout!.pipe(stdout);
+            // a write that fails (a full disk) ends the tool and is the reason
+            stdout.on("error", (err) => {
+                refused ??= new Error(`${command} output could not be written: ${err.message}`);
+                child.kill();
+            });
         }
         child.on("error", (err: NodeJS.ErrnoException) => {
             reject(err.code === "ENOENT" ? new Error(`${command} is needed to unpack this package but was not found on this computer`) : err);
@@ -183,7 +189,7 @@ function runTool(command: string, args: string[], stdout?: fs.WriteStream, limit
                 else if (code === 0) resolve();
                 else reject(new Error(`${command} failed (exit ${code}): ${stderr.trim() || "no output"}`));
             };
-            if (stdout && !stdout.writableFinished) stdout.on("finish", finish).end();
+            if (stdout && !stdout.writableFinished && !stdout.errored) stdout.once("error", finish).once("finish", finish).end();
             else finish();
         });
     });

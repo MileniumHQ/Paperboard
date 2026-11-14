@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, te
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PaperCraneEngine } from "../../papercrane/engine";
-import { streamToFileWithProgress } from "../../papercrane/storage";
+import { streamToFileWithProgress } from "../../papercrane/download";
 import { parsePackageRecipe, recipeDigest } from "../../papercrane/packageRecipe";
 import { RECORD_MAX_BYTES } from "../../papercrane/registryRecord";
 import { tar, tarGz, zip, type TarMember } from "./support/archive";

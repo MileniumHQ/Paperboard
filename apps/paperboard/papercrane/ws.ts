@@ -229,10 +229,6 @@ export function setupWebSocketServer(
                     ws,
                     engine,
                     auth,
-                    isAuthenticated: () => identity.authenticated,
-                    setAuthenticated: (v: boolean) => {
-                        identity.authenticated = v;
-                    },
                     callerPanelId: () => identity.panelId,
                     sendEvent,
                     broadcastEvent,

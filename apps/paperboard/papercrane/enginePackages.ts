@@ -3,13 +3,8 @@
 // installed release until the workloads running from it have stopped
 import path from "path";
 import fs from "fs";
-import {
-    ProgressCallback,
-    streamToFileWithProgress,
-    sanitizeId,
-    writeJsonAtomicSync,
-    LimitError,
-} from "./storage";
+import { sanitizeId, writeJsonAtomicSync, LimitError } from "./storage";
+import { ProgressCallback, streamToFileWithProgress } from "./download";
 import { logger } from "./logger";
 import { applyPackageRecipe, extractPackageArchive, findBinDir, packageArchiveSuffix, parsePackageLayout, RECIPE_SUFFIX } from "./engineArchives";
 import { assertRecipeRunsHere, parsePackageRecipe, recipeDigest } from "./packageRecipe";
@@ -658,7 +653,8 @@ export class PackageManager implements WorkloadRuntime {
             return { path: targetDir };
         } catch (err: any) {
             log(`FAILED: ${err?.message || err}`);
-            if (fs.existsSync(pkgDir) && !findBinDir(pkgDir, 4)) {
+            // every success path moves pkgDir away, so a copy still here is a leftover
+            if (fs.existsSync(pkgDir)) {
                 await fs.promises.rm(pkgDir, { recursive: true, force: true }).then(
                     () => log("removed partial install"),
                     (err) => logger.warn(`[engine] the partial install ${pkgDir} was left on disk:`, err),

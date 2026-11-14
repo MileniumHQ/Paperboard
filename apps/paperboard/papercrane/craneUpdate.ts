@@ -2,10 +2,10 @@
 // the extracted executable (scripts/publish/binaries.ts stageReleaseAssets).
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import { extractArchive, packageArchiveSuffix } from "./engineArchives";
-import { streamToFileWithProgress, writeJsonAtomicSync } from "./storage";
+import { hashFile, writeJsonAtomicSync } from "./storage";
+import { streamToFileWithProgress } from "./download";
 import { RELEASE_PUBLIC_KEY, releaseMessage, verifyRelease } from "./releaseSignature";
 
 export interface CraneRelease {
@@ -20,12 +20,6 @@ export interface CraneRelease {
 interface PendingCraneUpdate {
     version: string;
     binarySha256: string;
-}
-
-async function digestFile(file: string): Promise<string> {
-    const hash = crypto.createHash("sha256");
-    for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
-    return hash.digest("hex");
 }
 
 function readPending(execPath: string): PendingCraneUpdate | null {
@@ -52,7 +46,7 @@ function readPending(execPath: string): PendingCraneUpdate | null {
 export async function confirmCraneUpdate(execPath: string, runningVersion: string): Promise<boolean> {
     const pending = readPending(execPath);
     if (!pending || pending.version !== runningVersion) return false;
-    if (await digestFile(execPath) !== pending.binarySha256) throw new Error("Daemon update executable changed before confirmation");
+    if (await hashFile(execPath, "sha256") !== pending.binarySha256) throw new Error("Daemon update executable changed before confirmation");
     await fs.promises.rm(`${execPath}.update`, { recursive: true });
     return true;
 }
@@ -131,7 +125,7 @@ export async function installCraneRelease(
         }
         await fs.promises.rename(expected, replacement);
         await fs.promises.chmod(replacement, 0o755);
-        const binarySha256 = await digestFile(replacement);
+        const binarySha256 = await hashFile(replacement, "sha256");
         await probeReplacement(replacement, release.version);
         await fs.promises.rm(contents, { recursive: true });
         await fs.promises.unlink(archive);

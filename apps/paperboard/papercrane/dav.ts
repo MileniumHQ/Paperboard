@@ -7,7 +7,7 @@ import { lookupMime } from "./mime";
 import { logger } from "./logger";
 import { checkDavAuth, davUnauthorized, type DavSessionStore, DEFAULT_IDLE_MS, mainTokenOf } from "./davAuth";
 import { receiveFileAtomic, UploadTooLargeError } from "./atomicUpload";
-import { hasOnlyRealEntriesBelow } from "./storage";
+import { hasOnlyRealEntriesBelow } from "./pathContainment";
 
 // WebDAV rooted at the app-data dir, for the main token or an ephemeral
 // session (davAuth.ts)
@@ -313,9 +313,13 @@ export function sendFile(
         }
     }
     res.writeHead(status, headers);
-    // a file removed after the stat, or a client that hangs up, ends the
-    // response and frees the file instead of raising an unhandled error
-    const body = fs.createReadStream(abs, { start, end });
+    sendFileStream(res, fs.createReadStream(abs, { start, end }));
+}
+
+// Every file a response streams goes through here: a read that fails (a file
+// removed after the stat) or a client that hangs up ends the response and
+// frees the file, never an unhandled error or a descriptor left open.
+export function sendFileStream(res: http.ServerResponse, body: fs.ReadStream): void {
     body.on("error", (error) => res.destroy(error));
     res.once("close", () => body.destroy());
     body.pipe(res);
