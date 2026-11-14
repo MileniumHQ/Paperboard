@@ -26,6 +26,7 @@ import type { LibraryBridge } from "./bridge";
 import PanelPage, { iconGlyph, publisherLabel } from "./PanelPage";
 import { createLibraryRoute } from "./router";
 import { createInstalledMedia } from "./installedMedia";
+import { withRegistryImages } from "./registryImage";
 import {
     mergeRegistryWithInstalled,
     type PanelItem,
@@ -128,7 +129,8 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
             registry() ?? {},
             props.bridge.installed(),
             "",
-        ).map((panel) => {
+        ).map((merged) => {
+            const panel = withRegistryImages(merged);
             const own = media[panel.id];
             if (!own) return panel;
             return {

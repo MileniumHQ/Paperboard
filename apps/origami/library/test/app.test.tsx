@@ -105,14 +105,18 @@ describe("installs round-trip through the shell, and failures are shown", () => 
 describe("store listings render safely", () => {
     const imageSources = () => [...document.querySelectorAll("img")].map((img) => img.getAttribute("src") ?? "");
 
-    test("a registry listing never renders an unsafe URL as an image", async () => {
+    test("a registry listing renders only images the registry hosts, from the page's own origin", async () => {
+        const shot = "/panel/dev.example.clock/media/1.2.0/0-light.png";
         serveIndex({
             [CLOCK.id]: {
                 ...CLOCK,
+                iconUrl: `https://origami.ariapis.com/panel/${CLOCK.id}/icon`,
                 store: {
                     screenshots: [
                         { light: "javascript:alert(1)", alt: "Hostile" },
-                        { light: "https://cdn.example.test/shot.png", dark: "javascript:alert(2)", alt: "Real shot" },
+                        { light: "https://cdn.example.test/shot.png", alt: "Off-registry shot" },
+                        { light: `https://origami.ariapis.com${shot}`, dark: "https://cdn.example.test/dark.png", alt: "Real shot" },
+                        { light: `${window.location.origin}/panel/dev.example.clock/media/1.2.0/1-light.png`, alt: "Same-origin shot" },
                         { light: "data:image/png;base64,iVBORw0KGgo=", alt: "Data image from the registry" },
                     ],
                 },
@@ -121,9 +125,11 @@ describe("store listings render safely", () => {
         open(`/library/?panel=${CLOCK.id}`);
         await screen.findByAltText("Real shot");
         const sources = imageSources();
-        expect(sources).toContain("https://cdn.example.test/shot.png");
-        expect(sources.filter((s) => /^\s*(javascript|data):/i.test(s))).toEqual([]);
-        expect(screen.queryByAltText("Hostile")).toBeNull();
+        expect(sources).toContain(shot);
+        expect(sources).toContain("/panel/dev.example.clock/media/1.2.0/1-light.png");
+        expect(sources).toContain(`/panel/${CLOCK.id}/icon`);
+        expect(sources.filter((s) => !s.startsWith("/panel/"))).toEqual([]);
+        for (const alt of ["Hostile", "Off-registry shot", "Data image from the registry"]) expect(screen.queryByAltText(alt)).toBeNull();
     });
 
     test("an installed panel the registry does not list never renders an unsafe URL from the shell", async () => {
