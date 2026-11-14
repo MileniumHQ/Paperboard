@@ -24,13 +24,19 @@ const RUN_TONE: Record<PanelRunState, PaperWidgetRow["tone"]> = {
 // one opens it.
 export const Panels: Component<BuiltinWidgetProps> = (props) => {
     const usage = useUsage(() => props.computerId, () => props.visible);
-    const live = createMemo<ReadonlySet<string> | null>(() => {
-        const state = usage.state();
-        return state.kind === "ready"
-            ? new Set(state.report.groups.filter((g) => g.kind === "panel" && g.memoryBytes > 0).map((g) => g.id))
-            : null;
-    });
-    const rows = (): PaperWidgetRow[] =>
+    // usage is polled every few seconds; a poll that finds the same panels
+    // running changes nothing, so it redraws nothing
+    const live = createMemo<ReadonlySet<string> | null>(
+        () => {
+            const state = usage.state();
+            return state.kind === "ready"
+                ? new Set(state.report.groups.filter((g) => g.kind === "panel" && g.memoryBytes > 0).map((g) => g.id))
+                : null;
+        },
+        null,
+        { equals: sameMembers },
+    );
+    const rows = createMemo((): PaperWidgetRow[] =>
         (props.panels ?? []).map((panel) => {
             const state = panelRunState(!!panel.service, live(), panel.id);
             const open = props.onOpenPanel;
@@ -42,7 +48,8 @@ export const Panels: Component<BuiltinWidgetProps> = (props) => {
                 ariaLabel: `${panel.name}${RUN_LABEL[state] ? `, ${RUN_LABEL[state].toLowerCase()}` : ""}. Open`,
                 onClick: open ? () => open(panel.id) : undefined,
             };
-        });
+        }),
+    );
     return (
         <PaperWidget title={widgetTitle("Panels", props)} icon="dashboard" detail={props.panels ? String(props.panels.length) : undefined}>
             <Show
@@ -71,7 +78,7 @@ export const Computers: Component<BuiltinWidgetProps> = (props) => {
         const computer = props.computers.find((c) => c.id === id);
         return !!computer && (computer.isLocal || computer.status?.connected !== false);
     };
-    const rows = (): PaperWidgetRow[] =>
+    const rows = createMemo((): PaperWidgetRow[] =>
         props.computers.map((computer) => {
             const up = online(computer.id);
             const open = props.onOpenComputer;
@@ -83,7 +90,8 @@ export const Computers: Component<BuiltinWidgetProps> = (props) => {
                 ariaLabel: `${computer.name}, ${up ? "online" : "offline"}. Open`,
                 onClick: open ? () => open(computer.id) : undefined,
             };
-        });
+        }),
+    );
     return (
         <PaperWidget
             title="Computers"
@@ -94,3 +102,8 @@ export const Computers: Component<BuiltinWidgetProps> = (props) => {
         </PaperWidget>
     );
 };
+
+function sameMembers(a: ReadonlySet<string> | null, b: ReadonlySet<string> | null): boolean {
+    if (a === null || b === null) return a === b;
+    return a.size === b.size && [...a].every((id) => b.has(id));
+}
