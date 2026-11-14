@@ -51,6 +51,10 @@ async function main(): Promise<void> {
         await flowRepublishIndex(argv.includes("--yes"));
         return;
     }
+    if (argv.length > 0) {
+        console.error(`publish.ts: unknown subcommand "${argv[0]}". Run it with no arguments for the menu, or with ci-build or republish-index.`);
+        process.exit(2);
+    }
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
         console.error("publish.ts is interactive — run it in a terminal (or `bun scripts/publish.ts republish-index --yes` headless).");
         process.exit(1);
