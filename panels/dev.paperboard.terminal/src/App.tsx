@@ -749,19 +749,19 @@ export default function App() {
                             {(tab) => (
                                 <div classList={{ [styles.layer]: true, [styles.hidden]: activeTab() !== tab.id }}>
                                     <PaperFlex direction={tab.split?.direction === "down" ? "column" : "row"} fullWidth fullHeight minHeight={0}>
-                                        <Show when={tab.split} fallback={<Pane tab={tab} session={tab.id} />}>
-                                            {/* the line between the two shells drags; each keeps a floor */}
-                                            <PaperFlex
-                                                direction={tab.split?.direction === "down" ? "column" : "row"}
-                                                resizable={!compact()}
-                                                flex
-                                                minWidth={compact() ? 0 : "field"}
-                                                minHeight={compact() ? 0 : "field"}
-                                                class={awayOnPhone(tab, tab.id) ? styles.paneAway : undefined}
-                                            >
-                                                <Pane tab={tab} session={tab.id} />
-                                            </PaperFlex>
-                                        </Show>
+                                        {/* the first shell is one pane whether or not a split sits beside it, so
+                                            splitting never rebuilds its screen; the line between the two shells
+                                            drags and each keeps a floor */}
+                                        <PaperFlex
+                                            direction={tab.split?.direction === "down" ? "column" : "row"}
+                                            resizable={!!tab.split && !compact()}
+                                            flex
+                                            minWidth={tab.split && !compact() ? "field" : 0}
+                                            minHeight={tab.split && !compact() ? "field" : 0}
+                                            class={awayOnPhone(tab, tab.id) ? styles.paneAway : undefined}
+                                        >
+                                            <Pane tab={tab} session={tab.id} />
+                                        </PaperFlex>
                                         <Show when={tab.split}>
                                             {(shown) => {
                                                 // read once: a split keeps its session, and a read
