@@ -7,7 +7,7 @@ import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 import "./widget.css";
 import { render } from "solid-js/web";
-import { createSignal, onCleanup, Show, type JSX } from "solid-js";
+import { createMemo, createSignal, onCleanup, Show, type JSX } from "solid-js";
 import {
     PaperAvatar,
     PaperButton,
@@ -140,17 +140,28 @@ function BotStatus(props: { widget: WidgetContext }) {
     };
 
     // a 2x1 puts its way out in the header; a 1x1 has no room beside the
-    // bot's name, so its way out sits in the message instead
-    const action = (): JSX.Element => {
-        if (!wide()) return undefined;
-        if (failed()) return <HeaderButton icon="refresh" label="Retry" onClick={() => void refresh()} />;
+    // bot's name, so its way out sits in the message instead. Each poll hands
+    // over a new status, so the button is built from the one thing that
+    // decides it and stays the same button while that stays the same.
+    const actionKind = createMemo<"retry" | "connect" | "open" | null>(() => {
+        if (!wide()) return null;
+        if (failed()) return "retry";
         const status = ready();
-        if (!status) return undefined;
-        if (!status.connected && status.configured) {
-            return <HeaderButton icon="power_settings_new" label={connecting() ? "Connecting" : "Connect bot"} disabled={connecting()} onClick={() => void reconnect()} />;
+        if (!status) return null;
+        return !status.connected && status.configured ? "connect" : "open";
+    });
+    const action = createMemo((): JSX.Element => {
+        switch (actionKind()) {
+            case "retry":
+                return <HeaderButton icon="refresh" label="Retry" onClick={() => void refresh()} />;
+            case "connect":
+                return <HeaderButton icon="power_settings_new" label={connecting() ? "Connecting" : "Connect bot"} disabled={connecting()} onClick={() => void reconnect()} />;
+            case "open":
+                return <HeaderButton icon="open_in_new" label="Open Bot Creator" onClick={open} />;
+            default:
+                return undefined;
         }
-        return <HeaderButton icon="open_in_new" label="Open Bot Creator" onClick={open} />;
-    };
+    });
 
     const connectButton = () => (
         <PaperButton size="tiny" disabled={connecting()} onClick={() => void reconnect()}>
@@ -158,13 +169,18 @@ function BotStatus(props: { widget: WidgetContext }) {
         </PaperButton>
     );
 
-    // the bot's own avatar is its kind icon, drawn at the header's icon size
-    const icon = (): JSX.Element | string => {
+    // the bot's own avatar is its kind icon, drawn at the header's icon size;
+    // it is drawn again only when the picture changes
+    const avatar = createMemo(() => {
         const status = ready();
+        return status ? status.avatar || DEFAULT_DISCORD_AVATAR : null;
+    });
+    const icon = createMemo((): JSX.Element | string => {
         // a 1x1 gives the room to the bot's name instead
         if (!wide()) return undefined;
-        return status ? <PaperAvatar class="bc-header-avatar" src={status.avatar || DEFAULT_DISCORD_AVATAR} alt="" /> : "smart_toy";
-    };
+        const src = avatar();
+        return src ? <PaperAvatar class="bc-header-avatar" src={src} alt="" /> : "smart_toy";
+    });
 
     return (
         <PaperWidget
