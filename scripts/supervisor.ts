@@ -16,6 +16,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { BUN_TARGET_MAP } from "./publishLib";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const APP_DIR = join(ROOT, "apps", "paperboard");
@@ -65,6 +66,29 @@ export function buildSupervisor(target: SupervisorTarget = hostSupervisorTarget(
     }
     if (result.status !== 0) throw new Error(`go build of the workload supervisor for ${target} failed (exit ${result.status ?? "signal"})`);
     return out;
+}
+
+/**
+ * The one `bun build --compile` command for the server, used by releases and
+ * by test daemons alike, so a test runs the binary that ships. It embeds the
+ * target's supervisor (built here) and runs from apps/paperboard (`cwd`).
+ * Without a target it builds for this computer with the running Bun.
+ */
+export function craneCompileCommand(outfile: string, target?: SupervisorTarget, flags: string[] = []): { cmd: string[]; cwd: string } {
+    return {
+        cmd: [
+            process.execPath,
+            "build",
+            "--compile",
+            ...(target ? [`--target=${BUN_TARGET_MAP[target]}`] : []),
+            ...flags,
+            "./papercrane/main.ts",
+            buildSupervisor(target),
+            "--outfile",
+            outfile,
+        ],
+        cwd: APP_DIR,
+    };
 }
 
 /**

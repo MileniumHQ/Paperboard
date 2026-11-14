@@ -12,21 +12,18 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { buildSupervisor } from "../supervisor";
+import { craneCompileCommand } from "../supervisor";
 import { undoOnExit } from "./cleanup";
 
-const REPO = path.resolve(import.meta.dir, "../..");
-const CRANE_ENTRY = path.join(REPO, "apps/paperboard/papercrane/main.ts");
 const START_TIMEOUT_MS = 30_000;
+const STOP_TIMEOUT_MS = 10_000;
 
 /** compiles the crane from this checkout into `outDir`; returns the executable */
 export function buildCrane(outDir: string): string {
     const binary = path.join(outDir, process.platform === "win32" ? "papercrane.exe" : "papercrane");
-    // the workload supervisor travels inside the server, as in a release
-    const build = spawnSync(process.execPath, ["build", "--compile", CRANE_ENTRY, buildSupervisor(), "--outfile", binary], {
-        cwd: path.join(REPO, "apps/paperboard"),
-        encoding: "utf8",
-    });
+    // the release's own recipe (supervisor embedded), for this computer
+    const { cmd: [bun, ...args], cwd } = craneCompileCommand(binary);
+    const build = spawnSync(bun!, args, { cwd, encoding: "utf8" });
     if (build.status !== 0 || !fs.existsSync(binary)) {
         throw new Error(`Building the crane daemon failed (exit ${build.status}):\n${build.stdout}\n${build.stderr}`);
     }
@@ -74,10 +71,22 @@ export async function startCrane(binary: string, dataDir: string, host = "127.0.
     const forget = undoOnExit(() => {
         if (running()) child.kill();
     });
+    // a daemon that hangs on SIGTERM is killed, and the stop fails saying so
     const stop = async () => {
         forget();
         if (running()) child.kill();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const hung = await Promise.race([
+            exited.then(() => false),
+            new Promise<boolean>((resolve) => {
+                timer = setTimeout(() => resolve(true), STOP_TIMEOUT_MS);
+            }),
+        ]);
+        clearTimeout(timer);
+        if (!hung) return;
+        child.kill("SIGKILL");
         await exited;
+        throw new Error(`The test daemon did not stop within ${STOP_TIMEOUT_MS / 1000}s of SIGTERM and was killed:\n${log}`);
     };
     const listening = new RegExp(`Listening on https?://${host.replace(/\./g, "\\.")}:(\\d+)`);
     const port = await new Promise<number>((resolve, reject) => {

@@ -5,10 +5,9 @@ import AdmZip from "adm-zip";
 import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { basename, extname, join } from "path";
 import * as tar from "tar";
-import { buildSupervisor } from "../supervisor";
+import { craneCompileCommand } from "../supervisor";
 import {
     ALL_TARGETS,
-    BUN_TARGET_MAP,
     assetFileName,
     isUpdatePayload,
     isValidVersionSegment,
@@ -118,25 +117,11 @@ async function buildPbTarget(target: Target): Promise<BuiltBinary[]> {
 
 async function buildCraneTarget(target: Target): Promise<BuiltBinary> {
     assertMacHost(target);
-    const bunTarget = BUN_TARGET_MAP[target];
     const outName =
         osOf(target) === "windows" ? `papercrane-${target}.exe` : `papercrane-${target}`;
-    await sh(
-        [
-            process.execPath,
-            "build",
-            "--compile",
-            `--target=${bunTarget}`,
-            ...craneCompileFlags(target),
-            "./papercrane/main.ts",
-            // the workload supervisor travels inside the server (papercrane/main.ts)
-            buildSupervisor(target),
-            "--outfile",
-            `./dist/${outName}`,
-        ],
-        { quiet: false },
-    );
     const filePath = join(distDir, outName);
+    const { cmd, cwd } = craneCompileCommand(filePath, target, craneCompileFlags(target));
+    await sh(cmd, { cwd, quiet: false });
     if (!existsSync(filePath))
         throw new Error(`No Paperboard Server binary found at ${filePath}`);
     if (osOf(target) === "windows") applyCraneWindowsIcon(filePath);
