@@ -6,12 +6,16 @@ import "./shell.css";
 import { render } from "solid-js/web";
 import { PaperCode, PaperEmptyState, PaperFlex, PaperProvider } from "@mileniumhq/paperui";
 
-const WAYS_IN = (
-    <>
-        On the computer running Paperboard, choose “Open in Browser” from Paperboard's icon in the taskbar or menu bar, or run{" "}
-        <PaperCode>paperboard --web</PaperCode>.
-    </>
-);
+// a component, not JSX built when the module loads: that would make its
+// computations outside the page's root, where nothing ever disposes them
+function WaysIn() {
+    return (
+        <>
+            On the computer running Paperboard, choose “Open in Browser” from Paperboard's icon in the taskbar or menu bar, or run{" "}
+            <PaperCode>paperboard --web</PaperCode>.
+        </>
+    );
+}
 
 const REASONS: Record<string, { icon: string; title: string; why: string }> = {
     link: {
@@ -37,7 +41,7 @@ function SignedOut() {
                     title={reason.title}
                     description={
                         <>
-                            {reason.why} {WAYS_IN}
+                            {reason.why} <WaysIn />
                         </>
                     }
                 />
