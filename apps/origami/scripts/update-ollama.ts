@@ -9,10 +9,9 @@
 // whole record rather than publishing a partial one.
 import { parseSha256Sums, verifiedAsset, type GithubRelease } from "./lib/github";
 import { runUpdater, settle } from "./lib/cli";
+import { fetchJson, fetchText } from "./lib/download";
 import {
     assertValidRecord,
-    fetchJson,
-    fetchText,
     PLATFORM_KEYS,
     type PackageLayout,
     type PackageRecord,

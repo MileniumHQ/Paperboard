@@ -3,7 +3,6 @@
 // papercrane/engine.ts: it installs platforms[<os>-<arch>] and refuses any
 // entry without a sha256.
 import { parsePackageRecipe, type PackageRecipe } from "../../../paperboard/papercrane/packageRecipe";
-import { UPDATER_USER_AGENT } from "./download";
 
 export type { PackageRecipe };
 
@@ -91,38 +90,4 @@ export function assertValidRecord(record: PackageRecord): void {
             }
         }
     }
-}
-
-export async function fetchJson<T>(
-    url: string,
-    fetchFn: typeof fetch = fetch,
-    headers: Record<string, string> = {},
-): Promise<T> {
-    const res = await fetchFn(url, {
-        headers: {
-            "User-Agent": UPDATER_USER_AGENT,
-            Accept: "application/json",
-            ...headers,
-        },
-        signal: AbortSignal.timeout(30_000),
-    });
-    if (!res.ok) {
-        throw new Error(`GET ${url} failed: ${res.status} ${res.statusText}`);
-    }
-    return (await res.json()) as T;
-}
-
-export async function fetchText(
-    url: string,
-    fetchFn: typeof fetch = fetch,
-): Promise<string> {
-    const res = await fetchFn(url, {
-        headers: { "User-Agent": UPDATER_USER_AGENT },
-        signal: AbortSignal.timeout(30_000),
-        redirect: "follow",
-    });
-    if (!res.ok) {
-        throw new Error(`GET ${url} failed: ${res.status} ${res.statusText}`);
-    }
-    return res.text();
 }

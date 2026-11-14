@@ -11,10 +11,29 @@ import { pipeline } from "node:stream/promises";
 
 export const UPDATER_USER_AGENT = "Origami-Package-Updater/2.0";
 
-export async function fetchBytes(url: string, fetchFn: typeof fetch, timeoutMs: number, headers: Record<string, string> = {}): Promise<Buffer> {
-    const res = await fetchFn(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
+// Every updater GET: the updater's User-Agent, a deadline that covers the
+// body too (a stalled vendor fails the run instead of hanging it), and a
+// failed status thrown with the URL.
+async function get(url: string, fetchFn: typeof fetch, timeoutMs: number, headers: Record<string, string> = {}): Promise<Response> {
+    const res = await fetchFn(url, {
+        headers: { "User-Agent": UPDATER_USER_AGENT, ...headers },
+        redirect: "follow",
+        signal: AbortSignal.timeout(timeoutMs),
+    });
     if (!res.ok) throw new Error(`GET ${url} failed: ${res.status} ${res.statusText}`);
-    return Buffer.from(await res.arrayBuffer());
+    return res;
+}
+
+export async function fetchBytes(url: string, fetchFn: typeof fetch, timeoutMs: number, headers: Record<string, string> = {}): Promise<Buffer> {
+    return Buffer.from(await (await get(url, fetchFn, timeoutMs, headers)).arrayBuffer());
+}
+
+export async function fetchJson<T>(url: string, fetchFn: typeof fetch = fetch, headers: Record<string, string> = {}): Promise<T> {
+    return (await (await get(url, fetchFn, 30_000, { Accept: "application/json", ...headers })).json()) as T;
+}
+
+export async function fetchText(url: string, fetchFn: typeof fetch = fetch): Promise<string> {
+    return (await get(url, fetchFn, 30_000)).text();
 }
 
 export async function fetchHashed(url: string, fetchFn: typeof fetch, timeoutMs: number): Promise<{ sha256: string; size: number }> {
@@ -44,8 +63,9 @@ export async function withStreamedDownload<T>(
 ): Promise<T> {
     const dir = await mkdtemp(path.join(tmpdir(), opts.prefix));
     try {
-        const res = await fetchFn(url, { headers: { "User-Agent": UPDATER_USER_AGENT }, redirect: "follow" });
-        if (!res.ok || !res.body) throw new Error(`GET ${url} failed: ${res.status} ${res.statusText}`);
+        // archives run to hundreds of megabytes: a generous deadline, never none
+        const res = await get(url, fetchFn, 15 * 60_000);
+        if (!res.body) throw new Error(`GET ${url} answered no body`);
         const file = path.join(dir, opts.file);
         const hashes = { sha1: createHash("sha1"), sha256: createHash("sha256"), sha512: createHash("sha512") };
         let size = 0;

@@ -30,13 +30,11 @@
 // release's codex-package_SHA256SUMS. The downloaded bytes are hashed too:
 // listing an archive proves nothing about a file whose hash is unchecked.
 // A missing or disagreeing fact drops the whole record.
-import { listTar, withStreamedDownload } from "./lib/download";
+import { fetchJson, fetchText, listTar, withStreamedDownload } from "./lib/download";
 import { parseSha256Sums, verifiedAsset, type GithubRelease } from "./lib/github";
 import { runUpdater, settle } from "./lib/cli";
 import {
     assertValidRecord,
-    fetchJson,
-    fetchText,
     PLATFORM_KEYS,
     type PackageRecipe,
     type PackageRecord,

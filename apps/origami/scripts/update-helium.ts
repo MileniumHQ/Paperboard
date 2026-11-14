@@ -15,9 +15,9 @@
 // Chromium.
 import { digestedAsset, type GithubRelease } from "./lib/github";
 import { runUpdater, settle } from "./lib/cli";
+import { fetchJson } from "./lib/download";
 import {
     assertValidRecord,
-    fetchJson,
     PLATFORM_KEYS,
     type PackageRecipe,
     type PackageRecord,

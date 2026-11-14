@@ -8,9 +8,9 @@
 // fresh over TLS on every run. Adoptium is the authority for its own
 // artifacts; nothing publisher-supplied is persisted without it.
 import { type BuiltEntry, runUpdater, settle } from "./lib/cli";
+import { fetchJson } from "./lib/download";
 import {
     assertValidRecord,
-    fetchJson,
     type PackageRecord,
     type PlatformDownload,
     type PlatformKey,

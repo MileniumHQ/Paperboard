@@ -6,9 +6,9 @@
 // the SHA-256 of the same verified bytes, which is what the daemon checks.
 // A mismatch, a missing platform or an unexpected file fails the record.
 import { createHash } from "node:crypto";
-import { fetchBytes } from "./lib/download";
+import { fetchBytes, fetchJson } from "./lib/download";
 import { runUpdater, settle } from "./lib/cli";
-import { assertValidRecord, fetchJson, type PackageRecord, type PlatformDownload, type PlatformKey } from "./lib/records";
+import { assertValidRecord, type PackageRecord, type PlatformDownload, type PlatformKey } from "./lib/records";
 
 /** Channels Paperboard publishes. tModLoader pins 8.0 with roll-forward disabled. */
 export const CHANNELS = ["8.0"] as const;

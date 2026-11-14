@@ -31,12 +31,10 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fetchBytes, listTar, UPDATER_USER_AGENT, withStreamedDownload } from "./lib/download";
+import { fetchBytes, fetchJson, fetchText, listTar, UPDATER_USER_AGENT, withStreamedDownload } from "./lib/download";
 import { runUpdater, settle } from "./lib/cli";
 import {
     assertValidRecord,
-    fetchJson,
-    fetchText,
     PLATFORM_KEYS,
     type PackageRecipe,
     type PackageRecord,

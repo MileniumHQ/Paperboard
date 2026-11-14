@@ -6,7 +6,8 @@
 // downloading and hashing the ~600 MB archive. The updater only downloads
 // metadata/checksum files; the daemon verifies the archive's sha256.
 import { runUpdater, settle } from "./lib/cli";
-import { assertValidRecord, fetchJson, fetchText, PLATFORM_KEYS, type PackageRecord, type PlatformKey, type PlatformDownload } from "./lib/records";
+import { fetchJson, fetchText } from "./lib/download";
+import { assertValidRecord, PLATFORM_KEYS, type PackageRecord, type PlatformKey, type PlatformDownload } from "./lib/records";
 import type { GithubRelease } from "./lib/github";
 
 const LATEST = "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest";
