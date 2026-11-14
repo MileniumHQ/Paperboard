@@ -2,7 +2,7 @@
 // switch, Stop and Run, then the Library (a rail of categories, and the
 // chosen one's blocks in Blockly's flyout) and the canvas. Edits save as you
 // make them; the service runs the flows.
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js";
 import * as Blockly from "blockly";
 import { blocksApi, panelAssetUrl, panelsApi, type BlockInfo, type BlockProjectInfo, type PanelItem } from "@mileniumhq/paperapi";
 import {
@@ -190,13 +190,18 @@ export default function Editor(props: {
     const projectOf = (panel: string, project: string) => registry().projects.find((p) => p.panelId === panel && p.id === project);
 
     const builtins = createMemo<LibraryCategory[]>(() => BUILTIN_SECTIONS.map((s) => ({ id: builtinId(s.name), name: s.name, icon: s.icon })));
-    const panels = createMemo<LibraryCategory[]>(() =>
+    // each panel's category keeps its object while its name and icon stay, so a registry refresh
+    // doesn't rebuild every rail item and reload its icon
+    const panels = createMemo<LibraryCategory[]>((previous) =>
         [...new Set(registry().sections.map((s) => s.panelId))]
             .map((id) => {
                 const icon = panelIcon(id);
-                return { id: panelCategoryId(id), name: panelName(id), ...("src" in icon ? { iconUrl: icon.src } : { icon: icon.symbol }) };
+                const next: LibraryCategory = { id: panelCategoryId(id), name: panelName(id), ...("src" in icon ? { iconUrl: icon.src } : { icon: icon.symbol }) };
+                const kept = previous.find((c) => c.id === next.id);
+                return kept && kept.name === next.name && kept.icon === next.icon && kept.iconUrl === next.iconUrl ? kept : next;
             })
             .sort((a, b) => a.name.localeCompare(b.name)),
+    [],
     );
     const category = createMemo(() => [...builtins(), ...panels()].find((c) => c.id === selected()));
 
@@ -235,8 +240,6 @@ export default function Editor(props: {
 
     /** What the list shows now: the category's blocks, or every block the search finds. */
     const groups = createMemo<Group[]>(() => {
-        variablesVersion();
-        functionsShape();
         const words = query().trim().toLowerCase();
         if (words) {
             const all: Group[] = [
@@ -257,12 +260,14 @@ export default function Editor(props: {
         const builtin = BUILTIN_SECTIONS.find((s) => builtinId(s.name) === selected());
         if (builtin) {
             if (builtin.custom === "VARIABLE") {
+                variablesVersion();
                 // its "Create variable" button is the header's PaperButton, not Blockly's
                 if (!ready() || !workspace) return [];
                 const contents = Blockly.Variables.flyoutCategory(workspace) as unknown as Json[];
                 return [{ blocks: contents.filter((item) => item.kind !== "button") }];
             }
             if (builtin.custom === "PROCEDURE") {
+                functionsShape();
                 // a function is made by dragging out "to do something" and naming it
                 if (!ready() || !workspace) return [];
                 return [{ blocks: Blockly.Procedures.flyoutCategory(workspace) as unknown as Json[] }];
@@ -319,8 +324,10 @@ export default function Editor(props: {
         schemas = { ...awayDefs.schemas, ...liveDefs.schemas };
         uses = { ...awayDefs.uses, ...liveDefs.uses };
         setResultBlocks({ ...awayDefs.results, ...liveDefs.results });
-        setRegistry({ panels: panelList, projects, sections: liveDefs.sections });
-        setDefinitions((n) => n + 1);
+        batch(() => {
+            setRegistry({ panels: panelList, projects, sections: liveDefs.sections });
+            setDefinitions((n) => n + 1);
+        });
     }
 
     /** Marks the blocks whose panel isn't offering them right now. */
@@ -539,12 +546,17 @@ export default function Editor(props: {
     });
 
     // the list follows the chosen category, project and search
+    // and starts at the top only for a different list: a variable, a function or a block
+    // refresh redraws the list where the person is reading it
+    let shownList = "";
     createEffect(() => {
         const contents = flyoutContents(groups());
         definitions();
+        const list = JSON.stringify([selected(), shownProject(), query()]);
         if (!ready() || !workspace) return;
         workspace.updateToolbox({ kind: "flyoutToolbox", contents } as unknown as Blockly.utils.toolbox.ToolboxDefinition);
-        workspace.getFlyout()?.scrollToStart();
+        if (list !== shownList) workspace.getFlyout()?.scrollToStart();
+        shownList = list;
     });
 
     createEffect(() => {
