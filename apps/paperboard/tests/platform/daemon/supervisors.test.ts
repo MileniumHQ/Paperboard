@@ -168,7 +168,7 @@ describe("supervised workloads are reported faithfully", () => {
 		process.env.PAPERBOARD_DIR = dir;
 		try {
 			let ended = 0;
-			const registry = new WorkloadRegistry(path.join(dir, "local"), { beforeStart: async () => {}, requireNotReplacing: () => {}, ended: () => { ended++; } });
+			const registry = new WorkloadRegistry(path.join(dir, "local"), { beforeStart: () => Promise.resolve(), requireNotReplacing: () => undefined, ended: () => { ended++; } });
 			const changes: Array<{ id: string; state: string }> = [];
 			registry.onLifecycle((change) => { if (change.type === "workload") changes.push(change); });
 			const attaches = [registry.attachProcess("early", {}), registry.attachProcess("early", {})];
