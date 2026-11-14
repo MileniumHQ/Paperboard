@@ -11,7 +11,8 @@
 # they style a document only once it opts in with the attribute, and check (b)
 # below only matches a bare `* {` or `:global(*)`.
 #
-# Usage: bash scripts/check-styling.sh (from the repo root)
+# Usage: bash packages/paperui/scripts/check-styling.sh (it checks the package it
+# sits in, from any directory)
 
 set -u
 cd "$(dirname "$0")/.."
