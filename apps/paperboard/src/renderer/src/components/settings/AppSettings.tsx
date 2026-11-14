@@ -137,7 +137,7 @@ export default function AppSettings(props: {
                     <PaperQuote
                         variant="danger"
                         icon="warning"
-                        title={{ load: "Settings not loaded", save: "Settings not saved", apply: "Run on startup not applied", graphics: "Graphics card not checked" }[failure().kind]}
+                        title={{ load: "Settings not loaded", save: "Settings not saved", apply: "Run on startup not applied" }[failure().kind]}
                         role="alert"
                         onDismiss={props.onDismissFailure}
                     >
@@ -146,7 +146,6 @@ export default function AppSettings(props: {
                                 load: `These are the defaults, not your settings: ${failure().message}`,
                                 save: `Your change was not kept: ${failure().message}`,
                                 apply: failure().message,
-                                graphics: `Animations and blur stay on unless you turn them off, even if this computer has no graphics card: ${failure().message}`,
                             }[failure().kind]}
                             <Show when={failure().kind === "load" && props.onRetryLoad}>
                                 <PaperButton size="tiny" onClick={() => props.onRetryLoad?.()}>Retry loading</PaperButton>

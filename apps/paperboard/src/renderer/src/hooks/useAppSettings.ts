@@ -1,5 +1,6 @@
 import { createSignal, createEffect, on, onCleanup } from "solid-js";
 import { config } from "@mileniumhq/paperapi";
+import { showToast } from "@mileniumhq/paperui";
 import { logToMain, notifyAppSettingsChanged, shellApi } from "../lib/shell";
 import { createSaveQueue } from "../lib/saveQueue";
 import { withAppSettingsDefaults } from "../../../shared/appSettingsDefaults";
@@ -9,9 +10,8 @@ import { errorMessage } from "../lib/errorMessage";
 
 export interface SettingsFailure {
     /** which way it failed: settings that didn't load leave the defaults
-     * showing; saved settings the system wouldn't apply are "apply";
-     * "graphics" is not knowing whether Paperboard is drawn on a GPU */
-    kind: "load" | "save" | "apply" | "graphics";
+     * showing; saved settings the system wouldn't apply are "apply" */
+    kind: "load" | "save" | "apply";
     message: string;
 }
 
@@ -27,9 +27,14 @@ export function useAppSettings() {
     const look = () => effectiveLook(appSettings(), graphics());
 
     onCleanup(shellApi.onGraphicsChanged(setGraphics));
+    // said once, on its own: a settings failure later must not hide it
     shellApi.getGraphics().then(setGraphics, (err) => {
         logToMain("error", "Couldn't tell whether Paperboard is drawn on a GPU:", err);
-        setSettingsFailure({ kind: "graphics", message: errorMessage(err) });
+        showToast({
+            variant: "danger",
+            title: "Graphics card not checked",
+            message: `Animations and blur stay on unless you turn them off, even if this computer has no graphics card: ${errorMessage(err)}`,
+        });
     });
 
     // Mirrors the motion preference onto the document for PaperUI tokens
