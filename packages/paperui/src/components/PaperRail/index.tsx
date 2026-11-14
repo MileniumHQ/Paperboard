@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { children, createContext, useContext, splitProps, onCleanup, onMount, Show, type ParentProps, type JSX } from "solid-js";
+import { children, createContext, createMemo, useContext, splitProps, onCleanup, onMount, Show, type ParentProps, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import {
     SelectionProvider,
@@ -55,6 +55,11 @@ export function PaperRail(props: ParentProps<PaperRailProps>) {
         onCleanup(() => rail.removeEventListener("touchmove", holdScroll));
     });
 
+    // the selection reads the chosen value and its callback when an item is pressed, outside any tracking: a parent
+    // passing a computed `value` would make its getter build a computation there
+    const value = createMemo(() => local.value);
+    const onValueChange = createMemo(() => local.onValueChange);
+
     const className = () =>
         [
             styles.PaperRail,
@@ -67,9 +72,9 @@ export function PaperRail(props: ParentProps<PaperRailProps>) {
     return (
         <SelectionProvider
             name={local.name}
-            value={local.value}
+            value={value()}
             defaultValue={local.defaultValue}
-            onValueChange={local.onValueChange}
+            onValueChange={onValueChange()}
         >
             <RailContext.Provider value={{
                 get showLabels() { return local.showLabels; },
@@ -115,10 +120,16 @@ export function PaperRailItem(props: PaperRailItemProps) {
         "title",
     ]);
 
-    const { isSelected, select } = useSelectionItem(
-        () => local.value,
-        () => local.disabled,
-    );
+    // what the handlers read when pressed, outside any tracking: a parent passing a computed prop
+    // would make its getter build a computation there
+    const value = createMemo(() => local.value);
+    const disabled = createMemo(() => local.disabled);
+    const reorderable = createMemo(() => local.reorderable);
+    const onClick = createMemo(() => local.onClick);
+    const onPointerDown = createMemo(() => local.onPointerDown);
+    const onKeyDown = createMemo(() => local.onKeyDown);
+
+    const { isSelected, select } = useSelectionItem(value, disabled);
     const icon = children(() => local.icon);
     const label = children(() => local.label);
     const shouldShowLabel = () => local.showLabel ?? railCtx?.showLabels ?? false;
@@ -128,17 +139,17 @@ export function PaperRailItem(props: PaperRailItemProps) {
         return typeof text === "string" ? text : undefined;
     };
 
-    const isDragging = () => railCtx?.reorder.isDragging(local.value) ?? false;
+    const isDragging = () => railCtx?.reorder.isDragging(value()) ?? false;
 
     const className = () =>
         [
             styles.PaperRailItem,
             isSelected() ? styles.selected : "",
             shouldShowLabel() ? styles.hasLabel : "",
-            local.disabled ? styles.disabled : "",
-            local.reorderable ? styles.reorderable : "",
+            disabled() ? styles.disabled : "",
+            reorderable() ? styles.reorderable : "",
             isDragging() ? styles.dragging : "",
-            railCtx?.reorder.isLifted(local.value) ? styles.lifted : "",
+            railCtx?.reorder.isLifted(value()) ? styles.lifted : "",
             railCtx?.reorder.isDropping() ? styles.dropping : "",
             railCtx?.reorder.hasActiveDrag() && !isDragging() ? styles.isSibling : "",
             local.class,
@@ -149,21 +160,21 @@ export function PaperRailItem(props: PaperRailItemProps) {
     // a finger holds first, so a quick swipe still scrolls the rail; the
     // hold is the same one that opens the item's context menu
     const handlePointerDown = (e: PointerEvent) => {
-        if (local.reorderable && !local.disabled) {
-            railCtx?.reorder.start(local.value, e, e.pointerType === "touch" ? { holdMs: HOLD_MS } : {});
+        if (reorderable() && !disabled()) {
+            railCtx?.reorder.start(value(), e, e.pointerType === "touch" ? { holdMs: HOLD_MS } : {});
         }
-        if (typeof local.onPointerDown === "function") {
-            (local.onPointerDown as (e: PointerEvent) => void)(e);
+        if (typeof onPointerDown() === "function") {
+            (onPointerDown() as (e: PointerEvent) => void)(e);
         }
     };
 
     // hidden inputs scroll ancestors on focus, divs don't
     const activate = (e: MouseEvent) => {
         // the click that ends a drag is not a choice
-        if (local.disabled || railCtx?.reorder.justDragged()) return;
+        if (disabled() || railCtx?.reorder.justDragged()) return;
         select();
-        if (typeof local.onClick === "function") {
-            (local.onClick as (e: MouseEvent) => void)(e);
+        if (typeof onClick() === "function") {
+            (onClick() as (e: MouseEvent) => void)(e);
         }
     };
 
@@ -173,13 +184,13 @@ export function PaperRailItem(props: PaperRailItemProps) {
             role="radio"
             aria-label={local["aria-label"] ?? textLabel()}
             aria-checked={isSelected()}
-            aria-disabled={local.disabled || undefined}
-            tabIndex={local.disabled ? -1 : 0}
+            aria-disabled={disabled() || undefined}
+            tabIndex={disabled() ? -1 : 0}
             class={className()}
             classList={local.classList}
-            {...{ [REORDER_ATTRIBUTE]: local.reorderable ? String(local.value) : undefined }}
+            {...{ [REORDER_ATTRIBUTE]: reorderable() ? String(value()) : undefined }}
             style={{
-                ...(local.reorderable ? railCtx?.reorder.itemStyle(local.value) : {}),
+                ...(reorderable() ? railCtx?.reorder.itemStyle(value()) : {}),
                 ...(typeof local.style === "object" ? local.style : {}),
             }}
             title={local.title ?? textLabel()}
@@ -187,14 +198,14 @@ export function PaperRailItem(props: PaperRailItemProps) {
             onPointerDown={handlePointerDown}
             onKeyDown={(e) => {
                 if (
-                    !local.disabled &&
+                    !disabled() &&
                     (e.key === " " || e.key === "Enter")
                 ) {
                     e.preventDefault();
                     select();
                 }
-                if (typeof local.onKeyDown === "function") {
-                    (local.onKeyDown as (e: KeyboardEvent) => void)(e);
+                if (typeof onKeyDown() === "function") {
+                    (onKeyDown() as (e: KeyboardEvent) => void)(e);
                 }
             }}
         >
