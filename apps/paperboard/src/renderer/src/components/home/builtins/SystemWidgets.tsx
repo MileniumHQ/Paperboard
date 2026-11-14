@@ -3,7 +3,8 @@ import { type JSX, type Component, Show } from "solid-js";
 import type { BuiltinWidgetProps } from "./types";
 import { type Figure, figureOf, formatRate, formatUptime, oneCellCaption, retryTile, widgetTitle } from "./systemFigures";
 import { USAGE_HISTORY_SAMPLES, useUsage } from "./usageStore";
-import { formatBytes, formatPercent } from "./usageSegments";
+import { formatBytes } from "../../../lib/formatBytes";
+import { formatPercent } from "./usageSegments";
 import styles from "./Builtins.module.css";
 
 // Disk, Network and Uptime: one figure each from the computer's usage

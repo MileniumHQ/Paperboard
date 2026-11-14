@@ -3,7 +3,8 @@ import { type Component, createMemo, createSignal, onCleanup, Show } from "solid
 import type { BuiltinWidgetProps } from "./types";
 import { oneCellCaption, retryTile, widgetTitle } from "./systemFigures";
 import { USAGE_HISTORY_SAMPLES, useUsage } from "./usageStore";
-import { formatBytes, formatPercent, legendRows, type Segment, usageChart, usedFraction, type UsageMetric } from "./usageSegments";
+import { formatBytes } from "../../../lib/formatBytes";
+import { formatPercent, legendRows, type Segment, usageChart, usedFraction, type UsageMetric } from "./usageSegments";
 import styles from "./Builtins.module.css";
 
 // the legend has room for one figure per row; the ring's tooltip adds CPU

@@ -2,6 +2,7 @@
 // everything else, and what's free. Pure, so the arithmetic is tested.
 import type { UsageReport } from "@mileniumhq/paperapi";
 import { getVarCss } from "@mileniumhq/paperui";
+import { formatBytes } from "../../../lib/formatBytes";
 
 export type UsageMetric = "cpu" | "memory";
 
@@ -56,20 +57,6 @@ const MORE_PANELS_COLOR = getVarCss("success");
 const OTHER_COLOR = getVarCss("border-emphasis");
 // a step above the card in either theme, lighter than "Other apps"
 const FREE_COLOR = `color-mix(in srgb, ${getVarCss("contrast")} 16%, ${getVarCss("surface-raised")})`;
-
-export function formatBytes(bytes: number): string {
-    const units = ["B", "KB", "MB", "GB", "TB"];
-    let value = bytes;
-    let unit = 0;
-    // promote on the shown value, so 1023.6 KB reads "1 MB", not "1024 KB"
-    while (Math.round(value) >= 1024 && unit < units.length - 1) {
-        value /= 1024;
-        unit++;
-    }
-    // one decimal below ten, and none when it would be ".0"
-    const shown = value >= 10 || unit === 0 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/, "");
-    return `${shown} ${units[unit]}`;
-}
 
 export function formatPercent(fraction: number): string {
     const percent = fraction * 100;

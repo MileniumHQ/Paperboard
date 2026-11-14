@@ -1,6 +1,6 @@
 // How full a backup location is, in words, for the chooser and settings.
 import { backupLocationsApi, type BackupLocationUsage } from "@mileniumhq/paperapi";
-import { formatBytes } from "../home/builtins/usageSegments";
+import { formatBytes } from "../../lib/formatBytes";
 import { errorMessage } from "../../lib/errorMessage";
 import { logToMain } from "../../lib/shell";
 
