@@ -2,11 +2,11 @@ import { For, Show, createEffect, createSignal, createUniqueId, on, onCleanup, o
 import type { FaceController } from "./controller";
 import { EXPRESSIONS } from "./expressions";
 import { FEATURES, arrayToPose, faceBasis, poseToArray, strokePath, type Orientation } from "./geometry";
+import { BLINK_MS, blinkSince, frameSeconds } from "./blink";
 import styles from "./Face.module.css";
 import type { FaceSkin } from "./skins";
 
 const R = 80;
-const BLINK_MS = 170;
 /** the hologram's rim, in the sphere's own units */
 const RIM = 3;
 /** Below this size strokes thicken so the face still reads as an icon. */
@@ -110,7 +110,7 @@ export function Face(props: {
     let raf = 0;
     let last = performance.now();
     const tick = (now: number) => {
-        const dt = Math.min(0.05, (now - last) / 1000);
+        const dt = frameSeconds(now, last);
         last = now;
         const t = now / 1000;
         const calm = reduced.matches;
@@ -137,8 +137,8 @@ export function Face(props: {
             p.mouth.open += 0.02 + 0.05 * chatter;
             p.mouth.len *= 1 + 0.08 * chatter;
         }
-        const since = now - blinkAt;
-        if (since >= 0 && since < BLINK_MS) {
+        const since = blinkSince(now, blinkAt);
+        if (since !== null) {
             const shut = 1 - 0.88 * Math.sin((Math.PI * since) / BLINK_MS);
             p.eyeL.squash *= shut;
             p.eyeR.squash *= shut;
@@ -156,7 +156,7 @@ export function Face(props: {
         };
         // a face that isn't moving draws nothing
         if (!sameFrame(frame(), next)) setFrame(next);
-        const blinking = since >= 0 && since < BLINK_MS;
+        const blinking = since !== null;
         const resting = !talking && !shaking && !blinking && atRest(orient, [o.yaw, o.pitch, o.roll]) && atRest(pose, poseToArray(EXPRESSIONS[props.face.expression()])) && atRest(hop, [0]);
         // everything has stopped: the loop stops with it, and starts again when something asks the face to move
         raf = resting ? 0 : requestAnimationFrame(tick);
