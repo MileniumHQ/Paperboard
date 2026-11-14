@@ -39,11 +39,6 @@ export default defineConfig({
             alias: {
                 "@renderer": resolve(__dirname, "src/renderer/src"),
             },
-            // The @solid-primitives packages are deliberately not deduped:
-            // forcing resolution at the root picks up patched copies with no
-            // dependency links, which breaks their own imports. They resolve
-            // through solid-transition-group instead, where the store copies
-            // and their linked dependencies live.
             dedupe: ["solid-js", "solid-js/web", "solid-js/store"],
         },
         optimizeDeps: {

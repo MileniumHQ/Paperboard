@@ -316,8 +316,6 @@
   },
   "patchedDependencies": {
     "app-builder-lib@26.15.3": "patches/app-builder-lib@26.15.3.patch",
-    "@solid-primitives/transition-group@1.1.2": "patches/@solid-primitives%2Ftransition-group@1.1.2.patch",
-    "@solid-primitives/refs@1.1.4": "patches/@solid-primitives%2Frefs@1.1.4.patch",
   },
   "packages": {
     "@asamuzakjp/css-color": ["@asamuzakjp/css-color@7.1.3", "", { "dependencies": { "@csstools/css-calc": "^3.4.2", "@csstools/css-color-parser": "^4.2.5", "@csstools/css-parser-algorithms": "^4.0.2", "@csstools/css-tokenizer": "^4.0.2", "lru-cache": "^11.5.3" } }, "sha512-1t1U8Cm3RBl9vh3RAZhjkPaduzLSvQJRToRrxpGR/eDRW99mOREleuu+mWfiFa795bUzjwht7NgphCKTs2ianQ=="],
