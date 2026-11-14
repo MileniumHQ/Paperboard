@@ -18,7 +18,8 @@ import type { PaperCraneEngine } from "../engine";
 import { ErrorCode } from "../protocol";
 import { RpcError, invalidParams } from "../rpc/errors";
 import { logger } from "../logger";
-import { createPanelArchive, extractPanelArchive, sha256File } from "./archive";
+import { createPanelArchive, extractPanelArchive } from "./archive";
+import { hashFile } from "../storage";
 import {
     BACKUP_VAULT_OWNER,
     DESTINATION_LABEL_MAX,
@@ -543,7 +544,7 @@ export class BackupService {
                 await store.get(record, archive, (done) => this.report(panelId, "downloading", Math.min(done, record.size), record.size));
                 this.report(panelId, "checking");
                 const size = fs.statSync(archive).size;
-                if (size !== record.size || (await sha256File(archive)) !== record.sha256) {
+                if (size !== record.size || (await hashFile(archive, "sha256")) !== record.sha256) {
                     throw new Error("The downloaded backup does not match its record; it was not restored");
                 }
                 const source = this.sources.get(panelId);

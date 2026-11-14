@@ -99,8 +99,8 @@ export class DriveBackupStore implements BackupStore {
             pageToken = typeof body.nextPageToken === "string" ? body.nextPageToken : "";
             if (!pageToken) return out;
         }
-        logger.warn(`[backups] the Google Drive listing stopped after ${LIST_PAGES_MAX} pages`);
-        return out;
+        // pruning and usage from part of a listing would be wrong, so none is used
+        throw new Error(`The Google Drive folder lists more than ${LIST_PAGES_MAX} pages; Paperboard stops there rather than work from part of it`);
     }
 
     private inFolder(): string {

@@ -7,7 +7,7 @@ import * as http from "http";
 import * as https from "https";
 import { pipeline } from "stream/promises";
 import { Transform, type Readable } from "stream";
-import { BACKUP_ARCHIVE_MAX_BYTES, BACKUP_TRANSFER_TIMEOUT_MS } from "./types";
+import { BACKUP_ARCHIVE_MAX_BYTES, backupTransferDeadlineMs } from "./types";
 import { PAPERBOARD_USER_AGENT } from "../userAgent";
 
 export interface HttpResult {
@@ -30,8 +30,6 @@ export interface HttpRequestInit {
     maxBytes?: number;
     /** idle socket timeout */
     timeoutMs?: number;
-    /** total request lifetime, including connection and response streaming */
-    totalTimeoutMs?: number;
     /** hears the bodyFile bytes sent, or the toFile bytes received, so far */
     onProgress?: (done: number) => void;
 }
@@ -72,8 +70,10 @@ export async function httpRequest(rawUrl: string, init: HttpRequestInit = {}): P
     if (init.bodyFile) headers["Content-Length"] = String(init.bodyFile.size);
     else if (init.body !== undefined) headers["Content-Length"] = String(Buffer.byteLength(init.body));
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(new Error("Backup transfer deadline exceeded")),
-        Math.min(init.totalTimeoutMs ?? BACKUP_TRANSFER_TIMEOUT_MS, BACKUP_TRANSFER_TIMEOUT_MS));
+    // the lifetime scales with what moves: the file sent, or at most the file received
+    const fileCap = Math.min(init.maxFileBytes ?? BACKUP_ARCHIVE_MAX_BYTES, BACKUP_ARCHIVE_MAX_BYTES);
+    const bytes = init.bodyFile?.size ?? (init.toFile ? fileCap : 0);
+    const timer = setTimeout(() => controller.abort(new Error("Backup transfer deadline exceeded")), backupTransferDeadlineMs(bytes));
     let response: http.IncomingMessage | undefined;
     let upload: Readable | undefined;
     let download: Promise<void> | undefined;
@@ -85,7 +85,7 @@ export async function httpRequest(rawUrl: string, init: HttpRequestInit = {}): P
                 response = res;
                 const status = res.statusCode ?? 0;
                 if (init.toFile && status >= 200 && status < 300) {
-                    const cap = Math.min(init.maxFileBytes ?? BACKUP_ARCHIVE_MAX_BYTES, BACKUP_ARCHIVE_MAX_BYTES);
+                    const cap = fileCap;
                     const declared = Number(res.headers["content-length"]);
                     if (Number.isFinite(declared) && declared > cap) {
                         res.destroy();
@@ -151,7 +151,7 @@ export async function httpRequest(rawUrl: string, init: HttpRequestInit = {}): P
     } finally { clearTimeout(timer); }
 }
 
-/** the response as text, throwing HttpStatusError outside 2xx */
+/** the result unchanged, throwing HttpStatusError outside 2xx */
 export function expectOk(result: HttpResult, what: string): HttpResult {
     if (result.status < 200 || result.status >= 300) throw new HttpStatusError(result.status, result.body.toString("utf8"), what);
     return result;

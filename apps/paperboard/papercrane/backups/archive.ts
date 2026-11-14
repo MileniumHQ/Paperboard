@@ -2,13 +2,12 @@
 // data dir (files/<dir>/... and configs/<id>.json). Symlinks are never
 // archived. Extraction accepts only those two entries, under the shared
 // tar budget and escape scan, so an archive cannot write anywhere else.
-import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import * as tar from "tar";
 import * as zlib from "zlib";
 import { logger } from "../logger";
-import { LimitError, makeSafeTarFilter, scanTarMembers, TAR_BUDGET } from "../storage";
+import { hashFile, LimitError, makeSafeTarFilter, scanTarMembers, TAR_BUDGET } from "../storage";
 
 export interface PanelDataEntries {
     /** "files/<dir>" */
@@ -44,12 +43,6 @@ function measure(dir: string): { bytes: number; entries: number; tarBytes: numbe
         }
     }
     return { bytes, entries, tarBytes };
-}
-
-export async function sha256File(file: string): Promise<string> {
-    const hash = crypto.createHash("sha256");
-    for await (const chunk of fs.createReadStream(file)) hash.update(chunk as Buffer);
-    return hash.digest("hex");
 }
 
 /**
@@ -130,7 +123,7 @@ export async function createPanelArchive(
         // a long path adds a header the estimate leaves out: never past the end
         onProgress?.(Math.min(packed, total), total);
     });
-    return { size: fs.statSync(outFile).size, sha256: await sha256File(outFile) };
+    return { size: fs.statSync(outFile).size, sha256: await hashFile(outFile, "sha256") };
 }
 
 /** true for a member path inside the panel's two entries */

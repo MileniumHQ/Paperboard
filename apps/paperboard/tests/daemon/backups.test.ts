@@ -9,7 +9,7 @@ import { LocalBackupStore } from "../../papercrane/backups/localStore";
 import { S3BackupStore, signS3Request } from "../../papercrane/backups/s3Store";
 import { DriveBackupStore } from "../../papercrane/backups/driveStore";
 import { BUSY_RETRY_MS, MAX_KEEP, SCHEDULE_HOURS, SCHEDULED_LABEL } from "../../papercrane/backups/schedules";
-import { newBackupId, type BackupRecord } from "../../papercrane/backups/types";
+import { backupTransferDeadlineMs, newBackupId, type BackupRecord } from "../../papercrane/backups/types";
 import { MAX_ROUTINE_BACKUPS_KEPT, ROUTINE_BACKUP_HOURS, ROUTINE_BACKUP_LABEL } from "../../../../packages/paperapi/src/backups";
 import { tarGz } from "./support/archive";
 import { fakeDrive, fakeS3 } from "./support/cloud";
@@ -392,6 +392,26 @@ describe("cloud stores round-trip", () => {
 		await drive.close();
 	});
 
+	test("a large archive over a slow home uplink is given the time it needs", () => {
+		// 1 GB at 10 Mbit/s takes about 13 minutes; the largest archive at 1 Mbit/s about 12 hours
+		for (const [bytes, bytesPerSecond] of [[1e9, 1.25e6], [5 * 1024 ** 3, 125_000]] as const) {
+			expect(backupTransferDeadlineMs(bytes)).toBeGreaterThan((bytes / bytesPerSecond) * 1000);
+		}
+	});
+
+	test("an S3 backup whose record can't be saved takes its uploaded archive with it", async () => {
+		const store = new S3BackupStore({ endpoint: s3.url, region: "us-east-1", bucket: "bucket", prefix: "orphan", accessKeyId: "AKID", pathStyle: true }, { secretAccessKey: "s3cret" });
+		const { record, file } = await archiveRecord("test.orphan");
+		s3.refusePut = (key) => key.endsWith(".json");
+		try {
+			await expect(store.put(record, file)).rejects.toThrow("Saving the backup record");
+		} finally {
+			s3.refusePut = null;
+		}
+		expect([...s3.objects.keys()].filter((key) => key.startsWith("orphan/"))).toEqual([]);
+		expect((await store.usage()).used).toBe(0);
+	});
+
 	test("SigV4 reproduces AWS's published example signature", () => {
 		const authorization = signS3Request({
 			method: "GET",
@@ -522,6 +542,19 @@ describe("routine backups", () => {
 		expect([...ROUTINE_BACKUP_HOURS]).toEqual([...SCHEDULE_HOURS]);
 		expect(MAX_ROUTINE_BACKUPS_KEPT).toBe(MAX_KEEP);
 		expect(ROUTINE_BACKUP_LABEL).toBe(SCHEDULED_LABEL);
+	});
+
+	test("a schedule call that leaves the schedule out is refused and the routine stays; null removes it", async () => {
+		const dir = dataDir();
+		await installPanelFiles(dir, { id: "test.keepschedule" });
+		const daemon = await startDaemon({ dataDir: dir });
+		const host = await daemon.rpc();
+		await host.ok("backup:panel-destination-set", { panelId: "test.keepschedule", destinationId: "local" });
+		await host.ok("backup:schedule-set", { panelId: "test.keepschedule", schedule: { everyHours: 24, keep: 3 } });
+		expect((await host.fail("backup:schedule-set", { panelId: "test.keepschedule" })).code).toBe("INVALID_PARAMS");
+		expect((await host.ok("backup:status", { panelId: "test.keepschedule" })).schedule).toMatchObject({ everyHours: 24, keep: 3 });
+		expect((await host.ok("backup:schedule-set", { panelId: "test.keepschedule", schedule: null })).schedule).toBeNull();
+		await host.close();
 	});
 
 	test("a due schedule runs from the timer, prunes only routine backups, survives code-only uninstall, and a failure retries in 15 minutes", async () => {

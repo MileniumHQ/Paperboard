@@ -47,7 +47,16 @@ export interface BackupStore {
 
 // Daemon policy, never supplied by remote metadata or a store.
 export const BACKUP_ARCHIVE_MAX_BYTES = 5 * 1024 * 1024 * 1024;
-export const BACKUP_TRANSFER_TIMEOUT_MS = 10 * 60_000;
+
+// A transfer's whole lifetime: ten minutes plus the time its bytes take at
+// 32 KiB/s, so a large archive over a slow home uplink finishes while a
+// server that trickles a byte at a time is still cut off. Stalls are caught
+// sooner by each request's idle timeout.
+const TRANSFER_BASE_MS = 10 * 60_000;
+const TRANSFER_MIN_BYTES_PER_SECOND = 32 * 1024;
+export function backupTransferDeadlineMs(bytes: number): number {
+    return TRANSFER_BASE_MS + Math.ceil((Math.max(0, bytes) / TRANSFER_MIN_BYTES_PER_SECOND) * 1000);
+}
 
 export function backupArchiveDownloadCap(size: number): number {
     if (!Number.isSafeInteger(size) || size < 0 || size > BACKUP_ARCHIVE_MAX_BYTES) {

@@ -8,6 +8,8 @@ import { serve, type LoopbackServer } from "./release";
 export interface FakeS3 extends LoopbackServer {
 	objects: Map<string, Buffer>;
 	requests: Array<{ method: string; path: string; authorization: string | null }>;
+	// a PUT of a key this matches answers 500, as a bucket that fails mid-backup
+	refusePut: ((key: string) => boolean) | null;
 }
 
 function xmlEscape(value: string): string {
@@ -33,6 +35,7 @@ export function fakeS3(bucket: string): FakeS3 {
 			return new Response(`<?xml version="1.0"?><ListBucketResult><IsTruncated>false</IsTruncated>${contents}</ListBucketResult>`, { headers: { "content-type": "application/xml" } });
 		}
 		if (req.method === "PUT") {
+			if (fake.refusePut?.(key)) return new Response("InternalError", { status: 500 });
 			objects.set(key, Buffer.from(await req.arrayBuffer()));
 			return new Response("");
 		}
@@ -51,7 +54,8 @@ export function fakeS3(bucket: string): FakeS3 {
 	const routes = server.routes;
 	const original = routes.get.bind(routes);
 	routes.get = (path: string) => original(path) ?? (path.startsWith(`/${bucket}/`) ? handler : undefined);
-	return Object.assign(server, { objects, requests });
+	const fake: FakeS3 = Object.assign(server, { objects, requests, refusePut: null });
+	return fake;
 }
 
 interface DriveFile {

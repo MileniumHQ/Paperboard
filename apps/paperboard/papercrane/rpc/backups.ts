@@ -128,7 +128,10 @@ export async function handleBackups(action: string, id: unknown, params: any, ct
             }
             case "backup:schedule-set": {
                 const panelId = panelFor(params, action, ctx);
-                await backups.setSchedule(panelId, params?.schedule ?? null);
+                // only an explicit null removes the routine: a call that
+                // leaves the field out is refused, never read as a delete
+                if (params?.schedule === undefined) throw invalidParams("schedule is required: a schedule, or null to stop routine backups");
+                await backups.setSchedule(panelId, params.schedule);
                 reply(id, backups.status(panelId));
                 return true;
             }

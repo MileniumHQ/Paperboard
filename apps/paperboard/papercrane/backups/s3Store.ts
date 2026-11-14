@@ -159,8 +159,8 @@ export class S3BackupStore implements BackupStore {
             token = xmlValues(xml, "NextContinuationToken")[0];
             if (!token) return out;
         }
-        logger.warn(`[backups] the bucket listing stopped after ${LIST_PAGES_MAX} pages`);
-        return out;
+        // pruning and usage from part of a listing would be wrong, so none is used
+        throw new Error(`The bucket lists more than ${LIST_PAGES_MAX} pages under ${prefix}; Paperboard stops there rather than work from part of it`);
     }
 
     async check(): Promise<void> {
@@ -219,14 +219,23 @@ export class S3BackupStore implements BackupStore {
             "Uploading the backup",
         );
         const body = JSON.stringify(record);
-        expectOk(
-            await this.send("PUT", this.objectUrl(keys.record), {
-                payloadHash: crypto.createHash("sha256").update(body).digest("hex"),
-                headers: { "content-type": "application/json" },
-                body,
-            }),
-            "Saving the backup record",
-        );
+        try {
+            expectOk(
+                await this.send("PUT", this.objectUrl(keys.record), {
+                    payloadHash: crypto.createHash("sha256").update(body).digest("hex"),
+                    headers: { "content-type": "application/json" },
+                    body,
+                }),
+                "Saving the backup record",
+            );
+        } catch (err) {
+            // an archive with no record is listed nowhere but still costs
+            // storage: it goes with the failed backup
+            await this.send("DELETE", this.objectUrl(keys.archive))
+                .then((res) => expectOk(res, "Removing the unrecorded upload"))
+                .catch((cleanupErr) => logger.error(`[backups] the upload ${keys.archive} has no record and could not be removed; delete it from the bucket:`, cleanupErr));
+            throw err;
+        }
     }
 
     async get(record: BackupRecord, destPath: string, onProgress?: BytesProgress): Promise<void> {
