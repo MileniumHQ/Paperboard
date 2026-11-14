@@ -11,6 +11,7 @@ import {
     type HomeItem,
 } from "../../lib/homeLayout";
 import { defaultHomeItems } from "./builtins";
+import { errorMessage } from "../../lib/errorMessage";
 
 const SAVE_DEBOUNCE_MS = 250;
 
@@ -38,8 +39,6 @@ export interface HomePersistence {
     /** replaces a layout that can't be read with an empty one: only when the person asks */
     startOver(): Promise<void>;
 }
-
-const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 // Home's layout lives in the local daemon's shell document: the window's,
 // or the phone's (`phone`, fixed for Home's life), its own arrangement. An
@@ -73,7 +72,7 @@ export function createHomePersistence(phone: Accessor<boolean>): HomePersistence
             setLoadState("ready");
         } catch (err) {
             logToMain("error", "Failed to load the Home layout:", err);
-            setLoadState({ error: messageOf(err) });
+            setLoadState({ error: errorMessage(err) });
         }
     };
 
@@ -91,7 +90,7 @@ export function createHomePersistence(phone: Accessor<boolean>): HomePersistence
         } catch (err) {
             logToMain("error", "Failed to save the Home layout:", err);
             dirty = true;
-            setSaveError(messageOf(err));
+            setSaveError(errorMessage(err));
         } finally {
             saving = false;
         }
@@ -119,7 +118,7 @@ export function createHomePersistence(phone: Accessor<boolean>): HomePersistence
             });
         } catch (err) {
             logToMain("error", "Failed to reset the Home layout:", err);
-            setLoadState({ error: messageOf(err) });
+            setLoadState({ error: errorMessage(err) });
         }
     };
 

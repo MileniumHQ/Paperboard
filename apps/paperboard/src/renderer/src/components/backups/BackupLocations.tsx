@@ -7,6 +7,7 @@ import { loadUsage, usageText, type UsageState } from "./locationUsage";
 import { LocationLogo } from "./providers";
 import AddLocationModal from "./AddLocationModal";
 import styles from "./BackupLocations.module.css";
+import { errorMessage } from "../../lib/errorMessage";
 
 // The Backups section of a computer's Computer Info: the locations its
 // panels can keep backups in, what each holds and has free, adding one, and
@@ -52,7 +53,7 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
         } catch (err) {
             if (request !== loads) return;
             setLocations(null);
-            setLoadError(`Backup locations could not be loaded: ${(err as Error)?.message ?? err}`);
+            setLoadError(`Backup locations could not be loaded: ${errorMessage(err)}`);
         }
     };
     onMount(() => void load());
@@ -67,7 +68,7 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
             await shellIpc().invoke("backup-gdrive-connect", { computerId: props.computerId, locationId: location.id });
             await load();
         } catch (err) {
-            setReconnectError(`${location.label} could not be reconnected: ${(err as Error)?.message ?? err}`);
+            setReconnectError(`${location.label} could not be reconnected: ${errorMessage(err)}`);
         } finally {
             setReconnecting(null);
         }
@@ -79,7 +80,7 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
             await backupLocationsApi.recover(props.computerId);
             await load();
         } catch (err) {
-            setProblem(`The damaged locations file could not be set aside: ${(err as Error)?.message ?? err}`);
+            setProblem(`The damaged locations file could not be set aside: ${errorMessage(err)}`);
         } finally {
             setRecovering(false);
         }
@@ -95,7 +96,7 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
             setRemoving(null);
             await load();
         } catch (err) {
-            setRemoveError((err as Error)?.message ?? String(err));
+            setRemoveError(errorMessage(err));
         } finally {
             setRemoveBusy(false);
         }

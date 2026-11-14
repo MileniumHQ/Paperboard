@@ -8,6 +8,7 @@ import type { UpdateQueueState } from "../../../../shared/updateQueue";
 import UpdatesButton from "./UpdatesButton";
 import { leftReserve, rightReserve, type OverlayLike } from "./titlebarInsets";
 import styles from "./TopBar.module.css";
+import { errorMessage } from "../../lib/errorMessage";
 
 
 const TopBar: Component<{
@@ -73,7 +74,7 @@ const TopBar: Component<{
             })
             .catch((err) => {
                 logToMain("error", "Failed to open panel folder:", err);
-                showFolderError(err instanceof Error ? err.message : String(err));
+                showFolderError(errorMessage(err));
             });
     };
 

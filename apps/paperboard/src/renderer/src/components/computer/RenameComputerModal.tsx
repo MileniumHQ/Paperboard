@@ -1,6 +1,7 @@
 import { type Component, Show, createEffect, createSignal, on } from "solid-js";
 import { PaperButton, PaperInput, PaperModal, PaperText } from "@mileniumhq/paperui";
 import { computersApi, type ComputerInfo } from "../../lib/shell";
+import { errorMessage } from "../../lib/errorMessage";
 
 // matches COMPUTER_NAME_MAX in main's ConnectionPool, which has the last word
 const NAME_MAX = 64;
@@ -50,7 +51,7 @@ const RenameComputerModal: Component<RenameComputerModalProps> = (props) => {
             }
             props.onClose();
         } catch (err) {
-            setError(`Couldn't rename this computer: ${err instanceof Error ? err.message : String(err)}`);
+            setError(`Couldn't rename this computer: ${errorMessage(err)}`);
         } finally {
             setSaving(false);
         }

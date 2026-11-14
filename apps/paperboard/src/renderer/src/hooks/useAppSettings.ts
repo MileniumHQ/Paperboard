@@ -5,6 +5,7 @@ import { createSaveQueue } from "../lib/saveQueue";
 import { withAppSettingsDefaults } from "../../../shared/appSettingsDefaults";
 import { effectiveLook, type Graphics } from "../../../shared/graphics";
 import { APP_SETTINGS_DEFAULTS, APP_SETTINGS_ID, type AppSettingsData } from "../lib/appSettings";
+import { errorMessage } from "../lib/errorMessage";
 
 export interface SettingsFailure {
     /** which way it failed: settings that didn't load leave the defaults
@@ -13,8 +14,6 @@ export interface SettingsFailure {
     kind: "load" | "save" | "apply" | "graphics";
     message: string;
 }
-
-const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 // App-wide settings: load, mirror reduced motion and blur onto the document, persist
 // before notifying main. A load or save that fails stays as a failure for
@@ -30,7 +29,7 @@ export function useAppSettings() {
     onCleanup(shellApi.onGraphicsChanged(setGraphics));
     shellApi.getGraphics().then(setGraphics, (err) => {
         logToMain("error", "Couldn't tell whether Paperboard is drawn on a GPU:", err);
-        setSettingsFailure({ kind: "graphics", message: messageOf(err) });
+        setSettingsFailure({ kind: "graphics", message: errorMessage(err) });
     });
 
     // Mirrors the motion preference onto the document for PaperUI tokens
@@ -65,7 +64,7 @@ export function useAppSettings() {
             return true;
         } catch (err) {
             logToMain("error", "Failed to load app settings; showing the defaults:", err);
-            setSettingsFailure({ kind: "load", message: messageOf(err) });
+            setSettingsFailure({ kind: "load", message: errorMessage(err) });
             return false;
         }
     };
@@ -98,13 +97,13 @@ export function useAppSettings() {
             // a newer change is already waiting and carries this one in it:
             // its save tries again, and clears this failure if it lands
             if (superseded()) {
-                setSettingsFailure({ kind: "save", message: messageOf(err) });
+                setSettingsFailure({ kind: "save", message: errorMessage(err) });
                 return;
             }
             // Nothing newer: the UI falls back to the persisted truth, and
             // the save's failure is what to show, even if the re-read fails too
-            if (await loadAppSettings()) setSettingsFailure({ kind: "save", message: messageOf(err) });
-            else setSettingsFailure({ kind: "save", message: `${messageOf(err)}. The saved settings couldn't be read back either.` });
+            if (await loadAppSettings()) setSettingsFailure({ kind: "save", message: errorMessage(err) });
+            else setSettingsFailure({ kind: "save", message: `${errorMessage(err)}. The saved settings couldn't be read back either.` });
             return;
         }
         if (settingsFailure()?.kind === "save") setSettingsFailure(null);
@@ -114,7 +113,7 @@ export function useAppSettings() {
             else if (settingsFailure()?.kind === "apply") setSettingsFailure(null);
         } catch (err) {
             logToMain("error", "Failed to apply app settings:", err);
-            setSettingsFailure({ kind: "apply", message: messageOf(err) });
+            setSettingsFailure({ kind: "apply", message: errorMessage(err) });
         }
     };
 

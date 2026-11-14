@@ -18,6 +18,7 @@ import {
     type PanelItem,
 } from "@mileniumhq/paperapi";
 import { logToMain } from "../../lib/shell";
+import { errorMessage } from "../../lib/errorMessage";
 import {
     libraryFramePhase,
     libraryFrameSrc,
@@ -100,14 +101,14 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
         try {
             await props.onInstall(panelId);
             reply(shellToLibrary.installResult({ requestId, panelId, ok: true }));
-        } catch (err: any) {
+        } catch (err) {
             logToMain("error", `Panel library install failed for ${panelId}:`, err);
             reply(
                 shellToLibrary.installResult({
                     requestId,
                     panelId,
                     ok: false,
-                    error: err?.message ? String(err.message) : "install failed",
+                    error: errorMessage(err),
                 }),
             );
         }
@@ -123,14 +124,14 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
         try {
             const media = await props.loadMedia(panelId, full);
             reply(shellToLibrary.mediaResult({ requestId, panelId, ok: true, media }));
-        } catch (err: any) {
+        } catch (err) {
             logToMain("warn", `Panel library media unavailable for ${panelId}:`, err);
             reply(
                 shellToLibrary.mediaResult({
                     requestId,
                     panelId,
                     ok: false,
-                    error: err?.message ? String(err.message) : "media unavailable",
+                    error: errorMessage(err),
                 }),
             );
         }

@@ -2,6 +2,7 @@ import { type Component, createSignal, For, onMount, Show } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperSectionHeader, PaperSettingItem, PaperSettingList, PaperText, PaperToggle } from "@mileniumhq/paperui";
 import { portSettingsApi, type PortClaim, type PortPolicy, type PortProtocol } from "@mileniumhq/paperapi";
 import { createSavedValue } from "../../lib/saveQueue";
+import { errorMessage } from "../../lib/errorMessage";
 
 const PROTOCOL_NAMES: Record<PortProtocol, string> = { tcp: "TCP", udp: "UDP", "tcp+udp": "TCP and UDP" };
 
@@ -23,7 +24,7 @@ const ComputerPorts: Component<{ computerId: string }> = (props) => {
             policy.loaded(state.policy);
         } catch (err) {
             setClaims(null);
-            setLoadError(`Ports could not be loaded: ${(err as Error)?.message ?? err}`);
+            setLoadError(`Ports could not be loaded: ${errorMessage(err)}`);
         }
     };
     onMount(() => void load());
@@ -31,7 +32,7 @@ const ComputerPorts: Component<{ computerId: string }> = (props) => {
     const setRefuse = (refuse: boolean) => {
         setSaveError("");
         return policy.change(refuse ? "refuse" : "next-free").catch((err) => {
-            setSaveError(`The setting was not saved: ${(err as Error)?.message ?? err}`);
+            setSaveError(`The setting was not saved: ${errorMessage(err)}`);
         });
     };
 

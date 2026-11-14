@@ -56,6 +56,7 @@ import { useComputers } from "./hooks/useComputers";
 import { usePanels } from "./hooks/usePanels";
 import { usePanelRestarts } from "./hooks/usePanelRestarts";
 import { askPanelToLeave, unsavedPanels } from "./lib/unsavedPanels";
+import { errorMessage } from "./lib/errorMessage";
 
 const App: Component = () => {
     const appUpdate = useAppUpdate();
@@ -250,7 +251,7 @@ const App: Component = () => {
             showToast({
                 variant: "danger",
                 title: "Couldn't read how Paperboard was started",
-                message: `The desktop layout shows until Paperboard restarts. ${err instanceof Error ? err.message : String(err)}`,
+                message: `The desktop layout shows until Paperboard restarts. ${errorMessage(err)}`,
             });
         }
     });
@@ -316,7 +317,7 @@ const App: Component = () => {
             if (!(await computersApi.switch(compId))) throw new Error("Paperboard doesn't know this computer anymore.");
         } catch (err) {
             logToMain("error", "Failed to switch computer:", err);
-            setSwitchError((prev) => ({ ...prev, [compId]: err instanceof Error ? err.message : String(err) }));
+            setSwitchError((prev) => ({ ...prev, [compId]: errorMessage(err) }));
             return;
         }
         await refreshPanelsForComputer(compId);
@@ -347,7 +348,7 @@ const App: Component = () => {
             if (request !== selectionRequest) return;
             setOfflineTarget({
                 ...comp,
-                status: { ...comp.status, connected: false, error: err instanceof Error ? err.message : String(err) },
+                status: { ...comp.status, connected: false, error: errorMessage(err) },
             });
             return;
         }
@@ -423,7 +424,7 @@ const App: Component = () => {
             showToast({
                 variant: "danger",
                 title: "Couldn't move that computer",
-                message: err instanceof Error ? err.message : String(err),
+                message: errorMessage(err),
             });
             void refreshComputers();
         }

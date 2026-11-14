@@ -2,6 +2,7 @@ import { createEffect, createSignal, For, on, onCleanup, onMount, Show, type Com
 import { PaperButton, PaperFlex, PaperGrid, PaperMediaCard, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { panelPermissionsApi } from "../../lib/shell";
 import type { PanelPermission, PermissionAsk, ScreenPick, SystemBlock } from "../../../../shared/panelPermissions";
+import { errorMessage } from "../../lib/errorMessage";
 
 const NOUNS: Record<PanelPermission, string> = {
     microphone: "microphone",
@@ -60,7 +61,7 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
             await panelPermissionsApi.answer(askId, value);
             next();
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            setError(errorMessage(err));
         } finally {
             setBusy(false);
         }
@@ -71,7 +72,7 @@ const PanelPermissionPrompt: Component<{ panelName: (computerId: string, panelId
             await panelPermissionsApi.openSystemSettings(permission);
             next();
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            setError(errorMessage(err));
         }
     };
 

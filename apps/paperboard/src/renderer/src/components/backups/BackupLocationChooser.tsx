@@ -4,6 +4,7 @@ import { backupApi, backupLocationLabel, backupLocationsApi, type BackupLocation
 import { loadUsage, usageText, type UsageState } from "./locationUsage";
 import { LocationLogo } from "./providers";
 import { createOpenings } from "../../lib/openings";
+import { errorMessage } from "../../lib/errorMessage";
 
 export type BackupLocationChoice = { status: "chosen"; location: BackupLocation } | { status: "canceled" } | { status: "failed"; message: string };
 
@@ -43,7 +44,7 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
                 void loadUsage(location.id, props.computerId).then((state) => setUsage((prev) => ({ ...prev, [location.id]: state })));
             }
         } catch (err) {
-            if (openings.isCurrent(token)) setError(`Backup locations could not be loaded: ${(err as Error)?.message ?? err}`);
+            if (openings.isCurrent(token)) setError(`Backup locations could not be loaded: ${errorMessage(err)}`);
         }
     };
     createEffect(on(() => props.open, (open) => {
@@ -62,7 +63,7 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
             if (!status.location) throw new Error("The computer did not keep the choice");
             finish({ status: "chosen", location: status.location }, token);
         } catch (err) {
-            if (openings.isCurrent(token)) setError((err as Error)?.message ?? String(err));
+            if (openings.isCurrent(token)) setError(errorMessage(err));
         } finally {
             if (openings.isCurrent(token)) setSaving(false);
         }

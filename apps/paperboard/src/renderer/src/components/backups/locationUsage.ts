@@ -1,6 +1,8 @@
 // How full a backup location is, in words, for the chooser and settings.
 import { backupLocationsApi, type BackupLocationUsage } from "@mileniumhq/paperapi";
 import { formatBytes } from "../home/builtins/usageSegments";
+import { errorMessage } from "../../lib/errorMessage";
+import { logToMain } from "../../lib/shell";
 
 export type UsageState = { kind: "loading" } | { kind: "ready"; usage: BackupLocationUsage } | { kind: "failed"; message: string };
 
@@ -15,7 +17,7 @@ export async function loadUsage(locationId: string, computerId: string): Promise
     try {
         return { kind: "ready", usage: await backupLocationsApi.usage(locationId, computerId) };
     } catch (err) {
-        console.warn(`[backups] usage of ${locationId} unavailable:`, err);
-        return { kind: "failed", message: (err as Error)?.message ?? String(err) };
+        logToMain("warn", `The usage of backup location ${locationId} is unavailable:`, err);
+        return { kind: "failed", message: errorMessage(err) };
     }
 }

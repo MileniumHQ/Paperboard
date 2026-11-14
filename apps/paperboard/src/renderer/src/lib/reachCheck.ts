@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { computersApi, logToMain } from "./shell";
+import { errorMessage } from "./errorMessage";
 
 /**
  * Whether a paired computer answers, for the dialogs that offer to try it
@@ -23,7 +24,7 @@ export function createReachCheck() {
             setError(probe?.error || "Unreachable");
         } catch (err) {
             logToMain("error", "Checking a computer failed:", err);
-            if (mine === request) setError(err instanceof Error ? err.message : String(err));
+            if (mine === request) setError(errorMessage(err));
         } finally {
             // only the newest check may clear the busy flag
             if (mine === request) setChecking(false);

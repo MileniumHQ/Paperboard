@@ -26,6 +26,7 @@ import { BUILTIN_WIDGETS, BuiltinView, builtinWidget } from "./builtins";
 import PanelWidgetFrame, { type FrameFacts } from "./PanelWidgetFrame";
 import paperboardIcon from "../../assets/Paperboard.png";
 import styles from "./Home.module.css";
+import { errorMessage } from "../../lib/errorMessage";
 
 /** One widget, at one size, ready to place. */
 export type LibraryEntry = {
@@ -317,7 +318,7 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
         } catch (err) {
             if (mine !== request) return;
             logToMain("warn", `Couldn't load choices for widget ${props.widget.id}:`, err);
-            setChoices({ kind: "failed", message: err instanceof Error ? err.message : String(err) });
+            setChoices({ kind: "failed", message: errorMessage(err) });
         }
     };
     onMount(() => void loadChoices());

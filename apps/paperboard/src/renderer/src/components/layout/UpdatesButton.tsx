@@ -12,6 +12,7 @@ import {
     type UpdateQueueState,
 } from "../../../../shared/updateQueue";
 import { updateWhere } from "../../hooks/useUpdateQueue";
+import { errorMessage } from "../../lib/errorMessage";
 
 // how long the finished check (or cross) stays before the button goes
 const FINISH_MS = 1800;
@@ -57,7 +58,7 @@ function HoldRow(props: { group: UpdateHoldGroup; onRelease: (keys: string[]) =>
             showToast({
                 variant: "danger",
                 title: `${listOf(props.group.names)} couldn't update`,
-                message: err instanceof Error ? err.message : String(err),
+                message: errorMessage(err),
             });
         } finally {
             setBusy(false);

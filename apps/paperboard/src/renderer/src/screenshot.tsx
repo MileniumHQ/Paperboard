@@ -4,6 +4,7 @@ import "./screenshot.css";
 import { render } from "solid-js/web";
 import { createSignal } from "solid-js";
 import { PaperProvider, PaperButton } from "@mileniumhq/paperui";
+import { errorMessage } from "./lib/errorMessage";
 
 declare global {
     interface Window {
@@ -25,7 +26,7 @@ function ScreenshotController() {
         try {
             setMessage((await operation()).message);
         } catch (error) {
-            setMessage(error instanceof Error ? error.message : String(error));
+            setMessage(errorMessage(error));
         } finally {
             setBusy(false);
         }

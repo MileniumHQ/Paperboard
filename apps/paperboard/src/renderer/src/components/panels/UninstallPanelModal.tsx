@@ -9,6 +9,7 @@ import {
 } from "@mileniumhq/paperui";
 import { panelsApi, type PanelItem } from "@mileniumhq/paperapi";
 import { logToMain } from "../../lib/shell";
+import { errorMessage } from "../../lib/errorMessage";
 
 export interface UninstallTarget {
     compId: string;
@@ -58,7 +59,7 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
             props.onClose();
         } catch (err) {
             logToMain("error", "Failed to uninstall panel:", err);
-            setError(`Couldn't uninstall ${target.panel.name}: ${err instanceof Error ? err.message : String(err)}`);
+            setError(`Couldn't uninstall ${target.panel.name}: ${errorMessage(err)}`);
         } finally {
             setBusy(false);
         }

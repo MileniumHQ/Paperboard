@@ -1,6 +1,7 @@
 import { type Component, Show, createEffect, createSignal, on } from "solid-js";
 import { PaperButton, PaperModal, PaperText } from "@mileniumhq/paperui";
 import { logToMain, type ComputerInfo } from "../../lib/shell";
+import { errorMessage } from "../../lib/errorMessage";
 
 export interface ForgetComputerModalProps {
     /** the computer being forgotten; undefined closes the dialog */
@@ -32,7 +33,7 @@ const ForgetComputerModal: Component<ForgetComputerModalProps> = (props) => {
             props.onClose();
         } catch (err) {
             logToMain("error", "Failed to remove computer:", err);
-            setError(`Couldn't forget this computer: ${err instanceof Error ? err.message : String(err)}`);
+            setError(`Couldn't forget this computer: ${errorMessage(err)}`);
         } finally {
             setForgetting(false);
         }

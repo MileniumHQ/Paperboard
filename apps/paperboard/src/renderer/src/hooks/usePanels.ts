@@ -4,6 +4,7 @@ import { panelsApi, type InvalidPanel, type PanelItem } from "@mileniumhq/papera
 import { logToMain } from "../lib/shell";
 import { isShellTab } from "../lib/shellTabs";
 import { unsavedPanels } from "../lib/unsavedPanels";
+import { errorMessage } from "../lib/errorMessage";
 
 // every opened key is walked by PanelView's frame bookkeeping and LRU, so
 // the list is bounded: past the cap the oldest is dropped, and reopening it
@@ -96,7 +97,7 @@ export function usePanels() {
         } catch (err) {
             logToMain("error", "Failed to load installed panels for", compId, err);
             if (latestRequest[compId] !== request) return;
-            setPanelsLoadError((prev) => ({ ...prev, [compId]: err instanceof Error ? err.message : String(err) }));
+            setPanelsLoadError((prev) => ({ ...prev, [compId]: errorMessage(err) }));
         }
     };
 

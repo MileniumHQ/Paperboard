@@ -12,7 +12,8 @@ import {
     type ImportedPanelFile,
     type PanelFileTransferResult,
 } from "../../../shared/fileTransfer";
-import { isBrowserShell, shellIpc } from "./shell";
+import { isBrowserShell, logToMain, shellIpc } from "./shell";
+import { errorMessage } from "./errorMessage";
 
 export const FILE_TRANSFER_REQUEST = "paperboard:file-transfer";
 export const FILE_TRANSFER_RESULT = "paperboard:file-transfer-result";
@@ -74,8 +75,8 @@ export async function runPanelFileTransfer(
         }
         return message.kind === "export" ? await browserSave(request) : await browserOpen(request);
     } catch (err) {
-        console.error("[panel-files] file transfer failed:", err);
-        return failed("failed", err instanceof Error ? err.message : String(err));
+        logToMain("error", "A panel's file transfer failed:", err);
+        return failed("failed", errorMessage(err));
     }
 }
 
@@ -86,7 +87,7 @@ async function failureFrom(res: Response): Promise<PanelFileTransferResult> {
         const body = (await res.json()) as PanelFileTransferResult;
         if (body?.status === "failed") return body;
     } catch (err) {
-        console.error("[panel-files] unreadable failure response:", err);
+        logToMain("error", "The host's answer to a refused file transfer was unreadable:", err);
     }
     return failed("failed", `The host refused the transfer (HTTP ${res.status})`);
 }

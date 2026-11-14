@@ -10,7 +10,8 @@
 // ("unavailable"). Otherwise main listens on this device
 // (src/main/loopbackRedirect.ts), checking the address again.
 import { parseLoopbackRedirectUri, type PanelLoopbackRedirectResult } from "../../../shared/loopbackRedirect";
-import { isBrowserShell, shellIpc } from "./shell";
+import { isBrowserShell, logToMain, shellIpc } from "./shell";
+import { errorMessage } from "./errorMessage";
 
 export const LOOPBACK_REDIRECT_REQUEST = "paperboard:loopback-redirect";
 export const LOOPBACK_REDIRECT_CANCEL = `${LOOPBACK_REDIRECT_REQUEST}-cancel`;
@@ -60,7 +61,7 @@ export function createFrameLoopbackRedirects(computerId: string, host: LoopbackR
     const open = new Map<string, string>();
     const stop = (shellId: string) =>
         host.invoke("panel-loopback-redirect-cancel", { requestId: shellId }).catch((err) => {
-            console.error("[loopback] could not stop listening for a sign-in redirect:", err);
+            logToMain("error", "Couldn't stop listening for a sign-in redirect:", err);
         });
 
     return {
@@ -77,8 +78,8 @@ export function createFrameLoopbackRedirects(computerId: string, host: LoopbackR
             try {
                 return await host.invoke<PanelLoopbackRedirectResult>("panel-loopback-redirect", { requestId: shellId, redirectUri });
             } catch (err) {
-                console.error("[loopback] catching a sign-in redirect failed:", err);
-                return failed("failed", err instanceof Error ? err.message : String(err));
+                logToMain("error", "Catching a sign-in redirect failed:", err);
+                return failed("failed", errorMessage(err));
             } finally {
                 if (open.get(requestId) === shellId) open.delete(requestId);
             }

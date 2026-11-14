@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { computersApi, type ComputerInfo } from "../lib/shell";
+import { computersApi, logToMain, type ComputerInfo } from "../lib/shell";
 
 // computers list + active selection
 export function useComputers() {
@@ -65,7 +65,7 @@ export function useComputers() {
             }
             apply(data);
         } catch (err) {
-            console.error("[useComputers] load failed:", err);
+            logToMain("error", "Failed to load the computers:", err);
             if (pushes !== pushesBefore) return;
             setComputersLoadFailed(true);
         }
@@ -77,7 +77,7 @@ export function useComputers() {
     const subscribeComputerChanges = () =>
         computersApi.onChanged((data) => {
             if (!data || !Array.isArray(data.computers)) {
-                console.error("[useComputers] ignored a malformed computer list from main:", data);
+                logToMain("error", "Ignored a malformed computer list from main:", data);
                 return;
             }
             pushes++;

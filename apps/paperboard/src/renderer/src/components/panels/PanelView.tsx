@@ -11,6 +11,7 @@ import { createFrameLoopbackRedirects, LOOPBACK_REDIRECT_CANCEL, LOOPBACK_REDIRE
 import BackupLocationChooser, { type BackupLocationChoice } from "../backups/BackupLocationChooser";
 import { BACKUP_LOCATION_REQUEST, BACKUP_LOCATION_RESULT, parseBackupLocationRequest } from "../../lib/backupLocationRequest";
 import { setPanelUnsaved, unsavedPanels, type LeaveAnswer } from "../../lib/unsavedPanels";
+import { errorMessage } from "../../lib/errorMessage";
 
 // restarting: the panel's service restarts; updating: a new release of the panel installs
 export type RestartState = { kind: "restarting" } | { kind: "updating" } | { kind: "failed"; message: string };
@@ -58,7 +59,7 @@ const PanelFrame: Component<{ panelKey: string; heading: PanelHeading; mobile: b
         },
         (err) => {
             logToMain("error", `Couldn't read ${panelId()}'s running backups:`, err);
-            setBackupsError(`Couldn't check for a backup holding it: ${err instanceof Error ? err.message : String(err)}`);
+            setBackupsError(`Couldn't check for a backup holding it: ${errorMessage(err)}`);
         },
     );
     onMount(() => {

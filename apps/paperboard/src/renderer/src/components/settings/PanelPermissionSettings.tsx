@@ -4,6 +4,7 @@ import { PaperButton, PaperQuote, PaperSectionHeader, PaperSettingItem, PaperSet
 import { panelPermissionsApi } from "../../lib/shell";
 import { createSavedValue } from "../../lib/saveQueue";
 import type { PanelPermission, PanelPermissionEntry } from "../../../../shared/panelPermissions";
+import { errorMessage } from "../../lib/errorMessage";
 
 const TITLES: Record<PanelPermission, string> = {
     microphone: "Microphone",
@@ -19,7 +20,7 @@ export default function PanelPermissionSettings(props: { panelName: (panelId: st
     // reloads.
     const [entries, setEntries] = createStore<(PanelPermissionEntry & { key: string })[]>([]);
     const [error, setError] = createSignal<{ title: string; message: string } | null>(null);
-    const failed = (title: string, err: unknown) => setError({ title, message: err instanceof Error ? err.message : String(err) });
+    const failed = (title: string, err: unknown) => setError({ title, message: errorMessage(err) });
 
     // a newer reload wins over an older one still out
     let loads = 0;

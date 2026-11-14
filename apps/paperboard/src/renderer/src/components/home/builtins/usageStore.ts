@@ -4,6 +4,7 @@
 import { type Accessor, createEffect, createMemo, createSignal, on, onCleanup, type Setter } from "solid-js";
 import { systemApi, type UsageReport } from "@mileniumhq/paperapi";
 import { logToMain } from "../../../lib/shell";
+import { errorMessage } from "../../../lib/errorMessage";
 
 const POLL_MS = 2_000;
 // a computer that failed is asked again this much later, not every poll
@@ -30,7 +31,7 @@ interface Poller {
 const pollers = new Map<string, Poller>();
 
 function describe(err: unknown): string {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     if (/Unknown action/i.test(message)) return "This computer's Paperboard Server is too old to report usage. Update it to see this.";
     return message;
 }
