@@ -197,9 +197,27 @@ export function PaperMarkdown(props: PaperMarkdownProps) {
 
     // gfm + breaks are lexer options, not a global marked.use(): a global
     // mutation would leak these settings into every other marked consumer.
-    const tokens = createMemo<Token[]>(() =>
-        marked.lexer(local.text ?? "", { gfm: true, breaks: true }),
-    );
+    //
+    // A block whose source is unchanged keeps the token it had, so <For>
+    // keeps its elements: text streaming in rebuilds only the blocks it
+    // touches, and a code block or picture above them stays as it is.
+    let lastLinks = "";
+    const tokens = createMemo<Token[]>((previous) => {
+        const lexed = marked.lexer(local.text ?? "", { gfm: true, breaks: true });
+        // a reference link's definition can be anywhere: when the
+        // definitions change, any block may read differently
+        const links = JSON.stringify(lexed.links);
+        const reusable = new Map<string, Token[]>();
+        if (links === lastLinks) {
+            for (const token of previous) {
+                const same = reusable.get(token.raw);
+                if (same) same.push(token);
+                else reusable.set(token.raw, [token]);
+            }
+        }
+        lastLinks = links;
+        return lexed.map((token) => reusable.get(token.raw)?.shift() ?? token);
+    }, []);
     const slugs = createMemo(() => headingSlugs(tokens()));
 
     // a #link goes to its heading in this block, found by slug rather than

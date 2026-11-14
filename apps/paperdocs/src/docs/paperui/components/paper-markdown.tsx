@@ -37,7 +37,7 @@ export default function PaperMarkdownDoc() {
             <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
             <PaperText preset="body" as="p">
                 Pass the Markdown in <PaperCode>text</PaperCode>.
-                The component re-renders when the string changes, so you can stream text into it.
+                The component re-renders when the string changes, so you can stream text into it: a block whose source did not change keeps its elements, so only the blocks the new text touches are drawn again.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">
                 <PaperMarkdown text={sample} />
