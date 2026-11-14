@@ -1,4 +1,4 @@
-import { type Component, Show, createEffect, createSignal } from "solid-js";
+import { type Component, Show, createEffect, createSignal, on } from "solid-js";
 import { PaperButton, PaperInput, PaperModal, PaperText } from "@mileniumhq/paperui";
 import { computersApi, type ComputerInfo } from "../../lib/shell";
 
@@ -18,13 +18,18 @@ const RenameComputerModal: Component<RenameComputerModalProps> = (props) => {
     const [saving, setSaving] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
 
-    // each opening starts from the computer's current name
-    createEffect(() => {
-        const computer = props.computer;
-        if (!computer) return;
-        setName(computer.name);
-        setError(null);
-    });
+    // each opening starts from the computer's current name; a change pushed
+    // while the dialog is open (a status, a reconnect) leaves the typing alone
+    createEffect(
+        on(
+            () => props.computer?.id,
+            (id) => {
+                if (!id) return;
+                setName(props.computer?.name ?? "");
+                setError(null);
+            },
+        ),
+    );
 
     const trimmed = () => name().trim();
     const canSave = () =>
