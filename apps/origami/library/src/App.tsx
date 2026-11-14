@@ -113,11 +113,12 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
     // The shell covers the frame until the library says it is done. Ready
     // means the registry has settled, no installed-panel media is still in
     // flight, and the rendered page has painted, so nothing shifts after
-    // the reveal.
+    // the reveal. Only an embedded library has a shell to tell, and a
+    // handshake that lands after the timeout still makes it embedded.
     let readySent = false;
     createEffect(
         on([registrySettled, () => props.bridge.mode(), installedMedia.pending], ([settled, mode, pending]) => {
-            if (readySent || !settled || mode === "detecting" || pending > 0) return;
+            if (readySent || !settled || mode !== "embedded" || pending > 0) return;
             readySent = true;
             void waitForContentPainted().then(() => props.bridge.notifyReady());
         }),

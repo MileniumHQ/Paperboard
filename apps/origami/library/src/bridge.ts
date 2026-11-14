@@ -40,7 +40,7 @@ export interface LibraryBridge {
     open: (panelId: string) => void;
     /**
      * Tell the shell the library has loaded its data and painted, so it can
-     * stop covering the frame with a loader. No-op when standalone.
+     * stop covering the frame with a loader. No-op unless embedded.
      */
     notifyReady: () => void;
     /**
@@ -229,7 +229,7 @@ export function createLibraryBridge(
     };
 
     const notifyReady = () => {
-        if (!host || mode() === "standalone") return;
+        if (!host || mode() !== "embedded") return;
         host.send({ type: "paperboard:library-ready" });
     };
 

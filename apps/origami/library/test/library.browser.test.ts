@@ -20,7 +20,8 @@ const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js
 // The shell: it frames the library, says it is Paperboard with the
 // installed list from its query, and answers media requests with what
 // `window.mediaAnswer` returns; with `?hold=1` they wait until the test
-// answers them with `window.answerMedia["<id>:<full>"]`. Installs wait until
+// answers them with `window.answerMedia["<id>:<full>"]`. With `?late=1` it
+// answers the hello only when the test calls `window.connect()`. Installs wait until
 // the test answers them with `window.answerInstall`. Everything the library
 // sent is kept.
 const SHELL = `<!doctype html><html><head><meta charset="utf-8"><title>shell</title>
@@ -37,7 +38,10 @@ addEventListener("message", (event) => {
     // a DOM change, so a test waiting on what was sent wakes up
     document.body.dataset.sent = String(window.sent.length);
     const reply = (answer) => event.source.postMessage(answer, "*");
-    if (message.type === "paperboard:library-hello") reply({ type: "paperboard:library-connected", theme: "light", installed });
+    if (message.type === "paperboard:library-hello") {
+        window.connect = () => reply({ type: "paperboard:library-connected", theme: "light", installed });
+        if (!query.get("late")) window.connect();
+    }
     if (message.type === "paperboard:library-install") window.answerInstall = Object.assign(window.answerInstall || {}, { [message.panelId]: (answer) => reply({ type: "paperboard:library-install-result", requestId: message.requestId, panelId: message.panelId, ...answer }) });
     if (message.type === "paperboard:library-media") {
         const answer = (media) => reply({ type: "paperboard:library-media-result", requestId: message.requestId, panelId: message.panelId, ...media });
@@ -235,6 +239,36 @@ describe("the library, as a person uses it", () => {
         await page.evaluate(`window.answerMedia["dev.local.shots:true"](${JSON.stringify(shots(3))}); true`);
         await until(page, doc, `${gallery(3)} && !${next}.disabled`, "Next enabled for the new screenshots");
         expect(page.exceptions).toEqual([]);
+    }, 30_000);
+
+    test("a shell that answers after the handshake timed out still hears that the library is ready", async () => {
+        registry = { "dev.example.alpha": { id: "dev.example.alpha", name: "Alpha", version: "1.0.0" } };
+        try {
+            const page = await chrome.open(`${origin}/shell.html?late=1`);
+            const doc = FRAMED_DOC;
+            const readies = `window.sent.filter((m) => m.type === "paperboard:library-ready").length`;
+            // unanswered, the library gives up on the shell and offers Download
+            await press(page, doc, card("Alpha"), "the Alpha card");
+            await until(page, doc, `Boolean(${button("Download")})`, "the standalone Download");
+            // and the paint it waits on before a ready has settled, so the
+            // shell answers after the library had its say as standalone
+            await page.evaluate(`(async () => {
+                const frame = document.getElementById("library").contentWindow;
+                await frame.document.fonts.ready;
+                await Promise.all([...frame.document.images].map((img) => img.decode().catch(() => undefined)));
+                for (let i = 0; i < 3; i++) await new Promise((resolve) => frame.requestAnimationFrame(resolve));
+                return true;
+            })()`);
+            expect(await page.evaluate<number>(readies)).toBe(0);
+
+            // the shell was only slow: the library becomes embedded and says ready, once
+            await page.evaluate(`window.connect(); true`);
+            await until(page, doc, `Boolean(${button("Install")}) && ${readies} === 1`, "Install and the ready signal");
+            expect(await page.evaluate<number>(readies)).toBe(1);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            registry = {};
+        }
     }, 30_000);
 
     test("Download outside Paperboard fetches the archive the registry hosts, never a record's own URL", async () => {
