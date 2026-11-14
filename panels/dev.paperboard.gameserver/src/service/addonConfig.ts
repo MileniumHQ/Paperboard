@@ -40,6 +40,46 @@ export async function pluginNameFrom(entries: Map<string, string>): Promise<stri
     return null;
 }
 
+/** a version a descriptor states as itself, not a build placeholder like ${version} */
+function versionField(value: unknown): string | null {
+    const text = typeof value === "number" ? String(value) : stringField(value);
+    return text && !text.includes("${") ? text : null;
+}
+
+/** the name and version a plugin's paper-plugin.yml or plugin.yml gives */
+export async function pluginDescription(entries: Map<string, string>): Promise<{ name?: string; version?: string }> {
+    for (const file of PLUGIN_DESCRIPTORS) {
+        const text = entries.get(file);
+        if (text === undefined) continue;
+        const { parse: parseYaml } = await loadYaml();
+        const doc = parseYaml(text) as { name?: unknown; version?: unknown } | null;
+        const name = stringField(doc?.name) ?? undefined;
+        const version = versionField(doc?.version) ?? undefined;
+        if (name || version) return { name, version };
+    }
+    return {};
+}
+
+/** the version a mod's fabric.mod.json, quilt.mod.json or (neo)forge mods.toml gives */
+export function modVersionFrom(entries: Map<string, string>): string | null {
+    const fabric = entries.get("fabric.mod.json");
+    if (fabric !== undefined) {
+        const version = versionField((JSON.parse(fabric) as { version?: unknown })?.version);
+        if (version) return version;
+    }
+    const quilt = entries.get("quilt.mod.json");
+    if (quilt !== undefined) {
+        const version = versionField((JSON.parse(quilt) as { quilt_loader?: { version?: unknown } })?.quilt_loader?.version);
+        if (version) return version;
+    }
+    for (const file of ["META-INF/neoforge.mods.toml", "META-INF/mods.toml"]) {
+        const match = entries.get(file)?.match(/^\s*version\s*=\s*["']([^"']+)["']/m);
+        const version = versionField(match?.[1]);
+        if (version) return version;
+    }
+    return null;
+}
+
 /** the mod id from fabric.mod.json, quilt.mod.json or a (neo)forge mods.toml */
 export function modIdFrom(entries: Map<string, string>): string | null {
     const fabric = entries.get("fabric.mod.json");

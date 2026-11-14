@@ -12,6 +12,7 @@ import {
 import { commitPlugins, discardUpload, listAdded, pickFiles, type UploadOutcome } from "./upload";
 import { modrinthHits, modrinthSource } from "./sources";
 import type { AddonKind, AddonListing, InstalledAddon } from "./kind";
+import { versionLabel } from "./presentation";
 
 // Plugins on a plugin server, mods on a mod loader: the same tab, the same
 // folder rules, a different word. Installing runs here in the page (lib/plugins);
@@ -21,16 +22,24 @@ const isMods = () => getEcosystem(minecraftSoftware(serverSoftware()))?.kind ===
 
 export const pluginTitle = (filename: string) => filename.replace(/\.jar$/i, "");
 
+/** the version a record or the jar itself gives, or what is known instead */
+function pluginFooter(entry: Awaited<ReturnType<typeof listInstalledPlugins>>["plugins"][number]): string {
+    const version = entry.record?.version ?? entry.described?.version;
+    if (version) return versionLabel(version);
+    if (entry.described?.error) return `Couldn't read this jar: ${entry.described.error}`;
+    return entry.uploaded ? "Uploaded by you" : "Unknown version";
+}
+
 export function installedPlugins(
     plugins: Awaited<ReturnType<typeof listInstalledPlugins>>["plugins"],
 ): InstalledAddon[] {
     return plugins.map((entry) => ({
         id: entry.filename,
-        title: entry.record?.title ?? entry.record?.slug ?? pluginTitle(entry.filename),
+        title: entry.record?.title ?? entry.record?.slug ?? entry.described?.name ?? pluginTitle(entry.filename),
         subtitle: entry.filename,
         iconUrl: entry.record?.iconUrl,
         badge: entry.uploaded ? { label: "Uploaded", variant: "monochrome" } : { label: "Installed", variant: "success" },
-        footer: entry.record?.version ? `v${entry.record.version}` : entry.uploaded ? "Uploaded by you" : "Unknown version",
+        footer: pluginFooter(entry),
         // a GeyserMC build has no Modrinth page to open
         project: entry.record && !entry.record.source ? { projectId: entry.record.projectId, slug: entry.record.slug } : undefined,
         version: entry.record?.version,

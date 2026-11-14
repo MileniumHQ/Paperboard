@@ -1,4 +1,7 @@
+import * as nodePath from "node:path";
 import { minecraftSoftware } from "../games/minecraft/index";
+import { MOD_DESCRIPTORS, PLUGIN_DESCRIPTORS, modVersionFrom, pluginDescription } from "./addonConfig";
+import { readJarEntries } from "./jarEntries";
 import {
     files as fileApi,
     config,
@@ -80,11 +83,29 @@ export async function listInstalledPlugins(
 
     // an uploaded jar has no record Modrinth describes; saying so beats a bare "Unknown version"
     // (a Modrinth install over it has a record and is no longer the upload)
-    const plugins = collected.map((plugin) => (!plugin.record && `${dirName}/${plugin.filename}` in uploads ? { ...plugin, uploaded: true as const } : plugin));
+    const root = await fileApi.getPath("", PANEL_ID);
+    const mods = SOFTWARE[minecraftSoftware(ctx.state.serverSoftware)].addons?.kind === "mod";
+    const plugins = await Promise.all(collected.map(async (plugin): Promise<InstalledPlugin> => {
+        if (plugin.record) return plugin;
+        const uploaded = `${dirName}/${plugin.filename}` in uploads ? { uploaded: true as const } : {};
+        return { ...plugin, ...uploaded, described: await describeJar(nodePath.join(root, dirName, plugin.filename), mods) };
+    }));
     return {
         plugins,
         warning: listing.error,
     };
+}
+
+/** what a jar no record describes says of itself; a jar that can't be read says why */
+async function describeJar(jarPath: string, mod: boolean): Promise<NonNullable<InstalledPlugin["described"]>> {
+    try {
+        if (!mod) return await pluginDescription(await readJarEntries(jarPath, PLUGIN_DESCRIPTORS));
+        const entries = await readJarEntries(jarPath, MOD_DESCRIPTORS);
+        // a mod's id is no better a title than its file's name; its version is news
+        return { version: modVersionFrom(entries) ?? undefined };
+    } catch (err) {
+        return { error: err instanceof Error ? err.message : String(err) };
+    }
 }
 
 export async function deletePlugin(

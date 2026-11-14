@@ -340,6 +340,17 @@ export function createAddonBrowser<Meta = undefined>(options: {
             void search.run();
         }),
     );
+    // what was added to or taken from the folder outside Paperboard shows as
+    // soon as the panel is looked at again
+    const lookedAgain = () => {
+        if ((options.active?.() ?? true) && document.visibilityState === "visible") void reload();
+    };
+    window.addEventListener("focus", lookedAgain);
+    document.addEventListener("visibilitychange", lookedAgain);
+    onCleanup(() => {
+        window.removeEventListener("focus", lookedAgain);
+        document.removeEventListener("visibilitychange", lookedAgain);
+    });
 
     const installedProjects = () => new Set((listing()?.items ?? []).flatMap((item) => (item.project ? [item.project.projectId] : [])));
 

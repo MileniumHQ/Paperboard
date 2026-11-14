@@ -27,6 +27,11 @@ export interface InstalledPlugin {
     record?: InstalledRecord;
     /** added through Upload, so no Modrinth record describes it */
     uploaded?: true;
+    /**
+     * What the jar says of itself (plugin.yml, fabric.mod.json…), read when
+     * no record describes it; `error` when the jar could not be read.
+     */
+    described?: { name?: string; version?: string; error?: string };
 }
 
 export const INSTALL_RECORDS_KEY = "pluginInstalls";
