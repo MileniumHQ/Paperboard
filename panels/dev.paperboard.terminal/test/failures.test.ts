@@ -10,7 +10,10 @@ setDefaultTimeout(60_000);
 
 const browser = panelBrowser();
 
+let writeOnly: string | null = null;
 afterEach(async () => {
+    if (writeOnly) fs.chmodSync(writeOnly, 0o644);
+    writeOnly = null;
     await stopServices();
     await clearWorkloads();
 });
@@ -114,11 +117,64 @@ describe("failures are shown", () => {
         const page = await browser.open(served.url);
         try {
             await page.waitFor(`document.body.innerText.includes("Your tabs couldn't be read")`, "the unreadable tabs to be said");
+            // where the file is, whole, so a person can find it
             const shown = await page.evaluate<string>("document.body.innerText");
-            expect(shown).toContain("tabs.json");
+            expect(shown).toContain(path.join(dir, "tabs.json"));
             expect(shown).not.toContain("Try again");
             expect(await page.evaluate<number>(`document.querySelectorAll(".xterm").length`)).toBe(0);
             expect(fs.readFileSync(path.join(dir, "tabs.json"), "utf8")).toBe(broken);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
+    test("in the panel, a shell whose earlier output couldn't be read says so above its screen", async () => {
+        const dir = await panelFiles({ "tabs.json": { tabs: [{ id: "tab1", label: "One" }], activeTabId: "tab1" } });
+        await startService();
+        // the shell starts, and runs on while the service restarts
+        await call("open-tab", { id: "tab1", cols: 80, rows: 24 });
+        await stopServices();
+        const file = path.join(dir, "terminal-scrollback", "tab1.log");
+        fs.chmodSync(file, 0o200);
+        writeOnly = file;
+        await startService();
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.waitFor(alertShows("Output not saved", "earlier output couldn't be read"), "the unreadable output to be said");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
+    test("in the panel, Copy with nothing selected says so, and Copy Last Output copies the last command's output", async () => {
+        // bash marks where each command's output starts and ends
+        await panelFiles({ "tabs.json": { tabs: [{ id: "tab1", label: "One", shell: "/bin/bash" }], activeTabId: "tab1" } });
+        await startService();
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.waitFor(screenShows(0, "$"), "the shell's prompt");
+            // what reaches the clipboard
+            await page.evaluate(`navigator.clipboard.writeText = async (text) => { window.copied = text; }`);
+            const menuItem = (name: string, not = "\u0000") =>
+                page.evaluate(`(() => {
+                    document.querySelector(".xterm").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }));
+                })()`).then(() => page.waitFor(`[...document.querySelectorAll("[role=menuitem]")].some((i) => i.innerText.includes(${JSON.stringify(name)}))`, `the screen's menu`))
+                    .then(() => page.evaluate(`[...document.querySelectorAll("[role=menuitem]")].find((i) => i.innerText.includes(${JSON.stringify(name)}) && !i.innerText.includes(${JSON.stringify(not)})).click()`));
+
+            await menuItem("Copy", "Last Output");
+            await page.waitFor(alertShows("Nothing copied", "Nothing is selected"), "the empty copy to be said");
+            expect(await page.evaluate<unknown>("window.copied")).toBeUndefined();
+
+            await runBlock("type-in-tab", { tab: "tab1", text: "echo copied-$((2+3))\n" });
+            await page.waitFor(screenShows(0, "copied-5"), "the command's output");
+            await menuItem("Copy Last Output");
+            await page.waitFor(`window.copied?.trim() === "copied-5"`, "the last output on the clipboard");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

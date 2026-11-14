@@ -1,13 +1,17 @@
-// Saved commands, managed in the panel: add, run, remove. The list and every
-// outcome are the service's; this only asks and shows what it answered.
+// Saved commands, run from the toolbar's menu and managed in a modal: add,
+// run, remove. The list and every outcome are the service's; this only asks
+// and shows what it answered.
 import { createSignal, For, Show } from "solid-js";
 import {
     PaperButton,
-    PaperCard,
+    PaperContextMenuHeader,
+    PaperContextMenuItem,
     PaperEmptyState,
     PaperFlex,
     PaperIcon,
     PaperInput,
+    PaperList,
+    PaperListItem,
     PaperModal,
     PaperQuote,
     PaperText,
@@ -20,7 +24,7 @@ import { describeRun, type RunTone } from "./lib/runStatus";
 import { createAgoClock } from "./lib/clock";
 import { errorMessage, type Outcome } from "./lib/failure";
 import { PANEL_ID } from "./lib/panel";
-
+import { Menu, type MenuState } from "./Menus";
 
 const TONE_COLOR: Record<RunTone, PaperColor> = {
     idle: "text-subtle",
@@ -30,7 +34,80 @@ const TONE_COLOR: Record<RunTone, PaperColor> = {
     warning: "warning",
 };
 
-export default function SavedCommandsModal(props: {
+interface SavedCommandsProps {
+    commands: SavedCommand[];
+    runs: Record<string, CommandRun>;
+    loadError: string;
+}
+
+/** The toolbar's Saved commands menu, and the modal it manages them in. */
+export default function SavedCommands(props: SavedCommandsProps & { menu: MenuState }) {
+    const now = createAgoClock(props.menu.isOpen);
+    const [isOpen, setOpen] = createSignal(false);
+    // a run started from the menu that the service refused: shown in the
+    // modal, since the menu has closed by then
+    const [runError, setRunError] = createSignal("");
+    const open = (error = "") => {
+        setRunError(error);
+        setOpen(true);
+    };
+    const run = async (id: string) => {
+        setRunError("");
+        try {
+            await serviceApi.call(PANEL_ID, "run-saved-command", { id });
+        } catch (err) {
+            open(errorMessage(err));
+        }
+    };
+    return (
+        <>
+            <Menu state={props.menu}>
+                <PaperContextMenuHeader>Saved commands</PaperContextMenuHeader>
+                <Show when={props.loadError}>
+                    <PaperContextMenuItem icon="error" disabled description={props.loadError}>
+                        Saved commands could not be read
+                    </PaperContextMenuItem>
+                </Show>
+                <Show when={!props.loadError && props.commands.length === 0}>
+                    <PaperContextMenuItem icon="bookmarks" disabled>
+                        No saved commands
+                    </PaperContextMenuItem>
+                </Show>
+                <For each={props.commands}>
+                    {(cmd) => (
+                        <PaperContextMenuItem
+                            value={cmd.id}
+                            icon="play_arrow"
+                            description={cmd.command}
+                            keybind={describeRun(props.runs[cmd.id], now()).value}
+                            title={describeRun(props.runs[cmd.id], now()).detail}
+                            disabled={props.runs[cmd.id]?.state === "running"}
+                            onClick={() => void run(cmd.id)}
+                        >
+                            {cmd.label}
+                        </PaperContextMenuItem>
+                    )}
+                </For>
+                <PaperContextMenuItem value="manage-saved-commands" icon="edit" onClick={() => open()}>
+                    Manage saved commands…
+                </PaperContextMenuItem>
+            </Menu>
+            <SavedCommandsModal
+                open={isOpen()}
+                runError={runError()}
+                onClose={() => {
+                    setOpen(false);
+                    setRunError("");
+                }}
+                commands={props.commands}
+                runs={props.runs}
+                loadError={props.loadError}
+            />
+        </>
+    );
+}
+
+function SavedCommandsModal(props: {
     open: boolean;
     onClose: () => void;
     commands: SavedCommand[];
@@ -93,46 +170,56 @@ export default function SavedCommandsModal(props: {
                         </Show>
                     }
                 >
-                    <PaperFlex direction="column" gap="half" fullWidth>
+                    <PaperList selectable={false} fullWidth borderless scrollable={false}>
                         <For each={props.commands}>
                             {(saved) => {
                                 const status = () => describeRun(props.runs[saved.id], now());
                                 return (
-                                    <PaperCard surface="element" borderless paddingX="full" paddingY="half">
-                                        <PaperFlex direction="row" align="center" gap="half" fullWidth>
-                                            <PaperFlex direction="column" flex minWidth={0}>
-                                                <PaperText preset="label" truncate>{saved.label}</PaperText>
-                                                <PaperText preset="hint" truncate family="code" title={saved.command}>
+                                    <PaperListItem
+                                        value={saved.id}
+                                        icon="terminal"
+                                        description={
+                                            <PaperFlex direction="column" minWidth={0}>
+                                                <PaperText size={1} family="code" truncate title={saved.command}>
                                                     {saved.command}
                                                 </PaperText>
+                                                <PaperText size={1} color={TONE_COLOR[status().tone]} title={status().detail}>
+                                                    {status().text}
+                                                </PaperText>
                                             </PaperFlex>
-                                            <PaperText preset="hint" truncate color={TONE_COLOR[status().tone]} title={status().detail}>
-                                                {status().text}
-                                            </PaperText>
-                                            <PaperButton
-                                                size="small"
-                                                disabled={busy() || props.runs[saved.id]?.state === "running"}
-                                                onClick={() => void call("Command not started", "run-saved-command", { id: saved.id })}
-                                            >
-                                                <PaperIcon>play_arrow</PaperIcon> Run
-                                            </PaperButton>
-                                            <PaperButton
-                                                size="small"
-                                                variant="text"
-                                                icon
-                                                disabled={busy()}
-                                                title={`Remove ${saved.label}`}
-                                                aria-label={`Remove ${saved.label}`}
-                                                onClick={() => void call("Command not removed", "remove-saved-command", { id: saved.id })}
-                                            >
-                                                <PaperIcon>delete</PaperIcon>
-                                            </PaperButton>
-                                        </PaperFlex>
-                                    </PaperCard>
+                                        }
+                                        actions={
+                                            <>
+                                                <PaperButton
+                                                    size="small"
+                                                    icon
+                                                    disabled={busy() || props.runs[saved.id]?.state === "running"}
+                                                    title={`Run ${saved.command}`}
+                                                    aria-label={`Run ${saved.label}`}
+                                                    onClick={() => void call("Command not started", "run-saved-command", { id: saved.id })}
+                                                >
+                                                    <PaperIcon>play_arrow</PaperIcon>
+                                                </PaperButton>
+                                                <PaperButton
+                                                    size="small"
+                                                    variant="text"
+                                                    icon
+                                                    disabled={busy()}
+                                                    title={`Remove ${saved.label}`}
+                                                    aria-label={`Remove ${saved.label}`}
+                                                    onClick={() => void call("Command not removed", "remove-saved-command", { id: saved.id })}
+                                                >
+                                                    <PaperIcon>delete</PaperIcon>
+                                                </PaperButton>
+                                            </>
+                                        }
+                                    >
+                                        {saved.label}
+                                    </PaperListItem>
                                 );
                             }}
                         </For>
-                    </PaperFlex>
+                    </PaperList>
                 </Show>
                 <PaperFlex direction="column" gap="half" fullWidth>
                     <PaperInput

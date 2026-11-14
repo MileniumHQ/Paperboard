@@ -1,26 +1,16 @@
-import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
+import { createEffect, createSignal, For, on, onMount, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import {
     PaperFlex,
-    PaperList,
-    PaperListItem,
     PaperButton,
-    PaperCode,
     PaperEffect,
     PaperEmptyState,
     PaperIcon,
-    PaperModal,
-    PaperInput,
     PaperQuote,
-    PaperText,
     useContextMenuState,
-    PaperContextMenu,
-    PaperContextMenuItem,
-    PaperContextMenuHeader,
     copyText,
     createPaperMobile,
     showToast,
-    type LoaderStatus,
 } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
@@ -29,28 +19,30 @@ import "./style.css";
 import TerminalComponent, { activeTerminals, copySelection, pasteClipboard } from "./Terminal";
 import styles from "./Terminal.module.css";
 import { createPanelBridge, serviceApi, terminalApi, type TerminalShell } from "@mileniumhq/paperapi";
-import { onMount } from "solid-js";
-import SavedCommandsModal from "./SavedCommands";
+import SavedCommands from "./SavedCommands";
 import type { CommandRun, SavedCommand } from "./lib/savedCommands";
-import { describeRun } from "./lib/runStatus";
-import { createAgoClock } from "./lib/clock";
 import { errorMessage, type Outcome } from "./lib/failure";
-import { shortcutLabel } from "./keys";
 import SoftKeys from "./SoftKeys";
 import { createCompact } from "./lib/compact";
-import { watchKeyboardInset } from "./lib/keyboardInset";
-import { NO_MODIFIERS, type Modifiers, type NamedKey } from "./lib/softKeys";
-import { pasteLines } from "./lib/screen";
-import { shortTitle, tabSessions, tabTitle, type LiveSession, type SplitDirection, type TabLayout, type TerminalSession, type TerminalTab } from "./lib/tabs";
+import { createKeyRow } from "./lib/keyRow";
+import { createAttention } from "./lib/attention";
+import { createFind } from "./FindBar";
+import { createPasteConfirm } from "./PasteConfirm";
+import { createRenameTab } from "./RenameTab";
+import { ScreenMenu, ShellMenu, SplitMenu, TabMenu } from "./Menus";
+import { TabBar, Toolbar } from "./TabBar";
+import {
+    SESSION_ERROR_TITLES,
+    tabSessions,
+    tabTitle,
+    type LiveSession,
+    type SessionErrorKind,
+    type SessionErrors,
+    type SplitDirection,
+    type TabLayout,
+    type TerminalTab,
+} from "./lib/tabs";
 import { PANEL_ID } from "./lib/panel";
-
-const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
-// how long a hidden tab counts as busy after it last printed
-const BUSY_MS = 1500;
-// the lines of a paste shown when it is asked about
-const PASTE_PREVIEW_LINES = 12;
-
-export type { TerminalTab } from "./lib/tabs";
 
 interface TerminalBridgeState {
     tabs: TerminalTab[];
@@ -62,6 +54,7 @@ interface TerminalBridgeState {
     commandRuns: Record<string, CommandRun>;
     savedCommandsError: string;
     tabsError: string;
+    sessionErrors: SessionErrors;
 }
 
 const bridge = createPanelBridge<TerminalBridgeState>({
@@ -76,30 +69,17 @@ const bridge = createPanelBridge<TerminalBridgeState>({
         commandRuns: {},
         savedCommandsError: "",
         tabsError: "",
+        sessionErrors: {},
     },
 });
 
-/** what a tab that isn't shown has done since it was last looked at, in this window */
-interface Attention {
-    /** printed in the last moments */
-    busy?: boolean;
-    /** a command ended: how */
-    finished?: "success" | "error";
-    /** rang the bell */
-    bell?: boolean;
-}
-
 export default function App() {
     const [activeTab, setActiveTab] = createSignal("");
-    const [isRenameOpen, setIsRenameOpen] = createSignal(false);
     const [contextTabId, setContextTabId] = createSignal<string | null>(null);
-    const [renameValue, setRenameValue] = createSignal("");
     const [hydration, setHydration] = createSignal<"loading" | "ready" | "failed">("loading");
     const [hydrationError, setHydrationError] = createSignal("");
     // the service answered, but could not read the saved tabs
     const [tabsUnreadable, setTabsUnreadable] = createSignal(false);
-    const [renaming, setRenaming] = createSignal(false);
-    const [renameError, setRenameError] = createSignal("");
     // a tab action the service refused: shown over the terminals until
     // dismissed, or until the next action replaces it
     const [failure, setFailure] = createSignal<Outcome | null>(null);
@@ -111,10 +91,11 @@ export default function App() {
     // it, so a tab opened, renamed, moved or closed anywhere shows up here.
     // Keyed by id, so a tab keeps its object (and its live terminal) across
     // updates instead of remounting. Which tab is shown stays per window.
-    const [mirror, setMirror] = createStore<{ tabs: TerminalTab[]; live: Record<string, LiveSession>; layout: TabLayout }>({
+    const [mirror, setMirror] = createStore<{ tabs: TerminalTab[]; live: Record<string, LiveSession>; layout: TabLayout; sessionErrors: SessionErrors }>({
         tabs: [],
         live: {},
         layout: "horizontal",
+        sessionErrors: {},
     });
     const tabs = () => mirror.tabs;
     // on a phone the tabs are always along the top: a side list would take
@@ -130,10 +111,6 @@ export default function App() {
         commandRuns: {},
         savedCommandsError: "",
     });
-    const [isSavedOpen, setIsSavedOpen] = createSignal(false);
-    // a run started from the dropdown that the service refused: shown in the
-    // saved commands modal, since the dropdown has closed by then
-    const [savedRunError, setSavedRunError] = createSignal("");
     const applySaved = (full: TerminalBridgeState) => {
         setSaved("savedCommands", reconcile(full.savedCommands ?? [], { key: "id" }));
         setSaved("commandRuns", reconcile(full.commandRuns ?? {}));
@@ -152,83 +129,35 @@ export default function App() {
         const tab = shownTab();
         return tab ? focusedOf(tab) : "";
     };
-    // ── the phone's key row ─────────────────────────────────────────────────
-    // shown while a screen has the cursor, which is while the on-screen
-    // keyboard is up; it rides on top of the keyboard
-    const [typing, setTyping] = createSignal(false);
-    const [keyboardInset, setKeyboardInset] = createSignal(0);
-    const [modifiers, setModifiers] = createSignal<Modifiers>(NO_MODIFIERS);
-    const showKeys = () => mobile() && typing();
-    onMount(() => {
-        onCleanup(watchKeyboardInset(setKeyboardInset));
-        // a screen has the cursor when its helper textarea does; focus moving
-        // between screens, or to a key and back, settles before it is read
-        const read = () => setTyping(document.activeElement?.classList.contains("xterm-helper-textarea") ?? false);
-        const lost = () => setTimeout(read);
-        document.addEventListener("focusin", read);
-        document.addEventListener("focusout", lost);
-        onCleanup(() => {
-            document.removeEventListener("focusin", read);
-            document.removeEventListener("focusout", lost);
-        });
-    });
-    // the latch is for the next key typed, not for the next time the keyboard comes up
-    createEffect(on(showKeys, (shown) => !shown && setModifiers(NO_MODIFIERS)));
-    const toggleModifier = (which: keyof Modifiers) => setModifiers((m) => ({ ...m, [which]: !m[which] }));
-    const keepKeyboard = () => activeTerminals.get(currentSession())?.focus();
-    const pressKey = (key: NamedKey) => {
-        activeTerminals.get(currentSession())?.sendKey(key);
-        keepKeyboard();
-    };
-    const typeKey = (text: string) => {
-        activeTerminals.get(currentSession())?.type(text);
-        keepKeyboard();
-    };
-    const hideKeyboard = () => {
-        const field = document.activeElement;
-        if (field instanceof HTMLElement) field.blur();
-        setTyping(false);
-    };
-    const folderOfSession = (session: TerminalSession) => mirror.live[session.id]?.cwd || session.cwd || "";
+    const currentScreen = () => activeTerminals.get(currentSession());
+    const keys = createKeyRow(mobile, currentScreen);
+    const attention = createAttention(tabs, activeTab);
+    const find = createFind(currentSession);
+    const pasteConfirm = createPasteConfirm();
+    const rename = createRenameTab();
 
-    // ── what hidden tabs did, in this window ────────────────────────────────
-    const [attention, setAttention] = createStore<Record<string, Attention>>({});
-    const busyTimers = new Map<string, ReturnType<typeof setTimeout>>();
-    onCleanup(() => busyTimers.forEach(clearTimeout));
-    const ownerOf = (session: string) => tabs().find((t) => tabSessions(t).some((s) => s.id === session));
-    const notice = (session: string, change: Attention) => {
-        const tab = ownerOf(session);
-        if (!tab || tab.id === activeTab()) return;
-        setAttention(tab.id, (prev) => ({ ...prev, ...change }));
-        return tab.id;
+    // what went wrong for the shell in front where no one was waiting on it;
+    // each stands while it is true, and this window can put it away. Keyed
+    // by session, kind and message, so a row keeps its identity while it stands.
+    const [putAway, setPutAway] = createStore<Record<string, true>>({});
+    const sessionErrors = () => {
+        const session = currentSession();
+        return Object.entries(mirror.sessionErrors[session] ?? {})
+            .map(([kind, message]) => [session, kind, message].join("\n"))
+            .filter((key) => !putAway[key]);
     };
-    const noticeOutput = (session: string) => {
-        const tabId = notice(session, { busy: true });
-        if (!tabId) return;
-        clearTimeout(busyTimers.get(tabId));
-        busyTimers.set(tabId, setTimeout(() => setAttention(tabId, "busy", false), BUSY_MS));
+    const describeSessionError = (key: string) => {
+        const [, kind, ...message] = key.split("\n");
+        return { title: SESSION_ERROR_TITLES[kind as SessionErrorKind], message: message.join("\n") };
     };
-    // the commands this window has seen end, so only new ones are told
-    const seenCommand: Record<string, number> = {};
-    let commandsSeen = false;
+    const applySessionErrors = (next: unknown) => {
+        if (next && typeof next === "object") setMirror("sessionErrors", reconcile(next as SessionErrors));
+    };
+
     const applyLive = (next: unknown) => {
         if (!next || typeof next !== "object") return;
         setMirror("live", reconcile(next as Record<string, LiveSession>));
-        for (const [session, state] of Object.entries(next as Record<string, LiveSession>)) {
-            const seq = state.command?.seq ?? 0;
-            if (seq <= (seenCommand[session] ?? 0)) continue;
-            seenCommand[session] = seq;
-            // what had ended before this window opened is not news
-            if (commandsSeen) notice(session, { finished: state.command!.exitCode === 0 ? "success" : "error" });
-        }
-        commandsSeen = true;
-    };
-    // looking at a tab is seeing what it did
-    createEffect(on(activeTab, (id) => id && setAttention(id, { busy: undefined, finished: undefined, bell: undefined })));
-    const statusOf = (tabId: string): LoaderStatus | undefined => {
-        const a = attention[tabId];
-        if (a?.busy) return "indeterminate";
-        return a?.finished;
+        attention.live(next as Record<string, LiveSession>);
     };
 
     // Show Tab (a block) switches every open window; a window follows each
@@ -242,6 +171,7 @@ export default function App() {
     bridge.onStateChange((patch, full) => {
         applyTabs(patch.tabs);
         applyLive(patch.live);
+        applySessionErrors(patch.sessionErrors);
         if (patch.layout) setMirror("layout", patch.layout);
         applySaved(full);
         if (hydration() === "ready") followShow(full.showTab);
@@ -264,6 +194,7 @@ export default function App() {
             if (state.tabsError) throw new Error(state.tabsError);
             applyTabs(state.tabs);
             applyLive(state.live);
+            applySessionErrors(state.sessionErrors);
             setMirror("layout", state.layout ?? "horizontal");
             followedShow = state.showTab?.request ?? "";
             if (!activeTab()) setActiveTab(state.activeTabId || tabs()[0]?.id || "");
@@ -330,26 +261,39 @@ export default function App() {
             report("Tab not opened")(err);
         }
     };
-    // a shell picked in the tab list: its tab is shown, and it has the keyboard
-    const chooseSession = (id: string) => {
-        const owner = ownerOf(id);
-        if (!owner) return;
-        setFocusedPane(owner.id, id);
-        if (owner.id !== activeTab()) handleSwitchTab(owner.id);
-        queueMicrotask(() => activeTerminals.get(id)?.focus());
-    };
-    const openTabMenu = (e: MouseEvent, tabId: string) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setContextTabId(tabId);
-        tabMenu.openAtMouse(e);
-    };
     const handleSwitchTab = (id: string) => {
         setActiveTab(id);
         // the last used tab is what the next window opens on
         serviceApi
             .call(PANEL_ID, "touch-tab", { id })
             .catch(report("Tab not remembered", ". The next window may open on another tab."));
+    };
+    // a shell picked in the tab list: its tab is shown, and it has the keyboard
+    const chooseSession = (id: string) => {
+        const owner = attention.ownerOf(id);
+        if (!owner) return;
+        setFocusedPane(owner.id, id);
+        if (owner.id !== activeTab()) handleSwitchTab(owner.id);
+        queueMicrotask(() => activeTerminals.get(id)?.focus());
+    };
+    const reorder = (ids: string[]) => {
+        const current = tabs();
+        // a split's second shell is listed but moves with its tab
+        const reordered = ids.map((id) => current.find((item) => item.id === id)!).filter(Boolean);
+        if (reordered.every((t, i) => t.id === current[i]?.id)) return;
+        // shown at once; the service's order is the truth, so a failed
+        // reorder pulls it back
+        setMirror("tabs", reordered);
+        setFailure(null);
+        serviceApi
+            .call(PANEL_ID, "reorder-tabs", { orderedIds: reordered.map((t) => t.id) })
+            .catch((err) => {
+                report("Tab order not saved", ". The tabs are back in their saved order.")(err);
+                void bridge
+                    .refreshState()
+                    .then((state) => applyTabs(state.tabs))
+                    .catch(report("Tabs not reloaded", ". This window may show an order the service doesn't have."));
+            });
     };
     const split = (tabId: string, direction: SplitDirection) => {
         setFailure(null);
@@ -387,21 +331,9 @@ export default function App() {
         setFailure(null);
         pasteClipboard(currentSession()).catch(report("Nothing pasted"));
     };
-    // the phone can't select text on the screen, so its Copy copies what is
-    // selected or, with nothing selected, the last command's output
-    const copyForKeyRow = () => {
-        const screen = activeTerminals.get(currentSession());
-        if (screen?.term.hasSelection()) copy();
-        else copyLastOutput();
-        keepKeyboard();
-    };
-    const pasteForKeyRow = () => {
-        paste();
-        keepKeyboard();
-    };
     const copyLastOutput = () => {
         setFailure(null);
-        const output = activeTerminals.get(currentSession())?.lastOutput();
+        const output = currentScreen()?.lastOutput();
         if (output === null || output === undefined) {
             setFailure({
                 title: "No output to copy",
@@ -416,105 +348,36 @@ export default function App() {
             })
             .catch(report("Output not copied"));
     };
-
-    // ── find ────────────────────────────────────────────────────────────────
-    const [findOpen, setFindOpen] = createSignal(false);
-    const [findQuery, setFindQuery] = createSignal("");
-    const [findMissed, setFindMissed] = createSignal(false);
-    let findInput: HTMLInputElement | undefined;
-    const openFind = () => {
-        setFindOpen(true);
-        queueMicrotask(() => {
-            findInput?.focus();
-            findInput?.select();
-        });
+    // the phone can't select text on the screen, so its Copy copies what is
+    // selected or, with nothing selected, the last command's output
+    const copyForKeyRow = () => {
+        if (currentScreen()?.term.hasSelection()) copy();
+        else copyLastOutput();
+        keys.keepKeyboard();
     };
-    const find = (direction: -1 | 1) => {
-        const handle = activeTerminals.get(currentSession());
-        const query = findQuery();
-        if (!handle || !query) {
-            setFindMissed(false);
-            return;
-        }
-        setFindMissed(!handle.find(query, direction));
-    };
-    const closeFind = () => {
-        activeTerminals.get(currentSession())?.clearFind();
-        setFindOpen(false);
-        setFindMissed(false);
-        activeTerminals.get(currentSession())?.focus();
-    };
-    // a find belongs to the screen it was made in
-    createEffect(on(currentSession, (_now, before) => before && activeTerminals.get(before)?.clearFind(), { defer: true }));
-
-    // ── a paste that would run commands as it lands ─────────────────────────
-    const [pasteAsk, setPasteAsk] = createSignal<{ text: string; answer: (go: boolean) => void } | null>(null);
-    const pasteCount = () => pasteLines(pasteAsk()?.text ?? "");
-    const confirmPaste = (text: string) =>
-        new Promise<boolean>((resolve) => {
-            pasteAsk()?.answer(false);
-            setPasteAsk({
-                text,
-                answer: (go) => {
-                    setPasteAsk(null);
-                    resolve(go);
-                },
-            });
-        });
-    const pastePreview = (text: string) => {
-        const lines = text.replace(/(\r\n|\r|\n)$/, "").split(/\r\n|\r|\n/);
-        const shown = lines.slice(0, PASTE_PREVIEW_LINES).join("\n");
-        return lines.length > PASTE_PREVIEW_LINES ? `${shown}\n…` : shown;
+    const pasteForKeyRow = () => {
+        paste();
+        keys.keepKeyboard();
     };
 
     const terminalMenu = useContextMenuState();
     const tabMenu = useContextMenuState();
     const savedMenu = useContextMenuState();
-    const savedNow = createAgoClock(savedMenu.isOpen);
     const shellMenu = useContextMenuState();
     const splitMenu = useContextMenuState();
-    const runSaved = async (id: string) => {
-        setSavedRunError("");
-        try {
-            await serviceApi.call(PANEL_ID, "run-saved-command", { id });
-        } catch (err) {
-            setSavedRunError(errorMessage(err));
-            setIsSavedOpen(true);
-        }
-    };
-    const openRenameModal = () => {
-        const tid = contextTabId();
-        if (!tid) return;
-        tabMenu.close();
-        const currentTab = tabs().find((t) => t.id === tid);
-        // what the tab shows: a tab that was never named is called by its program, and that is the name to start from
-        setRenameValue(currentTab ? (currentTab.named ? currentTab.label : tabTitle(currentTab, mirror.live, currentTab.id)) : "");
-        setRenameError("");
-        setIsRenameOpen(true);
-    };
-    const closeRename = () => {
-        setIsRenameOpen(false);
-        setContextTabId(null);
-    };
-    const canRename = () => renameValue().trim() !== "" && !renaming();
-    // the modal stays open until the service has the new name, so a refusal
-    // is shown beside the field that caused it
-    const handleSaveRename = async () => {
-        const tid = contextTabId();
-        if (!tid || !canRename()) return;
-        setRenameError("");
-        setRenaming(true);
-        try {
-            // the new label arrives through the service's state
-            await serviceApi.call(PANEL_ID, "rename-tab", { id: tid, label: renameValue().trim() });
-            closeRename();
-        } catch (err) {
-            setRenameError(errorMessage(err));
-        } finally {
-            setRenaming(false);
-        }
+    const openTabMenu = (e: MouseEvent, tabId: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextTabId(tabId);
+        tabMenu.openAtMouse(e);
     };
     const contextTab = () => tabs().find((t) => t.id === contextTabId());
+    const renameContextTab = () => {
+        const tab = contextTab();
+        setContextTabId(null);
+        // what the tab shows: a tab that was never named is called by its program, and that is the name to start from
+        if (tab) rename.open(tab.id, tab.named ? tab.label : tabTitle(tab, mirror.live, tab.id));
+    };
 
     // the screen of one shell in a tab; a split's second shell keeps a floor
     // so dragging the line can't close it
@@ -535,72 +398,13 @@ export default function App() {
                 onFocus={() => setFocusedPane(paneProps.tab.id, paneProps.session)}
                 onContextMenu={terminalMenu.openAtMouse}
                 onFailure={(shown) => setFailure(shown)}
-                onActivity={() => noticeOutput(paneProps.session)}
-                onBell={() => notice(paneProps.session, { bell: true })}
-                onKeyAction={(action) => action === "find" && openFind()}
-                modifiers={modifiers}
-                onModifiersUsed={() => setModifiers(NO_MODIFIERS)}
-                confirmPaste={confirmPaste}
+                onActivity={() => attention.output(paneProps.session)}
+                onBell={() => attention.bell(paneProps.session)}
+                onKeyAction={(action) => action === "find" && find.open()}
+                modifiers={keys.modifiers}
+                onModifiersUsed={keys.used}
+                confirmPaste={pasteConfirm.confirm}
             />
-        </PaperFlex>
-    );
-
-    // what sits after the tabs: new tab, its shells, split, saved commands, layout
-    const Toolbar = () => (
-        <PaperFlex direction="row" align="center" gap="half" paddingX="half" paddingY={vertical() ? "half" : undefined}>
-            <PaperButton size="tiny" icon onClick={() => void addTab()} title="New Tab" aria-label="New Tab">
-                <PaperIcon>add</PaperIcon>
-            </PaperButton>
-            <Show when={shells().length > 1}>
-                <PaperButton
-                    size="tiny"
-                    icon
-                    onClick={(e) => shellMenu.openBelow(e)}
-                    title="New tab with another shell"
-                    aria-label="New tab with another shell"
-                    aria-haspopup="menu"
-                    aria-expanded={shellMenu.isOpen()}
-                >
-                    <PaperIcon>expand_more</PaperIcon>
-                </PaperButton>
-            </Show>
-            {/* a split is for a computer's screen; a phone can only close one made elsewhere */}
-            <Show when={!compact() || shownTab()?.split}>
-                <PaperButton
-                    size="tiny"
-                    icon
-                    onClick={(e) => (shownTab()?.split ? unsplit(activeTab()) : splitMenu.openBelow(e))}
-                    title={shownTab()?.split ? "Close Split" : "Split"}
-                    aria-label={shownTab()?.split ? "Close Split" : "Split"}
-                    aria-haspopup={shownTab()?.split ? undefined : "menu"}
-                    aria-expanded={shownTab()?.split ? undefined : splitMenu.isOpen()}
-                    disabled={!shownTab()}
-                >
-                    <PaperIcon>{shownTab()?.split ? "close_fullscreen" : "vertical_split"}</PaperIcon>
-                </PaperButton>
-            </Show>
-            <PaperButton
-                size="tiny"
-                icon
-                onClick={(e) => savedMenu.openBelow(e)}
-                title="Saved commands"
-                aria-label="Saved commands"
-                aria-haspopup="menu"
-                aria-expanded={savedMenu.isOpen()}
-            >
-                <PaperIcon>bookmarks</PaperIcon>
-            </PaperButton>
-            <Show when={!compact()}>
-                <PaperButton
-                    size="tiny"
-                    icon
-                    onClick={toggleLayout}
-                    title={vertical() ? "Tabs along the top" : "Tabs down the side"}
-                    aria-label={vertical() ? "Tabs along the top" : "Tabs down the side"}
-                >
-                    <PaperIcon>{vertical() ? "top_panel_open" : "side_navigation"}</PaperIcon>
-                </PaperButton>
-            </Show>
         </PaperFlex>
     );
 
@@ -609,139 +413,63 @@ export default function App() {
             {/* the keyboard covers the bottom of the panel: lift everything above it */}
             <PaperFlex
                 class={`paperui-root unselectable ${styles.keyboardAvoid}`}
-                style={{ "--terminal-keyboard-inset": `${keyboardInset()}px` }}
+                style={{ "--terminal-keyboard-inset": `${keys.keyboardInset()}px` }}
                 fullWidth
                 fullHeight
                 direction={vertical() ? "row" : "column"}
             >
                 <Show when={tabs().length > 0}>
-                {/* the buttons after the tabs stay where they are while the tabs scroll */}
-                <PaperFlex direction={vertical() ? "column" : "row"} align={vertical() ? undefined : "center"} fullHeight={vertical()} minWidth={0} minHeight={0}>
-                <PaperFlex flex minWidth={0} minHeight={0}>
-                <PaperList
-                    reorderable
-                    compact={vertical()}
-                    direction={vertical() ? "vertical" : "horizontal"}
-                    name="terminal-tabs"
-                    value={currentSession()}
-                    onValueChange={(val) => chooseSession(String(val))}
-                    onReorder={(newOrder) => {
-                        const current = tabs();
-                        // a split's second shell is listed but moves with its tab
-                        const reordered = newOrder
-                            .map((id) => current.find((item) => item.id === id)!)
-                            .filter(Boolean);
-                        if (reordered.every((t, i) => t.id === current[i]?.id)) return;
-                        // shown at once; the service's order is the truth, so a
-                        // failed reorder pulls it back
-                        setMirror("tabs", reordered);
-                        setFailure(null);
-                        serviceApi
-                            .call(
-                                PANEL_ID,
-                                "reorder-tabs",
-                                { orderedIds: reordered.map((t) => t.id) },
-                            )
-                            .catch((err) => {
-                                report("Tab order not saved", ". The tabs are back in their saved order.")(err);
-                                void bridge
-                                    .refreshState()
-                                    .then((state) => applyTabs(state.tabs))
-                                    .catch(report("Tabs not reloaded", ". This window may show an order the service doesn't have."));
-                            });
-                    }}
-                >
-                    <For each={tabs()}>
-                        {(tab) => (
-                            <>
-                                <PaperListItem
-                                    icon={attention[tab.id]?.bell ? "notifications_active" : "terminal"}
-                                    loaderStatus={statusOf(tab.id)}
-                                    value={tab.id}
-                                    title={vertical() ? folderOfSession(tab) : [tabTitle(tab, mirror.live, tab.id), folderOfSession(tab)].filter(Boolean).join("\n")}
-                                    onClosed={(closedId) => handleCloseTab(String(closedId))}
-                                    onContextMenu={(e: MouseEvent) => openTabMenu(e, tab.id)}
-                                >
-                                    {vertical() ? tabTitle(tab, mirror.live, tab.id) : shortTitle(tabTitle(tab, mirror.live, tab.id))}
-                                </PaperListItem>
-                                {/* a split's second shell is listed under its tab, to pick or close */}
-                                <Show when={tab.split}>
-                                    {(shown) => {
-                                        // read once: a split keeps its session, and a read
-                                        // after the split closes would throw mid-update
-                                        const session = shown().session;
-                                        return (
-                                            <PaperListItem
-                                                icon="subdirectory_arrow_right"
-                                                value={session.id}
-                                                title={folderOfSession(session)}
-                                                aria-label={`${tab.label}, second shell`}
-                                                onClosed={() => unsplit(tab.id)}
-                                                onContextMenu={(e: MouseEvent) => openTabMenu(e, tab.id)}
-                                            >
-                                                {mirror.live[session.id]?.program || tab.label}
-                                            </PaperListItem>
-                                        );
-                                    }}
-                                </Show>
-                            </>
-                        )}
-                    </For>
-                </PaperList>
-                </PaperFlex>
-                <Toolbar />
-                </PaperFlex>
+                    {/* the buttons after the tabs stay where they are while the tabs scroll */}
+                    <PaperFlex direction={vertical() ? "column" : "row"} align={vertical() ? undefined : "center"} fullHeight={vertical()} minWidth={0} minHeight={0}>
+                        <PaperFlex flex minWidth={0} minHeight={0}>
+                            <TabBar
+                                tabs={tabs()}
+                                live={mirror.live}
+                                vertical={vertical()}
+                                value={currentSession()}
+                                status={attention.status}
+                                rang={attention.rang}
+                                onChoose={chooseSession}
+                                onReorder={reorder}
+                                onCloseTab={handleCloseTab}
+                                onUnsplit={unsplit}
+                                onMenu={openTabMenu}
+                            />
+                        </PaperFlex>
+                        <Toolbar
+                            vertical={vertical()}
+                            compact={compact()}
+                            shown={shownTab()}
+                            manyShells={shells().length > 1}
+                            shellMenu={shellMenu}
+                            splitMenu={splitMenu}
+                            savedMenu={savedMenu}
+                            onNewTab={() => void addTab()}
+                            onUnsplit={() => unsplit(activeTab())}
+                            onToggleLayout={toggleLayout}
+                        />
+                    </PaperFlex>
                 </Show>
                 <PaperFlex direction="column" flex minWidth={0} minHeight={0} fullHeight={vertical()}>
-                    <Show when={failure()}>
-                        {(shown) => (
-                            <PaperFlex direction="column" fullWidth padding="half">
-                                <PaperQuote
-                                    variant="danger"
-                                    icon="warning"
-                                    title={shown().title}
-                                    role="alert"
-                                    onDismiss={() => setFailure(null)}
-                                >
-                                    {shown().message}
-                                </PaperQuote>
-                            </PaperFlex>
-                        )}
-                    </Show>
-                    <Show when={findOpen()}>
-                        <PaperFlex direction="row" align="center" gap="half" padding="half" fullWidth>
-                            <PaperInput
-                                compact
-                                fullWidth
-                                icon="search"
-                                placeholder="Find"
-                                aria-label="Find in this terminal"
-                                invalid={findMissed()}
-                                ref={(el: HTMLInputElement) => (findInput = el)}
-                                value={findQuery()}
-                                onInput={(e) => {
-                                    setFindQuery(e.currentTarget.value);
-                                    find(1);
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter") find(e.shiftKey ? -1 : 1);
-                                    else if (e.key === "Escape") closeFind();
-                                }}
-                            />
-                            <Show when={findMissed()}>
-                                <PaperText size={1} color="text-subtle" truncate>No matches</PaperText>
+                    <Show when={failure() || sessionErrors().length > 0}>
+                        <PaperFlex direction="column" gap="half" fullWidth padding="half">
+                            <Show when={failure()}>
+                                {(shown) => (
+                                    <PaperQuote variant="danger" icon="warning" title={shown().title} role="alert" onDismiss={() => setFailure(null)}>
+                                        {shown().message}
+                                    </PaperQuote>
+                                )}
                             </Show>
-                            <PaperButton size="tiny" icon onClick={() => find(-1)} title="Previous match" aria-label="Previous match">
-                                <PaperIcon>keyboard_arrow_up</PaperIcon>
-                            </PaperButton>
-                            <PaperButton size="tiny" icon onClick={() => find(1)} title="Next match" aria-label="Next match">
-                                <PaperIcon>keyboard_arrow_down</PaperIcon>
-                            </PaperButton>
-                            <PaperButton size="tiny" icon onClick={closeFind} title="Close find" aria-label="Close find">
-                                <PaperIcon>close</PaperIcon>
-                            </PaperButton>
+                            <For each={sessionErrors()}>
+                                {(key) => (
+                                    <PaperQuote variant="warning" icon="warning" title={describeSessionError(key).title} role="alert" onDismiss={() => setPutAway(key, true)}>
+                                        {describeSessionError(key).message}
+                                    </PaperQuote>
+                                )}
+                            </For>
                         </PaperFlex>
                     </Show>
+                    {find.bar}
                     <PaperFlex fullWidth flex minHeight={0} overflow="hidden" class={styles.stack}>
                         <Show when={hydration() === "failed"}>
                             <PaperFlex fullWidth fullHeight align="center" justify="center">
@@ -810,242 +538,50 @@ export default function App() {
                             )}
                         </For>
                     </PaperFlex>
-                    <Show when={showKeys()}>
+                    <Show when={keys.shown()}>
                         <SoftKeys
-                            ctrl={modifiers().ctrl}
-                            alt={modifiers().alt}
-                            onToggle={(which) => {
-                                toggleModifier(which);
-                                keepKeyboard();
-                            }}
-                            onKey={pressKey}
-                            onType={typeKey}
+                            ctrl={keys.modifiers().ctrl}
+                            alt={keys.modifiers().alt}
+                            onToggle={keys.toggle}
+                            onKey={keys.press}
+                            onType={keys.type}
                             onCopy={copyForKeyRow}
                             onPaste={pasteForKeyRow}
-                            onHideKeyboard={hideKeyboard}
+                            onHideKeyboard={keys.hideKeyboard}
                         />
                     </Show>
                 </PaperFlex>
             </PaperFlex>
-            <PaperContextMenu
-                open={tabMenu.isOpen()}
-                target={tabMenu.target()}
-                placement={tabMenu.placement()}
+            <TabMenu
+                state={tabMenu}
+                split={Boolean(contextTab()?.split)}
+                compact={compact()}
                 onClose={() => {
                     tabMenu.close();
-                    if (!isRenameOpen()) setContextTabId(null);
+                    setContextTabId(null);
                 }}
-            >
-                <PaperContextMenuItem icon="edit" onClick={openRenameModal}>
-                    Rename Tab
-                </PaperContextMenuItem>
-                <Show
-                    when={contextTab()?.split}
-                    fallback={
-                        <Show when={!compact()}>
-                            <PaperContextMenuItem icon="splitscreen_right" onClick={() => { tabMenu.close(); split(contextTabId()!, "right"); }}>
-                                Split Right
-                            </PaperContextMenuItem>
-                            <PaperContextMenuItem icon="splitscreen_bottom" onClick={() => { tabMenu.close(); split(contextTabId()!, "down"); }}>
-                                Split Down
-                            </PaperContextMenuItem>
-                        </Show>
-                    }
-                >
-                    <PaperContextMenuItem icon="close_fullscreen" onClick={() => { tabMenu.close(); unsplit(contextTabId()!); }}>
-                        Close Split
-                    </PaperContextMenuItem>
-                </Show>
-                <PaperContextMenuItem icon="close" danger onClick={() => { tabMenu.close(); handleCloseTab(contextTabId()!); }}>
-                    Close Tab
-                </PaperContextMenuItem>
-            </PaperContextMenu>
-            <PaperContextMenu
-                open={terminalMenu.isOpen()}
-                target={terminalMenu.target()}
-                placement={terminalMenu.placement()}
-                onClose={terminalMenu.close}
-            >
-                <PaperContextMenuItem icon="content_copy" keybind={compact() ? undefined : shortcutLabel("copy", MAC)} onClick={copy}>
-                    Copy
-                </PaperContextMenuItem>
-                <PaperContextMenuItem icon="content_paste" onClick={paste}>
-                    Paste
-                </PaperContextMenuItem>
-                <PaperContextMenuItem icon="output" onClick={copyLastOutput}>
-                    Copy Last Output
-                </PaperContextMenuItem>
-                <PaperContextMenuItem icon="search" keybind={compact() ? undefined : shortcutLabel("find", MAC)} onClick={openFind}>
-                    Find…
-                </PaperContextMenuItem>
-                <PaperContextMenuItem icon="keyboard_arrow_up" keybind={compact() ? undefined : shortcutLabel("previous-prompt", MAC)} onClick={() => activeTerminals.get(currentSession())?.jumpToPrompt(-1)}>
-                    Previous Prompt
-                </PaperContextMenuItem>
-                <PaperContextMenuItem icon="keyboard_arrow_down" keybind={compact() ? undefined : shortcutLabel("next-prompt", MAC)} onClick={() => activeTerminals.get(currentSession())?.jumpToPrompt(1)}>
-                    Next Prompt
-                </PaperContextMenuItem>
-                <Show
-                    when={shownTab()?.split}
-                    fallback={
-                        <Show when={!compact()}>
-                            <PaperContextMenuItem icon="splitscreen_right" onClick={() => split(activeTab(), "right")}>
-                                Split Right
-                            </PaperContextMenuItem>
-                            <PaperContextMenuItem icon="splitscreen_bottom" onClick={() => split(activeTab(), "down")}>
-                                Split Down
-                            </PaperContextMenuItem>
-                        </Show>
-                    }
-                >
-                    <PaperContextMenuItem icon="close_fullscreen" onClick={() => unsplit(activeTab())}>
-                        Close Split
-                    </PaperContextMenuItem>
-                </Show>
-            </PaperContextMenu>
-            <PaperContextMenu
-                open={splitMenu.isOpen()}
-                target={splitMenu.target()}
-                placement={splitMenu.placement()}
-                onClose={splitMenu.close}
-            >
-                <PaperContextMenuItem icon="splitscreen_right" onClick={() => { splitMenu.close(); split(activeTab(), "right"); }}>
-                    Split Right
-                </PaperContextMenuItem>
-                <PaperContextMenuItem icon="splitscreen_bottom" onClick={() => { splitMenu.close(); split(activeTab(), "down"); }}>
-                    Split Down
-                </PaperContextMenuItem>
-            </PaperContextMenu>
-            <PaperContextMenu
-                open={shellMenu.isOpen()}
-                target={shellMenu.target()}
-                placement={shellMenu.placement()}
-                onClose={shellMenu.close}
-            >
-                <PaperContextMenuHeader>New tab with</PaperContextMenuHeader>
-                <For each={shells()}>
-                    {(shell, index) => (
-                        <PaperContextMenuItem
-                            value={shell.path}
-                            icon="terminal"
-                            description={shell.path}
-                            keybind={index() === 0 ? "Default" : undefined}
-                            onClick={() => {
-                                shellMenu.close();
-                                void addTab(shell.path);
-                            }}
-                        >
-                            {shell.name}
-                        </PaperContextMenuItem>
-                    )}
-                </For>
-            </PaperContextMenu>
-
-            <PaperContextMenu
-                open={savedMenu.isOpen()}
-                target={savedMenu.target()}
-                placement={savedMenu.placement()}
-                onClose={savedMenu.close}
-            >
-                <PaperContextMenuHeader>Saved commands</PaperContextMenuHeader>
-                <Show when={saved.savedCommandsError}>
-                    <PaperContextMenuItem icon="error" disabled description={saved.savedCommandsError}>
-                        Saved commands could not be read
-                    </PaperContextMenuItem>
-                </Show>
-                <Show when={!saved.savedCommandsError && saved.savedCommands.length === 0}>
-                    <PaperContextMenuItem icon="bookmarks" disabled>
-                        No saved commands
-                    </PaperContextMenuItem>
-                </Show>
-                <For each={saved.savedCommands}>
-                    {(cmd) => (
-                        <PaperContextMenuItem
-                            value={cmd.id}
-                            icon="play_arrow"
-                            description={cmd.command}
-                            keybind={describeRun(saved.commandRuns[cmd.id], savedNow()).value}
-                            title={describeRun(saved.commandRuns[cmd.id], savedNow()).detail}
-                            disabled={saved.commandRuns[cmd.id]?.state === "running"}
-                            onClick={() => void runSaved(cmd.id)}
-                        >
-                            {cmd.label}
-                        </PaperContextMenuItem>
-                    )}
-                </For>
-                <PaperContextMenuItem
-                    value="manage-saved-commands"
-                    icon="edit"
-                    onClick={() => {
-                        setSavedRunError("");
-                        setIsSavedOpen(true);
-                    }}
-                >
-                    Manage saved commands…
-                </PaperContextMenuItem>
-            </PaperContextMenu>
-
-            <SavedCommandsModal
-                open={isSavedOpen()}
-                runError={savedRunError()}
-                onClose={() => {
-                    setIsSavedOpen(false);
-                    setSavedRunError("");
-                }}
-                commands={saved.savedCommands}
-                runs={saved.commandRuns}
-                loadError={saved.savedCommandsError}
+                onRename={renameContextTab}
+                onSplit={(direction) => split(contextTabId()!, direction)}
+                onUnsplit={() => unsplit(contextTabId()!)}
+                onCloseTab={() => handleCloseTab(contextTabId()!)}
             />
-
-            <PaperModal
-                open={pasteAsk() !== null}
-                onClose={() => pasteAsk()?.answer(false)}
-                title={pasteCount() === 1 ? "Paste 1 line?" : `Paste ${pasteCount()} lines?`}
-                size="small"
-                footer={
-                    <>
-                        <PaperButton variant="text" onClick={() => pasteAsk()?.answer(false)}>Cancel</PaperButton>
-                        <PaperButton variant="primary" onClick={() => pasteAsk()?.answer(true)} autofocus>Paste</PaperButton>
-                    </>
-                }
-            >
-                <PaperFlex direction="column" gap="half">
-                    <PaperText preset="body">{pasteCount() === 1 ? "It runs as a command as soon as it lands." : "Each line runs as a command as soon as it lands."}</PaperText>
-                    <PaperCode block>{pastePreview(pasteAsk()?.text ?? "")}</PaperCode>
-                </PaperFlex>
-            </PaperModal>
-
-            <PaperModal
-                open={isRenameOpen()}
-                onClose={closeRename}
-                title="Rename Tab"
-                size="small"
-                footer={
-                    <>
-                        <PaperButton variant="text" onClick={closeRename}>Cancel</PaperButton>
-                        <PaperButton disabled={!canRename()} onClick={() => void handleSaveRename()}>
-                            {renaming() ? "Saving…" : "Save"}
-                        </PaperButton>
-                    </>
-                }
-            >
-                <PaperFlex direction="column" gap="half">
-                    <PaperInput
-                        fullWidth
-                        label="Tab name"
-                        value={renameValue()}
-                        onInput={(e) => setRenameValue(e.currentTarget.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter") void handleSaveRename();
-                        }}
-                        autofocus
-                    />
-                    <Show when={renameError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Tab not renamed" role="alert">
-                            {renameError()}
-                        </PaperQuote>
-                    </Show>
-                </PaperFlex>
-            </PaperModal>
+            <ScreenMenu
+                state={terminalMenu}
+                split={Boolean(shownTab()?.split)}
+                compact={compact()}
+                onCopy={copy}
+                onPaste={paste}
+                onCopyLastOutput={copyLastOutput}
+                onFind={find.open}
+                onJump={(direction) => currentScreen()?.jumpToPrompt(direction)}
+                onSplit={(direction) => split(activeTab(), direction)}
+                onUnsplit={() => unsplit(activeTab())}
+            />
+            <SplitMenu state={splitMenu} onSplit={(direction) => split(activeTab(), direction)} />
+            <ShellMenu state={shellMenu} shells={shells()} onPick={(path) => void addTab(path)} />
+            <SavedCommands menu={savedMenu} commands={saved.savedCommands} runs={saved.commandRuns} loadError={saved.savedCommandsError} />
+            {pasteConfirm.modal}
+            {rename.modal}
         </>
     );
 }

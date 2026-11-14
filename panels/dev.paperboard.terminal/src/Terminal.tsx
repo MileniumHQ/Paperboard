@@ -40,7 +40,7 @@ export const activeTerminals = new Map<string, TerminalHandle>();
 export async function copySelection(id: string) {
     const term = activeTerminals.get(id)?.term;
     const selection = term?.getSelection() || window.getSelection()?.toString() || "";
-    if (!selection) return;
+    if (!selection) throw new Error("Nothing is selected. Select text on the screen, then copy.");
     // copyText owns the async-clipboard-plus-fallback path, same as PaperCopyButton
     if (!(await copyText(selection))) throw new Error("The clipboard refused the selection.");
 }
@@ -157,10 +157,11 @@ export function TerminalComponent(props: TerminalComponentProps) {
             searchDecorations = next.search;
         });
 
-        // the pty follows the screen: a resize the daemon refused is sent
-        // again on the next fit instead of leaving the shell's wrapping wrong
+        // the pty follows the screen: a resize the daemon refused is said
+        // once, and sent again on the next fit
         let sentCols = 0;
         let sentRows = 0;
+        let refused = "";
         const fit = () => {
             // a hidden tab has no size to fit to; it fits when it is shown
             if (containerRef.clientWidth === 0 || containerRef.clientHeight === 0) return;
@@ -172,8 +173,13 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 .then(() => {
                     sentCols = cols;
                     sentRows = rows;
+                    refused = "";
                 })
-                .catch((err) => console.error(`[terminal] resize to ${cols}x${rows} for ${props.id} failed:`, err));
+                .catch((err) => {
+                    if (refused === `${cols}x${rows}`) return;
+                    refused = `${cols}x${rows}`;
+                    props.onFailure({ title: "Screen size not sent", message: `The shell didn't take this screen's size, so long lines may wrap wrong: ${errorMessage(err)}` });
+                });
         };
         // fit before attach so the pty starts at its real size
         fit();
