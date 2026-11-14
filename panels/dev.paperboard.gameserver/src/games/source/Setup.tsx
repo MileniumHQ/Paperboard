@@ -43,6 +43,7 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
     const chosenMode = createMemo(() => modes().find((m) => m.prefix === mode()));
     /** the maps to start on: the mode's, or every one the server has */
     const startable = createMemo(() => (mode() === null ? (installed() ?? []) : (chosenMode()?.maps ?? [])));
+    const startableChoices = createMemo(() => mapChoices(props.spec, startable()));
     const gameDefault = createMemo(() => {
         const option = props.spec.options.find((o) => o.id === "map");
         const wanted = option && "default" in option ? option.default : undefined;
@@ -146,7 +147,7 @@ export default function SourceSetup(props: { spec: SourceGameSpec; onComplete():
                                     <PaperQuote variant="danger" icon="warning" title="Setup is not finished">{saveError()}</PaperQuote>
                                 </Show>
                                 <PaperFlex direction="column" fullWidth flex minHeight={0} scrollable="y">
-                                    <MapCards maps={mapChoices(props.spec, startable())} value={map()} pictures={pictures} hideMode={mode() !== null} disabled={saving()} onPick={setMap} />
+                                    <MapCards maps={startableChoices()} value={map()} pictures={pictures} hideMode={mode() !== null} disabled={saving()} onPick={setMap} />
                                 </PaperFlex>
                             </PaperFlex>
                         </PaperCenteredInterface>

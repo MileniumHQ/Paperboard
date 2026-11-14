@@ -17,6 +17,7 @@ import {
 import { mapMode, type SourceGameSpec } from "./index";
 import type { MapPicturesState } from "./useMapPictures";
 import { workshopId } from "./workshop";
+import { sameData } from "../../core/state";
 
 /** A map to choose, as a card. */
 export interface MapChoice {
@@ -122,14 +123,23 @@ export default function MapCards(props: {
     const [query, setQuery] = createSignal("");
     const [mode, setMode] = createSignal<string | null>(null);
     const modeOf = (map: MapChoice) => map.mode ?? OTHER_MODE;
+    // a map is the card of its name: a caller's list made again, with the
+    // same maps in it, keeps every card and its picture where they are
+    const maps = createMemo<readonly MapChoice[]>((prev) => {
+        const byName = new Map(prev.map((map) => [map.name, map]));
+        return props.maps.map((map) => {
+            const old = byName.get(map.name);
+            return old && sameData(old, map) ? old : map;
+        });
+    }, []);
     const modes = createMemo(() => {
         const counts = new Map<string, number>();
-        for (const map of props.maps) counts.set(modeOf(map), (counts.get(modeOf(map)) ?? 0) + 1);
+        for (const map of maps()) counts.set(modeOf(map), (counts.get(modeOf(map)) ?? 0) + 1);
         return [...counts].sort(([a], [b]) => (a === OTHER_MODE ? 1 : b === OTHER_MODE ? -1 : a.localeCompare(b)));
     });
     const shown = createMemo(() => {
         const words = query().toLowerCase().split(/\s+/).filter(Boolean);
-        return props.maps.filter((map) => {
+        return maps().filter((map) => {
             if (mode() !== null && modeOf(map) !== mode()) return false;
             const text = `${map.name} ${mapNames(map, props.pictures).title} ${map.mode ?? ""}`.toLowerCase();
             return words.every((word) => text.includes(word));
@@ -144,7 +154,7 @@ export default function MapCards(props: {
                 <PaperInput fullWidth icon="search" placeholder={props.placeholder ?? "Search maps"} value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
                 <Show when={modes().length > 1}>
                     <PaperSelectMenu name="map-mode" placeholder="All modes" value={mode() ?? ALL_MODES} onValueChange={(value) => setMode(value === ALL_MODES ? null : String(value))}>
-                        <PaperSelectMenuItem value={ALL_MODES} description={`${props.maps.length} maps`}>All modes</PaperSelectMenuItem>
+                        <PaperSelectMenuItem value={ALL_MODES} description={`${maps().length} maps`}>All modes</PaperSelectMenuItem>
                         <For each={modes()}>
                             {([name, count]) => <PaperSelectMenuItem value={name} description={`${count} ${count === 1 ? "map" : "maps"}`}>{name}</PaperSelectMenuItem>}
                         </For>

@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js";
+import { createMemo, createSignal, Show } from "solid-js";
 import { PaperAvatar, PaperButton, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview, { EditableDetail } from "../../components/ServerOverview";
 import { gameSettings, serverBridge, serverLevel, serverStatus } from "../../lib/server";
@@ -34,6 +34,7 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
         return (option?.kind === "select" ? option.choices.find((c) => c.value === chosen)?.label : undefined) ?? humanizeIdentifier(chosen);
     };
     const workshop = createWorkshopMaps(props.spec);
+    const choices = createMemo(() => [...mapChoices(props.spec, maps()), ...workshop.choices()]);
 
     const edit = async () => {
         setChoice(map());
@@ -106,7 +107,7 @@ export default function SourceOverview(props: { spec: SourceGameSpec; game: Game
                         : "The server starts on this map."}
                 </PaperText>
                 <Show when={maps().length > 0} fallback={<Show when={!error()}><PaperText color="text-subtle">Loading maps...</PaperText></Show>}>
-                    <MapCards maps={[...mapChoices(props.spec, maps()), ...workshop.choices()]} value={choice()} pictures={pictures} disabled={busy()} onPick={setChoice} />
+                    <MapCards maps={choices()} value={choice()} pictures={pictures} disabled={busy()} onPick={setChoice} />
                 </Show>
                 <Show when={error()}>
                     <PaperQuote variant="danger" icon="warning" title="Map not changed">{error()}</PaperQuote>

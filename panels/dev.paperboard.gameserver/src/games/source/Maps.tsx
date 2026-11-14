@@ -74,7 +74,7 @@ export default function SourceMaps(props: { spec: SourceGameSpec; active: boolea
     const workshopMap = (name: string) => view()?.workshop.find((m) => workshopName(m.id) === canonicalMap(name));
     /** a map as the screens name it */
     const choiceOf = (name: string): MapChoice => { const map = workshopMap(name); return map ? workshopChoice(map) : mapChoices(props.spec, [name])[0]!; };
-    const choices = () => addable().map(choiceOf);
+    const choices = createMemo(() => addable().map(choiceOf));
     /** what a person calls a map: its Workshop title or real name, else its file name */
     const titleOf = (name: string) => mapNames(choiceOf(name), pictures).title;
     const addable = createMemo(() => (view()?.installed ?? []).filter((name) => !view()!.maps.includes(name)));

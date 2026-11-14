@@ -1,4 +1,4 @@
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperInput, PaperLink, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { serverBridge } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
@@ -6,6 +6,7 @@ import { formatCount } from "../../lib/addons/presentation";
 import { sourceCalls, type SourceGameSpec } from "./index";
 import MapCards from "./MapCards";
 import { workshopChoice } from "./useWorkshopMaps";
+import type { MapPicturesState } from "./useMapPictures";
 import type { SourceWorkshopHit, SourceWorkshopResults } from "./workshop";
 import { workshopName } from "./workshop";
 
@@ -15,6 +16,9 @@ import { workshopName } from "./workshop";
  * act on (it is added to the server there). Valve's attribution and
  * disclaimers come with every answer and are shown under it.
  */
+/** a Workshop hit brings its own picture; there are none to look up */
+const NO_PICTURES: MapPicturesState = { of: () => undefined, loading: () => false, titleOf: () => undefined, all: () => [], source: () => null, error: () => "", retry: () => {} };
+
 export default function WorkshopPane(props: {
     spec: SourceGameSpec;
     disabled?: boolean;
@@ -46,7 +50,7 @@ export default function WorkshopPane(props: {
     // what is popular, until something is asked for
     onMount(() => void search());
 
-    const choices = () => (results()?.items ?? []).map((hit) => workshopChoice(hit, props.inRotation.includes(workshopName(hit.id)) ? "In the rotation" : hit.subscribers === null ? undefined : `${formatCount(hit.subscribers)} subscribers`));
+    const choices = createMemo(() => (results()?.items ?? []).map((hit) => workshopChoice(hit, props.inRotation.includes(workshopName(hit.id)) ? "In the rotation" : hit.subscribers === null ? undefined : `${formatCount(hit.subscribers)} subscribers`)));
     const pick = (name: string) => {
         const hit = results()?.items.find((h) => workshopName(h.id) === name);
         if (hit) props.onPick(hit);
@@ -81,7 +85,7 @@ export default function WorkshopPane(props: {
                             when={found().items.length > 0}
                             fallback={<PaperText size={2} color="text-subtle">{found().hidden > 0 ? "The Workshop has nothing but items that are not maps for that." : "No Workshop maps matched."}</PaperText>}
                         >
-                            <MapCards bare maps={choices()} pictures={{ of: () => undefined, loading: () => false, titleOf: () => undefined, all: () => [], source: () => null, error: () => "", retry: () => {} }} disabled={props.disabled} onPick={pick} />
+                            <MapCards bare maps={choices()} pictures={NO_PICTURES} disabled={props.disabled} onPick={pick} />
                         </Show>
                         <Show when={found().hidden > 0 && found().items.length > 0}>
                             <PaperText size={1} color="text-subtle">{found().hidden} {found().hidden === 1 ? "result is" : "results are"} not {found().hidden === 1 ? "a map" : "maps"} and left out.</PaperText>
