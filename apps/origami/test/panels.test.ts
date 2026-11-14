@@ -137,6 +137,19 @@ describe("the worker is read-only and its indexes are faithful", () => {
         expect(Object.keys((await full.json()) as object)).toHaveLength(200);
     });
 
+    test("a panels index rebuilt past its cap fails instead of listing some panels", async () => {
+        await registry.kv.delete("panels:index");
+        for (let n = 0; n <= 2000; n++) registry.kv.setJson(`panel:dev.example.p${n}`, { id: `dev.example.p${n}` });
+        const res = await request("/panels/index.json");
+        expect(res.status).toBe(500);
+        expect((await res.json()) as object).toEqual({ error: "The registry holds more than the 2000 panels the store can list without its index" });
+        // at the cap every panel is listed
+        await registry.kv.delete("panel:dev.example.p0");
+        const full = await request("/panels/index.json");
+        expect(full.status).toBe(200);
+        expect(Object.keys((await full.json()) as object)).toHaveLength(2000);
+    });
+
     test("an unreadable panel record fails the panels index instead of dropping the panel", async () => {
         await publishPanel(upload("dev.example.clock", "1.0.0"), ctx);
         await publishPanel(upload("dev.example.notes", "1.0.0"), ctx);

@@ -1,5 +1,5 @@
 import { jsonResponse, type Env } from "../lib";
-import { UnreadableRecordError } from "../recordError";
+import { RegistryLimitError, UnreadableRecordError } from "../recordError";
 
 // A package record daemons install from. One that isn't JSON is a broken
 // record, never a string to hand them: it fails the request, naming the
@@ -53,10 +53,7 @@ export async function handlePackagesRoutes(
             names.push(...page.keys.map((k) => k.name).filter(isPackageKey));
             if (names.length > MAX_PACKAGES) {
                 console.error(`[origami] package index holds more than ${MAX_PACKAGES} packages`);
-                return jsonResponse(
-                    { error: `The registry holds more than the ${MAX_PACKAGES} packages its index can list` },
-                    500,
-                );
+                throw new RegistryLimitError(`more than the ${MAX_PACKAGES} packages its index can list`);
             }
             cursor = page.list_complete ? undefined : page.cursor;
         } while (cursor);

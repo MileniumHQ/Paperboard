@@ -1,4 +1,4 @@
-import { UnreadableRecordError } from "./recordError";
+import { RegistryLimitError, UnreadableRecordError } from "./recordError";
 import type { StoreListing } from "../../../packages/paperapi/src/storeListing";
 
 export interface PanelRecord {
@@ -42,8 +42,9 @@ export function isValidPanelVersion(version: unknown): version is string {
         version.length <= 64 && VERSION_PATTERN.test(version);
 }
 
-// prefix walks are bounded: an unbounded cursor loop turns registry growth
-// into a Worker timeout. The index serves reads; the walk is the fallback.
+// The walk is the fallback when the index can't be read. It is bounded, so
+// registry growth can't turn it into a Worker timeout, and past the bound it
+// fails rather than answer a store that is missing panels.
 const MAX_WALK_KEYS = 2000;
 
 async function listRecordsByPrefix(
@@ -51,41 +52,25 @@ async function listRecordsByPrefix(
     prefix: string,
     index: Record<string, PanelRecord>,
 ): Promise<void> {
-    let cursor: string | undefined = undefined;
+    let cursor: string | undefined;
     let walked = 0;
-
     do {
-        const listResult: KVNamespaceListResult<unknown> = await kv.list({
-            prefix,
-            cursor,
-        });
-
-        const keys: string[] = listResult.keys.map(
-            (k: { name: string }) => k.name,
-        );
+        const page: KVNamespaceListResult<unknown> = await kv.list({ prefix, cursor });
+        walked += page.keys.length;
+        if (walked > MAX_WALK_KEYS) {
+            console.error(`[origami] the panels index walk passed ${MAX_WALK_KEYS} records`);
+            throw new RegistryLimitError(`more than the ${MAX_WALK_KEYS} panels the store can list without its index`);
+        }
+        // an unreadable record fails the request, never drops out of it:
+        // unavailable is not "unpublished"
         const records = await Promise.all(
-            keys.map(async (k: string) => {
-                // an unreadable record must fail the index request, never be
-                // silently dropped: unavailable is not "unpublished"
-                return (await kv.get(k, {
-                    type: "json",
-                })) as PanelRecord | null;
-            }),
+            page.keys.map((k) => kv.get<PanelRecord>(k.name, { type: "json" })),
         );
-
         for (const record of records) {
             // an unlisted panel stays out of the store even when the index is rebuilt from the records
-            if (!record || !record.id || record.unlistedAt) continue;
-            if (walked === MAX_WALK_KEYS) {
-                // the store quietly loses every panel past this point unless someone hears of it
-                console.error(`[origami] the panels index walk stopped at ${MAX_WALK_KEYS} panels; the rest are missing from the store`);
-                return;
-            }
-            index[record.id] = record;
-            walked++;
+            if (record?.id && !record.unlistedAt) index[record.id] = record;
         }
-
-        cursor = listResult.list_complete ? undefined : listResult.cursor;
+        cursor = page.list_complete ? undefined : page.cursor;
     } while (cursor);
 }
 

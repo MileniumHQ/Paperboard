@@ -8,3 +8,13 @@ export class UnreadableRecordError extends Error {
         this.name = "UnreadableRecordError";
     }
 }
+
+// The registry holds more than a listing can answer. Answering the part that
+// fits would quietly drop the rest from every reader, so the request fails
+// and says so.
+export class RegistryLimitError extends Error {
+    constructor(what: string) {
+        super(`The registry holds ${what}`);
+        this.name = "RegistryLimitError";
+    }
+}

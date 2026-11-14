@@ -1,5 +1,5 @@
 import { CORS_HEADERS, jsonResponse, type Env } from "./lib";
-import { UnreadableRecordError } from "./recordError";
+import { RegistryLimitError, UnreadableRecordError } from "./recordError";
 import { handlePanelsRoutes } from "./routes/panels";
 import { handlePackagesRoutes } from "./routes/packages";
 import {
@@ -70,9 +70,9 @@ export default {
                 jsonResponse({ error: "Not Found" }, 404)
             );
         } catch (err) {
-            // a record that exists but can't be read names itself; the
-            // KV error behind it stays in the logs
-            if (err instanceof UnreadableRecordError) {
+            // a record that can't be read, or a listing past its cap, names
+            // itself; the KV error behind it stays in the logs
+            if (err instanceof UnreadableRecordError || err instanceof RegistryLimitError) {
                 return jsonResponse({ error: err.message }, 500);
             }
             // the detail goes to the logs, not the caller: KV/R2 binding
