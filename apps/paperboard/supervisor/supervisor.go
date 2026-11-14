@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -35,6 +36,47 @@ type workload interface {
 	kill(signal string) error
 }
 
+// A program started on pipes. Its input is nil when it was started with
+// none, or its input is a console (consoleInput on Windows).
+type pipedStart struct {
+	command       string
+	args          []string
+	cwd           string
+	env           []string
+	noStdin       bool
+	inputEncoding string
+	consoleInput  bool
+	// told once when input written to it can't reach it
+	onInputLost func(error)
+}
+
+type pipedWorkload struct {
+	process  *os.Process
+	input    *asyncWriter
+	encoding string
+}
+
+var errNoInput = errors.New("it was started with no input")
+
+func (w *pipedWorkload) pid() int { return w.process.Pid }
+
+func (w *pipedWorkload) write(data []byte) error {
+	if w.input == nil {
+		return errNoInput
+	}
+	return w.input.write(encodeInput(string(data), w.encoding))
+}
+
+func (w *pipedWorkload) closeInput() error {
+	if w.input == nil {
+		return errNoInput
+	}
+	w.input.close()
+	return nil
+}
+
+func (w *pipedWorkload) resize(int, int) error { return nil }
+
 type client struct {
 	conn     net.Conn
 	out      *asyncWriter
@@ -60,6 +102,8 @@ type supervisor struct {
 	listener net.Listener
 	// the program in front of a terminal, as last reported
 	foreground string
+	// why input can no longer reach the workload; "" while it can
+	inputErr string
 	// closed when the workload exits, which ends its watchers
 	stopped chan struct{}
 }
@@ -197,6 +241,7 @@ func (s *supervisor) startWorkload() {
 			noStdin:       cfg.noStdin,
 			inputEncoding: cfg.inputEncoding,
 			consoleInput:  cfg.consoleInput,
+			onInputLost:   s.inputLost,
 		}, s.emitOutput, s.workloadExited)
 		if err != nil {
 			// nothing runs: the caller's start fails with the reason
@@ -260,6 +305,26 @@ func (s *supervisor) emitForeground(name string) {
 			s.send(c, frame)
 		}
 	}
+}
+
+// Input that can't reach the workload (it closed its input, stopped reading
+// it, or never had any) is reported once, not a line per write: every client
+// is told with an input-closed frame and refuses later writes, and the
+// workload's output says so, which is how a panel's console hears it.
+func (s *supervisor) inputLost(err error) {
+	s.mu.Lock()
+	if s.inputErr != "" {
+		s.mu.Unlock()
+		return
+	}
+	s.inputErr = err.Error()
+	frame := encodeFrame(map[string]any{"type": "input-closed", "error": s.inputErr})
+	for c := range s.clients {
+		s.send(c, frame)
+	}
+	s.mu.Unlock()
+	s.at.logf("WARN", "[supervisor:%s] input was not delivered: %v", s.id, err)
+	s.emitOutput("stderr", "\n[Input Error] input was not delivered: "+err.Error()+"\n")
 }
 
 // A workload that exits before the spawning daemon has attached (a command
@@ -340,6 +405,9 @@ func (s *supervisor) serve(conn net.Conn) {
 		"childPid": s.childPid(),
 		"running":  s.pending == nil,
 		"isPty":    truthy(s.cfg.raw["isPty"]),
+	}
+	if s.inputErr != "" {
+		status["inputError"] = s.inputErr
 	}
 	failed := s.startErr != ""
 	if failed {
@@ -425,7 +493,7 @@ func (s *supervisor) handle(c *client, line []byte) {
 			return
 		}
 		if err := work.write([]byte(*msg.Data)); err != nil {
-			s.at.logf("WARN", "[supervisor:%s] input was not delivered: %v", s.id, err)
+			s.inputLost(err)
 		}
 	case "stdin-close":
 		work := s.workload()

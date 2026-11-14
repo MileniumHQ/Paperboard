@@ -361,6 +361,14 @@ describe("workloads and terminals take input on every platform", () => {
 		expect(await exitOf(rpc, "drain")).toBe(0);
 		expect(dataOf(rpc, "drain")).toContain(`read:${4 * 65536}`);
 
+		// input to a program that closed its own is reported where its output goes, and later writes are refused
+		await rpc.ok("process:run", { id: "deaf", ...js("require('fs').closeSync(0); console.log('closed'); setInterval(() => {}, 1000)") });
+		await waitFor("the input to close", () => dataOf(rpc, "deaf").includes("closed"));
+		await rpc.ok("process:write", { id: "deaf", data: "lost\n" });
+		await waitFor("the undelivered input reported", () => dataOf(rpc, "deaf", "stderr").includes("[Input Error] input was not delivered"));
+		expect((await rpc.fail("process:write", { id: "deaf", data: "x" })).error).toContain("takes no more input");
+		await rpc.ok("process:kill", { id: "deaf" });
+
 		const cwd = tempDir();
 		await rpc.ok("process:run", { id: "pwd", cwd, ...js("console.log(process.env.PWD)") });
 		await exitOf(rpc, "pwd");

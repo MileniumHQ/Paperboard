@@ -146,6 +146,9 @@ export class SupervisedProcessClient {
     private exitCode: number | null = null;
     private listeners = new Map<string, Function[]>();
     private status: { error?: string } | null = null;
+    // why input can no longer reach the workload, as the supervisor said:
+    // later writes are refused instead of disappearing
+    private inputError: string | null = null;
 
     /** why the last connect did not succeed; null once one has */
     public connectError: string | null = null;
@@ -278,6 +281,7 @@ export class SupervisedProcessClient {
                 this.childPid = msg.childPid;
                 this.isPty = Boolean(msg.isPty);
                 this.status = { error: typeof msg.error === "string" ? msg.error : undefined };
+                if (typeof msg.inputError === "string") this.inputError = msg.inputError;
                 this.emit("status", this.status);
                 break;
             case "history":
@@ -298,6 +302,9 @@ export class SupervisedProcessClient {
                     this.foreground = msg.name;
                     this.emit("foreground", msg.name);
                 }
+                break;
+            case "input-closed":
+                this.inputError = String(msg.error);
                 break;
             case "exit":
                 this.exitCode = typeof msg.code === "number" ? msg.code : null;
@@ -337,6 +344,7 @@ export class SupervisedProcessClient {
     }
 
     public write(data: string) {
+        if (this.inputError !== null) throw new Error(`"${this.id}" takes no more input: ${this.inputError}`);
         this.send({ type: "stdin", data });
     }
 

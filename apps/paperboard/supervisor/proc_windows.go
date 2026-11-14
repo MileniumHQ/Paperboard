@@ -163,41 +163,6 @@ func killTree(process *os.Process) error {
 	return nil
 }
 
-type pipedStart struct {
-	command       string
-	args          []string
-	cwd           string
-	env           []string
-	noStdin       bool
-	inputEncoding string
-	consoleInput  bool
-}
-
-type pipedWorkload struct {
-	process  *os.Process
-	input    *asyncWriter
-	encoding string
-}
-
-func (w *pipedWorkload) pid() int { return w.process.Pid }
-
-func (w *pipedWorkload) write(data []byte) error {
-	if w.input == nil {
-		return nil
-	}
-	return w.input.write(encodeInput(string(data), w.encoding))
-}
-
-func (w *pipedWorkload) closeInput() error {
-	if w.input == nil {
-		return errors.New("it was started with no input")
-	}
-	w.input.close()
-	return nil
-}
-
-func (w *pipedWorkload) resize(int, int) error { return nil }
-
 func (w *pipedWorkload) kill(string) error { return killTree(w.process) }
 
 func startPiped(start pipedStart, onData func(stream, data string), onExit func(code int)) (workload, error) {
@@ -243,8 +208,7 @@ func startPiped(start pipedStart, onData func(stream, data string), onExit func(
 
 	work := &pipedWorkload{process: cmd.Process, encoding: start.inputEncoding}
 	if stdin != nil {
-		// a workload that closed its input is not an error worth a line per write
-		work.input = newAsyncWriter(stdin, nil)
+		work.input = newAsyncWriter(stdin, start.onInputLost)
 	}
 
 	var streams sync.WaitGroup
