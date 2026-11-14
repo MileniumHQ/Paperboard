@@ -5,7 +5,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { STATUS_CODES } from "http";
-import connectionPool from "./communication/papercrane/ConnectionPool";
+import connectionPool, { classifyProbeError } from "./communication/papercrane/ConnectionPool";
 import { logger } from "../../papercrane/logger";
 import { getPanelsDir } from "../../papercrane/paths";
 import { sanitizeId } from "../../papercrane/storage";
@@ -22,8 +22,6 @@ import { launchOptionsFromArgv } from "../shared/launchOptions";
 
 export { parsePanelHost } from "./panelAssets";
 
-const log = logger;
-
 const headerValue = (value: string | string[] | undefined): string | undefined =>
     Array.isArray(value) ? value[0] : value;
 
@@ -34,24 +32,44 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
 // a panel served by another computer gets a relay-only credential that can
 // tunnel to that computer and touch nothing on this one. An unavailable
 // issuer refuses the document rather than substituting a master token.
-const injectCraneCreds = async (
-    html: string,
-    comp: string,
-    panelId?: string,
-): Promise<string> => {
-    if (!panelId) throw new Error("Panel credential injection requires an explicit panel id");
+async function injectCraneCreds(html: string, comp: string, panelId: string): Promise<string> {
     const client = connectionPool.getClient("local");
     const granted = await client.call<{ token: string }>(
         "auth:panel-token",
         comp === "local" ? { panelId } : { panelId, relayTo: comp },
     );
     const scoped = granted?.token;
-    if (typeof scoped !== "string" || !scoped) throw new Error("Daemon did not issue a panel credential");
+    if (typeof scoped !== "string" || !scoped) throw new Error("Paperboard Server did not issue a panel credential");
     const creds = client.getLocalCredentials();
-    if (!creds) throw new Error("CRANE_NOT_READY");
+    if (!creds) throw new Error("Paperboard Server on this computer isn't connected yet");
     return injectCraneBootstrap(html, buildCraneCredentialPayload(creds, comp, panelId, scoped));
-};
+}
 
+// a panel document gets its credential, the phone layout flag and the CSP
+// nonce, in that order, from whichever machine served its bytes
+async function panelDocument(html: string, comp: string, panelId: string, nonce: string): Promise<string> {
+    return injectCspNonce(
+        injectMobileMode(
+            injectUnselectable(await injectCraneCreds(html, comp, panelId)),
+            launchOptionsFromArgv(process.argv).mobile,
+        ),
+        nonce,
+    );
+}
+
+// the file at `file`, or null when there is none (or it went away mid-serve)
+async function readLocalFile(file: string): Promise<Buffer | null> {
+    try {
+        if (!(await fs.promises.stat(file)).isFile()) return null;
+        return await fs.promises.readFile(file);
+    } catch (err: any) {
+        if (err?.code === "ENOENT" || err?.code === "ENOTDIR") return null;
+        throw err;
+    }
+}
+
+// Not found is a missing file; anything else (an unreadable file, a refused
+// credential, a computer that can't be reached) is a 500 or 502 that says why.
 export async function servePanelAsset(
     urlComp: string,
     panelId: string,
@@ -74,92 +92,56 @@ export async function servePanelAsset(
             return new Response(`Invalid panel id`, { status: 400 });
         }
 
+        // no ACAO: panel content loads same-origin into its own panel frame.
+        // Panels can update underneath a cached asset, so nothing is cached.
+        const headers: Record<string, string> = {
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
+        };
+
         // Local machine: serve straight from the panels directory
         if (comp === "local") {
             // containment lives in panelAssets so tests prove it headless
-            const resolution = resolveLocalPanelFile(
-                getPanelsDir(),
-                cleanPanelId,
-                subpath,
-            );
+            const resolution = resolveLocalPanelFile(getPanelsDir(), cleanPanelId, subpath);
             if (resolution.kind === "forbidden") {
                 return new Response(`Forbidden`, { status: 403 });
             }
-            if (resolution.kind === "ok") {
-                const targetFile: string = resolution.file;
-                try {
-                    if (fs.statSync(targetFile).isFile()) {
-                        const buffer = await fs.promises.readFile(targetFile);
-                        const ext = path.extname(targetFile).toLowerCase();
-                        const headers: Record<string, string> = {
-                            "Content-Type": lookupMime(ext),
-                            "X-Content-Type-Options": "nosniff",
-                            // no ACAO: panel content loads same-origin
-                            // into its own panel frame
-                            "Cache-Control": "no-store",
-                        };
-                        if (ext === ".html") {
-                            const nonce = panelCspNonce();
-                            headers["Content-Security-Policy"] =
-                                buildPanelCsp(nonce);
-                            const html = injectCspNonce(
-                                injectMobileMode(
-                                    injectUnselectable(
-                                        await injectCraneCreds(
-                                            buffer.toString("utf8"),
-                                            comp,
-                                            cleanPanelId,
-                                        ),
-                                    ),
-                                    launchOptionsFromArgv(process.argv).mobile,
-                                ),
-                                nonce,
-                            );
-                            return new Response(html, { headers });
-                        }
-                        return new Response(buffer, { headers });
-                    }
-                } catch (err) {
-                    // lost race with deletion — fall through to 404
-                    log.debug("[PanelProtocol] panel asset vanished mid-serve:", String(err));
-                }
+            const buffer = resolution.kind === "ok" ? await readLocalFile(resolution.file) : null;
+            if (resolution.kind !== "ok" || !buffer) {
+                return new Response(`Panel file not found: ${cleanPanelId}/${subpath}`, { status: 404 });
             }
-            return new Response(
-                `Panel file not found: ${cleanPanelId}/${subpath}`,
-                { status: 404 },
-            );
+            const fileExt = path.extname(resolution.file).toLowerCase();
+            headers["Content-Type"] = lookupMime(fileExt);
+            if (fileExt === ".html") {
+                const nonce = panelCspNonce();
+                headers["Content-Security-Policy"] = buildPanelCsp(nonce);
+                return new Response(await panelDocument(buffer.toString("utf8"), comp, cleanPanelId, nonce), { headers });
+            }
+            return new Response(new Uint8Array(buffer), { headers });
         }
 
         const client = connectionPool.getClient(comp);
         // /panel/ is authenticated-only on the daemon: attach the same
         // main-token Bearer header the DAV surface uses
         const assetToken = client.getToken();
-        const res = await client.request(`panel/${cleanPanelId}/${subpath}`, {
-            ...(assetToken ? { headers: { Authorization: `Bearer ${assetToken}` } } : {}),
-        }).catch((err) => {
-            log.debug("[PanelProtocol] asset fetch failed:", err?.message || err);
-            return null;
-        });
-        if (!res || !res.ok) {
-            return new Response(res ? STATUS_CODES[res.status] ?? "Error" : "Not Found", {
-                status: res ? res.status : 404,
+        let res: Awaited<ReturnType<typeof client.request>>;
+        try {
+            res = await client.request(`panel/${cleanPanelId}/${subpath}`, {
+                ...(assetToken ? { headers: { Authorization: `Bearer ${assetToken}` } } : {}),
             });
+        } catch (err) {
+            // an unreachable or mis-pinned computer is not a missing file
+            const name = connectionPool.getComputer(comp)?.name ?? comp;
+            logger.warn(`[PanelProtocol] ${name} did not serve ${cleanPanelId}/${subpath}:`, err);
+            return new Response(`${name} could not be reached: ${classifyProbeError(err)}`, { status: 502 });
+        }
+        if (!res.ok) {
+            return new Response(STATUS_CODES[res.status] ?? "Error", { status: res.status });
         }
         const buffer = new Uint8Array(res.body);
-        const remoteExt = path.extname(subpath).toLowerCase();
-        const contentType =
-            headerValue(res.headers["content-type"]) || lookupMime(remoteExt);
-        const headers: Record<string, string> = {
-            "Content-Type": contentType,
-            "X-Content-Type-Options": "nosniff",
-            // no ACAO: panel content loads same-origin into its own panel
-            // frame; the remote /panel/ route is Bearer-authenticated too.
-            // Parity with the local branch: panels can update underneath
-            // a cached remote asset, so nothing here may be cached
-            "Cache-Control": "no-store",
-        };
-        let responseBody: BodyInit = buffer;
-        if (remoteExt === ".html") {
+        const ext = path.extname(subpath).toLowerCase();
+        headers["Content-Type"] = headerValue(res.headers["content-type"]) || lookupMime(ext);
+        if (ext === ".html") {
             // CSP comes from the machine that serves the panel: the
             // daemon derived it from the manifest IT installed and
             // review approved. Deriving egress from the local manifest
@@ -167,24 +149,11 @@ export async function servePanelAsset(
             const served = headerValue(res.headers["content-security-policy"]) ?? null;
             const nonce = panelCspNonce();
             headers["Content-Security-Policy"] = remotePanelHtmlCsp(served, nonce);
-            responseBody = injectCspNonce(
-                injectMobileMode(
-                    injectUnselectable(
-                        await injectCraneCreds(
-                            new TextDecoder().decode(buffer),
-                            comp,
-                            cleanPanelId,
-                        ),
-                    ),
-                    launchOptionsFromArgv(process.argv).mobile,
-                ),
-                nonce,
-            );
+            return new Response(await panelDocument(new TextDecoder().decode(buffer), comp, cleanPanelId, nonce), { headers });
         }
-
-        return new Response(responseBody, { headers });
+        return new Response(buffer, { headers });
     } catch (err: any) {
-        log.error("[PanelProtocol] error:", err?.message || err);
+        logger.error("[PanelProtocol] error:", err?.message || err);
         return new Response(`Error: ${err?.message || err}`, { status: 500 });
     }
 }

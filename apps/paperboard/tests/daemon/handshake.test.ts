@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { WebSocketServer, type WebSocket as ServerSocket } from "ws";
 import { PaperCraneClient } from "../../src/main/communication/papercrane/PaperCraneClient";
+import { RemoteComputerDriver } from "../../src/main/communication/driver/RemoteComputerDriver";
 import { CraneTransport } from "../../../../packages/paperapi/src/ws";
 import { PROTOCOL_VERSION as SDK_PROTOCOL_VERSION } from "../../../../packages/paperapi/src/protocol";
 import { PROTOCOL_VERSION } from "../../papercrane/protocol";
@@ -108,6 +109,57 @@ describe("the master token goes only to a daemon that proves itself", () => {
 			local.stopEmbeddedServer();
 			await within("the embedded daemon to stop", closed);
 		});
+	});
+
+	test("a panel document whose credential is refused fails with why, never as a missing file", async () => {
+		const token = "pc_refusing_daemon";
+		const listener = await fakeListener((ws, challenge) => {
+			if (challenge) ws.send(JSON.stringify({ type: DAEMON_PROOF_TYPE, proof: daemonProof(token, challenge) }));
+			ws.on("message", (data) => {
+				const frame = JSON.parse(String(data));
+				// it verifies the app, then issues no panel credential
+				ws.send(JSON.stringify({ type: "response", id: frame.id, result: { success: true } }));
+			});
+		});
+		const dir = dataDir();
+		await installPanelFiles(dir, { id: "test.page" });
+		fs.writeFileSync(path.join(dir, "local", "crane.json"), JSON.stringify({ port: listener.port, token }));
+		await withDataDir(dir, async () => {
+			const { default: connectionPool } = await import("../../src/main/communication/papercrane/ConnectionPool");
+			const { servePanelAsset } = await import("../../src/main/panelServe");
+			const local = connectionPool.getClient("local");
+			local.disconnect();
+			await local.connect();
+			const res = await servePanelAsset("local", "test.page", "/index.html");
+			expect(res.status).toBe(500);
+			expect(await res.text()).toBe("Error: Paperboard Server did not issue a panel credential");
+			// a file that really is missing still says so
+			expect((await servePanelAsset("local", "test.page", "/gone.js")).status).toBe(404);
+			local.disconnect();
+		});
+		await listener.close();
+	});
+
+	test("a computer whose system:info fails is refused for update planning, never planned as an unknown OS", async () => {
+		const token = "pc_no_info_daemon";
+		const listener = await fakeListener((ws, challenge) => {
+			if (challenge) ws.send(JSON.stringify({ type: DAEMON_PROOF_TYPE, proof: daemonProof(token, challenge) }));
+			ws.on("message", (data) => {
+				const frame = JSON.parse(String(data));
+				if (frame.action === "system:info") ws.send(JSON.stringify({ type: "response", id: frame.id, error: "system:info is broken here" }));
+				else ws.send(JSON.stringify({ type: "response", id: frame.id, result: { success: true } }));
+			});
+		});
+		const dir = dataDir();
+		fs.writeFileSync(path.join(dir, "local", "crane.json"), JSON.stringify({ port: listener.port, token }));
+		const client = new PaperCraneClient();
+		await withDataDir(dir, async () => {
+			await client.connect();
+			const driver = new RemoteComputerDriver("r", client);
+			await expect(driver.getSystemInfo()).rejects.toThrow("system:info is broken here");
+			client.disconnect();
+		});
+		await listener.close();
 	});
 
 	test("both clients put their own token last and send the shared protocol version", async () => {

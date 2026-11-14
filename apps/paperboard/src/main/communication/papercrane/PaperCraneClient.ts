@@ -309,6 +309,58 @@ export class PaperCraneClient extends EventEmitter {
         return this.connectingPromise;
     }
 
+    // this data directory's daemon, proven by its handshake; else a fresh
+    // embedded one, which this client owns
+    private async localDaemonSocket(gen: number): Promise<WebSocket> {
+        const socket = (await this.storedDaemonSocket()) ?? (await this.startEmbeddedDaemon());
+        if (gen !== this.generation) {
+            socket.terminate();
+            throw new Error("Connection attempt was superseded");
+        }
+        return socket;
+    }
+
+    // the daemon crane.json names, once it proved it is this data directory's
+    private async storedDaemonSocket(): Promise<WebSocket | null> {
+        const stored = readCraneHandshake();
+        if (!stored) return null;
+        try {
+            const socket = await verifiedLocalSocket(stored);
+            this.port = stored.port;
+            this.token = stored.token;
+            return socket;
+        } catch (err) {
+            // Recovery is a freshly authenticated daemon; never send the
+            // stored credential to a peer that failed proof.
+            logger.warn("[PaperCraneClient] local daemon identity unavailable; starting a fresh daemon:", err);
+            return null;
+        }
+    }
+
+    private async startEmbeddedDaemon(): Promise<WebSocket> {
+        try {
+            this.embeddedServer?.stop();
+            this.embeddedServer = null;
+            const freshToken = "pc_" + crypto.randomBytes(24).toString("hex");
+            this.embeddedServer = await startPaperCraneServer({
+                port: 0,
+                host: "127.0.0.1",
+                headless: true,
+                staticToken: freshToken,
+                remotesFile: path.join(getLocalDir(), "paired_computers.json"),
+            });
+            if (this.embeddedServer?.port) {
+                this.port = this.embeddedServer.port;
+                this.token = freshToken;
+            }
+            return await verifiedLocalSocket({ port: this.port, token: freshToken });
+        } catch (err) {
+            this.embeddedServer?.stop();
+            this.embeddedServer = null;
+            throw new Error("Failed to start and verify the embedded daemon", { cause: err });
+        }
+    }
+
     private async open(
         host: string,
         port: number | undefined,
@@ -330,53 +382,7 @@ export class PaperCraneClient extends EventEmitter {
             throw new Error(error);
         }
 
-        let localSocket: WebSocket | undefined;
-        if (isLocal && !token) {
-            const stored = readCraneHandshake();
-            if (stored) {
-                try {
-                    localSocket = await verifiedLocalSocket(stored);
-                    this.port = stored.port;
-                    this.token = stored.token;
-                } catch (err) {
-                    // Recovery is a freshly authenticated daemon below; never
-                    // send the stored credential to a peer that failed proof.
-                    logger.warn("[PaperCraneClient] local daemon identity unavailable; starting a fresh daemon:", err);
-                }
-            }
-            if (!localSocket) {
-                try {
-                    if (this.embeddedServer?.stop) {
-                        this.embeddedServer.stop();
-                        this.embeddedServer = null;
-                    }
-                    const freshToken = "pc_" + crypto.randomBytes(24).toString("hex");
-                    this.embeddedServer = await startPaperCraneServer({
-                        port: 0,
-                        host: "127.0.0.1",
-                        headless: true,
-                        staticToken: freshToken,
-                        remotesFile: path.join(
-                            getLocalDir(),
-                            "paired_computers.json",
-                        ),
-                    });
-                    if (this.embeddedServer?.port) {
-                        this.port = this.embeddedServer.port;
-                        this.token = freshToken;
-                    }
-                    localSocket = await verifiedLocalSocket({ port: this.port, token: freshToken });
-                } catch (err) {
-                    this.embeddedServer?.stop();
-                    this.embeddedServer = null;
-                    throw new Error("Failed to start and verify the embedded daemon", { cause: err });
-                }
-            }
-            if (gen !== this.generation) {
-                localSocket?.terminate();
-                throw new Error("Connection attempt was superseded");
-            }
-        }
+        const localSocket = isLocal && !token ? await this.localDaemonSocket(gen) : undefined;
 
         this.localIdentityVerified = localSocket !== undefined;
         return new Promise((resolve, reject) => {
@@ -625,16 +631,12 @@ export class PaperCraneClient extends EventEmitter {
         this.embeddedServer = null;
     }
 
-    // NOTE: the client no longer tracks terminal/process streams — panels
-    // own their streams through PaperAPI's transport (refcounted attach,
-    // reconnect replay there). The dispatcher below only serves progress
-    // events for the updater's package downloads.
+    // panels own their streams through PaperAPI's transport; this client
+    // only hears progress for the updater's package downloads
     private handlePushEvent(
         event: string,
         payload: Record<string, unknown>,
     ) {
-        // terminal/process push events are owned by PaperAPI's transport;
-        // this client only dispatches updater progress
         if (event === "progress") {
             this.progressListeners
                 .get(payload.downloadId as string)
@@ -866,15 +868,11 @@ export class PaperCraneClient extends EventEmitter {
 
     // System info
 
-    public async getSystemInfo(): Promise<CraneSystemInfo | null> {
-        try {
-            return await this.call<CraneSystemInfo>("system:info");
-        } catch (err) {
-            logger.debug("[PaperCraneClient] getSystemInfo failed, caller treats null as unknown:", err);
-            return null;
+    public async getSystemInfo(): Promise<CraneSystemInfo> {
+        const info = await this.call<CraneSystemInfo>("system:info");
+        if (typeof info?.os !== "string" || typeof info?.arch !== "string") {
+            throw new Error(`${this.host} answered system:info without its OS and architecture`);
         }
+        return info;
     }
 }
-
-export const paperCraneClient = new PaperCraneClient();
-export default paperCraneClient;

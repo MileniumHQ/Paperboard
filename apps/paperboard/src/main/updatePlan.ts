@@ -40,13 +40,17 @@ export interface ComputerUpdateState {
     isLocal: boolean;
     panels: PanelUpdateInfo[];
     packages: Record<string, { version?: string }>;
+    // what system:info answered; a computer that couldn't say is unreachable, not planned
     sysInfo: {
-        os?: string;
-        arch?: string;
+        os: string;
+        arch: string;
         version?: string;
         craneVersion?: string;
-    } | null;
+    };
 }
+
+// registry builds are x64 or arm64
+const archKey = (arch: string) => (arch.includes("arm") ? "arm64" : "x64");
 
 export function validSha256(value: unknown): value is string {
     return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
@@ -134,11 +138,7 @@ export async function planUpdateTasks(
             const reg = registryPackages[pkgId];
             if (!reg?.version || !(installed as any)?.version) continue;
             if (!semverGt(reg.version, (installed as any).version)) continue;
-            const platform: string = comp.sysInfo?.os ?? "linux";
-            const arch: string = (comp.sysInfo?.arch ?? "x64").includes("arm")
-                ? "arm64"
-                : "x64";
-            const platformData = reg.platforms?.[`${platform}-${arch}`];
+            const platformData = reg.platforms?.[`${comp.sysInfo.os}-${archKey(comp.sysInfo.arch)}`];
             if (!platformData?.url) continue;
             // trust boundary: same rule as panels — no checksum fact, no task.
             // a registry entry without sha256 never becomes an install
@@ -167,13 +167,9 @@ export async function planUpdateTasks(
             });
         }
 
-        if (!comp.isLocal && comp.sysInfo) {
-            const platform: string =
-                comp.sysInfo.os === "darwin" ? "macos" : comp.sysInfo.os ?? "linux";
-            const arch: string = (comp.sysInfo.arch ?? "x64").includes("arm")
-                ? "arm64"
-                : "x64";
-            const craneEntry = craneDlIndex[`${platform}-${arch}`];
+        if (!comp.isLocal) {
+            const target = `${comp.sysInfo.os === "darwin" ? "macos" : comp.sysInfo.os}-${archKey(comp.sysInfo.arch)}`;
+            const craneEntry = craneDlIndex[target];
             if (!craneEntry?.version) continue;
 
             let currentCraneVersion: string | null =
@@ -210,7 +206,7 @@ export async function planUpdateTasks(
                         version: craneEntry.version,
                         downloadUrl:
                             craneEntry.downloadUrl ??
-                            `${opts.registryUrl}/paperdl/crane/${platform}-${arch}/download`,
+                            `${opts.registryUrl}/paperdl/crane/${target}/download`,
                         label: `Updating Paperboard Server on ${comp.name}`,
                         name: "Paperboard Server",
                         computerName: comp.name,

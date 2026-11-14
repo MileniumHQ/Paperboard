@@ -308,7 +308,7 @@ describe("upgrades and uninstall", () => {
 // Update planning finds every update and refuses what it can't verify.
 describe("update planning", () => {
 	const sha = "a".repeat(64);
-	const computer = (overrides: Partial<ComputerUpdateState>): ComputerUpdateState => ({ id: "c", name: "C", isLocal: true, panels: [], packages: {}, sysInfo: null, ...overrides });
+	const computer = (overrides: Partial<ComputerUpdateState>): ComputerUpdateState => ({ id: "c", name: "C", isLocal: true, panels: [], packages: {}, sysInfo: { os: "linux", arch: "x64" }, ...overrides });
 	const plan = (computers: ComputerUpdateState[], panels: Record<string, any>, crane: Record<string, any> = {}, readCraneVersion = async () => null as string | null) =>
 		planUpdateTasks(computers, panels, {}, crane, { registryUrl: origami.url, readCraneVersion });
 

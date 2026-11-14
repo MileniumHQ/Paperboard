@@ -140,10 +140,6 @@ export class ConnectionPool extends EventEmitter {
         this.computers.set("local", localComp);
     }
 
-    public getActiveDriver(): ComputerDriver {
-        return this.getDriver(this.activeId);
-    }
-
     // never default id — operations must not land on wrong machine
     public getDriver(id: string): ComputerDriver {
         let remoteDriver = this.remoteDrivers.get(id);
@@ -171,10 +167,6 @@ export class ConnectionPool extends EventEmitter {
             }
         }
         return client;
-    }
-
-    public getActiveClient(): PaperCraneClient {
-        return this.getClient(this.activeId);
     }
 
     public getActiveId(): string {
@@ -208,8 +200,9 @@ export class ConnectionPool extends EventEmitter {
         return true;
     }
 
-    public listComputers(): (StoredComputer & { status: any; networkAddress?: string })[] {
-        return Array.from(this.computers.values()).map((c) => {
+    /** what the shell shows of each computer: never a pairing's token or pinned certificate */
+    public listComputers(): (Omit<StoredComputer, "token" | "cert"> & { status: any; networkAddress?: string })[] {
+        return Array.from(this.computers.values()).map(({ token: _token, cert: _cert, ...c }) => {
             const client = this.clients.get(c.id);
             const status =
                 c.id === "local"
@@ -360,10 +353,6 @@ export class ConnectionPool extends EventEmitter {
             throw err;
         }
         this.emit("change");
-    }
-
-    public async removeComputer(id: string): Promise<boolean> {
-        return this.unpairComputer(id);
     }
 
     public async unpairComputer(id: string): Promise<boolean> {

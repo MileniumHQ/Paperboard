@@ -23,10 +23,13 @@ export class DiscoveryService extends EventEmitter {
     private browser: Browser | null = null;
     private services = new Map<string, DiscoveredEntry>();
     private started = false;
+    // why browsing stopped working, which the Add computer list shows
+    private failure: string | null = null;
 
     public start(): void {
         if (this.started) return;
         this.started = true;
+        this.failure = null;
         try {
             this.bonjour = new Bonjour();
             this.browser = this.bonjour.find({
@@ -53,6 +56,7 @@ export class DiscoveryService extends EventEmitter {
             // error event untyped; listen defensively
             (this.browser as any).on("error", (err: unknown) => {
                 logger.warn("[Discovery] mDNS browser error:", err);
+                this.failure = err instanceof Error ? err.message : String(err);
             });
 
             logger.info(
@@ -63,6 +67,7 @@ export class DiscoveryService extends EventEmitter {
                 "[Discovery] mDNS unavailable; network discovery disabled:",
                 err,
             );
+            this.failure = err instanceof Error ? err.message : String(err);
             this.started = false;
         }
     }
@@ -173,6 +178,12 @@ export class DiscoveryService extends EventEmitter {
 
     private emitChange() {
         this.emit("update", this.list());
+    }
+
+    /** online machines, sorted by name; throws why when browsing the network failed */
+    public found(): DiscoveredComputer[] {
+        if (this.failure) throw new Error(`Paperboard can't look for computers on this network: ${this.failure}`);
+        return this.list();
     }
 
     // online machines, sorted by name

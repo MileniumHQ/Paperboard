@@ -156,3 +156,24 @@ test("the can't-reach dialog checks the computer once when it opens and once per
     expect(await shell.host<number>({ cmd: "probes" })).toBe(before + 2);
     expect(page.exceptions).toEqual([]);
 });
+
+// Inventory: Core contracts — a panel on a computer that can't be reached says so, never that its file is missing.
+test("a panel file from a computer that can't be reached answers 502 with why", async () => {
+    await workshop.daemon.stop();
+    const answer = await shell.page.evaluate<[number, string]>(
+        `fetch("/_panel/${workshop.id}/dev.example.notes/index.html").then(async (r) => [r.status, await r.text()])`,
+    );
+    expect(answer[0]).toBe(502);
+    // named as the rail names it (an earlier test renamed it)
+    expect(answer[1]).toMatch(/^\w+ could not be reached: Connection refused/);
+});
+
+// Inventory: Security — the shell's computer list never carries a pairing's token or pinned certificate.
+test("the computer list the shell gets has no paired computer's token or certificate", async () => {
+    const { result: listed } = await shell.page.evaluate<{ result: { computers: Record<string, unknown>[] } }>(
+        `fetch("/_shell/invoke/computers-list", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ args: [] }) }).then((r) => r.json())`,
+    );
+    const paired = listed.computers.find((c) => c.id === workshop.id);
+    expect(paired?.host).toBe("127.0.0.2");
+    expect(listed.computers.every((c) => !("token" in c) && !("cert" in c))).toBe(true);
+});

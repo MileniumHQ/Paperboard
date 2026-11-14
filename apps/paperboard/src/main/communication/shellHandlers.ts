@@ -104,7 +104,7 @@ export function createShellInvokeHandlers(
         },
 
         // renderer input is validated here, not trusted from the caller's types
-        "computer-remove": (id) => connectionPool.removeComputer(requireString(id, "id")),
+        "computer-remove": (id) => connectionPool.unpairComputer(requireString(id, "id")),
 
         "computer-switch": (id) => connectionPool.setActive(requireString(id, "id")),
 
@@ -118,7 +118,7 @@ export function createShellInvokeHandlers(
 
         "discovery-list": () => {
             discovery.refresh();
-            return discovery.list();
+            return discovery.found();
         },
 
         // local dir or panel files dir; remotes mount an ephemeral session

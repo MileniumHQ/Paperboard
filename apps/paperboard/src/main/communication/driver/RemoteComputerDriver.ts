@@ -16,9 +16,8 @@ export class RemoteComputerDriver implements ComputerDriver {
         return this.computerId;
     }
 
-    public async getSystemInfo(): Promise<SystemInfo> {
-        const info = await this.client.getSystemInfo();
-        return info ?? { hostname: this.computerId, os: "unknown", arch: "unknown" };
+    public getSystemInfo(): Promise<SystemInfo> {
+        return this.client.getSystemInfo();
     }
 
     public async getPackageIndex(): Promise<Record<string, any>> {

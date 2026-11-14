@@ -93,7 +93,7 @@ async function revokeSession(s: ActiveSession): Promise<void> {
         });
     } catch (err) {
         // unreachable — server expiry reaps it
-        logger.debug("[remoteFolder] session keepalive failed:", err);
+        logger.debug("[remoteFolder] session revoke failed:", err);
     }
 }
 
@@ -233,7 +233,7 @@ export async function openRemoteFolder(
         return { ok: false, error };
     };
 
-    // MKCOL 405s ignored; best-effort
+    // the panel's folder is made first; 405 means it is already there
     if (subDir) {
         const basic =
             "Basic " +
@@ -241,13 +241,19 @@ export async function openRemoteFolder(
         let prefix = "";
         for (const seg of subDir.split("/").filter(Boolean)) {
             prefix += `/${encodeURIComponent(seg)}`;
+            let status: number;
             try {
-                await pinnedRequest(`${origin}/dav${prefix}`, cert, {
+                ({ status } = await pinnedRequest(`${origin}/dav${prefix}`, cert, {
                     method: "MKCOL",
                     headers: { Authorization: basic },
                     timeoutMs: 10_000,
-                });
-            } catch (err) { logger.debug("[remoteFolder.ts] op failed:", err) }
+                }));
+            } catch (err: any) {
+                return await fail(`The panel's folder couldn't be made on that computer: ${err?.message ?? String(err)}`);
+            }
+            if (status !== 201 && status !== 405) {
+                return await fail(`The panel's folder couldn't be made on that computer (HTTP ${status}).`);
+            }
         }
     }
 
@@ -318,6 +324,10 @@ export async function openRemoteFolder(
             rec.mount = mountPoint;
             active.set(computerId, rec);
             const target = subDir ? `${mountPoint}/${subDir}` : mountPoint;
+            // Finder opens somewhere else for a path that isn't there
+            if (!(await fs.promises.access(target).then(() => true, () => false))) {
+                return await fail(`macOS mounted the folder, but ${target} isn't in it.`);
+            }
             spawn("open", [target], { detached: true, stdio: "ignore" }).unref();
             startWatcher(rec, () => macHasWindow(mountPoint));
             return { ok: true };
