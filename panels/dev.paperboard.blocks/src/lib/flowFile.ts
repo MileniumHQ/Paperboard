@@ -2,7 +2,7 @@
 // It is the saved canvas (Blockly's workspace, and the schema of each panel
 // block on it), marked so another file is refused with a reason.
 import type { SavedFlows } from "../panel";
-import { readFlows } from "./flows";
+import { isRecord, readFlows } from "./flows";
 
 export const FLOW_FILE_FORMAT = "paperboard-blocks";
 export const FLOW_FILE_VERSION = 1;
@@ -20,11 +20,10 @@ export function parseFlowFile(text: string): SavedFlows {
     } catch {
         throw new Error("This file isn't a Blocks flow file: it isn't JSON.");
     }
-    const file = raw as { format?: unknown; version?: unknown };
-    if (!file || typeof file !== "object" || file.format !== FLOW_FILE_FORMAT) throw new Error("This file isn't a Blocks flow file.");
-    if (typeof file.version !== "number" || file.version > FLOW_FILE_VERSION) {
-        throw new Error(`This file was made by a newer version of Blocks (version ${String(file.version)}); update Blocks to import it.`);
-    }
+    if (!isRecord(raw) || raw.format !== FLOW_FILE_FORMAT) throw new Error("This file isn't a Blocks flow file.");
+    const version = raw.version;
+    if (typeof version !== "number" || !Number.isInteger(version) || version < 1) throw new Error("This Blocks flow file has no version, so it can't be read.");
+    if (version > FLOW_FILE_VERSION) throw new Error(`This file was made by a newer version of Blocks (version ${version}); update Blocks to import it.`);
     const flows = readFlows(raw);
     if (!flows.workspace.blocks?.blocks.length) throw new Error("This flow file has no blocks in it.");
     return flows;
