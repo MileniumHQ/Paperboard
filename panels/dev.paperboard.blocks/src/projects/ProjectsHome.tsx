@@ -26,6 +26,7 @@ import { editedText, switchFailed, type ProjectsState } from "./state";
 import { errorMessage } from "../lib/failure";
 import { oneAtATime } from "../lib/oneAtATime";
 import type { ProjectSummary } from "../lib/projects";
+import { closedUnsaved, NOT_SAVED, setClosedUnsaved } from "../editorFlows";
 
 
 export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (project: ProjectSummary) => void }) {
@@ -84,6 +85,11 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                         <PaperQuote variant="danger" icon="warning" title={f().title} role="alert" onDismiss={() => setFailure(null)}>
                             {f().text}
                         </PaperQuote>
+                    )}
+                </Show>
+                <Show when={closedUnsaved()}>
+                    {(text) => (
+                        <PaperQuote variant="danger" icon="warning" title={NOT_SAVED} role="alert" onDismiss={() => setClosedUnsaved(null)}>{text()}</PaperQuote>
                     )}
                 </Show>
                 <Show when={props.projects.state().projectsError}>

@@ -26,6 +26,10 @@ type Schemas = SavedFlows["schemas"];
 export const NOT_SAVED = "Your changes weren't saved";
 const SAVE_DELAY_MS = 400;
 
+// why the edits sent as an editor closed didn't save: the editor is gone, so the page says it
+const [closedUnsaved, setClosedUnsaved] = createSignal<string | null>(null);
+export { closedUnsaved, setClosedUnsaved };
+
 /** What the registry offers, as the Library shows it. */
 export interface Registry {
     panels: PanelItem[];
@@ -79,6 +83,9 @@ export function createEditorFlows(options: {
     const [loaded, setLoaded] = createSignal(false);
     const [loadError, setLoadError] = createSignal<string | null>(null);
     let saveTimer: ReturnType<typeof setTimeout> | undefined;
+    // an edit the service doesn't hold yet: from the edit until a save made after it lands
+    const [unsaved, setUnsaved] = createSignal(false);
+    let edits = 0;
     // the editor has gone: a load that answers now has no canvas to show it on
     let closed = false;
     // the save in flight, so leaving waits for it
@@ -176,30 +183,54 @@ export function createEditorFlows(options: {
      * rejects with why it didn't save. A canvas whose flows didn't load is
      * read-only, so it has nothing to save.
      */
-    function saveNow(): Promise<void> {
+    async function saveNow(): Promise<void> {
         clearTimeout(saveTimer);
         const workspace = options.workspace();
         if (!workspace || !loaded()) return saving;
+        // the canvas is read now, before anything is waited on
         const flows = snapshot();
+        const seen = edits;
         const text = JSON.stringify(flows.workspace);
-        if (text === stored) return saving;
-        stored = text;
-        const preview = canvasPreview(workspace);
-        saving = saving
-            .catch(() => undefined)
-            .then(() => bridge.call(SERVICE_CALLS.save, { project: options.project(), flows, preview }))
-            .then(options.onSaved, (err: unknown) => {
-                stored = null;
-                throw err;
-            });
-        return saving;
+        if (text !== stored) {
+            stored = text;
+            const preview = canvasPreview(workspace);
+            saving = saving
+                .catch(() => undefined)
+                .then(() => bridge.call(SERVICE_CALLS.save, { project: options.project(), flows, preview }))
+                .then(options.onSaved, (err: unknown) => {
+                    stored = null;
+                    throw err;
+                });
+        }
+        await saving;
+        if (seen === edits) setUnsaved(false);
     }
 
-    /** An edit: it is saved once the edits pause. */
+    // a save that failed is said in the editor, or by the page once the editor has closed
+    const notSaved = (err: unknown) => (closed ? setClosedUnsaved(errorMessage(err)) : fail(NOT_SAVED)(err));
+    /** Saves what isn't saved yet, as the editor or the page goes: the canvas is read as it is, even before Blockly tells of its last change. */
+    const saveLeaving = () => void saveNow().catch(notSaved);
+    window.addEventListener("pagehide", saveLeaving);
+
+    /**
+     * A change on the canvas: an edit is saved once the edits pause. A change
+     * that leaves the canvas as the service holds it (a load, a theme, a
+     * warning) is not one, so the page isn't marked unsaved for it.
+     */
     function edited(): void {
-        if (!loaded()) return;
+        if (!loaded() || closed) return;
+        if (!unsaved() && JSON.stringify(snapshot().workspace) === stored) return;
+        edits++;
+        setUnsaved(true);
         clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => void saveNow().catch(fail(NOT_SAVED)), SAVE_DELAY_MS);
+        saveTimer = setTimeout(() => void saveNow().catch(notSaved), SAVE_DELAY_MS);
+    }
+
+    /** The project goes with its edits (it is being deleted): none still waiting is sent. */
+    function discard(): void {
+        clearTimeout(saveTimer);
+        edits++;
+        setUnsaved(false);
     }
 
     /** Saves the latest edits now, saying why when they didn't save. */
@@ -223,7 +254,8 @@ export function createEditorFlows(options: {
     async function load(): Promise<void> {
         const workspace = canvas();
         const mine = ++loads;
-        clearTimeout(saveTimer);
+        // the canvas shows what the service has, in place of any edit not sent
+        discard();
         setLoaded(false);
         workspace.setIsReadOnly(true);
         try {
@@ -259,19 +291,24 @@ export function createEditorFlows(options: {
     return {
         loaded,
         loadError,
+        /** an edit the service doesn't hold yet, or whose save failed */
+        unsaved,
         load,
         registryChanged,
         markResults,
         snapshot,
         saveNow,
         edited,
+        discard,
         flush,
         addFlows,
         /** the schema a block on the canvas was defined from, if it is a registry block */
         schemaOf: (type: string) => schemas[type]?.schema,
+        /** The editor goes: what isn't saved is sent from the canvas as it is now, before the canvas goes. */
         dispose: () => {
             closed = true;
-            clearTimeout(saveTimer);
+            window.removeEventListener("pagehide", saveLeaving);
+            saveLeaving();
         },
     };
 }

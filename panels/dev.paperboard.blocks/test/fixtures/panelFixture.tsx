@@ -13,7 +13,8 @@ import { PaperProvider } from "@mileniumhq/paperui";
 import App from "../../src/App";
 import { SERVICE_CALLS, type LogEntry } from "../../src/panel";
 import { BUILTIN } from "../../src/lib/names";
-import { project, registry, service, SERVICED_PROJECT } from "./serviceStub";
+import { NOT_SAVED } from "../../src/editorFlows";
+import { project, registry, service, SERVICED_PROJECT, unsaved } from "./serviceStub";
 
 const errors: string[] = [];
 window.addEventListener("error", (event) => errors.push(event.error instanceof Error ? event.error.message : event.message));
@@ -381,16 +382,83 @@ async function openChecks() {
     return { saves: saves() - before };
 }
 
+const alertSaying = (text: string) => [...document.querySelectorAll<HTMLElement>('[role="alert"]')].find((el) => el.textContent?.includes(text));
+/** the window resized to `width` by `height`, or back to its own size with none */
+async function viewport(size: { width: number; height: number } | null): Promise<void> {
+    const answer = await fetch("/viewport", { method: "POST", body: JSON.stringify(size) });
+    if (!answer.ok) throw new Error(`the resize failed: ${await answer.text()}`);
+}
+const PHONE = { width: 390, height: 844 };
+const phoneScreen = () => byText("*", "Blocks isn't on phones yet");
+
 /**
- * What the page shows now, at phone and desktop width in both themes, saved
- * by the harness when BLOCKS_FIXTURE_SHOTS names a folder (a person looks at them).
+ * No edit goes without a word: a save the service refuses is said until one
+ * goes through, and Paperboard is told the page holds unsaved work, so it
+ * asks before a restart; asked, the editor saves, or asks the person when it
+ * can't. An editor closed straight after an edit (the window narrowed to a
+ * phone's) sends it as it goes, and one whose save fails then says so on the
+ * page that's left.
  */
-async function shoot(name: string): Promise<void> {
+async function unsavedChecks() {
+    const name = "Renamed by hand";
+    byText("*", name)!.click();
+    await editing(name);
+    const askedBefore = unsaved.confirm() !== null;
+    service.fail(SERVICE_CALLS.save, "the disk is full");
+    await addBlock("edit-refused");
+    const refused = (await until("the refused save's notice", () => alertSaying(NOT_SAVED)))!.textContent ?? "";
+    const ask = unsaved.confirm();
+    // Paperboard is about to restart the panel: the save fails again, so the person is asked
+    const asking = ask?.();
+    const dialog = await until("the unsaved changes dialog", openDialog);
+    const dialogText = dialog.textContent ?? "";
+    await shoot("unsaved-dialog");
+    byText("button", "Stay", dialog)!.click();
+    const stayAnswer = await asking;
+    await until("the dialog to close", () => !openDialog());
+    // the service takes saves again: asked again, the editor saves, and the panel may restart
+    service.fail(SERVICE_CALLS.save, null);
+    const leaveAnswer = await unsaved.confirm()?.();
+    await settle();
+    const afterSave = { saved: saveHolding("edit-refused") >= 0, notice: alertSaying(NOT_SAVED)?.textContent ?? null, asks: unsaved.confirm() !== null };
+
+    // an edit, and at once the window is a phone's: the editor closes, sending it
+    await addBlock("edit-before-narrow");
+    await viewport(PHONE);
+    await until("the phone screen", phoneScreen);
+    const sentOnClose = saveHolding("edit-before-narrow") >= 0;
+    await viewport(null);
+    await home();
+
+    // the same, but the save fails: the phone screen says so, and so does home once the window is wide again
+    byText("*", name)!.click();
+    await editing(name);
+    service.fail(SERVICE_CALLS.save, "the disk is full");
+    await addBlock("edit-lost-on-close");
+    await viewport(PHONE);
+    const onPhone = (await until("the failure on the phone screen", () => phoneScreen() && alertSaying(NOT_SAVED)))!.textContent ?? "";
+    await viewport(null);
+    service.fail(SERVICE_CALLS.save, null);
+    await shoot("closed-unsaved", true);
+    const onHome = (await until("the failure on home", () => byText("button", "New project") && alertSaying(NOT_SAVED)))!;
+    const homeText = onHome.textContent ?? "";
+    onHome.querySelector<HTMLElement>('[aria-label="Dismiss"]')!.click();
+    await settle();
+    return { askedBefore, refused, dialogText, stayAnswer, leaveAnswer, afterSave, sentOnClose, onPhone, homeText, dismissed: !alertSaying(NOT_SAVED) };
+}
+
+/**
+ * What the page shows now, at desktop width in both themes, saved by the
+ * harness when BLOCKS_FIXTURE_SHOTS names a folder (a person looks at them).
+ * At a phone's width too with `phone`: the panel shows its phone screen
+ * there, so what was open is closed, and home shows once it is wide again.
+ */
+async function shoot(name: string, phone = false): Promise<void> {
     for (const theme of ["light", "dark"]) {
         // the theme as the shell gives it to a panel
         document.documentElement.setAttribute("data-paperui-theme", theme);
         await settle();
-        for (const [size, width, height] of [["phone", 390, 844], ["desktop", 1280, 800]] as const) {
+        for (const [size, width, height] of [["desktop", 1280, 800], ...(phone ? ([["phone", PHONE.width, PHONE.height]] as const) : [])] as const) {
             const answer = await fetch("/screenshot", { method: "POST", body: JSON.stringify({ name: `${name}-${size}-${theme}`, width, height }) });
             if (!answer.ok) throw new Error(`the screenshot failed: ${await answer.text()}`);
         }
@@ -454,8 +522,9 @@ async function run(): Promise<Record<string, unknown>> {
     const loadFailure = await loadFailureChecks();
     const leaving = await leaveChecks();
     const opening = await openChecks();
+    const unsavedWork = await unsavedChecks();
     const homeScreen = await homeChecks();
-    return { console: consoleResult, dialogs, library, createVariable, toggle, refresh, loadFailure, leaving, opening, home: homeScreen, uncaught: [...errors] };
+    return { console: consoleResult, dialogs, library, createVariable, toggle, refresh, loadFailure, leaving, opening, unsavedWork, home: homeScreen, uncaught: [...errors] };
 }
 
 run()

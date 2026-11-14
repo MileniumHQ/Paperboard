@@ -82,6 +82,16 @@ export const panelsApi = {
     list: async (): Promise<PanelItem[]> => structuredClone(panels),
 };
 
+let confirmLeave: (() => Promise<boolean>) | null = null;
+/** what the page told Paperboard of its unsaved work, as the shell keeps it */
+export const unsaved = {
+    /** what Paperboard calls before it restarts or uninstalls the panel, while the page holds unsaved work */
+    confirm: () => confirmLeave,
+};
+export function setUnsavedChanges(confirm: (() => Promise<boolean>) | null): void {
+    confirmLeave = confirm;
+}
+
 export const SERVICED_PROJECT = "p-serviced";
 
 export const project = (id: string, name: string, editedAt = 0): ProjectSummary => ({

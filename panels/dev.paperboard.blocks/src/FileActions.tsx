@@ -168,6 +168,9 @@ export function createFileActions(props: {
         setRestoring(true);
         setLoadError(null);
         try {
+            // a save still going would land over the backup: it goes first. Whether it saves
+            // doesn't matter, as the backup replaces the canvas either way
+            await props.flush();
             await backupApi.restore(PANEL_ID, record.id);
         } catch (err) {
             setLoadError({ title: "Backup not loaded", text: errorMessage(err) });

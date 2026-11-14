@@ -9,7 +9,8 @@
 // button focus lands on, typing into whatever has the keyboard) posts the
 // DevTools Input calls to /input: Chrome delivers them as trusted events,
 // which a page's own dispatchEvent can't make. A fixture's /screenshot saves
-// what the page shows at a size into BLOCKS_FIXTURE_SHOTS, when that is set.
+// what the page shows at a size into BLOCKS_FIXTURE_SHOTS, when that is set,
+// and its /viewport lays the page out as a window resized to a size.
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -75,6 +76,14 @@ async function runPage(chrome: Chrome, dist: string, page: string): Promise<Fixt
                     if (!call.method.startsWith("Input.")) throw new Error(`a fixture sends only Input calls, not ${call.method}`);
                     await tab.send(call.method, call.params);
                 }
+                return new Response("ok");
+            }
+            if (request.method === "POST" && url.pathname === "/viewport") {
+                // the window resized to a size, or back to its own with none
+                const size = (await request.json()) as { width: number; height: number } | null;
+                if (!tab) throw new Error("The page is not open");
+                if (size) await tab.resize(size.width, size.height);
+                else await tab.send("Emulation.clearDeviceMetricsOverride");
                 return new Response("ok");
             }
             if (request.method === "POST" && url.pathname === "/screenshot") {

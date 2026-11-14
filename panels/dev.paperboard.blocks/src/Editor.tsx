@@ -4,7 +4,7 @@
 // make them; the service runs the flows.
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import * as Blockly from "blockly";
-import { blocksApi } from "@mileniumhq/paperapi";
+import { blocksApi, setUnsavedChanges } from "@mileniumhq/paperapi";
 import {
     PaperButton,
     PaperContextMenuItem,
@@ -13,8 +13,10 @@ import {
     PaperIcon,
     PaperMenuBar,
     PaperMenuBarMenu,
+    PaperModal,
     PaperQuote,
     PaperSeparator,
+    PaperText,
     PaperToggle,
 } from "@mileniumhq/paperui";
 import { BUILTIN_BLOCKS, builtinPlaceholder } from "./lib/blockDefs";
@@ -93,12 +95,16 @@ export default function Editor(props: {
 
     /** Scrolls the list to a section's heading. */
     function jump(section: string): void {
-        const flyout = workspace?.getFlyout();
-        if (!flyout) return;
-        const heading = flyout.getContents().filter((item) => item.getType() === HEADING_KIND)[library.sectionNames().indexOf(section)];
-        const list = flyout.getWorkspace();
-        if (!heading || !list.scrollbar) throw new Error(`The Library has no section "${section}"`);
-        list.scrollbar.setY(heading.getElement().getBoundingRectangle().top * list.scale);
+        try {
+            const flyout = workspace?.getFlyout();
+            const list = flyout?.getWorkspace();
+            if (!flyout || !list?.scrollbar) throw new Error("The Library's list isn't drawn yet");
+            const heading = flyout.getContents().filter((item) => item.getType() === HEADING_KIND)[library.sectionNames().indexOf(section)];
+            if (!heading) throw new Error(`The Library has no section "${section}"`);
+            list.scrollbar.setY(heading.getElement().getBoundingRectangle().top * list.scale);
+        } catch (err) {
+            fail("Couldn't jump to that section")(err);
+        }
     }
 
     onMount(() => {
@@ -259,6 +265,25 @@ export default function Editor(props: {
     const [renaming, setRenaming] = createSignal(false);
     const [deleting, setDeleting] = createSignal(false);
 
+    // Paperboard asks before it restarts or uninstalls the panel while an edit isn't saved: it is
+    // saved then, and a save that fails asks whether to go without it
+    const [leaving, setLeaving] = createSignal<{ why: string; answer: (leave: boolean) => void } | null>(null);
+    const answerLeave = (leave: boolean) => {
+        leaving()?.answer(leave);
+        setLeaving(null);
+    };
+    const confirmLeave = async () => {
+        const saved = await flows.flush();
+        if (saved.ok) return true;
+        answerLeave(false);
+        return new Promise<boolean>((answer) => setLeaving({ why: saved.message, answer }));
+    };
+    createEffect(on(flows.unsaved, (unsaved) => setUnsavedChanges(unsaved ? confirmLeave : null)));
+    onCleanup(() => {
+        answerLeave(false);
+        setUnsavedChanges(null);
+    });
+
     const file = createFileActions({
         name: () => props.project().name,
         loaded: flows.loaded,
@@ -350,11 +375,35 @@ export default function Editor(props: {
                 </PaperFlex>
             </div>
             <file.LoadBackupModal />
+            <PaperModal
+                open={leaving() !== null}
+                title="Your latest changes aren't saved"
+                size="small"
+                onClose={() => answerLeave(false)}
+                footer={
+                    <>
+                        <PaperButton variant="text" onClick={() => answerLeave(false)}>Stay</PaperButton>
+                        <PaperButton variant="danger" onClick={() => answerLeave(true)}>Leave without them</PaperButton>
+                    </>
+                }
+            >
+                <PaperFlex direction="column" gap="half">
+                    <PaperText preset="text">{leaving()?.why}</PaperText>
+                    <PaperText preset="hint">Stay to keep them on the canvas, or leave without them.</PaperText>
+                </PaperFlex>
+            </PaperModal>
             <RenameProjectModal project={renaming() ? props.project() : null} onRename={props.projects.rename} onClose={() => setRenaming(false)} />
             <DeleteProjectModal
                 project={deleting() ? props.project() : null}
                 onDelete={async (id) => {
-                    await props.projects.remove(id);
+                    // the project goes with its edits, so none is sent after it is gone
+                    flows.discard();
+                    try {
+                        await props.projects.remove(id);
+                    } catch (err) {
+                        flows.edited();
+                        throw err;
+                    }
                     props.onHome();
                 }}
                 onClose={() => setDeleting(false)}

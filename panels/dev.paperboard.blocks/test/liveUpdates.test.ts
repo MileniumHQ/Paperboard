@@ -98,6 +98,27 @@ describe("the editor", () => {
     );
 
     test(
+        "no edit is lost without a word: a refused save is said, Paperboard asks before a restart, and an editor that closes at once sends its last edit",
+        async () => {
+            const { unsavedWork: u } = await panelFixture();
+            expect(u.askedBefore).toBe(false);
+            expect(u.refused).toContain("the disk is full");
+            // asked before a restart while the save still fails: the person decides, and Stay keeps the panel
+            expect(u.dialogText).toContain("the disk is full");
+            expect(u.stayAnswer).toBe(false);
+            // asked once saves go through again: it is saved, and the panel may go
+            expect(u.leaveAnswer).toBe(true);
+            expect(u.afterSave).toEqual({ saved: true, notice: null, asks: false });
+            // the window narrowed straight after an edit, before its save was due
+            expect(u.sentOnClose).toBe(true);
+            expect(u.onPhone).toContain("the disk is full");
+            expect(u.homeText).toContain("the disk is full");
+            expect(u.dismissed).toBe(true);
+        },
+        TIMEOUT,
+    );
+
+    test(
         "opening a project and leaving it without an edit saves nothing, so it isn't marked as just edited",
         async () => {
             const { opening } = await panelFixture();
