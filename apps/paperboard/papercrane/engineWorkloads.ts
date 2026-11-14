@@ -632,12 +632,7 @@ export class WorkloadRegistry {
         // kill and destroy only queue or write to a socket; neither throws
         for (const [, client] of entries) client.kill("SIGTERM");
 
-        const deadline = Date.now() + graceMs;
-        while (Date.now() < deadline) {
-            if (entries.every(([, client]) => !client.isConnected())) break;
-            await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-
+        await Promise.all(entries.map(([, client]) => exitWithin(client, graceMs)));
         this.killAllClients();
     }
 
@@ -724,25 +719,34 @@ export class WorkloadRegistry {
     }
 
     private async stopOwnedClient(id: string, client: SupervisedProcessClient, signal = "SIGTERM", graceMs = 3000): Promise<void> {
-        let exitCode: number | null = null;
-        if (client.isConnected()) {
-            let exited = false;
-            const onExit = (code: number | null) => { exited = true; exitCode = code; };
-            client.on("exit", onExit);
-            try {
-                client.kill(signal);
-                const started = Date.now();
-                let escalated = false;
-                while (!exited) {
-                    if (!escalated && Date.now() - started >= graceMs) { client.kill("SIGKILL"); escalated = true; }
-                    if (Date.now() - started >= graceMs + 3000) throw new Error(`Process ${id} did not stop; removal refused`);
-                    await new Promise((resolve) => setTimeout(resolve, 25));
-                }
-            } finally { client.off("exit", onExit); }
+        if (client.isConnected()) client.kill(signal);
+        let exit = await exitWithin(client, graceMs);
+        if (!exit) {
+            client.kill("SIGKILL");
+            exit = await exitWithin(client, 3000);
+            if (!exit) throw new Error(`Process ${id} did not stop; removal refused`);
         }
         client.destroy();
         // its own exit listener may have ended it already
         if (this.clients.get(id) !== client) return;
         this.clients.delete(id);
-        this.workloadEnded(id, exitCode);
-    }}
+        this.workloadEnded(id, exit.code);
+    }
+}
+
+// the client's exit (null code: it hung up without one), or null when `ms`
+// passes first; a client that is no longer connected has already ended
+function exitWithin(client: SupervisedProcessClient, ms: number): Promise<{ code: number | null } | null> {
+    if (!client.isConnected()) return Promise.resolve({ code: null });
+    return new Promise((resolve) => {
+        const onExit = (code: number | null) => {
+            clearTimeout(timer);
+            resolve({ code });
+        };
+        const timer = setTimeout(() => {
+            client.off("exit", onExit);
+            resolve(null);
+        }, ms);
+        client.on("exit", onExit);
+    });
+}
