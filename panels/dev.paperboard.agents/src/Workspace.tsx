@@ -97,8 +97,9 @@ export default function Workspace(props: { agent: Agent }) {
                     </div>
                 </div>
                 <div class={styles.pagePane} ref={pagePane} inert={!pages.shown()}>
-                    <Show when={drawn()}>
-                        {(page) => <PageView page={page()} pages={pages} extended={extended()} phone={phone()} onExtend={() => setExtended((x) => !x)} onClose={pages.close} />}
+                    {/* keyed by the page's name: another page is another view, with none of the last one's state */}
+                    <Show when={drawn()?.name} keyed>
+                        {(_name) => <PageView page={drawn()!} pages={pages} extended={extended()} phone={phone()} onExtend={() => setExtended((x) => !x)} onClose={pages.close} />}
                     </Show>
                 </div>
             </div>
