@@ -60,7 +60,24 @@ export function panelRunState(hasService: boolean, liveOwners: ReadonlySet<strin
     return liveOwners.has(panelId) ? "running" : "stopped";
 }
 
-/** A widget's title, naming its computer when more than one is paired. */
-export function widgetTitle(name: string, props: { showComputer: boolean; computerName: string }): string {
-    return props.showComputer ? `${name} · ${props.computerName}` : name;
+/**
+ * A widget's title, naming its computer when more than one is paired. A
+ * one-cell tile has room for the name alone: it names the computer under
+ * its figure instead (oneCellCaption).
+ */
+export function widgetTitle(name: string, props: { showComputer: boolean; computerName: string; size: { w: number } }): string {
+    return props.showComputer && props.size.w > 1 ? `${name} · ${props.computerName}` : name;
+}
+
+/** What a one-cell tile says under its figure: its computer when more than one is paired, else `own`. */
+export function oneCellCaption(own: string | undefined, props: { showComputer: boolean; computerName: string }): string | undefined {
+    return props.showComputer ? props.computerName : own;
+}
+
+/**
+ * A one-cell tile has no room for a Retry button under its message: while
+ * its figure can be tried again, the whole tile is the button.
+ */
+export function retryTile(oneCell: boolean, canRetry: boolean, retry: () => void): { onPress?: () => void; pressLabel?: string } {
+    return oneCell && canRetry ? { onPress: retry, pressLabel: "Retry" } : {};
 }

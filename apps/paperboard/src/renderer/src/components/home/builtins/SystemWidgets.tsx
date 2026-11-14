@@ -1,7 +1,7 @@
 import { PaperButton, PaperChart, PaperWidget, PaperWidgetMessage, PaperWidgetStat, PaperWidgetStats } from "@mileniumhq/paperui";
 import { type JSX, type Component, Show } from "solid-js";
 import type { BuiltinWidgetProps } from "./types";
-import { type Figure, figureOf, formatRate, formatUptime, widgetTitle } from "./systemFigures";
+import { type Figure, figureOf, formatRate, formatUptime, oneCellCaption, retryTile, widgetTitle } from "./systemFigures";
 import { USAGE_HISTORY_SAMPLES, useUsage } from "./usageStore";
 import { formatBytes, formatPercent } from "./usageSegments";
 import styles from "./Builtins.module.css";
@@ -10,7 +10,7 @@ import styles from "./Builtins.module.css";
 // report, through the same shared poller as CPU and Memory.
 
 /** A figure's loading and unavailable states, the same in every widget. */
-function FigureView<T>(props: { figure: Figure<T>; retry: () => void; children: (value: () => T) => JSX.Element }) {
+function FigureView<T>(props: { figure: Figure<T>; retry: () => void; oneCell: boolean; children: (value: () => T) => JSX.Element }) {
     return (
         <Show
             when={props.figure.kind === "ready" ? (props.figure as { value: T }).value : undefined}
@@ -18,8 +18,8 @@ function FigureView<T>(props: { figure: Figure<T>; retry: () => void; children: 
             fallback={
                 <Show when={props.figure.kind === "unavailable" ? (props.figure as Extract<Figure<T>, { kind: "unavailable" }>) : undefined}>
                     {(failed) => (
-                        <PaperWidgetMessage title="Not available" description={failed().message} tone="warning">
-                            <Show when={failed().retry}>
+                        <PaperWidgetMessage title="Not available" description={failed().message} hint={failed().message} tone="warning">
+                            <Show when={failed().retry && !props.oneCell}>
                                 <PaperButton size="tiny" onClick={props.retry}>Retry</PaperButton>
                             </Show>
                         </PaperWidgetMessage>
@@ -37,9 +37,11 @@ function FigureView<T>(props: { figure: Figure<T>; retry: () => void; children: 
 export const Disk: Component<BuiltinWidgetProps> = (props) => {
     const usage = useUsage(() => props.computerId, () => props.visible);
     const disk = () => figureOf(usage.state(), "disk", props.computerName);
+    const oneCell = () => props.size.w === 1;
+    const failed = () => disk().kind === "unavailable" && (disk() as { retry: boolean }).retry;
     return (
-        <PaperWidget title={widgetTitle("Disk", props)} icon="hard_drive">
-            <FigureView figure={disk()} retry={usage.retry}>
+        <PaperWidget title={widgetTitle("Disk", props)} icon="hard_drive" {...retryTile(oneCell(), failed(), usage.retry)}>
+            <FigureView figure={disk()} retry={usage.retry} oneCell={oneCell()}>
                 {(d) => {
                     const used = () => (d().totalBytes > 0 ? 1 - d().freeBytes / d().totalBytes : 0);
                     return (
@@ -47,7 +49,7 @@ export const Disk: Component<BuiltinWidgetProps> = (props) => {
                             role="img"
                             aria-label={`Disk on ${props.computerName}: ${formatBytes(d().freeBytes)} free of ${formatBytes(d().totalBytes)}`}
                             value={props.size.w > 1 ? `${formatBytes(d().freeBytes)} free` : formatPercent(used())}
-                            caption={props.size.w > 1 ? `${formatPercent(used())} of ${formatBytes(d().totalBytes)} used` : "used"}
+                            caption={props.size.w > 1 ? `${formatPercent(used())} of ${formatBytes(d().totalBytes)} used` : oneCellCaption("used", props)}
                             meter={{ value: used(), max: 1, variant: used() > 0.9 ? "danger" : "primary" }}
                         />
                     );
@@ -68,7 +70,7 @@ export const Network: Component<BuiltinWidgetProps> = (props) => {
     const peak = () => Math.max(1024, ...history("receivePerSecond"), ...history("sendPerSecond"));
     return (
         <PaperWidget title={widgetTitle("Network", props)} icon="swap_vert">
-            <FigureView figure={network()} retry={usage.retry}>
+            <FigureView figure={network()} retry={usage.retry} oneCell={false}>
                 {(n) => (
                     <>
                         <PaperWidgetStats
@@ -103,15 +105,16 @@ export const Network: Component<BuiltinWidgetProps> = (props) => {
 export const Uptime: Component<BuiltinWidgetProps> = (props) => {
     const usage = useUsage(() => props.computerId, () => props.visible);
     const uptime = () => figureOf(usage.state(), "uptimeSeconds", props.computerName);
+    const failed = () => uptime().kind === "unavailable" && (uptime() as { retry: boolean }).retry;
     return (
-        <PaperWidget title={widgetTitle("Uptime", props)} icon="schedule">
-            <FigureView figure={uptime()} retry={usage.retry}>
+        <PaperWidget title={widgetTitle("Uptime", props)} icon="schedule" {...retryTile(true, failed(), usage.retry)}>
+            <FigureView figure={uptime()} retry={usage.retry} oneCell>
                 {(seconds) => (
                     <PaperWidgetStat
                         role="img"
                         aria-label={`${props.computerName} has been running for ${formatUptime(seconds())}`}
                         value={formatUptime(seconds())}
-                        caption="running"
+                        caption={oneCellCaption("running", props)}
                     />
                 )}
             </FigureView>

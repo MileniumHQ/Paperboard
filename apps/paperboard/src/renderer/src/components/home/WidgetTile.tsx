@@ -1,4 +1,4 @@
-import { PaperButton, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperWidget, PaperWidgetMessage } from "@mileniumhq/paperui";
 import { type Component, type JSX, Show } from "solid-js";
 import styles from "./Home.module.css";
 
@@ -20,6 +20,8 @@ export interface WidgetTileProps {
     style: JSX.CSSProperties;
     label: string;
     sizeLabel: string;
+    /** one cell wide: no room for buttons under a message */
+    oneCell: boolean;
     children: JSX.Element;
     ref: (el: HTMLDivElement) => void;
     onRemove: () => void;
@@ -30,6 +32,10 @@ export interface WidgetTileProps {
 
 const WidgetTile: Component<WidgetTileProps> = (props) => {
     const status = () => props.status;
+    const retry = () => {
+        const current = status();
+        return current.kind === "unavailable" ? current.retry : undefined;
+    };
     return (
         <div
             ref={props.ref}
@@ -42,19 +48,31 @@ const WidgetTile: Component<WidgetTileProps> = (props) => {
                 <Show
                     when={status().kind === "ok"}
                     fallback={
-                        <div class={styles.tileStatus} role={status().kind === "unavailable" ? "alert" : "status"}>
-                            <PaperText preset="hint">
-                                {(status() as { message: string }).message}
-                            </PaperText>
-                            <Show when={status().kind === "unavailable" && (status() as { retry?: () => void }).retry}>
-                                {(retry) => (
-                                    <PaperButton size="tiny" variant="text" onClick={() => retry()()}>Retry</PaperButton>
-                                )}
-                            </Show>
-                            <Show when={status().kind === "unavailable"}>
-                                <PaperButton size="tiny" variant="text" onClick={props.onRemove}>Remove from Home</PaperButton>
-                            </Show>
-                        </div>
+                        // laid out and fitted like the widget it stands in for:
+                        // its name, then why it isn't there. A one-cell tile
+                        // has no room for buttons: its Retry is the whole tile,
+                        // and it is removed while Home is being edited.
+                        <PaperWidget
+                            title={props.label}
+                            onPress={props.oneCell ? retry() : undefined}
+                            pressLabel={props.oneCell && retry() ? "Retry" : undefined}
+                        >
+                            <PaperWidgetMessage
+                                title={status().kind === "unavailable" ? "Not available" : "Loading"}
+                                description={(status() as { message: string }).message}
+                                hint={(status() as { message: string }).message}
+                                tone={status().kind === "unavailable" ? "warning" : undefined}
+                            >
+                                <Show when={!props.oneCell && retry()}>
+                                    {(again) => (
+                                        <PaperButton size="tiny" variant="text" onClick={() => again()()}>Retry</PaperButton>
+                                    )}
+                                </Show>
+                                <Show when={!props.oneCell && status().kind === "unavailable"}>
+                                    <PaperButton size="tiny" variant="text" onClick={props.onRemove}>Remove from Home</PaperButton>
+                                </Show>
+                            </PaperWidgetMessage>
+                        </PaperWidget>
                     }
                 >
                     <Show when={props.live}>{props.children}</Show>

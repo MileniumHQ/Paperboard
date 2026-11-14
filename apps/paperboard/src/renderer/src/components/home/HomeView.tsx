@@ -960,6 +960,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                                             style={px(rectOf(placementOf(item())))}
                                             label={labelOf(item())}
                                             sizeLabel={sizeLabel(item().size)}
+                                            oneCell={sizeOf(item()).w === 1}
                                             onRemove={() => remove(id)}
                                             onPointerDown={(e) => startTileDrag(item(), e)}
                                             onKeyDown={(e) => onTileKey(item(), e)}

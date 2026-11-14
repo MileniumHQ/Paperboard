@@ -1,7 +1,7 @@
 import { PaperButton, PaperChart, PaperChartLegend, PaperWidget, PaperWidgetMessage, PaperWidgetStat, type PaperChartSegment } from "@mileniumhq/paperui";
 import { type Component, createMemo, createSignal, onCleanup, Show } from "solid-js";
 import type { BuiltinWidgetProps } from "./types";
-import { widgetTitle } from "./systemFigures";
+import { oneCellCaption, retryTile, widgetTitle } from "./systemFigures";
 import { USAGE_HISTORY_SAMPLES, useUsage } from "./usageStore";
 import { formatBytes, formatPercent, legendRows, type Segment, usageChart, usedFraction, type UsageMetric } from "./usageSegments";
 import styles from "./Builtins.module.css";
@@ -27,12 +27,14 @@ const UsageDonut: Component<BuiltinWidgetProps & { metric: UsageMetric }> = (pro
     const slices = () => (chart()?.segments ?? []).map((segment) => toChart(segment));
     // the legend names as many of the largest users as its box has rows
     // for, then "Free"; the rest are in the ring and the chart's name. CPU
-    // and Memory pick them alike, so the two cards name the same owners
+    // and Memory pick them alike, so the two cards name the same owners. A
+    // box with room for one row shows "Free" alone, never half of two.
     const [rows, setRows] = createSignal(3);
     const fitLegend = (box: HTMLDivElement) => {
         const observer = new ResizeObserver(() => {
-            const row = box.querySelector("li")?.getBoundingClientRect().height;
-            if (row) setRows(Math.max(2, Math.floor(box.clientHeight / row)));
+            // layout heights, both: Home may draw the tile scaled
+            const row = box.querySelector("li")?.offsetHeight;
+            if (row) setRows(Math.max(1, Math.floor(box.clientHeight / row)));
         });
         observer.observe(box);
         onCleanup(() => observer.disconnect());
@@ -67,12 +69,19 @@ const UsageDonut: Component<BuiltinWidgetProps & { metric: UsageMetric }> = (pro
     };
 
     return (
-        <PaperWidget title={widgetTitle(title(), props)} icon={props.metric === "cpu" ? "memory" : "memory_alt"} detail={props.size.w > 1 ? summary() : undefined}>
+        <PaperWidget
+            title={widgetTitle(title(), props)}
+            icon={props.metric === "cpu" ? "memory" : "memory_alt"}
+            detail={props.size.w > 1 ? summary() : undefined}
+            {...retryTile(props.size.w === 1, unavailable() !== undefined, usage.retry)}
+        >
             <Show
                 when={!unavailable()}
                 fallback={
-                    <PaperWidgetMessage title="Not available" description={unavailable()} tone="warning">
-                        <PaperButton size="tiny" onClick={usage.retry}>Retry</PaperButton>
+                    <PaperWidgetMessage title="Not available" description={unavailable()} hint={unavailable()} tone="warning">
+                        <Show when={props.size.w > 1}>
+                            <PaperButton size="tiny" onClick={usage.retry}>Retry</PaperButton>
+                        </Show>
                     </PaperWidgetMessage>
                 }
             >
@@ -85,7 +94,7 @@ const UsageDonut: Component<BuiltinWidgetProps & { metric: UsageMetric }> = (pro
                                 role="img"
                                 aria-label={label()}
                                 value={formatPercent(used() ?? 0)}
-                                caption={summary() || undefined}
+                                caption={oneCellCaption(summary() || undefined, props)}
                                 meter={{ value: used() ?? 0, max: 1, variant: (used() ?? 0) > 0.9 ? "danger" : "primary" }}
                             />
                         </Show>
