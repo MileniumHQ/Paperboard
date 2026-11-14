@@ -1,4 +1,4 @@
-import { invoke, send, on, unpackIpcPayload } from "./ipc";
+import { invoke, send, on } from "./ipc";
 import "./readiness";
 import "./swipeBack";
 import "./haptics";
@@ -87,9 +87,8 @@ export const terminalApi = {
         invoke<boolean>("terminal-exists", { id }),
 
     onData: (id: string, callback: (data: string) => void): (() => void) => {
-        return on(`terminal-data:${id}`, (event: unknown, data: any) => {
-            const str = unpackIpcPayload<string>(event, data) as string;
-            if (str) callback(str);
+        return on(`terminal-data:${id}`, (_event: unknown, data: unknown) => {
+            if (typeof data === "string" && data) callback(data);
         });
     },
 
@@ -121,9 +120,8 @@ export const terminalApi = {
     },
 
     onExit: (id: string, callback: (exitCode?: number) => void): (() => void) => {
-        return on(`terminal-exit:${id}`, (event: unknown, payload: any) => {
-            const raw = payload !== undefined ? payload : event;
-            callback(typeof raw === "number" ? raw : raw?.exitCode);
+        return on(`terminal-exit:${id}`, (_event: unknown, exit: { exitCode?: number }) => {
+            callback(exit.exitCode);
         });
     },
 };

@@ -34,9 +34,9 @@ function requireConfigId(id: unknown): string {
     return id;
 }
 
-// panel configuration persistence. The config id is always explicit: an
-// omitted id used to fall back to "whoever this document is" (ambient
-// identity). Scope omitted = the transport this document was granted.
+// panel configuration persistence. The config id is always explicit: a
+// document's own identity is ambient, never a claim to a panel's config.
+// Scope omitted = the transport this document was granted.
 //
 // No path: the panel's config document, stored in configs/<panelId>.json.
 // With a panel-relative path (tabs.json, canvas.json): workspace data in

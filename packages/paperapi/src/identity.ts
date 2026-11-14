@@ -5,19 +5,6 @@ import { serviceBootContext } from "./boot";
 import { requirePanelId } from "./panelIdentity";
 import { panelPath, parsePanelPath } from "./panelPath";
 
-// log-once ledger. BOUNDED: an append-only array grows with every distinct
-// label a long-lived process warns about, so past the cap the oldest entry
-// drops (the label may then warn again — verbosity is preferred to a leak)
-const warnedCaps: string[] = [];
-const MAX_WARNED_CAPS = 32;
-
-export function warnOnce(labels: string, ...args: unknown[]): void {
-    if (warnedCaps.includes(labels)) return;
-    if (warnedCaps.length >= MAX_WARNED_CAPS) warnedCaps.shift();
-    warnedCaps.push(labels);
-    console.warn(...args);
-}
-
 export function grantedComputerId(): string {
     const computerId = (globalThis as any).__PAPERBOARD_CRANE?.computerId;
     if (typeof computerId === "string" && computerId) return computerId;

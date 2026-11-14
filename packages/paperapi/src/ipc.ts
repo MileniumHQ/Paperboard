@@ -28,10 +28,6 @@ declare global {
     }
 }
 
-export function unpackIpcPayload<T>(event: unknown, data: T): T | unknown {
-    return data !== undefined ? data : event;
-}
-
 // panel id resolution, priority and semantics live in src/identity.ts
 export function getPanelId(): string {
     return resolvePanelId();
@@ -566,9 +562,8 @@ export function on(
     // replay attachments this client owns — refcounted per resource id:
     // multiple subscribers to the same id share ONE attachment (one remote
     // attach RPC, one replay entry), so an unsubscribe only tears down when
-    // the LAST subscriber leaves. Per-subscriber attach/untrack pairs
-    // previously untracked on the first unsubscribe while a listener
-    // remained, silently losing reconnect replay. Exit counts too: the daemon
+    // the LAST subscriber leaves; untracking on the first would lose the
+    // reconnect replay for the listeners that remain. Exit counts too: the daemon
     // sends a resource's exit only to connections attached to it, so an exit
     // listener on a connection that did not start the resource (a restarted
     // service taking back a run) would otherwise never hear it.

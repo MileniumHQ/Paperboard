@@ -1,4 +1,5 @@
-import { invoke, on } from "./ipc";
+import { invoke } from "./ipc";
+import { followProgress } from "./progress";
 import { newClientId } from "./channels";
 
 export interface PackageProgress {
@@ -32,20 +33,7 @@ export const packageApi = {
         onProgress?: (progress: PackageProgress) => void,
     ): Promise<string> => {
         const downloadId = newClientId(packageName);
-        // hoisted so a rejected invoke can unsubscribe (see file.ts)
-        let off: (() => void) | undefined;
-        if (onProgress) {
-            off = on(`package-progress:${downloadId}`, (event: any, payload: any) => {
-                const data = payload !== undefined ? payload : event;
-                if (data) {
-                    const progress = data as PackageProgress;
-                    onProgress(progress);
-                    if (progress.stage === "completed" || progress.stage === "error") {
-                        off?.();
-                    }
-                }
-            });
-        }
+        const off = onProgress ? followProgress(`package-progress:${downloadId}`, onProgress) : undefined;
         try {
             return await invoke<string>("package-download", { packageName, downloadId });
         } catch (err) {

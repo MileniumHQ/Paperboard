@@ -1,12 +1,13 @@
-import { invoke, on } from "./ipc";
+import { invoke } from "./ipc";
+import { followProgress } from "./progress";
 import { newClientId } from "./channels";
 import { requirePanelId } from "./panelIdentity";
 import { importFile, importFiles, importFolder, exportFile } from "./fileTransfer";
 
 export { FileTransferError, type FileTransferErrorCode, type FileTypeFilter, type ImportFileOptions, type ImportFileResult, type ImportFilesResult, type ImportFolderResult, type ImportedFile, type ExportFileOptions, type ExportFileResult } from "./fileTransfer";
 
-// every file call names the panel whose storage it touches: an omitted id
-// used to fall back to "whoever this document is", which is ambient identity
+// every file call names the panel whose storage it touches: a document's own
+// identity is ambient, never a claim to a panel's files
 const owner = (appId: unknown): string => requirePanelId(appId);
 
 export interface FileDownloadProgress {
@@ -39,21 +40,7 @@ export const fileApi = {
 
         const downloadId = newClientId("file");
 
-        // hoisted so a rejected invoke can unsubscribe: a download that
-        // fails to start must not leave a permanently subscribed listener
-        let off: (() => void) | undefined;
-        if (opts.onProgress) {
-            off = on(`file-progress:${downloadId}`, (event: unknown, data: any) => {
-                const payload = data !== undefined ? data : event;
-                if (payload) {
-                    const progress = payload as FileDownloadProgress;
-                    opts.onProgress!(progress);
-                    if (progress.stage === "completed" || progress.stage === "error") {
-                        off?.();
-                    }
-                }
-            });
-        }
+        const off = opts.onProgress ? followProgress(`file-progress:${downloadId}`, opts.onProgress) : undefined;
 
         try {
             return await invoke("file-download", {

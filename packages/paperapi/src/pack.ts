@@ -79,9 +79,7 @@ export function packPanel(options: PackOptions = {}): PackResult {
     }
 
     // manifest.base says where the panel entry lives; the directory holding
-    // it must be packed — previously base was validated but the archive
-    // silently hardcoded dist/, so a base outside dist was dropped on the
-    // floor
+    // it is packed wherever it is, so a base outside dist/ still ships
     const baseDirRel: string | null = (() => {
         const rel = path.relative(panelDir, path.dirname(baseAbsolutePath));
         return rel === "" ? null : rel;

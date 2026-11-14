@@ -1,4 +1,4 @@
-import { invoke, send, on, unpackIpcPayload } from "./ipc";
+import { invoke, send, on } from "./ipc";
 import { newClientId } from "./channels";
 
 export interface ProcessRunResult {
@@ -35,9 +35,8 @@ export interface ProcessStartOptions {
 
 // a process stream's text, empty chunks dropped; returns its teardown
 function onText(stream: "process-data" | "process-stdout" | "process-stderr", id: string, callback: (data: string) => void): () => void {
-    return on(`${stream}:${id}`, (event: unknown, data: any) => {
-        const text = unpackIpcPayload<string>(event, data) as string;
-        if (text) callback(text);
+    return on(`${stream}:${id}`, (_event: unknown, data: unknown) => {
+        if (typeof data === "string" && data) callback(data);
     });
 }
 
@@ -79,9 +78,8 @@ export const processApi = {
     onStderr: (id: string, callback: (data: string) => void): (() => void) => onText("process-stderr", id, callback),
 
     onExit: (id: string, callback: (exitCode?: number) => void): (() => void) => {
-        return on(`process-exit:${id}`, (event: unknown, payload: any) => {
-            const raw = payload !== undefined ? payload : event;
-            callback(typeof raw === "number" ? raw : raw?.exitCode);
+        return on(`process-exit:${id}`, (_event: unknown, exit: { exitCode?: number }) => {
+            callback(exit.exitCode);
         });
     },
 
@@ -122,16 +120,14 @@ export const processApi = {
                 }, timeoutMs);
             };
 
-            unsubscribers.push(on(`process-exit:${id}`, (_event: unknown, payload: any) => {
+            unsubscribers.push(on(`process-exit:${id}`, (_event: unknown, exit: { exitCode?: number }) => {
                 exited = true;
                 if (timer !== null) clearTimeout(timer);
                 if (timedOut) {
                     resolve({ exitCode: -1, code: "RUN_TIMEOUT" });
                     return;
                 }
-                const raw = payload !== undefined ? payload : _event;
-                const code = typeof raw === "number" ? raw : raw?.exitCode ?? 0;
-                resolve({ exitCode: code });
+                resolve({ exitCode: exit.exitCode ?? 0 });
             }));
         });
 
