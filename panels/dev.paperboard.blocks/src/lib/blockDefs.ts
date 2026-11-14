@@ -172,6 +172,162 @@ export interface Definitions {
     uses: Record<string, string[]>;
 }
 
+/** What defining one registry entry adds to, and what it is. */
+interface EntryContext {
+    out: Definitions;
+    bases: TypeBases;
+    /** the types each panel offers, by "panel:type" */
+    types: Map<string, BlockInfo>;
+    panelId: string;
+    entry: string;
+    project: string | undefined;
+    /** the toolbox section its blocks go in */
+    contents: Json[];
+    /** keeps the schema a block type was defined from */
+    record(type: string): void;
+    /** defines the dropdowns its inputs with choices start as, saved with `owner` */
+    choiceBlocks(owner: string, inputs: Inputs | undefined): void;
+    /** the block as the toolbox lists it, its inputs filled with what they start as */
+    toolboxBlock(type: string, inputs: Inputs | undefined, empty?: EmptyChoice): Json;
+}
+
+function defineType(c: EntryContext, schema: Schema<"type">): void {
+    const { out, bases, panelId, entry, project, contents, record } = c;
+    if (!project) out.schemas[typeSchemaKey(`${panelId}:${schema.id}`)] = { panelId, entry, schema };
+    if (!project && schema.dynamicChoices) {
+        // the dropdown an input of the type starts as; an optional one's first choice leaves it out
+        const typeRef = `${panelId}:${schema.id}`;
+        for (const empty of [undefined, "none", "any"] as const) {
+            const choice = choiceBlockType(typeRef, empty);
+            record(choice);
+            out.blocks.push({
+                type: choice,
+                message0: "%1",
+                args0: [{ type: CHOICES_FIELD, name: "VALUE", typeRef, ...(empty ? { empty } : {}) }],
+                output: checksFor(typeRef, bases),
+                style: panelStyle(panelId),
+                tooltip: `A ${schema.name}; a block can take its place`,
+            });
+        }
+    }
+    // the panel's block reads what needs no project; each project's, what does
+    const fields = Object.entries(schema.fields ?? {}).filter(([, f]) => Boolean(f.perProject) === Boolean(project));
+    if (!fields.length) return;
+    const typeRef = `${panelId}:${schema.id}`;
+    const type = propertyBlockType(typeRef, project);
+    record(type);
+    out.blocks.push({
+        type,
+        // the type named, so two types' "Name of" read apart
+        message0: `%1 of ${schema.name} %2`,
+        args0: [
+            { type: "field_dropdown", name: "FIELD", options: fields.map(([key, f]) => [f.name, key]) },
+            { type: "input_value", name: "VALUE", check: checksFor(typeRef, bases) },
+        ],
+        output: null,
+        style: panelStyle(panelId),
+        tooltip: `A field of a ${schema.name}`,
+    });
+    contents.push({ kind: "block", type });
+}
+
+function defineCommand(c: EntryContext, s: Schema<"command">): void {
+    const { out, bases, types, panelId, entry, project, contents, record } = c;
+        const type = registryBlockType({ kind: "command", panelId, entry });
+    record(type);
+    // a command does something, so it's a step; what it gives back is in its gear
+    out.blocks.push({
+        type,
+        ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases),
+        previousStatement: null,
+        nextStatement: null,
+        ...(s.output ? { extensions: [RESULTS_GEAR] } : {}),
+        style: panelStyle(panelId),
+        tooltip: s.description ?? s.name,
+    });
+    contents.push(c.toolboxBlock(type, s.inputs as Inputs));
+    c.choiceBlocks(type, s.inputs as Inputs);
+    if (s.output) {
+        const typeInfo = types.get(s.output);
+        const typeSchema = typeInfo?.schema as Schema<"type"> | undefined;
+        const called = inText(s.outputName ?? typeSchema?.name ?? nameFromRef(s.output));
+        const needs = typeInfo ? [typeSchemaKey(s.output)] : [];
+        const whole = registryBlockType({ kind: "result", panelId, entry });
+        record(whole);
+        out.uses[type] = needs;
+        out.uses[whole] = [type, ...needs];
+        out.blocks.push({
+            type: whole,
+            message0: called,
+            output: checksFor(s.output, bases),
+            mutator: RESULT_SOURCE,
+            style: panelStyle(panelId),
+            tooltip: `What "${s.name}" gave back, the last time it ran`,
+        });
+        const tray = [whole];
+        // a field read per project is offered when the command is in one of its type's panel's projects, and read in it
+        for (const [key, f] of Object.entries(typeSchema?.fields ?? {})) {
+            if (f.perProject && (!project || typeInfo!.panelId !== panelId)) continue;
+            const one = registryBlockType({ kind: "result", panelId, entry, key, typeRef: s.output });
+            record(one);
+            out.uses[one] = [type, ...needs];
+            out.blocks.push({
+                type: one,
+                message0: `${called} ${inText(f.name)}`,
+                output: checksFor(f.type, bases),
+                mutator: RESULT_SOURCE,
+                style: panelStyle(panelId),
+                tooltip: `${f.name} of what "${s.name}" gave back, the last time it ran`,
+            });
+            tray.push(one);
+        }
+        out.results[type] = tray;
+    }
+}
+
+function defineValue(c: EntryContext, s: Schema<"value">): void {
+    const { out, bases, panelId, entry, contents, record } = c;
+        const type = registryBlockType({ kind: "value", panelId, entry });
+    record(type);
+    out.blocks.push({
+        type,
+        ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases),
+        output: checksFor(s.type, bases),
+        style: panelStyle(panelId),
+        tooltip: s.description ?? s.name,
+    });
+    contents.push(c.toolboxBlock(type, s.inputs as Inputs));
+    c.choiceBlocks(type, s.inputs as Inputs);
+    if (s.changes) {
+        const changes = registryBlockType({ kind: "changes", panelId, entry });
+        record(changes);
+        out.blocks.push(hat(changes, { message0: `When ${s.name} changes`, args0: [] }, `Runs each time ${s.name} changes`, panelStyle(panelId)));
+        contents.unshift({ kind: "block", type: changes });
+    }
+}
+
+function defineEvent(c: EntryContext, s: Schema<"event">): void {
+    const { out, bases, panelId, entry, contents, record } = c;
+        const type = registryBlockType({ kind: "event", panelId, entry });
+    record(type);
+    out.blocks.push(hat(type, message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases), s.description ?? s.name, panelStyle(panelId)));
+    const valueBlocks: Json[] = [];
+    for (const [key, v] of Object.entries(s.values ?? {})) {
+        const valueType = registryBlockType({ kind: "event-value", panelId, entry, key });
+        record(valueType);
+        out.blocks.push({
+            type: valueType,
+            message0: v.name,
+            output: checksFor(v.type, bases),
+            style: panelStyle(panelId),
+            tooltip: v.optional ? `${v.name}, inside "${s.name}"; it may have none (check with "has a value")` : `${v.name}, inside "${s.name}"`,
+        });
+        valueBlocks.push({ kind: "block", type: valueType });
+    }
+    contents.unshift(c.toolboxBlock(type, s.inputs as Inputs, "any"), ...valueBlocks);
+    c.choiceBlocks(type, s.inputs as Inputs);
+}
+
 /**
  * Blockly definitions and toolbox sections for every registry entry. A
  * type with fields read per project gets a property block in each of its
@@ -203,175 +359,46 @@ export function registryDefinitions(listed: BlockInfo[], projects: BlockProjectI
         if (categoryIcon && !found.categoryIcon) found.categoryIcon = categoryIcon;
         return found.contents;
     };
-    const toolboxBlock = (type: string, inputs: Inputs | undefined, owner: { panelId: string; entry: string }, empty: EmptyChoice = "none"): Json => {
-        const shadows: Json = {};
-        const fields: Json = {};
-        for (const [key, input] of Object.entries(inputs ?? {})) {
-            if (input.choices || input.dynamicChoices) {
-                const choice = registryBlockType({ kind: "choices", panelId: owner.panelId, entry: owner.entry, key });
-                shadows[key] = { shadow: { type: choice, ...(input.default !== undefined ? { fields: { VALUE: choiceValue(input.default) } } : {}) } };
-                continue;
-            }
-            const shadow = shadowFor(input, bases, listing, empty);
-            if (shadow) shadows[key] = shadow;
-        }
-        return { kind: "block", type, ...(Object.keys(shadows).length ? { inputs: shadows } : {}), ...(Object.keys(fields).length ? { fields } : {}) };
-    };
 
     for (const { panelId, entry, schema } of entries) {
         const { project } = parseEntry(entry);
-        // a type's property block sits under Properties, after the panel's own categories
-        const contents =
-            schema.kind === "type" ? section(panelId, project, PROPERTIES_CATEGORY) : section(panelId, project, schema.category, schema.categoryIcon);
-        const record = (type: string) => {
-            out.schemas[type] = { panelId, entry, schema };
-        };
-        /** the dropdowns its inputs with choices start as, saved with it */
-        const choiceBlocks = (owner: string, inputs: Inputs | undefined) => {
-            for (const block of inputChoiceBlocks(inputs ?? {}, bases, { panelId, entry }, panelStyle(panelId))) {
-                record(block.type as string);
-                out.uses[block.type as string] = [owner];
-                out.blocks.push(block);
-            }
-        };
-        switch (schema.kind) {
-            case "type": {
-                if (!project) out.schemas[typeSchemaKey(`${panelId}:${schema.id}`)] = { panelId, entry, schema };
-                if (!project && schema.dynamicChoices) {
-                    // the dropdown an input of the type starts as; an optional one's first choice leaves it out
-                    const typeRef = `${panelId}:${schema.id}`;
-                    for (const empty of [undefined, "none", "any"] as const) {
-                        const choice = choiceBlockType(typeRef, empty);
-                        record(choice);
-                        out.blocks.push({
-                            type: choice,
-                            message0: "%1",
-                            args0: [{ type: CHOICES_FIELD, name: "VALUE", typeRef, ...(empty ? { empty } : {}) }],
-                            output: checksFor(typeRef, bases),
-                            style: panelStyle(panelId),
-                            tooltip: `A ${schema.name}; a block can take its place`,
-                        });
+        const c: EntryContext = {
+            out,
+            bases,
+            types,
+            panelId,
+            entry,
+            project,
+            // a type's property block sits under Properties, after the panel's own categories
+            contents: schema.kind === "type" ? section(panelId, project, PROPERTIES_CATEGORY) : section(panelId, project, schema.category, schema.categoryIcon),
+            record: (type) => {
+                out.schemas[type] = { panelId, entry, schema };
+            },
+            choiceBlocks: (owner, inputs) => {
+                for (const block of inputChoiceBlocks(inputs ?? {}, bases, { panelId, entry }, panelStyle(panelId))) {
+                    c.record(block.type as string);
+                    out.uses[block.type as string] = [owner];
+                    out.blocks.push(block);
+                }
+            },
+            toolboxBlock: (type, inputs, empty = "none") => {
+                const shadows: Json = {};
+                for (const [key, input] of Object.entries(inputs ?? {})) {
+                    if (input.choices || input.dynamicChoices) {
+                        const choice = registryBlockType({ kind: "choices", panelId, entry, key });
+                        shadows[key] = { shadow: { type: choice, ...(input.default !== undefined ? { fields: { VALUE: choiceValue(input.default) } } : {}) } };
+                        continue;
                     }
+                    const shadow = shadowFor(input, bases, listing, empty);
+                    if (shadow) shadows[key] = shadow;
                 }
-                // the panel's block reads what needs no project; each project's, what does
-                const fields = Object.entries(schema.fields ?? {}).filter(([, f]) => Boolean(f.perProject) === Boolean(project));
-                if (!fields.length) break;
-                const typeRef = `${panelId}:${schema.id}`;
-                const type = propertyBlockType(typeRef, project);
-                record(type);
-                out.blocks.push({
-                    type,
-                    // the type named, so two types' "Name of" read apart
-                    message0: `%1 of ${schema.name} %2`,
-                    args0: [
-                        { type: "field_dropdown", name: "FIELD", options: fields.map(([key, f]) => [f.name, key]) },
-                        { type: "input_value", name: "VALUE", check: checksFor(typeRef, bases) },
-                    ],
-                    output: null,
-                    style: panelStyle(panelId),
-                    tooltip: `A field of a ${schema.name}`,
-                });
-                contents.push({ kind: "block", type });
-                break;
-            }
-            case "command": {
-                const s = schema as Schema<"command">;
-                const type = registryBlockType({ kind: "command", panelId, entry });
-                record(type);
-                // a command does something, so it's a step; what it gives back is in its gear
-                out.blocks.push({
-                    type,
-                    ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases),
-                    previousStatement: null,
-                    nextStatement: null,
-                    ...(s.output ? { extensions: [RESULTS_GEAR] } : {}),
-                    style: panelStyle(panelId),
-                    tooltip: s.description ?? s.name,
-                });
-                contents.push(toolboxBlock(type, s.inputs as Inputs, { panelId, entry }));
-                choiceBlocks(type, s.inputs as Inputs);
-                if (s.output) {
-                    const typeInfo = types.get(s.output);
-                    const typeSchema = typeInfo?.schema as Schema<"type"> | undefined;
-                    const called = inText(s.outputName ?? typeSchema?.name ?? nameFromRef(s.output));
-                    const needs = typeInfo ? [typeSchemaKey(s.output)] : [];
-                    const whole = registryBlockType({ kind: "result", panelId, entry });
-                    record(whole);
-                    out.uses[type] = needs;
-                    out.uses[whole] = [type, ...needs];
-                    out.blocks.push({
-                        type: whole,
-                        message0: called,
-                        output: checksFor(s.output, bases),
-                        mutator: RESULT_SOURCE,
-                        style: panelStyle(panelId),
-                        tooltip: `What "${s.name}" gave back, the last time it ran`,
-                    });
-                    const tray = [whole];
-                    // a field read per project is offered when the command is in one of its type's panel's projects, and read in it
-                    for (const [key, f] of Object.entries(typeSchema?.fields ?? {})) {
-                        if (f.perProject && (!project || typeInfo!.panelId !== panelId)) continue;
-                        const one = registryBlockType({ kind: "result", panelId, entry, key, typeRef: s.output });
-                        record(one);
-                        out.uses[one] = [type, ...needs];
-                        out.blocks.push({
-                            type: one,
-                            message0: `${called} ${inText(f.name)}`,
-                            output: checksFor(f.type, bases),
-                            mutator: RESULT_SOURCE,
-                            style: panelStyle(panelId),
-                            tooltip: `${f.name} of what "${s.name}" gave back, the last time it ran`,
-                        });
-                        tray.push(one);
-                    }
-                    out.results[type] = tray;
-                }
-                break;
-            }
-            case "value": {
-                const s = schema as Schema<"value">;
-                const type = registryBlockType({ kind: "value", panelId, entry });
-                record(type);
-                out.blocks.push({
-                    type,
-                    ...message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases),
-                    output: checksFor(s.type, bases),
-                    style: panelStyle(panelId),
-                    tooltip: s.description ?? s.name,
-                });
-                contents.push(toolboxBlock(type, s.inputs as Inputs, { panelId, entry }));
-                choiceBlocks(type, s.inputs as Inputs);
-                if (s.changes) {
-                    const changes = registryBlockType({ kind: "changes", panelId, entry });
-                    record(changes);
-                    out.blocks.push(hat(changes, { message0: `When ${s.name} changes`, args0: [] }, `Runs each time ${s.name} changes`, panelStyle(panelId)));
-                    contents.unshift({ kind: "block", type: changes });
-                }
-                break;
-            }
-            case "event": {
-                const s = schema as Schema<"event">;
-                const type = registryBlockType({ kind: "event", panelId, entry });
-                record(type);
-                out.blocks.push(hat(type, message(s.name, s.text, (s.inputs ?? {}) as Inputs, bases), s.description ?? s.name, panelStyle(panelId)));
-                const valueBlocks: Json[] = [];
-                for (const [key, v] of Object.entries(s.values ?? {})) {
-                    const valueType = registryBlockType({ kind: "event-value", panelId, entry, key });
-                    record(valueType);
-                    out.blocks.push({
-                        type: valueType,
-                        message0: v.name,
-                        output: checksFor(v.type, bases),
-                        style: panelStyle(panelId),
-                        tooltip: v.optional ? `${v.name}, inside "${s.name}"; it may have none (check with "has a value")` : `${v.name}, inside "${s.name}"`,
-                    });
-                    valueBlocks.push({ kind: "block", type: valueType });
-                }
-                contents.unshift(toolboxBlock(type, s.inputs as Inputs, { panelId, entry }, "any"), ...valueBlocks);
-                choiceBlocks(type, s.inputs as Inputs);
-                break;
-            }
-        }
+                return { kind: "block", type, ...(Object.keys(shadows).length ? { inputs: shadows } : {}) };
+            },
+        };
+        if (schema.kind === "type") defineType(c, schema);
+        else if (schema.kind === "command") defineCommand(c, schema);
+        else if (schema.kind === "value") defineValue(c, schema);
+        else defineEvent(c, schema);
     }
     return out;
 }
