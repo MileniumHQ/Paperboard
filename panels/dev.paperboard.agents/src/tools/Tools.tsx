@@ -296,12 +296,13 @@ function ServerRow(props: {
                             </PaperButton>
                         )}
                     </Show>
-                    <PaperFlex onPointerDown={own} onClick={own}>
-                        <PaperToggle aria-label={`${s().name} on`} checked={s().enabled} disabled={props.busy} onChange={(on) => props.onSwitch(on)} />
-                    </PaperFlex>
                     <PaperButton icon size="small" variant="text" disabled={props.busy} aria-label={`Remove ${s().name}`} title="Remove" onPointerDown={own} onClick={(e) => (own(e), props.onRemove())}>
                         <PaperIcon>delete</PaperIcon>
                     </PaperButton>
+                    {/* last: every row's switch is on the list's right edge, under the one for the other panels */}
+                    <PaperFlex onPointerDown={own} onClick={own}>
+                        <PaperToggle aria-label={`${s().name} on`} checked={s().enabled} disabled={props.busy} onChange={(on) => props.onSwitch(on)} />
+                    </PaperFlex>
                 </PaperFlex>
             }
         >
@@ -334,22 +335,51 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
     const saved = (row: Row) => (props.tools.view()?.secrets[f().name.trim()] ?? []).includes(secretNameOf(row.name.trim()));
     const valuesLabel = () => (http() ? "Headers" : "Environment variables");
 
+    let form!: HTMLFormElement;
+    const field = (name: string) => form.querySelector<HTMLElement>(`[name="${name}"]`);
+    /** the field a refusal is about, from what the form itself shows is wrong */
+    const invalid = (message: string): HTMLElement | null => {
+        const cur = f();
+        const row = cur.rows.find((r) => r.name.trim() && message.includes(`"${r.name.trim()}"`)) ?? cur.rows.find((r) => !r.name.trim() && (r.value || r.typed));
+        if (row) return field(`row-name-${row.key}`);
+        if (!cur.name.trim()) return field("name");
+        if (cur.transport === "http" ? !cur.url.trim() : !cur.command.trim()) return field(cur.transport === "http" ? "url" : "command");
+        return null;
+    };
+    /** shows a refusal where it can be read, and moves to the field it is about */
+    const refused = (title: string, message: string, to: boolean) => {
+        setError({ title, message });
+        setBusy(false);
+        queueMicrotask(() => {
+            if (to) invalid(message)?.focus({ preventScroll: true });
+            form.querySelector('[role="alert"]')?.scrollIntoView({ block: "nearest" });
+        });
+    };
+
+    /** the row goes, and focus goes to its neighbour (or to Add, when none is left) instead of dropping to the page */
+    const removeRow = (key: number) => {
+        const at = f().rows.findIndex((r) => r.key === key);
+        const left = f().rows.filter((r) => r.key !== key);
+        set("rows", left);
+        const next = left[Math.min(at, left.length - 1)];
+        queueMicrotask(() => (next ? field(`row-name-${next.key}`) : field("add-row"))?.focus());
+    };
+
     const save = async () => {
         setBusy(true);
         setError(null);
         try {
             await props.tools.save(specFromForm(f()));
         } catch (e) {
-            setError(failure("Server not saved", e));
-            setBusy(false);
+            console.error("[agents] tool server not saved:", e);
+            refused("Server not saved", errorText(e), true);
             return;
         }
         // the server is saved; its secrets go to the vault now
         try {
             for (const s of typedSecrets(f())) await props.tools.setSecret(f().name.trim(), s.name, s.value);
         } catch (e) {
-            setError({ title: "Secret not saved", message: `The server was saved, but a secret wasn't: ${errorText(e)} Edit it to add the secret again.` });
-            setBusy(false);
+            refused("Secret not saved", `The server was saved, but a secret wasn't: ${errorText(e)} Edit it to add the secret again.`, false);
             return;
         }
         setBusy(false);
@@ -374,12 +404,21 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
             }
         >
             <form
+                ref={form}
                 onSubmit={(e) => {
                     e.preventDefault();
                     void save();
                 }}
             >
                 <PaperFlex gap="full">
+                    {/* at the top: the footer's Save is always in view, so what it refused must be too */}
+                    <Show when={error()}>
+                        {(shown) => (
+                            <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
+                                {shown().message}
+                            </PaperQuote>
+                        )}
+                    </Show>
                     <PaperInput
                         name="name"
                         label="Name"
@@ -437,7 +476,7 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
                             {(row) => (
                                 <PaperFlex direction="row" align="end" gap="half" role="group" aria-label={row.name || valuesLabel()}>
                                     <PaperFlex flex minWidth={0}>
-                                        <PaperInput label="Name" value={row.name} maxLength={TOOL_LIMITS.envName} onInput={(e) => setRow(row.key, { name: e.currentTarget.value })} />
+                                        <PaperInput name={`row-name-${row.key}`} label="Name" value={row.name} maxLength={TOOL_LIMITS.envName} onInput={(e) => setRow(row.key, { name: e.currentTarget.value })} />
                                     </PaperFlex>
                                     <PaperSelectMenu name={`kind-${row.key}`} aria-label="Kind" value={row.kind} onValueChange={(v) => setRow(row.key, { kind: v as Row["kind"], value: "", typed: "" })}>
                                         <PaperSelectMenuItem value="value">Value</PaperSelectMenuItem>
@@ -459,25 +498,18 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
                                             />
                                         </Show>
                                     </PaperFlex>
-                                    <PaperButton icon variant="text" aria-label={`Remove ${row.name || "this row"}`} title="Remove" onClick={() => set("rows", f().rows.filter((r) => r.key !== row.key))}>
+                                    <PaperButton icon variant="text" aria-label={`Remove ${row.name || "this row"}`} title="Remove" onClick={() => removeRow(row.key)}>
                                         <PaperIcon>close</PaperIcon>
                                     </PaperButton>
                                 </PaperFlex>
                             )}
                         </For>
                         <PaperFlex direction="row">
-                            <PaperButton disabled={f().rows.length >= (http() ? TOOL_LIMITS.headers : TOOL_LIMITS.env)} onClick={() => set("rows", [...f().rows, newRow()])}>
+                            <PaperButton name="add-row" disabled={f().rows.length >= (http() ? TOOL_LIMITS.headers : TOOL_LIMITS.env)} onClick={() => set("rows", [...f().rows, newRow()])}>
                                 <PaperIcon>add</PaperIcon> Add {http() ? "a header" : "a variable"}
                             </PaperButton>
                         </PaperFlex>
                     </PaperFlex>
-                    <Show when={error()}>
-                        {(shown) => (
-                            <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                                {shown().message}
-                            </PaperQuote>
-                        )}
-                    </Show>
                 </PaperFlex>
             </form>
         </PaperModal>
