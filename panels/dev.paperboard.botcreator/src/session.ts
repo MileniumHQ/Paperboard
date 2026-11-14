@@ -890,15 +890,26 @@ export class BotSession {
             const errors = await syncSlashCommands(bot, this.commands);
             // a newer session may own the state by now
             if (this.client !== bot) return;
-            this.commandSyncError = errors.length > 0 ? errors.join(" ") : null;
-            if (this.commandSyncError) {
-                console.error("[DiscordService] command sync reported errors:", this.commandSyncError);
-            }
+            this.noteSync(errors.length > 0 ? errors.join(" ") : null);
         } catch (err) {
             if (this.client !== bot) return;
-            this.commandSyncError = errorToMessage(err);
             console.error("[DiscordService] command sync failed:", err);
+            this.noteSync(errorToMessage(err));
         }
+    }
+
+    /** Why the bot's commands aren't all on Discord, as of the last sync; null when they are. */
+    syncError(): string | null {
+        return this.commandSyncError;
+    }
+
+    // a sync's outcome is announced like the connection: the Commands tab
+    // says a command made anywhere isn't live on Discord yet
+    private noteSync(error: string | null): void {
+        if (error) console.error("[DiscordService] command sync reported errors:", error);
+        if (error === this.commandSyncError) return;
+        this.commandSyncError = error;
+        this.host.changed();
     }
 
     // save-then-sync for UI mutations: offline is reported as "not
@@ -911,14 +922,11 @@ export class BotSession {
         }
         try {
             const errors = await syncSlashCommands(bot, this.commands, scopesToClear);
-            this.commandSyncError = errors.length > 0 ? errors.join(" ") : null;
-            if (this.commandSyncError) {
-                console.error("[DiscordService] command sync reported errors:", this.commandSyncError);
-            }
+            this.noteSync(errors.length > 0 ? errors.join(" ") : null);
             return { registered: this.commandSyncError === null, syncError: this.commandSyncError };
         } catch (err) {
-            this.commandSyncError = errorToMessage(err);
             console.error("[DiscordService] command sync failed:", err);
+            this.noteSync(errorToMessage(err));
             return { registered: false, syncError: this.commandSyncError };
         }
     }

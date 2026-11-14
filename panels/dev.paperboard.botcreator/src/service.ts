@@ -150,6 +150,8 @@ function summary(entry: BotEntry): BotSummary {
         lastError: entry.blocksError ?? session.status().error ?? null,
         guildCount: connected ? session.client?.guilds?.cache?.size ?? 0 : 0,
         createdAt: stored.createdAt,
+        commands: stored.commands,
+        commandSyncError: session.syncError(),
     };
 }
 
@@ -405,6 +407,11 @@ async function connectEntry(entry: BotEntry): Promise<void> {
 // commands
 // ---------------------------------------------------------------------------
 
+/**
+ * The one way a bot's commands change, from the Commands tab or a Blocks
+ * flow alike: saved, handed to the session, and announced with the bot, so
+ * every window's Commands tab shows the list as it now is.
+ */
 async function setCommands(entry: BotEntry, commands: SlashCommandDefinition[]): Promise<void> {
     const before = entry.stored;
     entry.stored = { ...entry.stored, commands };
@@ -415,6 +422,7 @@ async function setCommands(entry: BotEntry, commands: SlashCommandDefinition[]):
         throw err;
     }
     entry.session.commands = commands;
+    publish();
 }
 
 // one event action per command: registering is part of creating the
@@ -727,9 +735,6 @@ export const serviceCalls = {
         const members = await searchMembers(guild, query, MEMBER_SEARCH_LIMIT);
         return buildMemberSummaries(members.values());
     },
-
-    /** A bot's saved slash commands. */
-    listCommands: (_ctx: unknown, input: any) => requireBot(input?.bot).stored.commands,
 
     /** Stores a command and registers its event and Discord definition. */
     createCommand: (_ctx: unknown, input: any) => createCommand(requireBot(input?.bot), input),

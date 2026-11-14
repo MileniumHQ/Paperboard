@@ -89,9 +89,11 @@ describe("failures are shown, never guessed", () => {
             const overview = await body(page);
             expect(overview).not.toContain("Gateway status");
             expect(overview).not.toContain("Checking health…");
+            // the Commands tab shows the bot as the service last announced it
+            // (the refused delete had already logged it out); what it asks the
+            // service itself, the bot's servers, fails and says why
             await openTab(page, "commands");
-            await page.waitFor(quoteShows("Couldn't check the bot's connection", "dev.paperboard.botcreator"), "the failed connection check");
-            expect(await body(page)).not.toContain("Bot offline");
+            await page.waitFor(quoteShows("Couldn't list the bot's servers", "dev.paperboard.botcreator"), "the failed server list read");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

@@ -1,4 +1,4 @@
-import { createEffect, createSignal, on, onMount, Show, For, Index } from "solid-js";
+import { createEffect, createSignal, on, Show, For, Index } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -34,12 +34,10 @@ import {
     isCommandDescriptionValid,
     isCommandNameValid,
     isOptionOrderValid,
-    normalizeCommandDefinitions,
     normalizeCommandName,
     type CommandMutationResult,
     type CommandOptionType,
     type GuildSummary,
-    type Health,
     type SlashCommandDefinition,
     type SlashCommandOption,
 } from "../types";
@@ -50,23 +48,21 @@ interface Outcome {
     message: string;
 }
 
-const syncProblem = (message: string): Outcome => ({ title: "Not live on Discord yet", message });
-
 // local-only ids for builder rows; never sent to Discord
 let nextOptionId = 1;
 function newOptionId(): string {
     return `opt-${Date.now().toString(36)}-${nextOptionId++}`;
 }
 
-export default function Commands(props: { bot: () => BotSummary; active: boolean }) {
+export default function Commands(props: { bot: () => BotSummary }) {
     const bot = () => props.bot().id;
-    const [commands, setCommands] = createSignal<SlashCommandDefinition[]>([]);
+    // the service announces the bot's commands with every change, wherever it
+    // was made (this tab, a Blocks flow, another window): the list is the
+    // panel's store, reconciled by command id, so a row that didn't change
+    // stays as it is
+    const commands = (): readonly SlashCommandDefinition[] => props.bot().commands;
     const [guilds, setGuilds] = createSignal<GuildSummary[]>([]);
-    // null until the first health read answers: unknown is not offline
-    const [connected, setConnected] = createSignal<boolean | null>(null);
-    const [loadError, setLoadError] = createSignal("");
     const [guildsError, setGuildsError] = createSignal("");
-    const [healthError, setHealthError] = createSignal("");
     const [actionError, setActionError] = createSignal<Outcome | null>(null);
 
     const [createOpen, setCreateOpen] = createSignal(false);
@@ -86,54 +82,28 @@ export default function Commands(props: { bot: () => BotSummary; active: boolean
         null,
     );
 
-    const load = async () => {
-        setLoadError("");
+    // the servers a command can be scoped to: read again as the bot comes
+    // online or joins or leaves one
+    let guildsRequest = 0;
+    const loadGuilds = async () => {
+        const request = ++guildsRequest;
         setGuildsError("");
-        setHealthError("");
-        try {
-            const saved = await serviceApi.call<unknown>(PANEL_ID, "listCommands", { bot: bot() });
-            setCommands(normalizeCommandDefinitions(saved));
-        } catch (err) {
-            console.error("[Commands] saved commands read failed:", err);
-            setLoadError(errorToMessage(err));
-        }
-
         try {
             const list = await serviceApi.call<GuildSummary[]>(PANEL_ID, "listGuilds", { bot: bot() });
             if (!Array.isArray(list)) throw new Error("listGuilds returned no server list");
-            setGuilds(list);
+            if (request === guildsRequest) setGuilds(list);
         } catch (err) {
             console.error("[Commands] guild list read failed:", err);
-            setGuildsError(errorToMessage(err));
-        }
-
-        try {
-            const health = await serviceApi.call<Health>(PANEL_ID, "getHealth", { bot: bot() });
-            if (!health || typeof health !== "object") {
-                throw new Error("getHealth returned no health payload");
-            }
-            setConnected(Boolean(health.connected));
-            if (health.commandSyncError) setActionError(syncProblem(health.commandSyncError));
-        } catch (err) {
-            console.error("[Commands] health read failed:", err);
-            setHealthError(errorToMessage(err));
+            if (request === guildsRequest) setGuildsError(errorToMessage(err));
         }
     };
+    createEffect(on(() => [props.bot().connected, props.bot().guildCount], () => void loadGuilds()));
 
-    onMount(() => {
-        void load();
-    });
-    // the service has no announcement for a command made elsewhere (a Blocks flow, another
-    // window), so the list is read again each time this tab is opened
-    createEffect(on(() => props.active, (active) => {
-        if (active) void load();
-    }, { defer: true }));
-
-    const mutationProblem = (result: CommandMutationResult): Outcome | null => {
-        if (result.triggerError) return { title: "Flow trigger not registered", message: result.triggerError };
-        if (result.syncError) return syncProblem(result.syncError);
-        return null;
-    };
+    // the last sync's outcome is announced with the bot, so it shows here
+    // however the commands changed
+    const syncError = () => props.bot().commandSyncError;
+    const mutationProblem = (result: CommandMutationResult): Outcome | null =>
+        result.triggerError ? { title: "Flow trigger not registered", message: result.triggerError } : null;
 
     const scopeLabel = (value: string) => {
         if (value === GLOBAL_SCOPE) return "Global";
@@ -250,7 +220,6 @@ export default function Commands(props: { bot: () => BotSummary; active: boolean
                     userInstall: userInstall(),
                 },
             );
-            setCommands((prev) => [...prev, result.command]);
             setCreateOpen(false);
             setActionError(mutationProblem(result));
         } catch (err) {
@@ -273,7 +242,6 @@ export default function Commands(props: { bot: () => BotSummary; active: boolean
                 "deleteCommand",
                 { bot: bot(), id: target.id },
             );
-            setCommands((prev) => prev.filter((c) => c.id !== target.id));
             setActionError(mutationProblem(result));
         } catch (err) {
             console.error("[Commands] deleteCommand failed:", err);
@@ -291,31 +259,26 @@ export default function Commands(props: { bot: () => BotSummary; active: boolean
                         subtitle="Slash commands this bot registers with Discord"
                     >
                         <PaperEffect>
-                            {/* the duplicate check needs the stored list */}
-                            <PaperButton onClick={openCreate} disabled={Boolean(loadError())}>
+                            <PaperButton onClick={openCreate}>
                                 <PaperIcon>add</PaperIcon>
                                 Create command
                             </PaperButton>
                         </PaperEffect>
                     </PaperPageHeader>
 
-                    <Show when={connected() === false}>
+                    <Show when={!props.bot().connected}>
                         <PaperQuote variant="warning" icon="cloud_off" title="Bot offline">
                             Commands are stored here and register the next time the bot
                             connects.
                         </PaperQuote>
                     </Show>
 
-                    <Show when={loadError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Stored commands unreadable">
-                            {loadError()}
-                        </PaperQuote>
-                    </Show>
-
-                    <Show when={healthError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Couldn't check the bot's connection">
-                            {healthError()}
-                        </PaperQuote>
+                    <Show when={props.bot().connected && syncError()}>
+                        {(message) => (
+                            <PaperQuote variant="danger" icon="warning" title="Not live on Discord yet">
+                                {message()}
+                            </PaperQuote>
+                        )}
                     </Show>
 
                     <Show when={guildsError()}>
@@ -332,19 +295,16 @@ export default function Commands(props: { bot: () => BotSummary; active: boolean
                         )}
                     </Show>
 
-                    {/* an unreadable list is unknown, not empty */}
                     <Show
                         when={commands().length > 0}
                         fallback={
-                            <Show when={!loadError()}>
-                                <PaperCard>
-                                    <PaperEmptyState
-                                        icon="terminal"
-                                        title="No slash commands yet"
-                                        description="Create one, then build a flow on its trigger to answer it."
-                                    />
-                                </PaperCard>
-                            </Show>
+                            <PaperCard>
+                                <PaperEmptyState
+                                    icon="terminal"
+                                    title="No slash commands yet"
+                                    description="Create one, then build a flow on its trigger to answer it."
+                                />
+                            </PaperCard>
                         }
                     >
                         <PaperSettingList autoHeight>
@@ -358,7 +318,7 @@ export default function Commands(props: { bot: () => BotSummary; active: boolean
                                             }
                                             description={command.description}
                                         >
-                                            <PaperFlex direction="row" gap="half" align="center">
+                                            <PaperFlex direction="row" gap="half" align="center" wrap>
                                                 <Show when={command.options.length > 0}>
                                                     <PaperBadge>
                                                         {command.options.length} parameter

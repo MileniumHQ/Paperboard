@@ -46,6 +46,14 @@ export interface BotSummary {
     lastError: string | null;
     guildCount: number;
     createdAt: number;
+    /**
+     * Its saved slash commands, however they were made (the Commands tab, a
+     * Blocks flow, another window): announced with every change, so an open
+     * Commands tab follows them
+     */
+    commands: SlashCommandDefinition[];
+    /** why its commands aren't all on Discord, as of the last sync; null when they are */
+    commandSyncError: string | null;
 }
 
 export interface BotsServiceState {
