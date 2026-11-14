@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, test } from "vitest";
-import { useBrowser } from "./support/chrome";
+import { useBrowser } from "./support/browser";
 
 const browser = useBrowser();
 

@@ -1,8 +1,10 @@
 // A real page in headless Chrome, driven over the DevTools protocol, for the
 // suites that test Paperboard's UI as a person uses it: the Game Server
 // panel's (panels/dev.paperboard.gameserver/test/helpers/browser.ts), the
-// Agents panel's (panels/dev.paperboard.agents/test/support/panel.ts) and the
-// shell's (apps/paperboard/tests/shell). Every wait is on something the page
+// Agents panel's (panels/dev.paperboard.agents/test/support/panel.ts), the
+// shell's (apps/paperboard/tests/shell) and PaperUI's
+// (packages/paperui/test/browser/support/browser.ts). It runs under Bun and
+// under Node (vitest). Every wait is on something the page
 // does (a DOM change, a socket message), never on a fixed delay.
 //
 // Chrome leaves nothing behind: its profile is its temp dir too (Chrome
@@ -18,12 +20,17 @@ const CHROMES = ["/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/us
 const WAIT_MS = 20_000;
 
 function chromeBinary(): string {
+    const configured = process.env.CHROME_PATH;
+    if (configured) {
+        if (!fs.existsSync(configured)) throw new Error(`CHROME_PATH is ${configured}, which does not exist`);
+        return configured;
+    }
     const found = CHROMES.find((file) => fs.existsSync(file));
-    if (!found) throw new Error(`These tests drive the UI in headless Chrome, and none is installed (looked for ${CHROMES.join(", ")})`);
+    if (!found) throw new Error(`These tests drive the UI in headless Chrome, and none is installed (looked for ${CHROMES.join(", ")}). Install it or set CHROME_PATH.`);
     return found;
 }
 
-type CdpEvent = { method: string; params: any };
+export type CdpEvent = { method: string; params: any };
 
 export interface Page {
     /** evaluates in the page; awaits a returned promise; throws the page's exception */
@@ -49,6 +56,10 @@ export interface Page {
     resize(width: number, height: number): Promise<void>;
     /** loads `url` in this page; resolves once it has loaded, throws when Chrome could not load it */
     navigate(url: string): Promise<void>;
+    /** a raw DevTools call to this page, for input and emulation the helpers above don't cover */
+    send<T = any>(method: string, params?: Record<string, unknown>): Promise<T>;
+    /** calls `listener` with every DevTools event from this page; returns what stops it */
+    on(listener: (event: CdpEvent) => void): () => void;
     close(): Promise<void>;
 }
 
@@ -61,6 +72,8 @@ export interface ChromeOptions {
     isCall?: (frame: string) => boolean;
     /** a script run in every document before its own, to watch or hold what the page does */
     init?: string;
+    /** more Chrome switches, after the ones every suite gets */
+    args?: string[];
 }
 
 // Stops Chrome's process group and removes its profile once this test
@@ -101,7 +114,7 @@ async function reaper(group: number, profile: string): Promise<Reaper> {
         } catch (err) {
             // ENXIO: nothing reads it yet
             if ((err as NodeJS.ErrnoException).code !== "ENXIO" || Date.now() > deadline) throw err;
-            await Bun.sleep(5);
+            await new Promise((resolve) => setTimeout(resolve, 5));
         }
     }
     return {
@@ -138,7 +151,7 @@ export async function openChrome(url: string, options: ChromeOptions = {}): Prom
         chrome = spawn(chromeBinary(), [
             "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check",
             "--disable-background-networking", "--disable-component-update", "--disable-sync", "--metrics-recording-only",
-            `--window-size=${options.windowSize ?? "1400,900"}`, "about:blank",
+            `--window-size=${options.windowSize ?? "1400,900"}`, ...(options.args ?? []), "about:blank",
         ], { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, TMPDIR: profile }, detached: true });
         const started = chrome;
         exited = new Promise<void>((resolve) => {
@@ -288,6 +301,11 @@ async function drive(chrome: ChildProcess, start: Start, url: string, options: C
         sentFrames,
         receivedFrames,
         navigate,
+        send,
+        on(listener) {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+        },
         async settled() {
             if (!options.isCall) return;
             // every frame the daemon and page exchange is JSON
