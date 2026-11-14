@@ -31,7 +31,7 @@
 #     platform       the cross-platform suites only: each `tests/platform` or
 #                    `test/platform` directory below. CI runs this on every
 #                    release target other than linux-x64, which runs it as
-#                    part of the full suites.
+#                    part of the full suites (the full gate skips it).
 #   e.g. `bun run gate terminal`, `bun run gate paperapi paperui`
 #
 # Repo-wide checks (changelog-existence, todo-expiry) run in the full gate or
@@ -275,13 +275,16 @@ done
 
 # ── cross-platform suites: what depends on the OS or CPU (booting and
 # updating the built app and daemon, processes, signals, paths, archives,
-# file modes). The full suites above already include these directories. ────
-gstep platform "supervisor tests" run_in "$ROOT/apps/paperboard/supervisor" go test -count=1 ./...
-gstep platform "paperboard platform tests" run_in "$ROOT/apps/paperboard" bun test ./tests/platform
-gstep platform "gameserver platform tests" run_in "$ROOT/panels/dev.paperboard.gameserver" bun test --isolate --conditions browser ./test/platform
-gstep platform "agents platform tests" run_in "$ROOT/panels/dev.paperboard.agents" bun test ./test/platform
-gstep platform "terminal platform tests" run_in "$ROOT/panels/dev.paperboard.terminal" bun test ./test/platform
-gstep platform "crane-launcher platform tests" run_in "$ROOT/packages/crane-launcher" bash -c "bun run build && bun test ./test/platform"
+# file modes). The full suites above already include these directories, so
+# the full gate skips them: they run only when `platform` is named. ─────────
+if [ "${#SELECTED[@]}" -gt 0 ]; then
+    gstep platform "supervisor tests" run_in "$ROOT/apps/paperboard/supervisor" go test -count=1 ./...
+    gstep platform "paperboard platform tests" run_in "$ROOT/apps/paperboard" bun test ./tests/platform
+    gstep platform "gameserver platform tests" run_in "$ROOT/panels/dev.paperboard.gameserver" bun test --isolate --conditions browser ./test/platform
+    gstep platform "agents platform tests" run_in "$ROOT/panels/dev.paperboard.agents" bun test ./test/platform
+    gstep platform "terminal platform tests" run_in "$ROOT/panels/dev.paperboard.terminal" bun test ./test/platform
+    gstep platform "crane-launcher platform tests" run_in "$ROOT/packages/crane-launcher" bash -c "bun run build && bun test ./test/platform"
+fi
 
 # ── repo-wide checks (full gate, or `global`) ────────────────────────────────
 if want global; then
