@@ -1,5 +1,6 @@
 import {
     type Component,
+    createComputed,
     createEffect,
     createMemo,
     createSignal,
@@ -7,6 +8,7 @@ import {
     onMount,
     Show,
 } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import {
     PaperBadge,
     PaperButton,
@@ -215,7 +217,7 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
         void waitForContentPainted().then(() => props.bridge.notifyReady());
     });
 
-    const panels = createMemo(() => {
+    const merged = createMemo(() => {
         const media = localMedia();
         return mergeRegistryWithInstalled(
             registry() ?? {},
@@ -231,6 +233,12 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
             };
         });
     });
+    // Every merge builds new records; reconciled by id, a panel keeps its
+    // card (and its page keeps its screenshots) when the installed list or
+    // its media arrive, and only what changed is redrawn.
+    const [panelList, setPanelList] = createStore<PanelItem[]>([]);
+    createComputed(() => setPanelList(reconcile(merged(), { key: "id" })));
+    const panels = () => panelList;
 
     const selectedPanel = createMemo(
         () => panels().find((p) => p.id === route.panelId()) ?? null,
