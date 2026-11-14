@@ -5,9 +5,9 @@
 // cross-verification: comparing sha512 with sha256 is impossible without
 // downloading and hashing the ~600 MB archive. The updater only downloads
 // metadata/checksum files; the daemon verifies the archive's sha256.
-import { writeRecords, report } from "./lib/cli";
+import { runUpdater, settle } from "./lib/cli";
 import { assertValidRecord, fetchJson, fetchText, PLATFORM_KEYS, type PackageRecord, type PlatformKey, type PlatformDownload } from "./lib/records";
-import type { GithubRelease } from "./update-ollama";
+import type { GithubRelease } from "./lib/github";
 
 const LATEST = "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest";
 const ARCH: Partial<Record<PlatformKey, string>> = { "linux-x64": "x86_64", "linux-arm64": "aarch64" };
@@ -51,23 +51,6 @@ export async function buildLatestProtonRecord(fetchFn: typeof fetch = fetch): Pr
     return buildProtonRecord(release, sums);
 }
 
-async function main(argv: string[]): Promise<number> {
-    const dryRun = argv.includes("--dry-run");
-    let built: { key: string; record?: PackageRecord; error?: string };
-    try {
-        built = { key: "proton", record: await buildLatestProtonRecord() };
-    } catch (err) {
-        built = { key: "proton", error: err instanceof Error ? err.message : String(err) };
-    }
-    return report(await writeRecords([built], { dryRun }), dryRun);
-}
-
 if (import.meta.main) {
-    main(process.argv.slice(2)).then(
-        (code) => process.exit(code),
-        (err) => {
-            console.error(err instanceof Error ? err.message : err);
-            process.exit(1);
-        },
-    );
+    runUpdater(async () => [await settle("proton", () => buildLatestProtonRecord())]);
 }

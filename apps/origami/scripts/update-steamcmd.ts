@@ -8,8 +8,8 @@
 // availability on arm64 is not guaranteed. Linux's binary needs 32-bit libc.
 // Consumers must copy the bootstrap to a mutable workspace before running:
 // SteamCMD self-updates in its own directory, never in the package store.
-import { createHash } from "node:crypto";
-import { writeRecords, report } from "./lib/cli";
+import { fetchHashed } from "./lib/download";
+import { runUpdater, settle } from "./lib/cli";
 import { assertValidRecord, PLATFORM_KEYS, type PackageRecipe, type PackageRecord, type PlatformKey, type PlatformDownload } from "./lib/records";
 
 export const STEAMCMD_BUILDS: Partial<Record<PlatformKey, { file: string; sha256: string; recipe: PackageRecipe }>> = {
@@ -51,31 +51,11 @@ export async function buildLatestSteamcmdRecord(fetchFn: typeof fetch = fetch): 
         const build = STEAMCMD_BUILDS[key];
         if (!build) continue;
         const url = `https://steamcdn-a.akamaihd.net/client/installer/${build.file}`;
-        const res = await fetchFn(url, { signal: AbortSignal.timeout(60_000) });
-        if (!res.ok) throw new Error(`GET ${url} failed: ${res.status} ${res.statusText}`);
-        const bytes = await res.arrayBuffer();
-        downloads[key] = { sha256: createHash("sha256").update(Buffer.from(bytes)).digest("hex"), size: bytes.byteLength };
+        downloads[key] = await fetchHashed(url, fetchFn, 60_000);
     }
     return buildSteamcmdRecord(downloads);
 }
 
-async function main(argv: string[]): Promise<number> {
-    const dryRun = argv.includes("--dry-run");
-    let built: { key: string; record?: PackageRecord; error?: string };
-    try {
-        built = { key: "steamcmd", record: await buildLatestSteamcmdRecord() };
-    } catch (err) {
-        built = { key: "steamcmd", error: err instanceof Error ? err.message : String(err) };
-    }
-    return report(await writeRecords([built], { dryRun }), dryRun);
-}
-
 if (import.meta.main) {
-    main(process.argv.slice(2)).then(
-        (code) => process.exit(code),
-        (err) => {
-            console.error(err instanceof Error ? err.message : err);
-            process.exit(1);
-        },
-    );
+    runUpdater(async () => [await settle("steamcmd", () => buildLatestSteamcmdRecord())]);
 }

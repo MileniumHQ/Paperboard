@@ -8,8 +8,8 @@
 // Both packages carry the archive's addons/ (and SourceMod's cfg/) under bin/.
 // The Game Server panel copies them into a server's own addons folder, which
 // SourceMod then owns: its configs, data and plugins are the user's.
-import { createHash } from "node:crypto";
-import { writeRecords, report } from "./lib/cli";
+import { fetchHashed } from "./lib/download";
+import { runUpdater, settleAll } from "./lib/cli";
 import { assertValidRecord, type PackageRecipe, type PackageRecord, type PlatformKey } from "./lib/records";
 
 interface Build {
@@ -58,33 +58,12 @@ export async function buildLatestSourcemodRecords(fetchFn: typeof fetch = fetch)
     const downloads: Record<string, { sha256: string; size: number }> = {};
     for (const build of SOURCEMOD_BUILDS) {
         for (const file of Object.values(build.files)) {
-            const res = await fetchFn(file!.url, { signal: AbortSignal.timeout(120_000) });
-            if (!res.ok) throw new Error(`GET ${file!.url} failed: ${res.status} ${res.statusText}`);
-            const bytes = await res.arrayBuffer();
-            downloads[file!.url] = { sha256: createHash("sha256").update(Buffer.from(bytes)).digest("hex"), size: bytes.byteLength };
+            downloads[file!.url] = await fetchHashed(file!.url, fetchFn, 120_000);
         }
     }
     return SOURCEMOD_BUILDS.map((build) => buildSourcemodRecord(build, downloads));
 }
 
-async function main(argv: string[]): Promise<number> {
-    const dryRun = argv.includes("--dry-run");
-    let built: { key: string; record?: PackageRecord; error?: string }[];
-    try {
-        built = (await buildLatestSourcemodRecords()).map((record) => ({ key: record.name, record }));
-    } catch (err) {
-        const error = err instanceof Error ? err.message : String(err);
-        built = SOURCEMOD_BUILDS.map((build) => ({ key: build.name, error }));
-    }
-    return report(await writeRecords(built, { dryRun }), dryRun);
-}
-
 if (import.meta.main) {
-    main(process.argv.slice(2)).then(
-        (code) => process.exit(code),
-        (err) => {
-            console.error(err instanceof Error ? err.message : err);
-            process.exit(1);
-        },
-    );
+    runUpdater(() => settleAll(SOURCEMOD_BUILDS.map((b) => b.name), () => buildLatestSourcemodRecords()));
 }

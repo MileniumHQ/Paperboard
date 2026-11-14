@@ -6,7 +6,8 @@
 // the SHA-256 of the same verified bytes, which is what the daemon checks.
 // A mismatch, a missing platform or an unexpected file fails the record.
 import { createHash } from "node:crypto";
-import { writeRecords, report } from "./lib/cli";
+import { fetchBytes } from "./lib/download";
+import { runUpdater, settle } from "./lib/cli";
 import { assertValidRecord, fetchJson, type PackageRecord, type PlatformDownload, type PlatformKey } from "./lib/records";
 
 /** Channels Paperboard publishes. tModLoader pins 8.0 with roll-forward disabled. */
@@ -95,9 +96,7 @@ export async function buildLatestDotnetRecord(channel: string, fetchFn: typeof f
     const { version, files } = runtimeFiles(meta);
     const observed: Partial<Record<PlatformKey, { sha512: string; sha256: string; size: number }>> = {};
     for (const [key, file] of Object.entries(files) as [PlatformKey, DotnetFile][]) {
-        const res = await fetchFn(file.url, { signal: AbortSignal.timeout(300_000) });
-        if (!res.ok) throw new Error(`GET ${file.url} failed: ${res.status} ${res.statusText}`);
-        const bytes = Buffer.from(await res.arrayBuffer());
+        const bytes = await fetchBytes(file.url, fetchFn, 300_000);
         observed[key] = {
             sha512: createHash("sha512").update(bytes).digest("hex"),
             sha256: createHash("sha256").update(bytes).digest("hex"),
@@ -107,26 +106,8 @@ export async function buildLatestDotnetRecord(channel: string, fetchFn: typeof f
     return buildDotnetRecord(channel, version, files, observed);
 }
 
-async function main(argv: string[]): Promise<number> {
-    const dryRun = argv.includes("--dry-run");
-    const built: { key: string; record?: PackageRecord; error?: string }[] = [];
-    for (const channel of CHANNELS) {
-        const key = `dotnet-${channel.split(".")[0]}`;
-        try {
-            built.push({ key, record: await buildLatestDotnetRecord(channel) });
-        } catch (err) {
-            built.push({ key, error: err instanceof Error ? err.message : String(err) });
-        }
-    }
-    return report(await writeRecords(built, { dryRun }), dryRun);
-}
-
 if (import.meta.main) {
-    main(process.argv.slice(2)).then(
-        (code) => process.exit(code),
-        (err) => {
-            console.error(err instanceof Error ? err.message : err);
-            process.exit(1);
-        },
+    runUpdater(async () =>
+        Promise.all(CHANNELS.map((channel) => settle(`dotnet-${channel.split(".")[0]}`, () => buildLatestDotnetRecord(channel)))),
     );
 }

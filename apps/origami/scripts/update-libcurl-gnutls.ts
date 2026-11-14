@@ -12,8 +12,8 @@
 // Its other libraries (gnutls, ngtcp2, nghttp2/3, libssh2, krb5, …) are
 // curl's own dependencies on Arch; elsewhere the panel names whatever ldd
 // still can't find.
-import { createHash } from "node:crypto";
-import { writeRecords, report } from "./lib/cli";
+import { fetchHashed } from "./lib/download";
+import { runUpdater, settle } from "./lib/cli";
 import { assertValidRecord, type PackageRecord } from "./lib/records";
 
 export const LIBCURL_GNUTLS_BUILD = {
@@ -45,30 +45,9 @@ export function buildLibcurlGnutlsRecord(download: { sha256: string; size: numbe
 }
 
 export async function buildLatestLibcurlGnutlsRecord(fetchFn: typeof fetch = fetch): Promise<PackageRecord> {
-    const url = libcurlGnutlsUrl(LIBCURL_GNUTLS_BUILD.file);
-    const res = await fetchFn(url, { signal: AbortSignal.timeout(60_000) });
-    if (!res.ok) throw new Error(`GET ${url} failed: ${res.status} ${res.statusText}`);
-    const bytes = await res.arrayBuffer();
-    return buildLibcurlGnutlsRecord({ sha256: createHash("sha256").update(Buffer.from(bytes)).digest("hex"), size: bytes.byteLength });
-}
-
-async function main(argv: string[]): Promise<number> {
-    const dryRun = argv.includes("--dry-run");
-    let built: { key: string; record?: PackageRecord; error?: string };
-    try {
-        built = { key: "libcurl-gnutls", record: await buildLatestLibcurlGnutlsRecord() };
-    } catch (err) {
-        built = { key: "libcurl-gnutls", error: err instanceof Error ? err.message : String(err) };
-    }
-    return report(await writeRecords([built], { dryRun }), dryRun);
+    return buildLibcurlGnutlsRecord(await fetchHashed(libcurlGnutlsUrl(LIBCURL_GNUTLS_BUILD.file), fetchFn, 60_000));
 }
 
 if (import.meta.main) {
-    main(process.argv.slice(2)).then(
-        (code) => process.exit(code),
-        (err) => {
-            console.error(err instanceof Error ? err.message : err);
-            process.exit(1);
-        },
-    );
+    runUpdater(async () => [await settle("libcurl-gnutls", () => buildLatestLibcurlGnutlsRecord())]);
 }

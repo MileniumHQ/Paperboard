@@ -28,13 +28,11 @@
 // The record's sha256 is that of the .tgz itself: it is what the daemon
 // downloads and checks at install. Needs `gpg` on the operator's machine.
 import { createHash } from "node:crypto";
-import { createWriteStream } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
-import { writeRecords, report } from "./lib/cli";
+import { fetchBytes, listTar, UPDATER_USER_AGENT, withStreamedDownload } from "./lib/download";
+import { runUpdater, settle } from "./lib/cli";
 import {
     assertValidRecord,
     fetchJson,
@@ -302,49 +300,26 @@ async function sha256OfOutput(command: string, args: string[]): Promise<string> 
  * is written out, nothing is run), and deletes the tarball.
  */
 export function inspectTarball(fetchFn: typeof fetch = fetch): ClaudeCodeIo["inspectTarball"] {
-    return async (url, binaryMember) => {
-        const dir = await mkdtemp(path.join(tmpdir(), "origami-claude-"));
-        try {
-            const res = await fetchFn(url, { headers: { "User-Agent": "Origami-Package-Updater/2.0" }, redirect: "follow" });
-            if (!res.ok || !res.body) throw new Error(`GET ${url} failed: ${res.status} ${res.statusText}`);
-            const archive = path.join(dir, "package.tgz");
-            const hashes = { sha1: createHash("sha1"), sha256: createHash("sha256"), sha512: createHash("sha512") };
-            let size = 0;
-            const tap = new TransformStream<Uint8Array, Uint8Array>({
-                transform(chunk, controller) {
-                    size += chunk.byteLength;
-                    for (const h of Object.values(hashes)) h.update(chunk);
-                    controller.enqueue(chunk);
-                },
-            });
-            await pipeline(Readable.fromWeb(res.body.pipeThrough(tap) as never), createWriteStream(archive));
-            const listed = await run("tar", ["-tzf", archive]);
-            if (listed.code !== 0) throw new Error(`tar -tzf failed: ${listed.stderr.trim()}`);
-            const members = listed.stdout.split("\n").filter(Boolean);
+    return (url, binaryMember) =>
+        withStreamedDownload(url, fetchFn, { prefix: "origami-claude-", file: "package.tgz" }, async (download) => {
+            const members = await listTar(download.path);
             if (!members.includes(binaryMember)) throw new Error(`${binaryMember} is not in ${url}`);
             return {
-                size,
-                sha1: hashes.sha1.digest("hex"),
-                sha256: hashes.sha256.digest("hex"),
-                sha512: hashes.sha512.digest("base64"),
+                size: download.size,
+                sha1: download.sha1,
+                sha256: download.sha256,
+                sha512: Buffer.from(download.sha512, "hex").toString("base64"),
                 members,
-                binarySha256: await sha256OfOutput("tar", ["-xzOf", archive, binaryMember]),
+                binarySha256: await sha256OfOutput("tar", ["-xzOf", download.path, binaryMember]),
             };
-        } finally {
-            await rm(dir, { recursive: true, force: true });
-        }
-    };
+        });
 }
 
 export function liveIo(fetchFn: typeof fetch = fetch): ClaudeCodeIo {
     return {
         text: (url) => fetchText(url, fetchFn),
         json: (url) => fetchJson(url, fetchFn),
-        bytes: async (url) => {
-            const res = await fetchFn(url, { headers: { "User-Agent": "Origami-Package-Updater/2.0" }, signal: AbortSignal.timeout(30_000) });
-            if (!res.ok) throw new Error(`GET ${url} failed: ${res.status} ${res.statusText}`);
-            return new Uint8Array(await res.arrayBuffer());
-        },
+        bytes: (url) => fetchBytes(url, fetchFn, 30_000, { "User-Agent": UPDATER_USER_AGENT }),
         verifySignature: gpgVerify,
         inspectTarball: inspectTarball(fetchFn),
     };
@@ -360,23 +335,6 @@ function channelArg(argv: string[]): Channel {
     return value as Channel;
 }
 
-async function main(argv: string[]): Promise<number> {
-    const dryRun = argv.includes("--dry-run");
-    let built: { key: string; record?: PackageRecord; error?: string };
-    try {
-        built = { key: "claude-code", record: await buildLatestClaudeCodeRecord(channelArg(argv)) };
-    } catch (err) {
-        built = { key: "claude-code", error: err instanceof Error ? err.message : String(err) };
-    }
-    return report(await writeRecords([built], { dryRun }), dryRun);
-}
-
 if (import.meta.main) {
-    main(process.argv.slice(2)).then(
-        (code) => process.exit(code),
-        (err) => {
-            console.error(err instanceof Error ? err.message : err);
-            process.exit(1);
-        },
-    );
+    runUpdater(async (argv) => [await settle("claude-code", () => buildLatestClaudeCodeRecord(channelArg(argv)))]);
 }

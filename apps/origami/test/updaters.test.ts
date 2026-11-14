@@ -7,7 +7,8 @@ import { buildLatestSteamcmdRecord, buildSteamcmdRecord, STEAMCMD_BUILDS } from 
 import { buildLatestLibcurlGnutlsRecord, buildLibcurlGnutlsRecord, LIBCURL_GNUTLS_BUILD, libcurlGnutlsUrl } from "../scripts/update-libcurl-gnutls";
 import { buildLatestSourcemodRecords, SOURCEMOD_BUILDS } from "../scripts/update-sourcemod";
 import { buildWindowsRuntimeRecords, WINDOWS_RUNTIMES } from "../scripts/update-windows-runtimes";
-import { buildLatestOllamaRecord, type GithubRelease } from "../scripts/update-ollama";
+import type { GithubRelease } from "../scripts/lib/github";
+import { buildLatestOllamaRecord } from "../scripts/update-ollama";
 import { buildLatestOpencodeRecord } from "../scripts/update-opencode";
 import { buildLatestCodexRecord, TARGETS } from "../scripts/update-codex";
 import { buildLatestDotnetRecord, RIDS } from "../scripts/update-dotnet";

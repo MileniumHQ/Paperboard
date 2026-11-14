@@ -7,7 +7,7 @@
 // Trust: the URL and sha256 both come from Adoptium's API record, fetched
 // fresh over TLS on every run. Adoptium is the authority for its own
 // artifacts; nothing publisher-supplied is persisted without it.
-import { writeRecords, report } from "./lib/cli";
+import { runUpdater } from "./lib/cli";
 import {
     assertValidRecord,
     fetchJson,
@@ -106,23 +106,12 @@ export async function buildJavaRecords(
     return built;
 }
 
-async function main(argv: string[]): Promise<number> {
-    const dryRun = argv.includes("--dry-run");
-    const explicit = argv.filter((a) => !a.startsWith("--")).map((a) => a.replace(/^java-?/, ""));
-    for (const a of explicit) {
-        if (!/^\d+$/.test(a)) throw new Error(`not a Java feature version: ${a}`);
-    }
-    const features = explicit.length > 0 ? explicit.map(Number) : await availableFeatures();
-    const built = await buildJavaRecords(features);
-    return report(await writeRecords(built, { dryRun }), dryRun);
-}
-
 if (import.meta.main) {
-    main(process.argv.slice(2)).then(
-        (code) => process.exit(code),
-        (err) => {
-            console.error(err instanceof Error ? err.message : err);
-            process.exit(1);
-        },
-    );
+    runUpdater(async (argv) => {
+        const explicit = argv.filter((a) => !a.startsWith("--")).map((a) => a.replace(/^java-?/, ""));
+        for (const a of explicit) {
+            if (!/^\d+$/.test(a)) throw new Error(`not a Java feature version: ${a}`);
+        }
+        return buildJavaRecords(explicit.length > 0 ? explicit.map(Number) : await availableFeatures());
+    });
 }

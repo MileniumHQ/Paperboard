@@ -13,8 +13,8 @@
 // The Game Server panel installs a runtime only when Windows lacks it, and
 // copies its bin/ beside the server's executable, where Windows and .NET
 // look first.
-import { createHash } from "node:crypto";
-import { writeRecords, report } from "./lib/cli";
+import { fetchHashed } from "./lib/download";
+import { runUpdater, settleAll } from "./lib/cli";
 import { assertValidRecord, type PackageRecipe, type PackageRecord } from "./lib/records";
 
 interface Runtime {
@@ -70,32 +70,11 @@ export function buildWindowsRuntimeRecord(runtime: Runtime, download: { sha256: 
 export async function buildWindowsRuntimeRecords(fetchFn: typeof fetch = fetch): Promise<PackageRecord[]> {
     const records: PackageRecord[] = [];
     for (const runtime of WINDOWS_RUNTIMES) {
-        const res = await fetchFn(runtime.url, { signal: AbortSignal.timeout(120_000) });
-        if (!res.ok) throw new Error(`GET ${runtime.url} failed: ${res.status} ${res.statusText}`);
-        const bytes = await res.arrayBuffer();
-        records.push(buildWindowsRuntimeRecord(runtime, { sha256: createHash("sha256").update(Buffer.from(bytes)).digest("hex"), size: bytes.byteLength }));
+        records.push(buildWindowsRuntimeRecord(runtime, await fetchHashed(runtime.url, fetchFn, 120_000)));
     }
     return records;
 }
 
-async function main(argv: string[]): Promise<number> {
-    const dryRun = argv.includes("--dry-run");
-    let built: { key: string; record?: PackageRecord; error?: string }[];
-    try {
-        built = (await buildWindowsRuntimeRecords()).map((record) => ({ key: record.name, record }));
-    } catch (err) {
-        const error = err instanceof Error ? err.message : String(err);
-        built = WINDOWS_RUNTIMES.map((runtime) => ({ key: runtime.name, error }));
-    }
-    return report(await writeRecords(built, { dryRun }), dryRun);
-}
-
 if (import.meta.main) {
-    main(process.argv.slice(2)).then(
-        (code) => process.exit(code),
-        (err) => {
-            console.error(err instanceof Error ? err.message : err);
-            process.exit(1);
-        },
-    );
+    runUpdater(() => settleAll(WINDOWS_RUNTIMES.map((r) => r.name), () => buildWindowsRuntimeRecords()));
 }

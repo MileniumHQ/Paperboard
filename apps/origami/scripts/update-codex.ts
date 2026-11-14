@@ -30,15 +30,9 @@
 // release's codex-package_SHA256SUMS. The downloaded bytes are hashed too:
 // listing an archive proves nothing about a file whose hash is unchecked.
 // A missing or disagreeing fact drops the whole record.
-import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
-import { writeRecords, report } from "./lib/cli";
+import { listTar, withStreamedDownload } from "./lib/download";
+import { parseSha256Sums, verifiedAsset, type GithubRelease } from "./lib/github";
+import { runUpdater, settle } from "./lib/cli";
 import {
     assertValidRecord,
     fetchJson,
@@ -49,7 +43,6 @@ import {
     type PlatformDownload,
     type PlatformKey,
 } from "./lib/records";
-import { parseSha256Sums, type GithubRelease } from "./update-ollama";
 
 const LATEST = "https://api.github.com/repos/openai/codex/releases/latest";
 const SUMS_FILE = "codex-package_SHA256SUMS";
@@ -105,16 +98,7 @@ export function codexDownloads(release: GithubRelease, sumsText: string): { vers
     const sums = parseSha256Sums(sumsText);
     const downloads = PLATFORM_KEYS.map((key) => {
         const file = `codex-package-${TARGETS[key].triple}.tar.gz`;
-        const asset = release.assets.find((a) => a.name === file);
-        if (!asset) throw new Error(`${release.tag_name}: asset ${file} missing`);
-        const digest = asset.digest?.match(/^sha256:([a-f0-9]{64})$/i)?.[1]?.toLowerCase();
-        if (!digest) throw new Error(`${release.tag_name}: ${file} has no sha256 digest`);
-        const listed = sums.get(file);
-        if (!listed) throw new Error(`${release.tag_name}: ${file} is not in ${SUMS_FILE}`);
-        if (listed !== digest) {
-            throw new Error(`${release.tag_name}: ${file} digest disagrees with ${SUMS_FILE}`);
-        }
-        return { key, file, url: asset.browser_download_url, sha256: digest, ...(typeof asset.size === "number" ? { size: asset.size } : {}) };
+        return { key, file, ...verifiedAsset(release, file, sums, SUMS_FILE) };
     });
     return { version, downloads };
 }
@@ -143,46 +127,17 @@ export function buildCodexRecord(release: GithubRelease, sumsText: string, listi
     return record;
 }
 
-function listArchive(archive: string): Promise<string[]> {
-    return new Promise((resolve, reject) => {
-        // argv array, no shell; -t only lists, nothing is extracted or run
-        execFile("tar", ["-tzf", archive], { maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
-            if (err) {
-                reject(new Error(`tar -tzf failed: ${stderr.trim() || err.message}`));
-                return;
-            }
-            resolve(stdout.split("\n").filter(Boolean));
-        });
-    });
-}
-
 /**
  * Streams the archive into a temp file, refuses it unless its bytes hash to
  * the digest the release claims, lists its members with `tar -t`, and
  * deletes it. Nothing in the archive is extracted or run.
  */
 export function inspectArchive(fetchFn: typeof fetch = fetch): ArchiveInspector {
-    return async ({ file, url, sha256 }) => {
-        const dir = await mkdtemp(path.join(tmpdir(), "origami-codex-"));
-        try {
-            const res = await fetchFn(url, { headers: { "User-Agent": "Origami-Package-Updater/2.0" }, redirect: "follow" });
-            if (!res.ok || !res.body) throw new Error(`GET ${url} failed: ${res.status} ${res.statusText}`);
-            const archive = path.join(dir, file);
-            const hash = createHash("sha256");
-            const tap = new TransformStream<Uint8Array, Uint8Array>({
-                transform(chunk, controller) {
-                    hash.update(chunk);
-                    controller.enqueue(chunk);
-                },
-            });
-            await pipeline(Readable.fromWeb(res.body.pipeThrough(tap) as never), createWriteStream(archive));
-            const actual = hash.digest("hex");
-            if (actual !== sha256) throw new Error(`${file}: downloaded bytes hash to ${actual}, not the published ${sha256}`);
-            return await listArchive(archive);
-        } finally {
-            await rm(dir, { recursive: true, force: true });
-        }
-    };
+    return ({ file, url, sha256 }) =>
+        withStreamedDownload(url, fetchFn, { prefix: "origami-codex-", file }, async (download) => {
+            if (download.sha256 !== sha256) throw new Error(`${file}: downloaded bytes hash to ${download.sha256}, not the published ${sha256}`);
+            return listTar(download.path);
+        });
 }
 
 export async function buildLatestCodexRecord(
@@ -201,23 +156,6 @@ export async function buildLatestCodexRecord(
     return buildCodexRecord(release, sumsText, listings);
 }
 
-async function main(argv: string[]): Promise<number> {
-    const dryRun = argv.includes("--dry-run");
-    let built: { key: string; record?: PackageRecord; error?: string };
-    try {
-        built = { key: "codex", record: await buildLatestCodexRecord() };
-    } catch (err) {
-        built = { key: "codex", error: err instanceof Error ? err.message : String(err) };
-    }
-    return report(await writeRecords([built], { dryRun }), dryRun);
-}
-
 if (import.meta.main) {
-    main(process.argv.slice(2)).then(
-        (code) => process.exit(code),
-        (err) => {
-            console.error(err instanceof Error ? err.message : err);
-            process.exit(1);
-        },
-    );
+    runUpdater(async () => [await settle("codex", () => buildLatestCodexRecord())]);
 }

@@ -13,7 +13,8 @@
 // asset's sha256 is GitHub's asset digest. The three repos must be on the
 // same version, or nothing is written, so every platform runs the same
 // Chromium.
-import { writeRecords, report } from "./lib/cli";
+import { digestedAsset, type GithubRelease } from "./lib/github";
+import { runUpdater, settle } from "./lib/cli";
 import {
     assertValidRecord,
     fetchJson,
@@ -23,7 +24,6 @@ import {
     type PlatformDownload,
     type PlatformKey,
 } from "./lib/records";
-import type { GithubRelease } from "./update-ollama";
 
 export const REPOS = ["helium-linux", "helium-macos", "helium-windows"] as const;
 export type HeliumRepo = (typeof REPOS)[number];
@@ -78,16 +78,7 @@ export function buildHeliumRecord(releases: Record<HeliumRepo, GithubRelease>): 
     const platforms: Partial<Record<PlatformKey, PlatformDownload>> = {};
     for (const key of PLATFORM_KEYS) {
         const { repo, file, recipe } = BUILD_FOR[key](version);
-        const asset = releases[repo].assets.find((a) => a.name === file);
-        if (!asset) throw new Error(`${repo} ${version}: asset ${file} missing`);
-        const digest = asset.digest?.match(/^sha256:([a-f0-9]{64})$/i)?.[1]?.toLowerCase();
-        if (!digest) throw new Error(`${repo} ${version}: ${file} has no sha256 digest`);
-        platforms[key] = {
-            url: asset.browser_download_url,
-            sha256: digest,
-            ...(typeof asset.size === "number" ? { size: asset.size } : {}),
-            recipe,
-        };
+        platforms[key] = { ...digestedAsset(releases[repo].assets, file, `${repo} ${version}`), recipe };
     }
     const record: PackageRecord = { name: "helium", version, platforms };
     assertValidRecord(record);
@@ -102,23 +93,6 @@ export async function buildLatestHeliumRecord(fetchFn: typeof fetch = fetch): Pr
     return buildHeliumRecord(releases);
 }
 
-async function main(argv: string[]): Promise<number> {
-    const dryRun = argv.includes("--dry-run");
-    let built: { key: string; record?: PackageRecord; error?: string };
-    try {
-        built = { key: "helium", record: await buildLatestHeliumRecord() };
-    } catch (err) {
-        built = { key: "helium", error: err instanceof Error ? err.message : String(err) };
-    }
-    return report(await writeRecords([built], { dryRun }), dryRun);
-}
-
 if (import.meta.main) {
-    main(process.argv.slice(2)).then(
-        (code) => process.exit(code),
-        (err) => {
-            console.error(err instanceof Error ? err.message : err);
-            process.exit(1);
-        },
-    );
+    runUpdater(async () => [await settle("helium", () => buildLatestHeliumRecord())]);
 }

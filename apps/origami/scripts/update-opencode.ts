@@ -20,7 +20,8 @@
 // sha256 comes from GitHub's asset digest and must agree with the release's
 // own SHA256SUMS; a missing or disagreeing fact drops the whole record
 // rather than publishing a partial one.
-import { writeRecords, report } from "./lib/cli";
+import { parseSha256Sums, verifiedAsset, type GithubRelease } from "./lib/github";
+import { runUpdater, settle } from "./lib/cli";
 import {
     assertValidRecord,
     fetchJson,
@@ -31,7 +32,6 @@ import {
     type PlatformDownload,
     type PlatformKey,
 } from "./lib/records";
-import { parseSha256Sums, type GithubRelease } from "./update-ollama";
 
 const RELEASES = "https://api.github.com/repos/anomalyco/opencode/releases?per_page=30";
 const TAG_RE = /^v(2)\.(\d+)\.(\d+)$/;
@@ -72,21 +72,7 @@ export function buildOpencodeRecord(release: GithubRelease, sumsText: string): P
     const platforms: Partial<Record<PlatformKey, PlatformDownload>> = {};
     for (const key of PLATFORM_KEYS) {
         const { file, layout } = ASSET_FOR[key];
-        const asset = release.assets.find((a) => a.name === file);
-        if (!asset) throw new Error(`${release.tag_name}: asset ${file} missing`);
-        const digest = asset.digest?.match(/^sha256:([a-f0-9]{64})$/i)?.[1]?.toLowerCase();
-        if (!digest) throw new Error(`${release.tag_name}: ${file} has no sha256 digest`);
-        const listed = sums.get(file);
-        if (!listed) throw new Error(`${release.tag_name}: ${file} is not in SHA256SUMS`);
-        if (listed !== digest) {
-            throw new Error(`${release.tag_name}: ${file} digest disagrees with SHA256SUMS`);
-        }
-        platforms[key] = {
-            url: asset.browser_download_url,
-            sha256: digest,
-            ...(typeof asset.size === "number" ? { size: asset.size } : {}),
-            layout,
-        };
+        platforms[key] = { ...verifiedAsset(release, file, sums, "SHA256SUMS"), layout };
     }
     const record: PackageRecord = { name: "opencode", version, platforms };
     assertValidRecord(record);
@@ -104,23 +90,6 @@ export async function buildLatestOpencodeRecord(fetchFn: typeof fetch = fetch): 
     return buildOpencodeRecord(release, await fetchText(sumsAsset.browser_download_url, fetchFn));
 }
 
-async function main(argv: string[]): Promise<number> {
-    const dryRun = argv.includes("--dry-run");
-    let built: { key: string; record?: PackageRecord; error?: string };
-    try {
-        built = { key: "opencode", record: await buildLatestOpencodeRecord() };
-    } catch (err) {
-        built = { key: "opencode", error: err instanceof Error ? err.message : String(err) };
-    }
-    return report(await writeRecords([built], { dryRun }), dryRun);
-}
-
 if (import.meta.main) {
-    main(process.argv.slice(2)).then(
-        (code) => process.exit(code),
-        (err) => {
-            console.error(err instanceof Error ? err.message : err);
-            process.exit(1);
-        },
-    );
+    runUpdater(async () => [await settle("opencode", () => buildLatestOpencodeRecord())]);
 }
