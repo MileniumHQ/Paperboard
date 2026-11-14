@@ -111,7 +111,17 @@ export function handleHttpRequest(
             res.end("Unauthorized");
             return;
         }
-        const parts = pathname.slice("/panel/".length).split("/");
+        // the URL path is percent-encoded: a file named "my notes.html"
+        // arrives as my%20notes.html. The resolver below refuses traversal
+        // in the decoded path.
+        let parts: string[];
+        try {
+            parts = pathname.slice("/panel/".length).split("/").map(decodeURIComponent);
+        } catch {
+            res.writeHead(400, { "Content-Type": "text/plain" });
+            res.end("Malformed panel file path");
+            return;
+        }
         const panelId = parts[0];
         const subPath = parts.slice(1).join("/") || "index.html";
 

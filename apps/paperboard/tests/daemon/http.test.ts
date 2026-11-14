@@ -267,6 +267,18 @@ describe("panel assets and /panel-files", () => {
 		expect((await request(port, { path: "/panel-files/test.assets/doc.txt", headers: bearer(daemon.token) })).body.toString()).toBe("doc");
 	});
 
+	test("a panel file whose name has a space or an accent is served by its encoded URL", async () => {
+		const daemon = await withPanel();
+		const port = daemon.instance.localPort;
+		fs.writeFileSync(path.join(daemon.dataDir, "panels", "test.assets", "café menu.png"), "the picture");
+		const auth = bearer(daemon.token);
+		const served = await request(port, { path: "/panel/test.assets/caf%C3%A9%20menu.png", headers: auth });
+		expect(served.status).toBe(200);
+		expect(served.body.toString()).toBe("the picture");
+		expect((await request(port, { path: "/panel/test.assets/%E0%A4%A", headers: auth })).status).toBe(400);
+		expect((await request(port, { path: "/panel/test.assets/..%2F..%2FSENTINEL", headers: auth })).status).not.toBe(200);
+	});
+
 	test("a request carrying the file's ETag gets an empty 304, and a changed file comes in full", async () => {
 		const daemon = await withPanel();
 		const port = daemon.instance.localPort;
@@ -317,15 +329,16 @@ describe("panel assets and /panel-files", () => {
 		}
 		// Over HTTP no spelling reaches the file: the URL parser removes raw and
 		// %2e%2e dot segments, which leaves a path naming no panel (404) or no
-		// panel id at all (400), and the route never decodes %2f, so an encoded
-		// slash names a file that does not exist (404).
+		// panel id at all (400). The route decodes each segment (so file names
+		// with spaces work), so an encoded slash reaches the shared resolver as
+		// a traversal and is refused (403), as /panel-files refuses it.
 		const spellings: Array<[string, number]> = [
 			["../../SENTINEL", 404],
-			["%2e%2e%2f%2e%2e%2fSENTINEL", 404],
-			["..%2f..%2fSENTINEL", 404],
+			["%2e%2e%2f%2e%2e%2fSENTINEL", 403],
+			["..%2f..%2fSENTINEL", 403],
 			["%2e%2e/%2e%2e/SENTINEL", 404],
 			["dist/../../SENTINEL", 404],
-			["dist/..%2f..%2fSENTINEL", 404],
+			["dist/..%2f..%2fSENTINEL", 403],
 			["..", 400],
 			["%2e%2e", 400],
 		];
