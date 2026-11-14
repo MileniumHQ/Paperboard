@@ -16,6 +16,7 @@ import {
     PaperKeyValue,
     PaperKeyValueList,
     PaperMarkdown,
+    PaperPage,
     PaperSectionHeader,
     PaperText,
 } from "@mileniumhq/paperui";
@@ -23,7 +24,7 @@ import type { PanelItem } from "../../../../packages/paperapi/src/panelMerge";
 import type { StoreRow, StoreScreenshot } from "../../../../packages/paperapi/src/storeListing";
 import type { LibraryMode } from "./bridge";
 import { panelHref } from "./router";
-import styles from "./PanelPage.module.css";
+import styles from "./Library.module.css";
 
 // Publisher and install source are independent facts; an unknown publisher
 // stays explicitly unknown rather than borrowing the registry's name.
@@ -177,8 +178,12 @@ const Screenshots: Component<{ panelName: string; shots: StoreScreenshot[] }> = 
 
 const Fact: Component<{ label: string; children: JSX.Element }> = (props) => (
     <div class={styles.fact}>
-        <span class={styles.factLabel}>{props.label}</span>
-        <span class={styles.factValue}>{props.children}</span>
+        <PaperText preset="section" color="text-faint" rounded>
+            {props.label}
+        </PaperText>
+        <PaperText size={5} weight={700} color="text-muted" rounded truncate>
+            {props.children}
+        </PaperText>
     </div>
 );
 
@@ -187,7 +192,10 @@ export interface PanelPageProps {
     mode: LibraryMode;
     busy: boolean;
     error: string | null;
+    /** why the installed panel's own listing couldn't be read, when it couldn't */
+    mediaError: string | null;
     onAction: () => void;
+    onRetryMedia: () => void;
     onNavigateHome: () => void;
 }
 
@@ -197,7 +205,7 @@ const PanelPage: Component<PanelPageProps> = (props) => {
     const size = () => formatBytes(props.panel.archiveBytes);
 
     return (
-        <article class={styles.page} aria-label={props.panel.name}>
+        <PaperPage role="article" aria-label={props.panel.name} gap="double">
             <PaperFlex direction="row">
                 <PaperButton
                     size="small"
@@ -275,6 +283,19 @@ const PanelPage: Component<PanelPageProps> = (props) => {
                 </Show>
             </section>
 
+            <Show when={props.mediaError}>
+                {(why) => (
+                    <PaperFlex direction="row" gap="half" align="center" wrap>
+                        <PaperText preset="error" color="danger" role="alert">
+                            Couldn't load this panel's screenshots and details: {why()}
+                        </PaperText>
+                        <PaperButton variant="text" size="small" onClick={props.onRetryMedia}>
+                            Retry
+                        </PaperButton>
+                    </PaperFlex>
+                )}
+            </Show>
+
             <Show when={store()?.screenshots.length}>
                 <Screenshots panelName={props.panel.name} shots={store()!.screenshots} />
             </Show>
@@ -296,7 +317,7 @@ const PanelPage: Component<PanelPageProps> = (props) => {
                     </>
                 )}
             </Show>
-        </article>
+        </PaperPage>
     );
 };
 

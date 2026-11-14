@@ -45,9 +45,9 @@ export interface LibraryBridge {
     notifyReady: () => void;
     /**
      * Ask the shell for an installed panel's own icon (and listing when
-     * `full`). Resolves null when unavailable; never rejects.
+     * `full`). Rejects with why when the shell can't give it.
      */
-    media: (panelId: string, full: boolean) => Promise<InstalledPanelMedia | null>;
+    media: (panelId: string, full: boolean) => Promise<InstalledPanelMedia>;
     dispose: () => void;
 }
 
@@ -111,7 +111,7 @@ export function createLibraryBridge(
     const pending = new Map<string, PendingInstall>();
     const pendingMedia = new Map<
         string,
-        { resolve: (media: InstalledPanelMedia | null) => void; timer: ReturnType<typeof setTimeout> }
+        { resolve: (media: InstalledPanelMedia) => void; reject: (why: Error) => void; timer: ReturnType<typeof setTimeout> }
     >();
     let handshakeTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -148,8 +148,13 @@ export function createLibraryBridge(
             pendingMedia.delete(message.requestId);
             clearTimeout(entry.timer);
             if (message.ok !== true) {
-                console.warn("[library] panel media unavailable:", message.error);
-                entry.resolve(null);
+                entry.reject(
+                    new Error(
+                        typeof message.error === "string" && message.error
+                            ? message.error
+                            : "Paperboard couldn't read the panel's files",
+                    ),
+                );
                 return;
             }
             // the shell is trusted to answer, not to be well-formed: the
@@ -228,17 +233,18 @@ export function createLibraryBridge(
         host.send({ type: "paperboard:library-ready" });
     };
 
-    const media = (panelId: string, full: boolean): Promise<InstalledPanelMedia | null> => {
-        if (!host || mode() !== "embedded" || !isPanelId(panelId)) {
-            return Promise.resolve(null);
+    const media = (panelId: string, full: boolean): Promise<InstalledPanelMedia> => {
+        if (!host || mode() !== "embedded") {
+            return Promise.reject(new Error("Paperboard is not connected"));
         }
+        if (!isPanelId(panelId)) return Promise.reject(new Error("Invalid panel id"));
         const requestId = nextRequestId();
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 pendingMedia.delete(requestId);
-                resolve(null);
+                reject(new Error("Paperboard did not answer the request for the panel's files"));
             }, MEDIA_TIMEOUT_MS);
-            pendingMedia.set(requestId, { resolve, timer });
+            pendingMedia.set(requestId, { resolve, reject, timer });
             host.send({ type: "paperboard:library-media", requestId, panelId, full });
         });
     };
@@ -255,7 +261,7 @@ export function createLibraryBridge(
         pending.clear();
         for (const entry of pendingMedia.values()) {
             clearTimeout(entry.timer);
-            entry.resolve(null);
+            entry.reject(new Error("The panel library was unloaded"));
         }
         pendingMedia.clear();
     };

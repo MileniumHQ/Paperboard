@@ -5,6 +5,7 @@ import {
     createMemo,
     createSignal,
     For,
+    on,
     onMount,
     Show,
 } from "solid-js";
@@ -18,9 +19,9 @@ import {
     PaperMediaCardGroup,
     PaperPage,
     PaperText,
-    getVarCss,
 } from "@mileniumhq/paperui";
 import bannerImg from "./assets/PanelLibraryBanner.webp";
+import styles from "./Library.module.css";
 import type { LibraryBridge } from "./bridge";
 import PanelPage, { iconGlyph, publisherLabel } from "./PanelPage";
 import { createLibraryRoute } from "./router";
@@ -46,51 +47,12 @@ function downloadArchive(panel: PanelItem) {
     link.remove();
 }
 
-const rootStyle = {
-    flex: "1",
-    width: "100%",
-    height: "100%",
-    "overflow-y": "auto",
-    "overflow-x": "hidden",
-    "box-sizing": "border-box",
-    // the same gutter as a PaperPage, so the Library lines up with panels
-    padding: getVarCss("uigap-double"),
-} as const;
-
-// the grid scrolls edge to edge; its PaperPage column brings the same
-// width and gutter as Settings and the panel pages
-const gridScrollStyle = {
-    flex: "1",
-    width: "100%",
-    height: "100%",
-    "overflow-y": "auto",
-    "overflow-x": "hidden",
-    "box-sizing": "border-box",
-} as const;
-
-const PanelIcon: Component<{ panel: PanelItem; size: string }> = (props) => {
-    return (
-        <Show
-            when={props.panel.iconUrl}
-            fallback={
-                <span style={{ "font-size": props.size }}>
-                    {iconGlyph(props.panel)}
-                </span>
-            }
-        >
-            <img
-                src={props.panel.iconUrl}
-                alt=""
-                style={{
-                    width: props.size,
-                    height: props.size,
-                    "border-radius": getVarCss("border-radius"),
-                    "object-fit": "contain",
-                }}
-            />
-        </Show>
-    );
-};
+// what is cached per installed panel goes with the panel; nothing changed
+// keeps the same object, so nothing downstream is notified
+function onlyInstalled<T>(entries: Record<string, T>, installed: Set<string>): Record<string, T> {
+    const kept = Object.fromEntries(Object.entries(entries).filter(([id]) => installed.has(id)));
+    return Object.keys(kept).length === Object.keys(entries).length ? entries : kept;
+}
 
 export interface PanelLibraryAppProps {
     bridge: LibraryBridge;
@@ -162,60 +124,76 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
             .filter((id) => !listed || !(id in listed));
     });
 
+    // a failed read is shown on the panel's page, never mistaken for a
+    // panel with no listing; it stays until a read of it succeeds
+    const [mediaErrors, setMediaErrors] = createSignal<Record<string, string>>({});
+    const dropMediaError = (id: string) =>
+        setMediaErrors((prev) => {
+            if (!(id in prev)) return prev;
+            const { [id]: _, ...rest } = prev;
+            return rest;
+        });
+
     const requestMedia = (id: string, full: boolean) => {
         const key = `${id}:${full ? "full" : "icon"}`;
         if (requestedMedia.has(key)) return;
         requestedMedia.add(key);
         setPendingMedia((count) => count + 1);
-        void props.bridge.media(id, full).then((media) => {
-            setPendingMedia((count) => Math.max(0, count - 1));
-            if (!media) {
-                // unavailable, not empty: allow a later visit to retry
-                requestedMedia.delete(key);
-                return;
-            }
-            if (!props.bridge.installed().some((panel) => panel.id === id)) return;
-            setLocalMedia((prev) => {
-                if (prev[id]?.full && !full) return prev;
-                return { ...prev, [id]: { ...media, full } };
-            });
-        });
+        void props.bridge
+            .media(id, full)
+            .then(
+                (media) => {
+                    if (!props.bridge.installed().some((panel) => panel.id === id)) return;
+                    dropMediaError(id);
+                    setLocalMedia((prev) => {
+                        if (prev[id]?.full && !full) return prev;
+                        return { ...prev, [id]: { ...media, full } };
+                    });
+                },
+                (err: Error) => {
+                    // unavailable, not empty: a retry asks again
+                    requestedMedia.delete(key);
+                    console.error(`[library] ${id}'s own listing is unavailable:`, err);
+                    setMediaErrors((prev) => ({ ...prev, [id]: err.message }));
+                },
+            )
+            .finally(() => setPendingMedia((count) => count - 1));
     };
 
-    createEffect(() => {
-        if (props.bridge.mode() !== "embedded") return;
-        const ids = unrecognizedIds();
-        const installed = new Set(props.bridge.installed().map((panel) => panel.id));
-        setLocalMedia((prev) => {
-            const kept = Object.fromEntries(
-                Object.entries(prev).filter(([id]) => installed.has(id)),
-            );
-            return Object.keys(kept).length === Object.keys(prev).length ? prev : kept;
-        });
-        for (const key of [...requestedMedia]) {
-            if (!installed.has(key.slice(0, key.lastIndexOf(":")))) requestedMedia.delete(key);
-        }
-        for (const id of ids) requestMedia(id, false);
-        const selected = route.panelId();
-        if (selected && ids.includes(selected)) requestMedia(selected, true);
-    });
+    const retryMedia = (id: string) => {
+        dropMediaError(id);
+        requestMedia(id, true);
+    };
+
+    createEffect(
+        on(
+            [() => props.bridge.mode(), unrecognizedIds, () => props.bridge.installed(), route.panelId],
+            ([mode, ids, installedList, selected]) => {
+                if (mode !== "embedded") return;
+                const installed = new Set(installedList.map((panel) => panel.id));
+                setLocalMedia((prev) => onlyInstalled(prev, installed));
+                setMediaErrors((prev) => onlyInstalled(prev, installed));
+                for (const key of [...requestedMedia]) {
+                    if (!installed.has(key.slice(0, key.lastIndexOf(":")))) requestedMedia.delete(key);
+                }
+                for (const id of ids) requestMedia(id, false);
+                if (selected && ids.includes(selected)) requestMedia(selected, true);
+            },
+        ),
+    );
 
     // The shell covers the frame until the library says it is done. Ready
     // means the registry has settled, no installed-panel media is still in
     // flight, and the rendered page has painted, so nothing shifts after
     // the reveal.
     let readySent = false;
-    createEffect(() => {
-        if (readySent) return;
-        const settled = registrySettled();
-        const mode = props.bridge.mode();
-        const pending = pendingMedia();
-        // track the installed list so a late reply still re-checks readiness
-        void props.bridge.installed();
-        if (!settled || mode === "detecting" || pending > 0) return;
-        readySent = true;
-        void waitForContentPainted().then(() => props.bridge.notifyReady());
-    });
+    createEffect(
+        on([registrySettled, () => props.bridge.mode(), pendingMedia], ([settled, mode, pending]) => {
+            if (readySent || !settled || mode === "detecting" || pending > 0) return;
+            readySent = true;
+            void waitForContentPainted().then(() => props.bridge.notifyReady());
+        }),
+    );
 
     const merged = createMemo(() => {
         const media = localMedia();
@@ -265,161 +243,119 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
         }
     };
 
+    // one scroll area, edge to edge, around either page's PaperPage column
     return (
-        <Show
-            when={selectedPanel()}
-            fallback={
-                <div style={gridScrollStyle}>
+        <PaperFlex direction="column" fullWidth fullHeight scrollable="y" overflowX="hidden">
+            <Show
+                when={selectedPanel()}
+                fallback={
                     <PaperPage>
-                    {/* a panel URL that doesn't resolve is its own page, never
-                        the grid: loading, unavailable and unknown differ */}
-                    <Show
-                        when={!route.panelId()}
-                        fallback={
-                            <Show when={registry() !== null || loadFailed()}>
-                                <PaperEmptyState
-                                    icon={loadFailed() ? "cloud_off" : "search_off"}
-                                    title={
-                                        loadFailed()
-                                            ? "Couldn't load library"
-                                            : "Panel not found"
-                                    }
-                                    description={
-                                        loadFailed()
-                                            ? "The registry didn't answer."
-                                            : `No published panel is named ${route.panelId()}.`
-                                    }
-                                >
-                                    {loadFailed() ? (
-                                        <PaperButton onClick={() => void load()}>
-                                            Retry
-                                        </PaperButton>
-                                    ) : (
-                                        <PaperButton onClick={() => route.navigate(null)}>
-                                            Browse the library
-                                        </PaperButton>
-                                    )}
-                                </PaperEmptyState>
-                            </Show>
-                        }
-                    >
-                        <div
-                            style={{
-                                position: "relative",
-                                width: "100%",
-                                "border-radius": getVarCss("border-radius"),
-                                overflow: "hidden",
-                                "flex-shrink": 0,
-                            }}
-                        >
-                            <img
-                                src={bannerImg}
-                                alt="Panel Library - Find and launch powerful tools in just a click"
-                                style={{
-                                    width: "100%",
-                                    height: "auto",
-                                    display: "block",
-                                }}
-                            />
-                        </div>
-
-                        <Show when={loadFailed()}>
-                            <PaperFlex
-                                direction="row"
-                                gap="half"
-                                align="center"
-                            >
-                                <PaperBadge variant="danger">
-                                    Couldn't load library
-                                </PaperBadge>
-                                <PaperButton
-                                    variant="text"
-                                    onClick={() => void load()}
-                                >
-                                    Retry
-                                </PaperButton>
-                            </PaperFlex>
-                        </Show>
-
-                        {/* loaded and empty is a different fact from failed:
-                            the registry answered, and it holds no panels */}
+                        {/* a panel URL that doesn't resolve is its own page, never
+                            the grid: loading, unavailable and unknown differ */}
                         <Show
-                            when={
-                                !loadFailed() &&
-                                registry() !== null &&
-                                panels().length === 0
+                            when={!route.panelId()}
+                            fallback={
+                                <Show when={registry() !== null || loadFailed()}>
+                                    <PaperEmptyState
+                                        icon={loadFailed() ? "cloud_off" : "search_off"}
+                                        title={loadFailed() ? "Couldn't load library" : "Panel not found"}
+                                        description={
+                                            loadFailed()
+                                                ? "The registry didn't answer."
+                                                : `No published panel is named ${route.panelId()}.`
+                                        }
+                                    >
+                                        {loadFailed() ? (
+                                            <PaperButton onClick={() => void load()}>Retry</PaperButton>
+                                        ) : (
+                                            <PaperButton onClick={() => route.navigate(null)}>
+                                                Browse the library
+                                            </PaperButton>
+                                        )}
+                                    </PaperEmptyState>
+                                </Show>
                             }
                         >
-                            <PaperEmptyState
-                                icon="dashboard"
-                                title="No panels published yet"
-                                description="Panels published to this registry appear here."
+                            <img
+                                class={styles.banner}
+                                src={bannerImg}
+                                alt="Panel Library - Find and launch powerful tools in just a click"
                             />
-                        </Show>
 
-                        <PaperMediaCardGroup>
-                            <For each={panels()}>
-                                {(panel) => (
-                                    <PaperMediaCard
-                                        icon={<PanelIcon panel={panel} size={getVarCss("avatar-size-xlarge")} />}
-                                        title={panel.name}
-                                        description={panel.description}
-                                        badge={
-                                            panel.isInstalled ? (
-                                                // a quiet mark: most cards carry it,
-                                                // so it mustn't be the loudest thing on them
-                                                <PaperBadge variant="monochrome" icon="check">
-                                                    Installed
-                                                </PaperBadge>
-                                            ) : undefined
-                                        }
-                                        footerLeft={
-                                            <PaperText
-                                                size={2}
-                                                color="text-subtle"
-                                            >
-                                                {publisherLabel(panel)}
-                                            </PaperText>
-                                        }
-                                        footerRight={
-                                            <PaperText
-                                                size={2}
-                                                color="text-subtle"
-                                            >
-                                                {panel.version
-                                                    ? `v${panel.version}`
-                                                    : "–"}
-                                            </PaperText>
-                                        }
-                                        onClick={() => {
-                                            setInstallError(null);
-                                            route.navigate(panel.id);
-                                        }}
-                                    />
-                                )}
-                            </For>
-                        </PaperMediaCardGroup>
-                    </Show>
+                            <Show when={loadFailed()}>
+                                <PaperFlex direction="row" gap="half" align="center">
+                                    <PaperBadge variant="danger">Couldn't load library</PaperBadge>
+                                    <PaperButton variant="text" onClick={() => void load()}>
+                                        Retry
+                                    </PaperButton>
+                                </PaperFlex>
+                            </Show>
+
+                            {/* loaded and empty is a different fact from failed:
+                                the registry answered, and it holds no panels */}
+                            <Show when={!loadFailed() && registry() !== null && panels().length === 0}>
+                                <PaperEmptyState
+                                    icon="dashboard"
+                                    title="No panels published yet"
+                                    description="Panels published to this registry appear here."
+                                />
+                            </Show>
+
+                            <PaperMediaCardGroup>
+                                <For each={panels()}>
+                                    {(panel) => (
+                                        <PaperMediaCard
+                                            icon={panel.iconUrl ?? iconGlyph(panel)}
+                                            title={panel.name}
+                                            description={panel.description}
+                                            badge={
+                                                panel.isInstalled ? (
+                                                    // a quiet mark: most cards carry it,
+                                                    // so it mustn't be the loudest thing on them
+                                                    <PaperBadge variant="monochrome" icon="check">
+                                                        Installed
+                                                    </PaperBadge>
+                                                ) : undefined
+                                            }
+                                            footerLeft={
+                                                <PaperText size={2} color="text-subtle">
+                                                    {publisherLabel(panel)}
+                                                </PaperText>
+                                            }
+                                            footerRight={
+                                                <PaperText size={2} color="text-subtle">
+                                                    {panel.version ? `v${panel.version}` : "–"}
+                                                </PaperText>
+                                            }
+                                            onClick={() => {
+                                                setInstallError(null);
+                                                route.navigate(panel.id);
+                                            }}
+                                        />
+                                    )}
+                                </For>
+                            </PaperMediaCardGroup>
+                        </Show>
                     </PaperPage>
-                </div>
-            }
-        >
-            {(panel) => (
-                <div style={rootStyle}>
+                }
+            >
+                {(panel) => (
                     <PanelPage
                         panel={panel()}
                         mode={props.bridge.mode()}
                         busy={busyPanelId() === panel().id}
                         error={installError()}
+                        mediaError={mediaErrors()[panel().id] ?? null}
                         onNavigateHome={() => {
                             setInstallError(null);
                             route.navigate(null);
                         }}
                         onAction={() => void handleAction(panel())}
+                        onRetryMedia={() => retryMedia(panel().id)}
                     />
-                </div>
-            )}
-        </Show>
+                )}
+            </Show>
+        </PaperFlex>
     );
 };
 

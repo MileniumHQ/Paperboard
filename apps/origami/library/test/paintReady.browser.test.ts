@@ -6,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { launchChrome, type Chrome, type Tab } from "./helpers/chrome";
+import { launchChrome, type Chrome, type Page } from "../../../../scripts/testing/chrome";
 
 // The real paintReady module, served to a real Chrome. Images come from
 // this loopback server: one is held until the test releases it, one is
@@ -54,7 +54,7 @@ beforeAll(async () => {
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-    chrome = await launchChrome();
+    chrome = await launchChrome({ args: ["--no-sandbox", "--disable-gpu", "--disable-extensions"] });
 }, 60_000);
 
 afterAll(async () => {
@@ -69,7 +69,7 @@ beforeEach(() => {
     imageRequests.length = 0;
 });
 
-async function page(): Promise<Tab> {
+async function page(): Promise<Page> {
     const tab = await chrome.open(`${origin}/`);
     // module scripts run before the load event, so by load the module is in or it failed
     await tab.evaluate(`new Promise((resolve, reject) => {
