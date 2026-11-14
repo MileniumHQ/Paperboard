@@ -1,4 +1,5 @@
 import { type Component, createSignal, createEffect, Show, For, onMount, onCleanup } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import {
     PaperWizard,
     PaperWizardStep,
@@ -42,7 +43,11 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     const [isPairing, setIsPairing] = createSignal(false);
     const [pairError, setPairError] = createSignal("");
 
-    const [discovered, setDiscovered] = createSignal<DiscoveredComputer[]>([]);
+    // each update is the whole list again; reconciled by id, a computer
+    // already listed keeps its row
+    const [discoveredList, setDiscoveredList] = createStore<DiscoveredComputer[]>([]);
+    const discovered = () => discoveredList;
+    const setDiscovered = (list: DiscoveredComputer[]) => setDiscoveredList(reconcile(list, { key: "id" }));
 
     const suggestionKey = (c: { host: string; port: number }) =>
         `${c.host}:${c.port}`;
@@ -63,11 +68,16 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
 
     let probeTimeout: any;
     let lastAutoName = "";
+    // only the latest probe answers for the address: one for an address
+    // that has since been changed is dropped, so Next can't be enabled by
+    // a check of something other than what's typed
+    let probeRequest = 0;
 
     // the probe timer must not fire past this component's lifecycle
     onCleanup(() => clearTimeout(probeTimeout));
 
     const probeTarget = async (targetHost: string, targetPort: string) => {
+        const request = ++probeRequest;
         const trimmedHost = targetHost.trim();
         const trimmedPort = targetPort.trim();
         if (!trimmedHost) {
@@ -84,6 +94,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                 trimmedHost,
                 trimmedPort === "" ? undefined : trimmedPort,
             );
+            if (request !== probeRequest) return;
 
             if (res && res.reachable) {
                 setIsReachable(true);
@@ -104,6 +115,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                 setProbeInvalid(res?.invalidAddress === true);
             }
         } catch (err: any) {
+            if (request !== probeRequest) return;
             setIsReachable(false);
             setProbeUnreachable(true);
             setProbeDetail(String(err?.message ?? err));
@@ -112,6 +124,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     };
 
     const handleIpInput = (val: string) => {
+        probeRequest++;
         setHost(val);
         setIsReachable(false);
         setProbeUnreachable(false);
@@ -124,6 +137,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     };
 
     const handlePortInput = (val: string) => {
+        probeRequest++;
         setPort(val);
         setIsReachable(false);
         setProbeUnreachable(false);
@@ -165,6 +179,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     };
 
     const handleMethodChange = (val: string) => {
+        probeRequest++;
         setMethod(val);
         if (val === "custom") {
             setHost("");
