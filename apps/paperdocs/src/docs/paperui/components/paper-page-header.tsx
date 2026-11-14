@@ -86,7 +86,7 @@ export function Example() {
                         <td><PaperCode>children</PaperCode></td>
                         <td><PaperCode>JSX.Element</PaperCode></td>
                         <td>No default (no actions area)</td>
-                        <td>The page's actions, laid out in a wrapping row with a half gap between them.</td>
+                        <td>The page's actions, laid out in a row with a half gap between them. Pass each control as a direct child, not wrapped in a <PaperCode>PaperFlex</PaperCode>, so the header can lay them out when they move under the title.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>centerWhenStacked</PaperCode></td>
@@ -107,8 +107,9 @@ export function Example() {
             <PaperTextList>
                 <li>The header is flat: a raised surface with a border and no shadow, so it sits at the same depth as the page below it.</li>
                 <li>The header fills the width of its container, such as the column of a <PaperLink href="/docs/paperui/paperpage/">PaperPage</PaperLink>.</li>
-                <li>The heading takes the room it needs first. When the row is too narrow for the title and the actions side by side, the actions wrap under it. Under it they are never wider than the header: buttons that don't fit on one row wrap onto the next, and a long subtitle, address or path breaks instead of running past the edge.</li>
-                <li><PaperCode>centerWhenStacked</PaperCode> measures the row with a resize observer. Where the browser has none, the header never centers.</li>
+                <li>The heading takes the room it needs first. When the row is too narrow for the title and the actions side by side, the actions move under it and take the whole row: the controls stretch to share it, and ones that don't fit on one row wrap onto the next, which they share the same way. Every header's actions on a phone span the card alike, whatever their labels. A long subtitle, address or path breaks instead of running past the edge.</li>
+                <li>In a phone layout's page whose bar already shows the same title (a <PaperLink href="/docs/paperui/paperpanel/">PaperPanel</PaperLink> entry's page, or a <PaperLink href="/docs/paperui/paperslidepage/">PaperSlidePage</PaperLink>), the header leaves out its title and icon. The subtitle and actions stay, with the actions taking the whole row. A header with neither draws nothing. Titles match ignoring case and surrounding spaces, and only a string title is compared.</li>
+                <li>The header measures its row with a resize observer to know when the actions moved under the title. Where the browser has none, the actions keep their own widths and the header never centers.</li>
                 <li>The title is a <PaperCode>span</PaperCode>, not a heading element, so it does not appear in the page's heading outline. Add a heading element yourself where assistive technology needs one.</li>
             </PaperTextList>
 

@@ -12,6 +12,13 @@
     isolation: isolate;
     transition: box-shadow var(--paper-short-transition), transform var(--paper-short-transition);
 }
+
+/* stretched by its layout (a row of actions sharing their width), the
+   control it wraps stretches with it */
+.PaperEffect > * {
+    flex-grow: 1;
+}
+
 .PaperEffect::before {
     content: "";
     position: absolute;

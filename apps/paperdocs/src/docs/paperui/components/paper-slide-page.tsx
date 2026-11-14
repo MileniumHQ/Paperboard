@@ -158,6 +158,7 @@ export function Drilldown(props: { phone: boolean }) {
                 <li>Closed, the page is <PaperCode>inert</PaperCode>: it takes no focus or clicks.</li>
                 <li>Opening and closing animate. Switching between the wide and phone layout does not: a closed page appears off-screen at once.</li>
                 <li>In a panel, an open page names itself to Paperboard: the app's top bar shows its title as a crumb after the panel's name, and the page draws no bar of its own. The app's Back goes back through the panel's pages first. Outside Paperboard, or in its desktop layout, the page keeps its own bar.</li>
+                <li>A <PaperLink href="/docs/paperui/paperpageheader/">PaperPageHeader</PaperLink> inside the page whose title is the page's own leaves the title to the bar.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="examples">Examples</PaperText>

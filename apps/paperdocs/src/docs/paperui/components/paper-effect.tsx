@@ -116,7 +116,7 @@ export function Example() {
 
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
-                <li>The root is an inline-flex <PaperCode>div</PaperCode> sized to its content. It reserves a small margin on its bottom and right for the shadow, so the shadow does not overlap the next element.</li>
+                <li>The root is an inline-flex <PaperCode>div</PaperCode> sized to its content. It reserves a small margin on its bottom and right for the shadow, so the shadow does not overlap the next element. Stretched by its layout, such as a <PaperCode>PaperPageHeader</PaperCode>'s actions sharing a row, it stretches the control with it.</li>
                 <li>On hover the control lifts up and left and the shadow grows. On press it moves down to meet the shadow. The effect runs only on devices with hover, apart from the press.</li>
                 <li>It switches itself to the neutral shadow when the wrapped control is disabled, or when it is a <PaperCode>variant="text"</PaperCode> button. A text button gets a shadow only on hover and none at rest.</li>
                 <li>On touch, lifting a finger where it pressed plays a haptic. A press that became a scroll plays nothing, and neither does a disabled control.</li>

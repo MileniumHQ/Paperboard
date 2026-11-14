@@ -62,18 +62,30 @@
     max-width: 100%;
 }
 
+/* Wrapped under the title (or alone, when a page bar already shows the
+   title), the actions take the whole row and their controls share it: each
+   row of them spans the header the same way, whatever their labels. Growing
+   leaves their natural widths, so where the row wraps never changes. */
+.stacked .actions {
+    flex-grow: 1;
+}
+
+.stacked .actions > * {
+    flex: 1 1 auto;
+}
+
 /* centerWhenStacked: once the actions wrap under the title, both rows sit
    on the header's center line instead of hugging its leading edge */
-.stacked {
+.centered {
     justify-content: center;
 }
 
-.stacked .heading,
-.stacked .actions {
+.centered .heading,
+.centered .actions {
     justify-content: center;
 }
 
-.stacked .text {
+.centered .text {
     align-items: center;
     text-align: center;
 }

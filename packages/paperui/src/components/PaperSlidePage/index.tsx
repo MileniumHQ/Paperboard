@@ -1,4 +1,5 @@
 import { type JSX, For, Show, children, createEffect, on, onCleanup } from "solid-js";
+import { PaperSlidePageTitleContext, useSlidePageTitle } from "../../contexts/slidePage";
 import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
@@ -67,6 +68,10 @@ export interface PaperSlidePageProps {
  */
 export function PaperSlidePage(props: PaperSlidePageProps) {
     const icon = children(() => props.icon);
+    // what a bar over this content names it: this page's title in the phone
+    // layout; disabled, the page isn't there, so whatever page holds it
+    const outerTitle = useSlidePageTitle();
+    const barTitle = () => (props.enabled ? props.title : outerTitle());
     createNavigationBack(() => props.enabled && props.open, () => props.onBack());
     // a page inside a panel names itself to the shell's bar; a fixed one too,
     // which in a frame covers the panel, not the screen
@@ -183,7 +188,9 @@ export function PaperSlidePage(props: PaperSlidePageProps) {
                 class={props.enabled ? styles.content : styles.passthrough}
                 style={{ "background-color": props.enabled ? props.footColor : undefined }}
             >
-                {props.children}
+                <PaperSlidePageTitleContext.Provider value={barTitle}>
+                    {props.children}
+                </PaperSlidePageTitleContext.Provider>
                 <Show when={props.enabled}>
                     {/* above content that would otherwise take the touch (an iframe) */}
                     <div class={styles.edge} onPointerDown={swipe.onPointerDown} aria-hidden="true" />

@@ -548,35 +548,33 @@ export default function Players() {
                 icon="group"
                 title="Players"
             >
-                <PaperFlex direction="row" gap="half" align="center" wrap>
-                    <PaperFlex minWidth="field">
-                        <PaperSelectMenu
-                            name="playersSort"
-                            value={sortBy()}
-                            onValueChange={(val) => setSortBy(String(val) as SortKey)}
-                        >
-                            <For each={Object.keys(SORT_LABELS) as SortKey[]}>
-                                {(key) => (
-                                    <PaperSelectMenuItem value={key}>
-                                        {SORT_LABELS[key]}
-                                    </PaperSelectMenuItem>
-                                )}
-                            </For>
-                        </PaperSelectMenu>
-                    </PaperFlex>
-                    <PaperButton
-                        variant="primary"
-                        disabled={!canEditLists()}
-                        onClick={() => {
-                            setWhitelistName("");
-                            setWhitelistError("");
-                            setWhitelistEdition("java");
-                            setWhitelistOpen(true);
-                        }}
+                <PaperFlex minWidth="field">
+                    <PaperSelectMenu
+                        name="playersSort"
+                        value={sortBy()}
+                        onValueChange={(val) => setSortBy(String(val) as SortKey)}
                     >
-                        <PaperIcon>how_to_reg</PaperIcon>Whitelist
-                    </PaperButton>
+                        <For each={Object.keys(SORT_LABELS) as SortKey[]}>
+                            {(key) => (
+                                <PaperSelectMenuItem value={key}>
+                                    {SORT_LABELS[key]}
+                                </PaperSelectMenuItem>
+                            )}
+                        </For>
+                    </PaperSelectMenu>
                 </PaperFlex>
+                <PaperButton
+                    variant="primary"
+                    disabled={!canEditLists()}
+                    onClick={() => {
+                        setWhitelistName("");
+                        setWhitelistError("");
+                        setWhitelistEdition("java");
+                        setWhitelistOpen(true);
+                    }}
+                >
+                    <PaperIcon>how_to_reg</PaperIcon>Whitelist
+                </PaperButton>
             </PaperPageHeader>
 
             <PlayerRoster
