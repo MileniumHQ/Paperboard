@@ -135,9 +135,14 @@ export class CredentialStore {
     public delete(name: string, panelId: string): boolean {
         const panel = this.validatePanelId(panelId);
         if (typeof name !== "string" || !NAME_RE.test(name)) return false;
-        const existed = this.secrets.delete(secretKey(panel, name));
-        if (existed) this.save();
-        return existed;
+        const key = secretKey(panel, name);
+        const previous = this.secrets.get(key);
+        if (!previous) return false;
+        // a failed save keeps the secret: memory and the file agree
+        this.secrets.delete(key);
+        try { this.save(); }
+        catch (err) { this.secrets.set(key, previous); throw err; }
+        return true;
     }
 
     // names only, never values, and only one panel's names: the wire (and

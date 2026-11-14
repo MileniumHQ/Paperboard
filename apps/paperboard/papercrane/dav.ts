@@ -714,7 +714,8 @@ export async function handleDavRequest(
         }
         try {
             fs.mkdirSync(target);
-        } catch {
+        } catch (err) {
+            logger.warn("[WebDAV] MKCOL failed:", (err as Error)?.message ?? err);
             res.writeHead(500, { "Content-Type": "text/plain" });
             res.end("Mkcol failed");
             return;

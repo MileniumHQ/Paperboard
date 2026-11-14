@@ -279,6 +279,22 @@ describe("the secret vault", () => {
 		expect(fs.readFileSync(path.join(dir, "local", "secrets.json"), "utf8")).not.toContain('"z"');
 		expect(fs.readdirSync(path.join(dir, "local")).filter((f) => f.startsWith("secrets.json") && f !== "secrets.json")).toEqual([]);
 	});
+
+	test("a delete the vault cannot save keeps the secret, in memory as on disk", () => {
+		const dir = dataDir();
+		const store = new CredentialStore(dir);
+		store.set("api", "kept", "test.vault");
+		const file = path.join(dir, "local", "secrets.json");
+		const saved = fs.readFileSync(file, "utf8");
+		// the store file's place is taken, so the save is refused
+		fs.rmSync(file);
+		fs.mkdirSync(path.join(file, "occupied"), { recursive: true });
+		expect(() => store.delete("api", "test.vault")).toThrow();
+		expect(store.get("api", "test.vault")).toEqual({ found: true, value: "kept" });
+		fs.rmSync(file, { recursive: true });
+		store.set("other", "o", "test.vault");
+		expect(JSON.parse(fs.readFileSync(file, "utf8"))).toMatchObject(JSON.parse(saved));
+	});
 });
 
 // The port registry never hands one port to two claimants.
