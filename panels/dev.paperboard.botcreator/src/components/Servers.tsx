@@ -131,15 +131,27 @@ export default function Servers(props: { bot: () => BotSummary }) {
             (channel) => channel.kind === "text" || channel.kind === "announcement",
         );
 
+    // only the newest look at a server may land: a slow answer for one server
+    // never shows on the page of the one chosen after it
+    let detailRequest = 0;
+    let memberRequest = 0;
+
     const selectGuild = async (guildId: string) => {
+        const request = ++detailRequest;
+        // reloading the server on screen (Refresh) keeps it, and what was typed or found in it, in place
+        const reloading = detail()?.id === guildId;
         setSelectedId(guildId);
-        setDetail(null);
         setDetailError("");
-        setMembers(null);
-        setMembersError("");
-        setMemberQuery("");
         setSendError("");
-        setSentTo("");
+        if (!reloading) {
+            memberRequest++;
+            setMembersLoading(false);
+            setDetail(null);
+            setMembers(null);
+            setMembersError("");
+            setMemberQuery("");
+            setSentTo("");
+        }
         setDetailLoading(true);
         try {
             const next = await serviceApi.call<GuildDetail>(
@@ -147,13 +159,17 @@ export default function Servers(props: { bot: () => BotSummary }) {
                 "getGuildDetail",
                 { bot: bot(), guildId },
             );
+            if (request !== detailRequest) return;
             setDetail(next);
-            setChannelId(textChannels()[0]?.id ?? "");
+            if (!reloading || !textChannels().some((channel) => channel.id === channelId())) {
+                setChannelId(textChannels()[0]?.id ?? "");
+            }
         } catch (err) {
+            if (request !== detailRequest) return;
             console.error("[Servers] guild detail read failed:", err);
             setDetailError(errorToMessage(err));
         } finally {
-            setDetailLoading(false);
+            if (request === detailRequest) setDetailLoading(false);
         }
     };
 
@@ -166,6 +182,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
     const searchMembers = async () => {
         const id = selectedId();
         if (!id) return;
+        const request = ++memberRequest;
         setMembersLoading(true);
         setMembersError("");
         try {
@@ -174,14 +191,16 @@ export default function Servers(props: { bot: () => BotSummary }) {
                 "searchGuildMembers",
                 { bot: bot(), guildId: id, query: memberQuery() },
             );
+            if (request !== memberRequest) return;
             if (!Array.isArray(found)) throw new Error("searchGuildMembers returned no member list");
             setMembers(found);
         } catch (err) {
+            if (request !== memberRequest) return;
             console.error("[Servers] member search failed:", err);
             setMembers(null);
             setMembersError(errorToMessage(err));
         } finally {
-            setMembersLoading(false);
+            if (request === memberRequest) setMembersLoading(false);
         }
     };
 
@@ -255,6 +274,11 @@ export default function Servers(props: { bot: () => BotSummary }) {
                         <Show when={selectedId()}>
                             <PaperButton
                                 onClick={() => {
+                                    // an answer still on its way is for a page that is no longer open
+                                    detailRequest++;
+                                    memberRequest++;
+                                    setDetailLoading(false);
+                                    setMembersLoading(false);
                                     setSelectedId(null);
                                     setDetail(null);
                                     setMembers(null);
@@ -317,7 +341,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
                     </Show>
 
                     <Show when={selectedId()}>
-                        <Show when={detailLoading()}>
+                        <Show when={detailLoading() && !detail()}>
                             <PaperCard>
                                 <PaperFlex padding="double" center>
                                     <PaperText preset="hint">
