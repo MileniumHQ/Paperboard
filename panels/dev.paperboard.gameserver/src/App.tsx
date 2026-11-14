@@ -1,5 +1,5 @@
 import GameOptions from "./components/GameOptions";
-import { createEffect, createMemo, createSignal, getOwner, onMount, onCleanup, runWithOwner, untrack, For, Index, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, onMount, onCleanup, untrack, For, Index, Show } from "solid-js";
 import { tabIds } from "./lib/tabIds";
 import {
     PaperPanel, PaperPresence, PaperButton, PaperIcon, PaperQuote, PaperLoader, PaperFlex, PaperText,
@@ -59,10 +59,26 @@ export default function App() {
     };
     const shownTabs = tabIds(() => described()?.tabs ?? []);
     const hasTab = (id: string) => features().tabs.some((tab) => tab.id === id);
+
+    // A tab holding work that leaving would lose (the Files editor's unsaved
+    // edits) asks the person before it goes: every way out of the open tab
+    // the panel controls waits for its answer, and staying keeps the tab.
+    let leaveGuard: (() => Promise<boolean>) | null = null;
+    const guardLeaving = (guard: () => Promise<boolean>) => {
+        leaveGuard = guard;
+        onCleanup(() => { if (leaveGuard === guard) leaveGuard = null; });
+    };
+    const leaveTab = (go: () => void) => {
+        if (!leaveGuard) return go();
+        leaveGuard().then((leave) => { if (leave) go(); }, (err) => fail("leaving the tab", err));
+    };
+    const openTab = (id: string) => {
+        if (id !== activeTab()) leaveTab(() => setActiveTab(id));
+    };
     const tabContext = {
         active: activeTab,
         hasTab,
-        openTab: setActiveTab,
+        openTab,
         revealFiles: (reveal: PaperFileReveal) => { setActiveTab("files"); setFilesReveal({ ...reveal }); },
     };
     const gameUI = createMemo(() => {
@@ -72,7 +88,7 @@ export default function App() {
     const renderTab = (id: string, owner: "shared" | "game") => {
         if (owner === "game") return gameUI()!.tab(id);
         switch (id) {
-            case "files": return <Files reveal={filesReveal()} />;
+            case "files": return <Files reveal={filesReveal()} guardLeaving={guardLeaving} />;
             case "logs": return <Logs />;
             case "backups": return <Backups active={activeTab() === id} whileRunning={features().backupWhileRunning} />;
             case "automation": return <Automation />;
@@ -190,8 +206,8 @@ export default function App() {
                     name="serverMenu"
                     value={activeTab()}
                     onValueChange={(val) => {
-                        if (val === HOME_ENTRY) openServer(null);
-                        else setActiveTab(String(val));
+                        if (val === HOME_ENTRY) leaveTab(() => openServer(null));
+                        else openTab(String(val));
                     }}
                 >
                     {/* a phone leaves the server with the page's back button, under the server's name */}
@@ -217,18 +233,9 @@ export default function App() {
                         {(id) => {
                             const tab = () => features().tabs.find((t) => t.id === id)!;
                             const owner = untrack(() => tab().owner);
-                            // Files holds the editor's unsaved text: it is made the first
-                            // time it opens and kept while another tab shows, so leaving
-                            // the tab and coming back finds the edit where it was left
-                            const itemOwner = getOwner();
-                            let kept: JSX.Element | undefined;
-                            const content = () =>
-                                owner === "shared" && id === "files"
-                                    ? (kept ??= runWithOwner(itemOwner, () => untrack(() => renderTab(id, owner))))
-                                    : untrack(() => renderTab(id, owner));
                             return <PaperInterfaceItem value={id} variant={(compact() && tab().compactVariant) || tab().variant} width={tab().width}>
                                 {/* made once; its props follow the features, so a state change never remounts the tab */}
-                                {content()}
+                                {untrack(() => renderTab(id, owner))}
                             </PaperInterfaceItem>;
                         }}
                     </For>
@@ -267,7 +274,7 @@ export default function App() {
             <Show when={servers()}>
                 <ServersHome state={servers()!} onOpen={openServerPage} />
             </Show>
-            <PaperSlidePage enabled open={pageOpen()} position="fixed" title={shownName()} onBack={closeServerPage}>
+            <PaperSlidePage enabled open={pageOpen()} position="fixed" title={shownName()} onBack={() => leaveTab(closeServerPage)}>
                 <Show when={shown()}>
                     {(id) => (
                         <Show when={servers() && serverHere() && id() === selectedServerId} fallback={loading()}>

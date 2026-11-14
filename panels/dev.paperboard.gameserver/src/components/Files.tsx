@@ -3,7 +3,9 @@ import { listServerFiles, readServerFile, writeServerFile } from "../lib/files";
 
 // Files: the server folder as a tree with an editor. The Configure button on
 // a plugin or mod opens this tab at that add-on's settings via `reveal`.
-export default function Files(props: { reveal: PaperFileReveal | null }) {
+// Leaving the tab with unsaved edits asks first: `guardLeaving` takes the
+// browser's question for every way out of the tab.
+export default function Files(props: { reveal: PaperFileReveal | null; guardLeaving: (confirmLeave: () => Promise<boolean>) => void }) {
     return (
         <>
             <PaperPageHeader icon="folder" title="Files">
@@ -18,6 +20,7 @@ export default function Files(props: { reveal: PaperFileReveal | null }) {
                     read={readServerFile}
                     write={writeServerFile}
                     reveal={props.reveal}
+                    ref={(browser) => props.guardLeaving(browser.confirmLeave)}
                 />
             </PaperFlex>
         </>

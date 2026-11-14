@@ -1,8 +1,8 @@
 // What a person was doing survives what they do next: an edit still waiting
-// for typing to pause is saved when its tab is left, an unsaved file is
-// still being edited when its tab is opened again, and making the panel
-// wider or narrower keeps the open player and an open dialog with what was
-// typed in it.
+// for typing to pause is saved when its tab is left, leaving Files with an
+// unsaved file asks whether to save it (and Cancel keeps it being edited),
+// and making the panel wider or narrower keeps the open player and an open
+// dialog with what was typed in it.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -45,9 +45,14 @@ async function setUp() {
     return servePanel(daemon);
 }
 
-const openTab = async (page: Page, id: string, shows: string) => {
+/** presses the server menu's entry `id` where a person would: on its row, which a phone's menu and the wide one both show */
+const pressEntry = async (page: Page, id: string) => {
     await page.waitFor(`document.querySelector('input[name=serverMenu][value="${id}"]')`, "the server menu");
-    await page.click(`input[name=serverMenu][value="${id}"]`);
+    await page.evaluate(`document.querySelector('input[name=serverMenu][value="${id}"]').closest("label").dataset.test = "entry-${id}"`);
+    await page.click(`[data-test="entry-${id}"]`);
+};
+const openTab = async (page: Page, id: string, shows: string) => {
+    await pressEntry(page, id);
     await page.waitFor(shows, `the ${id} tab`);
 };
 /** the text field in the setting row titled `title` */
@@ -64,7 +69,7 @@ describe("leaving a tab", () => {
             await page.evaluate(`${fieldIn("Prompt")}.dataset.test = "prompt"`);
             await page.type('input[data-test="prompt"]', "Grab the pack");
             // gone at once, well inside the pause the tab waits for
-            await page.click('input[name=serverMenu][value="overview"]');
+            await pressEntry(page, "overview");
             await page.waitFor(`!${fieldIn("Prompt")}`, "the Resource Pack tab to close");
             // the save is sent as the tab goes; the file holds it once it lands
             const deadline = Date.now() + 5_000;
@@ -78,25 +83,187 @@ describe("leaving a tab", () => {
             served.stop();
         }
     }, 60_000);
+});
 
-    test("with a file edited and not saved keeps the edit for when the tab is opened again", async () => {
+const EULA = "eula=true\n";
+const EDITED = "eula=true\n# agreed by the owner\n";
+const eula = () => path.join(serverDir(), "eula.txt");
+const editor = `document.querySelector("textarea")`;
+const unsaved = `Boolean(document.querySelector('[aria-label="Unsaved changes"]'))`;
+const question = `[...document.querySelectorAll("[role=dialog]")].find((d) => d.innerText.includes("Save changes to eula.txt?"))`;
+const chosenTab = `document.querySelector("input[name=serverMenu]:checked")?.value`;
+
+/** opens Files on eula.txt and types a line into it without saving */
+async function editEula(page: Page) {
+    await openTab(page, "files", `document.querySelector('[role=treeitem][data-path="eula.txt"]')`);
+    await page.click('[role=treeitem][data-path="eula.txt"]');
+    await page.waitFor(`${editor}?.value === ${JSON.stringify(EULA)}`, "eula.txt in the editor");
+    await page.evaluate(`(() => { const el = ${editor}; el.focus(); el.setSelectionRange(el.value.length, el.value.length); })()`);
+    await page.type("textarea", "# agreed by the owner\n");
+    await page.waitFor(unsaved, "the file to show it has unsaved changes");
+}
+/** presses the dialog's button named `name`, as a mouse would */
+async function answer(page: Page, name: "Save" | "Discard" | "Cancel") {
+    await page.waitFor(question, "the question about the unsaved edit");
+    await page.evaluate(`[...${question}.querySelectorAll("button")].find((b) => b.innerText.trim().endsWith(${JSON.stringify(name)})).dataset.test = "answer"`);
+    await page.click('[data-test="answer"]');
+    // the dialog may already be gone, with what it was over
+    await page.evaluate(`document.querySelector('[data-test="answer"]')?.removeAttribute("data-test")`);
+}
+/** what the person sees once they chose to stay: Files, still chosen, with the edit */
+async function stayed(page: Page) {
+    await page.waitFor(`!${question}`, "the question to close");
+    expect(await page.evaluate<string>(`${editor}.value`)).toBe(EDITED);
+    expect(await page.evaluate<boolean>(unsaved)).toBe(true);
+    expect(await page.evaluate<string | undefined>(chosenTab)).toBe("files");
+}
+
+describe("leaving Files with an unsaved edit asks first", () => {
+    test("Cancel stays on Files with the edit, and nothing is written", async () => {
         const served = await setUp();
+        fs.writeFileSync(eula(), EULA);
         const page = await openPage(`${served.url}/?server=s-mc`);
-        const editor = `document.querySelector("textarea")`;
         try {
-            await openTab(page, "files", `document.querySelector('[role=treeitem][data-path="eula.txt"]')`);
-            await page.click('[role=treeitem][data-path="eula.txt"]');
-            await page.waitFor(`${editor}?.value === "eula=true\\n"`, "eula.txt in the editor");
-            await page.evaluate(`(() => { const el = ${editor}; el.focus(); el.setSelectionRange(el.value.length, el.value.length); })()`);
-            await page.type("textarea", "# agreed by the owner\n");
-            await page.waitFor(`document.querySelector('[aria-label="Unsaved changes"]')`, "the file to show it has unsaved changes");
+            await editEula(page);
+            await pressEntry(page, "overview");
+            await answer(page, "Cancel");
+            await stayed(page);
+            expect(fs.readFileSync(eula(), "utf8")).toBe(EULA);
+            // asked again, it asks again
+            await pressEntry(page, "overview");
+            await answer(page, "Cancel");
+            await stayed(page);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    }, 60_000);
 
-            await openTab(page, "overview", `!document.querySelector("textarea")`);
-            await openTab(page, "files", `${editor}`);
-            expect(await page.evaluate<string>(`${editor}.value`)).toBe("eula=true\n# agreed by the owner\n");
-            expect(await page.evaluate<boolean>(`Boolean(document.querySelector('[aria-label="Unsaved changes"]'))`)).toBe(true);
-            // nothing was written behind the person's back
-            expect(fs.readFileSync(path.join(serverDir(), "eula.txt"), "utf8")).toBe("eula=true\n");
+    test("Discard leaves the file as it was, and coming back reads the folder again", async () => {
+        const served = await setUp();
+        fs.writeFileSync(eula(), EULA);
+        const page = await openPage(`${served.url}/?server=s-mc`);
+        try {
+            await editEula(page);
+            await pressEntry(page, "overview");
+            await answer(page, "Discard");
+            await page.waitFor(`!${editor} && ${chosenTab} === "overview"`, "the Overview tab");
+            expect(fs.readFileSync(eula(), "utf8")).toBe(EULA);
+            // made while Files was away: the tree shows it on return
+            fs.writeFileSync(path.join(serverDir(), "notes.txt"), "hello\n");
+            try {
+                await openTab(page, "files", `document.querySelector('[role=treeitem][data-path="notes.txt"]')`);
+                expect(await page.evaluate<boolean>(unsaved)).toBe(false);
+            } finally {
+                fs.rmSync(path.join(serverDir(), "notes.txt"));
+            }
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    }, 60_000);
+
+    test("Save writes the edit and then leaves", async () => {
+        const served = await setUp();
+        fs.writeFileSync(eula(), EULA);
+        const page = await openPage(`${served.url}/?server=s-mc`);
+        try {
+            await editEula(page);
+            await pressEntry(page, "logs");
+            await answer(page, "Save");
+            await page.waitFor(`!${editor} && ${chosenTab} === "logs"`, "the Logs tab");
+            expect(fs.readFileSync(eula(), "utf8")).toBe(EDITED);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    }, 60_000);
+
+    test("a Save that fails stays on Files with its error and the edit", async () => {
+        const served = await setUp();
+        fs.writeFileSync(eula(), EULA);
+        const page = await openPage(`${served.url}/?server=s-mc`);
+        try {
+            await editEula(page);
+            // changed behind the editor's back: the save is refused
+            fs.writeFileSync(eula(), "eula=false\n");
+            await pressEntry(page, "overview");
+            await answer(page, "Save");
+            await page.waitFor(`[...document.querySelectorAll("[role=alert]")].some((el) => el.innerText.includes("changed on disk"))`, "the save's error");
+            await stayed(page);
+            expect(fs.readFileSync(eula(), "utf8")).toBe("eula=false\n");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    }, 60_000);
+
+    test("All servers asks too, and leaves for the servers once discarded", async () => {
+        const served = await setUp();
+        fs.writeFileSync(eula(), EULA);
+        const page = await openPage(`${served.url}/?server=s-mc`);
+        try {
+            await editEula(page);
+            await pressEntry(page, "home");
+            await answer(page, "Cancel");
+            await stayed(page);
+            expect(await page.evaluate<string>(`location.search`)).toBe("?server=s-mc");
+            await pressEntry(page, "home");
+            await answer(page, "Discard");
+            await page.waitFor(`!new URLSearchParams(location.search).has("server") && !document.querySelector("input[name=serverMenu]")`, "the servers");
+            expect(fs.readFileSync(eula(), "utf8")).toBe(EULA);
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    }, 60_000);
+
+    test("on a phone, every Back asks: the file's, the system's and the server's", async () => {
+        const served = await setUp();
+        fs.writeFileSync(eula(), EULA);
+        const page = await openPage(`${served.url}/?server=s-mc`, "400,800");
+        /** the Back button on the bar of the page named `name` */
+        const back = (name: string) => `[...document.querySelectorAll("[role=region]")].find((r) => r.getAttribute("aria-label").startsWith(${JSON.stringify(name)})).querySelector(":scope > header button[aria-label=Back]")`;
+        const pressBack = async (name: string) => {
+            // a page slides without changing the DOM, so this is looked at until it is in place
+            const inPlace = `Math.abs(${back(name)}.closest("[role=region]").getBoundingClientRect().left) < 1`;
+            const deadline = Date.now() + 5_000;
+            while (!(await page.evaluate<boolean>(inPlace))) {
+                if (Date.now() > deadline) throw new Error(`The ${name} page never slid into place`);
+                await Bun.sleep(25);
+            }
+            await page.evaluate(`${back(name)}.dataset.test = "back"`);
+            await page.click('[data-test="back"]');
+            await page.evaluate(`delete document.querySelector('[data-test="back"]').dataset.test`);
+        };
+        const systemBack = () => page.evaluate<boolean>(`(() => { const e = new Event("paperboard:back", { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; })()`);
+        const serverOpen = `!${back("Survival")}.closest("[inert]")`;
+        try {
+            await editEula(page);
+            // the open file is a page of its own: its Back closes the file
+            await pressBack("eula.txt");
+            await answer(page, "Cancel");
+            await stayed(page);
+            // the file's page never slid away
+            expect(await page.evaluate<boolean>(`${back("eula.txt")}.closest("[inert]") === null`)).toBe(true);
+            expect(await systemBack()).toBe(true);
+            await answer(page, "Cancel");
+            await stayed(page);
+
+            await pressBack("Survival");
+            await answer(page, "Cancel");
+            await stayed(page);
+            expect(await page.evaluate<boolean>(serverOpen)).toBe(true);
+
+            await pressBack("Survival");
+            await answer(page, "Discard");
+            await page.waitFor(`!new URLSearchParams(location.search).has("server")`, "the servers list");
+            expect(fs.readFileSync(eula(), "utf8")).toBe(EULA);
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
@@ -111,7 +278,7 @@ describe("crossing between the phone and the wide layout", () => {
         const page = await openPage(`${served.url}/?server=s-mc`, "400,800");
         try {
             await page.waitFor(`document.querySelector('input[name=serverMenu][value="players"]')`, "the server menu");
-            await page.click('input[name=serverMenu][value="players"]');
+            await pressEntry(page, "players");
             await page.waitFor(`document.querySelector('input[name=playersList][value="Steve"]')`, "the roster");
             await page.settled();
             await page.evaluate(`document.querySelector('input[name=playersList][value="Steve"]').closest("label, li, [role=radio]").click()`);
