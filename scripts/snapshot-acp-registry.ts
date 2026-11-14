@@ -1,9 +1,12 @@
 #!/usr/bin/env bun
 /**
- * snapshot-acp-registry.ts — Captures the ACP agent registry for the Agents panel
+ * snapshot-acp-registry.ts — Captures the ACP agent registry for the AI panel
  *
  * Usage: bun scripts/snapshot-acp-registry.ts
- * Output: panels/dev.paperboard.agents/src/data/acp-agents.json
+ * Output: panels/dev.paperboard.ai/src/data/acp-agents.json
+ *
+ * This only serves the deprecated AI panel (dev.paperboard.ai), whose
+ * src/core/agents.ts imports the snapshot; nothing else reads it.
  *
  * The panel never downloads agent code: it runs agents the user installed
  * themselves. So the snapshot records, per agent, the command an install
@@ -16,7 +19,7 @@ import { join } from "node:path";
 
 const REGISTRY_URL = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
 const NPM_URL = "https://registry.npmjs.org";
-const OUT_FILE = join(import.meta.dir, "..", "panels", "dev.paperboard.agents", "src", "data", "acp-agents.json");
+const OUT_FILE = join(import.meta.dir, "..", "panels", "dev.paperboard.ai", "src", "data", "acp-agents.json");
 const MAX_AGENTS = 200;
 
 interface RegistryAgent {
@@ -32,7 +35,7 @@ interface RegistryAgent {
     };
 }
 
-export interface SnapshotAgent {
+interface SnapshotAgent {
     id: string;
     name: string;
     description: string;
@@ -44,13 +47,13 @@ export interface SnapshotAgent {
 }
 
 /** "@scope/pkg@1.2.3" → "@scope/pkg" */
-export function packageName(spec: string): string {
+function packageName(spec: string): string {
     const at = spec.lastIndexOf("@");
     return at > 0 ? spec.slice(0, at) : spec;
 }
 
 /** The bin an npm install links: the one named like the package, else the first. */
-export function npmCommand(pkg: string, bin: Record<string, string> | string | undefined): string | undefined {
+function npmCommand(pkg: string, bin: Record<string, string> | string | undefined): string | undefined {
     const unscoped = pkg.split("/").pop()!;
     if (typeof bin === "string") return unscoped;
     const names = Object.keys(bin ?? {});
@@ -58,7 +61,7 @@ export function npmCommand(pkg: string, bin: Record<string, string> | string | u
 }
 
 /** A release binary's command, when every platform ships the same plain file name (Windows adds .exe or a .cmd shim). */
-export function binaryCommand(binary: RegistryAgent["distribution"]["binary"]): { command: string; args: string[] } | undefined {
+function binaryCommand(binary: RegistryAgent["distribution"]["binary"]): { command: string; args: string[] } | undefined {
     const entries = Object.values(binary ?? {});
     if (entries.length === 0) return undefined;
     const names = new Set(entries.map((e) => (e.cmd ?? "").split(/[\\/]/).pop()!.replace(/\.(exe|cmd)$/i, "")));
@@ -67,7 +70,7 @@ export function binaryCommand(binary: RegistryAgent["distribution"]["binary"]): 
     return { command, args: entries[0]!.args ?? [] };
 }
 
-export function snapshotAgent(agent: RegistryAgent, bins: Map<string, Record<string, string> | string | undefined>): SnapshotAgent | undefined {
+function snapshotAgent(agent: RegistryAgent, bins: Map<string, Record<string, string> | string | undefined>): SnapshotAgent | undefined {
     const base = {
         id: agent.id,
         name: agent.name,
