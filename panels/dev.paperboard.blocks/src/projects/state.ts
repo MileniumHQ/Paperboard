@@ -63,6 +63,9 @@ export function createProjects() {
     };
 }
 
+/** What a project's switch that didn't move says, by where it was going. */
+export const switchFailed = (enabled: boolean) => (enabled ? "Flows not turned on" : "Flows not turned off");
+
 /** "Edited 5 minutes ago", as the home screen says it. */
 export function editedText(at: number, now = Date.now()): string {
     if (!at) return "Never edited";

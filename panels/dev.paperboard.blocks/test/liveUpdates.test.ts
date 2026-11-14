@@ -60,13 +60,15 @@ describe("the Library", () => {
 
 describe("the editor", () => {
     test(
-        "its switch moves with its thump once the service has switched the flows",
+        "its switch moves with its thump once the service has switched the flows, and a refused flip is said until one goes through",
         async () => {
             const { toggle } = await panelFixture();
             expect(toggle.before).toBe("true");
             expect(toggle.after).toBe("false");
             expect(toggle.saved).toBe(false);
             expect(toggle.animated).toBe(true);
+            expect(toggle.refused).toContain("the disk is full");
+            expect(toggle.noticeAfterRetry).toBeNull();
         },
         TIMEOUT,
     );
@@ -104,6 +106,22 @@ describe("the editor", () => {
             expect(loadFailure.failed.dismissable).toBe(false);
             expect(loadFailure.failed.library).toBe(false);
             expect(loadFailure.retried).toEqual({ readOnly: false, library: true });
+        },
+        TIMEOUT,
+    );
+});
+
+describe("the home screen", () => {
+    test(
+        "a switch that didn't move says why until a switch moves, and the service's banner goes once its trouble is over",
+        async () => {
+            const { home } = await panelFixture();
+            expect(home.failed).toContain("the disk is full");
+            expect(home.stayed).toBe(home.before);
+            expect(home.banner).toContain("the registry is away");
+            expect(home.after.moved).not.toBe(home.before);
+            expect(home.after.switchFailure).toBeNull();
+            expect(home.after.banner).toBeNull();
         },
         TIMEOUT,
     );

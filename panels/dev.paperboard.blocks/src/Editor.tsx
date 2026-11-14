@@ -38,7 +38,7 @@ import { errorMessage } from "./lib/failure";
 import { SERVICE_CALLS, type PanelState } from "./panel";
 import { bridge, type Notice } from "./bridge";
 import type { ProjectSummary } from "./lib/projects";
-import type { ProjectsState } from "./projects/state";
+import { switchFailed, type ProjectsState } from "./projects/state";
 import { DeleteProjectModal, ProjectNameField, RenameProjectModal } from "./projects/ProjectDialogs";
 import { createFileActions } from "./FileActions";
 import { BlocklyDialogs } from "./BlocklyDialogs";
@@ -47,6 +47,7 @@ import { createLibraryModel } from "./libraryModel";
 import { createEditorFlows, define, NOT_SAVED } from "./editorFlows";
 import styles from "./Editor.module.css";
 
+const RUN_FAILED = "Run didn't start";
 const HEADING_CLASSES: HeadingInfo["classes"] = { heading: styles.heading!, icon: styles.headingIcon!, badge: styles.headingBadge!, badgeText: styles.headingBadgeText! };
 
 export default function Editor(props: {
@@ -67,6 +68,8 @@ export default function Editor(props: {
     let shownLogId = 0;
 
     const fail = (title: string) => (err: unknown) => setNotice({ kind: "failed", title, text: errorMessage(err) });
+    /** what failed has worked since: its notice goes, and any other stays */
+    const worked = (...titles: string[]) => setNotice((shown) => (shown && titles.includes(shown.title) ? null : shown));
     // the bridge's state as the projects store keeps it (reconciled by id): a log line adds one row
     // to the console rather than handing it a whole new list of rows
     const running = () => props.projects.state().running[props.projectId] ?? 0;
@@ -78,7 +81,7 @@ export default function Editor(props: {
         workspace: () => workspace,
         onRegistry: library.setRegistry,
         onNotice: setNotice,
-        onSaved: () => setNotice((shown) => (shown?.title === NOT_SAVED ? null : shown)),
+        onSaved: () => worked(NOT_SAVED),
         // the log lines from before the flows were shown are on the blocks they name
         onLoaded: () => showErrors(props.projects.state()),
     });
@@ -265,7 +268,7 @@ export default function Editor(props: {
         flows
             .saveNow()
             .then(() => bridge.call<number>(SERVICE_CALLS.run, { project: props.projectId }))
-            .catch(fail("Run didn't start"));
+            .then(() => worked(RUN_FAILED), fail(RUN_FAILED));
     };
 
     // the project changes the menus make, each reporting what failed
@@ -275,6 +278,7 @@ export default function Editor(props: {
         setWorking(true);
         try {
             await work();
+            worked(failed);
         } catch (err) {
             fail(failed)(err);
         } finally {
@@ -314,7 +318,8 @@ export default function Editor(props: {
             props.onHome();
         });
     // the switch flips on its own, never waiting on another change; it moves once the service says so
-    const setEnabled = (enabled: boolean) => props.projects.setEnabled(props.projectId, enabled).catch(fail(enabled ? "Flows not turned on" : "Flows not turned off"));
+    const setEnabled = (enabled: boolean) =>
+        props.projects.setEnabled(props.projectId, enabled).then(() => worked(switchFailed(true), switchFailed(false)), fail(switchFailed(enabled)));
     const [renaming, setRenaming] = createSignal(false);
     const [deleting, setDeleting] = createSignal(false);
 

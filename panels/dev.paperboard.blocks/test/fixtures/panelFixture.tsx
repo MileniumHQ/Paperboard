@@ -215,7 +215,22 @@ async function toggleChecks() {
     await until("the switch to move", () => toggle.getAttribute("aria-checked") !== before);
     await frame();
     watch.disconnect();
-    return { before, after: toggle.getAttribute("aria-checked"), animated, saved: service.calls().filter((c) => c.name === SERVICE_CALLS.updateProject).at(-1)?.input.enabled };
+    const moved = { before, after: toggle.getAttribute("aria-checked"), animated, saved: service.calls().filter((c) => c.name === SERVICE_CALLS.updateProject).at(-1)?.input.enabled };
+
+    // a flip the service refuses is said, and the notice goes once a flip goes through
+    const notice = () => [...document.querySelectorAll<HTMLElement>('[role="alert"], [role="status"]')].find((el) => el.textContent?.includes("Flows not turned"));
+    service.fail(SERVICE_CALLS.updateProject, "the disk is full");
+    await clickAt(toggle);
+    const refused = (await until("the refused flip's notice", notice))!.textContent ?? "";
+    service.fail(SERVICE_CALLS.updateProject, null);
+    await clickAt(toggle);
+    await until("the switch to move back", () => toggle.getAttribute("aria-checked") === before);
+    await settle();
+    const noticeAfterRetry = notice()?.textContent ?? null;
+    await clickAt(toggle);
+    await until("the switch to move again", () => toggle.getAttribute("aria-checked") !== before);
+    await settle();
+    return { ...moved, refused, noticeAfterRetry };
 }
 
 /** Two registry changes whose answers come back in the other order: the Library shows the newer. */
@@ -322,6 +337,57 @@ async function leaveChecks() {
     };
 }
 
+/**
+ * What the page shows now, at phone and desktop width in both themes, saved
+ * by the harness when BLOCKS_FIXTURE_SHOTS names a folder (a person looks at them).
+ */
+async function shoot(name: string): Promise<void> {
+    for (const theme of ["light", "dark"]) {
+        // the theme as the shell gives it to a panel
+        document.documentElement.setAttribute("data-paperui-theme", theme);
+        await settle();
+        for (const [size, width, height] of [["phone", 390, 844], ["desktop", 1280, 800]] as const) {
+            const answer = await fetch("/screenshot", { method: "POST", body: JSON.stringify({ name: `${name}-${size}-${theme}`, width, height }) });
+            if (!answer.ok) throw new Error(`the screenshot failed: ${await answer.text()}`);
+        }
+    }
+    document.documentElement.removeAttribute("data-paperui-theme");
+    await settle();
+}
+
+/**
+ * Home: a switch that didn't move says why until a switch moves, and the
+ * service's own trouble driving projects shows until it says it is over.
+ */
+async function homeChecks() {
+    await home();
+    const name = "Renamed by hand";
+    const toggle = await until("the card's switch", () => document.querySelector<HTMLElement>(`[role="switch"][aria-label="${name}: flows start on their events"]`));
+    const alert = (text: string) => [...document.querySelectorAll<HTMLElement>('[role="alert"]')].find((el) => el.textContent?.includes(text));
+    const before = toggle.getAttribute("aria-checked");
+    service.fail(SERVICE_CALLS.updateProject, "the disk is full");
+    await clickAt(toggle);
+    const failed = (await until("the switch's failure", () => alert("Flows not turned")))!.textContent ?? "";
+    await settle();
+    const stayed = toggle.getAttribute("aria-checked");
+    service.announce({ blocksError: "The other panels weren't told the projects changed: the registry is away" });
+    const banner = (await until("the service's banner", () => alert("Flows can't drive projects")))!.textContent ?? "";
+    await shoot("home-failed");
+
+    service.fail(SERVICE_CALLS.updateProject, null);
+    await clickAt(toggle);
+    await until("the switch to move", () => toggle.getAttribute("aria-checked") !== before);
+    service.announce({ blocksError: null });
+    await settle();
+    const after = {
+        moved: toggle.getAttribute("aria-checked"),
+        switchFailure: alert("Flows not turned")?.textContent ?? null,
+        banner: alert("Flows can't drive projects")?.textContent ?? null,
+    };
+    await shoot("home-recovered");
+    return { before, failed, stayed, banner, after };
+}
+
 async function run(): Promise<Record<string, unknown>> {
     render(
         () => (
@@ -343,7 +409,8 @@ async function run(): Promise<Record<string, unknown>> {
     const refresh = await registryChecks();
     const loadFailure = await loadFailureChecks();
     const leaving = await leaveChecks();
-    return { console: consoleResult, dialogs, library, createVariable, toggle, refresh, loadFailure, leaving, uncaught: [...errors] };
+    const homeScreen = await homeChecks();
+    return { console: consoleResult, dialogs, library, createVariable, toggle, refresh, loadFailure, leaving, home: homeScreen, uncaught: [...errors] };
 }
 
 run()

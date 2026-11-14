@@ -22,7 +22,7 @@ import {
 } from "@mileniumhq/paperui";
 import CanvasPreview from "./CanvasPreview";
 import { DeleteProjectModal, RenameProjectModal } from "./ProjectDialogs";
-import { editedText, type ProjectsState } from "./state";
+import { editedText, switchFailed, type ProjectsState } from "./state";
 import { errorMessage } from "../lib/failure";
 import type { ProjectSummary } from "../lib/projects";
 
@@ -46,9 +46,12 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
     const create = () => change("Project not made", async () => props.onOpen(await props.projects.create()));
     const duplicate = (id: string) => change("Project not copied", async () => { await props.projects.duplicate(id); });
     // a switch flips on its own, never waiting on another change, and moves once the service says so
+    // once a switch moves, what an earlier one that didn't said goes
     const setEnabled = (id: string, enabled: boolean) =>
-        props.projects.setEnabled(id, enabled).catch((err) =>
-            setFailure({ title: enabled ? "Flows not turned on" : "Flows not turned off", text: errorMessage(err) }));
+        props.projects.setEnabled(id, enabled).then(
+            () => setFailure((shown) => (shown && [switchFailed(true), switchFailed(false)].includes(shown.title) ? null : shown)),
+            (err) => setFailure({ title: switchFailed(enabled), text: errorMessage(err) }),
+        );
 
     const menu = useContextMenuState("below-right");
     const [menuFor, setMenuFor] = createSignal<ProjectSummary | null>(null);

@@ -6,8 +6,9 @@
 // A fixture that needs a person's own input (a key that also presses the
 // button focus lands on, typing into whatever has the keyboard) posts the
 // DevTools Input calls to /input: Chrome delivers them as trusted events,
-// which a page's own dispatchEvent can't make.
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+// which a page's own dispatchEvent can't make. A fixture's /screenshot saves
+// what the page shows at a size into BLOCKS_FIXTURE_SHOTS, when that is set.
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { openChrome, type Page } from "../../../scripts/testing/chrome";
@@ -15,6 +16,9 @@ import { openChrome, type Page } from "../../../scripts/testing/chrome";
 const panelDir = resolve(import.meta.dir, "..");
 // the DevTools ports test/hermetic.ts lets a WebSocket reach
 const allowedPorts: Set<number> = (globalThis as any)[Symbol.for("paperboard.blocks.test.ports")];
+// where a fixture's screenshots go, for a person to look at; none are taken without it
+const shots = process.env.BLOCKS_FIXTURE_SHOTS ? resolve(process.env.BLOCKS_FIXTURE_SHOTS) : null;
+if (shots) mkdirSync(shots, { recursive: true });
 /** How long a fixture gets, from Chrome starting to its result. */
 const FIXTURE_TIMEOUT_MS = 90_000;
 
@@ -71,6 +75,16 @@ export async function runBrowserFixture(page: string, alias: Record<string, stri
                         if (!call.method.startsWith("Input.")) throw new Error(`a fixture sends only Input calls, not ${call.method}`);
                         await chrome.send(call.method, call.params);
                     }
+                    return new Response("ok");
+                }
+                if (request.method === "POST" && url.pathname === "/screenshot") {
+                    const { name, width, height } = (await request.json()) as { name: string; width: number; height: number };
+                    if (!chrome) throw new Error("Chrome is not open");
+                    if (!shots) return new Response("ok");
+                    if (!/^[a-z0-9-]+$/.test(name)) throw new Error(`"${name}" is not a screenshot name`);
+                    await chrome.resize(width, height);
+                    writeFileSync(join(shots, `${name}.png`), await chrome.screenshot());
+                    await chrome.send("Emulation.clearDeviceMetricsOverride");
                     return new Response("ok");
                 }
                 const file = join(dist, url.pathname);
