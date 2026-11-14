@@ -79,3 +79,27 @@ describe("a PaperModal's backdrop blur", () => {
         await settlesAt("none");
     });
 });
+
+// Inventory: PaperModal — Escape, stacking and focus.
+describe("a PaperModal hands focus back", () => {
+    test("closing returns focus to the button that was pressed to open it", async () => {
+        page = await browser.open("modalFocus");
+        await page.click("#opener");
+        await page.waitFor(`document.activeElement?.id === "name"`, "the dialog's field to take focus");
+
+        await page.press("Escape");
+        await page.waitFor("!t.isOpen()", "the dialog to close");
+        expect(await page.eval("document.activeElement?.id ?? null")).toBe("opener");
+    });
+
+    test("a keyboard open and close returns focus to the opener too", async () => {
+        page = await browser.open("modalFocus");
+        await page.eval(`document.getElementById("opener").focus()`);
+        await page.press("Enter");
+        await page.waitFor(`document.activeElement?.id === "name"`, "the dialog's field to take focus");
+
+        await page.press("Escape");
+        await page.waitFor("!t.isOpen()", "the dialog to close");
+        expect(await page.eval("document.activeElement?.id ?? null")).toBe("opener");
+    });
+});

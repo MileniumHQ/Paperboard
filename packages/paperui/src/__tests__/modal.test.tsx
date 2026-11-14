@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
-import { createSignal } from "solid-js";
+import { describe, expect, test, vi } from "vitest";
+import { createSignal, Show } from "solid-js";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { PaperModal } from "../index";
 
@@ -54,6 +54,50 @@ describe("PaperModal keyboard, stacking and focus", () => {
             expect(open()).toBe(false);
             expect(document.activeElement).toBe(opener);
         }
+    });
+
+    test("a dialog opened by a press that dropped focus (a menu's item) returns focus to where it was", async () => {
+        const [open, setOpen] = createSignal(false);
+        render(() => (
+            <>
+                <button type="button">Computer</button>
+                <PaperModal open={open()} onClose={() => setOpen(false)} title="Change name">
+                    <input aria-label="Name" autofocus />
+                </PaperModal>
+            </>
+        ));
+        const computer = screen.getByText("Computer");
+        computer.focus();
+        // the press on a menu item, which takes no focus, leaves the page's body focused
+        computer.blur();
+        expect(document.activeElement).toBe(document.body);
+        setOpen(true);
+        await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Name")));
+        escape();
+        expect(document.activeElement).toBe(computer);
+    });
+
+    test("closing does not reach for an opener that has left the page", async () => {
+        const [open, setOpen] = createSignal(false);
+        const [shown, setShown] = createSignal(true);
+        render(() => (
+            <>
+                <Show when={shown()}>
+                    <button type="button">Gone</button>
+                </Show>
+                <PaperModal open={open()} onClose={() => setOpen(false)} title="Left">
+                    <input aria-label="Field" autofocus />
+                </PaperModal>
+            </>
+        ));
+        const gone = screen.getByText("Gone");
+        gone.focus();
+        setOpen(true);
+        await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Field")));
+        setShown(false);
+        const focus = vi.spyOn(gone, "focus");
+        escape();
+        expect(focus).not.toHaveBeenCalled();
     });
 
     test("Tab and Shift+Tab wrap inside the dialog", () => {

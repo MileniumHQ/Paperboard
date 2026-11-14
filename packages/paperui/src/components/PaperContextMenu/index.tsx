@@ -16,6 +16,7 @@ import {
     type JSX,
 } from "solid-js";
 import { contextMenuDismissals } from "../shared/contextMenuDismiss";
+import { forgetFocusBeforeMenu, rememberFocusBeforeMenu } from "../shared/menuFocus";
 import { Portal } from "solid-js/web";
 import { PaperIcon } from "../PaperIcon";
 
@@ -441,6 +442,19 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
             setActiveSubMenu(null);
             return;
         }
+
+        // what had focus goes back to having it when the menu closes, unless
+        // focus has moved on to something else meanwhile
+        const active = document.activeElement;
+        const returnTo = active instanceof HTMLElement && active !== document.body && !inMenu(active) ? active : null;
+        if (returnTo) rememberFocusBeforeMenu(rootId, returnTo);
+        onCleanup(() => {
+            forgetFocusBeforeMenu(rootId);
+            const now = document.activeElement;
+            if (returnTo?.isConnected && (now === null || now === document.body || inMenu(now))) {
+                returnTo.focus({ preventScroll: true });
+            }
+        });
 
         const initial = local.initialHighlight;
         setHighlightedItem(initial === undefined || initial === null ? null : String(initial));

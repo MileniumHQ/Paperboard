@@ -183,7 +183,7 @@ export function Example() {
             <PaperTextList>
                 <li>On every open, focus moves to the first element inside with the <PaperCode>autofocus</PaperCode> attribute, or to the dialog itself. A field's own autofocus only fires once, at mount, so the modal moves focus again each time.</li>
                 <li>Tab and Shift+Tab stay inside the dialog. Disabled, hidden, and inert controls are skipped.</li>
-                <li>On close, focus returns to the element that had it when the modal opened.</li>
+                <li>On close, focus returns to the element that had it when the modal opened, if that element is still on the page. A modal chosen from a PaperContextMenu returns focus to what had it before the menu opened. A modal opened by a press on something that takes no focus returns it to the element that had focus before that press.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="stacking">Stacked modals</PaperText>

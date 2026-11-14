@@ -409,6 +409,7 @@ menu.setPlacement(placement: ContextMenuPlacement): void;`}
             <PaperText preset="subheader" as="h3" id="keyboard">Keyboard and accessibility</PaperText>
             <PaperText preset="body" as="p">
                 Keys are handled on the window while the menu is open. Focus does not move into the menu: the panel has <PaperCode>role="menu"</PaperCode> and exposes the highlighted row through <PaperCode>aria-activedescendant</PaperCode>.
+                When the menu closes, focus goes back to the element that had it when the menu opened, unless something else has taken it since.
             </PaperText>
             <PaperTable>
                 <thead>

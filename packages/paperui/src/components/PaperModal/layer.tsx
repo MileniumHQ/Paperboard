@@ -16,6 +16,7 @@ import {
 } from "solid-js";
 import { Portal } from "solid-js/web";
 import { PaperPresence } from "../PaperPresence";
+import { focusBeforeMenu } from "../shared/menuFocus";
 
 export interface ModalLayerProps extends JSX.HTMLAttributes<HTMLDivElement> {
     open?: boolean;
@@ -44,6 +45,37 @@ const [openModals, setOpenModals] = createSignal<object[]>([]);
 
 // how long a closed dialog waits for a frame before it leaves without one
 const LEAVE_WITHOUT_FRAME_MS = 100;
+
+// The element that last let focus go to nothing. A press on something
+// that takes no focus (a menu's item, a card) drops focus to the body before
+// its click opens a dialog: the dialog returns focus here instead.
+let droppedFocus: WeakRef<HTMLElement> | null = null;
+let watchingFocus = false;
+function watchDroppedFocus() {
+    if (watchingFocus) return;
+    watchingFocus = true;
+    document.addEventListener(
+        "focusout",
+        (e) => {
+            if (e.relatedTarget === null && e.target instanceof HTMLElement) droppedFocus = new WeakRef(e.target);
+        },
+        true,
+    );
+    document.addEventListener("focusin", () => (droppedFocus = null), true);
+}
+
+// from the start: a dialog mounted only as it opens needs what came before it
+if (typeof document !== "undefined") watchDroppedFocus();
+
+/**
+ * Where focus goes back to when a dialog opening now closes: what has focus,
+ * or, for a dialog chosen from a menu, what had it before the menu opened.
+ */
+function opener(): HTMLElement | null {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body) return focusBeforeMenu(active) ?? active;
+    return droppedFocus?.deref() ?? null;
+}
 
 const FOCUSABLE =
     'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
@@ -113,7 +145,7 @@ export function ModalLayer(props: ModalLayerProps) {
     createEffect(() => {
         if (!local.open) return;
 
-        const previousActiveElement = document.activeElement as HTMLElement | null;
+        const previousActiveElement = opener();
         const layer = {};
         setOver(untrack(openModals).length > 0);
         setOpenModals((stack) => [...stack, layer]);
@@ -173,7 +205,8 @@ export function ModalLayer(props: ModalLayerProps) {
             setOpenModals((stack) => stack.filter((open) => open !== layer));
             setLayer(null);
             cancelAnimationFrame(focusFrame);
-            previousActiveElement?.focus?.();
+            // back where it was, if that is still on the page
+            if (previousActiveElement?.isConnected) previousActiveElement.focus();
         });
     });
 
