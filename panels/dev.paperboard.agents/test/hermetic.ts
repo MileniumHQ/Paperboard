@@ -23,9 +23,20 @@ export function allowTestEndpoint(url: string): () => void {
     return () => allowed.delete(url);
 }
 
+/** ports on loopback a test serves itself (a headless Chrome's DevTools), any path on them */
+const allowedPorts = new Set<number>();
+
+/** Let sockets reach one loopback port the test serves itself; returns the undo. */
+export function allowTestPort(port: number): () => void {
+    allowedPorts.add(port);
+    return () => allowedPorts.delete(port);
+}
+
 class NoNetworkWebSocket {
     constructor(url: string | URL) {
-        if (allowed.has(String(url))) return new original(url) as unknown as NoNetworkWebSocket;
+        const target = new URL(String(url));
+        const ownPort = target.protocol === "ws:" && target.hostname === "127.0.0.1" && allowedPorts.has(Number(target.port));
+        if (allowed.has(String(url)) || ownPort) return new original(url) as unknown as NoNetworkWebSocket;
         throw new Error(
             "unit tests must not open network connections (a live daemon " +
                 "would make test results environment-dependent); if a test " +
@@ -46,5 +57,14 @@ class NoNetworkWebSocket {
 // and every program it starts, gets a throwaway one of its own.
 process.env.PAPERBOARD_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "pb-agents-home-"));
 const throwaway = process.env.PAPERBOARD_DIR;
+// what the suite started that must not outlive it (the page tests' daemon), ended once every file has run
+const teardown: (() => Promise<void> | void)[] = [];
+/** Ends `work` once every file has run (a daemon shared by the suite's files). */
+export function atSuiteEnd(work: () => Promise<void> | void): void {
+    teardown.push(work);
+}
 // a preload's afterAll runs once, after every suite in the process
-afterAll(() => fs.rmSync(throwaway, { recursive: true, force: true }));
+afterAll(async () => {
+    for (const work of teardown.splice(0).reverse()) await work();
+    fs.rmSync(throwaway, { recursive: true, force: true });
+});
