@@ -4,7 +4,7 @@
 // goes ahead only once all of them agreed. A signal or the system shutting
 // down does not ask. Each window says whether it holds unsaved work
 // (panels-unsaved), so a quit with nothing unsaved never waits.
-import { app, BrowserWindow, type WebContents } from "electron";
+import { app, BrowserWindow, dialog, type WebContents } from "electron";
 import { askShell } from "./shellAsk";
 import { logger } from "../../papercrane/logger";
 
@@ -71,6 +71,9 @@ export function holdQuit(event: { preventDefault(): void }): boolean {
         if (!ok) return;
         agreed = true;
         app.quit();
-    }, (err) => logger.error("[Main] the quit could not ask about unsaved work, so Paperboard stays open:", err));
+    }, (err) => {
+        logger.error("[Main] the quit could not ask about unsaved work, so Paperboard stays open:", err);
+        dialog.showErrorBox("Paperboard didn't quit", `It couldn't ask the open pages about their unsaved work: ${err instanceof Error ? err.message : String(err)}`);
+    });
     return true;
 }

@@ -9,6 +9,8 @@ import { TEST_TIMEOUT_MS } from "./support/wait";
 setDefaultTimeout(TEST_TIMEOUT_MS);
 
 const client = { clientId: "client-id", clientSecret: "client-secret" };
+// the tab's page names the outcome it was drawn for
+const page = (outcome: string, reason?: string) => `${outcome}${reason ? `: ${reason}` : ""}`;
 
 // Google's token endpoint on loopback: checks the PKCE verifier against the
 // challenge the authorization URL carried
@@ -52,6 +54,7 @@ describe("Google Drive sign-in", () => {
 			client,
 			{
 				endpoints: google.endpoints,
+				page,
 				openExternal: browser(google, "code-1", (res, auth) => {
 					authUrl = auth;
 					tab = res.then((r) => {
@@ -70,8 +73,7 @@ describe("Google Drive sign-in", () => {
 		expect(authUrl.searchParams.get("scope")).toBe(DRIVE_FILE_SCOPE);
 		expect(authUrl.searchParams.get("code_challenge_method")).toBe("S256");
 		expect(google.exchanges.at(-1)!.get("code_verifier")).toBeTruthy();
-		const page = await (await tab).text();
-		expect(page).toContain("Google Drive is connected");
+		expect(await (await tab).text()).toBe("connected");
 		expect(order).toEqual(["stored", "tab answered"]);
 		expect(engine.getSecret("drive.refresh-token", "shell-backups").value).toBe("refresh-for-code-1");
 	});
@@ -80,15 +82,13 @@ describe("Google Drive sign-in", () => {
 		let tab!: Promise<Response>;
 		const signIn = signInToGoogleDrive(
 			client,
-			{ endpoints: google.endpoints, openExternal: browser(google, "code-2", (res) => (tab = res)) },
+			{ endpoints: google.endpoints, page, openExternal: browser(google, "code-2", (res) => (tab = res)) },
 			async () => {
 				throw new Error("the vault refused it");
 			},
 		);
 		await expect(signIn).rejects.toThrow("the vault refused it");
-		const page = await (await tab).text();
-		expect(page).toContain("was not connected");
-		expect(page).not.toContain("is connected");
+		expect(await (await tab).text()).toBe("not-connected: the vault refused it");
 	});
 
 	test("a redirect carrying a different state gets 404 and the real one still completes", async () => {
@@ -98,6 +98,7 @@ describe("Google Drive sign-in", () => {
 			client,
 			{
 				endpoints: google.endpoints,
+				page,
 				openExternal: async (url) => {
 					const auth = new URL(url);
 					const back = new URL(auth.searchParams.get("redirect_uri")!);

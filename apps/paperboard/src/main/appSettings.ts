@@ -116,13 +116,11 @@ async function applyToFrame(frame: WebFrameMain): Promise<void> {
 }
 
 export async function broadcastAppSettings(): Promise<void> {
+    // applyToFrame says why a frame refused; a window closed meanwhile has none
     for (const wc of webContents.getAllWebContents()) {
-        try {
-            await applyToFrame(wc.mainFrame);
-            for (const frame of wc.mainFrame.frames) {
-                await applyToFrame(frame);
-            }
-        } catch (err) { logger.debug("[appSettings.ts] op failed:", err) }
+        if (wc.isDestroyed()) continue;
+        await applyToFrame(wc.mainFrame);
+        for (const frame of wc.mainFrame.frames) await applyToFrame(frame);
     }
 }
 
@@ -139,7 +137,10 @@ export function syncTitleBarOverlays(): void {
                     ? TITLEBAR_SYMBOL_COLORS.dark
                     : TITLEBAR_SYMBOL_COLORS.light,
             });
-        } catch (err) { logger.debug("[appSettings.ts] op failed:", err) }
+        } catch (err) {
+            // windows drawn without the overlay (macOS, the screenshot tool) have none to set
+            logger.debug("[AppSettings] title bar overlay not set:", err);
+        }
     }
 }
 
@@ -148,11 +149,9 @@ export function initAppSettingsSync(): void {
     applyRunOnStartup();
 
     app.on("web-contents-created", (_event, wc) => {
-        wc.on("did-frame-finish-load", async (_e, _isMainFrame, processId, routingId) => {
-            try {
-                const frame = webFrameMain.fromId(processId, routingId);
-                if (frame) await applyToFrame(frame);
-            } catch (err) { logger.debug("[appSettings.ts] op failed:", err) }
+        wc.on("did-frame-finish-load", (_e, _isMainFrame, processId, routingId) => {
+            const frame = webFrameMain.fromId(processId, routingId);
+            if (frame) void applyToFrame(frame);
         });
     });
 

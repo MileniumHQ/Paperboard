@@ -7,7 +7,6 @@
 import * as crypto from "crypto";
 import * as http from "http";
 import { once } from "events";
-import { signInReasonHtml } from "./signInReason";
 import { logger } from "../../papercrane/logger";
 
 export const DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
@@ -44,19 +43,12 @@ export interface GoogleSignInDeps {
     openExternal: (url: string) => Promise<void>;
     endpoints?: GoogleOAuthEndpoints;
     timeoutMs?: number;
-    /** the page the browser lands on afterwards, a bare one by default; the
-     * reason says why a sign-in was not connected */
-    page?: (outcome: "connected" | "not-connected", reason?: string) => string;
+    /** the page the browser lands on afterwards; the reason says why a
+     * sign-in was not connected */
+    page: (outcome: "connected" | "not-connected", reason?: string) => string;
 }
 
 const base64url = (buf: Buffer) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-
-const PAGE = (outcome: "connected" | "not-connected", reason?: string) =>
-    `<!doctype html><meta charset="utf-8"><title>Paperboard</title><body style="font-family:sans-serif;padding:3em">${
-        outcome === "connected"
-            ? "Google Drive is connected. You can close this tab and go back to Paperboard."
-            : `Google Drive was not connected${reason ? `: ${signInReasonHtml(reason)}` : ""}. You can close this tab.`
-    }</body>`;
 
 // one sign-in at a time: each holds a listening socket and a browser tab
 let signingIn = false;
@@ -98,7 +90,7 @@ export async function signInToGoogleDrive<T>(
             new Promise<void>((resolve) => {
                 if (answered) return resolve();
                 answered = true;
-                res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(deps.page ? deps.page(outcome, reason) : PAGE(outcome, reason), () => resolve());
+                res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(deps.page(outcome, reason), () => resolve());
             });
         finish(code ? { code } : { error: error === "access_denied" ? "Google access was not allowed" : `Google sign-in failed: ${error ?? "no code"}` });
     });

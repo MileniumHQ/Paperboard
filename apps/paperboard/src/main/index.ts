@@ -258,7 +258,10 @@ function createWindow(): void {
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
         if (opensExternally(details.url)) {
-            shell.openExternal(details.url).catch((err) => log.error("[Main] The system could not open", details.url, err));
+            shell.openExternal(details.url).catch((err) => {
+                log.error("[Main] The system could not open", details.url, err);
+                dialog.showErrorBox("Paperboard couldn't open that link", `${details.url}\n\n${err?.message || err}`);
+            });
         } else {
             log.warn("[Main] Blocked openExternal for a url that is neither https nor on this computer:", details.url);
         }

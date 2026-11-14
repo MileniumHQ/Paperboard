@@ -6,6 +6,8 @@ import { app, Menu, Tray, nativeImage } from "electron";
 import { trayMenu, traySummary } from "./traySummary";
 
 let tray: Tray | null = null;
+// draws the running count again; index.ts calls it through refreshDesktopTray
+let refresh: (() => void) | null = null;
 
 export interface DesktopTrayDeps {
     icon: string;
@@ -30,22 +32,19 @@ export function createDesktopTray(deps: DesktopTrayDeps): Tray {
     if (image.isEmpty()) throw new Error(`Tray icon failed to load: ${process.platform === "darwin" ? deps.macTemplateIcon : deps.icon}`);
     tray = new Tray(image);
 
-    const refresh = () => {
-        if (!tray) return;
+    const shown = tray;
+    refresh = () => {
         const count = deps.runningCount();
-        tray.setToolTip(traySummary(count));
-        tray.setContextMenu(Menu.buildFromTemplate(trayMenu(count, { openWindow: deps.openWindow, openInBrowser: deps.openInBrowser, quit: () => app.quit() })));
+        shown.setToolTip(traySummary(count));
+        shown.setContextMenu(Menu.buildFromTemplate(trayMenu(count, { openWindow: deps.openWindow, openInBrowser: deps.openInBrowser, quit: () => app.quit() })));
     };
-
     refresh();
     tray.on("click", () => deps.openWindow());
-    // hook the shell calls to re-render the count
-    (tray as Tray & { refreshSummary?: () => void }).refreshSummary = refresh;
     return tray;
 }
 
 export function refreshDesktopTray(): void {
-    (tray as (Tray & { refreshSummary?: () => void }) | null)?.refreshSummary?.();
+    refresh?.();
 }
 
 export function hasDesktopTray(): boolean {
@@ -55,4 +54,5 @@ export function hasDesktopTray(): boolean {
 export function destroyDesktopTray(): void {
     tray?.destroy();
     tray = null;
+    refresh = null;
 }
