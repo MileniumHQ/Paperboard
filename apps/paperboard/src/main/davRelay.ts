@@ -29,6 +29,7 @@ import * as https from "https";
 import * as net from "net";
 import { randomBytes } from "crypto";
 import { logger } from "../../papercrane/logger";
+import { bareHost } from "./communication/papercrane/probeTarget";
 import { pinnedTlsOptions } from "../../papercrane/pinnedTls";
 import { secretsMatch } from "../../papercrane/secretCompare";
 
@@ -197,7 +198,8 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
         const out = https.request(
             {
                 agent,
-                hostname: upstream.hostname,
+                // URL keeps an IPv6 literal's brackets; a socket dials it bare
+                hostname: bareHost(upstream.hostname),
                 port: upstream.port,
                 method: req.method,
                 path: target,

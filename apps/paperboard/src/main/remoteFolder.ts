@@ -13,6 +13,7 @@ import {
 } from "./remoteFolderMount";
 import { startDavRelay, relayFolderUrl, type DavRelay } from "./davRelay";
 import { pinnedRequest } from "../../papercrane/pinnedTls";
+import { bracketHost } from "./communication/papercrane/probeTarget";
 
 // remote data dir over WebDAV with ephemeral session; teardown on explorer
 // close. The OS mounts a loopback relay that makes the pinned TLS hop.
@@ -37,10 +38,6 @@ interface ActiveSession {
 }
 
 const active = new Map<string, ActiveSession>();
-
-function bracket(host: string): string {
-    return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
-}
 
 function execAsync(
     cmd: string,
@@ -85,7 +82,7 @@ function openWithDesktop(url: string): Promise<boolean> {
 
 async function revokeSession(s: ActiveSession): Promise<void> {
     try {
-        await pinnedRequest(`https://${bracket(s.host)}:${s.port}/dav/session`, s.cert, {
+        await pinnedRequest(`https://${bracketHost(s.host)}:${s.port}/dav/session`, s.cert, {
             method: "DELETE",
             headers: { Authorization: `Bearer ${s.mainToken}` },
             body: JSON.stringify({ user: s.davUser }),
@@ -117,7 +114,7 @@ export async function closeRemoteFolder(computerId: string): Promise<void> {
     const s = active.get(computerId);
     if (!s) return;
     active.delete(computerId);
-    if (s.timer) clearInterval(s.timer);
+    if (s.timer) clearTimeout(s.timer);
     await s.relay?.close();
     await unmount(s);
     await revokeSession(s);
@@ -141,38 +138,67 @@ async function windowsHasWindow(drive: string): Promise<boolean> {
         .some((line) => line.toLowerCase().includes(needle));
 }
 
+// each open Finder window's folder, one per line; no window is no line
+const FINDER_WINDOWS = [
+    'set out to ""',
+    'tell application "Finder"',
+    "repeat with w in (every Finder window)",
+    "try",
+    "set out to out & (POSIX path of (target of w as alias)) & linefeed",
+    "end try",
+    "end repeat",
+    "end tell",
+    "return out",
+];
+
 async function macHasWindow(mountPoint: string): Promise<boolean> {
-    const script = `tell application "Finder" to get POSIX path of (get target of every window)`;
-    try {
-        const { stdout } = await execAsync("osascript", ["-e", script], 15_000);
-        return stdout.split(/,\s*|\r?\n/).some((line) => line.includes(mountPoint));
-    } catch (err) {
-        logger.debug("[RemoteFolder] Finder window probe failed, assuming closed:", err);
-        return false;
-    }
+    const { stdout } = await execAsync("osascript", FINDER_WINDOWS.flatMap((line) => ["-e", line]), 15_000);
+    return stdout.split(/\r?\n/).some((line) => line.startsWith(mountPoint));
 }
 
+// The folder closes once its window does: after a grace period for the
+// window to appear, two looks in a row without it. A look that fails (Finder
+// refused Paperboard its Automation access, PowerShell broke) can't tell
+// open from closed, so the folder stays and the relay's idle timer ends it,
+// as on Linux: the folder someone is browsing is never pulled away.
 function startWatcher(s: ActiveSession, hasWindow: () => Promise<boolean>): void {
-    s.timer = setInterval(async () => {
+    const look = async () => {
+        let open: boolean;
         try {
-            const open = await hasWindow();
-            if (open) {
-                s.seen = true;
-                s.misses = 0;
+            open = await hasWindow();
+        } catch (err: any) {
+            logger.warn(`[RemoteFolder] can't see whether ${s.computerId}'s folder window is open; it stays until it goes unused:`, err?.message ?? err);
+            s.timer = null;
+            return;
+        }
+        if (active.get(s.computerId) !== s) return;
+        if (open) {
+            s.seen = true;
+            s.misses = 0;
+        } else if (s.seen || Date.now() >= s.deadline) {
+            s.misses += 1;
+            if (!s.seen || s.misses >= CONFIRM_MISSES) {
+                logger.info(`[RemoteFolder] explorer closed for ${s.computerId}; tearing down`);
+                await closeRemoteFolder(s.computerId);
                 return;
             }
-            if (!s.seen && Date.now() < s.deadline) return; // still in grace
-            s.misses += 1;
-            if (s.seen || Date.now() >= s.deadline) {
-                if (s.misses >= CONFIRM_MISSES || Date.now() >= s.deadline) {
-                    logger.info(`[RemoteFolder] explorer closed for ${s.computerId}; tearing down`);
-                    await closeRemoteFolder(s.computerId);
-                }
-            }
-        } catch (err: any) {
-            logger.warn("[RemoteFolder] watch poll failed:", err?.message ?? err);
         }
-    }, POLL_MS);
+        s.timer = setTimeout(look, POLL_MS);
+    };
+    s.timer = setTimeout(look, POLL_MS);
+}
+
+// starts a program the person will see and leaves it running; rejects when
+// it could not start at all
+function launch(cmd: string, args: string[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const child = spawn(cmd, args, { detached: true, stdio: "ignore" });
+        child.once("error", reject);
+        child.once("spawn", () => {
+            child.unref();
+            resolve();
+        });
+    });
 }
 
 export async function openRemoteFolder(
@@ -190,7 +216,7 @@ export async function openRemoteFolder(
     const port = client.getPort();
     const cert = client.getCert();
     if (!cert) return { ok: false, error: "This computer isn't paired. Pair it again from its settings." };
-    const origin = `https://${bracket(host)}:${port}`;
+    const origin = `https://${bracketHost(host)}:${port}`;
 
     await closeRemoteFolder(computerId);
 
@@ -299,7 +325,11 @@ export async function openRemoteFolder(
             if (!(await fs.promises.access(target).then(() => true, () => false))) {
                 return await fail(`Windows mapped ${drive}, but ${target} isn't in it.`);
             }
-            spawn("explorer", [target], { detached: true, stdio: "ignore" }).unref();
+            try {
+                await launch("explorer", [target]);
+            } catch (err: any) {
+                return await fail(`Explorer couldn't open ${target}: ${err?.message ?? err}`);
+            }
             startWatcher(rec, () => windowsHasWindow(drive));
             return { ok: true };
         }
@@ -319,7 +349,9 @@ export async function openRemoteFolder(
             } finally {
                 try {
                     fs.unlinkSync(scriptPath);
-                } catch (err) { logger.debug("[remoteFolder.ts] op failed:", err) }
+                } catch (err) {
+                    logger.warn(`[RemoteFolder] couldn't remove the mount script ${scriptPath}, which holds this session's password:`, err);
+                }
             }
             rec.mount = mountPoint;
             active.set(computerId, rec);
@@ -328,7 +360,11 @@ export async function openRemoteFolder(
             if (!(await fs.promises.access(target).then(() => true, () => false))) {
                 return await fail(`macOS mounted the folder, but ${target} isn't in it.`);
             }
-            spawn("open", [target], { detached: true, stdio: "ignore" }).unref();
+            try {
+                await execAsync("open", [target], 20_000);
+            } catch (err: any) {
+                return await fail(`Finder couldn't open ${target}: ${err?.stderr?.trim() || err?.message || err}`);
+            }
             startWatcher(rec, () => macHasWindow(mountPoint));
             return { ok: true };
         }

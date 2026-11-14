@@ -10,7 +10,7 @@ import {
 import { getLocalDir } from "../../../../papercrane/paths";
 import { logger } from "../../../../papercrane/logger";
 import { pinnedRequest } from "../../../../papercrane/pinnedTls";
-import { bracketHost, checkProbeTarget } from "./probeTarget";
+import { bareHost, bracketHost, checkProbeTarget } from "./probeTarget";
 import { PaperCraneClient } from "./PaperCraneClient";
 import type { ComputerDriver } from "../driver/ComputerDriver";
 import { RemoteComputerDriver } from "../driver/RemoteComputerDriver";
@@ -71,23 +71,25 @@ export class ConnectionPool extends EventEmitter {
     private remoteDrivers: Map<string, RemoteComputerDriver> = new Map();
     private activeId: string = "local";
     private configPath: string;
+    /** resolves once this computer's record carries its OS details; init() awaits it */
+    public readonly localRecorded: Promise<void>;
 
     constructor() {
         super();
         this.configPath = path.join(getLocalDir(), "paired_computers.json");
         this.loadConfig();
-        // fire-and-forget here is safe: init() awaits the same idempotent
-        // refresh below before the pool is used; the local record's
-        // identity fields only ever refine
-        void this.ensureLocalComputer();
+        this.localRecorded = this.ensureLocalComputer();
     }
 
     public async init(): Promise<void> {
-        await this.ensureLocalComputer();
+        await this.localRecorded;
         // warm local daemon so panels find a live endpoint
         try {
             await this.getClient("local").connect("127.0.0.1");
-        } catch (err) { logger.debug("[ConnectionPool.ts] op failed:", err) }
+        } catch (err) {
+            // the rail shows this computer offline, with the reason
+            logger.warn("[ConnectionPool] the local Paperboard server is not answering yet:", err);
+        }
     }
 
     private loadConfig() {
@@ -106,7 +108,8 @@ export class ConnectionPool extends EventEmitter {
                 if (!id) continue;
                 if (typeof c.host !== "string" || !c.host) continue;
                 if (typeof c.port !== "number" || !Number.isFinite(c.port)) continue;
-                this.computers.set(id, { ...c, id });
+                // a pairing kept before hosts were stored bare may say "[::1]"
+                this.computers.set(id, { ...c, id, host: bareHost(c.host) });
             }
         }
     }
@@ -255,6 +258,8 @@ export class ConnectionPool extends EventEmitter {
         code: string,
         customName?: string,
     ): Promise<StoredComputer> {
+        // kept as sockets dial it: "[::1]" as typed is ::1
+        host = bareHost(host);
         const tempClient = new PaperCraneClient();
         try {
             await tempClient.connectForPairing(host, port);

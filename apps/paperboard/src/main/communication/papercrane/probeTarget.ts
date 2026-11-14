@@ -4,8 +4,22 @@
 export const INVALID_ADDRESS = "That isn't a valid address. Type an IP address or a computer name";
 export const INVALID_PORT = "That isn't a valid port. Type a whole number from 1 to 65535";
 
+/** the host as a URL names it: an IPv6 literal goes in brackets */
 export function bracketHost(host: string): string {
     return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+}
+
+/** the host as a socket dials it: an IPv6 literal without its brackets */
+export function bareHost(host: string): string {
+    return host.trim().replace(/^\[(.*)\]$/, "$1");
+}
+
+/**
+ * The hosts the client dials in plaintext. The daemon's plaintext port is
+ * bound to 127.0.0.1 only, so ::1 is a pinned remote like any other.
+ */
+export function isLoopback(host: string): boolean {
+    return host === "localhost" || host === "127.0.0.1";
 }
 
 export interface ProbeRejection {

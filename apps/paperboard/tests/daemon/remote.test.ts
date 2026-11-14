@@ -161,6 +161,23 @@ describe("paired computers", () => {
 		impostor.disconnect();
 	});
 
+	test("a computer at an IPv6 address pairs, and its RPC and HTTP reach it", async () => {
+		const hop = await freezableHop(remote.port, "::1");
+		const pairer = new PaperCraneClient();
+		const client = new PaperCraneClient();
+		try {
+			await pairer.connectForPairing("::1", hop.port);
+			const token = (await pairer.pair(remote.instance.auth.startPairing(), "IPv6 laptop")).token;
+			expect(pairer.getCert()).toBe(cert);
+			expect((await client.connect("::1", hop.port, token, cert)).connected).toBe(true);
+			expect((await client.request("/health")).status).toBe(200);
+		} finally {
+			pairer.disconnect();
+			client.disconnect();
+			await hop.close();
+		}
+	});
+
 	test("a paired client reconnects after the daemon restarts, and its heartbeat reports a frozen path and recovers", async () => {
 		const hop = await freezableHop(remote.port, REMOTE_HOST);
 		const client = new PaperCraneClient({ heartbeatMs: 100, reconnectBaseMs: 20, reconnectMaxMs: 100 });

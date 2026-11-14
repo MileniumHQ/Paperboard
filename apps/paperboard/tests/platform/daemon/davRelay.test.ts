@@ -99,6 +99,27 @@ describe("DAV relay", () => {
 		expect(refused.body).not.toContain("hello");
 	});
 
+	test("a computer paired at an IPv6 address serves its folder through the relay", async () => {
+		// the daemon listens on IPv4; this hop is the computer's IPv6 address
+		const hop = net.createServer((client) => {
+			const upstream = net.connect(daemon.port, "127.0.0.1");
+			client.pipe(upstream).pipe(client);
+			client.on("error", () => upstream.destroy());
+			upstream.on("error", () => client.destroy());
+		});
+		await new Promise<void>((resolve) => hop.listen(0, "::1", resolve));
+		const v6 = await relay({ upstream: `https://[::1]:${(hop.address() as net.AddressInfo).port}` });
+		try {
+			const served = await ask(v6.port, { path: "/dav/files/test.relay/hello.txt", headers: basicAuth() });
+			expect(served.body).toBe("hello over the relay");
+			expect(served.status).toBe(200);
+		} finally {
+			// the relay's keep-alive socket holds the hop open until it closes
+			await v6.close();
+			await new Promise<void>((resolve) => hop.close(() => resolve()));
+		}
+	});
+
 	test("the upstream's password challenge never reaches the file manager", async () => {
 		const wrong = await relay({ pass: "not-the-session-password", clientAuth: "path" });
 		const res = await ask(wrong.port, { method: "PROPFIND", path: `${wrong.prefix}/dav/`, headers: { Depth: "0" } });

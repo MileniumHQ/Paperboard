@@ -21,10 +21,10 @@ const remote = (id: string) => ({
 const stored = () => JSON.parse(fs.readFileSync(file(), "utf8")) as { computers: { id: string; name: string; token?: string }[] };
 const ids = (pool: ConnectionPool) => pool.listAll().map((c) => c.id);
 
-// the constructor refreshes the local record asynchronously; init awaits it
+// the constructor refreshes the local record asynchronously
 async function openPool(): Promise<ConnectionPool> {
     const pool = new ConnectionPool();
-    await (pool as unknown as { ensureLocalComputer(): Promise<void> }).ensureLocalComputer();
+    await pool.localRecorded;
     return pool;
 }
 

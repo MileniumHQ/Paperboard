@@ -3,11 +3,8 @@
 // can be exercised without constructing the pool.
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { PanelFileTransferError } from "../shared/fileTransfer";
+import { isLoopback } from "./communication/papercrane/probeTarget";
 import type { DaemonEndpoint } from "./panelFileTransfer";
-
-function isLoopback(host: string): boolean {
-    return host === "127.0.0.1" || host === "localhost" || host === "::1";
-}
 
 export function poolEndpoint(computerId: string): DaemonEndpoint {
     let client: ReturnType<typeof connectionPool.getClient>;
