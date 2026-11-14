@@ -1,11 +1,13 @@
 import styles from "./index.module.css";
 import {
     splitProps,
+    children,
     createContext,
     useContext,
     type JSX,
     type ParentProps,
 } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import { PaperText, type PaperTextProps, PRESETS } from "../PaperText";
 import type { PaperColor, PaperTextPreset } from "../../types";
 import { getVarCss, resolveColor } from "../../utils/theme";
@@ -131,31 +133,24 @@ export function PaperTextList(props: ParentProps<PaperTextListProps>) {
         truncate: local.truncate,
     });
 
-    return local.ordered ? (
-        <ol
+    // built once: switching between numbered and bulleted swaps the list
+    // element and keeps its items
+    const items = children(() => (
+        <TextListContext.Provider value={contextValue}>{local.children}</TextListContext.Provider>
+    ));
+
+    return (
+        <Dynamic
+            component={local.ordered ? "ol" : "ul"}
             {...(rest as JSX.OlHTMLAttributes<HTMLOListElement>)}
-            start={local.start}
+            start={local.ordered ? local.start : undefined}
             data-preset={local.preset}
             class={className()}
             classList={local.classList}
             style={combinedStyle()}
         >
-            <TextListContext.Provider value={contextValue}>
-                {local.children}
-            </TextListContext.Provider>
-        </ol>
-    ) : (
-        <ul
-            {...(rest as JSX.HTMLAttributes<HTMLUListElement>)}
-            data-preset={local.preset}
-            class={className()}
-            classList={local.classList}
-            style={combinedStyle()}
-        >
-            <TextListContext.Provider value={contextValue}>
-                {local.children}
-            </TextListContext.Provider>
-        </ul>
+            {items()}
+        </Dynamic>
     );
 }
 

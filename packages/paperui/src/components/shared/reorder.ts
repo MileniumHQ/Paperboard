@@ -1,4 +1,4 @@
-import { createSignal, type JSX } from "solid-js";
+import { createSignal, onCleanup, type JSX } from "solid-js";
 import { haptic } from "../../utils/haptics";
 import { HOLD_SLOP } from "../../utils/touchHold";
 import { dismissContextMenus } from "./contextMenuDismiss";
@@ -59,6 +59,11 @@ export function createReorder(options: ReorderOptions): Reorder {
     const [isDropping, setIsDropping] = createSignal(false);
     const [liftedValue, setLiftedValue] = createSignal<string | null>(null);
     let justFinishedDrag = false;
+    // the gestures under way: unmounting mid-drag takes their window listeners with it
+    const active = new Set<() => void>();
+    onCleanup(() => {
+        for (const stop of active) stop();
+    });
 
     const start = (value: string | number, e: PointerEvent, startOptions: ReorderStartOptions = {}) => {
         const container = options.container();
@@ -146,6 +151,7 @@ export function createReorder(options: ReorderOptions): Reorder {
         };
 
         const cleanup = () => {
+            active.delete(cleanup);
             clearTimeout(holdTimer);
             setLiftedValue(null);
             window.removeEventListener("pointermove", handlePointerMove);
@@ -193,6 +199,7 @@ export function createReorder(options: ReorderOptions): Reorder {
             }
         };
 
+        active.add(cleanup);
         window.addEventListener("pointermove", handlePointerMove);
         window.addEventListener("pointerup", finish);
         window.addEventListener("pointercancel", finish);

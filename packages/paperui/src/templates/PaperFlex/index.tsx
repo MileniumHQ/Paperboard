@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import {
     splitProps,
     createSignal,
+    onCleanup,
     Show,
     type JSX,
     type ParentProps,
@@ -81,9 +82,14 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
     const isRow = () =>
         local.direction === "row" || local.direction === "row-reverse";
 
+    // a drag still going when this unmounts takes its window listeners with it
+    let endDrag: (() => void) | undefined;
+    onCleanup(() => endDrag?.());
+
     const handlePointerDown = (e: PointerEvent) => {
         if (!containerRef) return;
         e.preventDefault();
+        endDrag?.();
 
         const handleEl = e.currentTarget as HTMLElement;
         handleEl.setPointerCapture(e.pointerId);
@@ -127,13 +133,19 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
             }
         };
 
-        const handlePointerUp = (upEv: PointerEvent) => {
-            handleEl.releasePointerCapture(upEv.pointerId);
-            setIsDragging(false);
+        const stop = () => {
+            endDrag = undefined;
             window.removeEventListener("pointermove", handlePointerMove);
             window.removeEventListener("pointerup", handlePointerUp);
         };
 
+        const handlePointerUp = (upEv: PointerEvent) => {
+            handleEl.releasePointerCapture(upEv.pointerId);
+            setIsDragging(false);
+            stop();
+        };
+
+        endDrag = stop;
         window.addEventListener("pointermove", handlePointerMove);
         window.addEventListener("pointerup", handlePointerUp);
     };
@@ -207,7 +219,10 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
     };
 
     const layoutContextValue: PaperLayoutContextValue = {
-        direction: local.direction || "column",
+        // read when used, so children follow a direction that changes
+        get direction() {
+            return local.direction || "column";
+        },
         parentIsFlex: true,
     };
 
