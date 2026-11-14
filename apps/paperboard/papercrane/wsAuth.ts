@@ -4,7 +4,7 @@
 import * as os from "os";
 import type { WebSocket } from "ws";
 import type { PaperCraneAuth } from "./auth";
-import { getDetailedOsInfo } from "./index";
+import { getDetailedOsInfo } from "./osInfo";
 import { ErrorCode } from "./protocol";
 import { assertPanelId, assertStr } from "./rpc/params";
 import { requireHost } from "./principal";

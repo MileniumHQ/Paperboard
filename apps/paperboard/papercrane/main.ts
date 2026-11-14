@@ -3,11 +3,9 @@
 //
 // Two artifacts, one source tree. The Electron shell embeds the daemon via
 // startPaperCraneServer() from ./index and never imports this file; the
-// compiled binary starts here. The split is structural (entry module with
-// an import.meta.main gate), not the old require.main/argv-sniff heuristic
-// in ./index — importing ./index has zero autostart side effects in any
-// host, so a GUI import can never shadow the embedded daemon and a test
-// import can never boot a server.
+// compiled binary starts here, behind an import.meta.main gate. Importing
+// ./index has no autostart side effects in any host, so a GUI import can
+// never shadow the embedded daemon and a test import can never boot a server.
 import { fileURLToPath, pathToFileURL } from "url";
 import { startPaperCraneServer } from "./index";
 import { CliHandledExit, CliUsageError, EXIT, parseCli } from "./cli";

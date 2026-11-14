@@ -1,6 +1,7 @@
 import * as os from "os";
 import { computerHostname } from "../hostname";
-import { getDetailedOsInfo, getNetworkIp } from "../index";
+import { getDetailedOsInfo } from "../osInfo";
+import { getNetworkIp } from "../util";
 import { PAPERCRANE_VERSION } from "../discovery";
 import { logger } from "../logger";
 import type { RpcContext } from "./context";

@@ -9,7 +9,8 @@ import {
 import { getLocalDir } from "./paths";
 import { secretsMatch } from "./secretCompare";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
-import { sanitizeId } from "./storage";
+import { sanitizeId, unrefTimer } from "./storage";
+import { logger } from "./logger";
 
 export interface AuthorizedToken {
     token: string;
@@ -137,9 +138,8 @@ export class PaperCraneAuth extends EventEmitter {
     }
 
     // identity index lookup: hash the presented token, one Map probe, then
-    // exactly ONE constant-time secretsMatch against the found entry.
-    // Behaviorally identical to the old linear scan (same entries, same
-    // results) — the per-request work no longer scales with vault size.
+    // exactly ONE constant-time secretsMatch against the found entry, so the
+    // per-request work does not scale with vault size
     public matchToken(token?: string): AuthorizedToken | null {
         if (!token) return null;
         const entry = this.tokenIndex.get(this.tokenHash(token));
@@ -285,7 +285,7 @@ export class PaperCraneAuth extends EventEmitter {
                 mode: 0o600,
             });
         } catch (err) {
-            console.error("[auth] token store write failed:", err);
+            logger.error("[auth] token store write failed:", err);
             this.authorizedTokens = new Map([...this.tokenIndex.values()].map((entry) => [entry.token, entry]));
             this.tokensDirty = true;
             throw err;
@@ -303,9 +303,9 @@ export class PaperCraneAuth extends EventEmitter {
         this.lastSeenFlushTimer = setTimeout(() => {
             this.lastSeenFlushTimer = null;
             try { this.flushTokenStore(); }
-            catch (err) { console.error("[auth] deferred token metadata save failed:", err); }
+            catch (err) { logger.error("[auth] deferred token metadata save failed:", err); }
         }, this.lastSeenFlushMs);
-        (this.lastSeenFlushTimer as unknown as { unref?: () => void })?.unref?.();
+        unrefTimer(this.lastSeenFlushTimer);
     }
 
     public get isTokensDirty(): boolean {

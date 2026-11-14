@@ -332,14 +332,3 @@ export function parseCli(argv: string[] = process.argv, env: NodeJS.ProcessEnv =
     if (!parsed) throw new Error("papercrane: the command line parsed to nothing");
     return parsed;
 }
-
-// the daemon's own flags, for callers that only start a server (tests, the
-// historical API): anything other than a serve command line is an error
-export function parseCliArgs(argv: string[] = process.argv): ServeOptions & { panelService?: string } {
-    const command = parseCli(argv);
-    switch (command.kind) {
-        case "serve": return command.options;
-        case "panel-service": return { panelService: command.module };
-        default: throw new Error(`parseCliArgs only parses serve options, not the ${command.kind} command`);
-    }
-}

@@ -1,7 +1,6 @@
 import * as http from "http";
 import * as https from "https";
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 import * as crypto from "crypto";
 import { execFile } from "child_process";
@@ -18,7 +17,8 @@ import { setupWebSocketServer } from "./ws";
 import { PaperCraneTui } from "./tui";
 import { advertisePaperCrane, isLoopbackHost, type AdvertisementHandle } from "./discovery";
 import { writeFileAtomicSync } from "./storage";
-import { getDisplayHost, getLinuxDistroInfo } from "./util";
+import { getDisplayHost } from "./util";
+import { DEFAULT_LISTEN_PORT } from "./cli";
 import { getLocalDir, getPaperboardDir, ensurePrivateDir } from "./paths";
 import {
     craneHandshakePath, removeCraneHandshake,
@@ -47,105 +47,10 @@ export {
     isUnspecifiedHost,
     selectNetworkIp,
 } from "./util";
-
-// build number to friendly release. The reg query runs on the WS auth
-// path, so the DisplayVersion result is cached per build — one entry,
-// never a growing map; a sick box pays the 5s timeout at most once.
-// ASYNC: the reg child never blocks the event loop (execFile, not
-// execFileSync); concurrent calls share one cached promise per build.
-const windowsReleaseCache = {
-    build: -1,
-    name: "",
-    pending: null as Promise<string> | null,
-};
-export async function windowsReleaseName(build: number): Promise<string> {
-    if (windowsReleaseCache.build === build) return windowsReleaseCache.name;
-    if (!windowsReleaseCache.pending) {
-        windowsReleaseCache.pending = queryWindowsReleaseName(build)
-            .then((name) => {
-                windowsReleaseCache.build = build;
-                windowsReleaseCache.name = name;
-                return name;
-            })
-            .finally(() => {
-                windowsReleaseCache.pending = null;
-            });
-    }
-    return windowsReleaseCache.pending;
-}
-
-async function queryWindowsReleaseName(build: number): Promise<string> {
-    if (process.platform === "win32") {
-        try {
-            const out = await promisifiedExecFile(
-                "reg",
-                [
-                    "query",
-                    "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
-                    "/v",
-                    "DisplayVersion",
-                ],
-                { timeout: 5000 },
-            );
-            const m = /DisplayVersion\s+REG_SZ\s+(\S+)/.exec(out.stdout);
-            if (m) {
-                return `${build >= 22000 ? "11" : "10"} ${m[1]}`;
-            }
-        } catch (err) { logger.debug("[Paperboard Server] the Windows display version is unreadable; reporting the major only:", err) }
-    }
-    return build >= 22000 ? "11" : "10";
-}
-
-// Darwin 20-24 were macOS 11-15. Apple then moved to year numbers: Darwin 25
-// is macOS 26, so from there the macOS major is Darwin + 1. Older releases
-// (10.x) pass the raw Darwin release through for the shell to map.
-export function macosVersionFromDarwin(release: string): string {
-    const darwinMajor = parseInt(release.split(".")[0], 10);
-    if (isNaN(darwinMajor) || darwinMajor < 20) return release;
-    return (darwinMajor >= 25 ? darwinMajor + 1 : darwinMajor - 9).toString();
-}
-
-export async function getDetailedOsInfo(): Promise<{
-    os: string;
-    osVersion: string;
-    distroId?: string;
-    distroName?: string;
-}> {
-    const platform = process.platform;
-    if (platform === "darwin") {
-        return {
-            os: "macos",
-            osVersion: macosVersionFromDarwin(os.release()),
-            distroId: "macos",
-            distroName: "macOS",
-        };
-    }
-    if (platform === "win32") {
-        const build = parseInt(os.release().split(".")[2] || "0", 10);
-        return {
-            os: "windows",
-            osVersion: await windowsReleaseName(build),
-            distroId: "windows",
-            distroName: "Windows",
-        };
-    }
-    if (platform === "linux") {
-        const info = getLinuxDistroInfo();
-        return {
-            os: "linux",
-            osVersion: info.version || os.release(),
-            distroId: info.distroId,
-            distroName: info.distroName,
-        };
-    }
-    return {
-        os: process.platform,
-        osVersion: os.release(),
-    };
-}
+export { getDetailedOsInfo } from "./osInfo";
 
 export const DEFAULT_PORT =
-    Number(process.env.PAPERCRANE_PORT) || 45464;
+    Number(process.env.PAPERCRANE_PORT) || DEFAULT_LISTEN_PORT;
 // bind all interfaces by default — running remotely is PaperCrane's job.
 // every RPC still requires a token, and a non-loopback bind is TLS only.
 export const DEFAULT_HOST = process.env.PAPERCRANE_HOST || "0.0.0.0";
@@ -702,9 +607,4 @@ function listenPaperCraneServer(
     });
 }
 
-// the command line lives in ./cli.ts; re-exported for existing importers
-export { parseCliArgs } from "./cli";
-// Entry lives in ./main.ts (import.meta.main gate): importing this module
-// — from Electron, from tests, from anywhere — never autostarts a server.
-// The old main-module detection heuristic died with the split, and the
-// comment states that without quoting the removed code.
+// The entry is ./main.ts: importing this module never starts a server.

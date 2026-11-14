@@ -5,6 +5,7 @@ import * as crypto from "crypto";
 import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
 import { validatePanelManifest } from "./storage";
+import { DEFAULT_LISTEN_PORT } from "./cli";
 import { isPanelId, requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import type { PaperCraneAuth } from "./auth";
 import type { MonitorLifecycle, MonitorServiceRecord } from "../../../packages/paperapi/src/monitorProtocol";
@@ -92,7 +93,7 @@ function runtime(): { command: string; prefix: string[] } {
 export class PanelServicesManager {
     private services = new Map<string, RunningService>();
     private auth: PaperCraneAuth | null = null;
-    private port = 45464;
+    private port = DEFAULT_LISTEN_PORT;
     // who hears about services starting, getting ready, exiting and failing
     // (the traffic monitor); empty unless someone is watching
     private lifecycleListeners = new Set<(change: MonitorLifecycle) => void>();
