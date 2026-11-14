@@ -79,7 +79,7 @@ export function Example() {
                         <td><PaperCode>value</PaperCode></td>
                         <td><PaperCode>string | number</PaperCode></td>
                         <td>No default</td>
-                        <td>The chosen option's <PaperCode>value</PaperCode>. Setting it makes the menu controlled: it changes only when you change it.</td>
+                        <td>The chosen option's <PaperCode>value</PaperCode>. Setting it makes the menu controlled: it changes only when you change it, and so does the hidden input a named menu gives a form.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>defaultValue</PaperCode></td>

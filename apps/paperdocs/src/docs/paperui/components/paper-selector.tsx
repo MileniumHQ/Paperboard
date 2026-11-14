@@ -216,7 +216,7 @@ export function Example() {
                 <li>Each item is a label around a visually hidden radio input, or a checkbox with <PaperCode>multiple</PaperCode>. A click on the card, or the input's own keyboard behavior, chooses it.</li>
                 <li>The chosen item has a deep primary border and outline.</li>
                 <li>In single mode the browser moves between items of one <PaperCode>name</PaperCode> with the arrow keys, and Space chooses. In <PaperCode>multiple</PaperCode> mode each item is a checkbox with its own tab stop, and Space toggles.</li>
-                <li>Controlled and uncontrolled work as in a form: with <PaperCode>value</PaperCode> or <PaperCode>values</PaperCode> set, the choice changes only when your signal does. Ignore the callback to refuse a change.</li>
+                <li>Controlled and uncontrolled work as in a form: with <PaperCode>value</PaperCode> or <PaperCode>values</PaperCode> set, the choice changes only when your signal does. Ignore the callback to refuse a change: the inputs go back to the chosen item, so pressing the refused one again asks again.</li>
                 <li>The items press with the paper effect. A disabled item does not.</li>
             </PaperTextList>
 

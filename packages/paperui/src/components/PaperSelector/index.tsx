@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { splitProps, Show, type ParentProps, type JSX } from "solid-js";
+import { children, splitProps, Show, type ParentProps, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
 import { PaperEffect } from "../PaperEffect";
@@ -89,7 +89,10 @@ export function PaperSelectorItem(props: ParentProps<PaperSelectorItemProps>) {
         "href",
     ]);
 
-    const { isSelected } = useSelectionItem(local.value, local.disabled);
+    const { isSelected } = useSelectionItem(
+        () => local.value,
+        () => local.disabled,
+    );
 
     const className = () =>
         [
@@ -101,15 +104,18 @@ export function PaperSelectorItem(props: ParentProps<PaperSelectorItemProps>) {
             .filter(Boolean)
             .join(" ");
 
+    const icon = children(() => local.icon);
+    const description = children(() => local.description);
+
     const content = () => (
         <>
-            <Show when={local.icon}>
-                {typeof local.icon === "string" ? (
+            <Show when={icon()}>
+                {typeof icon() === "string" ? (
                     <PaperIcon class={styles.itemIcon} zeroHeight>
-                        {local.icon}
+                        {icon()}
                     </PaperIcon>
                 ) : (
-                    <span class={styles.itemIcon}>{local.icon}</span>
+                    <span class={styles.itemIcon}>{icon()}</span>
                 )}
             </Show>
 
@@ -117,9 +123,9 @@ export function PaperSelectorItem(props: ParentProps<PaperSelectorItemProps>) {
                 <PaperText class={styles.itemTitle} size={3} weight={500}>
                     {local.children}
                 </PaperText>
-                <Show when={local.description}>
+                <Show when={description()}>
                     <PaperText class={styles.itemDescription} size={1} weight={600}>
-                        {local.description}
+                        {description()}
                     </PaperText>
                 </Show>
             </div>

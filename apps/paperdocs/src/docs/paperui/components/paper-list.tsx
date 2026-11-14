@@ -350,7 +350,8 @@ onClosed(value: string | number): void;`}
             <PaperText preset="subheader" as="h3" id="selection">Selection</PaperText>
             <PaperTextList>
                 <li>Each item is a <PaperCode>label</PaperCode> around a visually hidden native radio input (a checkbox with <PaperCode>multiple</PaperCode>) that shares the list's <PaperCode>name</PaperCode>. Selection, focus, and form semantics are the browser's.</li>
-                <li>A controlled list changes only when you change <PaperCode>value</PaperCode>. <PaperCode>onValueChange</PaperCode> reports the request.</li>
+                <li>A controlled list changes only when you change <PaperCode>value</PaperCode>. <PaperCode>onValueChange</PaperCode> reports the request, and a refused one leaves the inputs on the selected item.</li>
+                <li>With <PaperCode>buttons</PaperCode>, pressing the selected item calls <PaperCode>onValueChange</PaperCode> again with its value.</li>
                 <li>The selected item is marked with an accent bar. In a horizontal list the bar is along the bottom edge.</li>
             </PaperTextList>
 

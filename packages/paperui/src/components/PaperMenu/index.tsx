@@ -1,11 +1,12 @@
 import styles from "./index.module.css";
 import {
+    children,
     createContext,
     useContext,
+    createEffect,
     createSignal,
     splitProps,
     onCleanup,
-    onMount,
     Show,
     type ParentProps,
     type JSX,
@@ -27,7 +28,7 @@ import { resolveSpacing } from "../../utils/theme";
 const MenuLevelContext = createContext<number>(0);
 // true for a PaperPanel's navigation menu: its entries open the panel's
 // interface page in the phone layout
-const PanelNavContext = createContext<boolean>(false);
+const PanelNavContext = createContext<() => boolean>(() => false);
 
 export function useMenuLevel() {
     return useContext(MenuLevelContext) ?? 0;
@@ -66,8 +67,8 @@ export function PaperMenu(props: ParentProps<PaperMenuProps>) {
     const panel = usePaperPanel();
     // a sidebar directly in a PaperPanel; a tab strip or an embedded menu
     // is some other surface's navigation
-    const isPanelNav = Boolean(panel?.inPanel) && !isHorizontal() && !local.embedded;
-    const isCompact = () => isPanelNav && Boolean(panel?.compact?.());
+    const isPanelNav = () => Boolean(panel?.inPanel) && !isHorizontal() && !local.embedded;
+    const isCompact = () => isPanelNav() && Boolean(panel?.compact?.());
 
     const resolvedSpacing = () => {
         if (local.spacing === undefined) return undefined; // the stylesheet's default gap
@@ -154,7 +155,10 @@ export interface PaperMenuSectionProps extends Omit<JSX.HTMLAttributes<HTMLDivEl
     title: string | JSX.Element;
     icon?: JSX.Element | string;
     defaultOpen?: boolean;
+    /** controlled: whether it's open. Pair it with onOpenChange */
     open?: boolean;
+    /** a press on the header asks for the other state */
+    onOpenChange?: (open: boolean) => void;
     collapsible?: boolean;
 }
 
@@ -164,6 +168,7 @@ export function PaperMenuSection(props: ParentProps<PaperMenuSectionProps>) {
         "icon",
         "defaultOpen",
         "open",
+        "onOpenChange",
         "collapsible",
         "class",
         "classList",
@@ -176,9 +181,14 @@ export function PaperMenuSection(props: ParentProps<PaperMenuSectionProps>) {
 
     const isOpen = () => (local.open !== undefined ? local.open : internalOpen());
 
+    const icon = children(() => local.icon);
+    const title = children(() => local.title);
+
     const toggleOpen = () => {
         if (!isCollapsible()) return;
-        setInternalOpen(!isOpen());
+        const next = !isOpen();
+        if (local.open === undefined) setInternalOpen(next);
+        local.onOpenChange?.(next);
     };
 
     const currentLevel = useMenuLevel();
@@ -208,21 +218,21 @@ export function PaperMenuSection(props: ParentProps<PaperMenuSectionProps>) {
                 }}
             >
                 <div class={styles.sectionTitle}>
-                    <Show when={local.icon}>
-                        {typeof local.icon === "string" ? (
+                    <Show when={icon()}>
+                        {typeof icon() === "string" ? (
                             <PaperIcon class={styles.menuIcon} zeroHeight>
-                                {local.icon}
+                                {icon()}
                             </PaperIcon>
                         ) : (
-                            <span class={styles.menuIcon}>{local.icon}</span>
+                            <span class={styles.menuIcon}>{icon()}</span>
                         )}
                     </Show>
-                    {typeof local.title === "string" ? (
+                    {typeof title() === "string" ? (
                         <PaperText size={2} weight={700}>
-                            {local.title}
+                            {title()}
                         </PaperText>
                     ) : (
-                        local.title
+                        title()
                     )}
                 </div>
 
@@ -301,27 +311,36 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
         "onClick",
     ]);
 
-    const { isSelected, select } = useSelectionItem(local.value, local.disabled);
+    const { isSelected, select } = useSelectionItem(
+        () => local.value,
+        () => local.disabled,
+    );
     const contextLevel = useMenuLevel();
     const panel = usePaperPanel();
     const isPanelNav = useContext(PanelNavContext);
     let textRef: HTMLDivElement | undefined;
+    const icon = children(() => local.icon);
+    const description = children(() => local.description);
 
     // the phone layout's page bar names the open entry with its title and icon
-    // (on mount: the title is read from the rendered label)
-    onMount(() => {
-        if (!isPanelNav || !panel?.registerEntry) return;
-        const unregister = panel.registerEntry(local.value, {
+    // (after render: the title is read from the rendered label)
+    createEffect(() => {
+        const register = panel?.registerEntry;
+        if (!isPanelNav() || !register) return;
+        const unregister = register(local.value, {
             // the title is the text block's first element; the description follows
             title: () => textRef?.firstElementChild?.textContent?.trim() || String(local.value),
-            icon: typeof local.icon === "string" ? local.icon : undefined,
+            get icon() {
+                const glyph = icon();
+                return typeof glyph === "string" ? glyph : undefined;
+            },
         });
         onCleanup(unregister);
     });
 
     // tapping an entry opens its page, even the entry already selected
     const activate = () => {
-        if (local.disabled || !isPanelNav || !panel?.compact?.()) return;
+        if (local.disabled || !isPanelNav() || !panel?.compact?.()) return;
         panel.openPage?.();
     };
     const effectiveLevel = () => local.level ?? contextLevel;
@@ -331,7 +350,7 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
             styles.PaperMenuItem,
             // a phone-width panel's menu is a list of buttons: what an entry
             // opens covers the menu, so none stays highlighted
-            isSelected() && !(isPanelNav && panel?.compact?.()) ? styles.selected : "",
+            isSelected() && !(isPanelNav() && panel?.compact?.()) ? styles.selected : "",
             local.disabled ? styles.disabled : "",
             local.class,
         ]
@@ -345,13 +364,13 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
 
     const content = () => (
         <>
-            <Show when={local.icon}>
-                {typeof local.icon === "string" ? (
+            <Show when={icon()}>
+                {typeof icon() === "string" ? (
                     <PaperIcon class={styles.menuIcon} zeroHeight>
-                        {local.icon}
+                        {icon()}
                     </PaperIcon>
                 ) : (
-                    <span class={styles.menuIcon}>{local.icon}</span>
+                    <span class={styles.menuIcon}>{icon()}</span>
                 )}
             </Show>
 
@@ -359,9 +378,9 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
                 <PaperText class={styles.menuTitle} size={2} weight={500}>
                     {local.children}
                 </PaperText>
-                <Show when={local.description}>
+                <Show when={description()}>
                     <PaperText class={styles.menuDescription} size={1} weight={600}>
-                        {local.description}
+                        {description()}
                     </PaperText>
                 </Show>
             </div>

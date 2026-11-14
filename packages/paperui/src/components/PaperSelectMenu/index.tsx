@@ -2,6 +2,8 @@ import styles from "./index.module.css";
 import { MenuItem } from "../shared/MenuItem";
 import { PaperContextMenu } from "../PaperContextMenu";
 import {
+    createMemo,
+    children,
     splitProps,
     createSignal,
     createContext,
@@ -160,20 +162,23 @@ function SelectMenuInner(
     };
 
     const currentValue = () => selection.currentValue();
-    const selectedOption = () => {
+    // a memo: another option registering leaves the chosen one, and the
+    // trigger's copy of its label, as they are
+    const selectedOption = createMemo(() => {
         const current = currentValue();
         if (current === undefined || current === "") return undefined;
         return options().find((o) => o.value === current);
-    };
-    const selectedLabel = () => {
+    });
+    // resolved once per choice: the trigger's own copy of the label
+    const selectedLabel = children(() => {
         const registered = selectedOption();
         if (registered) return registered.label();
         const current = currentValue();
         return current === undefined || current === "" ? undefined : String(current);
-    };
+    });
     // the trigger mirrors the selected option's icon, so a maker logo or
     // glyph is visible without opening the menu
-    const selectedIcon = () => selectedOption()?.icon();
+    const selectedIcon = children(() => selectedOption()?.icon());
 
     const commitValue = (value: string | number) => {
         if (local.disabled) return;
@@ -184,6 +189,9 @@ function SelectMenuInner(
             input.value = String(value);
             input.dispatchEvent(new Event("input", { bubbles: true }));
             input.dispatchEvent(new Event("change", { bubbles: true }));
+            // what a form reads is the value held: a parent that kept
+            // another one leaves the field holding that one
+            input.value = String(currentValue() ?? "");
         }
     };
 
@@ -392,15 +400,23 @@ export function PaperSelectMenuItem(
 
     const menu = useSelectMenu();
     const ctx = useContextMenu();
-    const { isSelected } = useSelectionItem(local.value, local.disabled);
+    const { isSelected } = useSelectionItem(
+        () => local.value,
+        () => local.disabled,
+    );
 
+    // the option's own label and description, built once
+    const content = children(() => local.children);
+    const description = children(() => local.description);
+    // the trigger shows the chosen option's label and icon beside this one,
+    // so it reads the props for a copy of its own
     const label: Accessor<JSX.Element> = () => local.children as JSX.Element;
     const itemValue = () => String(local.value);
     const isHighlighted = () => ctx?.highlightedItem() === itemValue();
 
     // what a search reads: the label and description when they're text, the value, the keywords
     const haystack = () =>
-        [local.value, local.children, local.description, local.keywords]
+        [local.value, content(), description(), local.keywords]
             .filter((t) => typeof t === "string" || typeof t === "number")
             .join(" ")
             .toLowerCase();
@@ -428,7 +444,7 @@ export function PaperSelectMenuItem(
             data-disabled={local.disabled ? "true" : "false"}
             data-select-value={local.value}
             icon={local.icon}
-            description={local.description}
+            description={description()}
             disabled={local.disabled}
             highlighted={isHighlighted()}
             checked={isSelected()}
@@ -445,7 +461,7 @@ export function PaperSelectMenuItem(
                 }
             }}
         >
-            {local.children}
+            {content()}
         </MenuItem>
         </Show>
     );

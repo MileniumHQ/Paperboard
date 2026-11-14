@@ -1,5 +1,6 @@
 import styles from "./index.module.css";
 import {
+    children,
     createContext,
     useContext,
     splitProps,
@@ -167,9 +168,16 @@ export function PaperList(props: ParentProps<PaperListProps>) {
         handlePointerDown,
         getItemStyle: reorder.itemStyle,
         containerRef: () => containerRef,
-        onBeforeItemClose: local.onBeforeItemClose,
-        onItemClose: local.onItemClose,
-        onItemClosed: local.onItemClosed,
+        // getters: the handlers are read when used, so the list's latest ones run
+        get onBeforeItemClose() {
+            return local.onBeforeItemClose;
+        },
+        get onItemClose() {
+            return local.onItemClose;
+        },
+        get onItemClosed() {
+            return local.onItemClosed;
+        },
     };
 
     const className = () =>
@@ -309,8 +317,14 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
         "children",
     ]);
 
-    const { isSelected } = useSelectionItem(local.value, local.disabled);
+    const { isSelected } = useSelectionItem(
+        () => local.value,
+        () => local.disabled,
+    );
     const listCtx = usePaperListContext();
+    const icon = children(() => local.icon);
+    const description = children(() => local.description);
+    const actions = children(() => local.actions);
     const selectable = () => listCtx?.isSelectable() ?? true;
     const compact = () => listCtx?.isCompact() ?? false;
     const isDragging = () => listCtx?.isItemDragging(local.value) ?? false;
@@ -401,19 +415,20 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
                 <SelectionRadioInput
                     value={local.value}
                     disabled={local.disabled}
+                    reselect={listCtx?.isButtons() ?? false}
                 />
             </Show>
 
             <Show
                 when={local.loaderStatus}
                 fallback={
-                    <Show when={local.icon}>
-                        {typeof local.icon === "string" ? (
+                    <Show when={icon()}>
+                        {typeof icon() === "string" ? (
                             <PaperIcon class={styles.listIcon} zeroHeight>
-                                {local.icon}
+                                {icon()}
                             </PaperIcon>
                         ) : (
-                            <span class={styles.listIcon}>{local.icon}</span>
+                            <span class={styles.listIcon}>{icon()}</span>
                         )}
                     </Show>
                 }
@@ -441,19 +456,19 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
                         </PaperButton>
                     </Show>
                 </PaperText>
-                <Show when={local.description}>
+                <Show when={description()}>
                     <PaperText
                         class={styles.listDescription}
                         size={1}
                         weight={600}
                     >
-                        {local.description}
+                        {description()}
                     </PaperText>
                 </Show>
             </div>
 
-            <Show when={local.actions}>
-                <span class={styles.itemActions}>{local.actions}</span>
+            <Show when={actions()}>
+                <span class={styles.itemActions}>{actions()}</span>
             </Show>
         </Dynamic>
     );

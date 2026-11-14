@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { createContext, useContext, splitProps, onCleanup, onMount, Show, type ParentProps, type JSX } from "solid-js";
+import { children, createContext, useContext, splitProps, onCleanup, onMount, Show, type ParentProps, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import {
     SelectionProvider,
@@ -116,12 +116,17 @@ export function PaperRailItem(props: PaperRailItemProps) {
     ]);
 
     const { isSelected, select } = useSelectionItem(
-        local.value,
-        local.disabled,
+        () => local.value,
+        () => local.disabled,
     );
+    const icon = children(() => local.icon);
+    const label = children(() => local.label);
     const shouldShowLabel = () => local.showLabel ?? railCtx?.showLabels ?? false;
     // a text label names the item, unless the caller names it themselves
-    const textLabel = () => (typeof local.label === "string" ? local.label : undefined);
+    const textLabel = () => {
+        const text = label();
+        return typeof text === "string" ? text : undefined;
+    };
 
     const isDragging = () => railCtx?.reorder.isDragging(local.value) ?? false;
 
@@ -193,15 +198,15 @@ export function PaperRailItem(props: PaperRailItemProps) {
                 }
             }}
         >
-            {typeof local.icon === "string" ? (
+            {typeof icon() === "string" ? (
                 <PaperIcon aria-hidden="true" class={styles.railIcon} zeroHeight>
-                    {local.icon}
+                    {icon()}
                 </PaperIcon>
             ) : (
-                <span class={styles.railIcon}>{local.icon}</span>
+                <span class={styles.railIcon}>{icon()}</span>
             )}
-            <Show when={shouldShowLabel() && local.label}>
-                <span class={styles.railLabel}>{local.label}</span>
+            <Show when={shouldShowLabel() && label()}>
+                <span class={styles.railLabel}>{label()}</span>
             </Show>
         </div>
     );
@@ -225,7 +230,13 @@ export function PaperRailAction(props: PaperRailActionProps) {
         "title",
     ]);
 
+    const icon = children(() => local.icon);
+    const label = children(() => local.label);
     const shouldShowLabel = () => local.showLabel ?? railCtx?.showLabels ?? false;
+    const textLabel = () => {
+        const text = label();
+        return typeof text === "string" ? text : undefined;
+    };
 
     const className = () =>
         [
@@ -240,21 +251,21 @@ export function PaperRailAction(props: PaperRailActionProps) {
     return (
         <button
             type="button"
-            aria-label={typeof local.label === "string" ? local.label : undefined}
+            aria-label={textLabel()}
             {...rest}
             class={className()}
             classList={local.classList}
-            title={local.title ?? (typeof local.label === "string" ? local.label : undefined)}
+            title={local.title ?? textLabel()}
         >
-            {typeof local.icon === "string" ? (
+            {typeof icon() === "string" ? (
                 <PaperIcon aria-hidden="true" class={styles.railIcon} zeroHeight>
-                    {local.icon}
+                    {icon()}
                 </PaperIcon>
             ) : (
-                <span class={styles.railIcon}>{local.icon}</span>
+                <span class={styles.railIcon}>{icon()}</span>
             )}
-            <Show when={shouldShowLabel() && local.label}>
-                <span class={styles.railLabel}>{local.label}</span>
+            <Show when={shouldShowLabel() && label()}>
+                <span class={styles.railLabel}>{label()}</span>
             </Show>
         </button>
     );

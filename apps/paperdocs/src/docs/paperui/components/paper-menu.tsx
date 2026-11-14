@@ -242,7 +242,13 @@ export function Example() {
                         <td><PaperCode>open</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td>No default</td>
-                        <td>Forces the section open or closed. It takes priority over the header's folding and there is no change callback, so use <PaperCode>defaultOpen</PaperCode> unless you drive the state yourself.</td>
+                        <td>Controls whether the section is open: the header's folding only asks, through <PaperCode>onOpenChange</PaperCode>. Use <PaperCode>defaultOpen</PaperCode> unless you drive the state yourself.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>onOpenChange</PaperCode></td>
+                        <td><PaperCode>(open: boolean) =&gt; void</PaperCode></td>
+                        <td>No default</td>
+                        <td>Called with the state a press on the header asks for, controlled or not.</td>
                     </tr>
                 </tbody>
             </PaperTable>
