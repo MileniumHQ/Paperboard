@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { For, Show, splitProps, type JSX, type ParentProps } from "solid-js";
+import { For, Show, children, createMemo, splitProps, type JSX, type ParentProps } from "solid-js";
 import { PaperIcon } from "../../components/PaperIcon";
 import { PaperProgress } from "../../components/PaperProgress";
 import type { PaperRole } from "../../types";
@@ -49,6 +49,11 @@ export interface PaperWidgetProps extends Omit<JSX.HTMLAttributes<HTMLDivElement
 
 export function PaperWidget(props: ParentProps<PaperWidgetProps>) {
     const [local, rest] = splitProps(props, ["title", "icon", "detail", "action", "footer", "onPress", "pressLabel", "pressDisabled", "class", "classList", "children"]);
+    const title = children(() => local.title);
+    const icon = children(() => local.icon);
+    const detail = children(() => local.detail);
+    const action = children(() => local.action);
+    const footer = children(() => local.footer);
     return (
         <div {...rest} class={[styles.PaperWidget, local.class].filter(Boolean).join(" ")} classList={local.classList} data-pressable={local.onPress ? "" : undefined}>
             <Show when={local.onPress}>
@@ -62,27 +67,27 @@ export function PaperWidget(props: ParentProps<PaperWidgetProps>) {
                 />
             </Show>
             <div class={styles.layout}>
-                <Show when={local.title !== undefined || local.detail !== undefined || local.action}>
+                <Show when={title() !== undefined || detail() !== undefined || action()}>
                     <div class={styles.header}>
-                        <Show when={local.icon}>
-                            {typeof local.icon === "string" ? (
-                                <PaperIcon class={styles.headerIcon} aria-hidden="true">{local.icon}</PaperIcon>
+                        <Show when={icon()}>
+                            {typeof icon() === "string" ? (
+                                <PaperIcon class={styles.headerIcon} aria-hidden="true">{icon()}</PaperIcon>
                             ) : (
-                                local.icon
+                                icon()
                             )}
                         </Show>
-                        <span class={styles.title}>{local.title}</span>
-                        <Show when={local.detail !== undefined}>
-                            <span class={styles.detail}>{local.detail}</span>
+                        <span class={styles.title}>{title()}</span>
+                        <Show when={detail() !== undefined}>
+                            <span class={styles.detail}>{detail()}</span>
                         </Show>
-                        <Show when={local.action}>
-                            <span class={styles.headerAction}>{local.action}</span>
+                        <Show when={action()}>
+                            <span class={styles.headerAction}>{action()}</span>
                         </Show>
                     </div>
                 </Show>
                 <div class={styles.body}>{local.children}</div>
-                <Show when={local.footer}>
-                    <div class={styles.footer}>{local.footer}</div>
+                <Show when={footer()}>
+                    <div class={styles.footer}>{footer()}</div>
                 </Show>
             </div>
         </div>
@@ -109,11 +114,12 @@ export interface PaperWidgetStatProps extends JSX.HTMLAttributes<HTMLDivElement>
 /** The figure a widget is about: large, left-aligned, sized by the tile. */
 export function PaperWidgetStat(props: PaperWidgetStatProps) {
     const [local, rest] = splitProps(props, ["value", "caption", "tone", "meter", "class"]);
+    const caption = children(() => local.caption);
     return (
         <div {...rest} class={[styles.stat, local.class].filter(Boolean).join(" ")} data-tone={local.tone} style={toneStyle(local.tone)}>
             <span class={styles.statValue}>{local.value}</span>
-            <Show when={local.caption !== undefined}>
-                <span class={styles.statCaption}>{local.caption}</span>
+            <Show when={caption() !== undefined}>
+                <span class={styles.statCaption}>{caption()}</span>
             </Show>
             <Show when={local.meter}>
                 {(meter) => (
@@ -157,29 +163,45 @@ export interface PaperWidgetRowsProps extends Omit<JSX.HTMLAttributes<HTMLUListE
 
 /**
  * A list of rows: dot, label, detail. Rows that don't fit the tile are
- * left out whole, never cut in half.
+ * left out whole, never cut in half. A row is its id: a new rows array
+ * (a poll's) keeps the element of every id it still has and updates what
+ * it shows.
  */
 export function PaperWidgetRows(props: PaperWidgetRowsProps) {
     const [local, rest] = splitProps(props, ["rows", "class"]);
+    const byId = createMemo(() => {
+        const rows = new Map<string, PaperWidgetRow>();
+        for (const row of local.rows) {
+            if (rows.has(row.id)) throw new Error(`PaperWidgetRows: two rows have the id "${row.id}"`);
+            rows.set(row.id, row);
+        }
+        return rows;
+    });
+    const ids = createMemo(() => [...byId().keys()]);
     return (
         <ul {...rest} class={[styles.rows, local.class].filter(Boolean).join(" ")}>
-            <For each={local.rows}>
-                {(row) => {
+            <For each={ids()}>
+                {(id) => {
+                    // a removed id's row is disposed right after this update;
+                    // until then it keeps the last row it had
+                    const row = createMemo<PaperWidgetRow>((last) => byId().get(id) ?? last, byId().get(id)!);
+                    const label = children(() => row().label);
+                    const detail = children(() => row().detail);
                     const content = () => (
                         <>
-                            <Show when={row.tone}>
-                                <span class={styles.dot} data-tone={row.tone} style={toneStyle(row.tone)} aria-hidden="true" />
+                            <Show when={row().tone}>
+                                {(tone) => <span class={styles.dot} data-tone={tone()} style={toneStyle(tone())} aria-hidden="true" />}
                             </Show>
-                            <span class={styles.rowLabel}>{row.label}</span>
-                            <Show when={row.detail !== undefined}>
-                                <span class={styles.rowDetail}>{row.detail}</span>
+                            <span class={styles.rowLabel}>{label()}</span>
+                            <Show when={detail() !== undefined}>
+                                <span class={styles.rowDetail}>{detail()}</span>
                             </Show>
                         </>
                     );
                     return (
                         <li class={styles.row}>
-                            <Show when={row.onClick} fallback={<div class={styles.rowInner}>{content()}</div>}>
-                                <button type="button" class={styles.rowInner} aria-label={row.ariaLabel} onClick={() => row.onClick?.()}>
+                            <Show when={Boolean(row().onClick)} fallback={<div class={styles.rowInner}>{content()}</div>}>
+                                <button type="button" class={styles.rowInner} aria-label={row().ariaLabel} onClick={() => row().onClick?.()}>
                                     {content()}
                                 </button>
                             </Show>
@@ -209,6 +231,8 @@ export interface PaperWidgetMessageProps extends Omit<JSX.HTMLAttributes<HTMLDiv
 export function PaperWidgetMessage(props: ParentProps<PaperWidgetMessageProps>) {
     const [local, rest] = splitProps(props, ["title", "description", "tone", "hint", "class", "children"]);
     const alert = () => local.tone === "danger" || local.tone === "warning";
+    const description = children(() => local.description);
+    const actions = children(() => local.children);
     return (
         <div
             role={alert() ? "alert" : "status"}
@@ -219,11 +243,11 @@ export function PaperWidgetMessage(props: ParentProps<PaperWidgetMessageProps>) 
             style={toneStyle(local.tone)}
         >
             <span class={styles.messageTitle}>{local.title}</span>
-            <Show when={local.description !== undefined}>
-                <span class={styles.messageDescription}>{local.description}</span>
+            <Show when={description() !== undefined}>
+                <span class={styles.messageDescription}>{description()}</span>
             </Show>
-            <Show when={local.children}>
-                <div class={styles.messageActions}>{local.children}</div>
+            <Show when={actions()}>
+                <div class={styles.messageActions}>{actions()}</div>
             </Show>
         </div>
     );

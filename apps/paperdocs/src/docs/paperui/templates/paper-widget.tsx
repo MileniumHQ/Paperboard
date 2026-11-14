@@ -209,7 +209,7 @@ export function Widget() {
                         <td><PaperCode>id</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td>Required</td>
-                        <td>A stable identity for the row.</td>
+                        <td>The row's identity. A new <PaperCode>rows</PaperCode> array, such as each poll's, keeps the element of every id it still has and shows that row's new label, detail and tone. Two rows with one id throw.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>label</PaperCode></td>
