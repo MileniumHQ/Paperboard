@@ -121,8 +121,7 @@ const ref = (message: { id: string; channelId: string }): MessageRef => ({ id: m
 
 // ─── finding things for a type's fields ─────────────────────────────────────
 
-/** The bots that are connected now: a type's fields are the panel's, so they ask whichever bot can see the value. */
-/** The connected bots' clients: every bot's, or one bot's (none while it's offline). */
+/** The connected bots' clients: every bot's, or one bot's (none while it's offline). A type's fields are the panel's, so they ask whichever bot can see the value. */
 export type ConnectedClients = (bot?: string) => Client[];
 
 /** The servers the clients are in, once each, and whether there's more than one (so a choice names its server). */
@@ -2206,7 +2205,6 @@ export function botsBlocks(host: BotsBlocksHost): BlockSet {
     return { commands, values, events };
 }
 
-/** Bot Creator's panel-wide blocks: the types, the builders, and the bots themselves. */
 /** The sections the panel's and its bots' blocks sit in; registered with the types, before any bot's blocks. */
 const BLOCK_CATEGORIES = [
     { name: "Bots", icon: "smart_toy" },
@@ -2224,6 +2222,7 @@ const BLOCK_CATEGORIES = [
     { name: "Modals", icon: "dialogs" },
 ];
 
+/** Bot Creator's panel-wide blocks: the types, the builders, and the bots themselves. */
 export function panelBlocks(clients: ConnectedClients, bots: BotsBlocksHost): BlockSet {
     const own = botsBlocks(bots);
     return { categories: BLOCK_CATEGORIES, types: [...blockTypes(clients), ...botTypes(bots)], commands: own.commands, values: [...builderValues, ...own.values!], events: own.events };

@@ -69,7 +69,7 @@
             {
                 "light": "./store/6-light.png",
                 "dark": "./store/6-dark.png",
-                "alt": "Polls, files and scheduled events as Actions blocks in a bot's project"
+                "alt": "Polls, files and scheduled events as Blocks in a bot's project"
             }
         ],
         "services": [
