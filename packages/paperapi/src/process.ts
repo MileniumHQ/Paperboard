@@ -33,6 +33,14 @@ export interface ProcessStartOptions {
     important?: boolean;
 }
 
+// a process stream's text, empty chunks dropped; returns its teardown
+function onText(stream: "process-data" | "process-stdout" | "process-stderr", id: string, callback: (data: string) => void): () => void {
+    return on(`${stream}:${id}`, (event: unknown, data: any) => {
+        const text = unpackIpcPayload<string>(event, data) as string;
+        if (text) callback(text);
+    });
+}
+
 // supervised background processes
 export const processApi = {
     start: async (options: ProcessStartOptions): Promise<{ success: boolean }> =>
@@ -64,28 +72,11 @@ export const processApi = {
     attach: async (id: string): Promise<{ success: boolean }> =>
         invoke<{ success: boolean }>("process-attach", { id }),
 
-    onData: (id: string, callback: (data: string) => void): (() => void) => {
-        // attach + track are handled by on(); the UNSUBSCRIBE must too —
-        // every subscription returns its teardown or it is a leak
-        return on(`process-data:${id}`, (event: unknown, data: any) => {
-            const text = unpackIpcPayload<string>(event, data) as string;
-            if (text) callback(text);
-        });
-    },
+    onData: (id: string, callback: (data: string) => void): (() => void) => onText("process-data", id, callback),
 
-    onStdout: (id: string, callback: (data: string) => void): (() => void) => {
-        return on(`process-stdout:${id}`, (event: unknown, data: any) => {
-            const text = unpackIpcPayload<string>(event, data) as string;
-            if (text) callback(text);
-        });
-    },
+    onStdout: (id: string, callback: (data: string) => void): (() => void) => onText("process-stdout", id, callback),
 
-    onStderr: (id: string, callback: (data: string) => void): (() => void) => {
-        return on(`process-stderr:${id}`, (event: unknown, data: any) => {
-            const text = unpackIpcPayload<string>(event, data) as string;
-            if (text) callback(text);
-        });
-    },
+    onStderr: (id: string, callback: (data: string) => void): (() => void) => onText("process-stderr", id, callback),
 
     onExit: (id: string, callback: (exitCode?: number) => void): (() => void) => {
         return on(`process-exit:${id}`, (event: unknown, payload: any) => {
@@ -97,29 +88,14 @@ export const processApi = {
     run: async (options: ProcessRunOptions, timeoutMs: number | null = 30_000): Promise<ProcessRunResult> => {
         const id = newClientId("proc");
         const unsubscribers: (() => void)[] = [];
+        if (options.onData) unsubscribers.push(onText("process-data", id, options.onData));
+        if (options.onStdout) unsubscribers.push(onText("process-stdout", id, options.onStdout));
+        if (options.onStderr) unsubscribers.push(onText("process-stderr", id, options.onStderr));
 
-        if (options.onData) {
-            const off = on(`process-data:${id}`, (event: unknown, data: any) => {
-                const text = unpackIpcPayload<string>(event, data) as string;
-                if (text) options.onData!(text);
-            });
-            if (off) unsubscribers.push(off);
-        }
-        if (options.onStdout) {
-            const off = on(`process-stdout:${id}`, (event: unknown, data: any) => {
-                const text = unpackIpcPayload<string>(event, data) as string;
-                if (text) options.onStdout!(text);
-            });
-            if (off) unsubscribers.push(off);
-        }
-        if (options.onStderr) {
-            const off = on(`process-stderr:${id}`, (event: unknown, data: any) => {
-                const text = unpackIpcPayload<string>(event, data) as string;
-                if (text) options.onStderr!(text);
-            });
-            if (off) unsubscribers.push(off);
-        }
-
+        // the deadline starts once the daemon started the child: a start it
+        // refused has nothing to time out, and nothing to kill
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        let startDeadline = () => {};
         const exitPromise = new Promise<ProcessRunResult>((resolve, reject) => {
             // bounded: a timeout must kill the child it started, not quietly
             // leave it running while reporting a synthetic exit code; a kill
@@ -129,23 +105,25 @@ export const processApi = {
             // can report its exit before the kill's answer arrives, and the
             // code it dies with (143 for SIGTERM) is not the command's verdict
             let timedOut = false;
-            const timer =
-                timeoutMs === null
-                    ? null
-                    : setTimeout(() => {
-                          timedOut = true;
-                          send("process-kill", { id, signal: "SIGTERM" }).then(
-                              () => resolve({ exitCode: -1, code: "RUN_TIMEOUT" }),
-                              (err) =>
-                                  reject(
-                                      new Error(
-                                          `"${options.command}" timed out after ${timeoutMs} ms and could not be stopped: ${err instanceof Error ? err.message : String(err)}`,
-                                      ),
-                                  ),
-                          );
-                      }, timeoutMs);
+            let exited = false;
+            startDeadline = () => {
+                if (timeoutMs === null || exited) return;
+                timer = setTimeout(() => {
+                    timedOut = true;
+                    send("process-kill", { id, signal: "SIGTERM" }).then(
+                        () => resolve({ exitCode: -1, code: "RUN_TIMEOUT" }),
+                        (err) =>
+                            reject(
+                                new Error(
+                                    `"${options.command}" timed out after ${timeoutMs} ms and could not be stopped: ${err instanceof Error ? err.message : String(err)}`,
+                                ),
+                            ),
+                    );
+                }, timeoutMs);
+            };
 
-            const off = on(`process-exit:${id}`, (_event: unknown, payload: any) => {
+            unsubscribers.push(on(`process-exit:${id}`, (_event: unknown, payload: any) => {
+                exited = true;
                 if (timer !== null) clearTimeout(timer);
                 if (timedOut) {
                     resolve({ exitCode: -1, code: "RUN_TIMEOUT" });
@@ -154,8 +132,7 @@ export const processApi = {
                 const raw = payload !== undefined ? payload : _event;
                 const code = typeof raw === "number" ? raw : raw?.exitCode ?? 0;
                 resolve({ exitCode: code });
-            });
-            if (off) unsubscribers.push(off);
+            }));
         });
 
         try {
@@ -166,9 +143,10 @@ export const processApi = {
                 cwd: options.cwd,
                 env: options.env,
             });
-
+            startDeadline();
             return await exitPromise;
         } finally {
+            if (timer !== null) clearTimeout(timer);
             for (const off of unsubscribers) off();
         }
     },
