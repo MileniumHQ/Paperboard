@@ -128,7 +128,14 @@ async function start(): Promise<TestDaemon> {
         throw new Error(`PAPERBOARD_DIR must be the throwaway dir test/hermetic.ts made, not ${dataDir}`);
     }
     const work = fs.mkdtempSync(path.join(os.tmpdir(), "terminal-crane-"));
-    const binary = buildCrane(work);
+    let binary: string;
+    try {
+        binary = buildCrane(work);
+    } catch (err) {
+        // nothing has started that the teardown would stop; the build is all there is to remove
+        fs.rmSync(work, { recursive: true, force: true });
+        throw err;
+    }
     const home = path.join(work, "home");
     fs.mkdirSync(home);
     // the daemon and every process it starts reach no network, and its

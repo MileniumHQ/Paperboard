@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { clearWorkloads } from "./helpers/crane";
-import { openPage, servePanel, type Page } from "./helpers/browser";
+import { panelBrowser, servePanel, type Page } from "./helpers/browser";
 import { panelFiles, startService, stopServices } from "./helpers/service";
 
 setDefaultTimeout(90_000);
+
+const browser = panelBrowser();
 
 afterEach(async () => {
     await stopServices();
@@ -21,7 +23,7 @@ async function opened(): Promise<{ page: Page; stop: () => Promise<void> }> {
     await panelFiles({ "tabs.json": TABS });
     await startService();
     const served = await servePanel();
-    const page = await openPage(served.url);
+    const page = await browser.open(served.url);
     await page.waitFor(`document.querySelectorAll(".xterm").length === 1 && document.body.innerText.includes("$")`, "the first shell");
     return {
         page,

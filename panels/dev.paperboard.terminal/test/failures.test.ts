@@ -2,11 +2,13 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { clearWorkloads, testDaemon } from "./helpers/crane";
-import { openPage, servePanel, type Page } from "./helpers/browser";
+import { panelBrowser, servePanel, type Page } from "./helpers/browser";
 import { call, panelFiles, runBlock, startService, stopServices } from "./helpers/service";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
+
+const browser = panelBrowser();
 
 afterEach(async () => {
     await stopServices();
@@ -51,7 +53,7 @@ describe("failures are shown", () => {
         await panelFiles({ "tabs.json": TABS });
         const service = await startService();
         const served = await servePanel();
-        const page = await openPage(served.url);
+        const page = await browser.open(served.url);
         try {
             // the active tab's shell could not start: its screen says why, never blank
             await page.waitFor(screenShows(1, `Could not open this terminal: Request failed: ${DAEMON_REASON}`), "the refused tab to say why");
@@ -98,6 +100,25 @@ describe("failures are shown", () => {
             await service.crash();
             await page.click('button[aria-label="New Tab"]');
             await page.waitFor(alertShows("Tab not opened", "create-tab"), "the refused new tab");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+    test("in the panel, tabs that couldn't be read are said, and no tab opens over them", async () => {
+        const broken = '{"tabs": [{"id": "tab1", "label": "Mine"';
+        const dir = await panelFiles({ "tabs.json": broken });
+        await startService();
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.waitFor(`document.body.innerText.includes("Your tabs couldn't be read")`, "the unreadable tabs to be said");
+            const shown = await page.evaluate<string>("document.body.innerText");
+            expect(shown).toContain("tabs.json");
+            expect(shown).not.toContain("Try again");
+            expect(await page.evaluate<number>(`document.querySelectorAll(".xterm").length`)).toBe(0);
+            expect(fs.readFileSync(path.join(dir, "tabs.json"), "utf8")).toBe(broken);
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

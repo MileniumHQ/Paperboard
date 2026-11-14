@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { clearWorkloads } from "./helpers/crane";
-import { openPage, servePanel, type Page } from "./helpers/browser";
+import { panelBrowser, servePanel, type Page } from "./helpers/browser";
 import { panelFiles, serviceState, startService, stopServices } from "./helpers/service";
 
 setDefaultTimeout(90_000);
+
+const browser = panelBrowser();
 
 afterEach(async () => {
     await stopServices();
@@ -22,13 +24,13 @@ const keyboardScreen = `(() => {
     return shown.indexOf(document.activeElement?.closest(".xterm"));
 })()`;
 // the calls the page made to the service, by name
-const callsTo = (page: Page, name: string) => page.frames.filter((f) => f.startsWith(">") && f.includes(`"command.call-${name}"`)).length;
+const callsTo = (page: Page, name: string) => page.sentFrames.filter((f) => f.includes(`"command.call-${name}"`)).length;
 
 async function opened(tabs: unknown): Promise<{ page: Page; stop: () => Promise<void> }> {
     await panelFiles({ "tabs.json": tabs });
     await startService();
     const served = await servePanel();
-    const page = await openPage(served.url);
+    const page = await browser.open(served.url);
     await page.waitFor(`document.querySelectorAll(".xterm").length >= 1 && document.body.innerText.includes("$")`, "the first shell");
     return {
         page,

@@ -1,10 +1,10 @@
-// Terminal's blocks (Actions API v2), used the way the Blocks panel uses
-// them: through the real daemon, from the service as the daemon runs it.
+// Terminal's blocks, used the way the Blocks panel uses them: through the
+// real daemon, from the service as the daemon runs it.
 import { afterAll, afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { blocksApi } from "@mileniumhq/paperapi";
+import { blocksApi, getTransport } from "@mileniumhq/paperapi";
 import { clearWorkloads, testDaemon } from "./helpers/crane";
 import { PANEL_ID, call, panelFiles, serviceState, startService, stopServices } from "./helpers/service";
 import { within } from "./helpers/wait";
@@ -48,8 +48,8 @@ async function readUntil<T>(value: string, inputs: Record<string, unknown>, acce
     }
 }
 
-// subscriptions reach the daemon on their own; let them land before acting
-const settle = () => new Promise((resolve) => setTimeout(resolve, 300));
+// an event fired before the daemon took its subscription is never heard
+const settle = () => getTransport().subscriptionsSettled();
 
 describe("the Terminal's blocks", () => {
     test("registers the Tab and Saved Command types, the reads as values, and no page plumbing", async () => {
