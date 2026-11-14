@@ -1,4 +1,5 @@
 import {
+    batch,
     createEffect,
     createSignal,
     For,
@@ -266,10 +267,13 @@ export default function MapView() {
         }
     };
 
+    // one view change is one draw: scale and offsets are set together
     const centerOnWorld = (x: number, z: number) => {
         const { width, height } = sizeOf();
-        setOffsetX(width / 2 - x * scale());
-        setOffsetY(height / 2 - z * scale());
+        batch(() => {
+            setOffsetX(width / 2 - x * scale());
+            setOffsetY(height / 2 - z * scale());
+        });
     };
 
     // world coordinates at the center of the viewport (screen -> world is
@@ -296,8 +300,10 @@ export default function MapView() {
     const fitTerrain = (terrain: MapDimensionRegions["terrain"]) => {
         const { width, height } = sizeOf();
         const fit = Math.min(width / (terrain.maxX - terrain.minX), height / (terrain.maxZ - terrain.minZ)) * TERRAIN_FILL;
-        setScale(Math.max(MIN_SCALE, Math.min(MAX_SCALE, fit)));
-        centerOnWorld((terrain.minX + terrain.maxX) / 2, (terrain.minZ + terrain.maxZ) / 2);
+        batch(() => {
+            setScale(Math.max(MIN_SCALE, Math.min(MAX_SCALE, fit)));
+            centerOnWorld((terrain.minX + terrain.maxX) / 2, (terrain.minZ + terrain.maxZ) / 2);
+        });
     };
 
     // switching dimension fits that dimension's terrain, so the Nether/End
@@ -375,9 +381,11 @@ export default function MapView() {
             const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, next));
             const worldX = (mouseX - offsetX()) / scale();
             const worldY = (mouseY - offsetY()) / scale();
-            setScale(clamped);
-            setOffsetX(mouseX - worldX * clamped);
-            setOffsetY(mouseY - worldY * clamped);
+            batch(() => {
+                setScale(clamped);
+                setOffsetX(mouseX - worldX * clamped);
+                setOffsetY(mouseY - worldY * clamped);
+            });
         };
 
         // the two fingers' midpoint (relative to the map) and their distance
@@ -407,13 +415,17 @@ export default function MapView() {
                 const now = pinchOf();
                 if (!start || !now || start.distance === 0) return;
                 // the fingers' midpoint pans, their spread zooms around it
-                setOffsetX((v) => v + (now.x - start.x));
-                setOffsetY((v) => v + (now.y - start.y));
-                zoomAt(now.x, now.y, scale() * (now.distance / start.distance));
+                batch(() => {
+                    setOffsetX((v) => v + (now.x - start.x));
+                    setOffsetY((v) => v + (now.y - start.y));
+                    zoomAt(now.x, now.y, scale() * (now.distance / start.distance));
+                });
                 return;
             }
-            setOffsetX((v) => v + (e.clientX - before.x));
-            setOffsetY((v) => v + (e.clientY - before.y));
+            batch(() => {
+                setOffsetX((v) => v + (e.clientX - before.x));
+                setOffsetY((v) => v + (e.clientY - before.y));
+            });
             touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
         };
         const onPointerUp = (e: PointerEvent) => {
