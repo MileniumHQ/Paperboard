@@ -23,9 +23,9 @@ import {
 import CanvasPreview from "./CanvasPreview";
 import { DeleteProjectModal, RenameProjectModal } from "./ProjectDialogs";
 import { editedText, type ProjectsState } from "./state";
+import { errorMessage } from "../lib/failure";
 import type { ProjectSummary } from "../lib/projects";
 
-const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (project: ProjectSummary) => void }) {
     const [failure, setFailure] = createSignal<{ title: string; text: string } | null>(null);
@@ -37,7 +37,7 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
         try {
             await work();
         } catch (err) {
-            setFailure({ title: failed, text: message(err) });
+            setFailure({ title: failed, text: errorMessage(err) });
         } finally {
             setWorking(false);
         }
@@ -48,7 +48,7 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
     // a switch flips on its own, never waiting on another change, and moves once the service says so
     const setEnabled = (id: string, enabled: boolean) =>
         props.projects.setEnabled(id, enabled).catch((err) =>
-            setFailure({ title: enabled ? "Flows not turned on" : "Flows not turned off", text: message(err) }));
+            setFailure({ title: enabled ? "Flows not turned on" : "Flows not turned off", text: errorMessage(err) }));
 
     const menu = useContextMenuState("below-right");
     const [menuFor, setMenuFor] = createSignal<ProjectSummary | null>(null);

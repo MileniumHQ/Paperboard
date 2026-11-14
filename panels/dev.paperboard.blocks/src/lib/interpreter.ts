@@ -2,6 +2,7 @@
 // does what they say. Blocks from the registry run in the panel that owns
 // them, through `host`; built-in blocks run here. Nothing is generated or
 // evaluated as code. Every failure names the block it happened on.
+import { errorMessage } from "./failure";
 import { base64, formatTime, isPrime, median, modes, position, regex, standardDeviation, timePart, unitMs, web, type WebAnswer } from "./library";
 import { BUILTIN, parseChoiceBlockType, parseEntry, parsePropertyBlockType, parseRegistryBlockType } from "./names";
 
@@ -146,7 +147,7 @@ async function chain(run: Run, first: SavedBlock | undefined): Promise<void> {
 
 function fail(block: SavedBlock, err: unknown): never {
     if (err instanceof BlockError || err instanceof Break || err instanceof Continue || err instanceof Stop || err instanceof Return) throw err;
-    throw new BlockError(err instanceof Error ? err.message : String(err), block.id);
+    throw new BlockError(errorMessage(err), block.id);
 }
 
 function field(block: SavedBlock, name: string): unknown {
@@ -276,7 +277,7 @@ async function gatherInputs(run: Run, block: SavedBlock, skip: string[] = []): P
         try {
             inputs[key] = JSON.parse(String(v));
         } catch (err) {
-            throw new BlockError(`The choice for "${key}" can't be read (${err instanceof Error ? err.message : String(err)}): ${String(v)}`, block.id);
+            throw new BlockError(`The choice for "${key}" can't be read (${errorMessage(err)}): ${String(v)}`, block.id);
         }
     }
     for (const key of Object.keys(block.inputs ?? {})) {
@@ -442,7 +443,7 @@ async function statementOf(run: Run, block: SavedBlock): Promise<void> {
             } catch (err) {
                 // stopping, and leaving a loop, a function or the flow, aren't failures to handle
                 if (err instanceof Break || err instanceof Continue || err instanceof Stop || err instanceof Return || run.host.signal.aborted) throw err;
-                run.errors.push(err instanceof Error ? err.message : String(err));
+                run.errors.push(errorMessage(err));
                 try {
                     await chain(run, block.inputs?.CATCH?.block);
                 } finally {
@@ -691,7 +692,7 @@ async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
             try {
                 return JSON.parse(t);
             } catch (err) {
-                throw new BlockError(`That isn't JSON: ${err instanceof Error ? err.message : String(err)}`, block.id);
+                throw new BlockError(`That isn't JSON: ${errorMessage(err)}`, block.id);
             }
         }
         case BUILTIN.jsonText:
@@ -809,7 +810,7 @@ async function evaluateOf(run: Run, block: SavedBlock): Promise<unknown> {
         try {
             return JSON.parse(String(choice));
         } catch (err) {
-            throw new BlockError(`The choice can't be read (${err instanceof Error ? err.message : String(err)}): ${String(choice)}`, block.id);
+            throw new BlockError(`The choice can't be read (${errorMessage(err)}): ${String(choice)}`, block.id);
         }
     }
     const property = parsePropertyBlockType(block.type);

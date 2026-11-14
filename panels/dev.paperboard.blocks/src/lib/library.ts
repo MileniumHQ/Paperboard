@@ -2,6 +2,7 @@
 // requests, time, positions in lists and text. Pure functions the
 // interpreter calls; each throws a plain Error the interpreter pins on the
 // block that asked.
+import { errorMessage } from "./failure";
 
 /** The longest a web request may take, in milliseconds. */
 export const WEB_TIMEOUT_MS = 30_000;
@@ -57,7 +58,7 @@ export async function web(method: "GET" | "POST", url: string, body: unknown, an
     const failed = (err: unknown) => {
         if (signal.aborted) return new Error("The run was stopped");
         if (timeout.aborted) return new Error(`${url} didn't answer within ${WEB_TIMEOUT_MS / 1000} seconds`);
-        return new Error(`${method} ${url} failed: ${err instanceof Error ? err.message : String(err)}`);
+        return new Error(`${method} ${url} failed: ${errorMessage(err)}`);
     };
     let response: Response;
     let text: string | null = "";
@@ -78,7 +79,7 @@ export async function web(method: "GET" | "POST", url: string, body: unknown, an
     try {
         return JSON.parse(text);
     } catch (err) {
-        throw new Error(`${url} didn't answer with JSON (${err instanceof Error ? err.message : String(err)})`);
+        throw new Error(`${url} didn't answer with JSON (${errorMessage(err)})`);
     }
 }
 
@@ -194,7 +195,7 @@ export function regex(pattern: string): RegExp {
     try {
         return new RegExp(pattern);
     } catch (err) {
-        throw new Error(`"${pattern}" isn't a pattern: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(`"${pattern}" isn't a pattern: ${errorMessage(err)}`);
     }
 }
 

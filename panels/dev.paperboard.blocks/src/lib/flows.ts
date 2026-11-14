@@ -2,7 +2,7 @@
 // checked here, so a broken file is refused with its reason, never half-run.
 import type { SavedFlows } from "../panel";
 
-const isRecord = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
+export const isRecord = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
 
 export function readFlows(raw: unknown): SavedFlows {
     if (!isRecord(raw)) throw new Error("The saved flows are not an object");

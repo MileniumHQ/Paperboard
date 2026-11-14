@@ -2,9 +2,9 @@
 // editor. Each says what failed, in place, instead of closing on an error.
 import { createEffect, createMemo, createSignal, on, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperInput, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { errorMessage } from "../lib/failure";
 import { MAX_PROJECT_NAME } from "../lib/projects";
 
-const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 /** The project's name in the editor's top bar, renamed in place: Enter or
  * leaving the field saves it, Escape puts it back. A name the service
@@ -32,7 +32,7 @@ export function ProjectNameField(props: {
             await props.onRename(name);
         } catch (err) {
             setDraft(props.name);
-            props.onFailed(message(err));
+            props.onFailed(errorMessage(err));
         }
     };
     return (
@@ -91,7 +91,7 @@ export function RenameProjectModal(props: {
             await props.onRename(project.id, name());
             props.onClose();
         } catch (err) {
-            setError(message(err));
+            setError(errorMessage(err));
         } finally {
             setBusy(false);
         }
@@ -151,7 +151,7 @@ export function DeleteProjectModal(props: {
             await props.onDelete(project.id);
             props.onClose();
         } catch (err) {
-            setError(message(err));
+            setError(errorMessage(err));
         } finally {
             setBusy(false);
         }

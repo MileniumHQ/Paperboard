@@ -7,6 +7,7 @@
 // choice is gone.
 import * as Blockly from "blockly";
 import type { BlockChoice } from "@mileniumhq/paperapi";
+import { errorMessage } from "./failure";
 
 export const CHOICES_FIELD = "pb_field_choices";
 
@@ -39,7 +40,7 @@ function labelOf(value: string): string {
     try {
         parsed = JSON.parse(value);
     } catch (err) {
-        throw new Error(`The saved choice ${value} can't be read: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(`The saved choice ${value} can't be read: ${errorMessage(err)}`);
     }
     return typeof parsed === "string" ? parsed : String(parsed);
 }
@@ -134,7 +135,7 @@ class ChoicesField extends Blockly.FieldDropdown {
                 super.showEditor_(e);
             },
             (err: unknown) => {
-                backend?.report(`The choices for this dropdown couldn't be loaded: ${err instanceof Error ? err.message : String(err)}`);
+                backend?.report(`The choices for this dropdown couldn't be loaded: ${errorMessage(err)}`);
                 super.showEditor_(e);
             },
         );

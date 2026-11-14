@@ -5,6 +5,7 @@ import { batch, createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { bridge } from "../bridge";
 import { SERVICE_CALLS, type PanelState } from "../panel";
+import { errorMessage } from "../lib/failure";
 import type { ProjectSummary } from "../lib/projects";
 
 export type ProjectsState = ReturnType<typeof createProjects>;
@@ -32,7 +33,7 @@ export function createProjects() {
             apply(await bridge.refreshState());
             setReady(true);
         } catch (err) {
-            setLoadError(err instanceof Error ? err.message : String(err));
+            setLoadError(errorMessage(err));
         }
     };
     void load();

@@ -12,6 +12,7 @@ import {
 import { backupApi, fileApi, type BackupRecord, type BackupStatus } from "@mileniumhq/paperapi";
 import { PANEL_ID, type SavedFlows } from "./panel";
 import type { Notice } from "./bridge";
+import { errorMessage } from "./lib/failure";
 import { flowFileText, MAX_FLOW_FILE_BYTES, parseFlowFile } from "./lib/flowFile";
 
 const FLOW_FILE_FILTERS = [{ name: "Flow files", extensions: ["json"] }];
@@ -30,7 +31,6 @@ const addedText = (file: SavedFlows) => counted(file.workspace.blocks?.blocks.le
 const fileName = (name: string) => name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "").trim() || "Flows";
 
 const dateText = (iso: string) => new Date(iso).toLocaleString();
-const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 // The File and Backup menus' work: a
 // project's flows out to a file and back in, and backups of everything
@@ -60,7 +60,7 @@ export function createFileActions(props: {
             const done = await work();
             if (done) props.onNotice({ kind: "done", title: titles.done, text: done });
         } catch (err) {
-            props.onNotice({ kind: "failed", title: titles.failed, text: message(err) });
+            props.onNotice({ kind: "failed", title: titles.failed, text: errorMessage(err) });
         } finally {
             setBusy(false);
         }
@@ -75,12 +75,12 @@ export function createFileActions(props: {
             done = await work();
         } catch (err) {
             await fileApi.delete(path, PANEL_ID).catch((why: unknown) => {
-                throw new Error(`${message(err)} The temporary file ${path} wasn't removed either: ${message(why)}`);
+                throw new Error(`${errorMessage(err)} The temporary file ${path} wasn't removed either: ${errorMessage(why)}`);
             });
             throw err;
         }
         await fileApi.delete(path, PANEL_ID).catch((why: unknown) => {
-            throw new Error(`That much worked, but the temporary file ${path} wasn't removed: ${message(why)}`);
+            throw new Error(`That much worked, but the temporary file ${path} wasn't removed: ${errorMessage(why)}`);
         });
         return done;
     };
@@ -142,7 +142,7 @@ export function createFileActions(props: {
             setBackups(list);
             setSelected(list[0]?.id ?? "");
         } catch (err) {
-            setLoadError({ title: "Backups not listed", text: message(err) });
+            setLoadError({ title: "Backups not listed", text: errorMessage(err) });
         }
     };
 
@@ -152,7 +152,7 @@ export function createFileActions(props: {
         try {
             if (!(await ensureLocation())) return;
         } catch (err) {
-            props.onNotice({ kind: "failed", title: "Backups not opened", text: message(err) });
+            props.onNotice({ kind: "failed", title: "Backups not opened", text: errorMessage(err) });
             return;
         }
         setLoadOpen(true);
@@ -163,7 +163,7 @@ export function createFileActions(props: {
         try {
             if ((await backupApi.chooseLocation(PANEL_ID)).status === "chosen") void loadBackups();
         } catch (err) {
-            setLoadError({ title: "Backup location not changed", text: message(err) });
+            setLoadError({ title: "Backup location not changed", text: errorMessage(err) });
         }
     };
 
@@ -175,7 +175,7 @@ export function createFileActions(props: {
         try {
             await backupApi.restore(PANEL_ID, record.id);
         } catch (err) {
-            setLoadError({ title: "Backup not loaded", text: message(err) });
+            setLoadError({ title: "Backup not loaded", text: errorMessage(err) });
             setRestoring(false);
             return;
         }
@@ -185,7 +185,7 @@ export function createFileActions(props: {
             await props.reload();
             props.onNotice({ kind: "done", title: "Backup loaded", text: `Loaded the backup from ${dateText(record.createdAt)}.` });
         } catch (err) {
-            props.onNotice({ kind: "failed", title: "Backup not shown", text: `The backup was loaded, but the canvas could not show it: ${message(err)}` });
+            props.onNotice({ kind: "failed", title: "Backup not shown", text: `The backup was loaded, but the canvas could not show it: ${errorMessage(err)}` });
         }
     };
 
