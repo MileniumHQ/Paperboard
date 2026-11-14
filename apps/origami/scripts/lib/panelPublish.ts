@@ -16,9 +16,6 @@
 // Unlisting takes a panel off the store (out of `panels:index`) and leaves
 // its record and archive: installs that have it keep it, and stop getting
 // updates. Publishing it again lists it again.
-import { writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
 import {
     iconKey,
@@ -37,7 +34,7 @@ import {
     STORE_MAX_SCREENSHOT_BYTES,
     type StoreListing,
 } from "../../../../packages/paperapi/src/storeListing";
-import { kvGetArgs, kvListArgs, kvPutArgs, ORIGAMI_DIR, runCommand, type CommandRunner } from "./wrangler";
+import { kvGetArgs, kvListArgs, kvPut, ORIGAMI_DIR, runCommand, withTempFile, type CommandRunner } from "./wrangler";
 
 export const PANELS_BUCKET = "paperboard-boards";
 export const MAX_ARCHIVE_BYTES = 64 * 1024 * 1024;
@@ -113,7 +110,7 @@ export function createWranglerStorage(run: CommandRunner = runCommand): PanelSto
             }
         },
         async putJson(key: string, value: unknown): Promise<void> {
-            await run("bunx", kvPutArgs(key, JSON.stringify(value)), ORIGAMI_DIR);
+            await kvPut(run, key, JSON.stringify(value));
         },
         async putObject(
             key: string,
@@ -121,16 +118,9 @@ export function createWranglerStorage(run: CommandRunner = runCommand): PanelSto
             contentType: string,
             cacheControl?: string,
         ): Promise<void> {
-            const tmp = path.join(
-                tmpdir(),
-                `panel-publish-${process.pid}-${Math.random().toString(36).slice(2)}`,
+            await withTempFile(bytes, (file) =>
+                run("bunx", r2PutArgs(key, file, contentType, cacheControl), ORIGAMI_DIR),
             );
-            writeFileSync(tmp, bytes);
-            try {
-                await run("bunx", r2PutArgs(key, tmp, contentType, cacheControl), ORIGAMI_DIR);
-            } finally {
-                rmSync(tmp, { force: true });
-            }
         },
     };
 }

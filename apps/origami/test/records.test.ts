@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { putRecord, signRecord } from "../scripts/lib/kv";
 import type { CommandRunner } from "../scripts/lib/wrangler";
 import type { PackageRecord } from "../scripts/lib/records";
@@ -10,12 +11,16 @@ const keys = generateKeyPairSync("ed25519");
 const PUBLIC = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const SHA = "ab".repeat(32);
 
-function recorder(): { run: CommandRunner; spawned: string[][] } {
+function recorder(): { run: CommandRunner; spawned: string[][]; values: string[] } {
     const spawned: string[][] = [];
+    const values: string[] = [];
     return {
         spawned,
+        values,
         run: async (command, args) => {
             spawned.push([command, ...args]);
+            const file = args[args.indexOf("--path") + 1];
+            if (args.includes("--path") && file) values.push(readFileSync(file, "utf8"));
             return { stdout: "", stderr: "" };
         },
     };
@@ -46,12 +51,12 @@ describe("package records are valid and signed, recipe included", () => {
     });
 
     test("every platform is signed over name, version, platform, sha256 and the recipe digest", async () => {
-        const { run, spawned } = recorder();
+        const { run, spawned, values } = recorder();
         const plain = { url: "https://example.test/b.zip", sha256: SHA, layout: "bin" as const };
         const input = record({ "linux-x64": { url: "https://example.test/a.tgz", sha256: SHA, recipe }, "windows-x64": plain });
         expect(await putRecord(input, keys.privateKey, run, PUBLIC)).toBe("written");
         expect(spawned).toHaveLength(1);
-        const written = JSON.parse(spawned[0]![spawned[0]!.indexOf("put") + 2]!) as PackageRecord;
+        const written = JSON.parse(values[0]!) as PackageRecord;
         expect(spawned[0]![spawned[0]!.indexOf("put") + 1]).toBe("helium");
 
         const linux = written.platforms["linux-x64"]!;

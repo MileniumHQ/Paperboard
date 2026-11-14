@@ -6,7 +6,7 @@ import { assertValidRecord, type PackageRecord, type PlatformKey } from "./recor
 import { releaseMessage, signRelease } from "../../../../scripts/releaseSigning";
 import { RELEASE_PUBLIC_KEY, verifyRelease } from "../../../paperboard/papercrane/releaseSignature";
 import { parsePackageRecipe, recipeDigest } from "../../../paperboard/papercrane/packageRecipe";
-import { kvPutArgs, ORIGAMI_DIR, runCommand, type CommandRunner } from "./wrangler";
+import { kvPut, runCommand, type CommandRunner } from "./wrangler";
 
 // Signs every platform entry with the offline release key. Daemons refuse
 // an entry without a valid signature, so an unsigned record is never
@@ -75,6 +75,6 @@ export async function putRecord(
         });
         if (live !== undefined && canonical(live) === canonical(signed)) return "unchanged";
     }
-    await run("bunx", kvPutArgs(signed.name, JSON.stringify(signed, null, 2)), ORIGAMI_DIR);
+    await kvPut(run, signed.name, JSON.stringify(signed, null, 2));
     return "written";
 }

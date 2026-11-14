@@ -152,7 +152,10 @@ export function wranglerRunner(registry: Registry, calls: WranglerCall[]): Comma
                 return { stdout: value, stderr: "" };
             }
             if (verb === "put") {
-                await registry.kv.put(args[4]!, args[5]!);
+                // the value always comes from a file: argv is capped by the OS
+                const file = flag(args, "--path");
+                if (!file || args[5] !== "--path") throw new Error("kv key put needs its value in --path");
+                await registry.kv.put(args[4]!, readFileSync(file, "utf8"));
                 return { stdout: "", stderr: "" };
             }
         }
