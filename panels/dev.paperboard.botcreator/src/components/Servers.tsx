@@ -199,6 +199,7 @@ export default function Servers(props: { bot: () => BotSummary }) {
         setSending(true);
         try {
             await serviceApi.call(PANEL_ID, "sendMessage", {
+                bot: bot(),
                 channel: channelId(),
                 content: content().trim(),
             });
