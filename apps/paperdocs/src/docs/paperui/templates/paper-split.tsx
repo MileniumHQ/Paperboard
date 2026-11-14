@@ -131,6 +131,12 @@ export function Example() {
                         <td>Called when the detail closes. Collapsed, it comes once the page has slid away, so the detail keeps what it showed until then. Set your selection state back in it, or the page opens again.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>onBeforeDetailClose</PaperCode></td>
+                        <td><PaperCode>() =&gt; boolean | Promise&lt;boolean&gt;</PaperCode></td>
+                        <td>No default (Back always closes)</td>
+                        <td>Asked when Back would close the collapsed page, before it slides. Return <PaperCode>false</PaperCode>, or a promise of it, to keep the page open, such as when the detail holds unsaved work and the person chooses to stay.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>detailTitle</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td>No default</td>
@@ -156,7 +162,7 @@ export function Example() {
                 <li>The root is 100% wide and tall. Give it a parent with a height, such as a page item with the <PaperCode>fill</PaperCode> variant.</li>
                 <li>The layout is chosen from the root's own width, measured with a resize observer, not from the screen. Until it is measured it takes the window's width, so a phone's first paint is already collapsed, and it is measured before <PaperCode>onCollapsedChange</PaperCode> first reports.</li>
                 <li>Side by side, the panes are a row with a <PaperCode>full</PaperCode> gap. The side pane is fixed, the detail pane flexes. The side's content fills the side pane's whole width, so the pane never narrows or widens with what it shows, such as a filtered list. <PaperCode>detailActive</PaperCode> is ignored and the detail always shows, so draw an empty state in it when nothing is selected.</li>
-                <li>Collapsed, the side pane fills the root and the detail is a fixed <PaperLink href="/docs/paperui/paperslidepage/">PaperSlidePage</PaperLink> (in a panel, it covers the panel), open while <PaperCode>detailActive</PaperCode> is true. Its back button, the system Back action and the back swipe slide it away, then call <PaperCode>onDetailClose</PaperCode>.</li>
+                <li>Collapsed, the side pane fills the root and the detail is a fixed <PaperLink href="/docs/paperui/paperslidepage/">PaperSlidePage</PaperLink> (in a panel, it covers the panel), open while <PaperCode>detailActive</PaperCode> is true. Its back button, the system Back action and the back swipe slide it away, then call <PaperCode>onDetailClose</PaperCode>. With <PaperCode>onBeforeDetailClose</PaperCode>, Back waits for its answer first and does nothing on <PaperCode>false</PaperCode>.</li>
                 <li>Both layouts are the same elements. Crossing the breakpoint restyles the panes and never moves or rebuilds their content, so scroll positions, typed text and anything mounted inside keep their state.</li>
                 <li>Each pane is a flex box. Give a card that should fill its pane <PaperCode>fullHeight</PaperCode>, as the samples do.</li>
             </PaperTextList>

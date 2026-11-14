@@ -7,6 +7,7 @@ import {
     For,
     Match,
     on,
+    onCleanup,
     onMount,
     Show,
     Switch,
@@ -98,6 +99,22 @@ export interface PaperFileBrowserProps {
     fileMenu?: boolean;
     sideWidth?: number | string;
     class?: string;
+    /** hands the host what it needs to guard leaving the browser */
+    ref?: (browser: PaperFileBrowserRef) => void;
+}
+
+/** What a host asks a file browser before taking it away (a tab, a modal, a page). */
+export interface PaperFileBrowserRef {
+    /** whether the open file has edits that are not saved; reactive */
+    dirty: () => boolean;
+    /**
+     * Asks the person what happens to unsaved edits, with the same Save /
+     * Discard / Cancel dialog as switching files. Resolves true once they are
+     * saved or discarded (at once when there are none), so the host may go
+     * ahead; false when the person cancels or the save fails (its error shows
+     * in the browser), so the host stays. Its shape fits onBeforeClose.
+     */
+    confirmLeave: () => Promise<boolean>;
 }
 
 type FolderState =
@@ -162,7 +179,8 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
     const [cursor, setCursor] = createSignal<PaperEditorPosition>({ line: 1, column: 1 });
     const [wrap, setWrap] = createSignal(false);
     const [lineNumbers, setLineNumbers] = createSignal(true);
-    const [pending, setPending] = createSignal<{ name: string; run: () => void } | null>(null);
+    // the open question about unsaved edits; `settle` answers whoever asked it
+    const [pending, setPending] = createSignal<{ name: string; settle: (go: boolean) => void } | null>(null);
     const [collapsed, setCollapsed] = createSignal(false);
     const menu = useContextMenuState("below-right");
 
@@ -310,12 +328,40 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
         }
     };
 
+    /**
+     * Asks what happens to the unsaved edits: true once they are saved or
+     * discarded, false when the person keeps editing. A newer question
+     * replaces an open one, which then answers false.
+     */
+    const ask = (path: string): Promise<boolean> =>
+        new Promise((resolve) => {
+            pending()?.settle(false);
+            setPending({ name: baseName(path), settle: resolve });
+        });
+
+    /** closes the dialog with the person's answer */
+    const answer = (go: boolean) => {
+        const request = pending();
+        setPending(null);
+        request?.settle(go);
+    };
+
     /** runs `action` now, or after the user decides what happens to unsaved edits */
     const guard = (action: () => void) => {
         const path = openPath();
         if (!dirty() || !path) return action();
-        setPending({ name: baseName(path), run: action });
+        void ask(path).then((go) => {
+            if (go) action();
+        });
     };
+
+    const confirmLeave = (): Promise<boolean> => {
+        const path = openPath();
+        return !dirty() || !path ? Promise.resolve(true) : ask(path);
+    };
+    props.ref?.({ dirty, confirmLeave });
+    // taken away while it asks: whoever asked stays where they are
+    onCleanup(() => pending()?.settle(false));
 
     const openFile = (path: string) => {
         setSelected(path);
@@ -783,6 +829,7 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
                 side={tree}
                 sideWidth={props.sideWidth}
                 detailActive={openPath() !== null}
+                onBeforeDetailClose={confirmLeave}
                 onDetailClose={closeFile}
                 detailTitle={openPath() ? baseName(openPath()!) : undefined}
                 onCollapsedChange={setCollapsed}
@@ -792,21 +839,19 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
 
             <PaperModal
                 open={pending() !== null}
-                onClose={() => setPending(null)}
+                onClose={() => answer(false)}
                 title={`Save changes to ${pending()?.name ?? "this file"}?`}
                 size="small"
                 footer={
                     <div class={styles.modalActions}>
-                        <PaperButton variant="text" onClick={() => setPending(null)}>
+                        <PaperButton variant="text" onClick={() => answer(false)}>
                             Cancel
                         </PaperButton>
                         <PaperButton
                             variant="danger"
                             onClick={() => {
-                                const action = pending()?.run;
-                                setPending(null);
                                 revert();
-                                action?.();
+                                answer(true);
                             }}
                         >
                             Discard
@@ -821,9 +866,9 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
                                     // canceled, or replaced by another question, while it saved:
                                     // that is the decision now, and this one no longer runs
                                     if (pending() !== request) return;
-                                    setPending(null);
-                                    // edits typed while it saved are not in the file; they stay
-                                    if (saved && !dirty()) request.run();
+                                    // a failed save stays, its error showing; edits typed
+                                    // while it saved are not in the file, so they stay too
+                                    answer(saved && !dirty());
                                 }}
                             >
                                 Save

@@ -14,6 +14,7 @@ import {
     PaperContextMenuHeader,
     PaperContextMenuItem,
     PaperContextMenuSub,
+    PaperFileBrowser,
     PaperInput,
     PaperInterfaceGroup,
     PaperInterfaceItem,
@@ -33,6 +34,7 @@ import {
     PaperSplit,
     PaperToggle,
     useContextMenuState,
+    type PaperFileBrowserRef,
     type ThemeMode,
 } from "@mileniumhq/paperui";
 
@@ -400,6 +402,42 @@ const scenarios: Record<string, () => JSX.Element> = {
             <div style={{ width: "400px" }}>
                 {rows(false)}
                 {rows(true)}
+            </div>,
+        );
+    },
+
+    fileBrowser() {
+        // a.txt on a disk the test can change, and a host that asks the
+        // browser before it would take it away
+        const disk: Record<string, string> = { "a.txt": "alpha\n" };
+        const versions: Record<string, number> = { "a.txt": 1 };
+        let browser!: PaperFileBrowserRef;
+        const t = (window.t = {
+            disk,
+            writes: 0,
+            answers: [] as boolean[],
+            dirty: () => browser.dirty(),
+            /** a host leaving: records what the browser answered */
+            leave: () => browser.confirmLeave().then((go) => t.answers.push(go)),
+            changeOnDisk(text: string) {
+                disk["a.txt"] = text;
+                versions["a.txt"]++;
+            },
+        });
+        return shell(
+            <div style={{ width: "100vw", height: "100vh", display: "flex" }}>
+                <PaperFileBrowser
+                    rootLabel="Root"
+                    list={async () => ({ entries: [{ name: "a.txt", path: "a.txt", kind: "file" }] })}
+                    read={async (path) => ({ kind: "text", text: disk[path]!, version: String(versions[path]) })}
+                    write={async (path, text, version) => {
+                        if (version !== String(versions[path])) throw new Error(`${path} changed on disk since it was opened`);
+                        t.writes++;
+                        disk[path] = text;
+                        return { version: String(++versions[path]!) };
+                    }}
+                    ref={(handle) => (browser = handle)}
+                />
             </div>,
         );
     },

@@ -29,6 +29,12 @@ export interface PaperSplitProps {
      * away, so the detail keeps showing what it showed until it's gone.
      */
     onDetailClose?: () => void;
+    /**
+     * Asked when Back would close the collapsed page, before it slides: false
+     * (or a promise of false) keeps the page open, as when the detail holds
+     * unsaved work and the person chooses to stay.
+     */
+    onBeforeDetailClose?: () => boolean | Promise<boolean>;
     /** the collapsed page's title */
     detailTitle?: string;
     /**
@@ -101,6 +107,7 @@ export function PaperSplit(props: ParentProps<PaperSplitProps>) {
         "collapseWidth",
         "detailActive",
         "onDetailClose",
+        "onBeforeDetailClose",
         "detailTitle",
         "onCollapsedChange",
         "class",
@@ -126,7 +133,13 @@ export function PaperSplit(props: ParentProps<PaperSplitProps>) {
                         position="fixed"
                         open={pageOpen()}
                         title={local.detailTitle ?? ""}
-                        onBack={() => setClosing(true)}
+                        onBack={() => {
+                            const before = local.onBeforeDetailClose;
+                            if (!before) return setClosing(true);
+                            void Promise.resolve(before()).then((close) => {
+                                if (close) setClosing(true);
+                            });
+                        }}
                         onClosed={() => {
                             if (closing()) local.onDetailClose?.();
                         }}

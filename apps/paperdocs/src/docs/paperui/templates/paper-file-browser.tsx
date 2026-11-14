@@ -182,6 +182,12 @@ export function Example() {
                         <td>No default</td>
                         <td>Added to the root.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>ref</PaperCode></td>
+                        <td><PaperCode>(browser: PaperFileBrowserRef) =&gt; void</PaperCode></td>
+                        <td>No default</td>
+                        <td>Hands the host what it needs to guard leaving: whether there are unsaved edits, and a way to ask about them. See Leaving with unsaved edits, below.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
@@ -224,6 +230,13 @@ interface PaperFileSaveResult {
 interface PaperFileReveal {
     path: string;
     kind: "file" | "folder";
+}
+
+interface PaperFileBrowserRef {
+    /** whether the open file has edits that are not saved; reactive */
+    dirty: () => boolean;
+    /** asks about unsaved edits; true once they are saved or discarded */
+    confirmLeave: () => Promise<boolean>;
 }`}
             </PaperCode>
 
@@ -248,6 +261,34 @@ interface PaperFileReveal {
                 <li>Opening another file, closing the open one, or reloading while edits are unsaved asks to save, discard, or cancel first. A dot on the file's row and in the breadcrumb marks unsaved edits.</li>
             </PaperTextList>
 
+            <PaperText preset="subheader" as="h3" id="leaving">Leaving with unsaved edits</PaperText>
+            <PaperText preset="body" as="p">
+                The browser can only ask about its own edits while it is on screen. Before you take it away, such as switching a tab, closing a modal, or going back a page, call <PaperCode>confirmLeave</PaperCode> from its <PaperCode>ref</PaperCode> and go ahead only when it resolves <PaperCode>true</PaperCode>.
+            </PaperText>
+            <PaperTextList>
+                <li>With nothing unsaved it resolves <PaperCode>true</PaperCode> at once, without asking.</li>
+                <li>Otherwise it shows the same Save, Discard, and Cancel dialog as switching files. Save resolves <PaperCode>true</PaperCode> once the file holds the edit. Discard throws the edit away and resolves <PaperCode>true</PaperCode>.</li>
+                <li>Cancel, closing the dialog, or a save that fails resolves <PaperCode>false</PaperCode>. A failed save shows its error in the browser, and the edit stays.</li>
+                <li>Asked again while it asks, the earlier question resolves <PaperCode>false</PaperCode> and the newest one is shown. If the browser is removed while it asks, it resolves <PaperCode>false</PaperCode>.</li>
+                <li>Its shape matches <PaperCode>onBeforeClose</PaperCode> on <PaperLink href="/docs/paperui/paperlist/">PaperList</PaperLink> and <PaperCode>onBeforeDetailClose</PaperCode> on <PaperLink href="/docs/paperui/papersplit/">PaperSplit</PaperLink>, so you can pass it to either.</li>
+                <li><PaperCode>dirty</PaperCode> is reactive. Read it when you need to know without asking, such as to mark a tab.</li>
+            </PaperTextList>
+            <PaperCode block language="tsx">
+{`import { PaperFileBrowser, PaperModal, type PaperFileBrowserRef } from "@mileniumhq/paperui";
+
+export function FilesModal(props: { open: boolean; onClose: () => void }) {
+    let browser!: PaperFileBrowserRef;
+    const close = async () => {
+        if (await browser.confirmLeave()) props.onClose();
+    };
+    return (
+        <PaperModal open={props.open} onClose={close} title="Files" size="large">
+            <PaperFileBrowser rootLabel="Files" list={list} read={read} write={write} ref={browser} />
+        </PaperModal>
+    );
+}`}
+            </PaperCode>
+
             <PaperText preset="subheader" as="h3" id="tree">The tree</PaperText>
             <PaperTextList>
                 <li>Folders list on first open and stay loaded. The refresh button in the tree header lists every open folder again.</li>
@@ -259,6 +300,7 @@ interface PaperFileReveal {
             <PaperText preset="subheader" as="h3" id="narrow">Narrow panels</PaperText>
             <PaperText preset="body" as="p">
                 The tree and viewer sit in a <PaperLink href="/docs/paperui/papersplit/">PaperSplit</PaperLink>. In a narrow panel the tree fills the space and the open file slides in over it as a page.
+                Going back from that page with unsaved edits asks first, before the page slides away, so Cancel keeps the file on screen.
             </PaperText>
 
             <PaperText preset="subheader" as="h3" id="security">Paths and security</PaperText>
@@ -318,13 +360,17 @@ interface PaperFileReveal {
             <PaperText preset="body" as="p">
                 The game server panel shows the browser in its Files tab, hosted as a <PaperCode>fill</PaperCode> interface item, and opens it at an add-on's settings through <PaperCode>reveal</PaperCode>.
                 Its three functions are the panel's own wrappers that call the panel's service, which validates every path.
+                It hands <PaperCode>confirmLeave</PaperCode> to the panel, which waits for it before switching tabs or leaving the server, so an unsaved edit is never lost by leaving the tab.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { PaperFileBrowser, PaperFlex } from "@mileniumhq/paperui";
 import type { PaperFileReveal } from "@mileniumhq/paperui";
 import { listServerFiles, readServerFile, writeServerFile } from "../lib/files";
 
-export function Files(props: { reveal: PaperFileReveal | null }) {
+export function Files(props: {
+    reveal: PaperFileReveal | null;
+    guardLeaving: (confirmLeave: () => Promise<boolean>) => void;
+}) {
     return (
         <PaperFlex direction="row" flex minHeight={0}>
             <PaperFileBrowser
@@ -333,6 +379,7 @@ export function Files(props: { reveal: PaperFileReveal | null }) {
                 read={readServerFile}
                 write={writeServerFile}
                 reveal={props.reveal}
+                ref={(browser) => props.guardLeaving(browser.confirmLeave)}
             />
         </PaperFlex>
     );
