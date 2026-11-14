@@ -102,6 +102,13 @@ export interface UpdateEnded {
     error?: string;
 }
 
+type Blocks = ReturnType<typeof blocksApi.panel>;
+type AnyOptions = DefinePanelServiceOptions<any, Record<string, ServiceCall<any>>>;
+
+// how long a failed state sync waits before it tries again, doubling each time
+const STATE_RETRY_BASE_MS = 500;
+const STATE_RETRY_MAX_MS = 30_000;
+
 export function definePanelService<
     TState extends Record<string, any>,
     TCalls extends Record<string, ServiceCall<TState>> = Record<string, ServiceCall<TState>>,
@@ -112,30 +119,6 @@ export function definePanelService<
     let currentState = { ...(options.state || {}) } as TState;
     // the page and its service talk over internal blocks of the panel
     const blocks = blocksApi.panel(panelId);
-
-    // an event is registered the first time it is emitted, then fired
-    const events = new Map<string, Promise<void>>();
-    const registerEvent = (id: string, event: string): Promise<void> => {
-        let registered = events.get(id);
-        if (!registered) {
-            registered = blocks.register({
-                events: [{ id, name: event, internal: true, values: { payload: { type: "any", name: "Payload", optional: true } } }],
-            });
-            events.set(id, registered);
-        }
-        return registered;
-    };
-    const emit = (event: string, payload?: unknown) => {
-        // a name that can't be an id is the panel's mistake: thrown where it was made
-        const id = eventBlockId(event);
-        void registerEvent(id, event)
-            .then(() => blocks.fire(id, payload === undefined ? {} : { payload }))
-            .catch((err) => console.error(`[Service:${panelId}] Failed to emit event '${event}':`, err));
-        // TRANSITIONAL (Actions removal): a page still listening with actionsApi.on hears it too
-        if (options.actions) {
-            actionsApi.emit(event, payload, panelId).catch((err) => console.error(`[Service:${panelId}] Failed to emit event '${event}':`, err));
-        }
-    };
 
     // the page's state travels on two internal blocks: a value it reads
     // whole when it opens, and an event each change after that fires on
@@ -150,24 +133,7 @@ export function definePanelService<
         }],
         events: [{ id: STATE_EVENT, name: "Panel State Changed", internal: true, values: { state: { type: "any", name: "State" } } }],
     });
-
-    let unsynced: Partial<TState> | null = null;
-    let syncing = false;
-    const syncState = () => {
-        const state = unsynced;
-        unsynced = null;
-        syncing = state !== null;
-        if (!state) return;
-        internals
-            .then(() => blocks.fire(STATE_EVENT, { state }))
-            .catch((err) => {
-                console.error(
-                    `[Service:${panelId}] Failed to sync state:`,
-                    err,
-                );
-            })
-            .finally(syncState);
-    };
+    const syncState = stateSync(panelId, blocks, internals);
 
     const setState = (
         patchOrUpdater:
@@ -179,11 +145,7 @@ export function definePanelService<
                 ? patchOrUpdater(currentState)
                 : patchOrUpdater;
         currentState = { ...currentState, ...patch };
-        // BOUNDED: one state sync in flight per service. Patches made while it
-        // travels merge into the next one, so a chatty service (a console
-        // printing hundreds of lines a second) cannot pile up daemon calls.
-        unsynced = unsynced ? { ...unsynced, ...patch } : patch;
-        if (!syncing) syncState();
+        syncState(patch);
     };
 
     const ctx: ServiceContext<TState> = {
@@ -191,142 +153,22 @@ export function definePanelService<
             return currentState;
         },
         setState,
-        emit,
+        emit: pageEvents(panelId, blocks, !!options.actions),
         emitTrigger: (triggerId, output) => {
             actionsApi.emitTrigger(triggerId, output, panelId).catch((err) => console.error(`[Service:${panelId}] Failed to emit trigger '${triggerId}':`, err));
         },
     };
 
-    const registrations: Promise<void>[] = [internals];
-
-    if (options.widgetChoices) {
-        const widgetChoices = options.widgetChoices;
-        // Home's gallery asks it; the daemon lets the shell in, never another panel
-        registrations.push(blocks.register({
-            commands: [{
-                id: WIDGET_CHOICES_COMMAND,
-                name: "Widget Choices",
-                internal: true,
-                inputs: { widget: { type: "text", name: "Widget" }, option: { type: "text", name: "Option" } },
-                output: "any",
-                outputName: "Choices",
-                run: async ({ widget, option }: { widget: string; option: string }) => {
-                    await ready;
-                    const supply = Object.hasOwn(widgetChoices, widget) && Object.hasOwn(widgetChoices[widget], option)
-                        ? widgetChoices[widget][option]
-                        : undefined;
-                    if (!supply) throw new Error(`This panel's service offers no choices for widget "${widget}" option "${option}"`);
-                    return parseWidgetChoices(await supply(ctx));
-                },
-            }],
-        }));
-    }
-
-    if (options.calls) {
-        const seen = new Map<string, string>();
-        const commands = Object.entries(options.calls).map(([name, call]) => {
-            const id = callBlockId(name);
-            const clash = seen.get(id);
-            if (clash !== undefined) throw new Error(`[Service:${panelId}] the calls "${clash}" and "${name}" share the name ${id}`);
-            seen.set(id, name);
-            return {
-                id,
-                name,
-                internal: true,
-                inputs: { input: { type: "any", name: "Input", optional: true } },
-                output: "any",
-                outputName: "Result",
-                // nothing given back reads as null, so the page always hears an answer
-                run: async ({ input }: { input?: unknown }) => (await call(ctx, input)) ?? null,
-            };
-        });
-        registrations.push(blocks.register({ commands }));
-    }
-
-    // TRANSITIONAL (Actions removal): a service still declaring v1 actions
-    // registers them as before. Deleted with actionsApi once Agents moved.
-    if (options.types) for (const typeDef of options.types) defineType(typeDef);
-    if (Array.isArray(options.actions)) {
-        for (const def of options.actions) {
-            const category = typeof def.category === "string" ? options.categories?.find((c) => c.name === def.category) ?? def.category : def.category;
-            registrations.push(actionsApi.register({
-                ...def,
-                category,
-                run: def.run ? (_c: any, inputs: any) => def.run!(ctx, inputs) : undefined,
-                listen: def.listen ? (_c: any, emitFn: (output: any) => void) => def.listen!(ctx, emitFn) : undefined,
-            }, undefined, panelId));
-        }
-    } else if (options.actions) {
-        const fns: Record<string, (...args: any[]) => any> = {};
-        for (const [name, fn] of Object.entries(options.actions)) fns[name] = (...args: any[]) => fn(ctx, ...args);
-        registrations.push(actionsApi.registerMultiple(fns, panelId));
-    }
+    const registrations: Promise<void>[] = [
+        internals,
+        ...registerWidgetChoices(blocks, options, ctx, () => ready),
+        ...registerCalls(panelId, blocks, options, ctx),
+        ...registerLegacyActions(panelId, options, ctx),
+    ];
 
     ready = Promise.all(registrations).then(async () => {
         await options.onInit?.(ctx);
-        if (typeof process !== "undefined" && typeof process.send === "function") {
-            for (const operation of ["backup", "restore"] as const) {
-                const hook = operation === "backup" ? options.beforeBackup : options.beforeRestore;
-                if (!hook) continue;
-                // the daemon asks once per backup and waits for the answer
-                process.on("message", (message: any) => {
-                    if (message?.type !== `paperboard:before-${operation}` || typeof message.requestId !== "string") return;
-                    void (async () => hook(ctx, { sourceId: message.sourceId }))().then(
-                        () => process.send?.({ type: `paperboard:before-${operation}-done`, requestId: message.requestId }),
-                        (err) => process.send?.({
-                            type: `paperboard:before-${operation}-done`,
-                            requestId: message.requestId,
-                            error: err instanceof Error ? err.message : String(err),
-                        }),
-                    );
-                });
-            }
-            if (options.beforeUpdate) {
-                const hook = options.beforeUpdate;
-                process.on("message", (message: any) => {
-                    if (message?.type !== "paperboard:before-update" || typeof message.requestId !== "string") return;
-                    const processes = Array.isArray(message.processes) ? message.processes.filter((p: unknown): p is string => typeof p === "string") : [];
-                    void (async () => hook(ctx, { processes }))().then(
-                        () => process.send?.({ type: "paperboard:before-update-done", requestId: message.requestId }),
-                        (err) => process.send?.({
-                            type: "paperboard:before-update-done",
-                            requestId: message.requestId,
-                            error: err instanceof Error ? err.message : String(err),
-                        }),
-                    );
-                });
-            }
-            if (options.afterUpdate) {
-                const hook = options.afterUpdate;
-                process.on("message", (message: any) => {
-                    if (message?.type !== "paperboard:after-update") return;
-                    void (async () => hook(ctx, message.ended as UpdateEnded))().catch((err) =>
-                        console.error(`[Service:${panelId}] afterUpdate failed:`, err),
-                    );
-                });
-            }
-            for (const operation of ["backup", "restore"] as const) {
-                const hook = operation === "backup" ? options.afterBackup : options.afterRestore;
-                if (!hook) continue;
-                process.on("message", (message: any) => {
-                    if (message?.type !== `paperboard:after-${operation}`) return;
-                    const ended = message.ended as BackupEnded;
-                    void (async () => hook(ctx, ended))().catch((err) =>
-                        console.error(`[Service:${panelId}] after${operation === "backup" ? "Backup" : "Restore"} failed:`, err),
-                    );
-                });
-            }
-            process.send({
-                type: "paperboard:service-ready",
-                panelId,
-                beforeBackup: Boolean(options.beforeBackup),
-                beforeRestore: Boolean(options.beforeRestore),
-                afterBackup: Boolean(options.afterBackup),
-                afterRestore: Boolean(options.afterRestore),
-                beforeUpdate: Boolean(options.beforeUpdate),
-                afterUpdate: Boolean(options.afterUpdate),
-            });
-        }
+        answerTheDaemon(panelId, options, ctx);
     });
     void ready.catch((err) => console.error(`[Service:${panelId}] initialization failed:`, err));
 
@@ -337,4 +179,180 @@ export function definePanelService<
         getState: () => currentState,
         setState,
     };
+}
+
+// ctx.emit: an event is registered the first time it is emitted, then fired
+function pageEvents(panelId: string, blocks: Blocks, legacyActions: boolean): (event: string, payload?: unknown) => void {
+    const events = new Map<string, Promise<void>>();
+    const registerEvent = (id: string, event: string): Promise<void> => {
+        let registered = events.get(id);
+        if (!registered) {
+            registered = blocks.register({
+                events: [{ id, name: event, internal: true, values: { payload: { type: "any", name: "Payload", optional: true } } }],
+            });
+            events.set(id, registered);
+        }
+        return registered;
+    };
+    return (event, payload) => {
+        // a name that can't be an id is the panel's mistake: thrown where it was made
+        const id = eventBlockId(event);
+        void registerEvent(id, event)
+            .then(() => blocks.fire(id, payload === undefined ? {} : { payload }))
+            .catch((err) => console.error(`[Service:${panelId}] Failed to emit event '${event}':`, err));
+        // TRANSITIONAL (Actions removal): a page still listening with actionsApi.on hears it too
+        if (legacyActions) {
+            actionsApi.emit(event, payload, panelId).catch((err) => console.error(`[Service:${panelId}] Failed to emit event '${event}':`, err));
+        }
+    };
+}
+
+// Sends each state patch to the page. BOUNDED: one sync in flight per
+// service; patches made while it travels merge into the next one, so a
+// chatty service (a console printing hundreds of lines a second) cannot pile
+// up daemon calls. The page only ever hears patches, so one that fails to
+// send is kept and sent again, under anything newer, until it arrives.
+function stateSync(panelId: string, blocks: Blocks, internals: Promise<void>): (patch: Record<string, unknown>) => void {
+    let unsynced: Record<string, unknown> | null = null;
+    let syncing = false;
+    let failures = 0;
+    const send = () => {
+        const state = unsynced;
+        unsynced = null;
+        syncing = state !== null;
+        if (!state) return;
+        internals
+            .then(() => blocks.fire(STATE_EVENT, { state }))
+            .then(
+                () => {
+                    failures = 0;
+                    send();
+                },
+                (err) => {
+                    unsynced = unsynced ? { ...state, ...unsynced } : state;
+                    const delay = Math.min(STATE_RETRY_MAX_MS, STATE_RETRY_BASE_MS * 2 ** failures++);
+                    console.error(`[Service:${panelId}] Failed to sync state, trying again in ${delay} ms:`, err);
+                    setTimeout(send, delay);
+                },
+            );
+    };
+    return (patch) => {
+        unsynced = unsynced ? { ...unsynced, ...patch } : patch;
+        if (!syncing) send();
+    };
+}
+
+// Home's gallery asks it; the daemon lets the shell in, never another panel
+function registerWidgetChoices(blocks: Blocks, options: AnyOptions, ctx: ServiceContext<any>, ready: () => Promise<void>): Promise<void>[] {
+    const widgetChoices = options.widgetChoices;
+    if (!widgetChoices) return [];
+    return [blocks.register({
+        commands: [{
+            id: WIDGET_CHOICES_COMMAND,
+            name: "Widget Choices",
+            internal: true,
+            inputs: { widget: { type: "text", name: "Widget" }, option: { type: "text", name: "Option" } },
+            output: "any",
+            outputName: "Choices",
+            run: async ({ widget, option }: { widget: string; option: string }) => {
+                await ready();
+                const supply = Object.hasOwn(widgetChoices, widget) && Object.hasOwn(widgetChoices[widget], option)
+                    ? widgetChoices[widget][option]
+                    : undefined;
+                if (!supply) throw new Error(`This panel's service offers no choices for widget "${widget}" option "${option}"`);
+                return parseWidgetChoices(await supply(ctx));
+            },
+        }],
+    })];
+}
+
+function registerCalls(panelId: string, blocks: Blocks, options: AnyOptions, ctx: ServiceContext<any>): Promise<void>[] {
+    if (!options.calls) return [];
+    const seen = new Map<string, string>();
+    const commands = Object.entries(options.calls).map(([name, call]) => {
+        const id = callBlockId(name);
+        const clash = seen.get(id);
+        if (clash !== undefined) throw new Error(`[Service:${panelId}] the calls "${clash}" and "${name}" share the name ${id}`);
+        seen.set(id, name);
+        return {
+            id,
+            name,
+            internal: true,
+            inputs: { input: { type: "any", name: "Input", optional: true } },
+            output: "any",
+            outputName: "Result",
+            // nothing given back reads as null, so the page always hears an answer
+            run: async ({ input }: { input?: unknown }) => (await call(ctx, input)) ?? null,
+        };
+    });
+    return [blocks.register({ commands })];
+}
+
+// TRANSITIONAL (Actions removal): a service still declaring v1 actions
+// registers them as before. Deleted with actionsApi once Agents moved.
+function registerLegacyActions(panelId: string, options: AnyOptions, ctx: ServiceContext<any>): Promise<void>[] {
+    if (options.types) for (const typeDef of options.types) defineType(typeDef);
+    if (Array.isArray(options.actions)) {
+        return options.actions.map((def) => {
+            const category = typeof def.category === "string" ? options.categories?.find((c) => c.name === def.category) ?? def.category : def.category;
+            return actionsApi.register({
+                ...def,
+                category,
+                run: def.run ? (_c: any, inputs: any) => def.run!(ctx, inputs) : undefined,
+                listen: def.listen ? (_c: any, emitFn: (output: any) => void) => def.listen!(ctx, emitFn) : undefined,
+            }, undefined, panelId);
+        });
+    }
+    if (options.actions) {
+        const fns: Record<string, (...args: any[]) => any> = {};
+        for (const [name, fn] of Object.entries(options.actions)) fns[name] = (...args: any[]) => fn(ctx, ...args);
+        return [actionsApi.registerMultiple(fns, panelId)];
+    }
+    return [];
+}
+
+// A spawned service hears the daemon over its process channel: requests it
+// answers (the daemon waits for each answer) and notices it only hears.
+// Then it tells the daemon it is ready, and which hooks it has.
+function answerTheDaemon(panelId: string, options: AnyOptions, ctx: ServiceContext<any>): void {
+    if (typeof process === "undefined" || typeof process.send !== "function") return;
+    const answer = (type: string, run: (message: any) => unknown) => {
+        process.on("message", (message: any) => {
+            if (message?.type !== type || typeof message.requestId !== "string") return;
+            const done = `${type}-done`;
+            void (async () => run(message))().then(
+                () => process.send?.({ type: done, requestId: message.requestId }),
+                (err) => process.send?.({ type: done, requestId: message.requestId, error: err instanceof Error ? err.message : String(err) }),
+            );
+        });
+    };
+    const hear = (type: string, hook: string, run: (message: any) => unknown) => {
+        process.on("message", (message: any) => {
+            if (message?.type !== type) return;
+            void (async () => run(message))().catch((err) => console.error(`[Service:${panelId}] ${hook} failed:`, err));
+        });
+    };
+
+    const { beforeBackup, beforeRestore, afterBackup, afterRestore, beforeUpdate, afterUpdate } = options;
+    if (beforeBackup) answer("paperboard:before-backup", (m) => beforeBackup(ctx, { sourceId: m.sourceId }));
+    if (beforeRestore) answer("paperboard:before-restore", (m) => beforeRestore(ctx, { sourceId: m.sourceId }));
+    if (beforeUpdate) {
+        answer("paperboard:before-update", (m) => beforeUpdate(ctx, {
+            processes: Array.isArray(m.processes) ? m.processes.filter((p: unknown): p is string => typeof p === "string") : [],
+        }));
+    }
+    if (afterUpdate) hear("paperboard:after-update", "afterUpdate", (m) => afterUpdate(ctx, m.ended as UpdateEnded));
+    if (afterBackup) hear("paperboard:after-backup", "afterBackup", (m) => afterBackup(ctx, m.ended as BackupEnded));
+    if (afterRestore) hear("paperboard:after-restore", "afterRestore", (m) => afterRestore(ctx, m.ended as BackupEnded));
+
+    process.send({
+        type: "paperboard:service-ready",
+        panelId,
+        beforeBackup: Boolean(beforeBackup),
+        beforeRestore: Boolean(beforeRestore),
+        afterBackup: Boolean(afterBackup),
+        afterRestore: Boolean(afterRestore),
+        beforeUpdate: Boolean(beforeUpdate),
+        afterUpdate: Boolean(afterUpdate),
+    });
 }

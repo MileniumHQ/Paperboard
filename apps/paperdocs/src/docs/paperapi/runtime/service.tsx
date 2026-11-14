@@ -304,7 +304,7 @@ const stop = serviceApi.on<{ city: string }>("dev.example.weather", "forecast-re
                 <li>The daemon waits at most 5 minutes for either hook, then fails with <PaperCode>Service &lt;id&gt; did not get ready for the backup within 300 s</PaperCode>. The hooks run only while the service is ready; a stopped or failed service is not asked.</li>
                 <li>Paperboard never stops your processes for an update on its own. While they run, the update waits in the top bar's list until someone chooses Stop and update, or they stop.</li>
                 <li>A <PaperCode>beforeUpdate</PaperCode> that throws refuses the update with <PaperCode>&lt;panel id&gt; could not stop its processes for the update: &lt;message&gt;</PaperCode>. The daemon waits at most 2 minutes for it. An error <PaperCode>afterUpdate</PaperCode> throws is logged as <PaperCode>{"[Service:<id>] afterUpdate failed:"}</PaperCode>.</li>
-                <li>A state sync that fails is logged as <PaperCode>{"[Service:<id>] Failed to sync state:"}</PaperCode>, and open bridges miss that patch until they call <PaperCode>refreshState</PaperCode>.</li>
+                <li>A state sync that fails is logged as <PaperCode>{"[Service:<id>] Failed to sync state, trying again in <n> ms:"}</PaperCode>. The patch is kept and sent again, merged under any newer one, starting half a second later and doubling up to 30 seconds, until it arrives.</li>
             </PaperTextList>
 
             <PaperText preset="body" as="p">
