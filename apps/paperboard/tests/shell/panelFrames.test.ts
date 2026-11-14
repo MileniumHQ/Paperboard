@@ -97,7 +97,7 @@ test("restarting a panel with an unsaved note asks the panel first: Stay keeps t
     await restartFromMenu("dev.paperboard.testnotes");
     await inNotes(`!doc.getElementById("ask").hidden`, "the note to ask about its unsaved changes");
     // the note is the panel in view while it asks
-    expect(await page.evaluate(`${frame(NOTES_KEY)}.parentElement.className.includes("_away_")`)).toBe(false);
+    expect(await page.evaluate(`${frame(NOTES_KEY)}.checkVisibility({ visibilityProperty: true })`)).toBe(true);
     await page.evaluate(`${notesDoc}.getElementById("stay").click()`);
     await inNotes(`doc.getElementById("ask").hidden`, "the note's dialog to close");
     // a stay leaves the page, and its note, as they were
