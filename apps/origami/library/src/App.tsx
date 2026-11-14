@@ -25,12 +25,12 @@ import styles from "./Library.module.css";
 import type { LibraryBridge } from "./bridge";
 import PanelPage, { iconGlyph, publisherLabel } from "./PanelPage";
 import { createLibraryRoute } from "./router";
+import { createInstalledMedia } from "./installedMedia";
 import {
     mergeRegistryWithInstalled,
     type PanelItem,
     type RegistryPanelRecord,
 } from "../../../../packages/paperapi/src/panelMerge";
-import type { InstalledPanelMedia } from "../../../../packages/paperapi/src/storeListing";
 import { fetchRegistryJson } from "../../../../packages/paperapi/src/registryFetch";
 import { waitForContentPainted } from "../../../../packages/paperapi/src/paintReady";
 
@@ -44,13 +44,6 @@ function downloadArchive(panel: PanelItem) {
     document.body.appendChild(link);
     link.click();
     link.remove();
-}
-
-// what is cached per installed panel goes with the panel; nothing changed
-// keeps the same object, so nothing downstream is notified
-function onlyInstalled<T>(entries: Record<string, T>, installed: Set<string>): Record<string, T> {
-    const kept = Object.fromEntries(Object.entries(entries).filter(([id]) => installed.has(id)));
-    return Object.keys(kept).length === Object.keys(entries).length ? entries : kept;
 }
 
 export interface PanelLibraryAppProps {
@@ -67,7 +60,6 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
     // Registry settled is distinct from succeeded: a failed load is still
     // "settled" for readiness, because the library has something to show.
     const [registrySettled, setRegistrySettled] = createSignal(false);
-    const [pendingMedia, setPendingMedia] = createSignal(0);
     const route = createLibraryRoute();
     // Install state is per panel: installs run side by side (the shell
     // answers each request on its own), and a failure stays on the page of
@@ -106,16 +98,6 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
         void load();
     });
 
-    // Installed panels the registry doesn't list (dev links, direct
-    // installs) describe themselves: Paperboard reads their own manifest and
-    // store/ files. Icons are fetched for the grid; the full listing only
-    // for the page being viewed. Entries live only while the panel stays
-    // installed, so the cache is bounded by the installed set.
-    const [localMedia, setLocalMedia] = createSignal<
-        Record<string, InstalledPanelMedia & { full: boolean }>
-    >({});
-    const requestedMedia = new Set<string>();
-
     const unrecognizedIds = createMemo(() => {
         const listed = registry();
         if (listed === null && !loadFailed()) return [];
@@ -125,63 +107,7 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
             .filter((id) => !listed || !(id in listed));
     });
 
-    // a failed read is shown on the panel's page, never mistaken for a
-    // panel with no listing; it stays until a read of it succeeds
-    const [mediaErrors, setMediaErrors] = createSignal<Record<string, string>>({});
-    const dropMediaError = (id: string) =>
-        setMediaErrors((prev) => {
-            if (!(id in prev)) return prev;
-            const { [id]: _, ...rest } = prev;
-            return rest;
-        });
-
-    const requestMedia = (id: string, full: boolean) => {
-        const key = `${id}:${full ? "full" : "icon"}`;
-        if (requestedMedia.has(key)) return;
-        requestedMedia.add(key);
-        setPendingMedia((count) => count + 1);
-        void props.bridge
-            .media(id, full)
-            .then(
-                (media) => {
-                    if (!props.bridge.installed().some((panel) => panel.id === id)) return;
-                    dropMediaError(id);
-                    setLocalMedia((prev) => {
-                        if (prev[id]?.full && !full) return prev;
-                        return { ...prev, [id]: { ...media, full } };
-                    });
-                },
-                (err: Error) => {
-                    // unavailable, not empty: a retry asks again
-                    requestedMedia.delete(key);
-                    console.error(`[library] ${id}'s own listing is unavailable:`, err);
-                    setMediaErrors((prev) => ({ ...prev, [id]: err.message }));
-                },
-            )
-            .finally(() => setPendingMedia((count) => count - 1));
-    };
-
-    const retryMedia = (id: string) => {
-        dropMediaError(id);
-        requestMedia(id, true);
-    };
-
-    createEffect(
-        on(
-            [() => props.bridge.mode(), unrecognizedIds, () => props.bridge.installed(), route.panelId],
-            ([mode, ids, installedList, selected]) => {
-                if (mode !== "embedded") return;
-                const installed = new Set(installedList.map((panel) => panel.id));
-                setLocalMedia((prev) => onlyInstalled(prev, installed));
-                setMediaErrors((prev) => onlyInstalled(prev, installed));
-                for (const key of [...requestedMedia]) {
-                    if (!installed.has(key.slice(0, key.lastIndexOf(":")))) requestedMedia.delete(key);
-                }
-                for (const id of ids) requestMedia(id, false);
-                if (selected && ids.includes(selected)) requestMedia(selected, true);
-            },
-        ),
-    );
+    const installedMedia = createInstalledMedia(props.bridge, unrecognizedIds, route.panelId);
 
     // The shell covers the frame until the library says it is done. Ready
     // means the registry has settled, no installed-panel media is still in
@@ -189,7 +115,7 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
     // the reveal.
     let readySent = false;
     createEffect(
-        on([registrySettled, () => props.bridge.mode(), pendingMedia], ([settled, mode, pending]) => {
+        on([registrySettled, () => props.bridge.mode(), installedMedia.pending], ([settled, mode, pending]) => {
             if (readySent || !settled || mode === "detecting" || pending > 0) return;
             readySent = true;
             void waitForContentPainted().then(() => props.bridge.notifyReady());
@@ -197,7 +123,7 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
     );
 
     const merged = createMemo(() => {
-        const media = localMedia();
+        const media = installedMedia.media();
         return mergeRegistryWithInstalled(
             registry() ?? {},
             props.bridge.installed(),
@@ -341,10 +267,10 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
                         mode={props.bridge.mode()}
                         busy={installs[panel().id]?.busy ?? false}
                         error={installs[panel().id]?.error ?? null}
-                        mediaError={mediaErrors()[panel().id] ?? null}
+                        mediaError={installedMedia.errors()[panel().id] ?? null}
                         onNavigateHome={() => route.navigate(null)}
                         onAction={() => void handleAction(panel())}
-                        onRetryMedia={() => retryMedia(panel().id)}
+                        onRetryMedia={() => installedMedia.retry(panel().id)}
                     />
                 )}
             </Show>
