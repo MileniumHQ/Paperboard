@@ -14,10 +14,12 @@ import {
 import {
     computersApi as computers,
     discoveryApi,
+    logToMain,
     type ComputerInfo,
     type DiscoveredComputer,
 } from "../../lib/shell";
 import frameStyles from "./wizardFrame.module.css";
+import { errorMessage } from "../../lib/errorMessage";
 
 export interface ComputerSetupWizardProps {
     onClose: () => void;
@@ -58,7 +60,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     onMount(() => {
         discoveryApi.list().then(
             (list) => setDiscovered(list ?? []),
-            (err) => setDiscoveryError(err instanceof Error ? err.message : String(err)),
+            (err) => setDiscoveryError(errorMessage(err)),
         );
         const off = discoveryApi.onChanged((list) => {
             setDiscoveryError("");
@@ -115,11 +117,11 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                 setProbeDetail(res?.error ?? "");
                 setProbeInvalid(res?.invalidAddress === true);
             }
-        } catch (err: any) {
+        } catch (err) {
             if (request !== probeRequest) return;
             setIsReachable(false);
             setProbeUnreachable(true);
-            setProbeDetail(String(err?.message ?? err));
+            setProbeDetail(errorMessage(err));
             setProbeInvalid(false);
         }
     };
@@ -165,15 +167,12 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                 name().trim() || undefined,
             );
 
-            if (res && res.id) {
-                props.onComplete(res);
-                props.onClose();
-            }
-        } catch (err: any) {
-            setPairError(
-                err?.message ||
-                    "Pairing failed. Make sure the 6-digit code is correct.",
-            );
+            if (!res?.id) throw new Error("The computer answered the pairing without saying who it is.");
+            props.onComplete(res);
+            props.onClose();
+        } catch (err) {
+            logToMain("error", "Pairing a computer failed:", err);
+            setPairError(errorMessage(err));
         } finally {
             setIsPairing(false);
         }

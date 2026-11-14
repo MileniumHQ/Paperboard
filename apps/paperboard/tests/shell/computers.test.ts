@@ -114,6 +114,34 @@ test("Add Computer: a check of an earlier address that answers late does not ena
     expect(page.exceptions).toEqual([]);
 });
 
+// Inventory: Core contracts — a pairing that doesn't finish says why instead of leaving the wizard as it was.
+test("Add Computer: a pairing answered without the computer says so", async () => {
+    const { page } = shell;
+    // main answers the pairing with nothing that names a computer
+    await page.evaluate(`(() => {
+        const fetch = window.fetch;
+        window.fetch = (input, init) => String(input).endsWith("/computer-pair")
+            ? Promise.resolve(new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 }))
+            : fetch(input, init);
+    })()`);
+    await page.click(`[role=button][aria-label='Add Computer'], button[aria-label='Add Computer']`);
+    await clickText(page, "label", "Custom IP");
+    await clickText(page, "button", "Next");
+    await page.waitFor(`document.querySelector("input[placeholder='192.168.1.50']")`, "the address step");
+    await page.evaluate(`document.querySelector("input[placeholder='45464']").select()`);
+    await page.type("input[placeholder='45464']", String(workshop.daemon.port));
+    await page.type("input[placeholder='192.168.1.50']", "127.0.0.2");
+    await page.waitFor(`![...document.querySelectorAll("button")].filter((b) => b.textContent.includes("Next")).pop().disabled`, "the address to be reachable");
+    await clickText(page, "button", "Next");
+    await page.waitFor(`document.querySelector("input[placeholder='123 456']")`, "the pairing step");
+    await page.type("input[placeholder='123 456']", "123456");
+    await clickText(page, "button", "Add Computer");
+    await page.waitFor(`document.body.innerText.includes("The computer answered the pairing without saying who it is.")`, "the pairing's failure");
+    await page.evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await page.waitFor(`!document.querySelector("input[placeholder='123 456']")`, "Add Computer to close");
+    expect(page.exceptions).toEqual([]);
+});
+
 // Inventory: Core contracts — the can't-reach dialog checks once per opening and once per Try Again.
 test("the can't-reach dialog checks the computer once when it opens and once per Try Again", async () => {
     const { page } = shell;
