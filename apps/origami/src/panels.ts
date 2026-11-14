@@ -51,31 +51,30 @@ export function isValidPanelVersion(version: unknown): version is string {
 // fails rather than answer a store that is missing panels.
 const MAX_WALK_KEYS = 2000;
 
-async function listRecordsByPrefix(
-    kv: KVNamespace,
-    prefix: string,
-    index: Record<string, PanelRecord>,
-): Promise<void> {
+async function walkPanelRecords(kv: KVNamespace): Promise<Record<string, PanelRecord>> {
+    const index: Record<string, PanelRecord> = {};
     let cursor: string | undefined;
     let walked = 0;
     do {
-        const page: KVNamespaceListResult<unknown> = await kv.list({ prefix, cursor });
+        const page: KVNamespaceListResult<unknown> = await kv.list({ prefix: PANEL_KEY_PREFIX, cursor });
         walked += page.keys.length;
         if (walked > MAX_WALK_KEYS) {
             console.error(`[origami] the panels index walk passed ${MAX_WALK_KEYS} records`);
             throw new RegistryLimitError(`more than the ${MAX_WALK_KEYS} panels the store can list without its index`);
         }
-        // an unreadable record fails the request, never drops out of it:
-        // unavailable is not "unpublished"
+        // the same reader as one panel's route: an unreadable record fails
+        // the request, never drops out of it (unavailable is not "unpublished")
         const records = await Promise.all(
-            page.keys.map((k) => kv.get<PanelRecord>(k.name, { type: "json" })),
+            page.keys.map((k) => getPanel(kv, k.name.slice(PANEL_KEY_PREFIX.length))),
         );
         for (const record of records) {
-            // an unlisted panel stays out of the store even when the index is rebuilt from the records
-            if (record?.id && !record.unlistedAt) index[record.id] = record;
+            // null is a record deleted since the listing; an unlisted panel
+            // stays out of the store even when the index is rebuilt
+            if (record && !record.unlistedAt) index[record.id] = record;
         }
         cursor = page.list_complete ? undefined : page.cursor;
     } while (cursor);
+    return index;
 }
 
 export async function getPanelsIndex(
@@ -93,10 +92,7 @@ export async function getPanelsIndex(
         console.error("[origami] panels index read failed, falling back:", err);
     }
 
-    const index: Record<string, PanelRecord> = {};
-    await listRecordsByPrefix(kv, PANEL_KEY_PREFIX, index);
-
-    return index;
+    return walkPanelRecords(kv);
 }
 
 // null only when there is no record: a record that can't be read is not a
@@ -114,8 +110,8 @@ export async function getPanel(
         throw new UnreadableRecordError(id);
     }
     if (record === null) return null;
-    if (typeof record !== "object" || Array.isArray(record)) {
-        console.error(`[origami] panel record for ${id} is not an object`);
+    if (typeof record !== "object" || Array.isArray(record) || typeof (record as { id?: unknown }).id !== "string") {
+        console.error(`[origami] panel record for ${id} is not a panel record`);
         throw new UnreadableRecordError(id);
     }
     return record as PanelRecord;

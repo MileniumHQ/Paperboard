@@ -159,15 +159,18 @@ describe("the worker is read-only and its indexes are faithful", () => {
         expect(rebuilt.status).toBe(200);
         expect(Object.keys((await rebuilt.json()) as object).sort()).toEqual(["dev.example.clock", "dev.example.notes"]);
 
-        registry.kv.values.set("panel:dev.example.notes", "{ not json");
-        const res = await request("/panels/index.json");
-        expect(res.status).toBeGreaterThanOrEqual(500);
-        expect(await res.text()).not.toContain("dev.example.clock");
+        // parsed but not a panel is as unreadable as not parsing
+        for (const broken of ["{ not json", "\"a string\"", "[]", "{}"]) {
+            registry.kv.values.set("panel:dev.example.notes", broken);
+            const res = await request("/panels/index.json");
+            expect({ broken, status: res.status }).toEqual({ broken, status: 500 });
+            expect((await res.json()) as object).toEqual({ error: "The registry record for dev.example.notes could not be read" });
+        }
     });
 
     test("an unreadable panel record answers 500 with the reason, never 404", async () => {
         await publishPanel(upload("dev.example.clock", "1.0.0"), ctx);
-        for (const broken of ["{ not json", "\"a string\"", "[]"]) {
+        for (const broken of ["{ not json", "\"a string\"", "[]", "{}"]) {
             registry.kv.values.set("panel:dev.example.clock", broken);
             for (const route of ["/panel/dev.example.clock.json", "/panel/dev.example.clock/download"]) {
                 const res = await request(route);
@@ -175,8 +178,9 @@ describe("the worker is read-only and its indexes are faithful", () => {
                 expect((await res.json()) as object).toEqual({ error: "The registry record for dev.example.clock could not be read" });
             }
         }
-        // a panel that was never published is still a 404
+        // a panel that was never published is still a 404, to HEAD as to GET
         expect((await request("/panel/dev.example.never.json")).status).toBe(404);
+        expect((await request("/panel/dev.example.never.json", { method: "HEAD" })).status).toBe(404);
     });
 
     test("an unreadable package record answers 500 naming it, never its raw text", async () => {

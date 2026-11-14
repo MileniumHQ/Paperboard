@@ -126,14 +126,14 @@ export async function handlePanelsRoutes(
         /^\/panel\/([a-zA-Z0-9_\-\.]+?)(?:\.json)?$/,
     );
     if (panelMatch && panelMatch[1]) {
-        if (request.method === "GET") {
-            const record = await getPanel(env.PACKAGES, panelMatch[1]);
-            if (!record) {
-                return jsonResponse({ error: "Panel not found" }, 404);
-            }
-            return jsonResponse(record);
+        if (request.method !== "GET" && request.method !== "HEAD") {
+            return jsonResponse({ error: "Method Not Allowed" }, 405);
         }
-        return jsonResponse({ error: "Method Not Allowed" }, 405);
+        const record = await getPanel(env.PACKAGES, panelMatch[1]);
+        if (!record) {
+            return jsonResponse({ error: "Panel not found" }, 404);
+        }
+        return jsonResponse(record);
     }
 
     return null;
