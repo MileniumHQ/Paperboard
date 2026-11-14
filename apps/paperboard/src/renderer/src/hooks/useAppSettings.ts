@@ -60,12 +60,19 @@ export function useAppSettings() {
         else document.documentElement.removeAttribute("data-paperui-blur");
     });
 
+    // A change made while a load is out makes the load's answer old news: it
+    // was read before the change was saved, and showing it would undo the
+    // change on screen (and the next change would be built on it).
+    let changes = 0;
+
     /** true when the stored settings were read */
     const loadAppSettings = async (): Promise<boolean> => {
+        const asked = changes;
         try {
             const stored = await config.get<Partial<AppSettingsData>>(
                 APP_SETTINGS_ID,
             );
+            if (asked !== changes) return true;
             // nothing saved yet is the defaults, also when a first change didn't save
             setAppSettings(stored ? withAppSettingsDefaults(APP_SETTINGS_DEFAULTS, stored) : APP_SETTINGS_DEFAULTS);
             return true;
@@ -87,6 +94,7 @@ export function useAppSettings() {
     // undo the first. The saves themselves run one at a time, in order.
     const saves = createSaveQueue();
     const handleAppSettingsChange = (next: AppSettingsData): Promise<void> => {
+        changes++;
         setAppSettings(next);
         return saves((superseded) => persistAppSettings(next, superseded));
     };
