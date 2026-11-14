@@ -94,6 +94,25 @@ describe("workloads belong to the panel that created them", () => {
 	});
 });
 
+// A stop that arrives while its workload is still starting stops it once it has.
+describe("stopping a workload the moment it is created", () => {
+	test("a terminal destroyed or a process killed while starting leaves no supervisor running", async () => {
+		const a = await panel("test.hasty");
+		for (const [create, stop, id, params] of [
+			["term:create", "term:destroy", "hasty-term", {}],
+			["process:run", "process:kill", "hasty-proc", { command: process.execPath, args: forever }],
+		] as const) {
+			const file = path.join(crane.dataDir, "sockets", `${supervisorEndpointName(id)}.json`);
+			// sent back to back: the stop reaches the daemon while the create is still starting
+			const created = a.call(create, { id, ...params });
+			const stopped = a.call(stop, { id });
+			expect((await created).error).toBeUndefined();
+			expect((await stopped).error).toBeUndefined();
+			await waitFor(`${id}'s supervisor to be gone`, () => workloadRecords(crane.dataDir).every((r) => r.file !== file || !isAlive(r.pid)));
+		}
+	});
+});
+
 // A workload whose supervisor dies without announcing an exit never reads as a clean one.
 describe("a supervisor killed outright", () => {
 	test("its workload's exit is reported with no code, not 0", async () => {

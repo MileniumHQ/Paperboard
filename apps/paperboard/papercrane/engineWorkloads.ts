@@ -110,12 +110,14 @@ export class WorkloadRegistry {
 
     /** Stops one live workload and waits for it to exit; nothing when it is not running. */
     public async stop(id: string, signal = "SIGTERM", graceMs?: number): Promise<void> {
+        await this.starting.get(id);
         const client = this.clients.get(id);
         if (client) await this.stopOwnedClient(id, client, signal, graceMs);
     }
 
     /** Stops every live workload the panel started and waits for each to exit. */
     public async stopPanelWorkloads(panelId: string): Promise<void> {
+        await Promise.all(this.starting.values());
         for (const [id, client] of [...this.clients]) {
             if (this.clientOwners.get(id) === panelId) await this.stopOwnedClient(id, client);
         }
@@ -326,13 +328,38 @@ export class WorkloadRegistry {
         return attempt;
     }
 
+    // Starts in flight, each settling once its start is decided either way.
+    // A stop that arrives during a start waits for it: until then the
+    // supervisor may not be reachable, and a stop that found nothing (or a
+    // client still connecting) would leave the workload running unseen.
+    private starting = new Map<string, Promise<void>>();
+
+    private trackStart(id: string, start: Promise<void>): Promise<void> {
+        // a failed start is its caller's error; a stop only waits it out
+        const settled = start.then(() => undefined, () => undefined);
+        this.starting.set(id, settled);
+        void settled.then(() => {
+            if (this.starting.get(id) === settled) this.starting.delete(id);
+        });
+        return start;
+    }
+
     // Terminal management
-    public async createTerminal(
+    public createTerminal(
         id: string,
         options: { cols?: number; rows?: number; cwd?: string; env?: Record<string, string>; shell?: string },
         streams: TerminalStreams,
         // the socket that receives the streams (see subscribeStreams); without
         // one, the listeners belong to this shell alone
+        subscriber?: object,
+    ): Promise<void> {
+        return this.trackStart(id, this.spawnTerminal(id, options, streams, subscriber));
+    }
+
+    private async spawnTerminal(
+        id: string,
+        options: { cols?: number; rows?: number; cwd?: string; env?: Record<string, string>; shell?: string },
+        streams: TerminalStreams,
         subscriber?: object,
     ): Promise<void> {
         const { cols = 80, rows = 24, cwd, env } = options;
@@ -412,6 +439,7 @@ export class WorkloadRegistry {
     }
 
     public async destroyTerminal(id: string): Promise<void> {
+        await this.starting.get(id);
         const client = this.clients.get(id);
         if (client) {
             await this.stopOwnedClient(id, client);
@@ -440,10 +468,18 @@ export class WorkloadRegistry {
     // the streams (see subscribeStreams). important: people rely on it while
     // it runs (a game server), so an update of what it runs from waits for it
     // instead of stopping it.
-    public async startProcess(
+    public startProcess(
         id: string, command: string, args: string[], cwd: string | undefined, env: Record<string, string> | undefined,
         subscriber: object, streams: ProcessStreams,
         options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; important?: boolean } = {},
+    ): Promise<void> {
+        return this.trackStart(id, this.spawnProcess(id, command, args, cwd, env, subscriber, streams, options));
+    }
+
+    private async spawnProcess(
+        id: string, command: string, args: string[], cwd: string | undefined, env: Record<string, string> | undefined,
+        subscriber: object, streams: ProcessStreams,
+        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; important?: boolean },
     ): Promise<void> {
         if (!id || typeof id !== "string") {
             throw new Error("process id is required");
@@ -518,6 +554,7 @@ export class WorkloadRegistry {
     }
 
     public async killProcess(id: string, signal: string = "SIGTERM"): Promise<void> {
+        await this.starting.get(id);
         const client = this.clients.get(id);
         if (!client) {
             this.forgetClientOwner(id);
@@ -591,6 +628,7 @@ export class WorkloadRegistry {
 
     // shutdown all clients: SIGTERM, then SIGKILL after grace
     public async disposeClients(graceMs = 5000): Promise<void> {
+        await Promise.all(this.starting.values());
         const entries = [...this.clients.entries()];
         if (entries.length === 0) return;
 
