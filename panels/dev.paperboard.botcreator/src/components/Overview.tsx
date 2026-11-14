@@ -1,4 +1,5 @@
 import { createEffect, createSignal, on, onMount, onCleanup, Show, For } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import {
     PaperFlex,
     PaperText,
@@ -19,30 +20,11 @@ import {
     formatDuration,
     RECENT_MESSAGE_CAP,
     errorToMessage,
+    type Health,
 } from "../types";
+import type { RecentMessage } from "../session";
 
 const HEALTH_POLL_MS = 10000;
-
-interface RecentMessage {
-    content: string;
-    author: string;
-    channelId: string;
-    guildId: string | null;
-    messageId: string;
-}
-
-interface Health {
-    connected: boolean;
-    lastError: string | null;
-    uptimeMs: number;
-    wsPing: number;
-    guildCount: number;
-    cachedUsers: number;
-    cachedChannels: number;
-    commandsReceived: number;
-    pendingInteractions: number;
-    commandSyncError: string | null;
-}
 
 export interface OverviewProps {
     bot: () => BotSummary;
@@ -55,7 +37,11 @@ export default function Overview(props: OverviewProps) {
     const [infoError, setInfoError] = createSignal("");
     const [healthError, setHealthError] = createSignal("");
     const [toggleError, setToggleError] = createSignal("");
-    const [recent, setRecent] = createSignal<RecentMessage[]>([]);
+    // the messages the session last received, oldest first; reconciled by
+    // message id, so a reread keeps the rows already shown
+    const [recentStore, setRecentStore] = createStore<{ list: RecentMessage[] }>({ list: [] });
+    const recent = () => recentStore.list;
+    const setRecent = (next: RecentMessage[]) => setRecentStore("list", reconcile(next, { key: "messageId" }));
     const [health, setHealth] = createSignal<Health | null>(null);
     // the bot's name, avatar and connection are the service's, kept live
     const connected = () => props.bot().connected;
@@ -110,12 +96,13 @@ export default function Overview(props: OverviewProps) {
     onCleanup(
         serviceApi.on(PANEL_ID, "message", (msg: any) => {
             if (!msg || typeof msg !== "object" || msg.bot !== props.bot().id) return;
-            setRecent((prev) =>
+            setRecent(
                 appendCapped(
-                    prev,
+                    recent(),
                     {
                         content: String(msg.content ?? ""),
                         author: String(msg.author ?? ""),
+                        authorId: String(msg.authorId ?? ""),
                         channelId: String(msg.channelId ?? ""),
                         guildId: msg.guildId ?? null,
                         messageId: String(msg.messageId ?? ""),
@@ -186,7 +173,8 @@ export default function Overview(props: OverviewProps) {
                                 checked={props.bot().enabled}
                                 aria-label={`${props.bot().name} is on`}
                                 title={props.bot().enabled ? "On: runs while Paperboard does" : "Off"}
-                                onChange={(enabled) => void setEnabled(enabled)}
+                                // the switch flips once the bot is on or off: its thump waits for the save
+                                onChange={setEnabled}
                             />
                 </PaperFlex>
             </PaperCard>

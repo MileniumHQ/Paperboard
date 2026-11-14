@@ -1,4 +1,4 @@
-import { createEffect, createSignal, on, Show, For, Index } from "solid-js";
+import { createSignal, Show, For, Index } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -61,8 +61,9 @@ export default function Commands(props: { bot: () => BotSummary }) {
     // panel's store, reconciled by command id, so a row that didn't change
     // stays as it is
     const commands = (): readonly SlashCommandDefinition[] => props.bot().commands;
-    const [guilds, setGuilds] = createSignal<GuildSummary[]>([]);
-    const [guildsError, setGuildsError] = createSignal("");
+    // the servers a command can be scoped to, announced with the bot as it
+    // joins, leaves or renames one; reconciled by server id like the commands
+    const guilds = (): readonly GuildSummary[] => props.bot().guilds;
     const [actionError, setActionError] = createSignal<Outcome | null>(null);
 
     const [createOpen, setCreateOpen] = createSignal(false);
@@ -81,23 +82,6 @@ export default function Commands(props: { bot: () => BotSummary }) {
     const [deleteTarget, setDeleteTarget] = createSignal<SlashCommandDefinition | null>(
         null,
     );
-
-    // the servers a command can be scoped to: read again as the bot comes
-    // online or joins or leaves one
-    let guildsRequest = 0;
-    const loadGuilds = async () => {
-        const request = ++guildsRequest;
-        setGuildsError("");
-        try {
-            const list = await serviceApi.call<GuildSummary[]>(PANEL_ID, "listGuilds", { bot: bot() });
-            if (!Array.isArray(list)) throw new Error("listGuilds returned no server list");
-            if (request === guildsRequest) setGuilds(list);
-        } catch (err) {
-            console.error("[Commands] guild list read failed:", err);
-            if (request === guildsRequest) setGuildsError(errorToMessage(err));
-        }
-    };
-    createEffect(on(() => [props.bot().connected, props.bot().guildCount], () => void loadGuilds()));
 
     // the last sync's outcome is announced with the bot, so it shows here
     // however the commands changed
@@ -279,12 +263,6 @@ export default function Commands(props: { bot: () => BotSummary }) {
                                 {message()}
                             </PaperQuote>
                         )}
-                    </Show>
-
-                    <Show when={guildsError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Couldn't list the bot's servers">
-                            {guildsError()}. New commands can only be global until the list loads.
-                        </PaperQuote>
                     </Show>
 
                     <Show when={actionError()}>
@@ -610,4 +588,3 @@ export default function Commands(props: { bot: () => BotSummary }) {
     );
 }
 
-export { Commands };

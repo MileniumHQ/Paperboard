@@ -21,20 +21,12 @@ import {
 } from "@mileniumhq/paperui";
 import { serviceApi, defineWidgets, type WidgetContext } from "@mileniumhq/paperapi";
 import type { CommandActivity } from "./commandActivity";
+import type { BotWidgetStatus } from "./session";
 import { DEFAULT_DISCORD_AVATAR, errorToMessage } from "./types";
 import { PANEL_ID } from "./bots";
 
 const STATUS_POLL_MS = 15_000;
 const ACTIVITY_POLL_MS = 60_000;
-
-interface BotWidgetStatus {
-    configured: boolean;
-    connected: boolean;
-    lastError: string | null;
-    name: string;
-    avatar: string;
-    guildCount: number;
-}
 
 type Load<T> = { kind: "loading" } | { kind: "ready"; value: T } | { kind: "failed"; message: string };
 

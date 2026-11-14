@@ -1,6 +1,7 @@
 // Whether the panel is on a phone: narrower than PaperUI's phone-layout
-// width, the same line PaperPanel and PaperSlidePage draw. A panel is its own
-// document, so its viewport is its width.
+// width, the same line PaperPanel draws. A panel is its own document, so its
+// viewport is its width. Only for the home screen, which sits outside the
+// bot's PaperPanel: pages inside it ask usePaperPanel().compact.
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 import { PAPER_PANEL_COMPACT_WIDTH } from "@mileniumhq/paperui";
 

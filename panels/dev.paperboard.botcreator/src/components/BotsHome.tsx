@@ -38,7 +38,7 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
     const bots = props.bots;
     const [failure, setFailure] = createSignal<{ title: string; text: string } | null>(null);
     const [adding, setAdding] = createSignal(false);
-    // a switch flips on its own, never waiting on another change
+    // a switch flips once its bot is on or off, and its thump waits for that
     const setEnabled = (bot: BotSummary, enabled: boolean) =>
         bots.setEnabled(bot.id, enabled).catch((err) =>
             setFailure({ title: enabled ? `${bot.name} didn't come online` : `${bot.name} didn't go offline`, text: errorToMessage(err) }));
@@ -122,7 +122,7 @@ export default function BotsHome(props: { bots: BotsState; onOpen: (bot: { id: s
                                                 disabled={!bot.hasToken}
                                                 aria-label={`${bot.name} is on`}
                                                 title={bot.enabled ? "On: runs while Paperboard does" : "Off"}
-                                                onChange={(enabled) => void setEnabled(bot, enabled)}
+                                                onChange={(enabled) => setEnabled(bot, enabled)}
                                             />
                                         }
                                         footerRight={

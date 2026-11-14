@@ -65,23 +65,6 @@ import {
     buildMemberSummaries,
 } from "./session";
 
-export {
-    PRESENCE_STATUSES,
-    validatePresenceStatus,
-    channelPermissionChanges,
-    scheduledEventOptions,
-    type PresenceStatus,
-} from "./botOps";
-
-export {
-    BotSession,
-    buildGuildDetail,
-    buildMemberSummaries,
-    commandPayload,
-    describeChannelKind,
-    syncSlashCommands,
-} from "./session";
-
 export async function buildInviteUrl(appId: string, permissions: string[]): Promise<string> {
     if (!appId) {
         throw new Error("Cannot build an invite URL: no application ID is known.");
@@ -149,6 +132,7 @@ function summary(entry: BotEntry): BotSummary {
         hasToken: entry.hasToken,
         lastError: entry.blocksError ?? session.status().error ?? null,
         guildCount: connected ? session.client?.guilds?.cache?.size ?? 0 : 0,
+        guilds: connected ? session.guildSummaries() : [],
         createdAt: stored.createdAt,
         commands: stored.commands,
         commandSyncError: session.syncError(),
@@ -161,8 +145,16 @@ function setupGuideSeen(): boolean {
     return savedExtras[SETUP_GUIDE_FIELD] === true || bots.size > 0;
 }
 
+// what every window was last told: an announcement that changes nothing
+// (a member joins a server the windows show no count for) is not sent
+let published = "";
+
 function publish(): void {
-    serviceCtx?.setState({ bots: [...bots.values()].map(summary), botsError, setupGuideSeen: setupGuideSeen() });
+    const state: BotsServiceState = { bots: [...bots.values()].map(summary), botsError, setupGuideSeen: setupGuideSeen() };
+    const next = JSON.stringify(state);
+    if (!serviceCtx || next === published) return;
+    published = next;
+    serviceCtx.setState(state);
 }
 
 function requireReadable(): void {
@@ -332,8 +324,15 @@ async function connect(entry: BotEntry): Promise<void> {
 
 async function setEnabled(entry: BotEntry, enabled: boolean): Promise<void> {
     if (entry.stored.enabled !== enabled) {
+        const before = entry.stored;
         entry.stored = { ...entry.stored, enabled };
-        await saveBots();
+        try {
+            await saveBots();
+        } catch (err) {
+            // the switch goes back to what is saved, and says why
+            entry.stored = before;
+            throw err;
+        }
         publish();
     }
     if (enabled) await connect(entry);
@@ -722,9 +721,6 @@ export const serviceCalls = {
     /** Gateway, cache and memory health. */
     getHealth: (_ctx: unknown, input: any) => requireBot(input?.bot).session.health(),
 
-    /** Server summaries from the client cache. */
-    listGuilds: (_ctx: unknown, input: any) => requireBot(input?.bot).session.guildSummaries(),
-
     /** Channels and roles, for the server explorer. */
     getGuildDetail: (_ctx: unknown, input: any) => buildGuildDetail(requireGuild(requireBot(input?.bot), input?.guildId)),
 
@@ -803,7 +799,7 @@ const blocksBots: BotsBlocksHost = {
  * Starts each bot without waiting for it. Logging in to Discord (and syncing commands after) can stall for minutes on a
  * rate limit; the service is ready before then, and a bot still connecting says so on its card.
  */
-export function startBots<T>(entries: Iterable<T>, start: (entry: T) => Promise<void>): void {
+function startBots<T>(entries: Iterable<T>, start: (entry: T) => Promise<void>): void {
     for (const entry of entries) {
         start(entry).catch((err) => console.error("[DiscordService] starting a bot failed:", errorToMessage(err)));
     }

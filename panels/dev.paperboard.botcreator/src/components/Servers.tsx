@@ -1,4 +1,5 @@
-import { createSignal, onMount, Show, For, type JSX } from "solid-js";
+import { createEffect, createSignal, on, Show, For, type JSX } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import {
     PaperFlex,
     PaperText,
@@ -31,7 +32,6 @@ import {
     type GuildChannel,
     type GuildDetail,
     type GuildSummary,
-    type Health,
     type MemberSummary,
 } from "../types";
 
@@ -70,20 +70,13 @@ function roleColor(color: number): string | undefined {
     return `#${color.toString(16).padStart(6, "0")}`;
 }
 
-interface ChannelGroup {
-    id: string;
-    name: string;
-    channels: GuildChannel[];
-}
-
 export default function Servers(props: { bot: () => BotSummary }) {
     const bot = () => props.bot().id;
-    const [guilds, setGuilds] = createSignal<GuildSummary[]>([]);
-    // null until the first health read answers: unknown is not offline
-    const [connected, setConnected] = createSignal<boolean | null>(null);
-    const [healthError, setHealthError] = createSignal("");
-    const [listError, setListError] = createSignal("");
-    const [loadingList, setLoadingList] = createSignal(true);
+    // the bot's servers and its connection are announced with it, kept live
+    // in the panel's store and reconciled by server id: a server it joins,
+    // leaves or renames shows at once, and a card that didn't change stays
+    const guilds = (): readonly GuildSummary[] => props.bot().guilds;
+    const connected = () => props.bot().connected;
 
     // On a phone a server's page slides in over the list and its bar goes
     // back to it; on a computer the page takes the list's place
@@ -94,12 +87,17 @@ export default function Servers(props: { bot: () => BotSummary }) {
     // the server the page shows: on a phone it keeps showing it while its
     // page slides away, so nothing changes under the person's eyes
     const [shownId, setShownId] = createSignal<string | null>(null);
-    const [detail, setDetail] = createSignal<GuildDetail | null>(null);
+    // what was read of the open server, reconciled by id on every reload so
+    // its rows keep their place
+    const [view, setView] = createStore<{ detail: GuildDetail | null; members: MemberSummary[] | null }>({ detail: null, members: null });
+    const detail = () => view.detail;
+    const setDetail = (next: GuildDetail | null) => setView("detail", reconcile(next, { key: "id" }));
+    const members = () => view.members;
+    const setMembers = (next: MemberSummary[] | null) => setView("members", reconcile(next, { key: "id" }));
     const [detailLoading, setDetailLoading] = createSignal(false);
     const [detailError, setDetailError] = createSignal("");
 
     const [memberQuery, setMemberQuery] = createSignal("");
-    const [members, setMembers] = createSignal<MemberSummary[] | null>(null);
     const [membersLoading, setMembersLoading] = createSignal(false);
     const [membersError, setMembersError] = createSignal("");
 
@@ -108,37 +106,6 @@ export default function Servers(props: { bot: () => BotSummary }) {
     const [sending, setSending] = createSignal(false);
     const [sendError, setSendError] = createSignal("");
     const [sentTo, setSentTo] = createSignal("");
-
-    const loadGuilds = async () => {
-        setLoadingList(true);
-        setListError("");
-        try {
-            const list = await serviceApi.call<GuildSummary[]>(PANEL_ID, "listGuilds", { bot: bot() });
-            if (!Array.isArray(list)) throw new Error("listGuilds returned no server list");
-            setGuilds(list);
-        } catch (err) {
-            console.error("[Servers] guild list read failed:", err);
-            setListError(errorToMessage(err));
-        } finally {
-            setLoadingList(false);
-        }
-
-        setHealthError("");
-        try {
-            const health = await serviceApi.call<Health>(PANEL_ID, "getHealth", { bot: bot() });
-            if (!health || typeof health !== "object") {
-                throw new Error("getHealth returned no health payload");
-            }
-            setConnected(Boolean(health.connected));
-        } catch (err) {
-            console.error("[Servers] health read failed:", err);
-            setHealthError(errorToMessage(err));
-        }
-    };
-
-    onMount(() => {
-        void loadGuilds();
-    });
 
     const textChannels = () =>
         (detail()?.channels ?? []).filter(
@@ -188,11 +155,23 @@ export default function Servers(props: { bot: () => BotSummary }) {
         }
     };
 
-    const refresh = async () => {
-        await loadGuilds();
+    const refresh = () => {
         const id = selectedId();
-        if (id) await selectGuild(id);
+        if (id) void selectGuild(id);
     };
+
+    // the open server follows what is announced of it: read again when it
+    // changes (a rename, a member joining), closed once the bot is no longer in it
+    const announced = () => {
+        const id = selectedId();
+        const guild = id ? guilds().find((g) => g.id === id) : undefined;
+        return guild ? JSON.stringify(guild) : null;
+    };
+    createEffect(on(announced, (now, before) => {
+        if (!before) return;
+        if (now) void selectGuild(selectedId()!);
+        else closeServer();
+    }, { defer: true }));
 
     // the page is gone: what it showed goes with it
     const clearServer = () => {
@@ -265,62 +244,44 @@ export default function Servers(props: { bot: () => BotSummary }) {
         }
     };
 
-    const channelGroups = (): ChannelGroup[] => {
-        const d = detail();
-        if (!d) return [];
-        const categoryIds = new Set(
-            d.channels.filter((c) => c.kind === "category").map((c) => c.id),
-        );
-        const groups: ChannelGroup[] = d.channels
-            .filter((c) => c.kind === "category")
-            .map((category) => ({
-                id: category.id,
-                name: category.name,
-                channels: d.channels.filter(
-                    (c) => c.kind !== "category" && c.parentId === category.id,
-                ),
-            }))
-            .filter((group) => group.channels.length > 0);
-
-        const orphaned = d.channels.filter(
-            (c) =>
-                c.kind !== "category" &&
-                (c.parentId === null || !categoryIds.has(c.parentId)),
-        );
-        if (orphaned.length > 0) {
-            groups.push({ id: "__none", name: "No category", channels: orphaned });
-        }
-        return groups;
+    // channels by category, each category's in Discord's order; the rows are
+    // the store's own channels, so a reload keeps them in place
+    const channelsIn = (parentId: string | null) =>
+        (detail()?.channels ?? []).filter((c) => c.kind !== "category" && c.parentId === parentId);
+    const categories = () =>
+        (detail()?.channels ?? []).filter((c) => c.kind === "category" && channelsIn(c.id).length > 0);
+    const uncategorized = () => {
+        const all = detail()?.channels ?? [];
+        const categoryIds = new Set(all.filter((c) => c.kind === "category").map((c) => c.id));
+        return all.filter((c) => c.kind !== "category" && (c.parentId === null || !categoryIds.has(c.parentId)));
     };
 
     // the warnings both pages show above what they list
     const status = (): JSX.Element => (
         <>
-            <Show when={connected() === false}>
-                <PaperQuote variant="warning" icon="cloud_off" title="Bot offline">
+            <Show when={!connected()}>
+                <PaperQuote variant="warning" icon="cloud_off" title={props.bot().connecting ? "Bot connecting" : "Bot offline"}>
                     Servers appear here while the bot is connected.
-                </PaperQuote>
-            </Show>
-
-            <Show when={healthError()}>
-                <PaperQuote variant="danger" icon="warning" title="Couldn't check the bot's connection">
-                    {healthError()}
-                </PaperQuote>
-            </Show>
-
-            <Show when={listError()}>
-                <PaperQuote variant="danger" icon="warning" title="Couldn't list the servers">
-                    {listError()}
                 </PaperQuote>
             </Show>
         </>
     );
 
-    const refreshButton = () => (
-        <PaperButton disabled={loadingList()} onClick={() => void refresh()}>
-            <PaperIcon>refresh</PaperIcon>
-            Refresh
-        </PaperButton>
+    const channelSection = (title: string, channels: () => GuildChannel[]): JSX.Element => (
+        <PaperFlex direction="column" gap="onefourth">
+            <PaperText as="h3" preset="section">
+                {title}
+            </PaperText>
+            <For each={channels()}>
+                {(channel) => (
+                    <PaperFlex direction="row" gap="half" align="center">
+                        <PaperIcon>{CHANNEL_KIND_ICONS[channel.kind]}</PaperIcon>
+                        <PaperText preset="text">{channel.name}</PaperText>
+                        <PaperText preset="hint">{CHANNEL_KIND_LABELS[channel.kind]}</PaperText>
+                    </PaperFlex>
+                )}
+            </For>
+        </PaperFlex>
     );
 
     const server = (): JSX.Element => (
@@ -337,7 +298,10 @@ export default function Servers(props: { bot: () => BotSummary }) {
                         All servers
                     </PaperButton>
                 </Show>
-                {refreshButton()}
+                <PaperButton disabled={detailLoading()} onClick={refresh}>
+                    <PaperIcon>refresh</PaperIcon>
+                    Refresh
+                </PaperButton>
             </PaperPageHeader>
 
             {status()}
@@ -399,34 +363,12 @@ export default function Servers(props: { bot: () => BotSummary }) {
                                 <PaperText preset="heading">
                                     Channels
                                 </PaperText>
-                                <For each={channelGroups()}>
-                                    {(group) => (
-                                        <PaperFlex direction="column" gap="onefourth">
-                                            <PaperText as="h3" preset="section">
-                                                {group.name}
-                                            </PaperText>
-                                            <For each={group.channels}>
-                                                {(channel) => (
-                                                    <PaperFlex
-                                                        direction="row"
-                                                        gap="half"
-                                                        align="center"
-                                                    >
-                                                        <PaperIcon>
-                                                            {CHANNEL_KIND_ICONS[channel.kind]}
-                                                        </PaperIcon>
-                                                        <PaperText preset="text">
-                                                            {channel.name}
-                                                        </PaperText>
-                                                        <PaperText preset="hint">
-                                                            {CHANNEL_KIND_LABELS[channel.kind]}
-                                                        </PaperText>
-                                                    </PaperFlex>
-                                                )}
-                                            </For>
-                                        </PaperFlex>
-                                    )}
+                                <For each={categories()}>
+                                    {(category) => channelSection(category.name, () => channelsIn(category.id))}
                                 </For>
+                                <Show when={uncategorized().length > 0}>
+                                    {channelSection("No category", uncategorized)}
+                                </Show>
                             </PaperFlex>
                         </PaperCard>
 
@@ -613,22 +555,22 @@ export default function Servers(props: { bot: () => BotSummary }) {
         <>
             {/* on a phone the list stays under the server's page, as it was left */}
             <Show when={compact() || !selectedId()}>
-                <PaperPageHeader icon="dns" title="Servers" subtitle={count(guilds().length, "server")}>
-                    {refreshButton()}
-                </PaperPageHeader>
+                <PaperPageHeader icon="dns" title="Servers" subtitle={count(guilds().length, "server")} />
 
                 {status()}
 
                 <Show
-                    when={guilds().length > 0 || listError()}
+                    when={guilds().length > 0}
                     fallback={
-                        <PaperCard>
-                            <PaperEmptyState
-                                icon="dns"
-                                title={loadingList() ? "Loading servers…" : "No servers"}
-                                description="Invite the bot to a server from the Invite tab and it will show up here."
-                            />
-                        </PaperCard>
+                        <Show when={connected()}>
+                            <PaperCard>
+                                <PaperEmptyState
+                                    icon="dns"
+                                    title="No servers"
+                                    description="Invite the bot to a server from the Invite tab and it will show up here."
+                                />
+                            </PaperCard>
+                        </Show>
                     }
                 >
                     <PaperMediaCardGroup>
@@ -667,4 +609,3 @@ export default function Servers(props: { bot: () => BotSummary }) {
     );
 }
 
-export { Servers };

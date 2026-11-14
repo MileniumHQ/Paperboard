@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, te
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { BotsServiceState } from "../src/bots";
-import { openPage, servePanel, type Page } from "./helpers/browser";
+import { panelBrowser, servePanel, type Page } from "./helpers/browser";
 import { testDaemon } from "./helpers/daemon";
 import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
@@ -10,6 +10,8 @@ import { stateWhere } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
+
+const browser = panelBrowser();
 
 let discord: FakeDiscord;
 beforeAll(() => {
@@ -51,7 +53,7 @@ describe("failures are shown, never guessed", () => {
         const service = await startService({ discordApi: discord.api });
         await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots.find((b) => b.id === "b-keep")?.connected), "Keeper to connect");
         const served = await servePanel();
-        const page = await openPage(served.url);
+        const page = await browser.open(served.url);
         const configs = path.join((await testDaemon()).dataDir, "configs");
         try {
             // an invite link that can't be made says so, instead of "Generating…"
@@ -89,11 +91,6 @@ describe("failures are shown, never guessed", () => {
             const overview = await body(page);
             expect(overview).not.toContain("Gateway status");
             expect(overview).not.toContain("Checking health…");
-            // the Commands tab shows the bot as the service last announced it
-            // (the refused delete had already logged it out); what it asks the
-            // service itself, the bot's servers, fails and says why
-            await openTab(page, "commands");
-            await page.waitFor(quoteShows("Couldn't list the bot's servers", "dev.paperboard.botcreator"), "the failed server list read");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();

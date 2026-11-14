@@ -56,17 +56,6 @@ export interface RecentMessage {
     messageId: string;
 }
 
-export interface BotChannelInfo {
-    id: string;
-    name: string;
-}
-
-export interface BotGuildInfo {
-    id: string;
-    name: string;
-    channels: BotChannelInfo[];
-}
-
 export interface BotWidgetStatus {
     /** a token is saved for this bot; false means it needs one */
     configured: boolean;
@@ -81,7 +70,7 @@ export interface BotWidgetStatus {
 export interface SessionHost {
     /** fires one of this bot's triggers, by its id inside the bot's project */
     emit(trigger: string, output: unknown): void;
-    /** the bot's identity or connection changed; the service republishes it */
+    /** the bot's identity, connection or servers changed; the service republishes it */
     changed(): void;
 }
 
@@ -255,10 +244,6 @@ export class BotSession {
     // pending interactions
     // ---------------------------------------------------------------------
 
-    pendingCount(): number {
-        return this.pending.size;
-    }
-
     private dropEntry(key: string): void {
         const entry = this.pending.get(key);
         if (!entry) return;
@@ -319,29 +304,8 @@ export class BotSession {
     // reads
     // ---------------------------------------------------------------------
 
-    // guild list straight from the client cache (bounded slices: the cache
-    // is already finite, this keeps the wire shape finite too)
-    listGuilds(): BotGuildInfo[] {
-        const bot = this.client;
-        if (!bot) return [];
-        const { ChannelType } = discord();
-        return [...bot.guilds.cache.values()].slice(0, 100).map((guild) => ({
-            id: guild.id,
-            name: guild.name,
-            channels: [...guild.channels.cache.values()]
-                .filter(
-                    (channel) =>
-                        channel.type === ChannelType.GuildText ||
-                        channel.type === ChannelType.GuildAnnouncement,
-                )
-                .slice(0, 100)
-                .map((channel) => ({
-                    id: channel.id,
-                    name: (channel as { name?: string }).name ?? channel.id,
-                })),
-        }));
-    }
-
+    // the servers it is in, from the client cache (bounded: the cache is
+    // already finite, this keeps the wire shape finite too)
     guildSummaries(): GuildSummary[] {
         const bot = this.client;
         if (!bot) return [];
@@ -363,7 +327,6 @@ export class BotSession {
             avatar: bot?.user?.displayAvatarURL() || "",
             tag: bot?.user?.tag || "",
             guildCount: bot?.guilds?.cache?.size || 0,
-            guilds: this.listGuilds(),
             applicationId: bot?.user?.id || this.applicationId,
             connected: this.connected(),
             lastError: this.connectionStatus.error ?? null,
@@ -579,8 +542,11 @@ export class BotSession {
             emit("on-message", payload);
         });
 
+        // every window shows each server with its member, channel and role
+        // counts: a change to any of them is announced with the bot
         bot.on("guildMemberAdd", (member) => {
             if (!ownsSession()) return;
+            this.host.changed();
             emit("on-member-join", {
                 username: member.user.username,
                 userId: member.user.id,
@@ -591,6 +557,7 @@ export class BotSession {
 
         bot.on("guildMemberRemove", (member) => {
             if (!ownsSession()) return;
+            this.host.changed();
             emit("on-member-leave", {
                 username: member.user.username,
                 userId: member.user.id,
@@ -598,9 +565,9 @@ export class BotSession {
             });
         });
 
-        // the home screen shows how many servers each bot is in. discord.js
-        // says guildCreate only for a server joined while connected, and
-        // guildDelete only for one left (an outage is guildUnavailable)
+        // discord.js says guildCreate only for a server joined while
+        // connected, and guildDelete only for one left (an outage is
+        // guildUnavailable); a rename or a new icon is guildUpdate
         bot.on("guildCreate", (guild) => {
             if (!ownsSession()) return;
             this.host.changed();
@@ -611,22 +578,29 @@ export class BotSession {
             this.host.changed();
             emit("on-guild-left", { guildId: guild.id, guildName: guild.name ?? "" });
         });
+        bot.on("guildUpdate", () => {
+            if (ownsSession()) this.host.changed();
+        });
 
         bot.on("channelCreate", (channel) => {
             if (!ownsSession()) return;
+            this.host.changed();
             emit("on-channel-created", { channelId: channel.id, name: channel.name, type: channel.type, guildId: channel.guildId });
         });
         bot.on("channelDelete", (channel) => {
             if (!ownsSession() || channel.isDMBased()) return;
+            this.host.changed();
             emit("on-channel-deleted", { channelId: channel.id, name: channel.name, type: channel.type, guildId: channel.guildId });
         });
 
         bot.on("roleCreate", (role) => {
             if (!ownsSession()) return;
+            this.host.changed();
             emit("on-role-created", { roleId: role.id, name: role.name, guildId: role.guild.id });
         });
         bot.on("roleDelete", (role) => {
             if (!ownsSession()) return;
+            this.host.changed();
             emit("on-role-deleted", { roleId: role.id, name: role.name, guildId: role.guild.id });
         });
 
@@ -828,9 +802,8 @@ export class BotSession {
             emit("on-connection-error", { error: message });
         };
 
-        // discord.js retries these internally; shardReady/clientReady below
-        // restores the connected flag when the gateway actually comes back
-        bot.on("disconnect" as any, (err?: unknown) => markGatewayDown("disconnect", err));
+        // discord.js reconnects a dropped shard itself; shardReady/clientReady
+        // below restores the connected flag when the gateway comes back
         bot.on("shardDisconnect", (event) => markGatewayDown("shardDisconnect", event));
         // a resume replays what the dropped connection missed; interactions
         // in that replay are already past Discord's answer window

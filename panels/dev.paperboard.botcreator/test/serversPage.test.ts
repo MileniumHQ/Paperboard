@@ -1,12 +1,14 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import type { BotsServiceState } from "../src/bots";
-import { openPage, servePanel, type Page } from "./helpers/browser";
+import { panelBrowser, servePanel, type Page } from "./helpers/browser";
 import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
-import { PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
+import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
+
+const browser = panelBrowser();
 
 let discord: FakeDiscord;
 beforeAll(() => {
@@ -38,7 +40,7 @@ describe("the server explorer", () => {
         await startService({ discordApi: discord.api });
         await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots.find((b) => b.id === "b-keep")?.connected), "Keeper to connect");
         const served = await servePanel();
-        const page = await openPage(served.url);
+        const page = await browser.open(served.url);
         try {
             await page.waitFor(`document.body.innerText.includes("Keeper")`, "the bot list");
             await clickText(page, "[class*=card], [class*=Card]", "Keeper");
@@ -51,6 +53,39 @@ describe("the server explorer", () => {
             expect(sent.bot).toBe(fake.token);
             expect(sent.body.content).toBe("Hello from Paperboard!");
             await page.waitFor(`document.body.innerText.includes("Posted to #general")`, "the confirmation");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+});
+
+// The server list is the bot's, as the service announces it: it follows the
+// bot coming online and a server being renamed without a Refresh.
+describe("the server list follows the bot", () => {
+    test("a bot turned on while its Servers tab is open shows its servers, and a rename shows in place", async () => {
+        const home = guild("Home");
+        const fake = discord.addBot({ username: "Sleeper", guilds: [home] });
+        await savedBots([{ stored: storedBot("b-sleep", fake.appId, { name: "Sleeper", enabled: false }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await page.waitFor(`document.body.innerText.includes("Sleeper")`, "the bot list");
+            await clickText(page, "[class*=card], [class*=Card]", "Sleeper");
+            await page.click(`input[name=botMenu][value="servers"]`);
+            await page.waitFor(`document.body.innerText.includes("Bot offline")`, "the offline bot's servers");
+
+            await call("connectBot", { bot: "b-sleep" });
+            await page.waitFor(`document.body.innerText.includes("1 member") && !document.body.innerText.includes("Bot offline")`, "the bot's servers once it is on");
+            const card = `([...document.querySelectorAll("[class*=card], [class*=Card]")].filter((el) => /Home|Hearth/.test(el.innerText ?? "")).at(-1) ?? null)`;
+            await page.evaluate(`window.homeCard = ${card}`);
+
+            discord.dispatch(fake, "GUILD_UPDATE", { id: home.id, name: "Hearth", icon: null, owner_id: fake.appId, features: [] });
+            await page.waitFor(`document.body.innerText.includes("Hearth")`, "the renamed server");
+            expect(await page.evaluate<boolean>(`window.homeCard.isConnected && window.homeCard === ${card}`)).toBe(true);
+            expect(await page.evaluate<string>(`document.body.innerText`)).not.toContain("Home");
             expect(page.exceptions).toEqual([]);
         } finally {
             await page.close();
@@ -92,7 +127,7 @@ describe("going back on a phone", () => {
         await startService({ discordApi: discord.api });
         await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots.find((b) => b.id === "b-keep")?.connected), "Keeper to connect");
         const served = await servePanel();
-        const page = await openPage(served.url);
+        const page = await browser.open(served.url);
         try {
             await page.resize(400, 800);
             await page.waitFor(`document.body.innerText.includes("Keeper")`, "the bot list");
@@ -148,7 +183,7 @@ describe("going back on a phone", () => {
         await startService({ discordApi: discord.api });
         await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots.find((b) => b.id === "b-keep")?.connected), "Keeper to connect");
         const served = await servePanel();
-        const page = await openPage(served.url);
+        const page = await browser.open(served.url);
         try {
             await page.resize(1400, 900);
             await page.waitFor(`document.body.innerText.includes("Keeper")`, "the bot list");

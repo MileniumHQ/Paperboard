@@ -1,7 +1,7 @@
 // Adding a bot, replacing its token and deleting it, the same from the home
 // screen and the bot's own pages. Each says what failed, in place, instead
 // of closing on an error.
-import { createEffect, createSignal, Show } from "solid-js";
+import { createEffect, createSignal, on, Show } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -61,12 +61,13 @@ export function NewBotModal(props: {
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
     const appId = () => extractApplicationIdFromToken(token());
-    createEffect(() => {
-        if (!props.open) return;
+    // each opening starts empty
+    createEffect(on(() => props.open, (open) => {
+        if (!open) return;
         setToken("");
         setError(null);
         setBusy(false);
-    });
+    }));
     const submit = async () => {
         if (busy() || !appId()) return;
         setBusy(true);
@@ -127,12 +128,13 @@ export function ReplaceTokenModal(props: {
     const appId = () => extractApplicationIdFromToken(token());
     // a token for another application would quietly turn this bot into that one
     const fits = () => Boolean(appId()) && (!props.bot?.applicationId || appId() === props.bot.applicationId);
-    createEffect(() => {
-        if (!props.bot) return;
+    // opened for a bot, it starts empty: a change to the bot while it is open keeps what was typed
+    createEffect(on(() => props.bot?.id, (id) => {
+        if (!id) return;
         setToken("");
         setError(null);
         setBusy(false);
-    });
+    }));
     const submit = async () => {
         const bot = props.bot;
         if (!bot || busy() || !fits()) return;
@@ -182,11 +184,11 @@ export function DeleteBotModal(props: {
 }) {
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
-    createEffect(() => {
-        if (!props.bot) return;
+    createEffect(on(() => props.bot?.id, (id) => {
+        if (!id) return;
         setError(null);
         setBusy(false);
-    });
+    }));
     const confirm = async () => {
         const bot = props.bot;
         if (!bot || busy()) return;

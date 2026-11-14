@@ -2,7 +2,7 @@
 // shows its pages. A bot deleted while it is open returns here. On a phone
 // the bot's pages are another menu: they slide in over the list, and back
 // (the button, the swipe) returns to it.
-import { createEffect, createSignal, Show } from "solid-js";
+import { createEffect, createSignal, on, Show } from "solid-js";
 import {
     PaperAvatar,
     PaperFlex,
@@ -106,12 +106,13 @@ export default function App() {
         setOpened(id);
     };
 
-    createEffect(() => {
+    createEffect(on(() => {
         const id = opened();
-        if (!id) return;
-        if (bots.find(id)) listed = true;
-        else if (listed) setOpened(null);
-    });
+        return id ? Boolean(bots.find(id)) : null;
+    }, (known) => {
+        if (known) listed = true;
+        else if (known === false && listed) setOpened(null);
+    }));
 
     // the bot being shown: opened, and known to the service
     const shown = () => {
@@ -122,10 +123,9 @@ export default function App() {
     // bot to show until it has gone: the last one shown, for as long as it
     // exists. On a computer the page is only there while it is open.
     const [lastShown, setLastShown] = createSignal<string | null>(null);
-    createEffect(() => {
-        const id = shown();
+    createEffect(on(shown, (id) => {
         if (id) setLastShown(id);
-    });
+    }));
     const pageBot = () => {
         const id = compact() ? lastShown() : shown();
         return id && bots.find(id) ? id : null;

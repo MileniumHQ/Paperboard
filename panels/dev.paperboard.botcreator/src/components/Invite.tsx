@@ -9,10 +9,10 @@ import {
     PaperPageHeader,
     PaperQuote,
     PaperSeparator,
+    usePaperPanel,
 } from "@mileniumhq/paperui";
 import { serviceApi } from "@mileniumhq/paperapi";
 import { PANEL_ID, type BotSummary } from "../bots";
-import { createCompact } from "../compact";
 import {
     PERMISSION_DEFINITIONS,
     DEFAULT_SELECTED_PERMISSIONS,
@@ -20,7 +20,9 @@ import {
 } from "../types";
 
 export default function Invite(props: { bot: () => BotSummary }) {
-    const compact = createCompact();
+    // the phone layout of the panel this page is in
+    const panel = usePaperPanel();
+    const compact = () => Boolean(panel?.compact?.());
     const [inviteUrl, setInviteUrl] = createSignal("");
     const [inviteError, setInviteError] = createSignal("");
     const [userInstallUrl, setUserInstallUrl] = createSignal("");

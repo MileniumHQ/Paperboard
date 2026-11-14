@@ -6,13 +6,15 @@ import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, te
 import { blocksApi } from "@mileniumhq/paperapi";
 import type { BotsServiceState } from "../src/bots";
 import type { SlashCommandDefinition } from "../src/types";
-import { openPage, servePanel, type Page } from "./helpers/browser";
+import { panelBrowser, servePanel, type Page } from "./helpers/browser";
 import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
 import { stateWhere } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
+
+const browser = panelBrowser();
 
 const run = <T = any>(command: string, inputs: Record<string, unknown>) => blocksApi.run<T>(PANEL_ID, command, inputs);
 
@@ -60,8 +62,8 @@ describe("the Commands tab", () => {
         await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length === 2 && s.bots.every((b) => b.connected), "both bots to connect");
         const served = await servePanel();
         // two windows: Alpha's tab, where the flow's changes land, and Beta's
-        const page = await openPage(served.url);
-        const other = await openPage(served.url);
+        const page = await browser.open(served.url);
+        const other = await browser.open(served.url);
         try {
             await openCommands(page, "Alpha");
             await openCommands(other, "Beta");
@@ -87,6 +89,37 @@ describe("the Commands tab", () => {
         } finally {
             await page.close();
             await other.close();
+            served.stop();
+        }
+    });
+
+    test("the servers a command is scoped to follow the bot: a renamed server shows its new name in the open tab", async () => {
+        const home = guild("Home");
+        const fake = discord.addBot({ username: "Gamma", guilds: [home] });
+        await savedBots([{ stored: storedBot("b-gamma", fake.appId, { name: "Gamma", commands: [{ ...command("c-wave", "wave"), scope: home.id }] }), token: fake.token }]);
+        await startService({ discordApi: discord.api });
+        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "Gamma to connect");
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        try {
+            await openCommands(page, "Gamma");
+            const badge = `(${row("wave")}?.closest("[class*=SettingItem]")?.textContent ?? "")`;
+            await page.waitFor(`${badge}.includes("Home")`, "/wave scoped to Home");
+            await page.evaluate(`window.waveRow = ${row("wave")}`);
+
+            // the same number of servers, one of them renamed: nothing but the list itself says so
+            discord.dispatch(fake, "GUILD_UPDATE", { id: home.id, name: "Hearth", icon: null, owner_id: fake.appId, features: [] });
+            await page.waitFor(`${badge}.includes("Hearth")`, "the renamed server in the open tab");
+            expect(await page.evaluate<boolean>(`window.waveRow.isConnected && window.waveRow === ${row("wave")}`)).toBe(true);
+
+            // and a new command offers it by its new name
+            await page.evaluate(`[...document.querySelectorAll("button")].find((b) => b.innerText.includes("Create command")).dataset.test = "new"`);
+            await page.click(`[data-test="new"]`);
+            await page.waitFor(`document.querySelector("[role=dialog]")?.textContent.includes("Hearth (this server only)")`, "the renamed server among the scopes");
+            expect(await page.evaluate<string>(`document.querySelector("[role=dialog]").textContent`)).not.toContain("Home (this server only)");
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
             served.stop();
         }
     });
