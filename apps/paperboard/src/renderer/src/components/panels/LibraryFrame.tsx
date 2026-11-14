@@ -1,6 +1,7 @@
 import {
     type Component,
     createEffect,
+    createMemo,
     createSignal,
     onCleanup,
     onMount,
@@ -84,6 +85,12 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
     const libraryOrigin = () =>
         new URL(libraryUrl(), window.location.href).origin;
 
+    // What the library is told is installed, as plain data: posted only
+    // when the list itself changed, not each time the shell's panel lists
+    // are touched (another computer's refresh, the same list read again).
+    const installedJson = createMemo(() => JSON.stringify(props.installed));
+    const installed = createMemo((): PanelItem[] => JSON.parse(installedJson()));
+
     const reply = (message: unknown) => {
         frame?.contentWindow?.postMessage(message, libraryOrigin());
     };
@@ -139,7 +146,7 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
             setReadyCapable(message.ready);
             setConnected(true);
             setFailure(false);
-            reply(shellToLibrary.connected(props.theme, props.installed));
+            reply(shellToLibrary.connected(props.theme, installed()));
         } else if (message.type === "paperboard:library-ready") {
             // a late ready still clears a connect-then-silent failure
             setReady(true);
@@ -207,11 +214,11 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
     // cards cannot go stale after an install/uninstall elsewhere. The theme
     // rides along so a settings change reaches the embedded page too.
     createEffect(() => {
-        const installed = props.installed;
+        const list = installed();
         const theme = props.theme;
         if (!connected()) return;
         if (!frame?.contentWindow) return;
-        reply(shellToLibrary.installed(theme, installed));
+        reply(shellToLibrary.installed(theme, list));
     });
 
     onMount(() => {

@@ -1,4 +1,4 @@
-import { type Component, type JSX, createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
+import { type Component, type JSX, createSignal, createEffect, createMemo, onMount, onCleanup, For, Show } from "solid-js";
 import {
     PaperProvider,
     PaperFlex,
@@ -87,7 +87,7 @@ const App: Component = () => {
     } = useComputers();
     const {
         panelsByComputer,
-        setPanelsByComputer,
+        forgetPanels,
         activeTabByComputer,
         setActiveTabByComputer,
         openedPanels,
@@ -225,13 +225,14 @@ const App: Component = () => {
 
     // a panel whose new release is installing can't be opened; once it is
     // in place (or the previous one is back) its view loads again
-    const updatingPanels = () =>
+    const updatingPanels = createMemo(() =>
         new Set(
             updateQueue
                 .state()
                 .items.filter((item) => item.kind === "panel" && item.status === "running" && item.panelId)
                 .map((item) => `${item.computerId}::${item.panelId}`),
-        );
+        ),
+    );
     const panelUpdateSeen = new Map<string, string>();
     createEffect(() => {
         for (const item of updateQueue.state().items) {
@@ -334,15 +335,26 @@ const App: Component = () => {
         setLayoutKnown(true);
     });
 
-    onMount(async () => {
+    onMount(() => {
+        // Subscribed before the first load, so a computer's status pushed
+        // while it is read isn't missed, and torn down with the window.
+        onCleanup(subscribeComputerChanges());
+        void startUp();
+    });
+
+    const startUp = async () => {
+        // Application-wide settings are read first, beside the daemon calls
+        // rather than behind them, so the theme and motion are the user's
+        // from the start
+        const settingsLoaded = loadAppSettings();
+
         // Restores the active computer over privileged IPC
         await refreshComputers();
 
         // Data fetches are scoped per computer
         await refreshPanelsForComputer(activeComputerId());
 
-        // Load application-wide settings before anything depends on them
-        await loadAppSettings();
+        await settingsLoaded;
 
         // Launch lands on Home or the computer App Settings starts on, never
         // on a panel: opening the last-used panel on boot made a misbehaving
@@ -353,12 +365,7 @@ const App: Component = () => {
             if (start.missing) logToMain("error", `Paperboard starts on computer "${appSettings().startOn}", which isn't listed; opening Home.`);
             if (start.computerId) handleRailSelect(start.computerId);
         }
-
-        // R1: the unsubscribe is kept and torn down. shell.onChanged's
-        // contract returns an unsubscribe; discarding it invites every
-        // future consumer to leak a live IPC listener.
-        onCleanup(subscribeComputerChanges());
-    });
+    };
 
     const finishComputerSelect = (compId: string) => {
         setActiveComputerId(compId);
@@ -438,11 +445,7 @@ const App: Component = () => {
             setOpenedPanels((prev) =>
                 prev.filter((k) => !k.startsWith(`${compId}::`)),
             );
-            setPanelsByComputer((prev) => {
-                const copy = { ...prev };
-                delete copy[compId];
-                return copy;
-            });
+            forgetPanels(compId);
             setActiveTabByComputer((prev) => {
                 const copy = { ...prev };
                 delete copy[compId];
@@ -503,7 +506,7 @@ const App: Component = () => {
 
     // the rail moves at once; a failed save says so and puts it back
     const handleReorderComputers = async (shownIds: string[]) => {
-        const before = computers();
+        const before = [...computers()];
         const ids = orderWithShown(before.map((c) => c.id), shownIds);
         const byId = new Map(before.map((c) => [c.id, c]));
         setComputers(ids.map((id) => byId.get(id)!));
@@ -590,15 +593,24 @@ const App: Component = () => {
         return panel.icon || "dashboard";
     };
 
-    // a panel's loader heads itself with the panel's icon and name
+    // A panel's loader heads itself with the panel's icon and name. Asked
+    // once per frame: the heading follows the panel from then on, and each
+    // loader that shows it draws its own icon, so nothing is redrawn when
+    // something else about the panels changes.
     const panelHeading = (key: string): { icon: JSX.Element; name: string } => {
         const [compId, panelId] = key.split("::");
-        const panel = panelsByComputer()[compId]?.find((p) => p.id === panelId);
-        if (!panel) return { icon: <PaperIcon>dashboard</PaperIcon>, name: panelId };
-        const src = panel.iconUrl ?? (panel.icon?.includes(".") ? panelUrl(compId, panel.id, panel.icon) : undefined);
+        const panel = createMemo(() => panelsByComputer()[compId]?.find((p) => p.id === panelId));
+        const src = () => {
+            const known = panel();
+            return known && (known.iconUrl ?? (known.icon?.includes(".") ? panelUrl(compId, known.id, known.icon) : undefined));
+        };
         return {
-            icon: <PaperIcon src={src} alt="">{src ? undefined : panel.icon || "dashboard"}</PaperIcon>,
-            name: panel.name,
+            get icon() {
+                return <PaperIcon src={src()} alt="">{src() ? undefined : panel()?.icon || "dashboard"}</PaperIcon>;
+            },
+            get name() {
+                return panel()?.name ?? panelId;
+            },
         };
     };
 
@@ -609,7 +621,7 @@ const App: Component = () => {
         appUpdate.state().status === "ready";
 
     // the mobile page's top bar: the open tab's icon and name
-    const mobilePageHeading = (): { title: string; icon: JSX.Element } => {
+    const mobilePageHeading = createMemo((): { title: string; icon: JSX.Element } => {
         const compId = activeComputerId();
         const tab = getSelectedTab(compId);
         const comp = activeComputer();
@@ -625,7 +637,7 @@ const App: Component = () => {
         const panel = panelsByComputer()[compId]?.find((p) => p.id === tab);
         if (!panel) return { title: tab, icon: "dashboard" };
         return { title: panel.name, icon: renderPanelIcon(panel, compId) };
-    };
+    });
 
     return (
         <PaperProvider

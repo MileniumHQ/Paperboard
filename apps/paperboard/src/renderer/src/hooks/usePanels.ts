@@ -1,4 +1,5 @@
 import { createMemo, createSignal } from "solid-js";
+import { createStore, produce, reconcile } from "solid-js/store";
 import { panelsApi, type PanelItem } from "@mileniumhq/paperapi";
 import { logToMain } from "../lib/shell";
 import { isShellTab } from "../lib/shellTabs";
@@ -10,9 +11,17 @@ export const MAX_OPENED_PANELS = 50;
 
 // panel state per computer
 export function usePanels() {
-    const [panelsByComputer, setPanelsByComputer] = createSignal<
-        Record<string, PanelItem[]>
-    >({});
+    // Reconciled by panel id, like the computers: a refresh lists every
+    // panel afresh, and new objects would remount each sidebar row, widget
+    // source and gallery card (reloading previews, dropping chosen sizes).
+    // A panel stays the same object and only what changed notifies.
+    const [panelStore, setPanelStore] = createStore<Record<string, PanelItem[]>>({});
+    const panelsByComputer = () => panelStore;
+    /** a forgotten computer's panels are gone with it */
+    const forgetPanels = (compId: string) =>
+        setPanelStore(produce((panels) => {
+            delete panels[compId];
+        }));
     const [activeTabByComputer, setActiveTabByComputer] = createSignal<
         Record<string, string>
     >({
@@ -62,10 +71,7 @@ export function usePanels() {
         try {
             const installed = await panelsApi.list(compId);
             if (Array.isArray(installed)) {
-                setPanelsByComputer((prev) => ({
-                    ...prev,
-                    [compId]: installed,
-                }));
+                setPanelStore(compId, reconcile(installed, { key: "id" }));
                 setPanelsLoadError((prev) => ({ ...prev, [compId]: "" }));
             }
         } catch (err) {
@@ -76,7 +82,7 @@ export function usePanels() {
 
     return {
         panelsByComputer,
-        setPanelsByComputer,
+        forgetPanels,
         activeTabByComputer,
         setActiveTabByComputer,
         openedPanels,

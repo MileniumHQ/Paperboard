@@ -87,11 +87,19 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
         return chosen && props.computers.some((c) => c.id === chosen) ? chosen : localId();
     };
 
-    const panelSources = (computer: ComputerInfo): Source[] =>
-        (props.panelsByComputer[computer.id] ?? [])
-            .filter((panel) => (panel.widgets?.length ?? 0) > 0)
-            .map((panel) => ({ key: `${computer.id}::${panel.id}`, kind: "panel" as const, computer, panel }));
-    const sources = createMemo<Source[]>(() => [{ key: "paperboard", kind: "builtin" }, ...props.computers.flatMap(panelSources)]);
+    // The panels and computers keep their objects across refreshes, so the
+    // lists below are walked over them, not over sources made afresh: a
+    // refresh then leaves each row and card (its preview, its chosen size
+    // and options) as it was.
+    const widgetPanels = (computer: ComputerInfo): PanelItem[] =>
+        (props.panelsByComputer[computer.id] ?? []).filter((panel) => (panel.widgets?.length ?? 0) > 0);
+    const panelSourceKey = (computer: ComputerInfo, panel: PanelItem) => `${computer.id}::${panel.id}`;
+    const sources = createMemo<Source[]>(() => [
+        { key: "paperboard", kind: "builtin" },
+        ...props.computers.flatMap((computer) =>
+            widgetPanels(computer).map((panel) => ({ key: panelSourceKey(computer, panel), kind: "panel" as const, computer, panel })),
+        ),
+    ]);
     const choosing = () => sources().length > 1 || props.computers.some((c) => props.panelsLoadFailed[c.id]);
     const open = createMemo<Source | null>(() => {
         if (!choosing()) return sources()[0];
@@ -177,7 +185,7 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
                             <For each={props.computers}>
                                 {(computer) => (
                                     <>
-                                        <Show when={props.computers.length > 1 && (panelSources(computer).length > 0 || props.panelsLoadFailed[computer.id])}>
+                                        <Show when={props.computers.length > 1 && (widgetPanels(computer).length > 0 || props.panelsLoadFailed[computer.id])}>
                                             <PaperText preset="section" class={styles.libraryComputer}>
                                                 {computer.name}
                                             </PaperText>
@@ -188,18 +196,15 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
                                                 <PaperButton size="tiny" variant="text" onClick={() => props.onRetry(computer.id)}>Retry</PaperButton>
                                             </div>
                                         </Show>
-                                        <For each={panelSources(computer)}>
-                                            {(source) => {
-                                                const s = source as Extract<Source, { kind: "panel" }>;
-                                                return (
-                                                    <SourceRow
-                                                        key={s.key}
-                                                        icon={<PanelIcon computerId={computer.id} panel={s.panel} />}
-                                                        name={s.panel.name}
-                                                        detail={(s.panel.widgets ?? []).map((w) => w.name).join(", ")}
-                                                    />
-                                                );
-                                            }}
+                                        <For each={widgetPanels(computer)}>
+                                            {(panel) => (
+                                                <SourceRow
+                                                    key={panelSourceKey(computer, panel)}
+                                                    icon={<PanelIcon computerId={computer.id} panel={panel} />}
+                                                    name={panel.name}
+                                                    detail={(panel.widgets ?? []).map((w) => w.name).join(", ")}
+                                                />
+                                            )}
                                         </For>
                                     </>
                                 )}
