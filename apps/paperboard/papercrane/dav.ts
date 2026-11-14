@@ -380,7 +380,8 @@ function destRel(req: http.IncomingMessage, res: http.ServerResponse): string | 
     let destPath: string;
     try {
         destPath = new URL(raw).pathname;
-    } catch {
+    } catch (err) {
+        logger.debug("[dav] unparseable Destination:", err);
         replyText(res, 400, "Bad Destination");
         return null;
     }
@@ -526,7 +527,8 @@ async function serveDav(
     let rel: string | null;
     try {
         rel = davRooted(new URL(req.url || "/", `http://${req.headers.host || "localhost"}`).pathname);
-    } catch {
+    } catch (err) {
+        logger.debug("[dav] unparseable request URL:", err);
         return replyText(res, 400, "Bad Request");
     }
     if (rel === null) return replyText(res, 404, "Not Found");
