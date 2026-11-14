@@ -18,6 +18,7 @@ export interface LoadingOverlayProps {
     value?: number;
     /** Shown under the bar when the wait needs explaining, such as a backup. */
     title?: string;
+    /** Under the bar while it waits, under the failure once it failed. */
     detail?: string;
     /** When set, replaces the loader with the failure and its recovery. */
     error?: string;
@@ -51,11 +52,11 @@ const LoadingOverlay: Component<LoadingOverlayProps> = (props) => (
         <Show when={!props.error && props.title}>
             <PaperText preset="label">{props.title}</PaperText>
         </Show>
-        <Show when={!props.error && props.detail}>
-            <PaperText preset="hint">{props.detail}</PaperText>
-        </Show>
         <Show when={props.error}>
             <PaperText preset="error" role="alert">{props.error}</PaperText>
+        </Show>
+        <Show when={props.detail}>
+            <PaperText preset="hint">{props.detail}</PaperText>
         </Show>
         <Show when={props.error && props.onRetry}>
             <PaperButton onClick={props.onRetry}>

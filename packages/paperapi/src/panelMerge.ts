@@ -36,6 +36,8 @@ export interface PanelItem {
     widgets?: WidgetDeclaration[];
     /** the installed manifest's service entry; absent when the panel runs no service */
     service?: string;
+    /** why the installed panel's service last failed or exited unasked; absent once it is ready again */
+    serviceError?: string;
 }
 
 export interface RegistryPanelRecord {

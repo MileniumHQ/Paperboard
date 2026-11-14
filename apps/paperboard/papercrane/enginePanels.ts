@@ -117,6 +117,7 @@ export class PanelInstaller {
                 if (!manifestPath) throw new Error("it has no manifest.json");
                 const validated = validatePanelManifest(JSON.parse(await fs.promises.readFile(manifestPath, "utf-8")), entry);
                 const isDevLink = fs.lstatSync(panelPath).isSymbolicLink();
+                const serviceError = this.services.failure(entry);
                 panels.push({
                     ...validated,
                     base: validated.base || "./dist/index.html",
@@ -124,6 +125,7 @@ export class PanelInstaller {
                     isDevLink,
                     isLinked: isDevLink,
                     ...(isDevLink ? { installSource: "dev" as const } : {}),
+                    ...(serviceError ? { serviceError } : {}),
                 } as PanelManifest);
             } catch (err) {
                 const error = err instanceof Error ? err.message : String(err);

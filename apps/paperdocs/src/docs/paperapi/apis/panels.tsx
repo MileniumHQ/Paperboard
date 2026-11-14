@@ -57,7 +57,7 @@ panelsApi.install(panelId: string, scope?: string): Promise<PanelItem>;`}
                     <tr>
                         <td><PaperCode>listInstalled</PaperCode></td>
                         <td>Any panel</td>
-                        <td>The same panels as <PaperCode>list</PaperCode>, plus <PaperCode>invalid</PaperCode>: each installed panel the daemon refuses, as <PaperCode>{"{ id, error }"}</PaperCode>, where <PaperCode>id</PaperCode> is its folder name and <PaperCode>error</PaperCode> says what is wrong with its manifest. Paperboard lists these under the computer's panels.</td>
+                        <td>The same panels as <PaperCode>list</PaperCode>, plus <PaperCode>invalid</PaperCode>: each installed panel the daemon refuses, as <PaperCode>{"{ id, error }"}</PaperCode>, where <PaperCode>id</PaperCode> is its folder name and <PaperCode>error</PaperCode> says what is wrong with its manifest. Paperboard lists these under the computer's panels. A panel whose service failed to start, or exited without being asked, carries <PaperCode>serviceError</PaperCode>: the reason, from the last lines it wrote to stderr when it gave one. It goes once the service is ready again. Paperboard shows it when the panel's page can't load.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>registry</PaperCode></td>
@@ -110,6 +110,8 @@ panelsApi.install(panelId: string, scope?: string): Promise<PanelItem>;`}
     /** from the installed manifest, already validated */
     widgets?: WidgetDeclaration[];
     service?: string;
+    /** installed only: why the service last failed or exited unasked, until it is ready again */
+    serviceError?: string;
 }`}
             </PaperCode>
             <PaperText preset="body" as="p">

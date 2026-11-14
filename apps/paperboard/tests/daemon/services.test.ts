@@ -1,5 +1,7 @@
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { dataDir } from "./support/fs";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { dataDir, tempDir } from "./support/fs";
 import { startDaemon, type InProcessDaemon } from "./support/inproc";
 import { installPanelFiles, serviceSource } from "./support/panels";
 import { TEST_TIMEOUT_MS } from "./support/wait";
@@ -13,11 +15,16 @@ afterAll(async () => {
 
 // A panel service that cannot start says why where its failures are read.
 describe("a service that fails to start", () => {
-	test("its exit reaches the monitor with the reason it wrote, not only its exit code", async () => {
+	test("its exit reaches the monitor and the panel list with the reason it wrote, until it starts", async () => {
 		const dir = dataDir();
+		const broken = path.join(tempDir(), "config-unreadable");
+		fs.writeFileSync(broken, "");
 		await installPanelFiles(dir, {
 			id: "test.brokenstart",
-			service: serviceSource({ options: `onInit: async () => { throw new Error("the config file is unreadable"); },` }),
+			service: serviceSource({
+				extra: 'import * as fs from "node:fs";',
+				options: `onInit: async () => { if (fs.existsSync(${JSON.stringify(broken)})) throw new Error("the config file is unreadable"); },`,
+			}),
 		});
 		daemon = await startDaemon({ dataDir: dir });
 		const host = await daemon.rpc();
@@ -30,6 +37,20 @@ describe("a service that fails to start", () => {
 		);
 		expect(exited.record.code).toBe(1);
 		expect(exited.record.error).toContain("the config file is unreadable");
+		// the shell reads it from the panel list: the thrown message, not
+		// the bundle's source lines Bun prints around the throw
+		const listed = (await host.ok("panel:list")).panels.find((p: { id: string }) => p.id === "test.brokenstart");
+		expect(listed.serviceError).toBe("the config file is unreadable");
+
+		// once it starts, the panel list stops saying it failed
+		fs.rmSync(broken);
+		await host.next(
+			(f) => f.type === "monitor" && f.record.type === "service" && f.record.panel === "test.brokenstart" && f.record.state === "ready",
+			TEST_TIMEOUT_MS,
+			"the fixed service's ready record",
+		);
+		const fixed = (await host.ok("panel:list")).panels.find((p: { id: string }) => p.id === "test.brokenstart");
+		expect(fixed.serviceError).toBeUndefined();
 		await host.close();
 	});
 });

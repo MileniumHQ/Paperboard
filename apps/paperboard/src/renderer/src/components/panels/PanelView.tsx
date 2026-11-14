@@ -15,9 +15,12 @@ import { setPanelUnsaved, unsavedPanels, type LeaveAnswer } from "../../lib/unsa
 // restarting: the panel's service restarts; updating: a new release of the panel installs
 export type RestartState = { kind: "restarting" } | { kind: "updating" } | { kind: "failed"; message: string };
 
+/** a panel's loader heading, and why its service last failed (followed, like the rest) */
+export type PanelHeading = { icon: JSX.Element; name: string; serviceError?: string };
+
 export interface PanelViewProps {
     /** each panel's icon and name, headed on its loader; asked once per frame, and followed from then on */
-    panelHeading: (key: string) => { icon: JSX.Element; name: string };
+    panelHeading: (key: string) => PanelHeading;
     /** the phone layout: the loader's heading draws smaller */
     mobile: boolean;
     activePanel: string;
@@ -29,9 +32,11 @@ export interface PanelViewProps {
     onReloadPanel?: (key: string) => void;
     restartStates?: Record<string, RestartState>;
     onRestartPanel?: (key: string) => void;
+    /** a panel's page could not load: the shell reads the panel list again, which says why its service failed */
+    onPanelFailed?: (key: string) => void;
 }
 
-const PanelFrame: Component<{ panelKey: string; heading: { icon: JSX.Element; name: string }; mobile: boolean; computerName: string; current: boolean; reload: number; retry: () => void; restart?: RestartState; retryRestart: () => void }> = (props) => {
+const PanelFrame: Component<{ panelKey: string; heading: PanelHeading; mobile: boolean; computerName: string; current: boolean; reload: number; retry: () => void; restart?: RestartState; retryRestart: () => void; failed: () => void }> = (props) => {
     const [computerId, panelId] = props.panelKey.split("::");
     const [ready, setReady] = createSignal(false);
     const [failure, setFailure] = createSignal("");
@@ -154,6 +159,7 @@ const PanelFrame: Component<{ panelKey: string; heading: { icon: JSX.Element; na
             for (const resolve of leaving.values()) resolve({ leave: true });
         });
     });
+    createEffect(on(failure, (message) => { if (message) props.failed(); }, { defer: true }));
     // mobile mode turning on or off reaches a frame already challenged
     createEffect(on(mobileMode, (mobile) => { if (mobile !== null) frame?.contentWindow?.postMessage({ type: MOBILE_MODE_MESSAGE, generation, mobile }, "*"); }, { defer: true }));
     return <div class={styles.panelLayer} classList={{ [styles.away]: !props.current }}>
@@ -193,6 +199,7 @@ const PanelFrame: Component<{ panelKey: string; heading: { icon: JSX.Element; na
                 compact={props.mobile}
                 label={failure() ? undefined : "Connecting panel…"}
                 error={failure() || undefined}
+                detail={failure() && props.heading.serviceError ? `Its service stopped: ${props.heading.serviceError}` : undefined}
                 retryLabel="Reload panel"
                 onRetry={props.retry}
             />
@@ -227,7 +234,7 @@ const PanelView: Component<PanelViewProps> = (props) => {
             const heading = props.panelHeading(key);
             return <Show when={live().has(key)}>
                 <PanelFrame panelKey={key} heading={heading} mobile={props.mobile} computerName={props.computerName(key.split("::")[0])} current={key === currentKey()} reload={props.reloadTokens?.[key] || 0} retry={() => props.onReloadPanel?.(key)}
-                    restart={props.restartStates?.[key]} retryRestart={() => props.onRestartPanel?.(key)} />
+                    restart={props.restartStates?.[key]} retryRestart={() => props.onRestartPanel?.(key)} failed={() => props.onPanelFailed?.(key)} />
             </Show>;
         }}</For>
     </PaperFlex>;

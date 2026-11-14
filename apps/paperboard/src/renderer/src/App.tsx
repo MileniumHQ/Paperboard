@@ -36,7 +36,7 @@ import PanelView from "./components/panels/PanelView";
 import LibraryFrame from "./components/panels/LibraryFrame";
 import PanelContextMenu from "./components/panels/PanelContextMenu";
 import LibraryContextMenu from "./components/panels/LibraryContextMenu";
-import type { RestartState } from "./components/panels/PanelView";
+import type { PanelHeading, RestartState } from "./components/panels/PanelView";
 import UninstallPanelModal, {
     type UninstallTarget,
 } from "./components/panels/UninstallPanelModal";
@@ -638,7 +638,7 @@ const App: Component = () => {
     // once per frame: the heading follows the panel from then on, and each
     // loader that shows it draws its own icon, so nothing is redrawn when
     // something else about the panels changes.
-    const panelHeading = (key: string): { icon: JSX.Element; name: string } => {
+    const panelHeading = (key: string): PanelHeading => {
         const [compId, panelId] = key.split("::");
         const panel = createMemo(() => panelsByComputer()[compId]?.find((p) => p.id === panelId));
         const src = () => {
@@ -651,6 +651,9 @@ const App: Component = () => {
             },
             get name() {
                 return panel()?.name ?? panelId;
+            },
+            get serviceError() {
+                return panel()?.serviceError;
             },
         };
     };
@@ -1027,6 +1030,7 @@ const App: Component = () => {
                                     reloadTokens={reloadTokens()}
                                     onReloadPanel={bumpReloadToken}
                                     restartStates={restartStates()}
+                                    onPanelFailed={(key) => void refreshPanelsForComputer(key.split("::")[0])}
                                     onRestartPanel={(key) => {
                                         const [compId, panelId] = key.split("::");
                                         const name = panelsByComputer()[compId]?.find((p) => p.id === panelId)?.name || panelId;

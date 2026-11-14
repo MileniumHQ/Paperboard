@@ -44,12 +44,16 @@ const STDERR_TAIL_BYTES = 2000;
 
 // What a service last wrote to stderr, as one line short enough for a
 // lifecycle record: a service whose start fails exits 1 with the reason
-// there. Stack frames and the source excerpt Bun prints around a throw
-// are left out; the messages stay.
+// there. When it threw, the error lines are the reason ("error: ..." is
+// Bun's plain Error); the source excerpt Bun prints around a throw (a
+// minified bundle's lines, which carry raw newlines) and the stack are left
+// out. Otherwise its last lines are, without stack frames.
 function exitReason(stderrTail: string): string | undefined {
-    const lines = stderrTail.split("\n").map((line) => line.replace(/(^|\s)\d+ \|.*$/, "").trim())
+    const lines = stderrTail.split("\n").map((line) => line.trim());
+    const thrown = lines.filter((line) => /^(error|(?:[A-Z]\w*)?Error)(\s*\[[^\]]*\])?: \S/.test(line)).map((line) => line.replace(/^error: /, ""));
+    const kept = thrown.length ? [...new Set(thrown)] : lines.map((line) => line.replace(/(^|\s)\d+ \|.*$/, "").trim())
         .filter((line) => line && !/^at\s/.test(line) && !/^\^+$/.test(line));
-    return lines.length ? lines.join(" · ").slice(-500) : undefined;
+    return kept.length ? kept.join(" · ").slice(-500) : undefined;
 }
 
 // How to spawn a panel service on this host. Node, Bun and Electron-as-node
@@ -92,6 +96,9 @@ export class PanelServicesManager {
     // who hears about services starting, getting ready, exiting and failing
     // (the traffic monitor); empty unless someone is watching
     private lifecycleListeners = new Set<(change: MonitorLifecycle) => void>();
+    // why each panel's service last failed or exited unasked, until it is
+    // ready again: the panel list carries it, so the shell can say why
+    private failures = new Map<string, string>();
     constructor(private baseDir = getPaperboardDir()) {}
 
     /** Hears every service state change from now on; returns the unsubscribe. */
@@ -100,6 +107,10 @@ export class PanelServicesManager {
         return () => this.lifecycleListeners.delete(listener);
     }
     private announce(panel: string, change: ServiceChange): void {
+        if (change.state === "ready") this.failures.delete(panel);
+        else if (change.state === "failed" || change.state === "exited") {
+            this.failures.set(panel, change.error ?? `It exited with code ${change.code ?? "unknown"}`);
+        }
         for (const listener of this.lifecycleListeners) {
             try {
                 listener({ type: "service", panel, ...change });
@@ -111,6 +122,10 @@ export class PanelServicesManager {
         this.port = port;
         if (auth) this.auth = auth;
         this.startAll();
+    }
+    /** Why the panel's service last failed or exited unasked; undefined once it is ready again. */
+    public failure(panelId: string): string | undefined {
+        return this.failures.get(panelId);
     }
     public setAuth(auth: PaperCraneAuth): void { this.auth = auth; }
     public tokenForPanel(panelId: string): string {
@@ -357,7 +372,11 @@ export class PanelServicesManager {
         }
         if (this.services.get(id) === entry) this.services.delete(id);
     }
-    public revokePanel(id: string): void { this.auth?.revokePanelTokens(requirePanelId(id)); }
+    /** An uninstalled panel: its credentials stop working and its last failure is forgotten. */
+    public revokePanel(id: string): void {
+        this.auth?.revokePanelTokens(requirePanelId(id));
+        this.failures.delete(id);
+    }
     /** Synchronous last-resort exit hook; normal removal awaits stopService. */
     public stopAll(): void {
         for (const entry of this.services.values()) {

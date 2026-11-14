@@ -21,6 +21,8 @@ export interface PanelManifest {
     unlisted?: boolean;
     // "dev" = symlinked from a working tree; registry installs carry none
     installSource?: "dev";
+    // why its service last failed or exited unasked, until it is ready again
+    serviceError?: string;
 }
 
 export type BoardManifest = PanelManifest;

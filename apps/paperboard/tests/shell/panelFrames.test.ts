@@ -1,6 +1,7 @@
 // Open panels in the real shell, each in its own frame: what restarting one
 // does to the others, a page with unsaved work having its say before the
-// shell takes it away, and a panel that can't load saying why.
+// shell takes it away, and a panel that can't load saying why, or whose
+// service can't start saying what the service said.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -14,6 +15,14 @@ const NOTES: DevPanel = {
     html: ["index.html"],
 };
 
+// a panel whose service throws as it starts
+const FAILING: DevPanel = {
+    source: path.join(import.meta.dir, "support/failing-panel"),
+    pages: ["panel.ts"],
+    service: "service.ts",
+    html: ["index.html"],
+};
+
 let shell: Shell;
 const WIDGETS = "local::dev.paperboard.widgetdemo";
 const API = "local::dev.paperboard.apidemo";
@@ -22,7 +31,7 @@ const frame = (key: string) => `document.querySelector("iframe[data-panel-key='$
 const loaded = (key: string) => `${frame(key)}?.contentDocument?.readyState === "complete" && ${frame(key)}.contentDocument.location.href !== "about:blank"`;
 
 beforeAll(async () => {
-    shell = await bootShell({ panels: [WIDGET_DEMO, API_DEMO, NOTES] });
+    shell = await bootShell({ panels: [WIDGET_DEMO, API_DEMO, NOTES, FAILING] });
 });
 
 afterAll(async () => {
@@ -114,6 +123,19 @@ test("a panel whose manifest is broken is listed with why it can't load", async 
     await page.waitFor(
         `[...document.querySelectorAll("[role=alert]")].some((a) => a.offsetParent !== null && a.innerText.includes("Panel can't load") && a.innerText.includes("dev.example.broken"))`,
         "the broken panel, with why, in the panel list",
+    );
+    expect(page.exceptions).toEqual([]);
+});
+
+// Inventory: Core contracts — a panel whose service can't start says what the service said, where its page fails.
+test("a panel whose service can't start shows the service's own reason under the failure", async () => {
+    const { page } = shell;
+    await page.click("[role=radio][aria-label='This Computer (127.0.0.1)']");
+    await page.waitFor(`document.querySelector("label[data-value='dev.paperboard.testfailing']")`, "the failing panel in the sidebar");
+    await page.click("label[data-value='dev.paperboard.testfailing']");
+    await page.waitFor(
+        `[...document.querySelectorAll("[role=alert]")].some((a) => a.offsetParent !== null && a.nextElementSibling?.innerText === "Its service stopped: the config file is unreadable")`,
+        "the service's reason under the panel's failure",
     );
     expect(page.exceptions).toEqual([]);
 });
