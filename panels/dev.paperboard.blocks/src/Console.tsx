@@ -6,13 +6,19 @@ import { PaperButton, PaperIcon, PaperText } from "@mileniumhq/paperui";
 import type { LogEntry } from "./panel";
 import styles from "./Console.module.css";
 
+/** a reader within this many pixels of the end is at the end (scroll positions are fractions) */
+const BOTTOM_SLACK = 4;
+
 export function Console(props: { entries: LogEntry[]; onClear(): void }) {
     let body: HTMLDivElement | undefined;
-    // the newest line is the point: a failure never hides below the fold
+    // The newest line is the point, so a reader at the bottom stays there as lines arrive. One who scrolled up
+    // to read stays where they are, until they come back down.
+    let following = true;
+    const atBottom = (el: HTMLElement) => el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_SLACK;
     createEffect(() => {
         props.entries.length;
         queueMicrotask(() => {
-            if (body) body.scrollTop = body.scrollHeight;
+            if (body && following) body.scrollTop = body.scrollHeight;
         });
     });
 
@@ -28,7 +34,14 @@ export function Console(props: { entries: LogEntry[]; onClear(): void }) {
                         <PaperIcon>delete_sweep</PaperIcon>
                     </PaperButton>
                 </div>
-                <div class={styles.body} ref={body}>
+                <div
+                    class={styles.body}
+                    ref={(el) => {
+                        body = el;
+                        following = true;
+                    }}
+                    onScroll={(e) => (following = atBottom(e.currentTarget))}
+                >
                     <For each={props.entries}>
                         {(entry) => (
                             <div class={styles.line} classList={{ [styles.error!]: entry.level === "error" }}>
