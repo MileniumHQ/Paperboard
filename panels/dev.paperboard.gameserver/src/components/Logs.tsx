@@ -49,19 +49,24 @@ export default function Logs() {
         }
     };
 
+    // the newest read is the one shown: an older one that finishes after it is dropped
+    let reading = 0;
     const selectFile = async (name: string) => {
+        const read = ++reading;
         setSelected(name);
         setLoading(true);
         setError(null);
         try {
-            setContent(await readLogFile(name));
+            const next = await readLogFile(name);
+            if (read === reading) setContent(next);
         } catch (err) {
+            if (read !== reading) return;
             const message = errorMessage(err);
             console.error(`[Logs] Failed to read "${name}":`, message);
             setContent(null);
             setError({ title: "Couldn't read this log", message });
         } finally {
-            setLoading(false);
+            if (read === reading) setLoading(false);
         }
     };
 

@@ -50,9 +50,13 @@ export function AddonDetail<Meta>(props: {
     const panel = usePaperPanel();
     const compact = () => Boolean(panel?.compact?.());
 
+    // only the newest look-up speaks: an earlier project's answer, or its
+    // end, never lands on the one opened after it
+    let lookup = 0;
     createEffect(() => {
         const target = props.target;
         if (!target) return;
+        const mine = ++lookup;
         setProject(null);
         setLoading(false);
         setLoadError(null);
@@ -61,14 +65,16 @@ export function AddonDetail<Meta>(props: {
         props.kind.source
             .project(target)
             .then((next) => {
-                if (props.target?.projectId === target.projectId) setProject(next);
+                if (mine === lookup) setProject(next);
             })
             .catch((err) => {
                 // the page still shows what the list knows, and says why the rest is missing
                 console.error(`[${props.kind.title}] Failed to load project details:`, err);
-                if (props.target?.projectId === target.projectId) setLoadError(err instanceof Error ? err.message : String(err));
+                if (mine === lookup) setLoadError(err instanceof Error ? err.message : String(err));
             })
-            .finally(() => setLoading(false));
+            .finally(() => {
+                if (mine === lookup) setLoading(false);
+            });
     });
 
     const page = (target: DetailTarget) => {
