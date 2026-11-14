@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { actionsApi } from "../src/actions";
 import { blocksApi, memoryBlocks, validateBlockDefinitions, valueProblem, type BlockSet } from "../src/blocks";
-import { closeTransport } from "../src/ipc";
+import { closeTransport, getTransport } from "../src/ipc";
 import { startDaemon, type Daemon, type PanelProcess } from "./helpers/daemon";
 
 setDefaultTimeout(60_000);
@@ -25,7 +25,6 @@ afterAll(async () => {
 // the caller is this test process (the host), as the Blocks panel will be:
 // every block runs in the panel's own process, through the daemon
 const run = (command: string, inputs?: Record<string, unknown>) => blocksApi.run(PANEL, command, inputs, { project: "s1" });
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const read = (value: string) => blocksApi.read(PANEL, value, undefined, { project: "s1" });
 
 describe("a panel's blocks reach the registry as data", () => {
@@ -184,24 +183,23 @@ describe("events and changes reach whoever listens", () => {
     test("firing an event delivers its payload, and a changed value is read fresh", async () => {
         const fired: unknown[] = [];
         let changes = 0;
-        const offEvent = blocksApi.onEvent(PANEL, "joined", (payload) => fired.push(payload), "s1");
-        const offChange = blocksApi.onChange(PANEL, "online", () => changes++, "s1");
+        // wakes whoever waits for the next firing or change
+        let heard = () => {};
+        const until = async (check: () => boolean) => {
+            while (!check()) await new Promise<void>((resolve) => (heard = resolve));
+        };
+        const offEvent = blocksApi.onEvent(PANEL, "joined", (payload) => {
+            fired.push(payload);
+            heard();
+        }, "s1");
+        const offChange = blocksApi.onChange(PANEL, "online", () => {
+            changes++;
+            heard();
+        }, "s1");
         try {
-            // a subscription is announced to the daemon on its own: wait
-            // until a firing lands before counting
-            const deadline = Date.now() + 10_000;
-            while (fired.length === 0) {
-                if (Date.now() > deadline) throw new Error("the event never arrived");
-                await run("join", { name: "Steve" });
-                await sleep(100);
-            }
-            const firstChanges = changes;
-            fired.length = 0;
+            await getTransport().subscriptionsSettled();
             await run("join", { name: "Alex" });
-            while (fired.length === 0 || changes === firstChanges) {
-                if (Date.now() > deadline) throw new Error("the second firing never arrived");
-                await sleep(20);
-            }
+            await until(() => fired.length === 1 && changes === 1);
             expect(fired).toEqual([{ player: { name: "Alex" } }]);
             // the value read after the change holds the player who just joined
             expect(((await read("online")) as unknown[]).at(-1)).toEqual({ name: "Alex" });

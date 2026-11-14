@@ -29,6 +29,8 @@ const BOOT_GLOBAL = "__PAPERBOARD_SERVICE_BOOT";
 
 let cached: ServiceBootContext | null = null;
 let captured = false;
+// why this process was booted as a service but holds no usable context
+let refusal: string | null = null;
 
 function fromGlobal(): ServiceBootContext | null {
     if (typeof globalThis === "undefined") return null;
@@ -47,6 +49,7 @@ function fromGlobal(): ServiceBootContext | null {
     ) {
         // a malformed boot context is a daemon bug — fail closed, loudly,
         // rather than guessing credentials from anywhere else
+        refusal = "The daemon booted this service with a malformed boot context (panelId, token and port are required)";
         console.error(
             "[paperapi] malformed service boot context refused (panelId/token/port required)",
         );
@@ -58,13 +61,19 @@ function fromGlobal(): ServiceBootContext | null {
 function fromEnv(): ServiceBootContext | null {
     if (typeof process === "undefined" || !process.env) return null;
     const panelId = process.env.PAPERBOARD_PANEL_ID;
+    if (!panelId) return null;
+    // named as a panel's service: anything short of a full context is
+    // refused, never completed from crane.json or the host token
+    const incomplete = (what: string) => {
+        refusal = `This process was started as ${panelId}'s service, but ${what}`;
+        return null;
+    };
     const portRaw = process.env.PAPERCRANE_PORT;
-    if (!panelId || !portRaw) return null;
     const port = Number(portRaw);
-    if (!Number.isInteger(port) || port <= 0) return null;
+    if (!portRaw || !Number.isInteger(port) || port <= 0) return incomplete("PAPERCRANE_PORT is not a port");
     // a service authenticates as its panel, never as the host
     const token = process.env.PAPERCRANE_PANEL_TOKEN;
-    if (!token) return null;
+    if (!token) return incomplete("PAPERCRANE_PANEL_TOKEN is not set");
     return { panelId, token, port };
 }
 
@@ -84,10 +93,16 @@ export function serviceBootContext(): ServiceBootContext | null {
 // Explicit (re)capture for embedders and tests that set the boot context or
 // env after this module initialized. Not part of the panel-facing surface.
 export function captureServiceBootContext(): ServiceBootContext | null {
+    refusal = null;
     const ctx = fromGlobal() ?? fromEnv();
     cached = ctx;
     captured = ctx !== null;
     return ctx;
+}
+
+/** Why this process was started as a service yet has no usable boot context, or null when it wasn't. */
+export function serviceBootRefusal(): string | null {
+    return captured ? null : refusal;
 }
 
 // module init: claim the in-process boot window if it is open right now

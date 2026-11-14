@@ -51,12 +51,12 @@ const computerId = grantedComputerId();`}
                     <tr>
                         <td>Any other Node or Bun script</td>
                         <td>The options passed to <PaperCode>initPaperApi</PaperCode>. With none, the file <PaperCode>$PAPERBOARD_DIR/local/crane.json</PaperCode> (default <PaperCode>~/.paperboard/local/crane.json</PaperCode>), for the <PaperCode>"local"</PaperCode> computer only.</td>
-                        <td>Whatever the options or the file hold. <PaperCode>crane.json</PaperCode> holds the host's own token.</td>
+                        <td>Whatever the options or the file hold. <PaperCode>crane.json</PaperCode> holds the host's own token, so it is only sent once the listener proves it holds the same token, the way <PaperLink href="/docs/paperapi/cli/#connecting">the CLI</PaperLink> does.</td>
                     </tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                A service does not read <PaperCode>crane.json</PaperCode>. A page URL is never read as identity: only the injection counts.
+                A service does not read <PaperCode>crane.json</PaperCode>: a process with <PaperCode>PAPERBOARD_PANEL_ID</PaperCode> set but no usable port or panel token fails to connect, naming what is missing. A page URL is never read as identity: only the injection counts.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="api">API</PaperText>
@@ -120,6 +120,7 @@ const computerId = grantedComputerId();`}
                 <li>A call times out after 30 seconds unless its API says otherwise, with <PaperCode>{"PaperCrane '<method>' timed out"}</PaperCode>. Downloads, installs, uninstalls, backups and restores have no timeout.</li>
                 <li>At most 1000 calls wait for an answer at once. The next one throws <PaperCode>PaperCrane transport has 1000 outstanding calls (cap 1000); refusing to queue '&lt;method&gt;'</PaperCode>.</li>
                 <li>A dropped socket reconnects with a backoff from 400 milliseconds up to 5 seconds. Registered blocks, event subscriptions and process and terminal attachments are restored after it reconnects.</li>
+                <li>When the tunnel to a paired computer closes, the transport reports itself disconnected with the reason and reopens the tunnel the same way, restoring the same subscriptions and attachments through it. A failed attempt is logged to the console.</li>
                 <li>Every frame carries the credential and the protocol version, exported as <PaperCode>PROTOCOL_VERSION</PaperCode> (2).</li>
             </PaperTextList>
 

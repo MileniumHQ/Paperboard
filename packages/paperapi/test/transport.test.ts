@@ -4,6 +4,7 @@ import { fileApi } from "../src/file";
 import { terminalApi } from "../src/index";
 import { closeTransport, getTransport, initPaperApi, invoke, on, RPC_ROUTES } from "../src/ipc";
 import { processApi } from "../src/process";
+import { definePanelService } from "../src/service";
 import { TransportRegistry } from "../src/transport/registry";
 import { CraneTransport } from "../src/ws";
 import { startWireServer, type Frame, type WireServer } from "./helpers/wire";
@@ -216,6 +217,43 @@ describe("remote-computer traffic never leaks outside its tunnel", () => {
         expect(read.tunnel).not.toBeNull();
         expect(read.tunnel).not.toBe(firstTunnel);
         expect(plainRequests()).toEqual([]);
+    });
+
+    test("a tunnel that closes and can't reopen is reported, then reopens and replays attaches on its own", async () => {
+        const t = transport({ computerId: "remote-1" });
+        await t.call("ping", {});
+        t.trackProcess("proc-1");
+        const firstTunnel = (await server.next("the first tunnel", (f) => f.msg?.type === "remote:open")).msg.id;
+        const heard = (what: string, match: (s: { connected: boolean; error?: string }) => boolean) =>
+            new Promise<void>((resolve, reject) => {
+                const timer = setTimeout(() => reject(new Error(`no status ${what}`)), 10_000);
+                t.onStatus((s) => {
+                    if (!match(s)) return;
+                    clearTimeout(timer);
+                    resolve();
+                });
+            });
+        const lines: string[] = [];
+        const consoleError = console.error;
+        console.error = (...args: unknown[]) => void lines.push(args.map(String).join(" "));
+        try {
+            const refused = heard("naming the refusal", (s) => !s.connected && s.error === "Remote tunnel failed: refused by test");
+            server.refuseTunnels = true;
+            server.closeTunnel();
+            await refused;
+            expect(lines.some((l) => l.includes("reconnect to remote-1 failed") && l.includes("refused by test"))).toBe(true);
+
+            // nothing calls the transport: it retries by itself
+            const back = heard("connected again", (s) => s.connected);
+            server.refuseTunnels = false;
+            await back;
+        } finally {
+            console.error = consoleError;
+        }
+        const attach = await server.next("the replayed attach", (f) => f.msg?.action === "process:attach" && f.tunnel !== firstTunnel);
+        expect(attach.tunnel).not.toBeNull();
+        expect(attach.msg.params.id).toBe("proc-1");
+        expect(t.isConnected()).toBe(true);
     });
 
     test("after a socket drop it reconnects, reopens the tunnel and replays terminal attaches through it", async () => {
@@ -437,6 +475,49 @@ describe("failures reach the caller", () => {
         await expect(processApi.run({ command: "stubborn" }, 50)).rejects.toThrow('"stubborn" timed out after 50 ms and could not be stopped: the process would not die');
         server.answer = () => ({ success: true });
         await expect(processApi.exec("slow", [], { timeoutMs: 50 })).rejects.toThrow('RUN_TIMEOUT: "slow" exceeded 50ms and was killed');
+    });
+
+    test("a process.run the daemon refuses to start rejects and leaves nothing behind to kill it later", async () => {
+        await initPaperApi({ port: server.port, token: server.token });
+        server.answer = (action) => {
+            if (action === "process:run") throw new Error("env PATH is not allowed");
+            return {};
+        };
+        const unhandled: unknown[] = [];
+        const onUnhandled = (reason: unknown) => unhandled.push(reason);
+        process.on("unhandledRejection", onUnhandled);
+        try {
+            await expect(processApi.run({ command: "refused" }, 50)).rejects.toThrow("env PATH is not allowed");
+            // past the run's deadline: a timer left behind would send its kill by now
+            await new Promise((r) => setTimeout(r, 300));
+            await flushMicrotasks();
+            expect(server.requests("process:kill")).toEqual([]);
+            expect(unhandled).toEqual([]);
+        } finally {
+            process.off("unhandledRejection", onUnhandled);
+        }
+    });
+
+    test("a state change the page could not be told is sent again until it arrives", async () => {
+        await initPaperApi({ port: server.port, token: server.token });
+        let refusals = 1;
+        server.answer = (action) => {
+            if (action === "blocks:emit" && refusals-- > 0) throw new Error("the daemon is restarting");
+            return {};
+        };
+        const lines: string[] = [];
+        const consoleError = console.error;
+        console.error = (...args: unknown[]) => void lines.push(args.map(String).join(" "));
+        try {
+            const service = definePanelService({ id: "dev.test.resync", state: { running: false, players: 0 } });
+            await service.ready;
+            service.setState({ running: true });
+            const retried = await server.next("the state sent again", (f) => f.msg?.action === "blocks:emit" && server.requests("blocks:emit").indexOf(f) === 1);
+            expect(retried.msg.params.payload).toEqual({ state: { running: true } });
+            expect(lines.some((l) => l.includes("[Service:dev.test.resync] Failed to sync state") && l.includes("the daemon is restarting"))).toBe(true);
+        } finally {
+            console.error = consoleError;
+        }
     });
 
     test("a refused download rejects and stops its progress listener", async () => {

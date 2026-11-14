@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
 import { blocksApi } from "../src/blocks";
 import { createPanelBridge } from "../src/bridge";
-import { closeTransport } from "../src/ipc";
+import { closeTransport, getTransport } from "../src/ipc";
 import { serviceApi } from "../src/serviceCalls";
 import { getWidgetChoices } from "../src/widgetChoices";
 import { startDaemon, type Daemon, type PanelProcess } from "./helpers/daemon";
@@ -26,24 +26,29 @@ afterAll(async () => {
     await daemon.stop();
 });
 
-const until = async (check: () => boolean) => {
-    for (let i = 0; i < 100 && !check(); i++) await new Promise((r) => setTimeout(r, 20));
-    expect(check()).toBe(true);
-};
-
 test("the page reads the service's state, calls it, and hears each change and event", async () => {
     const bridge = createPanelBridge<{ items: string[] }>({ panelId: SERVICE, defaultState: { items: [] } });
     try {
         expect(await bridge.refreshState()).toEqual({ items: [] });
         const heard: unknown[] = [];
-        const off = bridge.on("item:added", (payload) => heard.push(payload));
+        // wakes whoever waits for the next state patch or event
+        let woke = () => {};
+        const until = async (check: () => boolean) => {
+            while (!check()) await new Promise<void>((resolve) => (woke = resolve));
+        };
+        const offState = bridge.onStateChange(() => woke());
+        const off = bridge.on("item:added", (payload) => {
+            heard.push(payload);
+            woke();
+        });
+        await getTransport().subscriptionsSettled();
         expect(await bridge.call<number>("addItem", { name: "apple" })).toBe(1);
         expect(await bridge.calls.addItem({ name: "pear" })).toBe(2);
-        await until(() => bridge.getState().items.length === 2);
+        await until(() => bridge.getState().items.length === 2 && heard.length === 2);
         expect(bridge.getState().items).toEqual(["apple", "pear"]);
-        await until(() => heard.length === 2);
         expect(heard).toEqual([{ name: "apple", count: 1 }, { name: "pear", count: 2 }]);
         off();
+        offState();
     } finally {
         bridge.dispose();
     }

@@ -1,32 +1,18 @@
 // The developer CLI's connection to the Paperboard server daemon on this
-// computer, as its host.
-//
-// The daemon writes its loopback port and host token to local/crane.json
-// under the data directory (PAPERBOARD_DIR, or ~/.paperboard). The token is
-// full access, so it is only sent to a listener that first proves it holds
-// the same token: the socket opens with a random challenge header, and the
-// daemon answers with an HMAC of it before anything else is sent.
+// computer, as its host. The handshake and the daemon's proof are shared
+// with the SDK transport (transport/localHandshake.ts).
 import crypto from "crypto";
 import fs from "fs";
 import WebSocket from "ws";
 import { PROTOCOL_VERSION } from "../protocol";
+import { challengeDaemon, HandshakeError, NOT_RUNNING_HINT, readHandshake as readHandshakeFile, type Handshake } from "../transport/localHandshake";
 import { CliError } from "./output";
 import { handshakePath } from "./paths";
 
-const CHALLENGE_HEADER = "x-papercrane-challenge";
-const PROOF_TYPE = "daemon-proof";
-const PROOF_CONTEXT = "papercrane-local-proof-v1\n";
 const CONNECT_TIMEOUT_MS = 5_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
-
-export interface Handshake {
-    port: number;
-    token: string;
-    file: string;
-}
-
-const NOT_RUNNING_HINT = "Start Paperboard, or set PAPERBOARD_DIR to the data folder of the Paperboard you run.";
+export type { Handshake };
 
 /** No daemon answers right now: it is stopped, starting, or restarting. Waiting can fix this one. */
 export class DaemonUnavailable extends CliError {
@@ -36,46 +22,17 @@ export class DaemonUnavailable extends CliError {
     }
 }
 
+function cliErrorOf(err: HandshakeError): CliError {
+    return err.unavailable ? new DaemonUnavailable(err.message, err.hint) : new CliError(err.message, err.hint);
+}
+
 /** Reads crane.json, refusing anything that is not a running daemon's handshake. */
 export function readHandshake(): Handshake {
-    const file = handshakePath();
-    let text: string;
     try {
-        text = fs.readFileSync(file, "utf8");
+        return readHandshakeFile(fs, handshakePath());
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-            throw new DaemonUnavailable(`Paperboard isn't running: there is no ${file}`);
-        }
-        throw new CliError(`Couldn't read ${file}: ${(err as Error).message}`);
+        throw err instanceof HandshakeError ? cliErrorOf(err) : err;
     }
-    let raw: any;
-    try {
-        raw = JSON.parse(text);
-    } catch (err) {
-        throw new CliError(`${file} is not valid JSON: ${(err as Error).message}`);
-    }
-    if (!raw || typeof raw !== "object" || typeof raw.port !== "number" || !Number.isInteger(raw.port) || raw.port <= 0) {
-        throw new CliError(`${file} has no valid port`);
-    }
-    if (raw.token === null) {
-        throw new CliError(
-            `The Paperboard on port ${raw.port} runs with --no-auth, so it cannot prove who it is`,
-            "The developer CLI only sends commands to a daemon that can; start it without --no-auth.",
-        );
-    }
-    if (typeof raw.token !== "string" || raw.token.length === 0) {
-        throw new CliError(`${file} has no valid token`);
-    }
-    return { port: raw.port, token: raw.token, file };
-}
-
-function proofFor(token: string, challenge: string): string {
-    return crypto.createHmac("sha256", token).update(`${PROOF_CONTEXT}${challenge}`).digest("hex");
-}
-
-function proofMatches(token: string, challenge: string, proof: unknown): boolean {
-    if (typeof proof !== "string" || !/^[a-f0-9]{64}$/.test(proof)) return false;
-    return crypto.timingSafeEqual(Buffer.from(proofFor(token, challenge)), Buffer.from(proof));
 }
 
 /** An answer the daemon refused, with its machine-readable code. */
@@ -204,12 +161,25 @@ export class HostConnection {
     }
 }
 
+/** Whether a daemon that proves it holds this data folder's token answers now. */
+export async function daemonAnswers(): Promise<boolean> {
+    let connection: HostConnection;
+    try {
+        connection = await HostConnection.open();
+    } catch (err) {
+        if (err instanceof DaemonUnavailable) return false;
+        throw err;
+    }
+    connection.close();
+    return true;
+}
+
 function verifiedSocket(handshake: Handshake): Promise<WebSocket> {
-    const challenge = crypto.randomBytes(32).toString("hex");
+    const challenge = challengeDaemon(crypto, handshake);
     const address = `127.0.0.1:${handshake.port}`;
     return new Promise((resolve, reject) => {
         const socket = new WebSocket(`ws://${address}`, {
-            headers: { [CHALLENGE_HEADER]: challenge },
+            headers: challenge.headers,
             handshakeTimeout: CONNECT_TIMEOUT_MS,
         });
         let settled = false;
@@ -222,18 +192,9 @@ function verifiedSocket(handshake: Handshake): Promise<WebSocket> {
         };
         const timer = setTimeout(() => fail(new DaemonUnavailable(`Paperboard on ${address} did not prove its identity in time`)), CONNECT_TIMEOUT_MS);
         socket.once("message", (raw) => {
-            let frame: any = null;
-            try {
-                frame = JSON.parse(raw.toString());
-            } catch (err) {
-                fail(new CliError(`The listener on ${address} is not Paperboard: its first frame is not JSON (${(err as Error).message})`));
-                return;
-            }
-            if (frame?.type !== PROOF_TYPE || !proofMatches(handshake.token, challenge, frame.proof)) {
-                fail(new DaemonUnavailable(
-                    `The listener on ${address} could not prove it is the Paperboard that wrote ${handshake.file}`,
-                    "That handshake may be left over from a Paperboard that stopped; start Paperboard again.",
-                ));
+            const refused = challenge.refusal(raw.toString());
+            if (refused) {
+                fail(cliErrorOf(refused));
                 return;
             }
             settled = true;

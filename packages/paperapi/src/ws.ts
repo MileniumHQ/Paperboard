@@ -1,37 +1,15 @@
 // WebSocket transport bound to one computer; remote frames ride a tunnel or fail
-import type * as fsType from "fs";
-import type { AsyncLocalStorage as CallStorage } from "async_hooks";
-
 import { debug, debugErr } from "./debug";
 import { PROTOCOL_VERSION } from "./protocol";
 import { TransportRegistry } from "./transport/registry";
 import { grantedComputerId, resolveDefaultPanelId } from "./identity";
-import { serviceBootContext } from "./boot";
+import { resolveCredentials, type CraneCredentials, type ResolvedCredentials } from "./transport/credentials";
+import { webSocketImpl, type TransportSocket } from "./transport/socket";
+import { answerActionCall, currentActionCall, loadActionCallScope } from "./transport/actionCalls";
+
+export { craneEndpoint, type CraneCredentials } from "./transport/credentials";
 
 const LOCAL_ONLY_APP_SETTINGS = "app-settings";
-
-/** How a host says where its daemon is: the loopback port it listens on, or
- * the ws(s):// URL of a daemon it reaches some other way. */
-export type CraneCredentials = { token: string } & ({ port: number; url?: undefined } | { url: string; port?: undefined });
-
-export function craneEndpoint(creds: { port?: unknown; url?: unknown }): string {
-    if (typeof creds.url === "string") {
-        let url: URL;
-        try {
-            url = new URL(creds.url);
-        } catch {
-            throw new Error(`The Paperboard host gave a daemon address that isn't a URL: ${creds.url}`);
-        }
-        if (url.protocol !== "wss:" && url.protocol !== "ws:") {
-            throw new Error(`The Paperboard host gave a daemon address that isn't a WebSocket URL: ${creds.url}`);
-        }
-        return url.href;
-    }
-    if (typeof creds.port === "number" && Number.isInteger(creds.port) && creds.port > 0 && creds.port < 65536) {
-        return `ws://127.0.0.1:${creds.port}`;
-    }
-    throw new Error("The Paperboard host gave neither a daemon port nor a daemon URL");
-}
 
 export interface TransportOptions {
     port?: number;
@@ -68,121 +46,10 @@ async function randomTunnelId(): Promise<string> {
     return `t-${mod.randomBytes(6).toString("hex")}`;
 }
 
-// @vite-ignore keeps node builtins out of browser builds
-async function nodeBuiltin(name: string): Promise<any> {
-    return import(/* @vite-ignore */ `node:${name}`);
-}
-
-// The action call a service is answering, for the requests it makes while
-// doing so. Some requests stop the service that makes them (a backup pauses
-// its own panel's service), and the daemon, which cannot get the action's
-// answer from a service it stopped, needs to know which call to answer for it.
-// Only Node runs a service; other contexts have nothing to carry.
-interface ActionCallScope {
-    run<T>(callId: string, fn: () => T): T;
-    current(): string | undefined;
-}
-let actionCallScope: ActionCallScope | undefined;
-async function loadActionCallScope(): Promise<void> {
-    if (actionCallScope) return;
-    const { AsyncLocalStorage } = await nodeBuiltin("async_hooks");
-    const storage: CallStorage<string> = new AsyncLocalStorage();
-    actionCallScope = { run: (callId, fn) => storage.run(callId, fn), current: () => storage.getStore() };
-}
-
-function defaultCraneJsonPath(pathMod: any): string {
-    const home = process.env.HOME || process.env.USERPROFILE || "";
-    return pathMod.join(
-        process.env.PAPERBOARD_DIR || pathMod.join(home, ".paperboard"),
-        "local",
-        "crane.json",
-    );
-}
-
-async function getWebSocketImpl(): Promise<any> {
-    const g = globalThis as any;
-    if (typeof g.WebSocket !== "undefined") {
-            // Adapt native events to the ws-package shape
-        return class NativeAdapter {
-            private _ws: WebSocket;
-            private _url: string;
-            private _wrapped = new Map<(arg?: any) => void, { event: string; fn: EventListener }>();
-            constructor(url: string) {
-                this._url = url;
-                this._ws = new g.WebSocket(url);
-            }
-            get readyState() {
-                return this._ws.readyState;
-            }
-            send(data: string) {
-                this._ws.send(data);
-            }
-            close() {
-                // Detach every adapted listener so reconnects don't leak.
-                const remove = (this._ws as any).removeEventListener?.bind(this._ws);
-                if (remove) {
-                    for (const { event, fn } of this._wrapped.values()) {
-                        try {
-                            remove(event, fn);
-                        } catch (err) { debugErr("detach shim listener", err) }
-                    }
-                }
-                this._wrapped.clear();
-                this._ws.close();
-            }
-            on(event: string, cb: (arg?: any) => void) {
-                // a native error event carries no reason; the ws package
-                // hands its listeners an Error, so this one does too
-                const wrapped: EventListener =
-                    event === "message"
-                        ? (e) => cb((e as MessageEvent).data)
-                        : event === "error"
-                          ? () => cb(new Error(`Couldn't reach PaperCrane at ${this._url}`))
-                          : () => cb();
-                this._wrapped.set(cb, { event, fn: wrapped });
-                this._ws.addEventListener(event, wrapped);
-            }
-            off(event: string, cb?: (arg?: any) => void) {
-                const remove = (this._ws as any).removeEventListener?.bind(this._ws);
-                if (!remove) {
-                    if (cb) this._wrapped.delete(cb);
-                    else {
-                        for (const [orig, entry] of this._wrapped) {
-                            if (entry.event === event) this._wrapped.delete(orig);
-                        }
-                    }
-                    return;
-                }
-                if (cb) {
-                    const entry = this._wrapped.get(cb);
-                    if (entry && entry.event === event) {
-                        try {
-                            remove(event, entry.fn);
-                        } catch (err) { debugErr("detach shim listener", err) }
-                        this._wrapped.delete(cb);
-                    }
-                    return;
-                }
-                for (const [orig, entry] of this._wrapped) {
-                    if (entry.event === event) {
-                        try {
-                            remove(event, entry.fn);
-                        } catch (err) { debugErr("detach shim listener", err) }
-                        this._wrapped.delete(orig);
-                    }
-                }
-            }
-        };
-    }
-    const mod = await import(/* @vite-ignore */ "ws");
-    return mod.default ?? mod.WebSocket ?? mod;
-}
-
 export class CraneTransport {
     public readonly computerId: string;
-    private ws: any = null;
-    // where the daemon answers: loopback by port, or a URL a host hands out
-    private endpoint: string | null = null;
+    private ws: TransportSocket | null = null;
+    // the credential every request carries, from the last resolve
     private token: string | null = null;
     private opts: TransportOptions = {};
     // supplies local daemon credentials
@@ -193,6 +60,8 @@ export class CraneTransport {
     // last subscription set announced to the daemon; null means not announced
     private lastSubscribedEvents: Set<string> | null = null;
     private subSyncScheduled = false;
+    // the newest events:subscribe call, settled once the daemon answered it
+    private subscribing: Promise<unknown> = Promise.resolve();
     private connecting: Promise<void> | null = null;
     private reconnectAttempts = 0;
     private closedByUser = false;
@@ -216,75 +85,6 @@ export class CraneTransport {
     constructor(opts: TransportOptions = {}) {
         this.opts = opts;
         this.computerId = opts.computerId || grantedComputerId();
-    }
-
-    // ── Bootstrap ───────────────────────────────────────────────────────────
-
-    private async resolveCredentials(): Promise<void> {
-        if (this.opts.port && this.opts.token) {
-            this.endpoint = craneEndpoint({ port: this.opts.port });
-            this.token = this.opts.token;
-            return;
-        }
-
-        if (this.credentialProvider) {
-            const creds = await this.credentialProvider();
-            this.endpoint = craneEndpoint(creds);
-            this.token = creds.token;
-            return;
-        }
-
-        // service boot context: credentials GRANTED at service start
-        // (in-process boot window or spawned-service env, captured once in
-        // boot.ts). Issued credentials outrank discovered ones — a service
-        // never reads crane.json or ambient env to find out who it is.
-        const boot = serviceBootContext();
-        if (boot) {
-            this.endpoint = craneEndpoint(boot);
-            this.token = boot.token;
-            return;
-        }
-
-        if (!this.isNode) {
-            // Browser: credentials are injected by the host at serve time
-            // (scoped to this document's computer). No fetch fallback.
-            const injected = (globalThis as any).__PAPERBOARD_CRANE;
-            if (!(injected?.port || injected?.url) || !injected?.token) {
-                throw new Error("Paperboard host unavailable (no injected crane credentials)");
-            }
-            if (injected.computerId !== this.computerId) {
-                throw new Error(
-                    `Paperboard host served credentials for "${injected.computerId}" but this panel is scoped to "${this.computerId}"`,
-                );
-            }
-            this.endpoint = craneEndpoint(injected);
-            this.token = injected.token;
-            return;
-        }
-
-        // Node reads the local handshake file; always local-scoped
-        if (this.computerId !== "local") {
-            throw new Error(
-                `Transport scoped to "${this.computerId}" requires explicit port/token credentials in Node`,
-            );
-        }
-        const pathMod = await nodeBuiltin("path");
-        const fsMod: typeof fsType = await nodeBuiltin("fs");
-        const file = this.opts.craneJsonPath || defaultCraneJsonPath(pathMod);
-        const raw = JSON.parse(fsMod.readFileSync(file, "utf8"));
-        // the handshake file is a trust boundary: garbage fields must fail
-        // here with a typed message, not as ws://127.0.0.1:undefined later
-        if (!raw || typeof raw !== "object") {
-            throw new Error(`Invalid crane handshake file (expected an object): ${file}`);
-        }
-        if (typeof raw.port !== "number" || !Number.isFinite(raw.port)) {
-            throw new Error(`Invalid crane handshake file (port must be a number): ${file}`);
-        }
-        if (typeof raw.token !== "string" || raw.token.length === 0) {
-            throw new Error(`Invalid crane handshake file (token must be a non-empty string): ${file}`);
-        }
-        this.endpoint = craneEndpoint({ port: raw.port });
-        this.token = raw.token;
     }
 
     // ── Connection lifecycle ────────────────────────────────────────────────
@@ -328,68 +128,19 @@ export class CraneTransport {
 
     private async open(): Promise<void> {
         if (this.isNode) await loadActionCallScope();
-        await this.resolveCredentials();
+        const creds = await resolveCredentials({
+            port: this.opts.port,
+            token: this.opts.token,
+            computerId: this.computerId,
+            isNode: this.isNode,
+            provider: this.credentialProvider,
+            craneJsonPath: this.opts.craneJsonPath,
+        });
+        this.token = creds.token;
         if (this.closedByUser) throw new Error("PaperCrane transport is disposed");
 
         // Reuse a live socket when only the tunnel is missing
-        if (!this.socketOpen()) {
-            const Ws = await getWebSocketImpl();
-            if (this.closedByUser) throw new Error("PaperCrane transport is disposed");
-            await new Promise<void>((resolve, reject) => {
-                const ws = new Ws(this.endpoint);
-                let settled = false;
-                const timeout = setTimeout(() => {
-                    if (settled) return;
-                    settled = true;
-                    ws.close();
-                    reject(new Error("PaperCrane connection timed out"));
-                }, 10_000);
-                this.cancelConnection = () => {
-                    if (settled) return;
-                    settled = true; clearTimeout(timeout); ws.close();
-                    reject(new Error("PaperCrane transport disposed during connection"));
-                };
-
-                ws.on("open", () => {
-                    if (this.closedByUser || settled) { ws.close(); return; }
-                    settled = true;
-                    this.cancelConnection = null;
-                    clearTimeout(timeout);
-                    this.ws = ws;
-                    this.reconnectAttempts = 0;
-                    resolve();
-                });
-
-                ws.on("error", (err: Error) => {
-                    if (!settled) {
-                        settled = true;
-                        this.cancelConnection = null;
-                        clearTimeout(timeout);
-                        reject(err);
-                    }
-                });
-
-                ws.on("message", (raw: any) => {
-                    try {
-                        const text =
-                            typeof raw === "string" ? raw : raw.toString("utf8");
-                        this.handleMessage(text);
-                    } catch (err) { debugErr("message handler", err); }
-                });
-
-                ws.on("close", () => {
-                    clearTimeout(timeout);
-                    if (!settled) { settled = true; reject(new Error("PaperCrane closed before connecting")); }
-                    this.ws = null;
-                    this.authenticated = false;
-                    // Tunnel died with the socket; open() re-establishes it
-                    this.tunnelId = null;
-                    this.emitStatus(false);
-                    this.rejectAllPending("PaperCrane connection closed");
-                    if (!this.closedByUser) this.scheduleReconnect();
-                });
-            });
-        }
+        if (!this.socketOpen()) await this.openSocket(creds);
 
         if (!this.authenticated) {
             try {
@@ -411,6 +162,81 @@ export class CraneTransport {
         this.emitStatus(true);
     }
 
+    private async openSocket(creds: ResolvedCredentials): Promise<void> {
+        const challenge = creds.challenge;
+        const Ws = await webSocketImpl(!!challenge);
+        if (this.closedByUser) throw new Error("PaperCrane transport is disposed");
+        await new Promise<void>((resolve, reject) => {
+            const ws = challenge ? new Ws(creds.endpoint, { headers: challenge.headers }) : new Ws(creds.endpoint);
+            let settled = false;
+            // a listener named by crane.json proves it holds the token in
+            // its first frame, before the token is ever sent to it
+            let awaitingProof = !!challenge;
+            const fail = (err: Error) => {
+                if (settled) return;
+                settled = true;
+                this.cancelConnection = null;
+                clearTimeout(timeout);
+                reject(err);
+            };
+            const timeout = setTimeout(() => {
+                if (settled) return;
+                fail(new Error("PaperCrane connection timed out"));
+                ws.close();
+            }, 10_000);
+            this.cancelConnection = () => {
+                if (settled) return;
+                fail(new Error("PaperCrane transport disposed during connection"));
+                ws.close();
+            };
+            const accept = () => {
+                settled = true;
+                this.cancelConnection = null;
+                clearTimeout(timeout);
+                this.ws = ws;
+                this.reconnectAttempts = 0;
+                resolve();
+            };
+
+            ws.on("open", () => {
+                if (this.closedByUser || settled) { ws.close(); return; }
+                if (!awaitingProof) accept();
+            });
+
+            ws.on("error", (err: Error) => fail(err));
+
+            ws.on("message", (raw: any) => {
+                const text = typeof raw === "string" ? raw : raw.toString("utf8");
+                if (awaitingProof) {
+                    awaitingProof = false;
+                    const refused = challenge!.refusal(text);
+                    if (refused) {
+                        fail(refused);
+                        ws.close();
+                        return;
+                    }
+                    if (this.closedByUser || settled) { ws.close(); return; }
+                    accept();
+                    return;
+                }
+                try {
+                    this.handleMessage(text);
+                } catch (err) { debugErr("message handler", err); }
+            });
+
+            ws.on("close", () => {
+                fail(new Error("PaperCrane closed before connecting"));
+                this.ws = null;
+                this.authenticated = false;
+                // Tunnel died with the socket; open() re-establishes it
+                this.tunnelId = null;
+                this.emitStatus(false);
+                this.rejectAllPending("PaperCrane connection closed");
+                if (!this.closedByUser) this.scheduleReconnect();
+            });
+        });
+    }
+
     private scheduleReconnect(): void {
         if (this.closedByUser || this.reconnectTimer) return;
         const delay = Math.min(
@@ -420,15 +246,19 @@ export class CraneTransport {
         this.reconnectAttempts++;
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
-            if (this.closedByUser) return;
-            // a dropped reconnect must be recorded, not just retried:
-            // debugErr is always visible, debug-trace is not
-            this.ensureConnected().catch((err) => {
-                debugErr("reconnect attempt failed", err);
-                this.emitStatus(false, err instanceof Error ? err.message : String(err));
-                this.scheduleReconnect();
-            });
+            this.reconnectNow();
         }, delay);
+    }
+
+    // a dropped reconnect must be recorded, not just retried: debugErr is
+    // always visible, the debug trace is not, and status listeners hear why
+    private reconnectNow(): void {
+        if (this.closedByUser) return;
+        this.ensureConnected().catch((err) => {
+            debugErr(`reconnect to ${this.computerId} failed`, err);
+            this.emitStatus(false, err instanceof Error ? err.message : String(err));
+            this.scheduleReconnect();
+        });
     }
 
     /** Stops the transport for good; safe to call repeatedly. */
@@ -506,6 +336,7 @@ export class CraneTransport {
             throw err;
         }
         this.tunnelId = id;
+        this.reconnectAttempts = 0;
         debug(`target=${computerId} tunnel ${id} open`);
     }
 
@@ -552,18 +383,12 @@ export class CraneTransport {
             }
         }
 
-        // Upstream leg dropped: rebuild tunnel and resubscribe
+        // Upstream leg dropped: the socket is healthy, so reconnecting
+        // only rebuilds the tunnel and replays subscriptions through it
         if (msg.type === "tunnel-closed" && msg.id === this.tunnelId) {
             this.tunnelId = null;
-            const reopen = async () => {
-                if (this.computerId === "local") return;
-                await this.openTunnel(this.computerId);
-                await this.resubscribe();
-            };
-            reopen().catch((err) => {
-                // Leave tunnel down; socket is healthy, next ensureConnected retries
-                debug(`target=${this.computerId} tunnel reopen failed: ${err?.message}`);
-            });
+            this.emitStatus(false, `The tunnel to ${this.computerId} closed`);
+            this.reconnectNow();
             return;
         }
 
@@ -573,46 +398,8 @@ export class CraneTransport {
         }
 
         if (msg.type === "action_call") {
-            const { callId, panelId, action, args } = msg;
-            // namespaced dispatch: unique composite owner only; ambiguous
-            // bare names are refused rather than resolved last-writer-wins.
             // A Blocks call names its registry; an Actions call names none.
-            const registry = msg.registry === "blocks" ? this.blocksRegistry : this.registry;
-            const handler = registry.getHandler(`${panelId}:${action}`);
-            if (!handler) {
-                this.frame({
-                    type: "action_reply",
-                    callId,
-                    error: `Handler for action '${action}' not found`,
-                });
-                return;
-            }
-            // the reply is sent once the handler settles, which can be after
-            // the connection closed (a daemon restart mid-call): an undeliverable
-            // reply is reported here, never thrown out of the handler's chain
-            const reply = (outcome: { result: unknown } | { error: string }) => {
-                try {
-                    this.frame({ type: "action_reply", callId, ...outcome });
-                    return;
-                } catch (err) {
-                    if ("error" in outcome) {
-                        debugErr(`reply to ${panelId}:${action} (call ${callId}) was not delivered`, err);
-                        return;
-                    }
-                    // a result that cannot be sent (unserializable, or the
-                    // connection is gone) is answered as the call's error
-                    reply({ error: `The action's result could not be sent: ${(err as Error)?.message || String(err)}` });
-                }
-            };
-            Promise.resolve()
-                .then(() => {
-                    const call = () => handler(...(Array.isArray(args) ? args : []));
-                    return actionCallScope ? actionCallScope.run(callId, call) : call();
-                })
-                .then(
-                    (result) => reply({ result: result === undefined ? null : result }),
-                    (err: any) => reply({ error: err?.message || String(err) }),
-                );
+            answerActionCall(msg.registry === "blocks" ? this.blocksRegistry : this.registry, msg, (reply) => this.frame(reply));
             return;
         }
 
@@ -690,7 +477,7 @@ export class CraneTransport {
         // typo'd field) can never clobber the real credential.
         // v marks the wire protocol version — the daemon refuses unknown
         // versions with a typed BAD_PROTOCOL error instead of guessing
-        const duringCall = actionCallScope?.current();
+        const duringCall = currentActionCall();
         if (duringCall) params = { ...params, duringCall };
         const finalParams = { ...params, token: this.token, v: PROTOCOL_VERSION };
         return new Promise((resolve, reject) => {
@@ -706,6 +493,7 @@ export class CraneTransport {
             this.pending.set(id, entry);
             try {
                 if (!routed || this.isLocalOnlyChannel(action, finalParams)) {
+                    if (!this.ws) throw new Error("PaperCrane connection closed");
                     this.ws.send(JSON.stringify({ id, action, params: finalParams }));
                 } else {
                     this.frame({ id, action, params: finalParams });
@@ -804,9 +592,19 @@ export class CraneTransport {
             return;
         }
         this.lastSubscribedEvents = wanted;
-        this.call("events:subscribe", { events: [...wanted] }).catch((err) =>
-            debugErr("events:subscribe sync", err),
-        );
+        this.subscribing = this.call("events:subscribe", { events: [...wanted] });
+        this.subscribing.catch((err) => debugErr("events:subscribe sync", err));
+    }
+
+    /**
+     * Resolves once the daemon acknowledged every event subscribed so far,
+     * so an event that fires after it is heard; rejects with why it wasn't.
+     */
+    public async subscriptionsSettled(): Promise<void> {
+        await this.ensureConnected();
+        // a subscription made just now announces itself on the next microtask
+        this.syncSubscriptions();
+        await this.subscribing;
     }
 
     public trackTerminal(id: string): void {

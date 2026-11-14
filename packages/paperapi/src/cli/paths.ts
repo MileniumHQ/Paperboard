@@ -4,9 +4,10 @@
 // the developer's real one.
 import os from "os";
 import path from "path";
+import { handshakeFileIn, paperboardDirIn } from "../transport/localHandshake";
 
 export function paperboardDir(): string {
-    return process.env.PAPERBOARD_DIR || path.join(os.homedir(), ".paperboard");
+    return paperboardDirIn(os.homedir(), path.join);
 }
 
 /** Where panels live, and where `paperapi link` puts its links. */
@@ -16,5 +17,5 @@ export function panelsDir(): string {
 
 /** The handshake a running daemon writes for this computer's own clients. */
 export function handshakePath(): string {
-    return path.join(paperboardDir(), "local", "crane.json");
+    return handshakeFileIn(paperboardDir(), path.join);
 }
