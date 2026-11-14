@@ -112,7 +112,7 @@ export function Example() {
             <PaperText preset="subheader" as="h3" id="languages">Languages</PaperText>
             <PaperText preset="body" as="p">
                 Highlighting uses Prism with these grammars loaded: <PaperCode>tsx</PaperCode>, <PaperCode>jsx</PaperCode>, <PaperCode>typescript</PaperCode> (<PaperCode>ts</PaperCode>), <PaperCode>javascript</PaperCode> (<PaperCode>js</PaperCode>), <PaperCode>css</PaperCode>, <PaperCode>json</PaperCode>, <PaperCode>json5</PaperCode>, <PaperCode>bash</PaperCode> (<PaperCode>sh</PaperCode>, <PaperCode>shell</PaperCode>), <PaperCode>yaml</PaperCode> (<PaperCode>yml</PaperCode>), <PaperCode>toml</PaperCode>, <PaperCode>ini</PaperCode>, <PaperCode>properties</PaperCode>, <PaperCode>markdown</PaperCode> (<PaperCode>md</PaperCode>), <PaperCode>html</PaperCode>, <PaperCode>xml</PaperCode>, <PaperCode>clike</PaperCode>, and <PaperCode>text</PaperCode> for no highlighting.
-                An unlisted language, such as <PaperCode>python</PaperCode>, is highlighted as <PaperCode>tsx</PaperCode> and still gets its name in <PaperCode>data-language</PaperCode>. Use <PaperCode>text</PaperCode> to avoid wrong colors.
+                An unlisted language, such as <PaperCode>python</PaperCode>, is shown as written, the same as <PaperCode>text</PaperCode>, and still gets its name in <PaperCode>data-language</PaperCode>.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>

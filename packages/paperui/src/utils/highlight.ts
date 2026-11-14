@@ -24,33 +24,17 @@ export function grammarFor(language: string | undefined): Prism.Grammar | null {
     return Prism.languages[language.toLowerCase()] ?? null;
 }
 
-/** language ids that mean "no highlighting": the text is shown as written */
-const PLAIN_LANGUAGES = new Set(["text", "plain", "plaintext", "txt"]);
-
 /**
- * Highlighted HTML for PaperCode. A block with no language or an unknown one
- * is highlighted as TSX; `text` (or `plain`, `plaintext`, `txt`) is shown
- * without highlighting.
+ * Highlighted HTML for PaperCode. A block with no language is highlighted as
+ * TSX; a language PaperUI has no grammar for, or `text`, is shown as written,
+ * the same as PaperEditor shows it.
  */
 export function highlightCode(code: string, lang?: string): string {
     if (!code) return "";
     const language = (lang ?? "tsx").toLowerCase();
-    if (PLAIN_LANGUAGES.has(language)) return escapeHtml(code);
-    const grammar =
-        Prism.languages[language] ||
-        Prism.languages.tsx ||
-        Prism.languages.typescript ||
-        Prism.languages.javascript ||
-        Prism.languages.clike;
-
+    const grammar = grammarFor(language);
     if (!grammar) return escapeHtml(code);
-    try {
-        return Prism.highlight(code, grammar, language);
-    } catch (err) {
-        // graceful degradation (renders unhighlighted), still traced
-        console.debug("[PaperCode] highlight failed, rendering plain:", err);
-        return escapeHtml(code);
-    }
+    return Prism.highlight(code, grammar, language);
 }
 
 export function escapeHtml(text: string): string {
