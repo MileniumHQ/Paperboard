@@ -21,6 +21,21 @@ export interface DevPanel {
     html: string[];
 }
 
+export const WIDGET_DEMO: DevPanel = {
+    source: resolve(import.meta.dir, "../dev/widget-demo"),
+    pages: ["panel.ts", "widgets.ts"],
+    service: "service.ts",
+    html: ["index.html", "widget.html"],
+};
+
+export const API_DEMO: DevPanel = {
+    source: resolve(import.meta.dir, "../dev/api-demo"),
+    pages: ["panel.ts"],
+    service: "service.ts",
+    html: ["index.html"],
+};
+
+/** the install-*-demo scripts: `--dir <data dir>` installs or replaces, `--remove` removes */
 export async function installDevPanel(panel: DevPanel): Promise<void> {
     const manifest = JSON.parse(readFileSync(join(panel.source, "manifest.json"), "utf8")) as { id: string };
     const { values } = parseArgs({
@@ -32,16 +47,30 @@ export async function installDevPanel(panel: DevPanel): Promise<void> {
         process.exit(2);
     }
     const target = join(resolve(dataDir), "panels", manifest.id);
-
     if (existsSync(target) && lstatSync(target).isSymbolicLink()) {
         console.error(`${target} is a symlink (a linked dev panel); refusing to replace it.`);
         process.exit(1);
     }
-
     if (values.remove) {
         rmSync(target, { recursive: true, force: true });
         console.log(`Removed ${target}`);
         process.exit(0);
+    }
+    try {
+        await installDevPanelInto(panel, dataDir);
+    } catch (err) {
+        console.error(err instanceof Error ? err.message : err);
+        process.exit(1);
+    }
+    console.log(`Installed ${manifest.id} into ${target}`);
+}
+
+/** builds `panel` and installs it into `dataDir` the way an install leaves a panel; throws why it couldn't */
+export async function installDevPanelInto(panel: DevPanel, dataDir: string): Promise<void> {
+    const manifest = JSON.parse(readFileSync(join(panel.source, "manifest.json"), "utf8")) as { id: string };
+    const target = join(resolve(dataDir), "panels", manifest.id);
+    if (existsSync(target) && lstatSync(target).isSymbolicLink()) {
+        throw new Error(`${target} is a symlink (a linked dev panel); refusing to replace it.`);
     }
 
     // a fresh build directory: a failed build leaves the installed copy alone
@@ -61,7 +90,7 @@ export async function installDevPanel(panel: DevPanel): Promise<void> {
         const built = spawnSync("bun", ["run", "build"], { cwd: SDK, stdio: "inherit" });
         if (built.status !== 0) {
             rmSync(staging, { recursive: true, force: true });
-            process.exit(1);
+            throw new Error(`Rebuilding @mileniumhq/paperapi failed (exit ${built.status})`);
         }
     }
     // one build per page: each page gets its own stylesheet next to its script
@@ -78,12 +107,10 @@ export async function installDevPanel(panel: DevPanel): Promise<void> {
             naming: { entry: "[name].[ext]", asset: "[name]-[hash].[ext]" },
         });
     const results = [...(await Promise.all(panel.pages.map((page) => build(page, "browser")))), await build(panel.service, "node")];
-    for (const result of results) {
-        if (!result.success) {
-            for (const log of result.logs) console.error(log);
-            rmSync(staging, { recursive: true, force: true });
-            process.exit(1);
-        }
+    const failed = results.filter((result) => !result.success);
+    if (failed.length) {
+        rmSync(staging, { recursive: true, force: true });
+        throw new Error(`Building ${manifest.id} failed:\n${failed.flatMap((result) => result.logs.map(String)).join("\n")}`);
     }
 
     for (const html of panel.html) copyFileSync(join(panel.source, html), join(staging, "dist", html));
@@ -93,5 +120,4 @@ export async function installDevPanel(panel: DevPanel): Promise<void> {
     mkdirSync(dirname(target), { recursive: true });
     // the old copy goes only once the new one built
     renameSync(staging, target);
-    console.log(`Installed ${manifest.id} into ${target}`);
 }

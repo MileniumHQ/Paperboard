@@ -5,12 +5,6 @@
 //
 //   bun scripts/install-widget-demo.ts --dir /tmp/pb-dev     install or replace
 //   bun scripts/install-widget-demo.ts --dir /tmp/pb-dev --remove
-import { resolve } from "node:path";
-import { installDevPanel } from "./devPanel";
+import { installDevPanel, WIDGET_DEMO } from "./devPanel";
 
-await installDevPanel({
-    source: resolve(import.meta.dir, "../dev/widget-demo"),
-    pages: ["panel.ts", "widgets.ts"],
-    service: "service.ts",
-    html: ["index.html", "widget.html"],
-});
+await installDevPanel(WIDGET_DEMO);

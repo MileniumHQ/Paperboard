@@ -5,12 +5,6 @@
 //
 //   bun scripts/install-api-demo.ts --dir /tmp/pb-dev     install or replace
 //   bun scripts/install-api-demo.ts --dir /tmp/pb-dev --remove
-import { resolve } from "node:path";
-import { installDevPanel } from "./devPanel";
+import { API_DEMO, installDevPanel } from "./devPanel";
 
-await installDevPanel({
-    source: resolve(import.meta.dir, "../dev/api-demo"),
-    pages: ["panel.ts"],
-    service: "service.ts",
-    html: ["index.html"],
-});
+await installDevPanel(API_DEMO);
