@@ -20,6 +20,7 @@ import {
 } from "../../lib/shell";
 import frameStyles from "./wizardFrame.module.css";
 import { errorMessage } from "../../lib/errorMessage";
+import { DAEMON_PORT } from "../../lib/daemonPort";
 
 export interface ComputerSetupWizardProps {
     onClose: () => void;
@@ -32,7 +33,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     // nothing is chosen until the person chooses, or a computer is found
     const [method, setMethod] = createSignal("");
     const [host, setHost] = createSignal("");
-    const [port, setPort] = createSignal("45464");
+    const [port, setPort] = createSignal(String(DAEMON_PORT));
     const [name, setName] = createSignal("");
     const [code, setCode] = createSignal("");
 
@@ -162,7 +163,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
         try {
             const res = await computers.pair(
                 host().trim(),
-                Number(port()) || 45464,
+                Number(port()) || DAEMON_PORT,
                 code().trim(),
                 name().trim() || undefined,
             );
@@ -183,7 +184,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
         setMethod(val);
         if (val === "custom") {
             setHost("");
-            setPort("45464");
+            setPort(String(DAEMON_PORT));
             setName("");
             setIsReachable(false);
             setProbeUnreachable(false);
@@ -337,7 +338,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             <PaperInput
                                 fullWidth
                                 label="Server port"
-                                placeholder="45464"
+                                placeholder={String(DAEMON_PORT)}
                                 icon="numbers"
                                 value={port()}
                                 onInput={(e) =>
@@ -349,7 +350,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                 <PaperText preset="error">
                                     Can't reach {host().trim()}
                                     <Show when={!probeInvalid()}>
-                                        :{port().trim() || "45464"}
+                                        :{port().trim() || DAEMON_PORT}
                                     </Show>
                                     <Show when={probeDetail()}>
                                         <br />

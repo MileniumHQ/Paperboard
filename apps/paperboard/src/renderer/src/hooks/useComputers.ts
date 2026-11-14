@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { computersApi, logToMain, type ComputerInfo } from "../lib/shell";
+import { DAEMON_PORT } from "../lib/daemonPort";
 
 // computers list + active selection
 export function useComputers() {
@@ -15,14 +16,14 @@ export function useComputers() {
             id: "local",
             name: "This Computer",
             host: "127.0.0.1",
-            port: 45464,
+            port: DAEMON_PORT,
             isLocal: true,
             // unknown until refresh probes daemon
             status: {
                 connected: false,
                 isRemote: false,
                 host: "127.0.0.1",
-                port: 45464,
+                port: DAEMON_PORT,
             },
         },
     ]);

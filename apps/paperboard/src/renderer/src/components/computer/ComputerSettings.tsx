@@ -10,6 +10,7 @@ import type { ComputerInfo } from "../../lib/shell";
 import { computerIcon } from "./computerIcon";
 import BackupLocations from "../backups/BackupLocations";
 import ComputerPorts from "./ComputerPorts";
+import { DAEMON_PORT } from "../../lib/daemonPort";
 
 export interface ComputerSettingsProps {
     computer?: ComputerInfo;
@@ -22,7 +23,7 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
     const isLocal = () => Boolean(props.computer?.isLocal);
     const address = () => {
         const host = props.computer?.networkAddress || props.computer?.host || "127.0.0.1";
-        return isLocal() ? host : `${host}:${props.computer?.port || 45464}`;
+        return isLocal() ? host : `${host}:${props.computer?.port || DAEMON_PORT}`;
     };
 
     return (
