@@ -3,6 +3,8 @@ import {
     children,
     createContext,
     useContext,
+    onCleanup,
+    onMount,
     splitProps,
     Show,
     type ParentProps,
@@ -151,13 +153,18 @@ export function PaperList(props: ParentProps<PaperListProps>) {
         if (isReorderable()) reorder.start(value, e);
     };
 
-    // the click that ends a drag lands on an item; it must not select it
-    const handleContainerClickCapture = (e: MouseEvent) => {
+    // the click that ends a drag lands on an item; it must not select it or
+    // reach the item's onClick, so it stops on its way down, before either
+    const swallowDragClick = (e: MouseEvent) => {
         if (reorder.justDragged()) {
             e.preventDefault();
             e.stopPropagation();
         }
     };
+    onMount(() => {
+        containerRef!.addEventListener("click", swallowDragClick, true);
+        onCleanup(() => containerRef!.removeEventListener("click", swallowDragClick, true));
+    });
 
     const contextValue: PaperListContextType = {
         isSelectable,
@@ -236,7 +243,6 @@ export function PaperList(props: ParentProps<PaperListProps>) {
             <PaperListContext.Provider value={contextValue}>
                 <div
                     ref={containerRef}
-                    onClick={handleContainerClickCapture}
                     {...rest}
                     class={className()}
                     classList={local.classList}
