@@ -10,6 +10,7 @@ import {
     PaperSettingList,
     PaperText,
     PaperToggle,
+    showToast,
 } from "@mileniumhq/paperui";
 import { supports } from "../lib/capabilities";
 import { errorMessage } from "../lib/failure";
@@ -51,9 +52,6 @@ export default function ResourcePack(props: { active: boolean }) {
     const [customError, setCustomError] = createSignal("");
 
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
-    onCleanup(() => {
-        if (saveTimer) clearTimeout(saveTimer);
-    });
 
     // what server.properties holds replaces the draft whenever it is read again
     createEffect(on(() => browser.listing()?.meta.settings, (stored) => stored && setSettings({ ...stored })));
@@ -96,21 +94,37 @@ export default function ResourcePack(props: { active: boolean }) {
             )
             .catch((err) => {
                 console.error("[Resource Pack] Failed to save the settings:", err);
-                setSaveError(errorMessage(err));
+                // a save the tab sent as it closed has nowhere on the tab to say so
+                if (left) showToast({ variant: "danger", title: "Resource pack settings not saved", message: errorMessage(err) });
+                else setSaveError(errorMessage(err));
             });
     };
+
+    // an edit still waiting for typing to pause is saved, not dropped, when the tab goes
+    let left = false;
+    onCleanup(() => {
+        left = true;
+        if (!saveTimer) return;
+        clearTimeout(saveTimer);
+        saveTimer = null;
+        persist();
+    });
 
     const change = (patch: Partial<Pick<PackSettings, "prompt" | "id">>) => {
         const next = { ...settings()!, ...patch };
         setSettings(next);
         if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = null;
         const problem = draftError(next);
         if (problem) {
             setSaveError(problem);
             return;
         }
         setSaveError("");
-        saveTimer = setTimeout(persist, SAVE_DEBOUNCE_MS);
+        saveTimer = setTimeout(() => {
+            saveTimer = null;
+            persist();
+        }, SAVE_DEBOUNCE_MS);
     };
 
     return (
@@ -156,6 +170,7 @@ export default function ResourcePack(props: { active: boolean }) {
                                             description="The message players see when asked to accept the pack. Leave empty for the default."
                                         >
                                             <PaperInput
+                                                placeholder="Text"
                                                 value={values().prompt}
                                                 invalid={promptProblem(values().prompt) !== ""}
                                                 onInput={(e) => change({ prompt: e.currentTarget.value })}
@@ -168,6 +183,7 @@ export default function ResourcePack(props: { active: boolean }) {
                                             description="A UUID clients use to tell this pack from others. Leave empty to let the game choose."
                                         >
                                             <PaperInput
+                                                placeholder="UUID"
                                                 value={values().id}
                                                 invalid={idProblem(values().id) !== ""}
                                                 onInput={(e) => change({ id: e.currentTarget.value })}
