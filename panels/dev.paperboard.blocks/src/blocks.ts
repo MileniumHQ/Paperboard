@@ -120,7 +120,8 @@ export function blocksPanelBlocks(host: BlocksPanelHost): BlockSet {
 
 /**
  * Tells the registry what happened, once the blocks are registered: the
- * project list only when its ids changed, and every failure is reported.
+ * project list only when its ids changed. Each announcement rejects with
+ * why it didn't reach the registry, for the service to say.
  */
 export class BlocksAnnouncer {
     private registered = false;
@@ -134,16 +135,16 @@ export class BlocksAnnouncer {
         this.registered = true;
     }
 
-    projects(ids: string[]): void {
+    async projects(ids: string[]): Promise<void> {
         if (!this.registered) return;
         const key = JSON.stringify(ids);
         if (key === this.last) return;
         this.last = key;
-        this.handle.changed("projects").catch((err) => console.error("[dev.paperboard.blocks] the change to Projects did not reach the registry:", err));
+        await this.handle.changed("projects");
     }
 
-    failed(project: string, error: string): void {
+    async failed(project: string, error: string): Promise<void> {
         if (!this.registered) return;
-        this.handle.fire(FLOW_FAILED_EVENT, { project, error }).catch((err) => console.error("[dev.paperboard.blocks] When a Flow Fails did not reach the registry:", err));
+        await this.handle.fire(FLOW_FAILED_EVENT, { project, error });
     }
 }

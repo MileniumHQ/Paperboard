@@ -1,0 +1,269 @@
+// What the Blocks service does, given the registry and the storage it does
+// it over: it keeps the projects and their flows, listens for the events the
+// switched-on projects start from, and runs them. service.ts hands it the
+// daemon's; the tests hand it a registry and storage in memory.
+import { blockEntry, type blocksApi, type BlocksHandle, type ServiceContext } from "@mileniumhq/paperapi";
+import { BlockError, hatInputs, isHat, runHat, type Host, type SavedBlock } from "./lib/interpreter";
+import { BUILTIN, parseEntry, parseRegistryBlockType, registryBlockType } from "./lib/names";
+import { BlocksAnnouncer, FLOW_FAILED_EVENT, blocksPanelBlocks } from "./blocks";
+import { readFlows } from "./lib/flows";
+import { ProjectStore, readPreview, type ProjectStorage } from "./lib/projects";
+import { MAX_LOG, PANEL_ID, SERVICE_CALLS, type LogEntry, type PanelState, type SavedFlows } from "./panel";
+
+/** The most runs one project has at once, so a flow that starts its own project can't run away. */
+export const MAX_RUNS_PER_PROJECT = 50;
+
+export interface RuntimeDeps {
+    storage: ProjectStorage;
+    /** the registry the flows run and listen through */
+    blocks: Pick<typeof blocksApi, "run" | "read" | "property" | "onEvent" | "onChange">;
+    /** this panel's own handle, for its Projects blocks */
+    handle: BlocksHandle;
+}
+
+type SetState = ServiceContext<PanelState>["setState"];
+
+const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+const isRecord = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
+const topBlocks = (flows: SavedFlows) => (flows.workspace.blocks?.blocks ?? []).filter((b) => b.enabled !== false);
+// the hat of this panel's own "When a Flow Fails": a flow it starts that fails doesn't fire it again
+const FLOW_FAILED_HAT = registryBlockType({ kind: "event", panelId: PANEL_ID, entry: blockEntry("event", FLOW_FAILED_EVENT) });
+
+export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
+    const store = new ProjectStore(storage);
+    const announcer = new BlocksAnnouncer(handle);
+    let setState!: SetState;
+    let nextLogId = 1;
+    // every run in progress and its project, so Stop ends a project's runs
+    const runs = new Map<AbortController, string>();
+    // one subscription per event or value the flows start from
+    const listening = new Map<string, () => void>();
+
+    function log(project: string, level: LogEntry["level"], text: string, blockId?: string): void {
+        const entry: LogEntry = { id: nextLogId++, at: Date.now(), level, message: text, project, ...(blockId ? { blockId } : {}) };
+        setState((prev) => ({ log: [...prev.log, entry].slice(-MAX_LOG) }));
+    }
+
+    function publishRunning(): void {
+        const running: Record<string, number> = {};
+        for (const project of runs.values()) running[project] = (running[project] ?? 0) + 1;
+        setState({ running });
+    }
+
+    /** The projects a flow can name: a draft isn't kept until it has a block. */
+    const keptProjects = () => store.list().filter((p) => !p.draft).map((p) => p.id);
+
+    const runningCount = (project: string) => [...runs.values()].filter((owner) => owner === project).length;
+
+    /** The project list changed: every window hears it, the registry is told, and the listening follows. */
+    function publishProjects(): void {
+        setState({ projects: store.list() });
+        announcer.projects(keptProjects()).catch((err: unknown) => setState({ blocksError: `The other panels weren't told the projects changed: ${message(err)}` }));
+        listen();
+    }
+
+    /**
+     * A call to another panel, as long as it takes (a backup or an install can
+     * take minutes), unless the run is stopped first: then the flow stops
+     * waiting for it. The other panel still finishes what it started.
+     */
+    function untilStopped<T>(signal: AbortSignal, call: Promise<T>): Promise<T> {
+        if (signal.aborted) return Promise.reject(new Error("The run was stopped"));
+        return new Promise<T>((resolve, reject) => {
+            const stopped = () => reject(new Error("The run was stopped"));
+            signal.addEventListener("abort", stopped, { once: true });
+            call.then(resolve, reject).finally(() => signal.removeEventListener("abort", stopped));
+        });
+    }
+
+    function host(project: string, signal: AbortSignal): Host {
+        const at = (target: string | undefined) => (target ? { project: target } : {});
+        return {
+            signal,
+            run: (panelId, entry, inputs) => {
+                const { project: target, id } = parseEntry(entry);
+                return untilStopped(signal, blocks.run(panelId, id, inputs, { ...at(target), timeoutMs: null }));
+            },
+            read: (panelId, entry, inputs) => {
+                const { project: target, id } = parseEntry(entry);
+                return untilStopped(signal, blocks.read(panelId, id, inputs, at(target)));
+            },
+            property: (typeRef, field, value, target) => untilStopped(signal, blocks.property(typeRef, field, value, at(target))),
+            log: (text, blockId) => log(project, "info", text, blockId),
+        };
+    }
+
+    async function start(project: string, flows: SavedFlows, hat: SavedBlock, payload: Record<string, unknown> | null): Promise<void> {
+        if (runningCount(project) >= MAX_RUNS_PER_PROJECT) {
+            log(project, "error", `A flow didn't start: ${MAX_RUNS_PER_PROJECT} of this project's flows are already running. Stop them, or check for a flow that starts itself.`, hat.id);
+            return;
+        }
+        const controller = new AbortController();
+        runs.set(controller, project);
+        publishRunning();
+        try {
+            await runHat(hat, payload, flows.workspace, host(project, controller.signal));
+        } catch (err) {
+            log(project, "error", message(err), err instanceof BlockError ? err.blockId : hat.id);
+            // a run that was stopped didn't fail
+            if (!controller.signal.aborted && hat.type !== FLOW_FAILED_HAT) {
+                announcer.failed(project, message(err)).catch((why: unknown) => log(project, "error", `"When a Flow Fails" didn't hear this failure: ${message(why)}`, hat.id));
+            }
+        } finally {
+            runs.delete(controller);
+            publishRunning();
+        }
+    }
+
+    /** The hats of this type in every switched-on project, started with this payload when their filters hold. */
+    async function fire(hatType: string, payload: Record<string, unknown> | null): Promise<void> {
+        for (const { id: project, flows } of store.running()) {
+            const schema = flows.schemas[hatType]?.schema;
+            const filters = schema?.kind === "event" ? (schema.filters ?? {}) : {};
+            for (const hat of topBlocks(flows).filter((b) => b.type === hatType)) {
+                if (Object.keys(filters).length) {
+                    let wanted: Record<string, unknown>;
+                    try {
+                        // a filter's input is worked out before the flow starts, outside any run
+                        wanted = await hatInputs(hat, flows.workspace, host(project, new AbortController().signal));
+                    } catch (err) {
+                        log(project, "error", message(err), err instanceof BlockError ? err.blockId : hat.id);
+                        continue;
+                    }
+                    // a filter left empty takes any
+                    const holds = Object.entries(filters).every(([input, key]) => {
+                        const want = wanted[input];
+                        return want === undefined || want === "" || JSON.stringify(want) === JSON.stringify(payload?.[key]);
+                    });
+                    if (!holds) continue;
+                }
+                void start(project, flows, hat, payload);
+            }
+        }
+    }
+
+    /** Listens for exactly the events and changes the switched-on projects start from. */
+    function listen(): void {
+        const wanted = new Set(
+            store.running().flatMap(({ flows }) =>
+                topBlocks(flows)
+                    .map((b) => b.type)
+                    .filter((type) => {
+                        const name = parseRegistryBlockType(type);
+                        return name?.kind === "event" || name?.kind === "changes";
+                    }),
+            ),
+        );
+        for (const [type, off] of listening) {
+            if (wanted.has(type)) continue;
+            off();
+            listening.delete(type);
+        }
+        for (const type of wanted) {
+            if (listening.has(type)) continue;
+            const name = parseRegistryBlockType(type)!;
+            const { project, id } = parseEntry(name.entry);
+            listening.set(
+                type,
+                name.kind === "event"
+                    ? blocks.onEvent(name.panelId, id, (payload) => void fire(type, payload), project)
+                    : blocks.onChange(name.panelId, id, () => void fire(type, null), project),
+            );
+        }
+    }
+
+    function stop(project: string): number {
+        let count = 0;
+        for (const [run, owner] of runs) {
+            if (owner !== project) continue;
+            run.abort();
+            count++;
+        }
+        return count;
+    }
+
+    /** Starts a project's "When Run is clicked" flows; how many started. */
+    function runProject(project: unknown): number {
+        const flows = store.flows(project);
+        const hats = topBlocks(flows).filter((b) => b.type === BUILTIN.onRun);
+        if (!hats.length) throw new Error('Add a "When Run is clicked" block for Run to start');
+        for (const hat of hats) void start(String(project), flows, hat, null);
+        return hats.length;
+    }
+
+    // settled once the projects are read: with null, or with why they couldn't be
+    let settle!: (failure: string | null) => void;
+    const read = new Promise<string | null>((resolve) => (settle = resolve));
+
+    /** A call the panel's own page makes: it waits for the projects to be read, and says so if they couldn't be. */
+    const call = (run: (inputs: Record<string, unknown>) => unknown) => async (_ctx: unknown, input: unknown) => {
+        const failure = await read;
+        if (failure) throw new Error(`The projects couldn't be read: ${failure}`);
+        return run(isRecord(input) ? input : {});
+    };
+
+    /** A project change, then the list every window shows. */
+    const changing = async <T>(work: Promise<T>): Promise<T> => {
+        const result = await work;
+        publishProjects();
+        return result;
+    };
+
+    const calls = {
+        [SERVICE_CALLS.load]: call(({ project }) => store.flows(project)),
+        [SERVICE_CALLS.save]: call(({ project, flows, preview }) => changing(store.save(project, readFlows(flows), readPreview(preview)))),
+        [SERVICE_CALLS.run]: call(({ project }) => runProject(project)),
+        [SERVICE_CALLS.stop]: call(({ project }) => stop(String(project))),
+        [SERVICE_CALLS.clearLog]: call(({ project }) => {
+            setState((prev) => ({ log: prev.log.filter((entry) => entry.project !== project) }));
+            return true;
+        }),
+        [SERVICE_CALLS.createProject]: call(({ name }) => changing(store.create(name))),
+        [SERVICE_CALLS.updateProject]: call(({ project, name, enabled }) => changing(store.update(project, { name, enabled }))),
+        [SERVICE_CALLS.duplicateProject]: call(({ project }) => changing(store.duplicate(project))),
+        [SERVICE_CALLS.deleteProject]: call(async ({ project, onlyDraft }) => {
+            const deleted = await changing(store.remove(project, onlyDraft === true));
+            // a deleted project's flows stop with it
+            if (deleted) stop(String(project));
+            return { deleted };
+        }),
+    };
+
+    /** Reads the projects, starts listening, and adds the Projects blocks; every failure ends up in the state. */
+    async function init(state: SetState): Promise<void> {
+        setState = state;
+        try {
+            await store.open();
+        } catch (err) {
+            // nothing runs and nothing is written while the projects can't be read
+            setState({ projectsError: message(err), loaded: true });
+            console.error(`[${PANEL_ID}] the projects couldn't be read:`, err);
+            settle(message(err));
+            return;
+        }
+        setState({ projects: store.list(), loaded: true });
+        listen();
+        settle(null);
+        try {
+            await announcer.register(
+                blocksPanelBlocks({
+                    projects: keptProjects,
+                    project: (id) => store.summaryOf(id),
+                    runningCount,
+                    setEnabled: async (id, enabled) => void (await changing(store.update(id, { enabled }))),
+                    run: runProject,
+                    stop: (id) => stop(store.summaryOf(id).id),
+                }),
+                keptProjects(),
+            );
+        } catch (err) {
+            // the projects still run; only flows that drive them are missing their blocks
+            setState({ blocksError: `The Projects blocks couldn't be added: ${message(err)}` });
+            console.error(`[${PANEL_ID}] the Projects blocks couldn't be registered:`, err);
+        }
+        const flows = store.running().reduce((n, p) => n + topBlocks(p.flows).filter((b) => isHat(b.type)).length, 0);
+        console.log(`[${PANEL_ID}] ${store.list().length} project(s), ${flows} flow(s) switched on.`);
+    }
+
+    return { calls, init };
+}
