@@ -27,6 +27,19 @@ export interface ExpectedPanelRelease {
     sha256?: string;
 }
 
+/**
+ * What an uninstall did. It resolves only once the panel is gone; the panel
+ * RPC (panel:uninstall) replies with these fields beside `success`.
+ */
+export interface UninstallResult {
+    /**
+     * Set when the panel is uninstalled but packages only it used could not
+     * be removed (they stay on disk). The user must be shown it: it names the
+     * panel and each package with its reason.
+     */
+    packagesWarning?: string;
+}
+
 // a process stopped for an update gets this long to exit on its terminate
 // signal (a game server saving its world) before it is killed
 const UPDATE_STOP_GRACE_MS = 30_000;
@@ -479,9 +492,9 @@ export class PanelInstaller {
         }, { before: () => this.services.stopService(cleanId), after: restart });
     }
 
-    public async uninstallPanel(panelId: string, options?: { deleteData?: boolean }): Promise<void> {
+    public async uninstallPanel(panelId: string, options?: { deleteData?: boolean }): Promise<UninstallResult> {
         const cleanId = requirePanelId(panelId);
-        await this.locked(cleanId, async () => {
+        return this.locked(cleanId, async () => {
             await this.services.stopService(cleanId);
             // Resource identity comes from the ownership ledger. Legacy IDs
             // require an explicit migration; a name is not proof of ownership.
@@ -499,10 +512,14 @@ export class PanelInstaller {
             // scoped token is revoked, not left lingering in the vault
             this.services.revokePanel(cleanId);
             // the packages only this panel used go with it; the panel is gone
-            // either way, so a failure here is logged, not the uninstall's
-            await this.packages.releasePackagesOf(cleanId).catch((err) =>
-                logger.error(`[engine] ${cleanId} is uninstalled, but the packages only it used could not be removed:`, err),
-            );
+            // either way, so a failure here is the result's warning, not the
+            // uninstall's failure
+            const failures = await this.packages.releasePackagesOf(cleanId).catch((err: Error) => [err?.message ?? String(err)]);
+            const result: UninstallResult = {};
+            if (failures.length > 0) {
+                result.packagesWarning = `${cleanId} is uninstalled, but the packages only it used could not be removed (${failures.join("; ")})`;
+                logger.error(`[engine] ${result.packagesWarning}`);
+            }
 
             if (options?.deleteData === true) {
                 // explicit opt-in: the panel's config document, workspace files
@@ -516,6 +533,7 @@ export class PanelInstaller {
                     await listener(cleanId);
                 }
             }
+            return result;
         });
     }
 }

@@ -217,8 +217,11 @@ export class PackageManager implements WorkloadRuntime {
         }
     }
 
-    /** Lets go of every package a panel used; the ones nothing uses any more are removed. */
-    public async releasePackagesOf(panelId: string): Promise<void> {
+    /**
+     * Lets go of every package a panel used; the ones nothing uses any more
+     * are removed. Resolves with what could not be removed, one line each.
+     */
+    public async releasePackagesOf(panelId: string): Promise<string[]> {
         const users = this.readPackageUsers();
         let changed = false;
         for (const [name, list] of Object.entries(users)) {
@@ -227,18 +230,20 @@ export class PackageManager implements WorkloadRuntime {
             changed = true;
         }
         if (changed) this.writePackageUsers(users);
-        await this.removeUnusedPackages();
+        return this.removeUnusedPackages();
     }
 
     // a package a workload still runs from waits: its record stays empty, and
-    // the next uninstall or start removes it
-    private async removeUnusedPackages(): Promise<void> {
+    // the next uninstall or start removes it. Resolves with each failure,
+    // which is logged here too.
+    private async removeUnusedPackages(): Promise<string[]> {
+        const failures: string[] = [];
         let users: Record<string, string[]>;
         try {
             users = this.readPackageUsers();
         } catch (err) {
             logger.error("[engine] could not read which panels use the installed packages, so none were removed:", err);
-            return;
+            return [`which panels use them could not be read: ${(err as Error)?.message ?? err}`];
         }
         for (const [name, list] of Object.entries(users)) {
             if (list.length > 0) continue;
@@ -269,10 +274,12 @@ export class PackageManager implements WorkloadRuntime {
                 logger.info(`[package:${name}] removed: no installed panel uses it`);
             } catch (err) {
                 logger.error(`[package:${name}] no panel uses it, but it could not be removed:`, err);
+                failures.push(`${name}: ${(err as Error)?.message ?? err}`);
             } finally {
                 this.operations.delete(key);
             }
         }
+        return failures;
     }
 
     private sweepPackageSwaps(): void {

@@ -90,8 +90,8 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
                 try {
                     // deleting data is opt-in and only an explicit true
                     // enables it; anything else keeps the user's data
-                    await engine.uninstallPanel(panelId, { deleteData: params?.deleteData === true });
-                    reply(id, { success: true });
+                    const result = await engine.uninstallPanel(panelId, { deleteData: params?.deleteData === true });
+                    reply(id, { success: true, ...result });
                 } catch (err: any) {
                     reply(id, null, `Uninstall failed: ${err?.message}`);
                 }

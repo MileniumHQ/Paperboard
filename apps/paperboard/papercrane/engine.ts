@@ -26,12 +26,12 @@ import type { InputEncoding } from "./supervisor";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import { WorkloadRegistry, type TerminalStreams } from "./engineWorkloads";
 import { PackageManager, sanitizeIdOrThrow, type PackageInstallOutcome, type PackageUpdateWait, type ReleaseSource } from "./enginePackages";
-import { PanelInstaller, type ExpectedPanelRelease } from "./enginePanels";
+import { PanelInstaller, type ExpectedPanelRelease, type UninstallResult } from "./enginePanels";
 import type { PanelManifest } from "./types";
 
 export type { TerminalStreams } from "./engineWorkloads";
 export type { StagedPackage, PackageUpdateWait, PackageInstallOutcome } from "./enginePackages";
-export type { ExpectedPanelRelease } from "./enginePanels";
+export type { ExpectedPanelRelease, UninstallResult } from "./enginePanels";
 
 export const REGISTRY_URL = resolveRegistryUrl();
 
@@ -457,7 +457,7 @@ export class PaperCraneEngine {
     }
     public updateInUse(...args: Parameters<PanelInstaller["updateInUse"]>): ReturnType<PanelInstaller["updateInUse"]> { return this.panels.updateInUse(...args); }
     public restartPanelService(panelId: string): Promise<boolean> { return this.panels.restartPanelService(panelId); }
-    public uninstallPanel(panelId: string, options?: { deleteData?: boolean }): Promise<void> { return this.panels.uninstallPanel(panelId, options); }
+    public uninstallPanel(panelId: string, options?: { deleteData?: boolean }): Promise<UninstallResult> { return this.panels.uninstallPanel(panelId, options); }
     public installedPanelVersion(panelId: string): string | null { return this.panels.installedPanelVersion(panelId); }
     public panelDataEntries(panelId: string): { files: string; config: string } { return this.panels.panelDataEntries(panelId); }
     public withPanelOperation<T>(panelId: string, fn: () => Promise<T>): Promise<T> { return this.panels.withPanelOperation(panelId, fn); }
