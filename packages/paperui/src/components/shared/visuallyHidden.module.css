@@ -1,0 +1,15 @@
+/* A native input that carries a value for forms and screen readers while
+   the component draws its own control: it takes no room, shows nothing and
+   is never hit by a pointer. */
+.visuallyHidden {
+    position: absolute;
+    width: 0;
+    height: 0;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    border: 0;
+    opacity: 0;
+    pointer-events: none;
+}

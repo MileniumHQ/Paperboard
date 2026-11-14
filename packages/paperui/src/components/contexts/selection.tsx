@@ -10,6 +10,7 @@ import {
     type JSX,
 } from "solid-js";
 import { callEventHandler } from "../../utils/events";
+import hidden from "../shared/visuallyHidden.module.css";
 
 export interface SelectionProviderProps {
     name: string;
@@ -154,17 +155,7 @@ export function SelectionRadioInput(props: SelectionRadioInputProps) {
                 if (local.reselect && wasChosen && !context.multiple()) select();
             }}
             onChange={select}
-            style={{
-                position: "absolute",
-                width: "0",
-                height: "0",
-                padding: "0",
-                margin: "0",
-                overflow: "hidden",
-                "white-space": "nowrap",
-                border: "0",
-                opacity: "0",
-            }}
+            class={hidden.visuallyHidden}
         />
     );
 }

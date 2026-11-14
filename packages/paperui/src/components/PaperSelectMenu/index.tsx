@@ -1,4 +1,5 @@
 import styles from "./index.module.css";
+import hidden from "../shared/visuallyHidden.module.css";
 import { MenuItem } from "../shared/MenuItem";
 import { PaperContextMenu } from "../PaperContextMenu";
 import {
@@ -259,13 +260,7 @@ function SelectMenuInner(
                         value={String(currentValue() ?? "")}
                         tabindex={-1}
                         aria-hidden="true"
-                        style={{
-                            position: "absolute",
-                            width: "0.0625rem",
-                            height: "0.0625rem",
-                            opacity: "0",
-                            "pointer-events": "none",
-                        }}
+                        class={hidden.visuallyHidden}
                     />
                 </Show>
 
