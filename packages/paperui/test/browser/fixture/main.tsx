@@ -33,6 +33,7 @@ import {
     PaperSlidePage,
     PaperSplit,
     PaperToggle,
+    createPolling,
     setHapticPlayer,
     useContextMenuState,
     type PaperFileBrowserRef,
@@ -50,9 +51,11 @@ declare global {
 const query = new URLSearchParams(location.search);
 window.t = {};
 
-const shell = (children: JSX.Element) => (
-    <PaperProvider fullScreen theme="light">
-        {children}
+// light unless the page asks for ?theme=dark; the content is built inside
+// the provider, as a page's own JSX children are, so it sees the provider
+const shell = (content: () => JSX.Element) => (
+    <PaperProvider fullScreen theme={query.get("theme") === "dark" ? "dark" : "light"}>
+        {content()}
     </PaperProvider>
 );
 
@@ -62,7 +65,7 @@ const scenarios: Record<string, () => JSX.Element> = {
     modalLeave() {
         const [open, setOpen] = createSignal(true);
         const t = (window.t = { presses: 0, close: () => setOpen(false) });
-        return shell(
+        return shell(() => (
             <>
                 <button
                     id="under"
@@ -75,15 +78,15 @@ const scenarios: Record<string, () => JSX.Element> = {
                 <PaperModal open={open()} onClose={() => setOpen(false)} title="Leaving">
                     <p id="modal-body">The page under this dialog takes presses once it closes.</p>
                 </PaperModal>
-            </>,
-        );
+            </>
+        ));
     },
 
     railReorder() {
         const [order, setOrder] = createSignal(["home", "games", "files"]);
         const [value, setValue] = createSignal("home");
         const t = (window.t = { reorders: [] as string[][], order, value });
-        return shell(
+        return shell(() => (
             <div style={{ padding: "24px", height: "400px", display: "flex" }}>
                 <PaperRail
                     name="rail"
@@ -98,14 +101,43 @@ const scenarios: Record<string, () => JSX.Element> = {
                         {(item) => <PaperRailItem value={item} icon="home" label={item} reorderable data-item={item} />}
                     </For>
                 </PaperRail>
-            </div>,
-        );
+            </div>
+        ));
+    },
+
+    listReorder() {
+        const [order, setOrder] = createSignal(["alpha", "beta", "gamma"]);
+        const [value, setValue] = createSignal("alpha");
+        const t = (window.t = { reorders: [] as string[][], listClicks: 0, itemClicks: [] as string[], value });
+        return shell(() => (
+            <div style={{ padding: "24px", width: "320px" }}>
+                <PaperList
+                    name="list"
+                    value={value()}
+                    onValueChange={(v) => setValue(String(v))}
+                    reorderable
+                    onReorder={(next) => {
+                        t.reorders.push(next as string[]);
+                        setOrder(next as string[]);
+                    }}
+                    onClick={() => t.listClicks++}
+                >
+                    <For each={order()}>
+                        {(item) => (
+                            <PaperListItem value={item} data-item={item} onClick={() => t.itemClicks.push(item)}>
+                                {item}
+                            </PaperListItem>
+                        )}
+                    </For>
+                </PaperList>
+            </div>
+        ));
     },
 
     modalFocus() {
         const [open, setOpen] = createSignal(false);
         window.t = { isOpen: () => open() };
-        return shell(
+        return shell(() => (
             <div style={{ padding: "24px" }}>
                 <PaperButton id="opener" onClick={() => setOpen(true)}>
                     Rename
@@ -113,8 +145,8 @@ const scenarios: Record<string, () => JSX.Element> = {
                 <PaperModal open={open()} onClose={() => setOpen(false)} title="Rename">
                     <input id="name" aria-label="Name" autofocus />
                 </PaperModal>
-            </div>,
-        );
+            </div>
+        ));
     },
 
     selectMenu() {
@@ -135,7 +167,7 @@ const scenarios: Record<string, () => JSX.Element> = {
             const input = e.target as HTMLInputElement;
             t.formEvents.push(`${e.type}:${input.name}=${input.value}`);
         };
-        return shell(
+        return shell(() => (
             <div style={{ display: "flex", "flex-direction": "column", gap: "24px", padding: "24px", width: "320px" }}>
                 <form
                     id="free"
@@ -181,14 +213,14 @@ const scenarios: Record<string, () => JSX.Element> = {
                 <div id="scroller" style={{ height: "160px", overflow: "auto" }}>
                     <div style={{ height: "800px" }}>scrolls</div>
                 </div>
-            </div>,
-        );
+            </div>
+        ));
     },
 
     contextMenu() {
         const menu = useContextMenuState();
         const t = (window.t = { runs: [] as string[], closes: 0 });
-        return shell(
+        return shell(() => (
             <>
                 <div
                     id="target"
@@ -217,8 +249,8 @@ const scenarios: Record<string, () => JSX.Element> = {
                     </PaperContextMenuSub>
                     <PaperContextMenuItem onClick={() => t.runs.push("Delete")}>Delete</PaperContextMenuItem>
                 </PaperContextMenu>
-            </>,
-        );
+            </>
+        ));
     },
 
     markdownAnchors() {
@@ -235,7 +267,7 @@ const scenarios: Record<string, () => JSX.Element> = {
             filler,
         ].join("\n\n");
         const second = ["[Details](#details)", filler, "## Details", filler].join("\n\n");
-        return shell(
+        return shell(() => (
             <>
                 <p id="details">the page's own element, which a link must not reach</p>
                 <div id="scroller" style={{ height: "300px", overflow: "auto" }}>
@@ -246,8 +278,8 @@ const scenarios: Record<string, () => JSX.Element> = {
                         <PaperMarkdown text={second} />
                     </div>
                 </div>
-            </>,
-        );
+            </>
+        ));
     },
 
     input() {
@@ -264,7 +296,7 @@ const scenarios: Record<string, () => JSX.Element> = {
             slow,
             code,
         });
-        return shell(
+        return shell(() => (
             <div style={{ display: "flex", "flex-direction": "column", gap: "24px", padding: "24px", width: "320px" }}>
                 {/* saves on blur from the field itself, with no draft of its own */}
                 <PaperInput
@@ -307,8 +339,8 @@ const scenarios: Record<string, () => JSX.Element> = {
                 <button id="elsewhere" type="button">
                     elsewhere
                 </button>
-            </div>,
-        );
+            </div>
+        ));
     },
 
     toggle() {
@@ -338,7 +370,7 @@ const scenarios: Record<string, () => JSX.Element> = {
             return true;
         });
         const row = { display: "flex", gap: "12px", "align-items": "center", padding: "12px" } as const;
-        return shell(
+        return shell(() => (
             <div style={{ padding: "24px" }}>
                 <label id="free" style={row}>
                     <PaperToggle name="notify" onChange={(v) => t.changes.push(v)} />
@@ -378,8 +410,8 @@ const scenarios: Record<string, () => JSX.Element> = {
                     <PaperToggle disabled onChange={(v) => t.disabledChanges.push(v)} />
                     <span id="disabled-text">Disabled</span>
                 </label>
-            </div>,
-        );
+            </div>
+        ));
     },
 
     listSplit() {
@@ -388,7 +420,7 @@ const scenarios: Record<string, () => JSX.Element> = {
         const [compact, setCompact] = createSignal(false);
         const [names, setNames] = createSignal(["Alex", "Sam", "Kai"]);
         const t = (window.t = { collapsed: [] as boolean[], closes: 0, opens: [] as string[], setWidth, setNames });
-        return shell(
+        return shell(() => (
             <div id="split" style={{ width: `${width()}px`, height: "600px" }}>
                 <PaperSplit
                     detailActive={open() !== undefined}
@@ -423,8 +455,8 @@ const scenarios: Record<string, () => JSX.Element> = {
                 >
                     <p id="detail">{open() ?? "nobody"}</p>
                 </PaperSplit>
-            </div>,
-        );
+            </div>
+        ));
     },
 
     listOverflow() {
@@ -446,12 +478,12 @@ const scenarios: Record<string, () => JSX.Element> = {
                 </PaperListItem>
             </PaperList>
         );
-        return shell(
+        return shell(() => (
             <div style={{ width: "400px" }}>
                 {rows(false)}
                 {rows(true)}
-            </div>,
-        );
+            </div>
+        ));
     },
 
     fileBrowser() {
@@ -472,7 +504,7 @@ const scenarios: Record<string, () => JSX.Element> = {
                 versions["a.txt"]++;
             },
         });
-        return shell(
+        return shell(() => (
             <div style={{ width: "100vw", height: "100vh", display: "flex" }}>
                 <PaperFileBrowser
                     rootLabel="Root"
@@ -486,8 +518,8 @@ const scenarios: Record<string, () => JSX.Element> = {
                     }}
                     ref={(handle) => (browser = handle)}
                 />
-            </div>,
-        );
+            </div>
+        ));
     },
 
     panel() {
@@ -503,7 +535,7 @@ const scenarios: Record<string, () => JSX.Element> = {
                 return event.defaultPrevented;
             },
         };
-        return shell(
+        return shell(() => (
             <>
                 <PaperPanel>
                     <PaperMenu name="nav" value={page()} onValueChange={(v) => setPage(String(v))}>
@@ -526,14 +558,14 @@ const scenarios: Record<string, () => JSX.Element> = {
                 <PaperModal open={modal()} onClose={() => setModal(false)} title="Over the page">
                     <p>modal</p>
                 </PaperModal>
-            </>,
-        );
+            </>
+        ));
     },
 
     slidePage() {
         const [open, setOpen] = createSignal(true);
         const t = (window.t = { backs: 0, open: () => setOpen(true), isOpen: () => open() });
-        return shell(
+        return shell(() => (
             <div style={{ position: "relative", width: "100vw", height: "100vh", overflow: "hidden" }}>
                 <PaperSlidePage
                     enabled
@@ -548,8 +580,8 @@ const scenarios: Record<string, () => JSX.Element> = {
                         content
                     </div>
                 </PaperSlidePage>
-            </div>,
-        );
+            </div>
+        ));
     },
 
     console() {
@@ -578,7 +610,7 @@ const scenarios: Record<string, () => JSX.Element> = {
                 return rect;
             };
         }
-        return shell(
+        return shell(() => (
             <div id="console" style={{ width: "600px", height: "400px", display: "flex", "flex-direction": "column" }}>
                 <PaperConsole
                     entries={entries()}
@@ -586,21 +618,30 @@ const scenarios: Record<string, () => JSX.Element> = {
                     onCommand={(command) => t.commands.push(command)}
                     style={{ flex: "1", "min-height": "0" }}
                 />
-            </div>,
-        );
+            </div>
+        ));
     },
 
     audio() {
         const t = (window.t = { errors: [] as string[] });
-        return shell(
+        return shell(() => (
             <div style={{ padding: "24px", width: "480px" }}>
                 <PaperAudio src={query.get("src")!} waveform={false} label="Clip" onError={(message) => t.errors.push(message)} />
-            </div>,
-        );
+            </div>
+        ));
     },
 
     uncaught() {
-        return shell(<p id="page">A page that fails.</p>);
+        return shell(() => <p id="page">A page that fails.</p>);
+    },
+
+    // a poll whose first call is refused
+    polling() {
+        const Poller = () => {
+            createPolling(() => Promise.reject(new Error("the status check failed")), 60_000, { immediate: true });
+            return <p id="page">A page that polls.</p>;
+        };
+        return shell(() => <Poller />);
     },
 
     provider() {

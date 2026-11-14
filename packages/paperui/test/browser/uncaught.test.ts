@@ -35,6 +35,13 @@ describe("PaperProvider's uncaught errors", () => {
         expect(consoleSaid().join("\n")).toContain("the save was refused");
     });
 
+    test("a poll whose call fails is a toast", async () => {
+        page = await browser.open("polling");
+        await page.waitFor(`document.querySelector('${REGION} [role="alert"]')`, "the failed poll's toast");
+        expect(await alerts()).toEqual([["Something went wrong", "the status check failed"]]);
+        expect(consoleSaid().join("\n")).toContain("the status check failed");
+    });
+
     test("a failure that repeats is one toast while it shows, and comes back once it's closed", async () => {
         page = await browser.open("uncaught");
         for (let i = 0; i < 20; i++) await throwUncaught("moved off the canvas");

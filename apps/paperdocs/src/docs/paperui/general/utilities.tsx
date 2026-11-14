@@ -209,7 +209,7 @@ export function CopyAddress(props: { address: string }) {
                         <td><PaperCode>fn</PaperCode></td>
                         <td><PaperCode>() =&gt; void | Promise&lt;void&gt;</PaperCode></td>
                         <td>Required</td>
-                        <td>Called on every tick. A throw or a rejection is logged with <PaperCode>console.error</PaperCode> and the next tick still runs. It is not shown in the interface: catch inside <PaperCode>fn</PaperCode> to show a failure.</td>
+                        <td>Called on every tick. A throw or a rejection is not caught: inside a <PaperCode>PaperProvider</PaperCode> it shows as an error toast, and the next tick still runs.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>intervalMs</PaperCode></td>
@@ -226,7 +226,7 @@ export function CopyAddress(props: { address: string }) {
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                Ticks do not wait for the previous call to finish, so keep <PaperCode>fn</PaperCode> fast or guard against overlap.
+                A tick that comes while the previous call's promise is still pending is skipped, so calls never overlap.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { createSignal } from "solid-js";

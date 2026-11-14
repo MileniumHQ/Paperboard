@@ -6,9 +6,11 @@ export interface CreatePollingOptions {
 }
 
 /**
- * Bounded polling for components: one interval, cleared on cleanup, and a
- * callback failure is logged instead of becoming an unhandled rejection.
- * Returns a stop function for callers that want to end it early.
+ * Bounded polling for components: one interval, cleared on cleanup. A tick
+ * whose previous call is still running is skipped, so calls never overlap.
+ * A failure is not caught: it reaches PaperProvider's uncaught-error toast,
+ * and the next tick still runs. Returns a stop function for callers that
+ * want to end it early.
  */
 export function createPolling(
     fn: () => void | Promise<void>,
@@ -21,17 +23,16 @@ export function createPolling(
         );
     }
 
+    let running = false;
     const tick = () => {
-        try {
-            const result = fn();
-            if (result && typeof (result as Promise<void>).then === "function") {
-                (result as Promise<void>).catch((err) => {
-                    console.error("[paperui] polling callback failed:", err);
-                });
-            }
-        } catch (err) {
-            console.error("[paperui] polling callback failed:", err);
-        }
+        if (running) return;
+        const result = fn();
+        if (!result) return;
+        running = true;
+        // a rejection passes through, unhandled, to the uncaught-error toast
+        void result.finally(() => {
+            running = false;
+        });
     };
 
     if (options.immediate) tick();
