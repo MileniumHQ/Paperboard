@@ -62,8 +62,15 @@ export function BlocklyDialogs() {
                         placeholder="Name"
                         value={value()}
                         onInput={(e) => setValue(e.currentTarget.value)}
+                        // the modal hands the keyboard to this field as it opens; a name being changed is selected, to type over
+                        autofocus
+                        onFocus={(e) => e.currentTarget.select()}
                         onKeyDown={(e) => {
-                            if (e.key === "Enter" && value().trim()) close(true);
+                            if (e.key !== "Enter") return;
+                            // Enter answers the question and nothing else: the dialog closes and focus goes back to
+                            // the button that asked it, which this same Enter would press again
+                            e.preventDefault();
+                            if (value().trim()) close(true);
                         }}
                     />
                 ) : (

@@ -4,6 +4,7 @@
 // make them; the service runs the flows.
 import { batch, createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js";
 import * as Blockly from "blockly";
+import { sortVariableReads } from "./lib/naturalOrder";
 import { blocksApi, panelAssetUrl, panelsApi, type BlockInfo, type BlockProjectInfo, type PanelItem } from "@mileniumhq/paperapi";
 import {
     PaperButton,
@@ -264,7 +265,8 @@ export default function Editor(props: {
                 // its "Create variable" button is the header's PaperButton, not Blockly's
                 if (!ready() || !workspace) return [];
                 const contents = Blockly.Variables.flyoutCategory(workspace) as unknown as Json[];
-                return [{ blocks: contents.filter((item) => item.kind !== "button") }];
+                // in the order a person counts: variable_2 comes before variable_10
+                return [{ blocks: sortVariableReads(contents.filter((item) => item.kind !== "button"), (id) => workspace!.getVariableMap().getVariableById(id)?.getName() ?? id) }];
             }
             if (builtin.custom === "PROCEDURE") {
                 functionsShape();
