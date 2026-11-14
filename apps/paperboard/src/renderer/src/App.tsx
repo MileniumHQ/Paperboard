@@ -410,7 +410,8 @@ const App: Component = () => {
             return;
         }
 
-        // Probe before switching so offline computers prompt explicitly
+        // Probe before switching so offline computers prompt explicitly; the
+        // dialog shows this probe's answer and probes again only when asked
         try {
             const probe = await computersApi.probe(comp.host, comp.port);
             if (request !== selectionRequest) return;
@@ -424,7 +425,10 @@ const App: Component = () => {
         } catch (err) {
             logToMain("error", "Failed to probe computer:", err);
             if (request !== selectionRequest) return;
-            setOfflineTarget(comp);
+            setOfflineTarget({
+                ...comp,
+                status: { ...comp.status, connected: false, error: err instanceof Error ? err.message : String(err) },
+            });
             return;
         }
 

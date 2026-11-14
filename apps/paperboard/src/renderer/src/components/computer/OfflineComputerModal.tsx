@@ -9,7 +9,7 @@ export interface OfflineComputerModalProps {
     onClose: () => void;
     /** User chose to forget the unreachable computer. */
     onForget: () => void;
-    /** Probe succeeded — caller should select the computer normally. */
+    /** Try Again reached it: the caller selects the computer normally. */
     onReconnectSuccess: () => void;
 }
 
@@ -47,21 +47,17 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
         }
     };
 
-    // Probe once each time the modal opens, and again if it is opened for
-    // another computer (it stays mounted, so onMount won't refire). Only the
-    // opening and the computer's id are followed: the probe's own busy flag
-    // and status must not start it again, or a failed probe would retry
-    // without end while the dialog is open.
+    // The dialog opens on the answer of the probe that found the computer
+    // unreachable, so it shows that answer instead of asking again; Try
+    // Again probes. Opened for another computer (it stays mounted), it shows
+    // that computer's answer; closed, a probe still out is moot.
     createEffect(
         on(
             () => (props.open ? props.computer?.id : undefined),
             (id) => {
-                if (id) {
-                    void attemptReconnect();
-                    return;
-                }
                 probeRequest++;
                 setIsProbing(false);
+                setError(id ? (props.computer?.status?.error ?? null) : null);
             },
         ),
     );
