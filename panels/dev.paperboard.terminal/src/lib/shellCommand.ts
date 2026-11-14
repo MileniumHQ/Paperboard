@@ -1,5 +1,5 @@
-// Run Shell Command, as the block and the v1 action both run it: one command
-// in a shell of its own, through the daemon, waited for.
+// Run Shell Command, as the block runs it: one command in a shell of its
+// own, through the daemon, waited for.
 import { processApi, resolveOneShotShell } from "@mileniumhq/paperapi";
 import { errorMessage } from "./failure";
 

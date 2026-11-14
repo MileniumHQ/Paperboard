@@ -11,6 +11,8 @@
 // its runs (dispose); one that restarts after a crash finds the records and
 // takes the runs back with the deadline they had left (init).
 
+import { errorMessage } from "./failure";
+
 export const MAX_SAVED_COMMANDS = 32;
 export const MAX_COMMAND_LENGTH = 4096;
 export const MAX_LABEL_LENGTH = 48;
@@ -204,7 +206,7 @@ export class SavedCommands {
             this.commands = [];
             this.runs = {};
             this.loaded = false;
-            this.loadError = `Saved commands could not be read: ${err instanceof Error ? err.message : String(err)}`;
+            this.loadError = `Saved commands could not be read: ${errorMessage(err)}`;
         }
         if (this.loaded && running.length > 0) await this.takeBack(running);
         this.publish();
@@ -240,7 +242,7 @@ export class SavedCommands {
             try {
                 await this.deps.save(this.docWith(next, this.runs));
             } catch (err) {
-                throw new Error(`The command was not saved: ${err instanceof Error ? err.message : String(err)}`);
+                throw new Error(`The command was not saved: ${errorMessage(err)}`);
             }
             this.commands = next;
             this.publish();
@@ -257,7 +259,7 @@ export class SavedCommands {
             try {
                 await this.deps.save(this.docWith(nextCommands, nextRuns));
             } catch (err) {
-                throw new Error(`The command was not removed: ${err instanceof Error ? err.message : String(err)}`);
+                throw new Error(`The command was not removed: ${errorMessage(err)}`);
             }
             // applied to what is current now, not to a snapshot: runs settled
             // and started while the save was in flight stay
@@ -293,7 +295,7 @@ export class SavedCommands {
             await this.deps.start(procId, command.command);
         } catch (err) {
             this.abandon(live, previousRun);
-            throw new Error(`"${command.label}" could not start: ${err instanceof Error ? err.message : String(err)}`);
+            throw new Error(`"${command.label}" could not start: ${errorMessage(err)}`);
         }
         live.accepted = true;
         // the child is the daemon's and outlives this service: it must be on
@@ -307,7 +309,7 @@ export class SavedCommands {
             await this.deps.kill(procId).catch((killErr) =>
                 console.error(`[TerminalService] could not stop unrecorded run of ${command.id}:`, killErr),
             );
-            throw new Error(`"${command.label}" was stopped: its run could not be recorded (${err instanceof Error ? err.message : String(err)})`);
+            throw new Error(`"${command.label}" was stopped: its run could not be recorded (${errorMessage(err)})`);
         }
         if (!live.settled) {
             live.timeout = setTimeout(() => this.expire(command.id, live), this.timeoutMs);
@@ -341,7 +343,7 @@ export class SavedCommands {
             await this.deps.kill(live.procId);
         } catch (err) {
             live.stopping = false;
-            throw new Error(`"${command.label}" could not be stopped: ${err instanceof Error ? err.message : String(err)}`);
+            throw new Error(`"${command.label}" could not be stopped: ${errorMessage(err)}`);
         }
         if (!live.settled) {
             clearTimeout(live.timeout);
@@ -387,11 +389,6 @@ export class SavedCommands {
         } catch (err) {
             console.error("[TerminalService] could not record the runs stopped at shutdown:", err);
         }
-    }
-
-    /** Test/diagnostic: how many children are in flight. */
-    liveCount(): number {
-        return this.live.size;
     }
 
     // listen before spawning: a fast command can exit before start() answers

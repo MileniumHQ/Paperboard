@@ -1,6 +1,5 @@
-// Terminal's blocks for the Blocks panel (Actions API v2). The actions (v1,
-// service.ts) stay as they are; both run the same functions, which the
-// service hands in here.
+// Terminal's blocks for the Blocks panel. They run the same functions the
+// panel's page calls, which the service hands in here.
 import type { BlockSet, BlocksHandle, TerminalCommand } from "@mileniumhq/paperapi";
 import type { SplitDirection } from "./lib/tabs";
 import { MAX_COMMAND_LENGTH, MAX_LABEL_LENGTH, type CommandRun, type SavedCommand } from "./lib/savedCommands";

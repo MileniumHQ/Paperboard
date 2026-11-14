@@ -14,8 +14,7 @@ import { onThemeChange, screenColors, token } from "./lib/theme";
 import { writeRefusal, writeTerminal } from "./lib/terminalWrite";
 import styles from "./Terminal.module.css";
 import "@xterm/xterm/css/xterm.css";
-
-const TERMINAL_PANEL_ID = "dev.paperboard.terminal";
+import { PANEL_ID } from "./lib/panel";
 
 /** what the panel can do with one session's screen */
 export interface TerminalHandle {
@@ -250,7 +249,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 offExit();
             };
             serviceApi
-                .call<string>(TERMINAL_PANEL_ID, "open-tab", { id, cols: term.cols, rows: term.rows })
+                .call<string>(PANEL_ID, "open-tab", { id, cols: term.cols, rows: term.rows })
                 .then((scrollback) => {
                     if (current !== attempt) return;
                     replaying = true;

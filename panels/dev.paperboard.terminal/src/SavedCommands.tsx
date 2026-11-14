@@ -19,8 +19,8 @@ import { MAX_LABEL_LENGTH, MAX_SAVED_COMMANDS } from "./lib/savedCommands";
 import { describeRun, type RunTone } from "./lib/runStatus";
 import { createAgoClock } from "./lib/clock";
 import { errorMessage, type Outcome } from "./lib/failure";
+import { PANEL_ID } from "./lib/panel";
 
-const PANEL_ID = "dev.paperboard.terminal";
 
 const TONE_COLOR: Record<RunTone, PaperColor> = {
     idle: "text-subtle",
