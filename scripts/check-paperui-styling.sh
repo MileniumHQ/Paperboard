@@ -14,35 +14,60 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$ROOT/packages/paperui/src"
 
-# Exempted files, with reasons:
-#   src/styles/colors.css
+# Files each check exempts, with reasons. Paths are relative to $SRC.
+# (a) hex colors:
+#   styles/colors.css
 #       token definition file — the one place hex values are allowed to live
 #       (it defines the --paper-* tokens everything else must consume)
-#   src/__tests__/theme.test.tsx
+#   __tests__/theme.test.tsx
 #       hex literals are resolver passthrough assertions (proving
 #       resolveBackground/resolveColor/getVarCss forward values through),
 #       not styling
-#   src/components/PaperEffect/index.module.css
+HEX_EXEMPT=(
+    "styles/colors.css"
+    "__tests__/theme.test.tsx"
+)
+# (b) global selectors: the files above, and
+#   components/PaperEffect/index.module.css
 #       documented global contract: top-level :global([data-paperui-motion="reduced"])
 #       selectors key on the PaperUI-owned accessibility data attribute;
 #       they target a runtime state flag, not a styling-scope escape
-#   src/components/PaperButton/index.module.css
+#   components/PaperButton/index.module.css
 #       documented global contract: top-level :global([class*="PaperEffect"])
 #       composition coupling — PaperButton's hover/active states key on the
 #       PaperEffect class contract; the scoped subject (.PaperButton) stays local
-EXEMPT=(
-    "src/styles/colors.css"
-    "src/__tests__/theme.test.tsx"
-    "src/components/PaperEffect/index.module.css"
-    "src/components/PaperButton/index.module.css"
+GLOBAL_EXEMPT=(
+    "${HEX_EXEMPT[@]}"
+    "components/PaperEffect/index.module.css"
+    "components/PaperButton/index.module.css"
 )
 
 fail=0
 
+# scan <grep args...>: the matching lines, into SCAN. A scan that cannot read
+# what it was pointed at (a moved folder, a grep error) fails the check
+# instead of passing it with nothing found.
+scan() {
+    SCAN="$(grep -rnIE --exclude-dir=node_modules --exclude-dir=dist "$@")"
+    local status=$?
+    if [ "$status" -gt 1 ]; then
+        echo "FAIL: paperui styling: grep could not scan (exit $status): $*" >&2
+        exit 1
+    fi
+}
+
+# without <file...>: stdin minus the lines grep -rn printed for those files
+without() {
+    local args=() file
+    for file in "$@"; do
+        args+=(-e "$SRC/$file:")
+    done
+    grep -vF "${args[@]}"
+}
+
 # (a) hardcoded hex colors
-hex_out="$(grep -rnIE '#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]' "$SRC" \
-    --exclude-dir=node_modules --exclude-dir=dist \
-    | grep -vF -e "$SRC/styles/colors.css" -e "$SRC/__tests__/theme.test.tsx")"
+scan '#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]' "$SRC"
+hex_out="$(printf '%s\n' "$SCAN" | without "${HEX_EXEMPT[@]}")"
 if [ -n "$hex_out" ]; then
     echo "FAIL: hardcoded hex colors outside styles/colors.css:" >&2
     printf '%s\n' "$hex_out" >&2
@@ -50,11 +75,11 @@ if [ -n "$hex_out" ]; then
 fi
 
 # (c) literal units in component CSS (token files are the one exception)
-unit_out="$(grep -rnIE '[0-9.]+(px|rem|em)\b' "$SRC/components" "$SRC/templates" \
-    --include='*.css' --exclude-dir=node_modules --exclude-dir=dist 2>/dev/null \
+scan '[0-9.]+(px|rem|em)\b' "$SRC/components" "$SRC/templates" --include='*.css'
+unit_out="$(printf '%s\n' "$SCAN" \
     | grep -vE ':[0-9]+:[[:space:]]*\*' \
     | grep -vE ':[0-9]+:[[:space:]]*@(container|media)[[:space:]]' \
-    | grep -vE '0px')"
+    | grep -vE '0px|^$')"
 if [ -n "$unit_out" ]; then
     echo "FAIL: literal px/rem/em in component CSS (use tokens from src/styles):" >&2
     printf '%s\n' "$unit_out" >&2
@@ -62,11 +87,8 @@ if [ -n "$unit_out" ]; then
 fi
 
 # (b) global selectors escaping .paperui-root
-global_out="$(grep -rnIE '^[[:space:]]*(:global\(|\*[[:space:]]*[,{])' "$SRC" \
-    --exclude-dir=node_modules --exclude-dir=dist \
-    | grep -vF -e "$SRC/styles/colors.css" -e "$SRC/__tests__/theme.test.tsx" \
-              -e "$SRC/components/PaperEffect/index.module.css" \
-              -e "$SRC/components/PaperButton/index.module.css")"
+scan '^[[:space:]]*(:global\(|\*[[:space:]]*[,{])' "$SRC"
+global_out="$(printf '%s\n' "$SCAN" | without "${GLOBAL_EXEMPT[@]}")"
 if [ -n "$global_out" ]; then
     echo "FAIL: global selectors escaping .paperui-root (bare * or top-level :global() outside documented global contracts):" >&2
     printf '%s\n' "$global_out" >&2

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# App and panel styling check (warning only, always exits 0):
-# flags literal sizes, colors, motion, z-index, opacity, font weights, line
+# App and panel styling check (warning only: findings exit 0, and only a
+# scan that could not run exits nonzero): flags literal sizes, colors, motion, z-index, opacity, font weights, line
 # heights and scales in apps and panels that have a PaperUI token. PaperUI's
 # own sources are gated, and strictly, by check-paperui-styling.sh.
 #
@@ -18,7 +18,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT" || exit 0
+cd "$ROOT" || exit 1
 
 if [ "$#" -gt 0 ]; then
     SCOPE=("$@")
@@ -26,9 +26,15 @@ else
     SCOPE=(apps/paperboard apps/origami/library panels packages/create-panel/template)
 fi
 
-FILES="$(git ls-files "${SCOPE[@]}" 2>/dev/null \
+# a scope git does not know (a moved or mistyped folder) fails here, not as
+# a clean "no files in scope"
+if ! TRACKED="$(git ls-files --error-unmatch "${SCOPE[@]}")"; then
+    echo "FAIL: app styling: git could not list ${SCOPE[*]}" >&2
+    exit 1
+fi
+FILES="$(printf '%s\n' "$TRACKED" \
     | grep -E '\.(css|tsx)$' \
-    | grep -vE '(^|/)(node_modules|dist|out)/|\.test\.|/__tests__/|/tests?/|\.d\.ts$' || true)"
+    | grep -vE '(^|/)(node_modules|dist|out)/|\.test\.|/__tests__/|/tests?/|\.d\.ts$')"
 
 if [ -z "$FILES" ]; then
     echo "ok: app styling (no files in scope)"
@@ -36,7 +42,10 @@ if [ -z "$FILES" ]; then
 fi
 
 # shellcheck disable=SC2086
-OUT="$(printf '%s\n' $FILES | python3 -I "$ROOT/scripts/check-app-styling.py")"
+if ! OUT="$(printf '%s\n' $FILES | python3 -I "$ROOT/scripts/check-app-styling.py")"; then
+    echo "FAIL: app styling: the scanner (check-app-styling.py) did not finish" >&2
+    exit 1
+fi
 if [ -n "$OUT" ]; then
     echo "WARN: literal values with a PaperUI token (use --paper-* tokens; if one is missing, add it to PaperUI):" >&2
     printf '%s\n' "$OUT" >&2
