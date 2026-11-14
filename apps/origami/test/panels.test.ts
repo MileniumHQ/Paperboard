@@ -307,6 +307,10 @@ describe("publisher-supplied content cannot gain library authority", () => {
             expect(res.headers.get("content-type")).toBe(type);
             expect(res.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
             expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+            // HEAD answers like the download and media routes beside it
+            const head = await request(`/panel/${id}/icon`, { method: "HEAD" });
+            expect(head.status).toBe(200);
+            expect(head.headers.get("content-type")).toBe(type);
         }
     });
 
@@ -346,6 +350,30 @@ describe("publisher-supplied content cannot gain library authority", () => {
         const shot = await request(new URL(record.store!.screenshots[0]!.light).pathname);
         expect(shot.status).toBe(200);
         expect(shot.headers.get("x-content-type-options")).toBe("nosniff");
+    });
+
+    test("only media the live record names is served: a superseded release's and an unnamed key's are 404", async () => {
+        const withShot = (version: string) =>
+            upload("dev.example.clock", version, {
+                manifest: { id: "dev.example.clock", store: { screenshots: [{ light: "store/one.png", dark: "store/one-dark.png" }] } },
+                store: { files: new Map([["screenshot-0-light", new Uint8Array([1])], ["screenshot-0-dark", new Uint8Array([2])]]) },
+            });
+        const old = await publishPanel(withShot("1.0.0"), ctx);
+        const live = await publishPanel(withShot("1.1.0"), ctx);
+        const oldPath = new URL(old.store!.screenshots[0]!.light).pathname;
+        const livePath = new URL(live.store!.screenshots[0]!.light).pathname;
+        expect(oldPath).not.toBe(livePath);
+        // the older release's bytes are still stored, and still not served
+        expect(registry.panels.objects.has(oldPath.replace(/^\/panel\//, "panels/"))).toBe(true);
+        // a key under the media prefix that no record names
+        await registry.panels.put("panels/dev.example.clock/media/1.1.0/7-light.png", new Uint8Array([3]));
+        const status = async (path: string, method = "GET") => (await request(path, { method })).status;
+        expect(await status(livePath)).toBe(200);
+        expect(await status(livePath, "HEAD")).toBe(200);
+        for (const path of [oldPath, "/panel/dev.example.clock/media/1.1.0/7-light.png"]) {
+            expect(await status(path)).toBe(404);
+            expect(await status(path, "HEAD")).toBe(404);
+        }
     });
 
     test("an archive over 64 MiB is refused before any write", async () => {

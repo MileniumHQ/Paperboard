@@ -6,7 +6,11 @@ export interface PanelRecord {
     name: string;
     version: string;
     description?: string;
-    /** the registry-hosted icon's address; set exactly when `iconKey` is */
+    /**
+     * the registry-hosted icon's address. Every record published now sets it
+     * together with `iconKey`; older records set it alone, and the icon
+     * route then serves the icon under the panel's legacy fixed key.
+     */
     iconUrl?: string;
     /** the R2 object the icon route serves: only this release's icon, never an older one's */
     iconKey?: string;

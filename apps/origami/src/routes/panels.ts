@@ -72,7 +72,7 @@ export async function handlePanelsRoutes(
         /^\/panel\/([a-zA-Z0-9_\-\.]+)\/icon(?:\.(png|svg|webp))?$/,
     );
     if (iconMatch && iconMatch[1]) {
-        if (request.method !== "GET") {
+        if (request.method !== "GET" && request.method !== "HEAD") {
             return jsonResponse({ error: "Method Not Allowed" }, 405);
         }
         const panelId = iconMatch[1];
@@ -90,7 +90,7 @@ export async function handlePanelsRoutes(
         headers.set("X-Content-Type-Options", "nosniff");
         headers.set("Cache-Control", "public, max-age=86400");
         headers.set("Access-Control-Allow-Origin", "*");
-        return new Response(object.body, { headers });
+        return new Response(request.method === "HEAD" ? null : object.body, { headers });
     }
 
     const mediaMatch = pathname.match(
