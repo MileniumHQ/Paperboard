@@ -2,7 +2,7 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { clearWorkloads, testDaemon } from "./helpers/crane";
-import { panelBrowser, servePanel, type Page } from "./helpers/browser";
+import { alertShows, panelBrowser, servePanel, type Page } from "./helpers/browser";
 import { call, panelFiles, runBlock, startService, stopServices } from "./helpers/service";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
@@ -28,8 +28,6 @@ const TABS = { tabs: [{ id: "tab1", label: "Works" }, { id: REFUSED, label: "Ref
 // the text each tab's xterm shows, by its tab's place in the list
 const screens = `[...document.querySelectorAll(".xterm-rows")].map((rows) => rows.innerText)`;
 const screenShows = (index: number, text: string) => `(${screens})[${index}]?.includes(${JSON.stringify(text)})`;
-const alertShows = (title: string, text: string) =>
-    `[...document.querySelectorAll("[role=alert]")].some((q) => q.innerText.includes(${JSON.stringify(title)}) && q.innerText.includes(${JSON.stringify(text)}))`;
 
 const textarea = `document.querySelectorAll(".xterm-helper-textarea")[0]`;
 // a clipboard paste into the first terminal, as Ctrl+V delivers it; `text` is a page expression

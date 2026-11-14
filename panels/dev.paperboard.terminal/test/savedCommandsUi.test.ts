@@ -2,7 +2,7 @@
 // modal, run from the toolbar's menu, and run from the Home widget.
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { clearWorkloads } from "./helpers/crane";
-import { panelBrowser, servePanel, type Page } from "./helpers/browser";
+import { alertShows, panelBrowser, servePanel, type Page } from "./helpers/browser";
 import { call, panelFiles, startService, stopServices } from "./helpers/service";
 
 setDefaultTimeout(90_000);
@@ -19,8 +19,6 @@ const dialog = `document.querySelector("[role=dialog]")`;
 // the modal's row for a command: a list row, keyed by the command's id
 const rowShowing = (label: string, text: string) =>
     `[...${dialog}.querySelectorAll("[data-value]")].some((row) => row.innerText.includes(${JSON.stringify(label)}) && row.innerText.includes(${JSON.stringify(text)}))`;
-const alertShows = (title: string, text: string) =>
-    `[...document.querySelectorAll("[role=alert]")].some((q) => q.innerText.includes(${JSON.stringify(title)}) && q.innerText.includes(${JSON.stringify(text)}))`;
 const press = (page: Page, selector: string) => page.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
 
 /** types into the modal's field with this label */

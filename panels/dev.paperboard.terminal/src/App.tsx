@@ -229,7 +229,7 @@ export default function App() {
         if (activeTab() === closedId) {
             const next = closedIndex > 0 ? current[closedIndex - 1] : current[1];
             if (next) {
-                setActiveTab(next.id);
+                handleSwitchTab(next.id);
                 // the tab that comes forward has the keyboard, so typing goes on where it left off
                 focusSession(focusedOf(next));
             }
@@ -253,8 +253,9 @@ export default function App() {
             );
             if (!id) throw new Error("The terminal service answered without a tab.");
             // the state push travels beside this answer; pull it so the new
-            // tab is listed before it is shown
-            applyTabs((await bridge.refreshState()).tabs);
+            // tab is listed before it is shown. The pull reaches onStateChange
+            // above, and a push that lands meanwhile wins over it
+            await bridge.refreshState();
             setActiveTab(id);
             focusSession(id);
         } catch (err) {
@@ -289,9 +290,8 @@ export default function App() {
             .call(PANEL_ID, "reorder-tabs", { orderedIds: reordered.map((t) => t.id) })
             .catch((err) => {
                 report("Tab order not saved", ". The tabs are back in their saved order.")(err);
-                void bridge
+                bridge
                     .refreshState()
-                    .then((state) => applyTabs(state.tabs))
                     .catch(report("Tabs not reloaded", ". This window may show an order the service doesn't have."));
             });
     };
@@ -301,7 +301,7 @@ export default function App() {
             .call<string>(PANEL_ID, "split-tab", { id: tabId, direction })
             .then(async (pane) => {
                 // the new shell is listed before it is shown
-                applyTabs((await bridge.refreshState()).tabs);
+                await bridge.refreshState();
                 setFocusedPane(tabId, pane);
                 focusSession(pane);
             })
@@ -390,7 +390,8 @@ export default function App() {
             minWidth={paneProps.floor && !compact() ? "field" : 0}
             minHeight={paneProps.floor && !compact() ? "field" : 0}
             direction="column"
-            class={[paneProps.class, awayOnPhone(paneProps.tab, paneProps.session) ? styles.paneAway : ""].filter(Boolean).join(" ")}
+            class={paneProps.class}
+            hidden={awayOnPhone(paneProps.tab, paneProps.session)}
         >
             <TerminalComponent
                 id={paneProps.session}
@@ -514,7 +515,7 @@ export default function App() {
                                             flex
                                             minWidth={tab.split && !compact() ? "field" : 0}
                                             minHeight={tab.split && !compact() ? "field" : 0}
-                                            class={awayOnPhone(tab, tab.id) ? styles.paneAway : undefined}
+                                            hidden={awayOnPhone(tab, tab.id)}
                                         >
                                             <Pane tab={tab} session={tab.id} />
                                         </PaperFlex>

@@ -158,7 +158,9 @@ export function TerminalComponent(props: TerminalComponentProps) {
         });
 
         // the pty follows the screen: a resize the daemon refused is said
-        // once, and sent again on the next fit
+        // once, and sent again on the next fit. Until the session is open its
+        // size goes with the open, so a resize never races the shell starting
+        let opened = false;
         let sentCols = 0;
         let sentRows = 0;
         let refused = "";
@@ -166,6 +168,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
             // a hidden tab has no size to fit to; it fits when it is shown
             if (containerRef.clientWidth === 0 || containerRef.clientHeight === 0) return;
             fitAddon.fit();
+            if (!opened) return;
             const { cols, rows } = term;
             if (cols === sentCols && rows === sentRows) return;
             terminalApi
@@ -234,6 +237,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
             const id = props.id;
             const current = ++attempt;
             stopped = false;
+            opened = false;
             disconnect?.();
             term.reset();
             replaying = false;
@@ -254,10 +258,16 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 offData();
                 offExit();
             };
+            const { cols, rows } = term;
             serviceApi
-                .call<string>(PANEL_ID, "open-tab", { id, cols: term.cols, rows: term.rows })
+                .call<string>(PANEL_ID, "open-tab", { id, cols, rows })
                 .then((scrollback) => {
                     if (current !== attempt) return;
+                    opened = true;
+                    sentCols = cols;
+                    sentRows = rows;
+                    // the screen may have changed size while it opened
+                    fit();
                     replaying = true;
                     term.write(joinScrollback(scrollback, pending!), () => (replaying = false));
                     pending = null;

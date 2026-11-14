@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { clearWorkloads } from "./helpers/crane";
-import { panelBrowser, servePanel } from "./helpers/browser";
-import { panelFiles, runBlock, startService, stopServices } from "./helpers/service";
+import { answered, panelBrowser, servePanel } from "./helpers/browser";
+import { PANEL_ID, panelFiles, runBlock, startService, stopServices } from "./helpers/service";
+import { stateWhere } from "./helpers/wait";
 
 setDefaultTimeout(90_000);
 
@@ -43,6 +44,34 @@ describe("splitting a tab", () => {
             await page.waitFor(`document.querySelectorAll(".xterm").length === 1`, "the split to close");
             expect(await page.evaluate<string | undefined>(`${firstScreen}.dataset.kept`)).toBe("yes");
             expect(await page.evaluate<string>(`${firstScreen}.querySelector(".xterm-rows").innerText`)).toContain("first-42");
+
+            expect(page.exceptions).toEqual([]);
+        } finally {
+            await page.close();
+            served.stop();
+        }
+    });
+
+    test("a saved split opens both shells at its size, and on a phone only the shell with the keyboard shows", async () => {
+        await panelFiles({ "tabs.json": { tabs: [{ id: "tab1", label: "One", split: { direction: "right", session: { id: "pane1" } } }], activeTabId: "tab1" } });
+        await startService();
+        const served = await servePanel();
+        const page = await browser.open(served.url);
+        // the screens in view, by their place in the tab
+        const inView = `[...document.querySelectorAll(".xterm")].map((x, i) => (x.getClientRects().length ? i : -1)).filter((i) => i >= 0)`;
+        try {
+            await page.waitFor(`JSON.stringify(${inView}) === "[0,1]"`, "both shells side by side");
+            // neither shell had started: each starts at its screen's size, and none is said to have refused it
+            await stateWhere<any>(PANEL_ID, (s) => Boolean(s.live?.tab1?.program && s.live?.pane1?.program), "both shells to run");
+            await answered(page);
+            expect(await page.evaluate<number>(`document.querySelectorAll("[role=alert]").length`)).toBe(0);
+
+            await page.resize(390, 800);
+            await page.waitFor(`JSON.stringify(${inView}) === "[0]"`, "only the first shell in view");
+            await page.click('label[data-value="pane1"]');
+            await page.waitFor(`JSON.stringify(${inView}) === "[1]"`, "only the second shell in view");
+            // the one in view fills the width
+            expect(await page.evaluate<number>(`document.querySelectorAll(".xterm")[1].getBoundingClientRect().width`)).toBeGreaterThan(300);
 
             expect(page.exceptions).toEqual([]);
         } finally {

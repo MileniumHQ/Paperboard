@@ -136,3 +136,13 @@ export function panelBrowser(): { open(url: string): Promise<Page> } {
         },
     };
 }
+
+/** resolves once every call the page has sent so far has its answer */
+export async function answered(page: Page): Promise<void> {
+    const ids = page.sentFrames.map((f) => JSON.parse(f).id).filter((id) => id !== undefined);
+    for (const id of ids) await page.received((f) => JSON.parse(f).id === id, `the answer to call ${id}`);
+}
+
+/** a page expression: some alert shows `title` and `text` */
+export const alertShows = (title: string, text: string) =>
+    `[...document.querySelectorAll("[role=alert]")].some((q) => q.innerText.includes(${JSON.stringify(title)}) && q.innerText.includes(${JSON.stringify(text)}))`;
