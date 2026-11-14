@@ -15,7 +15,7 @@ Paperboard is a dashboard for self-hostable programs. Panels are like the apps. 
 - **Changelogs are suspended:** No changelogs right now. I'm figuring that out.
 - **Nothing ships that is unfinished:** Don't write experimental code, write production-ready code.
 - **Don't touch .paperboard:** The user's .paperboard is theirs, ensure tests don't reach it. Use `PAPERBOARD_DIR`.
-- **Suicide prevention:** Don't `pkill -f`, because that could also kill your own shell.
+- **Suicide prevention:** Don't `pkill` or `killall` at all (not `-f`, not `-x`): it kills your own shell or another session's work. Stop only what you started, by PID.
 - **Leave the real app alone:** Never kill the installed Paperboard app or its workloads (game servers, supervisors). People play on those servers. If the real app crashed, check whether a session killed it before debugging Paperboard.
 - **Launching from an agent shell:** Your shell may set `ELECTRON_RUN_AS_NODE=1`, which makes Electron crash. Launch with `env -u ELECTRON_RUN_AS_NODE`, a throwaway `PAPERBOARD_DIR` and `--user-data-dir`.
 - **Always test.** Unless you're certain it'll work fine, always do a manual check to ensure the feature works and looks great.
@@ -29,13 +29,14 @@ Tests:
 - **Platform tests:** only OS-dependent tests go in `test/platform`; CI runs those on every release target.
 - **Only what matters:** data loss, security, updates/releases, core contracts.
 - **Never skip or loosen a failing test.** Fix the code, or the test if it expects broken behavior.
+- **A UI fix ships with a browser test that fails on the old code.** Nobody reads the diff, so the test is the review. Press the thing; reading the code is not a check.
 
 Some rules about Git:
 
 - **Keep the workspace clean:** Only code, assets and markdown in this repo, no logs, builds, etc should end up here.
 - Conventional commits (`feat:`, `fix:`, `chore:`). Never `stuff` or `checkpoint`.
 - Split into multiple commits when necessary.
-- **Shared checkout:** Other sessions may switch this checkout's branch mid-task. Run `git branch --show-current` before every commit or merge, commit with `git commit -- <paths>` (never `git add -A` or a bare `git commit`), and never touch another session's uncommitted files.
+- **Shared checkout:** Other sessions may switch this checkout's branch mid-task. Run `git branch --show-current` before every commit or merge, commit with `git commit -- <paths>` (never `git add -A` or a bare `git commit`), and never touch another session's uncommitted files. No `git stash`: the stash is shared too.
 - **Branches:** `company` is only for accounts work (sign-in, Paperboard Cloud, web hosting). Everything else goes to `main`, even if you're sitting on `company`. Merge `main` into `company`, never the other way, and never push `company`.
 
 Gates:
@@ -50,6 +51,18 @@ Browser mode:
 - `bun run dev:browser`
 - Use it for screenshots, testing, browser use in your agent (T3 Code), etc.
 - USE THE T3 PREVIEW IF AVAILABLE. If it's not available, use a headless browser (preferrably Helium). **How the UI looks must be held to the highest standard.**
+
+Solid:
+
+- **Rows keep their identity:** a list that reloads lives in a store reconciled by id (or `<Index>`). Never hand `<For>` fresh objects: every row is rebuilt, and a switch that is rebuilt doesn't animate.
+- **Never rebuild a view to refresh it:** key a view on an id, never on an object or on `props.children` read again.
+- **Read a JSX prop once:** resolve it with `children()`. `<Show when={props.x}>{props.x}</Show>` builds it twice.
+- **Props stay reactive:** no destructuring, no `const x = props.x`, no `if`/`switch`/early return on props in a component body.
+- **A push that changes nothing notifies nothing:** keep the old value when the new one is equal, and `batch` setters that follow an `await`.
+- **Effects track what they mean:** name the dependencies with `on()`. An effect that calls a service must not depend on what that call changes.
+- **Late answers lose:** anything async that a newer request can replace carries a token and drops the older answer.
+- **One way to save a control:** it flips at once, saves in order, and falls back with an error. Never disable a control for its own save.
+- **Stale comments are bugs:** when you remove a mechanism, grep for the comments that cite it.
 
 UI:
 
