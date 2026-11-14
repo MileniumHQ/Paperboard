@@ -1,6 +1,6 @@
 import { PaperFlex, playHaptic, swipeFromFrame } from "@mileniumhq/paperui";
 import { backupApi, backupProgressFraction, backupProgressText, HAPTIC_MESSAGE, SWIPE_BACK_MESSAGE, type BackupProgress } from "@mileniumhq/paperapi";
-import { type Component, type JSX, createEffect, createSignal, For, on, Show, onCleanup, onMount } from "solid-js";
+import { type Component, type JSX, createEffect, createMemo, createSignal, For, on, Show, onCleanup, onMount } from "solid-js";
 import { recordUse, liveKeys, recordAway, withoutIdle, MAX_LIVE_IFRAMES, IDLE_UNLOAD_MS } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";
 import styles from "./frame.module.css";
@@ -15,7 +15,7 @@ import { BACKUP_LOCATION_REQUEST, BACKUP_LOCATION_RESULT, parseBackupLocationReq
 export type RestartState = { kind: "restarting" } | { kind: "updating" } | { kind: "failed"; message: string };
 
 export interface PanelViewProps {
-    /** each panel's icon and name, headed on its loader */
+    /** each panel's icon and name, headed on its loader; asked once per frame, and followed from then on */
     panelHeading: (key: string) => { icon: JSX.Element; name: string };
     /** the phone layout: the loader's heading draws smaller */
     mobile: boolean;
@@ -70,8 +70,12 @@ const PanelFrame: Component<{ panelKey: string; heading: { icon: JSX.Element; na
     });
     // the backup location window this frame asked for, answered on it
     const [chooser, setChooser] = createSignal<{ requestId: string; sourceId?: string; generation: string; target: Window } | null>(null);
+    // only this frame's own reload token reloads it: the shell keeps every
+    // panel's token in one record, and any other panel's restart or update
+    // must leave this document alone
+    const reloadToken = createMemo(() => props.reload);
     createEffect(() => {
-        const reload = props.reload;
+        const reload = reloadToken();
         generation = crypto.randomUUID();
         const current = generation;
         setReady(false); setFailure("");
@@ -191,12 +195,15 @@ const PanelView: Component<PanelViewProps> = (props) => {
         const clock = setInterval(() => setNow(Date.now()), 60_000);
         onCleanup(() => clearInterval(clock));
     });
-    const live = () => withoutIdle(liveKeys(props.openedPanels, usageOrder(), currentKey(), MAX_LIVE_IFRAMES), away(), currentKey(), now(), IDLE_UNLOAD_MS);
+    const live = createMemo(() => withoutIdle(liveKeys(props.openedPanels, usageOrder(), currentKey(), MAX_LIVE_IFRAMES), away(), currentKey(), now(), IDLE_UNLOAD_MS));
     return <PaperFlex fullWidth fullHeight background="surface-raised" flex={1} overflow="hidden" class={styles.area}>
-        <For each={props.openedPanels}>{(key) => <Show when={live().has(key)}>
-            <PanelFrame panelKey={key} heading={props.panelHeading(key)} mobile={props.mobile} computerName={props.computerName(key.split("::")[0])} current={key === currentKey()} reload={props.reloadTokens?.[key] || 0} retry={() => props.onReloadPanel?.(key)}
-                restart={props.restartStates?.[key]} retryRestart={() => props.onRestartPanel?.(key)} />
-        </Show>}</For>
+        <For each={props.openedPanels}>{(key) => {
+            const heading = props.panelHeading(key);
+            return <Show when={live().has(key)}>
+                <PanelFrame panelKey={key} heading={heading} mobile={props.mobile} computerName={props.computerName(key.split("::")[0])} current={key === currentKey()} reload={props.reloadTokens?.[key] || 0} retry={() => props.onReloadPanel?.(key)}
+                    restart={props.restartStates?.[key]} retryRestart={() => props.onRestartPanel?.(key)} />
+            </Show>;
+        }}</For>
     </PaperFlex>;
 };
 export default PanelView;
