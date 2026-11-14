@@ -4,15 +4,13 @@ start building with the guides at https://paperboard.dev/docs/developers/.
 # PaperAPI
 
 Client SDK for Paperboard panels talking to the PaperCrane daemon. Paperboard
-is a dashboard for self-hosted programs — panels are the apps. PaperAPI is the
-package a panel UI (running inside the Paperboard host) or a panel service
-(running anywhere Node runs) uses to reach the machine: terminals, supervised
-processes, file storage, downloads, config persistence, the secret vault, and
-the panel action/trigger grid.
+is a dashboard for self-hosted programs, and panels are its apps. A panel's
+page, its widgets and its service use PaperAPI to reach the machine:
+terminals, supervised processes, file storage, downloads, config, the secret
+vault, and Blocks, which every other panel, the Blocks panel and agents use.
 
-Everything rides a single WebSocket per computer scope. Every channel call
-carries an explicit credential; nothing is injected from ambient state except
-the deprecated fallbacks listed below.
+Everything rides one WebSocket per computer. Every page and service connects
+with the credential it was granted; nothing is read from ambient state.
 
 ## Install
 
@@ -20,95 +18,82 @@ the deprecated fallbacks listed below.
 bun add @mileniumhq/paperapi
 ```
 
-## Quickstart — panel UI
+## Quickstart: panel service
 
-Panel UIs run inside the Paperboard host, which injects daemon credentials
-into the iframe at serve time (`__PAPERBOARD_CRANE`). The SDK reads them for
-you; there is no token parsing in your code.
-
-```ts
-import { initPaperApi, getPanelId, terminalApi, configApi } from "@mileniumhq/paperapi";
-
-await initPaperApi(); // connects to the daemon for this panel's scope
-
-const id = getPanelId(); // injected at serve time; "" if unresolvable
-
-const terminalId = `term-${id}`;
-await terminalApi.create(terminalId, { cols: 80, rows: 24 });
-const offData = terminalApi.onData(terminalId, (data) => console.log(data));
-
-await configApi.set({ theme: "dark" }); // keyed to this panel's id
-```
-
-State sync between a panel's UI and its service uses the bridge:
+A service is the part of a panel that keeps running while Paperboard's window
+is closed: a server, a bot, a schedule. Name its built file in the manifest's
+`service` field and call `definePanelService` once at its top level.
 
 ```ts
-import { createPanelBridge } from "@mileniumhq/paperapi";
+import { blocksApi, definePanelService } from "@mileniumhq/paperapi";
 
-const bridge = createPanelBridge({ defaultState: { count: 0 } });
-bridge.onStateChange((patch, full) => render(full));
-
-await bridge.call("increment"); // action call to this panel's service
-const out = await bridge.actions.increment(); // same thing via proxy
-// a long-running action: wait past the 30 s default instead of failing
-await bridge.call("install", undefined, { timeoutMs: null });
-
-// release the subscription and listeners when the component unmounts
-bridge.dispose();
-```
-
-## Quickstart — panel service
-
-Services run in Node with a `crane.json` handshake file (written by the
-daemon at `local/crane.json` in the Paperboard data folder: `PAPERBOARD_DIR`,
-or `~/.paperboard`) holding the local daemon's port and token. The SDK reads
-it; you never touch tokens.
-
-```ts
-import { definePanelService } from "@mileniumhq/paperapi";
-import { defineAction, defineTrigger } from "@mileniumhq/paperapi";
+const PANEL_ID = "dev.example.counter";
 
 definePanelService({
-    // optional here; defaults to PAPERBOARD_PANEL_ID resolved by the runtime
-    id: "dev.example.counter",
+    id: PANEL_ID,
     state: { count: 0 },
-    actions: {
-        increment: (ctx, by = 1) =>
-            ctx.setState((prev) => ({ count: prev.count + by })),
+    // what the panel's own page asks: bridge.calls.increment({ by: 2 })
+    calls: {
+        increment: (ctx, input?: { by?: number }) => {
+            const count = ctx.state.count + (input?.by ?? 1);
+            ctx.setState({ count });
+            ctx.emit("count-changed", { count });
+            return count;
+        },
     },
-    triggers: [
-        defineTrigger({
-            id: "count-changed",
-            name: "Count changed",
-            description: "Fires whenever the counter changes",
-            output: "number",
-            listen: (_ctx, emit) => {
-                // subscribe to your own state change and emit with the payload
-                return () => {}; // return a teardown
-            },
-        }),
-    ],
+    // what the Blocks panel, agents and other panels can use
+    onInit: async (ctx) => {
+        await blocksApi.panel(PANEL_ID).register({
+            commands: [{
+                id: "reset",
+                name: "Reset",
+                description: "Sets the counter back to zero",
+                run: () => ctx.setState({ count: 0 }),
+            }],
+        });
+    },
 });
 ```
 
-State set with `ctx.setState` is broadcast to the panel's UI; UI code reads it
-via `createPanelBridge` above.
+State set with `ctx.setState` reaches the panel's page through the bridge.
 
-## Credentials model
+## Quickstart: panel page
 
-| Runtime | Where credentials come from |
+The host injects the page's credential when it serves the panel, so a page
+connects on its own. The bridge keeps a copy of the service's state, calls it
+and hears what it emits:
+
+```ts
+import { createPanelBridge, configApi, getPanelId, requirePanelId } from "@mileniumhq/paperapi";
+
+const bridge = createPanelBridge<{ count: number }>({ defaultState: { count: 0 } });
+const stop = bridge.onStateChange((_patch, full) => render(full));
+
+await bridge.calls.increment({ by: 2 }); // same as bridge.call("increment", { by: 2 })
+const off = bridge.on("count-changed", (payload) => console.log(payload));
+
+// config names its panel every time
+const panelId = requirePanelId(getPanelId());
+await configApi.set({ theme: "dark" }, panelId);
+
+// when the component unmounts
+stop();
+off();
+bridge.dispose();
+```
+
+## Credentials
+
+| Runtime | Where the credential comes from |
 | --- | --- |
-| Panel UI (iframe) | Host-injected `__PAPERBOARD_CRANE` (port + scoped token + panelId), read automatically |
-| Panel service (Node) | `crane.json` handshake file (`~/.paperboard/local/crane.json`, or `PAPERBOARD_DIR/local/crane.json`) |
-| Explicit | `initPaperApi({ port, token, computerId })` — e.g. talking to a paired remote machine |
+| Panel page, widget page | `window.__PAPERBOARD_CRANE`, injected by the host (port, token scoped to the panel, computer and panel id) |
+| Service the daemon started | `PAPERBOARD_PANEL_ID`, `PAPERCRANE_PANEL_TOKEN` and `PAPERCRANE_PORT`, set by the daemon and read once. A service never reads `crane.json` |
+| Any other script | `initPaperApi({ port, token, computerId })`, or with no options the handshake in `$PAPERBOARD_DIR/local/crane.json` (default `~/.paperboard`), sent only once the listener proves it holds the same token |
 
-No SDK method parses tokens, and panel code should never handle one. Secrets
-go to the vault (below), not to config files or payload.
+No panel code handles a token. Secrets go to the vault, never to config or a
+payload.
 
-## Secrets — vault, explicit panelId
-
-Bot tokens and API keys never go in panel config files. They live in the
-daemon's secret vault, addressed always by an explicit `panelId`:
+## Secrets: the vault, by explicit panel id
 
 ```ts
 import { secretsApi } from "@mileniumhq/paperapi";
@@ -117,45 +102,9 @@ await secretsApi.set("BOT_TOKEN", token, "dev.example.bot");
 const { found, value } = await secretsApi.get("BOT_TOKEN", "dev.example.bot");
 const names = await secretsApi.list("dev.example.bot"); // names only
 await secretsApi.delete("BOT_TOKEN", "dev.example.bot");
-await secretsApi.purge("dev.example.bot");
 ```
 
-## Actions and triggers — namespaced `panelId:action`
-
-Actions are defined by panels and called across the grid. Registration is
-namespaced by owning panel id; the two-argument "for my panel" forms throw a
-clear identity error when this panel's id cannot be resolved, rather than
-silently subscribing to nothing.
-
-```ts
-import { actionsApi } from "@mileniumhq/paperapi";
-
-// register for this panel (identity must be resolvable)
-await actionsApi.register("reset", () => ({ ok: true }));
-
-// register a schema'd action for another panel's context
-await actionsApi.register(
-    defineAction({
-        id: "increment",
-        name: "Increment counter",
-        run: (_ctx, inputs) => ({ count: inputs.by }),
-    }),
-    undefined, // handler comes from the definition
-    "dev.example.counter",
-);
-
-// watch another panel's events
-const off = actionsApi.on("dev.example.counter", "count-changed", (payload) => {
-    console.log(payload);
-});
-
-// watch another panel's trigger
-const offT = actionsApi.onTrigger(
-    "dev.example.counter",
-    "count-changed",
-    (output) => console.log(output),
-);
-```
+Every API is documented at https://paperboard.dev/docs/paperapi/.
 
 ## CLI
 
@@ -205,19 +154,15 @@ are shown, and every other argument by its shape (`‹14 chars›`, `[3]`,
 
 | Call family | Timeout |
 | --- | --- |
-| most routing-table invokes (`terminal-*`, `file-*`, `config-*`, `secrets-*`, `system-*`, `package-*`, `panels-list`) | 30 s |
-| `actions:call` | 30 s by default; `options.timeoutMs` sets it, up to a 60 s cap, or `null` to wait for a long-running action |
-| `panel-uninstall` | none — the daemon may take longer than 30 s to finish shredding |
-| `panel-install`, `file-download`, `package-download` | none (long-running, progress events streamed) |
-| registry index fetch | 10 s, with a 1 MB stream-bound size cap |
-| outstanding call cap | 1000 queued calls transport-wide; past that new calls refuse |
+| most calls (`terminalApi`, `fileApi`, `configApi`, `secretsApi`, `systemApi`, `packageApi`, `panelsApi.list`) | 30 s |
+| `blocksApi.run`/`read`, `serviceApi.call` | 30 s by default; `options.timeoutMs` sets it, up to 60 s, or `null` waits for work that runs long. `bridge.call` uses the default |
+| panel install and uninstall, backup and restore | none: the daemon may take longer than 30 s |
+| `fileApi.download`, `packageApi.download` | none (progress events streamed) |
+| registry index fetch | 10 s, with a 1 MB size cap |
+| outstanding calls | 1000 per transport; past that new calls refuse |
 
-`actionsApi.call(targetPanel, action, inputs, options)` and `bridge.call` take
-an `options.timeoutMs`. A numeric value above 60 s is refused at the daemon
-boundary with a typed error; `null` removes the deadline for an action that
-legitimately runs long. The outstanding-call cap, not the timer, is the budget
-then — prefer acknowledging long work and reporting progress through state
-over holding a caller's socket open.
+With no deadline, the outstanding-call cap is the budget: prefer answering
+long work at once and reporting progress through state.
 
 ## Trust model
 
