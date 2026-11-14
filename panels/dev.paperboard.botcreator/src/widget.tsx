@@ -22,7 +22,7 @@ import {
 import { serviceApi, defineWidgets, type WidgetContext } from "@mileniumhq/paperapi";
 import type { CommandActivity } from "./commandActivity";
 import type { BotWidgetStatus } from "./session";
-import { errorToMessage } from "./types";
+import { count, errorToMessage } from "./types";
 import { picture } from "./picture";
 import { PANEL_ID } from "./bots";
 
@@ -94,10 +94,6 @@ async function readActivity(widget: WidgetContext): Promise<CommandActivity> {
         throw new Error("Bot Creator returned no command activity");
     }
     return activity;
-}
-
-function plural(n: number, one: string, many: string): string {
-    return `${n.toLocaleString()} ${n === 1 ? one : many}`;
 }
 
 // the header's way out: a compact icon button, the same in every state
@@ -246,7 +242,7 @@ function BotStatus(props: { widget: WidgetContext }) {
                                     ) : status().guildCount === 1 ? "server" : "servers"
                                 }
                                 tone="success"
-                                aria-label={`${status().name} is online in ${plural(status().guildCount, "server", "servers")}`}
+                                aria-label={`${status().name} is online in ${count(status().guildCount, "server")}`}
                             />
                         </Show>
                     )}
@@ -301,7 +297,7 @@ function CommandActivityWidget(props: { widget: WidgetContext }) {
                             type="line"
                             class="bc-chart"
                             label={`Slash commands run per hour, ${fullDay(a()) ? "last 24 hours" : `since ${formatHour(a().since)}`}`}
-                            series={[{ label: "This hour", values: observed(a()), detail: plural(a().counts[a().counts.length - 1] ?? 0, "command", "commands") }]}
+                            series={[{ label: "This hour", values: observed(a()), detail: count(a().counts[a().counts.length - 1] ?? 0, "command") }]}
                             min={0}
                             max={Math.max(1, ...a().counts)}
                             span={a().counts.length}

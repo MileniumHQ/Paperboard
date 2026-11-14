@@ -27,6 +27,7 @@ import {
     COMMAND_OPTION_TYPES,
     COMMAND_OPTION_TYPE_ICONS,
     COMMAND_OPTION_TYPE_LABELS,
+    count,
     describeCommandOptionProblem,
     describeCommandProblem,
     errorToMessage,
@@ -298,10 +299,7 @@ export default function Commands(props: { bot: () => BotSummary }) {
                             >
                                 <PaperFlex direction="row" gap="half" align="center" wrap>
                                     <Show when={command.options.length > 0}>
-                                        <PaperBadge>
-                                            {command.options.length} parameter
-                                            {command.options.length === 1 ? "" : "s"}
-                                        </PaperBadge>
+                                        <PaperBadge>{count(command.options.length, "parameter")}</PaperBadge>
                                     </Show>
                                     <Show when={command.userInstall}>
                                         <PaperBadge>

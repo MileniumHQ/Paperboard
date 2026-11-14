@@ -28,6 +28,7 @@ import { PANEL_ID, type BotSummary } from "../bots";
 import { picture } from "../picture";
 import {
     CHANNEL_KIND_LABELS,
+    count,
     errorToMessage,
     type DiscordChannelKind,
     type GuildChannel,
@@ -47,9 +48,6 @@ const CHANNEL_KIND_ICONS: Record<DiscordChannelKind, string> = {
     media: "perm_media",
     other: "drafts",
 };
-
-/** "1 channel", "2 channels" */
-const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 function formatJoined(iso: string | null): string {
     if (!iso) return "join date unknown";

@@ -309,7 +309,8 @@ export class BotSession {
             id: guild.id,
             name: guild.name,
             icon: guild.iconURL() ?? "",
-            memberCount: guild.memberCount,
+            // none until Discord sends the server (it is listed unavailable at login)
+            memberCount: guild.memberCount ?? 0,
             channelCount: guild.channels.cache.size,
             roleCount: guild.roles.cache.size,
             ownerId: guild.ownerId,

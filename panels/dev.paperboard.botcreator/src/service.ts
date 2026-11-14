@@ -261,6 +261,11 @@ function createEntry(stored: StoredBot, hasToken: boolean): BotEntry {
     return entry;
 }
 
+/** The bot's Discord user id: its application's, as of the live session or the last login. */
+function appIdOf(entry: BotEntry): string {
+    return entry.session.client?.user?.id || entry.stored.applicationId;
+}
+
 /** What a bot's blocks run against: its live session. */
 function blocksHost(entry: BotEntry): BotBlocksHost {
     return {
@@ -268,7 +273,7 @@ function blocksHost(entry: BotEntry): BotBlocksHost {
         interactions: () => new InteractionOps((id) => entry.session.takeInteraction(id)),
         connected: () => entry.session.connected(),
         userId: () => {
-            const id = entry.session.client?.user?.id || entry.stored.applicationId;
+            const id = appIdOf(entry);
             if (!id) throw new Error("This bot's Discord user isn't known yet. Turn it on in Bot Creator.");
             return id;
         },
@@ -671,13 +676,12 @@ export const serviceCalls = {
     getInviteUrl: (_ctx: unknown, input: any) => {
         const entry = requireBot(input?.bot);
         const permissions = Array.isArray(input?.permissions) ? input.permissions : [];
-        return buildInviteUrl(entry.session.client?.user?.id || entry.stored.applicationId, permissions);
+        return buildInviteUrl(appIdOf(entry), permissions);
     },
 
     /** The account-install URL for user-app commands. */
     getUserInstallUrl: (_ctx: unknown, input: any) => {
-        const entry = requireBot(input?.bot);
-        return buildUserInstallUrl(entry.session.client?.user?.id || entry.stored.applicationId);
+        return buildUserInstallUrl(appIdOf(requireBot(input?.bot)));
     },
 
     /** Adds a bot whose token the page saved in the vault under the bot's id, once it logs in. */
@@ -786,12 +790,10 @@ const blocksBots: BotsBlocksHost = {
     createCommand: (id, input) => createCommand(blocksBot(id), input),
     deleteCommand: (id, commandId) => deleteCommand(blocksBot(id), commandId),
     inviteLink: (id, permissions) => {
-        const entry = blocksBot(id);
-        return buildInviteUrl(entry.session.client?.user?.id || entry.stored.applicationId, permissions ?? DEFAULT_SELECTED_PERMISSIONS);
+        return buildInviteUrl(appIdOf(blocksBot(id)), permissions ?? DEFAULT_SELECTED_PERMISSIONS);
     },
     userInstallLink: (id) => {
-        const entry = blocksBot(id);
-        return buildUserInstallUrl(entry.session.client?.user?.id || entry.stored.applicationId);
+        return buildUserInstallUrl(appIdOf(blocksBot(id)));
     },
 };
 

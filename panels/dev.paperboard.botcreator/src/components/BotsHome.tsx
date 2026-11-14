@@ -24,12 +24,12 @@ import {
 import { DeleteBotModal, NewBotModal, ReplaceTokenModal } from "./BotDialogs";
 import type { BotsState } from "../state";
 import type { BotSummary } from "../bots";
-import { errorToMessage } from "../types";
+import { count, errorToMessage } from "../types";
 import { picture } from "../picture";
 
 /** "3 servers" for a bot online, or why it isn't, as its card says it. */
 export function botStatusText(bot: BotSummary): string {
-    if (bot.connected) return `${bot.guildCount} ${bot.guildCount === 1 ? "server" : "servers"}`;
+    if (bot.connected) return count(bot.guildCount, "server");
     if (!bot.hasToken) return "Needs a token";
     if (bot.connecting) return "Connecting…";
     return bot.enabled ? "Offline" : "Off";

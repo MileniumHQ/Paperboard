@@ -194,6 +194,11 @@ export const RECENT_MESSAGE_CAP = 10;
 
 // chronological append that drops the oldest entry past the cap — the
 // same semantics as the service-side recent-message buffer
+/** "1 server", "1,200 servers" */
+export function count(n: number, noun: string): string {
+    return `${n.toLocaleString()} ${noun}${n === 1 ? "" : "s"}`;
+}
+
 export function appendCapped<T>(list: T[], item: T, cap: number = RECENT_MESSAGE_CAP): T[] {
     const next = [...list, item];
     return next.length > cap ? next.slice(next.length - cap) : next;
