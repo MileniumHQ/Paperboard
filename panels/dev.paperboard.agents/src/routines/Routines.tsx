@@ -80,7 +80,7 @@ export default function Routines(props: { agent: Agent }) {
                             <PaperCard borderless paddingX="full" paddingY="half">
                                 <PaperFlex direction="row" align="center" gap="full">
                                     <PaperFlex flex minWidth={0} gap="onefourth">
-                                        <PaperText preset="label">{r.what}</PaperText>
+                                        <PaperText preset="label" breakWord>{r.what}</PaperText>
                                         <PaperText preset="hint">
                                             {describeSchedule(r.schedule)}
                                             {r.next ? ` · next ${localStamp(r.next)}` : ""}
@@ -92,7 +92,7 @@ export default function Routines(props: { agent: Agent }) {
                                             </PaperQuote>
                                         </Show>
                                     </PaperFlex>
-                                    <PaperButton icon size="small" variant="danger" aria-label={`Stop: ${r.what}`} title="Stop this routine" onClick={() => void stop(r)}>
+                                    <PaperButton icon size="small" variant="text" aria-label={`Stop: ${r.what}`} title="Stop this routine" onClick={() => void stop(r)}>
                                         <PaperIcon>delete</PaperIcon>
                                     </PaperButton>
                                 </PaperFlex>

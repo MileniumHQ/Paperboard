@@ -108,7 +108,7 @@ function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
                                     {f.text}
                                 </PaperText>
                             </PaperFlex>
-                            <PaperButton icon size="small" variant="danger" aria-label={`Forget: ${f.text}`} title="Forget" onClick={() => forget(f.id)}>
+                            <PaperButton icon size="small" variant="text" aria-label={`Forget: ${f.text}`} title="Forget" onClick={() => forget(f.id)}>
                                 <PaperIcon>delete</PaperIcon>
                             </PaperButton>
                         </PaperFlex>
