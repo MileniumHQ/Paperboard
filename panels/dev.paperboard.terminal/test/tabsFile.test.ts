@@ -5,16 +5,19 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { clearWorkloads } from "./helpers/crane";
-import { call, panelFiles, readBlock, runBlock, serviceState, startService, stopServices } from "./helpers/service";
-import { within } from "./helpers/wait";
+import { PANEL_ID, call, panelFiles, readBlock, runBlock, serviceState, startService, stopServices } from "./helpers/service";
+import { stateWhere, until, within } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
 
 let readOnly: string | null = null;
+let writeOnly: string | null = null;
 afterEach(async () => {
     if (readOnly) fs.chmodSync(readOnly, 0o755);
+    if (writeOnly) fs.chmodSync(writeOnly, 0o644);
     readOnly = null;
+    writeOnly = null;
     await stopServices();
     await clearWorkloads();
 });
@@ -91,6 +94,43 @@ describe("a tab's scrollback", () => {
 
         await runBlock("close-tab", { tab: "tab2" });
         expect(fs.existsSync(path.join(scrollback(dir), "tab2.log"))).toBe(false);
+    });
+
+    test("holds what the shell printed just before the service stopped", async () => {
+        await panelFiles({ "tabs.json": TABS });
+        await startService();
+        await call("open-tab", { id: "tab1" });
+        await runBlock("type-in-tab", { tab: "tab1", text: "echo last-$((6*7))\n" });
+        await until("the output", () => readBlock<string>("output", { tab: "tab1", lines: 100 }), (out) => out.includes("last-42"));
+        // stopped at once, while the output still waits to be written
+        await stopServices();
+        await startService();
+        expect(await readBlock("output", { tab: "tab1", lines: 100 })).toContain("last-42");
+    });
+
+    test("that could not be read is said, and never written over", async () => {
+        const dir = await panelFiles({ "tabs.json": TABS });
+        await startService();
+        await call("open-tab", { id: "tab1" });
+        await runBlock("type-in-tab", { tab: "tab1", text: "echo kept-$((6*7))\n" });
+        const file = path.join(scrollback(dir), "tab1.log");
+        await fileHolds(file, "kept-42");
+        await stopServices();
+        // the shell runs on; its saved output can be written but not read
+        const before = fs.readFileSync(file, "utf8");
+        fs.chmodSync(file, 0o200);
+        writeOnly = file;
+
+        await startService();
+        const said = await stateWhere<any>(PANEL_ID, (s) => Boolean(s.sessionErrors?.tab1?.scrollback), "the unreadable scrollback to be said");
+        expect(said.sessionErrors.tab1.scrollback).toContain("earlier output couldn't be read");
+        await call("open-tab", { id: "tab1" });
+        await runBlock("type-in-tab", { tab: "tab1", text: "echo new-$((6*7))\n" });
+        await until("the new output", () => readBlock<string>("output", { tab: "tab1", lines: 100 }), (out) => out.includes("new-42"));
+        await stopServices();
+        fs.chmodSync(file, 0o644);
+        writeOnly = null;
+        expect(fs.readFileSync(file, "utf8")).toBe(before);
     });
 
     test("is not left behind by a tab whose shell would not start", async () => {

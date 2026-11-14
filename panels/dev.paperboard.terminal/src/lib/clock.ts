@@ -2,7 +2,7 @@
 // `active` is true and reads the time again each time it turns on.
 import { createEffect, createSignal, on, onCleanup } from "solid-js";
 
-export const AGO_TICK_MS = 15_000;
+const AGO_TICK_MS = 15_000;
 
 export function createAgoClock(active: () => boolean): () => number {
     const [now, setNow] = createSignal(Date.now());

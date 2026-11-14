@@ -34,7 +34,21 @@ export interface LiveSession {
     command?: { line: string; exitCode: number; seq: number };
 }
 
-export const DEFAULT_LABEL = /^Tab \d+$/;
+/**
+ * What went wrong for a session in the background, by what it was about:
+ * its saved output, its saved folder, or its screen size. Each stands until
+ * the same thing works again, so the panel can say it while it is true.
+ */
+export type SessionErrorKind = "scrollback" | "folder" | "size";
+export type SessionErrors = Record<string, Partial<Record<SessionErrorKind, string>>>;
+
+export const SESSION_ERROR_TITLES: Record<SessionErrorKind, string> = {
+    scrollback: "Output not saved",
+    folder: "Folder not saved",
+    size: "Screen size not sent",
+};
+
+const DEFAULT_LABEL = /^Tab \d+$/;
 
 export function tabSessions(tab: TerminalTab): TerminalSession[] {
     return tab.split ? [tab, tab.split.session] : [tab];

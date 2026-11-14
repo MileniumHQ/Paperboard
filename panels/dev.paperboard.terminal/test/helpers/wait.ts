@@ -33,3 +33,18 @@ export function stateWhere<T>(panelId: string, accept: (state: T) => boolean, wh
         clearTimeout(timer);
     });
 }
+
+/**
+ * Resolves with `read()`'s value once `accept` holds, read again every 25 ms:
+ * for what nothing announces (a block's value, a file). Fails saying what
+ * never happened and the last value read.
+ */
+export async function until<T>(what: string, read: () => Promise<T> | T, accept: (value: T) => boolean, ms = 20_000): Promise<T> {
+    const deadline = Date.now() + ms;
+    for (;;) {
+        const value = await read();
+        if (accept(value)) return value;
+        if (Date.now() > deadline) throw new Error(`Timed out after ${ms} ms waiting for ${what}; last: ${JSON.stringify(value)}`);
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+}

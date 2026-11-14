@@ -6,10 +6,11 @@ export function applyScrollbackCap(chunk: string, existing: string): string {
     return (existing + chunk).slice(-SCROLLBACK_CHARS);
 }
 
-// return the last `lineCount` whole lines of the buffer. when the buffer
-// is at its cap, the head line may be severed mid-command — drop the
-// partial fragment instead of presenting it as a complete line
-export function readWholeLines(buffer: string, lineCount: number): string {
+// return the last `lineCount` whole lines of the buffer, 1 to 1000 of them
+// (100 when not given). when the buffer is at its cap, the head line may be
+// severed mid-command — drop the partial fragment instead of presenting it
+// as a complete line
+export function readWholeLines(buffer: string, lineCount?: number): string {
     const safeCount = Math.max(1, Math.min(1000, Math.trunc(Number(lineCount ?? 100))));
     if (!buffer) return "";
     const all = buffer.split("\n");

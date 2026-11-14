@@ -17,7 +17,7 @@ export interface RunStatus {
     detail: string;
 }
 
-export function formatAgo(ms: number): string {
+function formatAgo(ms: number): string {
     const seconds = Math.max(0, Math.floor(ms / 1000));
     if (seconds < 10) return "just now";
     if (seconds < 60) return `${seconds}s ago`;

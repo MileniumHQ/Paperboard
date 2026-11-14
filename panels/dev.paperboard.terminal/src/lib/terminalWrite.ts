@@ -2,12 +2,12 @@ import { terminalApi } from "@mileniumhq/paperapi";
 
 // the most characters (UTF-16 units) one term:write may carry; the daemon
 // refuses a longer one (papercrane/rpc/terminal.ts)
-export const TERMINAL_WRITE_MAX = 64 * 1024;
+const TERMINAL_WRITE_MAX = 64 * 1024;
 
 // the most one write to a terminal may hold in all. Its pieces are all in
 // flight at once, and the daemon closes a socket with over 1024 requests in
 // flight, so a paste stays far below that: 256 pieces
-export const TERMINAL_PASTE_MAX = 256 * TERMINAL_WRITE_MAX;
+const TERMINAL_PASTE_MAX = 256 * TERMINAL_WRITE_MAX;
 
 const megabytes = (chars: number) => `${Math.round((chars / 1024 / 1024) * 10) / 10} MB`;
 
@@ -18,7 +18,7 @@ export function writeRefusal(data: string): string | null {
 }
 
 /** `data` in pieces of at most `max` units, never splitting a surrogate pair */
-export function writeChunks(data: string, max = TERMINAL_WRITE_MAX): string[] {
+function writeChunks(data: string, max = TERMINAL_WRITE_MAX): string[] {
     const chunks: string[] = [];
     let start = 0;
     while (data.length - start > max) {

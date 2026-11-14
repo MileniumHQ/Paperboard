@@ -16,11 +16,11 @@ import { errorMessage } from "./failure";
 export const MAX_SAVED_COMMANDS = 32;
 export const MAX_COMMAND_LENGTH = 4096;
 export const MAX_LABEL_LENGTH = 48;
-export const MAX_CONCURRENT_RUNS = 4;
-export const RUN_TIMEOUT_MS = 10 * 60_000;
+const MAX_CONCURRENT_RUNS = 4;
+const RUN_TIMEOUT_MS = 10 * 60_000;
 /** After a kill, how long to wait for the exit before giving up on the run. */
-export const EXIT_GRACE_MS = 30_000;
-export const SAVED_COMMANDS_VERSION = 1;
+const EXIT_GRACE_MS = 30_000;
+const SAVED_COMMANDS_VERSION = 1;
 
 export interface SavedCommand {
     id: string;
@@ -39,7 +39,7 @@ export type CommandRun =
     | { state: "failed"; startedAt: number; endedAt: number; error: string };
 
 /** A child the daemon accepted and this service has not yet seen exit. */
-export interface RunningRecord {
+interface RunningRecord {
     commandId: string;
     procId: string;
     startedAt: number;
@@ -97,7 +97,7 @@ function isFinishedRun(raw: unknown): raw is CommandRun {
 }
 
 /** Normalises a user's label and command, or throws saying what is wrong. */
-export function validateSavedCommand(label: unknown, command: unknown): { label: string; command: string } {
+function validateSavedCommand(label: unknown, command: unknown): { label: string; command: string } {
     if (typeof command !== "string" || !command.trim()) throw new Error("A command is required");
     if (command.length > MAX_COMMAND_LENGTH) {
         throw new Error(`A saved command can be at most ${MAX_COMMAND_LENGTH} characters`);
@@ -113,7 +113,7 @@ export function validateSavedCommand(label: unknown, command: unknown): { label:
 }
 
 /** Parses the stored document; throws when it is not one we wrote (never read as empty). */
-export function parseSavedCommandsDoc(raw: unknown): SavedCommandsDoc {
+function parseSavedCommandsDoc(raw: unknown): SavedCommandsDoc {
     if (raw === null || raw === undefined) return { version: SAVED_COMMANDS_VERSION, commands: [], lastRuns: {}, running: [] };
     if (typeof raw !== "object" || Array.isArray(raw)) throw new Error("the saved commands file is not an object");
     const doc = raw as Record<string, unknown>;
