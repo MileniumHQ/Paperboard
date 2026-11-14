@@ -130,6 +130,10 @@ export class UpdateQueue {
         this.commit({ holds: [...this.holds.panels, ...this.holds.packages] });
     }
 
+    setHoldsError(holdsError: string | null): void {
+        if (holdsError !== this.state.holdsError) this.commit({ holdsError });
+    }
+
     hold(key: string): UpdateHold | undefined {
         return this.state.holds.find((h) => h.key === key);
     }

@@ -55,6 +55,9 @@ export interface UpdateQueueState {
     holds: UpdateHold[];
     // why the last look for updates could not finish
     checkError: string | null;
+    // why the last look at what holds updates back could not finish (a
+    // computer that could not report its waiting updates)
+    holdsError: string | null;
 }
 
 export const initialUpdateQueueState: UpdateQueueState = {
@@ -63,6 +66,7 @@ export const initialUpdateQueueState: UpdateQueueState = {
     items: [],
     holds: [],
     checkError: null,
+    holdsError: null,
 };
 
 /** Items still to do: what the top bar's count shows. */

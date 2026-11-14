@@ -18,6 +18,7 @@ export function useUpdateQueue() {
     // what each item was when last seen, so a failure is told once
     const seen = new Map<string, UpdateItem["status"]>();
     let lastCheckError: string | null = null;
+    let lastHoldsError: string | null = null;
 
     const tellFailures = (next: UpdateQueueState) => {
         for (const item of next.items) {
@@ -34,6 +35,10 @@ export function useUpdateQueue() {
             showToast({ variant: "danger", title: "Couldn't check for updates", message: next.checkError });
         }
         lastCheckError = next.checkError;
+        if (next.holdsError && next.holdsError !== lastHoldsError) {
+            showToast({ variant: "danger", title: "Couldn't read the updates waiting to install", message: next.holdsError });
+        }
+        lastHoldsError = next.holdsError;
     };
 
     onMount(() => {

@@ -15,7 +15,7 @@ import { getLocalDir } from "../../papercrane/paths";
 import { logger } from "../../papercrane/logger";
 import { fetchRegistryJson } from "../../../../packages/paperapi/src/config";
 import { updateQueue } from "./updateQueue";
-import { refreshHolds, stopHoldRefresh } from "./updateHolds";
+import { refreshHolds, resumeHoldRefresh, stopHoldRefresh } from "./updateHolds";
 import { PING_TIMEOUT_MS, taskJob } from "./updateTasks";
 import type { AppUpdateState } from "../shared/appUpdate";
 
@@ -154,6 +154,7 @@ let recheckTimer: ReturnType<typeof setInterval> | null = null;
  */
 export function startBackgroundUpdates(argv: string[]): void {
     if (recheckTimer) return;
+    resumeHoldRefresh();
     if (!shouldSkipUpdate(argv)) void runUpdateOrchestrator().catch((err) => logger.error("[Updater] Orchestrator error:", err));
     else void refreshHolds();
     recheckTimer = setInterval(() => {

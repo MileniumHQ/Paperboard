@@ -51,8 +51,8 @@ const HOLD: UpdateHold = {
     users: ["Widget Demo"],
 };
 
-function push(items: UpdateItem[], holds: UpdateHold[] = []): Promise<unknown> {
-    const state: UpdateQueueState = { revision: ++revision, checking: false, items, holds, checkError: null };
+function push(items: UpdateItem[], holds: UpdateHold[] = [], holdsError: string | null = null): Promise<unknown> {
+    const state: UpdateQueueState = { revision: ++revision, checking: false, items, holds, checkError: null, holdsError };
     return shell.host({ cmd: "push-update-queue", state });
 }
 
@@ -116,5 +116,14 @@ test("Stop and update that fails says why, and runs when pressed again", async (
     await page.evaluate(SETTLED);
     await clickText(page, "button", "Stop and update");
     expect(await shell.host<string[]>({ cmd: "next-release" })).toEqual([HOLD.key]);
+    expect(page.exceptions).toEqual([]);
+});
+
+// Inventory: Updates — a computer that can't say which updates wait on it is named, not dropped from the list in silence.
+test("updates waiting on a computer that couldn't be read are said", async () => {
+    const { page } = shell;
+    const why = "Basement PC didn't say which updates wait on it: Paperboard Server RPC 'package:pending' timed out.";
+    await push([], [HOLD], why);
+    await page.waitFor(`document.body.innerText.includes(${JSON.stringify(why)})`, "the unread computer, said");
     expect(page.exceptions).toEqual([]);
 });
