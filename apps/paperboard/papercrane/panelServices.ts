@@ -21,6 +21,8 @@ interface RunningService {
     restartTimer?: ReturnType<typeof setTimeout>;
     readyTimer?: ReturnType<typeof setTimeout>;
     stopped: boolean;
+    /** killed for not getting ready: no restart, but not a stop anyone asked for */
+    timedOut?: boolean;
     crashCount: number;
     startedAt: number;
     /** the service said, when it became ready, that it gets ready for backups */
@@ -168,6 +170,7 @@ export class PanelServicesManager {
         entry.readyTimer = setTimeout(() => {
             entry.state = "failed";
             entry.stopped = true;
+            entry.timedOut = true;
             this.announce(id, { state: "failed", error: `did not report ready within 20s` });
             rejectReady(new Error(`Service ${id} did not report ready within 20s`));
             child.kill("SIGKILL");
@@ -208,9 +211,11 @@ export class PanelServicesManager {
         child.once("close", (code) => {
             clearTimeout(entry.readyTimer);
             // an exit nobody asked for carries the service's own last words,
-            // so the monitor and an installing caller say why, not only the code
-            const reason = entry.stopped ? undefined : exitReason(entry.stderrTail);
-            this.announce(id, entry.stopped ? { state: "stopped", code } : { state: "exited", code, ...(reason ? { error: reason } : {}) });
+            // so the monitor and an installing caller say why, not only the
+            // code; one killed for not getting ready was not asked to stop
+            const asked = entry.stopped && !entry.timedOut;
+            const reason = asked ? undefined : exitReason(entry.stderrTail) ?? (entry.timedOut ? "did not report ready within 20s" : undefined);
+            this.announce(id, asked ? { state: "stopped", code } : { state: "exited", code, ...(reason ? { error: reason } : {}) });
             entry.backupPrepare?.settle(new Error(`Service ${id} exited while getting ready`));
             resolveExit();
             rejectReady(new Error(`Service ${id} exited before it was ready (code ${code})${reason ? `: ${reason}` : ""}`));
@@ -298,6 +303,12 @@ export class PanelServicesManager {
             if (err) logger.error(`[services] ${id} was not told its ${operation} ended`, err);
         });
     }
+    /** Starts the panel's service and waits until it is ready; false when the panel declares none. */
+    public async startAndWait(id: string): Promise<boolean> {
+        if (!this.startService(id)) return false;
+        await this.waitUntilReady(id);
+        return true;
+    }
     public async waitUntilReady(id: string): Promise<void> {
         const entry = this.services.get(id);
         if (entry) await entry.ready;
@@ -329,6 +340,7 @@ export class PanelServicesManager {
         const entry = this.services.get(requirePanelId(id));
         if (!entry) return;
         entry.stopped = true;
+        entry.timedOut = false;
         entry.state = "stopping";
         clearTimeout(entry.restartTimer);
         clearTimeout(entry.readyTimer);

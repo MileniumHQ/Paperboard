@@ -1,15 +1,8 @@
-// Core execution engine (terminals, processes, files, packages, panels, configs)
+// The daemon's engine: one facade over the workloads (engineWorkloads.ts),
+// the runtime packages (enginePackages.ts) and the installed panels
+// (enginePanels.ts), plus the panel files, configs and secrets it serves
 import path from "path";
 import fs from "fs";
-import os from "os";
-import {
-    SupervisedProcessClient,
-    supervisorPresent,
-    supervisorEndpointName,
-    supervisorSocketPathForName,
-    type InputEncoding,
-} from "./supervisor";
-import { PanelManifest } from "./types";
 import {
     ProgressCallback,
     streamToFileWithProgress,
@@ -17,90 +10,30 @@ import {
     moveFileSafe,
     resolveSecureTargetPath,
     openResolvedFile,
-    sanitizeId,
-    panelFilesDirName,
-    validatePanelManifest,
-    readStateFileSync,
-    writeJsonAtomicSync,
     writeFileAtomic,
     LimitError,
 } from "./storage";
-import { getSocketsDir, getPaperboardDir } from "./paths";
-import { logger } from "./logger";
-import { stopMountHolder } from "./supervisorLaunch";
-import { spawnSupervisedClient } from "./engineSupervisor";
-import { defaultTerminalShell, requireOfferedShell, shellLaunch, type ShellCommand } from "./shellIntegration";
-import { applyPackageRecipe, extractArchive, extractPackageArchive, findBinDir, packageArchiveSuffix, parsePackageLayout, RECIPE_SUFFIX } from "./engineArchives";
-import { assertRecipeRunsHere, parsePackageRecipe, recipeDigest } from "./packageRecipe";
+import { getPaperboardDir } from "./paths";
+import { extractArchive } from "./engineArchives";
 import { panelServices, PanelServicesManager } from "./panelServices";
 import { CredentialStore } from "./credentials";
-import { RpcError } from "./rpc/errors";
-import { ErrorCode } from "./protocol";
+import { logger } from "./logger";
 import { resolveRegistryUrl } from "./util";
-import { requireReleaseOrder } from "./releasePolicy";
-import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
+import { daemonReleaseKey } from "./releaseSignature";
 import type { MonitorLifecycle } from "../../../packages/paperapi/src/monitorProtocol";
 import type { BackupEnded } from "./backups/types";
-import { fetchRegistryRecord } from "./registryRecord";
-import { daemonReleaseKey, releaseMessage, requireReleaseSignature } from "./releaseSignature";
+import type { InputEncoding } from "./supervisor";
+import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
+import { WorkloadRegistry, type TerminalStreams } from "./engineWorkloads";
+import { PackageManager, sanitizeIdOrThrow, type PackageInstallOutcome, type PackageUpdateWait, type ReleaseSource } from "./enginePackages";
+import { PanelInstaller, type ExpectedPanelRelease } from "./enginePanels";
+import type { PanelManifest } from "./types";
+
+export type { TerminalStreams } from "./engineWorkloads";
+export type { StagedPackage, PackageUpdateWait, PackageInstallOutcome } from "./enginePackages";
+export type { ExpectedPanelRelease } from "./enginePanels";
 
 export const REGISTRY_URL = resolveRegistryUrl();
-
-type StreamListeners = Record<string, ((...args: any[]) => void) | undefined>;
-/** what a terminal tells its listeners; see SupervisedProcessClient's events */
-export interface TerminalStreams {
-    data?: (data: string) => void;
-    exit?: (exitCode: number | null) => void;
-    /** the program in front of the terminal changed */
-    foreground?: (name: string) => void;
-    /** a command the shell ran has ended */
-    command?: (finished: ShellCommand) => void;
-    /** the shell changed folder */
-    cwd?: (cwd: string) => void;
-}
-type StreamClient = { on: (event: string, fn: any) => unknown; off: (event: string, fn: any) => unknown };
-
-// what a caller expects to install (the release it showed the user or
-// planned an update to); the daemon's own registry lookup must agree
-export interface ExpectedPanelRelease {
-    allowDowngrade?: boolean;
-    version?: string;
-    sha256?: string;
-}
-
-// a verified runtime release kept beside the installed one until the
-// workloads running from the installed one have stopped
-export interface StagedPackage {
-    name: string;
-    version: string;
-    sha256: string;
-}
-
-// a package update that is downloaded and verified but not yet installed:
-// either it waits for the listed workloads (owner null: the host), or its
-// swap failed and the previous release was rolled back in place
-export interface PackageUpdateWait {
-    name: string;
-    version: string;
-    // holds: the workload is important or long running (holdsUpdates);
-    // the others are stopped for the update without asking
-    blockedBy: Array<{ processId: string; owner: string | null; holds: boolean }>;
-    error?: string;
-}
-
-// a package install either completed, or it is staged and waits
-export interface PackageInstallOutcome {
-    path: string;
-    waiting?: PackageUpdateWait;
-}
-
-const MAX_STAGED_PACKAGES = 64;
-// a process stopped for an update gets this long to exit on its terminate
-// signal (a game server saving its world) before it is killed
-const UPDATE_STOP_GRACE_MS = 30_000;
-// a workload running this long is something people rely on: it holds an
-// update of what it runs from, like one started as important
-const LONG_RUNNING_MS = 10 * 60_000;
 
 // the algorithms a file:download checksum may name
 export const DOWNLOAD_CHECKSUM_ALGORITHMS = ["sha1", "sha256", "sha512"];
@@ -118,26 +51,11 @@ export class PaperCraneEngine {
     private configsDir: string;
     private localDir: string;
     private credentialsStore: CredentialStore;
-    private clients = new Map<string, SupervisedProcessClient>();
-    private operations = new Set<string>();
     private services: PanelServicesManager;
-    // the command each live workload runs, which says which runtime package
-    // it holds. Missing or null means unknown, which blocks every swap.
-    private clientCommands = new Map<string, string | null>();
-    // workloads started with their input closed; a write to one is refused, not dropped
-    private inputless = new Set<string>();
-    // when each live workload started, and the ones started as important:
-    // these hold an update of what they run from (holdsUpdates)
-    private clientStarts = new Map<string, number>();
-    private importantClients = new Set<string>();
-    private stagedPackages = new Map<string, StagedPackage>();
-    private swapFailures = new Map<string, { version: string; error: string }>();
-    private swaps = new Map<string, Promise<void>>();
-    // packages whose directory is being renamed right now
-    private swapping = new Set<string>();
-    // supervisors that outlived the previous daemon are users too: no swap
-    // decides before they are adopted
-    private recovery: Promise<void> = Promise.resolve();
+    private workloads: WorkloadRegistry;
+    private packages: PackageManager;
+    private panels: PanelInstaller;
+    private registry: ReleaseSource;
 
     // registryUrl and releaseKey are fixed in production; tests point them
     // at a loopback registry signed with a fixture key, in process or
@@ -145,8 +63,8 @@ export class PaperCraneEngine {
     constructor(
         baseDir?: string,
         services?: PanelServicesManager,
-        private registryUrl = REGISTRY_URL,
-        private releaseKey = daemonReleaseKey(),
+        registryUrl = REGISTRY_URL,
+        releaseKey = daemonReleaseKey(),
     ) {
         this.services = services ?? (baseDir ? new PanelServicesManager(baseDir) : panelServices);
         this.appDataDir = baseDir || getPaperboardDir();
@@ -176,180 +94,27 @@ export class PaperCraneEngine {
         }
 
         this.credentialsStore = new CredentialStore(this.appDataDir);
-        // a damaged ledger is set aside like every state file: its workloads
-        // are then the host's alone, never a panel's by a guess
-        const owners = readStateFileSync<Record<string, string | null>>(path.join(this.localDir, "process-owners.json"), {}, "workload ownership ledger");
-        this.clientOwners = new Map(Object.entries(owners ?? {}));
-        this.loadStagedPackages();
+        // every package and panel operation holds one of these locks
+        const operations = new Set<string>();
+        this.registry = { url: registryUrl, key: releaseKey };
+        this.packages = new PackageManager(this.packagesDir, this.panelsDir, operations, this.registry);
+        this.workloads = new WorkloadRegistry(this.localDir, this.packages);
+        this.packages.useWorkloads(this.workloads);
+        this.panels = new PanelInstaller(
+            { appDataDir: this.appDataDir, panelsDir: this.panelsDir, filesDir: this.filesDir, configsDir: this.configsDir },
+            operations, this.services, this.workloads, this.packages, this.credentialsStore, this.registry,
+        );
     }
 
-    // read-only: a second daemon constructed in a port race may load these
-    // too, but only the instance that owns the port swaps or sweeps
-    private loadStagedPackages(): void {
-        let entries: string[];
-        try {
-            entries = fs.readdirSync(this.packagesDir);
-        } catch (err) {
-            logger.warn("[engine] could not list staged package updates:", err);
-            return;
-        }
-        for (const entry of entries) {
-            const match = /^\.staged-(.+)\.json$/.exec(entry);
-            if (!match || this.stagedPackages.size >= MAX_STAGED_PACKAGES) continue;
-            try {
-                const record = JSON.parse(fs.readFileSync(path.join(this.packagesDir, entry), "utf8"));
-                const name = match[1]!;
-                if (
-                    record?.name !== name || sanitizeId(name) !== name ||
-                    typeof record.version !== "string" || !record.version ||
-                    typeof record.sha256 !== "string" || !/^[a-f0-9]{64}$/i.test(record.sha256) ||
-                    !this.findBinDir(this.stagedDir(name), 4)
-                ) {
-                    logger.warn(`[engine] staged package record ${entry} does not describe a staged release; ignoring it`);
-                    continue;
-                }
-                this.stagedPackages.set(name, { name, version: record.version, sha256: record.sha256 });
-            } catch (err) {
-                logger.warn(`[engine] staged package record ${entry} is unreadable; ignoring it:`, err);
-            }
-        }
-    }
-
-    // Removes interrupted download/install artifacts (*.tmp-*, *.staging-*).
-    // These appear when a crash/restart interrupts a long operation.
+    // Removes interrupted download/install artifacts (*.tmp-*, *.staging-*)
+    // and recovers swaps a crash interrupted (parkedSwap.ts), in packages,
+    // panel releases and restored panel data.
     //
     // Explicit, NOT in the constructor: sweeping deletes live temp files,
     // so it must only run after this instance owns its port. A second
     // daemon constructed during a port race (see index.ts tryStart) must
     // never sweep the first daemon's in-flight downloads.
     public sweepStartupOrphans(): void {
-        this.sweepOrphans();
-        this.claimUnrecordedPackages();
-        void this.removeUnusedPackages();
-    }
-
-    // ─── which panels use which package ─────────────────────────────────
-    //
-    // A package stays while a panel uses it. A panel uses a package once it
-    // asks for it (installs it, or asks whether it's there or where it is);
-    // uninstalling the panel lets go of it, and a package no installed panel
-    // uses is removed. Kept in packages/users.json as { package: [panelId] }.
-
-    private packageUsersFile(): string {
-        return path.join(this.packagesDir, "users.json");
-    }
-
-    private readPackageUsers(): Record<string, string[]> {
-        const file = this.packageUsersFile();
-        if (!fs.existsSync(file)) return {};
-        const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`${file} is not a record of package users`);
-        return parsed as Record<string, string[]>;
-    }
-
-    private writePackageUsers(users: Record<string, string[]>): void {
-        fs.mkdirSync(this.packagesDir, { recursive: true });
-        writeJsonAtomicSync(this.packageUsersFile(), users);
-    }
-
-    /** Records that a panel uses a package, so it stays while the panel does. */
-    public recordPackageUse(packageName: string, panelId: string): void {
-        const name = this.sanitizeIdOrThrow(packageName, "package");
-        const users = this.readPackageUsers();
-        const list = users[name] ?? [];
-        if (list.includes(panelId)) return;
-        users[name] = [...list, panelId];
-        this.writePackageUsers(users);
-    }
-
-    /** The packages installed now, by the directories under packages/. */
-    private installedPackageNames(): string[] {
-        if (!fs.existsSync(this.packagesDir)) return [];
-        return fs
-            .readdirSync(this.packagesDir, { withFileTypes: true })
-            .filter((entry) => entry.isDirectory() && !entry.name.startsWith(".") && !/\.(tmp|staging)-\d+/.test(entry.name))
-            .map((entry) => entry.name);
-    }
-
-    // a package installed before uses were recorded may belong to any panel
-    // installed now, so each of them counts as using it: it goes once all of
-    // them are uninstalled. Only a package panels let go of is removed, so
-    // one no panel ever asked for stays.
-    private claimUnrecordedPackages(): void {
-        try {
-            const users = this.readPackageUsers();
-            const unrecorded = this.installedPackageNames().filter((name) => !(name in users));
-            if (!unrecorded.length) return;
-            const panels = fs.existsSync(this.panelsDir)
-                ? fs.readdirSync(this.panelsDir, { withFileTypes: true }).filter((e) => (e.isDirectory() || e.isSymbolicLink()) && !e.name.startsWith(".")).map((e) => e.name)
-                : [];
-            if (!panels.length) return;
-            for (const name of unrecorded) users[name] = [...panels];
-            this.writePackageUsers(users);
-        } catch (err) {
-            logger.error("[engine] could not record which panels use the installed packages:", err);
-        }
-    }
-
-    /** Lets go of every package a panel used; the ones nothing uses any more are removed. */
-    private async releasePackagesOf(panelId: string): Promise<void> {
-        const users = this.readPackageUsers();
-        let changed = false;
-        for (const [name, list] of Object.entries(users)) {
-            if (!list.includes(panelId)) continue;
-            users[name] = list.filter((id) => id !== panelId);
-            changed = true;
-        }
-        if (changed) this.writePackageUsers(users);
-        await this.removeUnusedPackages();
-    }
-
-    // a package a workload still runs from waits: its record stays empty, and
-    // the next uninstall or start removes it
-    private async removeUnusedPackages(): Promise<void> {
-        let users: Record<string, string[]>;
-        try {
-            users = this.readPackageUsers();
-        } catch (err) {
-            logger.error("[engine] could not read which panels use the installed packages, so none were removed:", err);
-            return;
-        }
-        for (const [name, list] of Object.entries(users)) {
-            if (list.length > 0) continue;
-            const key = `package:${name}`;
-            if (this.operations.has(key) || this.packageUsers(name).length > 0) {
-                logger.info(`[package:${name}] no panel uses it, but it's busy; it will be removed later`);
-                continue;
-            }
-            this.operations.add(key);
-            try {
-                // a panel may have asked for it since the list was read
-                if (this.readPackageUsers()[name]?.length) continue;
-                await fs.promises.rm(path.join(this.packagesDir, name), { recursive: true, force: true });
-                fs.rmSync(this.stagedRecordFile(name), { force: true });
-                await fs.promises.rm(this.stagedDir(name), { recursive: true, force: true });
-                this.stagedPackages.delete(name);
-                this.swapFailures.delete(name);
-                const index = this.getPackageIndex();
-                if (name in index) {
-                    delete index[name];
-                    writeJsonAtomicSync(path.join(this.packagesDir, "index.json"), index);
-                }
-                const now = this.readPackageUsers();
-                if (now[name]?.length === 0) {
-                    delete now[name];
-                    this.writePackageUsers(now);
-                }
-                logger.info(`[package:${name}] removed: no installed panel uses it`);
-            } catch (err) {
-                logger.error(`[package:${name}] no panel uses it, but it could not be removed:`, err);
-            } finally {
-                this.operations.delete(key);
-            }
-        }
-    }
-
-    private sweepOrphans(): void {
         for (const dir of [this.packagesDir, this.panelsDir]) {
             try {
                 for (const entry of fs.readdirSync(dir)) {
@@ -366,43 +131,8 @@ export class PaperCraneEngine {
                 }
             }
         }
-        this.sweepPackageSwaps();
-    }
-
-    // a swap interrupted between its two renames leaves the previous
-    // release parked and no installed one: put it back. A parked copy beside
-    // an installed release is a finished swap's leftover. A staged directory
-    // without its record is a staging that never completed.
-    private sweepPackageSwaps(): void {
-        let entries: string[];
-        try {
-            entries = fs.readdirSync(this.packagesDir);
-        } catch (err) {
-            logger.warn("[engine] could not list packages to recover interrupted swaps:", err);
-            return;
-        }
-        for (const entry of entries) {
-            const full = path.join(this.packagesDir, entry);
-            try {
-                const parked = /^\.replaced-\d+-(.+)$/.exec(entry);
-                if (parked) {
-                    const target = path.join(this.packagesDir, parked[1]!);
-                    if (fs.existsSync(target)) {
-                        fs.rmSync(full, { recursive: true, force: true });
-                    } else {
-                        fs.renameSync(full, target);
-                        logger.warn(`[engine] restored ${parked[1]} from an interrupted update`);
-                    }
-                    continue;
-                }
-                const staged = /^\.staged-(.+?)(\.json)?$/.exec(entry);
-                if (staged && !this.stagedPackages.has(staged[1]!)) {
-                    fs.rmSync(full, { recursive: true, force: true });
-                }
-            } catch (err) {
-                logger.error(`[engine] could not recover ${entry} after an interrupted package update:`, err);
-            }
-        }
+        this.panels.recoverAtStartup();
+        this.packages.recoverAtStartup();
     }
 
     // Resolves a subpath in one of the managed directories
@@ -433,207 +163,6 @@ export class PaperCraneEngine {
         return resolveSecureTargetPath(this.filesDir, targetPath, appId);
     }
 
-    // Shared spawn cwd: explicit cwd wins, else home, else process cwd.
-    private resolveSpawnCwd(cwd?: string): string {
-        if (cwd) {
-            const resolved = path.resolve(cwd);
-            // explicit but missing cwd must fail, never fall back silently
-            if (!fs.existsSync(resolved)) {
-                throw new Error(`spawn cwd does not exist: ${resolved}`);
-            }
-            return resolved;
-        }
-        return typeof os.homedir === "function" ? os.homedir() : process.cwd();
-    }
-
-    // Stream subscriptions, keyed by workload id and then by subscriber (an
-    // RPC socket). Every subscriber gets every chunk. Subscribing again
-    // replaces that subscriber's own listeners, so a creator that also
-    // attaches is not handed each chunk twice, and no subscriber takes the
-    // stream from another. A subscription outlives the process it was made
-    // against: a shell that exits and starts again under the same id, or one
-    // subscribed to before it started, streams to everyone subscribed, until
-    // the socket closes.
-    private streamSubscriptions = new Map<string, Map<object, StreamListeners>>();
-    private streamSubscriptionCount = 0;
-    // what each live client currently has wired, so a replacement can be undone
-    private wiredStreams = new WeakMap<object, Map<object, StreamListeners>>();
-
-    private subscribeStreams(id: string, subscriber: object, listeners: StreamListeners): void {
-        let bySubscriber = this.streamSubscriptions.get(id);
-        if (!bySubscriber?.has(subscriber)) {
-            if (this.streamSubscriptionCount >= 10_000) throw new LimitError("Too many stream subscriptions");
-            this.streamSubscriptionCount++;
-        }
-        if (!bySubscriber) {
-            bySubscriber = new Map();
-            this.streamSubscriptions.set(id, bySubscriber);
-        }
-        bySubscriber.set(subscriber, listeners);
-        const client = this.clients.get(id);
-        if (client) this.wireStreams(id, client);
-    }
-
-    // brings a client's listeners in line with the subscriptions for its id
-    private wireStreams(id: string, client: StreamClient): void {
-        let wired = this.wiredStreams.get(client);
-        if (!wired) {
-            wired = new Map();
-            this.wiredStreams.set(client, wired);
-        }
-        const wanted = this.streamSubscriptions.get(id);
-        for (const [subscriber, listeners] of [...wired]) {
-            if (wanted?.get(subscriber) === listeners) continue;
-            for (const [event, fn] of Object.entries(listeners)) {
-                if (fn) client.off(event, fn);
-            }
-            wired.delete(subscriber);
-        }
-        for (const [subscriber, listeners] of wanted ?? []) {
-            if (wired.has(subscriber)) continue;
-            for (const [event, fn] of Object.entries(listeners)) {
-                if (fn) client.on(event, fn);
-            }
-            wired.set(subscriber, listeners);
-        }
-    }
-
-    // a closed socket stops receiving: its subscriptions leave every workload
-    public detachStreams(subscriber: object): void {
-        for (const [id, bySubscriber] of [...this.streamSubscriptions]) {
-            if (!bySubscriber.delete(subscriber)) continue;
-            this.streamSubscriptionCount--;
-            if (bySubscriber.size === 0) this.streamSubscriptions.delete(id);
-            const client = this.clients.get(id);
-            if (client) this.wireStreams(id, client);
-        }
-    }
-
-    // ownership ledger: supervised id → creating panel claim (null =
-    // master/host-created or pre-ledger). One entry per live client id,
-    // deleted with the client — bounded by the client map itself. The RPC
-    // layer records the socket claim on create and refuses mismatches
-    // (rpc/ownership.ts).
-    private clientOwners = new Map<string, string | null>();
-
-    public setClientOwner(id: string, owner: string | null): void {
-        if (typeof id === "string" && id) {
-            if (!this.clientOwners.has(id) && this.clientOwners.size >= 10_000) throw new LimitError("Process ownership ledger is full");
-            this.clientOwners.set(id, owner ?? null);
-            writeJsonAtomicSync(path.join(this.localDir, "process-owners.json"), Object.fromEntries(this.clientOwners), { mode: 0o600 });
-        }
-    }
-
-    // A reservation exists before start exposes a client. The bounded set
-    // excludes overlapping starts (including host starts) so one failure
-    // cannot restore the ledger over a newer claim. Both outcomes release it.
-    private startingClients = new Set<string>();
-
-    public reserveClientOwner(id: string, owner: string | null): { commit(): void; undo(): void } {
-        if (this.startingClients.has(id)) throw new RpcError(ErrorCode.CONFLICT, `Process ${id} is already starting`);
-        if (this.startingClients.size >= 10_000) throw new LimitError("Too many starting workloads");
-        const had = this.clientOwners.has(id);
-        const previous = this.clientOwners.get(id) ?? null;
-        try {
-            this.setClientOwner(id, owner);
-        } catch (err) {
-            // Atomic persistence failed; do not leave an in-memory claim for
-            // a start that was never attempted.
-            if (had) this.clientOwners.set(id, previous);
-            else this.clientOwners.delete(id);
-            throw err;
-        }
-        this.startingClients.add(id);
-        return {
-            commit: () => {
-                this.startingClients.delete(id);
-                // An immediate exit may already have removed the workload.
-                if (!this.clients.has(id)) this.forgetClientOwner(id);
-            },
-            undo: () => {
-                this.startingClients.delete(id);
-                if (had) this.setClientOwner(id, previous);
-                else this.forgetClientOwner(id);
-            },
-        };
-    }
-
-    // drops a finished workload's ledger entry, on disk too: an entry left
-    // in process-owners.json would outlive the workload across a restart.
-    // A failed write keeps the stale entry, which only over-claims (refuses
-    // other panels that id) — it never grants anything — so it is logged
-    // rather than thrown into the exit path that called this.
-    private forgetClientOwner(id: string): void {
-        // Startup still owns this id even if its child exits immediately.
-        // commit/undo releases the reservation after start is observed.
-        if (this.startingClients.has(id)) return;
-        if (!this.clientOwners.delete(id)) return;
-        try {
-            writeJsonAtomicSync(path.join(this.localDir, "process-owners.json"), Object.fromEntries(this.clientOwners), { mode: 0o600 });
-        } catch (err) {
-            logger.error(`[engine] could not persist the end of ${id}'s ownership; the stale entry over-claims until the next write:`, err);
-        }
-    }
-
-    public clientOwner(id: string): string | null {
-        return this.clientOwners.get(id) ?? null;
-    }
-
-    /** Each running panel service's process, by panel. */
-    public serviceRoots(): Array<{ panelId: string; pid: number }> {
-        return this.services.processRoots();
-    }
-
-    /** Each live workload's supervisor process and the panel that created it (null: the host). */
-    public workloadRoots(): Array<{ owner: string | null; pid: number }> {
-        const roots: Array<{ owner: string | null; pid: number }> = [];
-        for (const [id, client] of this.clients) {
-            if (client.pid > 0) roots.push({ owner: this.clientOwners.get(id) ?? null, pid: client.pid });
-        }
-        return roots;
-    }
-
-    // lookup with reconnect, shared by attach/isRunning
-    private async getOrConnectClient(
-        id: string,
-    ): Promise<SupervisedProcessClient | null> {
-        let client = this.clients.get(id);
-        if (!client) {
-            // Windows supervisors listen on a named pipe, which fs cannot
-            // stat: supervisorPresent keys off the metadata file there so an
-            // orphaned Ollama is found and stopped instead of a second
-            // supervisor racing the same pipe name.
-            if (!supervisorPresent(id)) return null;
-            client = new SupervisedProcessClient(id);
-            if (!(await client.connect())) return null;
-            this.clients.set(id, client);
-            this.wireStreams(id, client);
-            const meta = this.supervisorMeta(id);
-            this.clientCommands.set(id, typeof meta?.config.command === "string" ? meta.config.command : null);
-            if (meta?.config.noStdin === true) this.inputless.add(id);
-            this.rememberWorkload(id, meta?.startedAt, meta?.config.important === true);
-        }
-        return client;
-    }
-
-    // Manifest hunt: root manifest.json, else one level of subdirectories
-    private findManifestFile(dir: string): string | null {
-        const root = path.join(dir, "manifest.json");
-        if (fs.existsSync(root)) return root;
-        if (!fs.statSync(dir, { throwIfNoEntry: false })?.isDirectory()) return null;
-        for (const sub of fs.readdirSync(dir)) {
-            const candidate = path.join(dir, sub, "manifest.json");
-            if (fs.existsSync(candidate)) return candidate;
-        }
-        return null;
-    }
-
-    private sanitizeIdOrThrow(id: string, what: string): string {
-        const clean = sanitizeId(id);
-        if (!clean) throw new Error(`Invalid ${what} id: ${id}`);
-        return clean;
-    }
-
     public getAppDataDir(): string {
         return this.appDataDir;
     }
@@ -643,7 +172,7 @@ export class PaperCraneEngine {
     // a path (the RPC boundary refuses it first with INVALID_PARAMS;
     // this throw is the defense for direct engine callers).
     private configFileName(id: string): string {
-        return `${this.sanitizeIdOrThrow(id, "config")}.json`;
+        return `${sanitizeIdOrThrow(id, "config")}.json`;
     }
 
     // globals in local/, panel configs in configs/<id>.json, and an
@@ -662,272 +191,6 @@ export class PaperCraneEngine {
             return path.join(this.localDir, this.configFileName(id));
         }
         return path.join(this.configsDir, this.configFileName(id));
-    }
-
-    // Terminal management
-    public async createTerminal(
-        id: string,
-        options: { cols?: number; rows?: number; cwd?: string; env?: Record<string, string>; shell?: string },
-        streams: TerminalStreams,
-        // the socket that receives the streams (see subscribeStreams); without
-        // one, the listeners belong to this shell alone
-        subscriber?: object,
-    ): Promise<void> {
-        const { cols = 80, rows = 24, cwd, env } = options;
-        const { data: onData, exit: onExit } = streams;
-        // a chosen shell must be one this computer offers; otherwise the
-        // platform's own, never $SHELL as a GUI app inherited it
-        const shell = options.shell ? requireOfferedShell(options.shell) : defaultTerminalShell();
-        this.requireNoRuntimeReplacement(shell);
-        const resolvedCwd = this.resolveSpawnCwd(cwd);
-        const launch = shellLaunch(shell, { ...process.env, ...env });
-        logger.debug(`[Paperboard Server] creating terminal ${id} (shell=${shell} cwd=${resolvedCwd})`);
-        if (subscriber) this.subscribeStreams(id, subscriber, { ...streams });
-
-        let announced = false;
-        let exited = false;
-        await spawnSupervisedClient(
-            id,
-            {
-                id,
-                type: "pty",
-                isPty: true,
-                command: shell,
-                args: launch.args,
-                cwd: resolvedCwd,
-                env: { ...env, ...launch.env },
-                cols,
-                rows,
-            },
-            this.clients,
-            {
-                onData: subscriber ? undefined : onData,
-                onExit: (code) => {
-                    this.clients.delete(id);
-                    // a shell can exit before its spawn resolves: it still
-                    // started first, and nothing of it is kept
-                    if (!announced) {
-                        announced = true;
-                        this.announceWorkload(id, "started");
-                    }
-                    exited = true;
-                    this.workloadEnded(id, code);
-                    if (!subscriber) onExit?.(code);
-                },
-                attach: (client) => this.wireStreams(id, client),
-            },
-        );
-        if (!exited) {
-            this.clientCommands.set(id, shell);
-            this.rememberWorkload(id, Date.now(), false);
-        }
-        if (!announced) {
-            announced = true;
-            this.announceWorkload(id, "started");
-        }
-    }
-
-    public writeTerminal(id: string, data: string): void {
-        const client = this.clients.get(id);
-        // keystrokes for a shell that is gone are a failure, not a delivery
-        if (!client) throw new Error(`Terminal "${id}" is not running`);
-        client.write(data);
-    }
-
-    /**
-     * What is known of a running terminal: the program in front of it and
-     * the folder its shell is in, each "" until it has been said
-     */
-    public terminalState(id: string): { foreground: string; cwd: string } {
-        const client = this.clients.get(id);
-        return { foreground: client?.foreground ?? "", cwd: client?.cwd ?? "" };
-    }
-
-    public resizeTerminal(id: string, cols: number, rows: number): void {
-        this.clients.get(id)?.resize(cols, rows);
-    }
-
-    public async destroyTerminal(id: string): Promise<void> {
-        const client = this.clients.get(id);
-        if (client) {
-            await this.stopOwnedClient(id, client);
-        }
-        this.forgetClientOwner(id);
-    }
-
-    // Reattaches streaming for a terminal owned by a previous session
-    public async attachTerminal(
-        id: string,
-        subscriber: object,
-        streams: TerminalStreams,
-    ): Promise<boolean> {
-        // subscribed even when the shell is not running yet: it streams
-        // here as soon as it starts
-        this.subscribeStreams(id, subscriber, { ...streams });
-        return (await this.getOrConnectClient(id)) !== null;
-    }
-
-    public async isTerminalRunning(id: string): Promise<boolean> {
-        const client = await this.getOrConnectClient(id);
-        return client?.isConnected() ?? false;
-    }
-
-    // Background supervised processes
-    public async runProcess(
-        id: string,
-        command: string,
-        args: string[] = [],
-        cwd?: string,
-        env?: Record<string, string>,
-        onData?: (data: string) => void,
-        onStdout?: (data: string) => void,
-        onStderr?: (data: string) => void,
-    ): Promise<{ exitCode: number | null }> {
-        return (await this.startProcess(id, command, args, cwd, env, onData, onStdout, onStderr)).completion;
-    }
-
-    public async startProcess(
-        id: string, command: string, args: string[] = [], cwd?: string, env?: Record<string, string>,
-        onData?: (data: string) => void, onStdout?: (data: string) => void, onStderr?: (data: string) => void,
-        // subscriber: the socket that receives the streams (see
-        // subscribeStreams), onExit its exit listener; without one, the
-        // listeners belong to this process alone
-        // important: people rely on it while it runs (a game server), so an
-        // update of what it runs from waits for it instead of stopping it
-        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; important?: boolean; subscriber?: object; onExit?: (exitCode: number | null) => void } = {},
-    ): Promise<{ completion: Promise<{ exitCode: number | null }> }> {
-        if (!id || typeof id !== "string") {
-            throw new Error("process id is required");
-        }
-        // a staged update of this workload's runtime lands before it starts,
-        // when nothing else still runs from the installed release
-        const runtime = this.packageOfCommand(command);
-        if (runtime) {
-            await this.applyStagedPackage(runtime).catch((err) =>
-                // recorded in swapFailures; the rolled-back release is intact
-                logger.warn(`[engine] starting ${id} on the installed ${runtime}; its staged update failed:`, err),
-            );
-        }
-        this.requireNoRuntimeReplacement(command);
-        const resolvedCwd = this.resolveSpawnCwd(cwd);
-        const subscriber = options.subscriber;
-        if (subscriber) {
-            this.subscribeStreams(id, subscriber, {
-                data: onData,
-                stdout: onStdout,
-                stderr: onStderr,
-                exit: options.onExit,
-            });
-        }
-
-        let resolveExit!: (result: { exitCode: number | null }) => void;
-        const completion = new Promise<{ exitCode: number | null }>((resolve) => { resolveExit = resolve; });
-        // a Windows console input takes no writes: the process is inputless,
-        // recorded as such so a daemon that adopts it refuses writes too
-        const inputless = options.stdin === false || (options.consoleInput === true && process.platform === "win32");
-        let announced = false;
-        let exited = false;
-        await spawnSupervisedClient(
-                id,
-                {
-                    id,
-                    type: "child_process",
-                    command,
-                    args,
-                    cwd: resolvedCwd,
-                    env,
-                    noStdin: inputless,
-                    inputEncoding: options.inputEncoding,
-                    consoleInput: options.consoleInput,
-                    ...(options.important ? { important: true } : {}),
-                },
-                this.clients,
-                {
-                    onData: subscriber ? undefined : onData,
-                    onStdout: subscriber ? undefined : onStdout,
-                    onStderr: subscriber ? undefined : onStderr,
-                    onExit: (exitCode: number | null) => {
-                        this.clients.delete(id);
-                        // a process can exit before its spawn resolves: it
-                        // still started first, and nothing of it is kept
-                        if (!announced) {
-                            announced = true;
-                            this.announceWorkload(id, "started");
-                        }
-                        exited = true;
-                        this.workloadEnded(id, exitCode);
-                        resolveExit({ exitCode });
-                        if (!subscriber) options.onExit?.(exitCode);
-                    },
-                    attach: (client) => this.wireStreams(id, client),
-                },
-            );
-        if (!exited) {
-            this.clientCommands.set(id, command);
-            if (inputless) this.inputless.add(id);
-            else this.inputless.delete(id);
-            this.rememberWorkload(id, Date.now(), options.important === true);
-        }
-        if (!announced) {
-            announced = true;
-            this.announceWorkload(id, "started");
-        }
-        return { completion };
-    }
-
-    private requireNoRuntimeReplacement(command: string): void {
-        const runtime = this.packageOfCommand(command);
-        if (runtime && this.swapping.has(runtime)) {
-            throw new Error(`The shared runtime "${runtime}" is being replaced; wait for it to finish before starting workloads`);
-        }
-    }
-
-    public writeProcess(id: string, data: string): void {
-        const client = this.clients.get(id);
-        // a write to a process that is gone is a failure, not a delivery
-        if (!client) throw new Error(`Process "${id}" is not running`);
-        if (this.inputless.has(id)) throw new Error(`Process "${id}" has no input open (it was started without one, or it was closed); it can't be written to`);
-        client.write(data);
-    }
-
-    /** Ends a process's input after what was written to it: a program that reads its input to the end goes on. Later writes are refused. */
-    public closeProcessInput(id: string): void {
-        const client = this.clients.get(id);
-        if (!client) throw new Error(`Process "${id}" is not running`);
-        if (this.inputless.has(id)) throw new Error(`Process "${id}" has no input open (it was started without one, or it was closed already)`);
-        this.inputless.add(id);
-        client.closeInput();
-    }
-
-    public async killProcess(id: string, signal: string = "SIGTERM"): Promise<void> {
-        const client = this.clients.get(id);
-        if (!client) {
-            this.forgetClientOwner(id);
-            return;
-        }
-        await this.stopOwnedClient(id, client, signal);
-    }
-
-    public async isProcessRunning(id: string): Promise<boolean> {
-        const client = await this.getOrConnectClient(id);
-        return client?.isConnected() ?? false;
-    }
-
-    public async attachProcess(
-        id: string,
-        subscriber: object,
-        onData?: (data: string) => void,
-        onStdout?: (data: string) => void,
-        onStderr?: (data: string) => void,
-        onExit?: (exitCode: number | null) => void,
-    ): Promise<boolean> {
-        this.subscribeStreams(id, subscriber, {
-            data: onData,
-            stdout: onStdout,
-            stderr: onStderr,
-            exit: onExit,
-        });
-        return (await this.getOrConnectClient(id)) !== null;
     }
 
     // Panel file management
@@ -1001,114 +264,6 @@ export class PaperCraneEngine {
         return true;
     }
 
-    // Reconnects supervisors that outlived the previous daemon, keyed by the
-    // id their metadata records (the endpoint name is a digest of it, never
-    // an id). A supervisor whose metadata does not belong to its file name is
-    // skipped rather than adopted under the wrong id.
-    public recoverRunningSupervisors(): Promise<void> {
-        this.recovery = this.adoptRunningSupervisors();
-        return this.recovery;
-    }
-
-    private async adoptRunningSupervisors(): Promise<void> {
-        const socketsDir = getSocketsDir();
-        if (!fs.existsSync(socketsDir)) return;
-        let files: string[];
-        try {
-            files = await fs.promises.readdir(socketsDir);
-        } catch (err) {
-            logger.warn("[Paperboard Server] failed to list running supervisors:", err);
-            return;
-        }
-        for (const file of files) {
-            if (!file.endsWith(".json")) continue;
-            const stem = file.slice(0, -".json".length);
-            let id: unknown;
-            let command: unknown;
-            let noStdin: unknown;
-            let startedAt: unknown;
-            let important = false;
-            let mountHolderPid: unknown;
-            try {
-                const meta = JSON.parse(await fs.promises.readFile(path.join(socketsDir, file), "utf8"));
-                id = meta?.id;
-                command = meta?.config?.command;
-                noStdin = meta?.config?.noStdin;
-                startedAt = meta?.startedAt;
-                important = meta?.config?.important === true;
-                mountHolderPid = meta?.config?.mountHolderPid;
-            } catch (err) {
-                logger.warn(`[Paperboard Server] unreadable supervisor metadata ${file}; not adopting it:`, err);
-                continue;
-            }
-            if (typeof id !== "string" || !id || this.clients.has(id)) continue;
-            if (stem !== supervisorEndpointName(id)) {
-                logger.warn(`[Paperboard Server] supervisor metadata ${file} names "${id}", which does not own that endpoint; not adopting it`);
-                continue;
-            }
-            const client = new SupervisedProcessClient(id, supervisorSocketPathForName(stem));
-            if (await client.connect()) {
-                this.clients.set(id, client);
-                this.clientCommands.set(id, typeof command === "string" ? command : null);
-                if (noStdin === true) this.inputless.add(id);
-                this.rememberWorkload(id, startedAt, important);
-                client.on("exit", (code: number | null) => {
-                    if (this.clients.get(id) !== client) return;
-                    this.clients.delete(id);
-                    this.workloadEnded(id, code);
-                });
-            } else {
-                client.destroy();
-                // A supervisor that was killed outright never stopped the
-                // AppImage mount it ran from (supervisorLaunch.ts). Its
-                // metadata goes too, so a later start never signals that pid
-                // again once it may belong to another supervisor's mount.
-                if (typeof mountHolderPid === "number" && Number.isInteger(mountHolderPid) && mountHolderPid > 0) {
-                    stopMountHolder(mountHolderPid);
-                    await fs.promises.rm(path.join(socketsDir, file), { force: true }).catch((err) =>
-                        logger.warn(`[Paperboard Server] could not remove the metadata of dead supervisor "${id}":`, err),
-                    );
-                }
-            }
-        }
-    }
-
-    // shutdown all clients: SIGTERM, then SIGKILL after grace
-    public async disposeClients(graceMs = 5000): Promise<void> {
-        const entries = [...this.clients.entries()];
-        if (entries.length === 0) return;
-
-        // kill and destroy only queue or write to a socket; neither throws
-        for (const [, client] of entries) client.kill("SIGTERM");
-
-        const deadline = Date.now() + graceMs;
-        while (Date.now() < deadline) {
-            if (entries.every(([, client]) => !client.isConnected())) break;
-            await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-
-        this.killAllClients();
-    }
-
-    // lets go of every supervised workload without stopping it: the sockets
-    // close, the supervisors keep their programs running, and the next daemon
-    // adopts them (recoverRunningSupervisors)
-    public releaseAllClients(): void {
-        for (const [id, client] of [...this.clients.entries()]) {
-            client.destroy();
-            this.clients.delete(id);
-        }
-    }
-
-    // last-resort sync teardown for exit handlers
-    public killAllClients(): void {
-        for (const [id, client] of [...this.clients.entries()]) {
-            if (client.isConnected()) client.kill("SIGKILL");
-            client.destroy();
-            this.clients.delete(id);
-        }
-    }
-
     public async downloadFile(
         url: string,
         targetPath: string,
@@ -1162,1016 +317,9 @@ export class PaperCraneEngine {
         }
     }
 
-    // Runtime package management
-    public isPackageInstalled(packageName: string, version?: string): boolean {
-        // validated like downloadPackage: a name is a directory under
-        // packages/, never a path that climbs out of it
-        packageName = this.sanitizeIdOrThrow(packageName, "package");
-        const base = path.join(this.packagesDir, packageName);
-        if (!fs.existsSync(base)) return false;
-        if (this.findBinDir(base, 4) === null) return false;
-        // a requested version is a promise: confirm it against the install
-        // index instead of ignoring it. "latest"/omitted keeps the old
-        // presence check; installs predating the index re-verify once by
-        // reinstalling, then read as installed.
-        if (version && version !== "latest") {
-            const entry = this.getPackageIndex()?.[packageName];
-            const installed = typeof entry?.version === "string" ? entry.version : null;
-            if (!installed) return false;
-            return installed === version;
-        }
-        return true;
-    }
-
-    public getPackageIndex(): Record<string, any> {
-        const indexFile = path.join(this.packagesDir, "index.json");
-        if (fs.existsSync(indexFile)) {
-            try {
-                return JSON.parse(fs.readFileSync(indexFile, "utf-8"));
-            } catch (err) {
-                logger.debug(
-                    "[Paperboard Server] package index.json could not be read:",
-                    err,
-                );
-                throw err;
-            }
-        }
-        return {};
-    }
-
-    public getPackagePath(packageName: string): string {
-        const base = path.join(this.packagesDir, this.sanitizeIdOrThrow(packageName, "package"));
-        const found = this.findBinDir(base, 4);
-        return found || base;
-    }
-
-    // Recursively searches for a bin/ dir, up to maxDepth levels
-    private findBinDir(dir: string, maxDepth: number): string | null {
-        return findBinDir(dir, maxDepth);
-    }
-
-    // ─── shared runtime replacement ─────────────────────────────────────
-
-    private stagedDir(name: string): string {
-        return path.join(this.packagesDir, `.staged-${name}`);
-    }
-
-    private stagedRecordFile(name: string): string {
-        return path.join(this.packagesDir, `.staged-${name}.json`);
-    }
-
-    // the package a command runs from, null when it is not inside one. A
-    // bare name ("java") is a PATH lookup and names no package.
-    private packageOfCommand(command: string | null | undefined): string | null {
-        if (typeof command !== "string" || !path.isAbsolute(command)) return null;
-        const rel = path.relative(this.packagesDir, path.resolve(command));
-        if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null;
-        const name = rel.split(path.sep)[0];
-        return name && !name.startsWith(".") ? name : null;
-    }
-
-    // live workloads running from the installed release of a package. One
-    // whose command is unknown counts against every package. A binary a
-    // shell runs by hand is not seen: on Linux and macOS it keeps its open
-    // files across the swap, on Windows the rename fails and rolls back.
-    private packageUsers(name: string): Array<{ processId: string; owner: string | null; holds: boolean }> {
-        const users: Array<{ processId: string; owner: string | null; holds: boolean }> = [];
-        for (const id of this.clients.keys()) {
-            const command = this.clientCommands.get(id);
-            if (command == null || this.packageOfCommand(command) === name) {
-                users.push({ processId: id, owner: this.clientOwners.get(id) ?? null, holds: this.holdsUpdates(id) });
-            }
-        }
-        return users;
-    }
-
-    private packageUpdateWait(name: string): PackageUpdateWait | null {
-        const staged = this.stagedPackages.get(name);
-        if (staged) return { name, version: staged.version, blockedBy: this.packageUsers(name) };
-        const failed = this.swapFailures.get(name);
-        return failed ? { name, version: failed.version, blockedBy: [], error: failed.error } : null;
-    }
-
-    /** Package updates that are downloaded but not installed yet. */
-    public pendingPackageUpdates(): PackageUpdateWait[] {
-        const names = new Set([...this.stagedPackages.keys(), ...this.swapFailures.keys()]);
-        return [...names].map((name) => this.packageUpdateWait(name)!);
-    }
-
-    private async stagePackage(release: StagedPackage, srcDir: string): Promise<void> {
-        const name = release.name;
-        if (!this.stagedPackages.has(name) && this.stagedPackages.size >= MAX_STAGED_PACKAGES) {
-            throw new LimitError(`Too many staged package updates (max ${MAX_STAGED_PACKAGES})`);
-        }
-        // the record goes first and comes back last, so a record on disk
-        // always describes the bytes beside it
-        this.stagedPackages.delete(name);
-        fs.rmSync(this.stagedRecordFile(name), { force: true });
-        await fs.promises.rm(this.stagedDir(name), { recursive: true, force: true });
-        await fs.promises.rename(srcDir, this.stagedDir(name));
-        writeJsonAtomicSync(this.stagedRecordFile(name), release);
-        this.stagedPackages.set(name, release);
-        this.swapFailures.delete(name);
-    }
-
-    // swap in place: the previous release is parked only until the
-    // replacement is indexed, then it is gone. A failed swap rolls it back;
-    // nothing is retained after success.
-    private async swapPackage(release: StagedPackage, srcDir: string): Promise<void> {
-        const name = release.name;
-        const targetDir = path.join(this.packagesDir, name);
-        const index = this.getPackageIndex();
-        index[name] = {
-            name,
-            version: release.version,
-            sha256: release.sha256,
-            installedAt: new Date().toISOString(),
-        };
-        this.swapping.add(name);
-        try {
-            const previous = path.join(this.packagesDir, `.replaced-${Date.now()}-${name}`);
-            if (fs.existsSync(targetDir)) await fs.promises.rename(targetDir, previous);
-            try {
-                await fs.promises.rename(srcDir, targetDir);
-                writeJsonAtomicSync(path.join(this.packagesDir, "index.json"), index);
-            } catch (err) {
-                if (fs.existsSync(targetDir)) await fs.promises.rm(targetDir, { recursive: true, force: true });
-                if (fs.existsSync(previous)) await fs.promises.rename(previous, targetDir);
-                throw err;
-            }
-            await fs.promises
-                .rm(previous, { recursive: true, force: true })
-                .catch((err) => logger.warn("[engine] previous package copy could not be removed:", err));
-        } finally {
-            this.swapping.delete(name);
-        }
-        this.swapFailures.delete(name);
-    }
-
-    // installs a staged release once no workload runs from the installed
-    // one; concurrent callers share the swap in flight
-    private async applyStagedPackage(name: string): Promise<void> {
-        await this.recovery;
-        const inFlight = this.swaps.get(name);
-        if (inFlight) return inFlight;
-        const release = this.stagedPackages.get(name);
-        if (!release || this.packageUsers(name).length > 0) return;
-        const swap = (async () => {
-            try {
-                await this.swapPackage(release, this.stagedDir(name));
-                logger.info(`[package:${name}] installed the staged ${release.version}`);
-            } catch (err) {
-                // the installed release was rolled back in place and keeps
-                // working; the update is a recorded failure, never installed
-                const error = err instanceof Error ? err.message : String(err);
-                this.swapFailures.set(name, { version: release.version, error });
-                logger.error(`[package:${name}] could not install the staged ${release.version}:`, err);
-                await fs.promises
-                    .rm(this.stagedDir(name), { recursive: true, force: true })
-                    .catch((rmErr) => logger.warn(`[package:${name}] staged copy could not be removed:`, rmErr));
-                throw err;
-            } finally {
-                this.stagedPackages.delete(name);
-                fs.rmSync(this.stagedRecordFile(name), { force: true });
-            }
-        })().finally(() => this.swaps.delete(name));
-        this.swaps.set(name, swap);
-        return swap;
-    }
-
-    /** Installs every staged update no workload holds back. */
-    public async applyReadyStagedPackages(): Promise<void> {
-        await Promise.all(
-            [...this.stagedPackages.keys()].map((name) =>
-                // a failed swap is recorded in swapFailures and surfaces
-                // through pendingPackageUpdates
-                this.applyStagedPackage(name).catch((err) =>
-                    logger.debug(`[package:${name}] staged swap failed (recorded):`, err),
-                ),
-            ),
-        );
-    }
-
-    // a workload is gone: its runtime may now be free to update
-    private workloadEnded(id: string, code: number | null): void {
-        this.announceWorkload(id, "exited", code);
-        this.clientCommands.delete(id);
-        this.inputless.delete(id);
-        this.clientStarts.delete(id);
-        this.importantClients.delete(id);
-        this.forgetClientOwner(id);
-        if (this.stagedPackages.size > 0) void this.applyReadyStagedPackages();
-    }
-
-    private supervisorMeta(id: string): { config: { command?: unknown; noStdin?: unknown; important?: unknown }; startedAt?: unknown } | null {
-        try {
-            const meta = JSON.parse(fs.readFileSync(path.join(getSocketsDir(), `${supervisorEndpointName(id)}.json`), "utf8"));
-            return meta?.config && typeof meta.config === "object" ? { config: meta.config, startedAt: meta.startedAt } : null;
-        } catch (err) {
-            logger.warn(`[engine] supervisor metadata for ${id} is unreadable; its runtime is unknown and blocks package updates:`, err);
-            return null;
-        }
-    }
-
-    private rememberWorkload(id: string, startedAt: unknown, important: boolean): void {
-        const at = typeof startedAt === "number" ? startedAt : typeof startedAt === "string" ? Date.parse(startedAt) : NaN;
-        // an unknown start counts as long ago: it holds updates, never loses to them
-        this.clientStarts.set(id, Number.isFinite(at) ? at : 0);
-        if (important) this.importantClients.add(id);
-        else this.importantClients.delete(id);
-    }
-
-    /**
-     * Whether a live workload holds back an update of what it runs from:
-     * one started as important (a game server), or one that has run for a
-     * while. Anything else is stopped for the update and started again by
-     * its panel (afterUpdate), without asking anyone.
-     */
-    public holdsUpdates(id: string): boolean {
-        if (this.importantClients.has(id)) return true;
-        const started = this.clientStarts.get(id);
-        return started === undefined || Date.now() - started >= LONG_RUNNING_MS;
-    }
-
-    public async downloadPackage(
-        packageName: string,
-        onProgress?: ProgressCallback,
-        expectedSha256?: string,
-        options: { allowDowngrade?: boolean } = {},
-    ): Promise<PackageInstallOutcome> {
-        const key = `package:${this.sanitizeIdOrThrow(packageName, "package")}`;
-        if (this.operations.has(key)) throw new Error(`An operation on ${packageName} is already running`);
-        if (this.operations.size >= 8) throw new LimitError("Too many concurrent installs");
-        this.operations.add(key);
-        try { return await this.installPackageRelease(packageName, onProgress, expectedSha256, options); }
-        finally { this.operations.delete(key); }
-    }
-
-    private async installPackageRelease(packageName: string, onProgress?: ProgressCallback, expectedSha256?: string, options: { allowDowngrade?: boolean } = {}): Promise<PackageInstallOutcome> {
-        // trust boundary: same rule as installPanel — no checksum fact from
-        // the anchor means no install, never proceed with sha256: undefined
-        if (typeof expectedSha256 !== "string" || !/^[a-f0-9]{64}$/i.test(expectedSha256)) {
-            throw new Error(
-                `Install refused for package "${packageName}": registry did not provide a sha256 checksum`,
-            );
-        }
-        packageName = this.sanitizeIdOrThrow(packageName, "package");
-        const log = (msg: string) =>
-            logger.info(`[package:${packageName}] ${msg}`);
-
-        const targetDir = path.join(this.packagesDir, packageName);
-        const pkgDir = `${targetDir}.staging-${Date.now()}`;
-
-        const metaUrl = `${this.registryUrl}/package/${encodeURIComponent(packageName)}.json`;
-        log(`resolving ${metaUrl}`);
-        onProgress?.({
-            stage: "checking",
-            percent: 0,
-            message: `Resolving package ${packageName}...`,
-        });
-
-        let meta: any;
-        try {
-            meta = await fetchRegistryRecord(metaUrl);
-        } catch (err) {
-            throw new Error(`Install refused for package "${packageName}": registry record unavailable (${err instanceof Error ? err.message : String(err)})`);
-        }
-
-        const currentOs =
-            process.platform === "win32"
-                ? "windows"
-                : process.platform === "darwin"
-                  ? "macos"
-                  : "linux";
-        const currentArch = process.arch === "arm64" ? "arm64" : "x64";
-        const platformKey = `${currentOs}-${currentArch}`;
-        // only the platforms map is a release record: the signature covers
-        // (name, version, platform, sha256) of exactly that entry
-        const downloadInfo = meta?.platforms?.[platformKey];
-        if (!downloadInfo?.url) {
-            throw new Error(
-                `No download available for ${packageName} on ${platformKey}`,
-            );
-        }
-        if (typeof meta.version !== "string" || !meta.version) {
-            throw new Error(`Install refused for package "${packageName}": registry did not provide a version`);
-        }
-        log(`source: ${downloadInfo.url}`);
-        // the caller's checksum fact must agree with the record; a mismatch
-        // (or a record without one) means one of the two sources is lying
-        if (typeof downloadInfo.sha256 !== "string" || downloadInfo.sha256.toLowerCase() !== expectedSha256.toLowerCase()) {
-            throw new Error(
-                `Install refused for package "${packageName}": checksum mismatch between update plan and registry metadata`,
-            );
-        }
-        // a recipe is part of what is signed: parse it before verifying
-        const recipe = downloadInfo.recipe === undefined ? null : parsePackageRecipe(downloadInfo.recipe);
-        if (recipe && downloadInfo.layout !== undefined) {
-            throw new Error(`Install refused for package "${packageName}": a recipe entry cannot also declare a layout`);
-        }
-        requireReleaseSignature(
-            releaseMessage.package(packageName, meta.version, platformKey, downloadInfo.sha256, recipe ? recipeDigest(recipe) : undefined),
-            downloadInfo.signature,
-            `package "${packageName}"`,
-            this.releaseKey,
-        );
-
-        requireReleaseOrder(
-            { version: meta.version, sha256: expectedSha256 },
-            [this.getPackageIndex()[packageName], this.stagedPackages.get(packageName)],
-            options,
-        );
-
-        if (this.getPackageIndex()[packageName]?.sha256 === expectedSha256 && this.findBinDir(targetDir, 4)) {
-            onProgress?.({ stage: "completed", percent: 100, message: "Requested release is installed" });
-            return { path: targetDir };
-        }
-        // already downloaded and verified, still waiting on its workloads:
-        // swap it now if they are gone, never download the same bytes again
-        if (this.stagedPackages.get(packageName)?.sha256 === expectedSha256) {
-            await this.applyStagedPackage(packageName);
-            const waiting = this.packageUpdateWait(packageName);
-            onProgress?.({ stage: "completed", percent: 100, message: waiting ? "Update waits for running workloads" : "Installed successfully" });
-            return waiting ? { path: targetDir, waiting } : { path: targetDir };
-        }
-        // refused before any download: a layout this daemon does not know
-        // would install binaries where no caller looks for them
-        const layout = parsePackageLayout(downloadInfo.layout);
-        if (recipe) assertRecipeRunsHere(recipe);
-        // keep the URL extension so extraction dispatches on format
-        const urlExt = recipe ? RECIPE_SUFFIX[recipe.unpack] : packageArchiveSuffix(downloadInfo.url);
-        const tempArchive = path.join(
-            this.packagesDir,
-            `${packageName}-archive.tmp-${Date.now()}${urlExt}`,
-        );
-        try {
-            log("downloading...");
-            let lastMilestone = 0;
-            const milestoneProgress: ProgressCallback = (payload) => {
-                // log every 10% with byte counts
-                if (
-                    payload.stage === "downloading" &&
-                    payload.bytesTotal &&
-                    payload.percent - lastMilestone >= 10
-                ) {
-                    lastMilestone = Math.floor(payload.percent / 10) * 10;
-                    log(
-                        `${lastMilestone}% (${Math.round(payload.bytesLoaded! / 1048576)} MB)` +
-                            (payload.bytesTotal
-                                ? ` of ${Math.round(payload.bytesTotal! / 1048576)} MB`
-                                : ""),
-                    );
-                }
-                onProgress?.(payload);
-            };
-            await streamToFileWithProgress(
-                downloadInfo.url,
-                tempArchive,
-                milestoneProgress,
-                downloadInfo.sha1,
-                expectedSha256,
-            );
-            const archiveSize = fs.existsSync(tempArchive)
-                ? fs.statSync(tempArchive).size
-                : -1;
-            log(`download finished (${archiveSize} bytes)`);
-
-            onProgress?.({
-                stage: "extracting",
-                percent: 50,
-                message: "Extracting package...",
-            });
-
-            if (!fs.existsSync(pkgDir)) fs.mkdirSync(pkgDir, { recursive: true });
-            if (recipe) await applyPackageRecipe(tempArchive, pkgDir, recipe);
-            else await extractPackageArchive(tempArchive, pkgDir, layout, urlExt);
-            log(
-                `extraction complete; bin present: ${this.findBinDir(pkgDir, 4) !== null}`,
-            );
-
-            // require bin/ before indexing, else remove and fail
-            if (!this.findBinDir(pkgDir, 4)) {
-                await fs.promises.rm(pkgDir, { recursive: true, force: true });
-                throw new Error(
-                    `Package ${packageName} extracted but no usable binary directory was found. Removed partial install.`,
-                );
-            }
-
-            const release: StagedPackage = { name: packageName, version: meta.version, sha256: expectedSha256 };
-            // Runtimes are shared host resources: a workload running from
-            // the installed release keeps it. The verified release is staged
-            // beside it and swapped in once the last of them exits.
-            if (fs.existsSync(targetDir) && this.packageUsers(packageName).length > 0) {
-                await this.stagePackage(release, pkgDir);
-                const waiting = this.packageUpdateWait(packageName)!;
-                log(`staged ${meta.version}; waiting for ${waiting.blockedBy.length} workload(s) to stop`);
-                onProgress?.({ stage: "completed", percent: 100, message: "Update waits for running workloads" });
-                return { path: targetDir, waiting };
-            }
-            await this.swapPackage(release, pkgDir);
-
-            onProgress?.({
-                stage: "completed",
-                percent: 100,
-                message: "Installed successfully",
-            });
-            return { path: targetDir };
-        } catch (err: any) {
-            log(`FAILED: ${err?.message || err}`);
-            if (fs.existsSync(pkgDir) && !this.findBinDir(pkgDir, 4)) {
-                await fs.promises.rm(pkgDir, { recursive: true, force: true }).catch((err) => logger.debug("[engine] package dir cleanup failed:", err));
-                log("removed partial install");
-            }
-            throw err;
-        } finally {
-            if (fs.existsSync(tempArchive)) {
-                await fs.promises.unlink(tempArchive).catch((err) => logger.debug("[engine] archive cleanup failed:", err));
-            }
-        }
-    }
-
-    public async extractArchive(
-        archivePath: string,
-        destDir: string,
-    ): Promise<void> {
-        return extractArchive(archivePath, destDir);
-    }
-
-    // Installed panels, and the ones whose manifest can't be read or is
-    // invalid: those are named with the reason instead of vanishing, so the
-    // shell can say why a panel is missing and still offer to remove it.
-    public async listPanels(): Promise<{ panels: PanelManifest[]; invalid: Array<{ id: string; error: string }> }> {
-        const panels: PanelManifest[] = [];
-        const invalid: Array<{ id: string; error: string }> = [];
-        if (!fs.existsSync(this.panelsDir)) return { panels, invalid };
-        for (const entry of await fs.promises.readdir(this.panelsDir)) {
-            if (entry.startsWith(".")) continue;
-            const panelPath = path.join(this.panelsDir, entry);
-            try {
-                // a stray file beside the panel folders is not a panel
-                if (!fs.statSync(panelPath).isDirectory()) continue;
-                const manifestPath = this.findManifestFile(panelPath);
-                if (!manifestPath) throw new Error("it has no manifest.json");
-                const validated = validatePanelManifest(JSON.parse(await fs.promises.readFile(manifestPath, "utf-8")), entry);
-                const isDevLink = fs.lstatSync(panelPath).isSymbolicLink();
-                panels.push({
-                    ...validated,
-                    base: validated.base || "./dist/index.html",
-                    isInstalled: true,
-                    isDevLink,
-                    isLinked: isDevLink,
-                    ...(isDevLink ? { installSource: "dev" as const } : {}),
-                } as PanelManifest);
-            } catch (err) {
-                const error = err instanceof Error ? err.message : String(err);
-                logger.error(`[Paperboard Server] panel ${entry} is not listed: its manifest is unreadable or invalid: ${error}`);
-                invalid.push({ id: entry, error });
-            }
-        }
-        return { panels, invalid };
-    }
-
-    /** Panel service children that have not exited. */
-    public runningServiceCount(): number {
-        return this.services.runningCount();
-    }
-
-    // Installs the registry's current release of a panel. The daemon asks
-    // its own registry which release that is and which bytes are right, and
-    // downloads only from the registry: a caller names the panel and may
-    // state what it expects, never where the bytes come from.
-    public async installPanel(
-        panelId: string,
-        expected: ExpectedPanelRelease = {},
-        onProgress?: ProgressCallback,
-    ): Promise<PanelManifest> {
-        const key = `panel:${requirePanelId(panelId)}`;
-        if (this.operations.has(key)) throw new Error(`An operation on ${panelId} is already running`);
-        if (this.operations.size >= 8) throw new LimitError("Too many concurrent installs");
-        this.operations.add(key);
-        try { return await this.installPanelRelease(panelId, expected, onProgress); }
-        finally { this.operations.delete(key); }
-    }
-
-    /** The live workloads a panel started, which an update of the panel stops. */
-    public panelWorkloads(panelId: string): string[] {
-        const cleanId = requirePanelId(panelId);
-        return [...this.clients.keys()].filter((id) => this.clientOwners.get(id) === cleanId);
-    }
-
-    /**
-     * Stop and update: the workloads the given updates wait for stop once
-     * (each owning panel's beforeUpdate first), every staged package swaps
-     * in and every panel release installs, and each owner hears the update
-     * end once (afterUpdate) so it starts them again. A target that fails
-     * does not stop the others: resolves with the panels installed and why
-     * each failed target failed, by target ("panel:<id>", "package:<name>").
-     */
-    public async updateInUse(
-        targets: { panels?: Array<{ id: string; expected?: ExpectedPanelRelease }>; packages?: string[] },
-        onProgress?: (target: string, payload: Parameters<ProgressCallback>[0]) => void,
-    ): Promise<{ installed: PanelManifest[]; failures: Record<string, string> }> {
-        const panels = (targets.panels ?? []).map((p) => ({ id: requirePanelId(p.id), expected: p.expected ?? {} }));
-        const packages = (targets.packages ?? []).map((name) => this.sanitizeIdOrThrow(name, "package"));
-        if (panels.length === 0 && packages.length === 0) throw new Error("Nothing to update");
-        for (const name of packages) {
-            if (!this.stagedPackages.has(name)) throw new Error(`No update of ${name} is waiting`);
-        }
-        const processes = [...new Set([
-            ...panels.flatMap((p) => this.panelWorkloads(p.id)),
-            ...packages.flatMap((name) => this.packageUsers(name).map((u) => u.processId)),
-        ])];
-        const owners = new Map<string, string[]>();
-        for (const id of processes) {
-            const owner = this.clientOwners.get(id);
-            if (owner) owners.set(owner, [...(owners.get(owner) ?? []), id]);
-        }
-        const all = [...panels.map((p) => `panel:${p.id}`), ...packages.map((n) => `package:${n}`)];
-        for (const target of all) onProgress?.(target, { stage: "stopping", percent: 0, message: "Stopping processes" });
-        await this.stopWorkloadsForUpdate(processes);
-        const failures: Record<string, string> = {};
-        const installed: PanelManifest[] = [];
-        for (const name of packages) {
-            const target = `package:${name}`;
-            try {
-                onProgress?.(target, { stage: "extracting", percent: 50, message: "Installing" });
-                await this.applyStagedPackage(name);
-                const left = this.packageUpdateWait(name);
-                if (left?.error) throw new Error(left.error);
-                if (left) throw new Error(`${name} is still in use by ${left.blockedBy.length} process(es) that started during the update`);
-                onProgress?.(target, { stage: "completed", percent: 100, message: "Installed successfully" });
-            } catch (err) {
-                failures[target] = err instanceof Error ? err.message : String(err);
-            }
-        }
-        for (const panel of panels) {
-            const target = `panel:${panel.id}`;
-            try {
-                installed.push(await this.installPanel(panel.id, panel.expected, (payload) => onProgress?.(target, payload)));
-            } catch (err) {
-                failures[target] = err instanceof Error ? err.message : String(err);
-            }
-        }
-        const failed = Object.entries(failures);
-        const error = failed.length ? failed.map(([target, why]) => `${target.slice(target.indexOf(":") + 1)}: ${why}`).join("; ") : undefined;
-        for (const [owner, ids] of owners) {
-            this.services.tellUpdateEnded(owner, { processes: ids, ok: !error, ...(error ? { error } : {}) });
-        }
-        return { installed, failures };
-    }
-
-    // each owning panel's service stops its own first; whatever is still
-    // running then gets a terminate signal and time to exit cleanly
-    private async stopWorkloadsForUpdate(processes: string[]): Promise<void> {
-        const byOwner = new Map<string, string[]>();
-        for (const id of processes) {
-            const owner = this.clientOwners.get(id);
-            if (owner) byOwner.set(owner, [...(byOwner.get(owner) ?? []), id]);
-        }
-        for (const [owner, ids] of byOwner) {
-            try {
-                await this.services.prepareForUpdate(owner, ids);
-            } catch (err) {
-                throw new Error(`${owner} could not stop its processes for the update: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
-            }
-        }
-        for (const id of processes) {
-            const client = this.clients.get(id);
-            if (client) await this.stopOwnedClient(id, client, "SIGTERM", UPDATE_STOP_GRACE_MS);
-        }
-    }
-
-    // the registry record is the authority for the release; any caller
-    // expectation that disagrees with it refuses the install
-    private async resolvePanelRelease(id: string, expected: ExpectedPanelRelease): Promise<{ version: string; sha256: string }> {
-        let raw: any;
-        try {
-            raw = await fetchRegistryRecord(`${this.registryUrl}/panel/${encodeURIComponent(id)}.json`);
-        } catch (err) {
-            throw new Error(`Install refused for "${id}": registry record unavailable (${err instanceof Error ? err.message : String(err)})`);
-        }
-        if (raw?.id !== id) throw new Error(`Install refused for "${id}": the registry record names a different panel`);
-        if (typeof raw.sha256 !== "string" || !/^[a-f0-9]{64}$/i.test(raw.sha256)) {
-            throw new Error(`Install refused for "${id}": registry did not provide a sha256 checksum`);
-        }
-        if (typeof raw.version !== "string" || !raw.version) {
-            throw new Error(`Install refused for "${id}": registry did not provide a version`);
-        }
-        const sha256 = raw.sha256.toLowerCase();
-        // the registry's facts count only when the offline release key
-        // signed them: a registry compromise cannot list its own bytes
-        requireReleaseSignature(releaseMessage.panel(id, raw.version, sha256), raw.signature, `"${id}"`, this.releaseKey);
-        if (expected.sha256 !== undefined && expected.sha256.toLowerCase() !== sha256) {
-            throw new Error(`Install refused for "${id}": the registry now lists different bytes than the release requested`);
-        }
-        if (expected.version !== undefined && expected.version !== raw.version) {
-            throw new Error(`Install refused for "${id}": requested version ${expected.version}, the registry lists ${raw.version}`);
-        }
-        return { version: raw.version, sha256 };
-    }
-
-    private async installPanelRelease(panelId: string, expected: ExpectedPanelRelease, onProgress?: ProgressCallback): Promise<PanelManifest> {
-        const cleanId = requirePanelId(panelId);
-        const release = await this.resolvePanelRelease(cleanId, expected);
-        const downloadUrl = `${this.registryUrl}/panel/${encodeURIComponent(cleanId)}/download`;
-        const targetDir = path.join(this.panelsDir, cleanId);
-
-        if (fs.lstatSync(targetDir, { throwIfNoEntry: false })?.isSymbolicLink()) {
-            throw new Error(`Panel "${cleanId}" is currently symlinked for development. Remove the dev link before installing from registry.`);
-        }
-        if (fs.existsSync(targetDir)) {
-            const version = this.installedPanelVersion(cleanId);
-            if (!version) throw new Error(`Install refused for "${cleanId}": installed manifest has no version`);
-            requireReleaseOrder(release, [{ version }], expected);
-        }
-        const stagingDir = `${targetDir}.staging-${Date.now()}`;
-        const tempArchive = path.join(
-            this.panelsDir,
-            `${cleanId}.tmp-${Date.now()}.tar.gz`,
-        );
-
-        try {
-            onProgress?.({ stage: "downloading", percent: 0, message: "Downloading" });
-            await streamToFileWithProgress(
-                downloadUrl,
-                tempArchive,
-                onProgress,
-                undefined,
-                release.sha256,
-            );
-            onProgress?.({ stage: "extracting", percent: 100, message: "Installing" });
-
-            if (fs.existsSync(stagingDir)) {
-                await fs.promises.rm(stagingDir, {
-                    recursive: true,
-                    force: true,
-                });
-            }
-            fs.mkdirSync(stagingDir, { recursive: true });
-            await this.extractArchive(tempArchive, stagingDir);
-
-            // collapse a single top-level wrapper folder to the root
-            let contentDir = stagingDir;
-            const stagingEntries = fs.readdirSync(stagingDir);
-            if (
-                stagingEntries.length === 1 &&
-                fs.statSync(path.join(stagingDir, stagingEntries[0])).isDirectory()
-            ) {
-                contentDir = path.join(stagingDir, stagingEntries[0]);
-            }
-
-            // the archive must say what it is, and agree with the request
-            // and the registry record, before anything activates
-            const manifestFile = this.findManifestFile(contentDir);
-            if (!manifestFile) {
-                throw new Error(`Install refused for "${cleanId}": the archive has no manifest.json`);
-            }
-            const rawManifest = JSON.parse(await fs.promises.readFile(manifestFile, "utf-8"));
-            if (rawManifest?.id !== cleanId) {
-                throw new Error(`Install refused for "${cleanId}": the archive's manifest names ${JSON.stringify(rawManifest?.id)}`);
-            }
-            if (rawManifest.version !== release.version) {
-                throw new Error(`Install refused for "${cleanId}": the archive is version ${JSON.stringify(rawManifest.version)}, the registry lists ${release.version}`);
-            }
-            const manifest = validatePanelManifest(rawManifest, cleanId);
-
-            await this.services.stopService(cleanId);
-            for (const [id, client] of [...this.clients]) {
-                if (this.clientOwners.get(id) === cleanId) await this.stopOwnedClient(id, client);
-            }
-
-            // atomic swap into place: the live dir is parked only until the
-            // replacement activates. A failed activation removes the new
-            // release and restores the previous one in place; a successful
-            // one leaves no copy behind.
-            const previousDir = path.join(this.panelsDir, `.replaced-${Date.now()}-${cleanId}`);
-            if (fs.existsSync(targetDir)) {
-                await fs.promises.rename(targetDir, previousDir);
-            }
-            try {
-                await moveFileSafe(contentDir, targetDir);
-                if (this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
-            } catch (err) {
-                await this.services.stopService(cleanId);
-                if (fs.existsSync(targetDir)) await fs.promises.rm(targetDir, { recursive: true, force: true });
-                if (fs.existsSync(previousDir)) {
-                    await fs.promises.rename(previousDir, targetDir);
-                    if (this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
-                }
-                throw err;
-            }
-            await fs.promises
-                .rm(previousDir, { recursive: true, force: true })
-                .catch((err) => logger.warn("[engine] previous panel copy could not be removed:", err));
-            await fs.promises
-                .rm(stagingDir, { recursive: true, force: true })
-                .catch((err) => logger.debug("[engine] staging cleanup failed:", err));
-
-
-            return {
-                ...(manifest as PanelManifest),
-                id: manifest.id || cleanId,
-                publisher:
-                    (manifest as any).publisher ||
-                    (manifest as any).author,
-                isInstalled: true,
-            };
-        } catch (err) {
-            await fs.promises
-                .rm(stagingDir, { recursive: true, force: true })
-                .catch((cleanupErr) => logger.debug("[engine] staging cleanup failed:", cleanupErr));
-            throw err;
-        } finally {
-            if (fs.existsSync(tempArchive))
-                await fs.promises.unlink(tempArchive).catch((err) => logger.debug("[engine] archive cleanup failed:", err));
-        }
-    }
-
-    /** Restarts only the panel's service child. Workloads it started through
-     * process:run/terminals are daemon-owned clients and keep running.
-     * Resolves true once the new generation reports ready, false when the
-     * panel declares no service. */
-    public async restartPanelService(panelId: string): Promise<boolean> {
-        const cleanId = requirePanelId(panelId);
-        const key = `panel:${cleanId}`;
-        if (this.operations.has(key)) throw new Error(`An operation on ${cleanId} is already running`);
-        if (!fs.existsSync(path.join(this.panelsDir, cleanId))) throw new Error(`Panel ${cleanId} is not installed`);
-        this.operations.add(key);
-        try {
-            await this.services.stopService(cleanId);
-            if (!this.services.startService(cleanId)) return false;
-            await this.services.waitUntilReady(cleanId);
-            return true;
-        } finally { this.operations.delete(key); }
-    }
-
-    // ─── Panel data, for backups ─────────────────────────────────────────
-
-    /** a panel's backed-up data, relative to the data dir: its file storage
-     * and its config document. Vault secrets are not panel data here. */
-    public panelDataEntries(panelId: string): { files: string; config: string } {
-        const cleanId = requirePanelId(panelId);
-        return {
-            files: path.posix.join("files", panelFilesDirName(cleanId)),
-            config: path.posix.join("configs", this.configFileName(cleanId)),
-        };
-    }
-
-    /** the installed panel's manifest version, null when it declares none */
-    public installedPanelVersion(panelId: string): string | null {
-        const cleanId = requirePanelId(panelId);
-        const manifestFile = this.findManifestFile(path.join(this.panelsDir, cleanId));
-        if (!manifestFile) throw new Error(`Panel ${cleanId} is not installed`);
-        const version = JSON.parse(fs.readFileSync(manifestFile, "utf-8"))?.version;
-        return typeof version === "string" ? version : null;
-    }
-
-    /** runs fn holding the panel's operation lock (install, restart,
-     * uninstall, backup and restore exclude each other) */
-    public async withPanelOperation<T>(panelId: string, fn: () => Promise<T>): Promise<T> {
-        const cleanId = requirePanelId(panelId);
-        const key = `panel:${cleanId}`;
-        if (this.operations.has(key)) throw new RpcError(ErrorCode.CONFLICT, `An operation on ${cleanId} is already running`);
-        this.operations.add(key);
-        try {
-            return await fn();
-        } finally {
-            this.operations.delete(key);
-        }
-    }
-
-    private readonly lifecycleListeners = new Set<(change: MonitorLifecycle) => void>();
-
-    /** Hears every panel service and workload start and exit from now on
-     * (the traffic monitor); returns the unsubscribe. */
-    public onLifecycle(listener: (change: MonitorLifecycle) => void): () => void {
-        this.lifecycleListeners.add(listener);
-        const offServices = this.services.onLifecycle(listener);
-        return () => {
-            this.lifecycleListeners.delete(listener);
-            offServices();
-        };
-    }
-
-    private announceWorkload(id: string, state: "started" | "exited", code?: number | null): void {
-        if (this.lifecycleListeners.size === 0) return;
-        const panel = this.clientOwner(id);
-        for (const listener of this.lifecycleListeners) {
-            try {
-                listener({ type: "workload", id, panel, state, ...(state === "exited" ? { code: code ?? null } : {}) });
-            } catch (err) { logger.error(`[engine] lifecycle listener failed for ${id}`, err); }
-        }
-    }
-
-    private readonly dataDeletedListeners = new Set<(panelId: string) => void | Promise<void>>();
-
-    /** runs `listener` when an uninstall deletes a panel's data; returns the
-     * unsubscribe, which the subscriber calls when it is disposed */
-    public onPanelDataDeleted(listener: (panelId: string) => void | Promise<void>): () => void {
-        this.dataDeletedListeners.add(listener);
-        return () => this.dataDeletedListeners.delete(listener);
-    }
-
-    /** asks the panel's running service to get ready for a backup of its
-     * data, when it takes part; see PanelServicesManager.prepareForBackup */
-    public prepareServiceForBackup(panelId: string, sourceId?: string): Promise<boolean> {
-        return this.services.prepareForBackup(requirePanelId(panelId), sourceId);
-    }
-
-    public prepareServiceForRestore(panelId: string, sourceId?: string): Promise<boolean> {
-        return this.services.prepareForBackup(requirePanelId(panelId), sourceId, 300_000, "restore");
-    }
-
-    /** tells the panel's running service how a backup or restore of its
-     * data ended; see PanelServicesManager.tellBackupEnded */
-    public tellServiceBackupEnded(panelId: string, operation: "backup" | "restore", ended: BackupEnded): void {
-        this.services.tellBackupEnded(requirePanelId(panelId), operation, ended);
-    }
-
-    /** runs fn (a backup copying the panel's data) with the panel's service
-     * stopped, so the copy is not taken mid-write, then starts the service
-     * again if it was running and waits for it to be ready. An optional rollback
-     * runs while stopped if the work or its restart fails, then the original
-     * service is restarted. A service that
-     * does not come back fails the call. Call inside withPanelOperation. */
-    public async withServicePaused<T>(panelId: string, fn: () => Promise<T>, rollback?: () => Promise<void>): Promise<T> {
-        const cleanId = requirePanelId(panelId);
-        const wasActive = this.services.isActive(cleanId);
-        if (wasActive) await this.services.stopService(cleanId);
-        if (rollback) {
-            try {
-                const result = await fn();
-                if (wasActive && this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
-                return result;
-            } catch (err) {
-                try {
-                    await this.services.stopService(cleanId);
-                    await rollback();
-                    if (wasActive && this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
-                } catch (rollbackError) {
-                    throw new Error(`The operation failed (${err instanceof Error ? err.message : String(err)}) and rollback failed (${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)})`, { cause: err });
-                }
-                throw err;
-            }
-        }
-        let result: T;
-        try {
-            result = await fn();
-        } finally {
-            if (wasActive && this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
-        }
-        return result;
-    }
-
-    /**
-     * Replaces a panel's file storage and config document with staged
-     * copies (a restore). The service and the processes the panel owns are
-     * stopped and observed exiting first. The live data is parked only
-     * until the panel is ready on the new data (a service that was not
-     * running stays stopped): a failure puts the parked
-     * data back in place and restarts the panel on it. Call inside
-     * withPanelOperation.
-     */
-    public async replacePanelData(panelId: string, staged: { filesDir: string; configFile: string | null }): Promise<void> {
-        const cleanId = requirePanelId(panelId);
-        if (!fs.existsSync(path.join(this.panelsDir, cleanId))) throw new Error(`Panel ${cleanId} is not installed`);
-        const entries = this.panelDataEntries(cleanId);
-        const liveFiles = path.join(this.appDataDir, entries.files);
-        const liveConfig = path.join(this.appDataDir, entries.config);
-        const stamp = `${Date.now()}`;
-        const parkedFiles = path.join(this.filesDir, `.restore-parked-${stamp}-${path.basename(liveFiles)}`);
-        const parkedConfig = path.join(this.configsDir, `.restore-parked-${stamp}-${path.basename(liveConfig)}`);
-
-        const wasActive = this.services.isActive(cleanId);
-        const hadFiles = fs.existsSync(liveFiles);
-        const hadConfig = fs.existsSync(liveConfig);
-        let parkedFilesDone = false;
-        let parkedConfigDone = false;
-        let installing = false;
-        try {
-            await this.services.stopService(cleanId);
-            for (const [id, client] of [...this.clients]) {
-                if (this.clientOwners.get(id) === cleanId) await this.stopOwnedClient(id, client);
-            }
-            if (hadFiles) {
-                await fs.promises.rename(liveFiles, parkedFiles);
-                parkedFilesDone = true;
-            }
-            if (hadConfig) {
-                await fs.promises.rename(liveConfig, parkedConfig);
-                parkedConfigDone = true;
-            }
-            installing = true;
-            await moveFileSafe(staged.filesDir, liveFiles);
-            if (staged.configFile) await moveFileSafe(staged.configFile, liveConfig);
-            if (wasActive && this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
-        } catch (err) {
-            // anything from the stop onward leaves the previous data in
-            // place and the panel running on it again
-            try {
-                await this.services.stopService(cleanId);
-                if (installing) {
-                    await fs.promises.rm(liveFiles, { recursive: true, force: true });
-                    await fs.promises.rm(liveConfig, { force: true });
-                }
-                if (parkedFilesDone) await fs.promises.rename(parkedFiles, liveFiles);
-                if (parkedConfigDone) await fs.promises.rename(parkedConfig, liveConfig);
-            } catch (rollbackErr) {
-                throw new Error(
-                    `The restore failed (${(err as Error).message}) and the previous data of ${cleanId} could not be put back (${(rollbackErr as Error).message}); it is parked at ${parkedFiles} and ${parkedConfig}`,
-                    { cause: err },
-                );
-            }
-            // the restore's failure is the answer; a panel that also fails
-            // to come back on its own data is logged, not swallowed
-            try {
-                if (wasActive && this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
-            } catch (restartErr) {
-                logger.error(`[engine] ${cleanId} did not restart on its previous data after a failed restore:`, restartErr);
-            }
-            throw err;
-        }
-        await fs.promises
-            .rm(parkedFiles, { recursive: true, force: true })
-            .catch((err) => logger.warn("[engine] parked panel files could not be removed:", err));
-        await fs.promises
-            .rm(parkedConfig, { force: true })
-            .catch((err) => logger.warn("[engine] parked panel config could not be removed:", err));
-    }
-
-    public async uninstallPanel(panelId: string, options?: { deleteData?: boolean }): Promise<void> {
-        const cleanId = requirePanelId(panelId);
-        const key = `panel:${cleanId}`;
-        if (this.operations.has(key)) throw new Error(`An operation on ${cleanId} is already running`);
-        this.operations.add(key);
-        try {
-        await this.services.stopService(cleanId);
-
-        // Resource identity comes from the ownership ledger. Legacy IDs
-        // require an explicit migration; a name is not proof of ownership.
-        for (const [id, client] of this.clients.entries()) {
-            if (this.clientOwners.get(id) === cleanId) {
-                await this.stopOwnedClient(id, client);
-            }
-        }
-
-        const panelDir = path.join(this.panelsDir, cleanId);
-        if (fs.existsSync(panelDir)) {
-            // uninstall removes the code, not the user's data; the workload
-            // is already stopped and its exit observed above
-            await fs.promises.rm(panelDir, { recursive: true, force: true });
-        }
-        // Uninstall removes code, not user data by default. Config, files
-        // and vault entries remain in their restricted stores for a later
-        // reinstall. a removed panel stops authenticating immediately: its
-        // scoped token is revoked, not left lingering in the vault
-        this.services.revokePanel(cleanId);
-        // the packages only this panel used go with it; the panel is gone
-        // either way, so a failure here is logged, not the uninstall's
-        await this.releasePackagesOf(cleanId).catch((err) =>
-            logger.error(`[engine] ${cleanId} is uninstalled, but the packages only it used could not be removed:`, err),
-        );
-
-        if (options?.deleteData === true) {
-            // explicit opt-in: the panel's config document, workspace files
-            // and vault entries are deleted with the code
-            await fs.promises.rm(this.configFileFor(cleanId), { force: true });
-            await fs.promises.rm(path.join(this.filesDir, panelFilesDirName(cleanId)), { recursive: true, force: true });
-            this.credentialsStore.purge(cleanId);
-            // what other owners keep about the panel (its routine backups)
-            // goes with its data; their failure is the uninstall's failure
-            for (const listener of [...this.dataDeletedListeners]) {
-                await listener(cleanId);
-            }
-        }
-        } finally { this.operations.delete(key); }
-    }
-
-    private async stopOwnedClient(id: string, client: SupervisedProcessClient, signal = "SIGTERM", graceMs = 3000): Promise<void> {
-        let exitCode: number | null = null;
-        if (client.isConnected()) {
-            let exited = false;
-            const onExit = (code: number | null) => { exited = true; exitCode = code; };
-            client.on("exit", onExit);
-            try {
-                client.kill(signal);
-                const started = Date.now();
-                let escalated = false;
-                while (!exited) {
-                    if (!escalated && Date.now() - started >= graceMs) { client.kill("SIGKILL"); escalated = true; }
-                    if (Date.now() - started >= graceMs + 3000) throw new Error(`Process ${id} did not stop; removal refused`);
-                    await new Promise((resolve) => setTimeout(resolve, 25));
-                }
-            } finally { client.off("exit", onExit); }
-        }
-        client.destroy();
-        this.clients.delete(id);
-        this.workloadEnded(id, exitCode);
-    }
-
     public async getConfig(id: string, configPath?: string): Promise<any> {
         // service-owned boundary: traversal ids throw before touching disk
-        this.sanitizeIdOrThrow(id, "config");
+        sanitizeIdOrThrow(id, "config");
         const file = this.configFileFor(id, configPath);
         if (!fs.existsSync(file)) return null;
         try {
@@ -2184,7 +332,7 @@ export class PaperCraneEngine {
 
     public async setConfig(id: string, data: any, configPath?: string): Promise<boolean> {
         // service-owned boundary: traversal ids throw before touching disk
-        this.sanitizeIdOrThrow(id, "config");
+        sanitizeIdOrThrow(id, "config");
         // bounded payload: config is small structured state, never a blob
         // store — 1 MiB serialized refuses before the atomic write
         const serialized = JSON.stringify(data, null, 2);
@@ -2218,5 +366,124 @@ export class PaperCraneEngine {
 
     public purgeSecrets(panelId: string): number {
         return this.credentialsStore.purge(panelId);
+    }
+
+    public async extractArchive(archivePath: string, destDir: string): Promise<void> {
+        return extractArchive(archivePath, destDir);
+    }
+
+    // ─── workloads (engineWorkloads.ts) ─────────────────────────────────
+
+    public createTerminal(
+        id: string,
+        options: { cols?: number; rows?: number; cwd?: string; env?: Record<string, string>; shell?: string },
+        streams: TerminalStreams,
+        subscriber?: object,
+    ): Promise<void> {
+        return this.workloads.createTerminal(id, options, streams, subscriber);
+    }
+    public writeTerminal(id: string, data: string): void { this.workloads.writeTerminal(id, data); }
+    public terminalState(id: string): { foreground: string; cwd: string } { return this.workloads.terminalState(id); }
+    public resizeTerminal(id: string, cols: number, rows: number): void { this.workloads.resizeTerminal(id, cols, rows); }
+    public destroyTerminal(id: string): Promise<void> { return this.workloads.destroyTerminal(id); }
+    public attachTerminal(id: string, subscriber: object, streams: TerminalStreams): Promise<boolean> {
+        return this.workloads.attachTerminal(id, subscriber, streams);
+    }
+    public isTerminalRunning(id: string): Promise<boolean> { return this.workloads.isTerminalRunning(id); }
+    public runProcess(
+        id: string, command: string, args: string[] = [], cwd?: string, env?: Record<string, string>,
+        onData?: (data: string) => void, onStdout?: (data: string) => void, onStderr?: (data: string) => void,
+    ): Promise<{ exitCode: number | null }> {
+        return this.workloads.runProcess(id, command, args, cwd, env, onData, onStdout, onStderr);
+    }
+    public startProcess(
+        id: string, command: string, args: string[] = [], cwd?: string, env?: Record<string, string>,
+        onData?: (data: string) => void, onStdout?: (data: string) => void, onStderr?: (data: string) => void,
+        options: { stdin?: boolean; inputEncoding?: InputEncoding; consoleInput?: boolean; important?: boolean; subscriber?: object; onExit?: (exitCode: number | null) => void } = {},
+    ): Promise<{ completion: Promise<{ exitCode: number | null }> }> {
+        return this.workloads.startProcess(id, command, args, cwd, env, onData, onStdout, onStderr, options);
+    }
+    public writeProcess(id: string, data: string): void { this.workloads.writeProcess(id, data); }
+    public closeProcessInput(id: string): void { this.workloads.closeProcessInput(id); }
+    public killProcess(id: string, signal = "SIGTERM"): Promise<void> { return this.workloads.killProcess(id, signal); }
+    public isProcessRunning(id: string): Promise<boolean> { return this.workloads.isProcessRunning(id); }
+    public attachProcess(
+        id: string, subscriber: object,
+        onData?: (data: string) => void, onStdout?: (data: string) => void, onStderr?: (data: string) => void, onExit?: (exitCode: number | null) => void,
+    ): Promise<boolean> {
+        return this.workloads.attachProcess(id, subscriber, onData, onStdout, onStderr, onExit);
+    }
+    public detachStreams(subscriber: object): void { this.workloads.detachStreams(subscriber); }
+    public setClientOwner(id: string, owner: string | null): void { this.workloads.setClientOwner(id, owner); }
+    public reserveClientOwner(id: string, owner: string | null): { commit(): void; undo(): void } { return this.workloads.reserveClientOwner(id, owner); }
+    public clientOwner(id: string): string | null { return this.workloads.clientOwner(id); }
+    public holdsUpdates(id: string): boolean { return this.workloads.holdsUpdates(id); }
+    public panelWorkloads(panelId: string): string[] { return this.workloads.panelWorkloads(panelId); }
+    /** Each live workload's supervisor process and the panel that created it (null: the host). */
+    public workloadRoots(): Array<{ owner: string | null; pid: number }> { return this.workloads.workloadRoots(); }
+    public recoverRunningSupervisors(): Promise<void> { return this.workloads.recoverRunningSupervisors(); }
+    public disposeClients(graceMs = 5000): Promise<void> { return this.workloads.disposeClients(graceMs); }
+    public releaseAllClients(): void { this.workloads.releaseAllClients(); }
+    public killAllClients(): void { this.workloads.killAllClients(); }
+
+    /** Hears every panel service and workload start and exit from now on
+     * (the traffic monitor); returns the unsubscribe. */
+    public onLifecycle(listener: (change: MonitorLifecycle) => void): () => void {
+        const offWorkloads = this.workloads.onLifecycle(listener);
+        const offServices = this.services.onLifecycle(listener);
+        return () => {
+            offWorkloads();
+            offServices();
+        };
+    }
+
+    // ─── runtime packages (enginePackages.ts) ───────────────────────────
+
+    public isPackageInstalled(packageName: string, version?: string): boolean { return this.packages.isPackageInstalled(packageName, version); }
+    public getPackageIndex(): Record<string, any> { return this.packages.getPackageIndex(); }
+    public getPackagePath(packageName: string): string { return this.packages.getPackagePath(packageName); }
+    public recordPackageUse(packageName: string, panelId: string): void { this.packages.recordPackageUse(packageName, panelId); }
+    public pendingPackageUpdates(): PackageUpdateWait[] { return this.packages.pendingPackageUpdates(); }
+    public applyReadyStagedPackages(): Promise<void> { return this.packages.applyReadyStagedPackages(); }
+    public downloadPackage(packageName: string, onProgress?: ProgressCallback, expectedSha256?: string, options: { allowDowngrade?: boolean } = {}): Promise<PackageInstallOutcome> {
+        return this.packages.downloadPackage(packageName, onProgress, expectedSha256, options);
+    }
+
+    // ─── panels (enginePanels.ts) and their services ────────────────────
+
+    public listPanels(): Promise<{ panels: PanelManifest[]; invalid: Array<{ id: string; error: string }> }> { return this.panels.listPanels(); }
+    public installPanel(panelId: string, expected: ExpectedPanelRelease = {}, onProgress?: ProgressCallback): Promise<PanelManifest> {
+        return this.panels.installPanel(panelId, expected, onProgress);
+    }
+    public updateInUse(...args: Parameters<PanelInstaller["updateInUse"]>): ReturnType<PanelInstaller["updateInUse"]> { return this.panels.updateInUse(...args); }
+    public restartPanelService(panelId: string): Promise<boolean> { return this.panels.restartPanelService(panelId); }
+    public uninstallPanel(panelId: string, options?: { deleteData?: boolean }): Promise<void> { return this.panels.uninstallPanel(panelId, options); }
+    public installedPanelVersion(panelId: string): string | null { return this.panels.installedPanelVersion(panelId); }
+    public panelDataEntries(panelId: string): { files: string; config: string } { return this.panels.panelDataEntries(panelId); }
+    public withPanelOperation<T>(panelId: string, fn: () => Promise<T>): Promise<T> { return this.panels.withPanelOperation(panelId, fn); }
+    public withServicePaused<T>(panelId: string, fn: () => Promise<T>, rollback?: () => Promise<void>): Promise<T> {
+        return this.panels.withServicePaused(panelId, fn, rollback);
+    }
+    public replacePanelData(panelId: string, staged: { filesDir: string; configFile: string | null }): Promise<void> {
+        return this.panels.replacePanelData(panelId, staged);
+    }
+    public onPanelDataDeleted(listener: (panelId: string) => void | Promise<void>): () => void { return this.panels.onPanelDataDeleted(listener); }
+
+    /** Panel service children that have not exited. */
+    public runningServiceCount(): number { return this.services.runningCount(); }
+    /** Each running panel service's process, by panel. */
+    public serviceRoots(): Array<{ panelId: string; pid: number }> { return this.services.processRoots(); }
+    /** asks the panel's running service to get ready for a backup of its
+     * data, when it takes part; see PanelServicesManager.prepareForBackup */
+    public prepareServiceForBackup(panelId: string, sourceId?: string): Promise<boolean> {
+        return this.services.prepareForBackup(requirePanelId(panelId), sourceId);
+    }
+    public prepareServiceForRestore(panelId: string, sourceId?: string): Promise<boolean> {
+        return this.services.prepareForBackup(requirePanelId(panelId), sourceId, 300_000, "restore");
+    }
+    /** tells the panel's running service how a backup or restore of its
+     * data ended; see PanelServicesManager.tellBackupEnded */
+    public tellServiceBackupEnded(panelId: string, operation: "backup" | "restore", ended: BackupEnded): void {
+        this.services.tellBackupEnded(requirePanelId(panelId), operation, ended);
     }
 }

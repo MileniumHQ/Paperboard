@@ -244,6 +244,38 @@ describe("unreadable state is quarantined", () => {
 			expect(fs.existsSync(path.join(packages, ".replaced-1-node"))).toBe(false);
 		}, dir);
 	});
+
+	test("a panel install or restore a crash interrupted is put back, or its leftover removed, on the next start", async () => {
+		const dir = dataDir();
+		// a crash after parking the previous release, before the new one moved in
+		const parkedRelease = path.join(dir, "panels", ".replaced-1-test.interrupted");
+		await installPanelFiles(dir, { id: "test.interrupted", version: "1.0.0" });
+		fs.renameSync(path.join(dir, "panels", "test.interrupted"), parkedRelease);
+		// a crash while the new release got ready: the previous one is left over
+		await installPanelFiles(dir, { id: "test.updated", version: "2.0.0" });
+		fs.mkdirSync(path.join(dir, "panels", ".replaced-1-test.updated"));
+		fs.writeFileSync(path.join(dir, "panels", ".replaced-1-test.updated", "manifest.json"), JSON.stringify({ id: "test.updated", version: "1.0.0" }));
+		// a restore that parked the panel's data before the backup's moved in
+		fs.mkdirSync(path.join(dir, "files", ".restore-parked-1-test.interrupted"), { recursive: true });
+		fs.writeFileSync(path.join(dir, "files", ".restore-parked-1-test.interrupted", "world.dat"), "the user's world");
+		fs.writeFileSync(path.join(dir, "configs", ".restore-parked-1-test.interrupted.json"), JSON.stringify({ kept: true }));
+		// a restore whose data moved in while the panel got ready
+		fs.mkdirSync(path.join(dir, "files", "test.updated"), { recursive: true });
+		fs.writeFileSync(path.join(dir, "files", "test.updated", "world.dat"), "restored");
+		fs.mkdirSync(path.join(dir, "files", ".restore-parked-1-test.updated"));
+		fs.writeFileSync(path.join(dir, "files", ".restore-parked-1-test.updated", "world.dat"), "before the restore");
+
+		await withDaemon(async (daemon) => {
+			const host = await daemon.rpc();
+			const listed = await host.ok("panel:list");
+			expect(listed.panels.map((p: { id: string; version: string }) => `${p.id}@${p.version}`).sort()).toEqual(["test.interrupted@1.0.0", "test.updated@2.0.0"]);
+			await host.close();
+		}, dir);
+		expect(fs.readFileSync(path.join(dir, "files", "test.interrupted", "world.dat"), "utf8")).toBe("the user's world");
+		expect(JSON.parse(fs.readFileSync(path.join(dir, "configs", "test.interrupted.json"), "utf8"))).toEqual({ kept: true });
+		expect(fs.readFileSync(path.join(dir, "files", "test.updated", "world.dat"), "utf8")).toBe("restored");
+		expect(listTree(dir).filter((f) => /\.replaced-|\.restore-parked-/.test(f))).toEqual([]);
+	});
 });
 
 // Vault behaviour.

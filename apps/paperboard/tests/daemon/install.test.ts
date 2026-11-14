@@ -27,7 +27,7 @@ const panelEntries = (dir: string, id: string) => fs.readdirSync(path.join(dir, 
 // the in-process daemon's engine, pointed at the loopback registry and fixture key
 // (what the engine constructor takes in tests; the daemon builds its engine itself)
 function useFixtureRegistry(daemon: InProcessDaemon) {
-	Object.assign(daemon.instance.engine as unknown as Record<string, unknown>, { registryUrl: origami.url, releaseKey: FIXTURE_PUBLIC_KEY });
+	Object.assign((daemon.instance.engine as unknown as { registry: object }).registry, { url: origami.url, key: FIXTURE_PUBLIC_KEY });
 }
 
 // a service that records each start and answers `version`
