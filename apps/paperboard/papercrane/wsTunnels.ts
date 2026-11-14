@@ -1,7 +1,9 @@
 // Tunnels from one RPC socket to paired remotes: the upstream handshake
 // (auth, then a scope grant for a panel socket), the heartbeat that notices
 // a remote gone quiet, and forwarding frames both ways.
+import * as path from "path";
 import { WebSocket } from "ws";
+import { getLocalDir } from "./paths";
 import { readRemotes } from "./remotes";
 import { pinnedTlsOptions } from "./pinnedTls";
 import { pinnableWebSocket } from "./pinnableWebSocket";
@@ -17,6 +19,8 @@ const MAX_TUNNELS_PER_SOCKET = 32;
 const TUNNEL_HEARTBEAT_MS = 15_000;
 
 export interface TunnelOptions {
+    /** the paired-computers file; a standalone daemon (papercrane serve, the
+     *  systemd service) reads the one in its own data folder */
     remotesFile?: string;
     /** upstream ping interval for remote tunnels (tests shorten it) */
     tunnelHeartbeatMs?: number;
@@ -106,7 +110,7 @@ export function socketTunnels(ws: WebSocket, identity: SocketIdentity, options: 
         // when it is unambiguous — with two remotes sharing a name,
         // first-match-wins could tunnel to the wrong machine, so refuse
         // instead of guessing.
-        const candidates = readRemotes(options.remotesFile).filter(
+        const candidates = readRemotes(options.remotesFile ?? path.join(getLocalDir(), "paired_computers.json")).filter(
             (r) => r.id === computerId || r.name === computerId,
         );
         const entry =

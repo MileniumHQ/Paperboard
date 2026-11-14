@@ -12,8 +12,7 @@ export interface RemoteEntry {
     isLocal?: boolean;
 }
 
-export function readRemotes(file: string | undefined): RemoteEntry[] {
-    if (!file) return [];
+export function readRemotes(file: string): RemoteEntry[] {
     // trust-relevant state (a pairing holds a pinned certificate) is never
     // read as "no paired computers": the shared state reader quarantines
     // unparseable bytes beside the file and refuses unreadable files, so

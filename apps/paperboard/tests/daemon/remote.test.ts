@@ -13,7 +13,7 @@ import { pinnedTlsOptions } from "../../papercrane/pinnedTls";
 import { createTlsIdentity } from "../../papercrane/tlsIdentity";
 import { setupWebSocketServer } from "../../papercrane/ws";
 import { PaperCraneClient } from "../../src/main/communication/papercrane/PaperCraneClient";
-import { dataDir, modeOf, tempDir } from "./support/fs";
+import { dataDir, modeOf, restoreEnv, tempDir } from "./support/fs";
 import { type InProcessDaemon, request, startDaemon, stopDaemon } from "./support/inproc";
 import { Rpc } from "./support/rpc";
 import { TEST_TIMEOUT_MS, waitFor } from "./support/wait";
@@ -218,7 +218,9 @@ describe("paired computers", () => {
 
 // The local daemon whose sockets open tunnels: the real WS server and auth,
 // with the tunnel heartbeat shortened.
-async function tunnelHost(remotes: unknown[]) {
+// `standalone` passes no remotesFile, as `papercrane serve` and the systemd
+// service do: the daemon must find the file in its own data folder.
+async function tunnelHost(remotes: unknown[], { standalone = false } = {}) {
 	const dir = dataDir();
 	const remotesFile = path.join(dir, "local", "paired_computers.json");
 	fs.writeFileSync(remotesFile, JSON.stringify({ computers: remotes }));
@@ -228,12 +230,13 @@ async function tunnelHost(remotes: unknown[]) {
 	auth.injectToken(hostToken, "host");
 	const server = http.createServer();
 	const wss = new WebSocketServer({ server });
-	setupWebSocketServer(wss, engine, auth, { remotesFile, tunnelHeartbeatMs: 100 });
+	setupWebSocketServer(wss, engine, auth, { ...(standalone ? {} : { remotesFile }), tunnelHeartbeatMs: 100 });
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 	const url = `ws://127.0.0.1:${(server.address() as net.AddressInfo).port}`;
 	return {
 		auth,
 		url,
+		remotesFile,
 		host: () => Rpc.authed(url, hostToken),
 		socket: (token: string) => Rpc.authed(url, token),
 		close: async () => {
@@ -328,6 +331,20 @@ describe("tunnels and scoped credentials", () => {
 			owner.send({ type: "action_reply", callId: call.callId, result: "genuine" });
 			expect((await answer).result).toEqual({ result: "genuine" });
 		} finally {
+			await local.close();
+		}
+	});
+
+	test("a standalone daemon tunnels to the computers paired in its own data folder", async () => {
+		const local = await tunnelHost([{ id: "far", name: "Far", host: "127.0.0.1", port: remote.port, cert: remoteCert, token: remoteToken }], { standalone: true });
+		const previous = process.env.PAPERBOARD_DIR;
+		process.env.PAPERBOARD_DIR = path.dirname(path.dirname(local.remotesFile));
+		try {
+			const host = await local.host();
+			host.send({ type: "remote:open", tunnelId: "s1", computerId: "far" });
+			await tunnelOpen(host, "s1");
+		} finally {
+			restoreEnv("PAPERBOARD_DIR", previous);
 			await local.close();
 		}
 	});
