@@ -1,4 +1,5 @@
 // Privileged shell-only IPC; panels speak PaperCrane directly over WebSocket.
+import { onCleanup } from "solid-js";
 import { panelPath } from "@mileniumhq/paperapi";
 import { createBrowserBridge, type ShellIpc } from "./browserBridge";
 import type { LaunchOptions } from "../../../shared/launchOptions";
@@ -62,6 +63,36 @@ export function shellIpc(): ShellIpc {
     if (electron) return electron as unknown as ShellIpc;
     browserBridge ??= createBrowserBridge();
     return browserBridge;
+}
+
+/**
+ * A state main keeps and pushes on `channel` whenever it changes, read once
+ * by invoking `channel`: `accept` gets the read and each push, except one
+ * older than `current()` (a push and the read travel separately) and any
+ * after the owner is disposed. `failed` gets why the read failed. Called
+ * where onCleanup reaches the owner, such as onMount.
+ */
+export function subscribeRevisioned<T extends { revision: number }>(
+    channel: string,
+    current: () => T,
+    accept: (next: T) => void,
+    failed: (err: unknown) => void,
+): void {
+    const ipc = shellIpc();
+    let disposed = false;
+    const take = (next: T) => {
+        if (disposed || next.revision < current().revision) return;
+        accept(next);
+    };
+    const handler = (_: unknown, next: T) => take(next);
+    ipc.on(channel, handler);
+    onCleanup(() => {
+        disposed = true;
+        ipc.removeListener(channel, handler);
+    });
+    void ipc.invoke<T>(channel).then(take).catch((err) => {
+        if (!disposed) failed(err);
+    });
 }
 
 const requireIpc = shellIpc;

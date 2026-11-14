@@ -1,8 +1,8 @@
-import { createSignal, onMount, onCleanup } from "solid-js";
+import { createSignal, onMount } from "solid-js";
 import { showToast } from "@mileniumhq/paperui";
 import { initialUpdateQueueState, type UpdateItem, type UpdateQueueState } from "../../../shared/updateQueue";
 import { errorMessage } from "../lib/errorMessage";
-import { isBrowserShell, shellIpc } from "../lib/shell";
+import { isBrowserShell, shellIpc, subscribeRevisioned } from "../lib/shell";
 
 /** where an update ran, for messages: "" on this computer */
 export function updateWhere(item: { computerName: string | null }): string {
@@ -39,23 +39,15 @@ export function useUpdateQueue() {
     onMount(() => {
         // browser mode runs no updates: they happen when Paperboard next runs as a window
         if (isBrowserShell()) return;
-        const ipc = shellIpc();
-        let disposed = false;
-        const accept = (next: UpdateQueueState) => {
-            if (disposed || next.revision < state().revision) return;
-            tellFailures(next);
-            setState(next);
-        };
-        const handler = (_: unknown, next: UpdateQueueState) => accept(next);
-        ipc.on("update-queue", handler);
-        onCleanup(() => {
-            disposed = true;
-            ipc.removeListener("update-queue", handler);
-        });
-        void ipc.invoke<UpdateQueueState>("update-queue").then(accept).catch((err) => {
-            if (disposed) return;
-            showToast({ variant: "danger", title: "Couldn't read the update list", message: errorMessage(err) });
-        });
+        subscribeRevisioned<UpdateQueueState>(
+            "update-queue",
+            state,
+            (next) => {
+                tellFailures(next);
+                setState(next);
+            },
+            (err) => showToast({ variant: "danger", title: "Couldn't read the update list", message: errorMessage(err) }),
+        );
     });
 
     /** Stop and update, for held updates on one computer: rejects with why it could not run */
