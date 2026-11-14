@@ -1,30 +1,18 @@
 import { jsonResponse, type Env } from "../lib";
 import { handleInstallRoutes } from "./install";
+import { DOWNLOAD_HOST, FILE_SEGMENT, GH_REPO, VERSION_SEGMENT } from "../downloadUrl";
 
 // Versioned binary downloads. Binaries live on GitHub Releases; Origami
 // only 302-redirects to them and serves the small metadata (latest.yml
-// feeds) from R2. It never proxies bytes.
-//
-// Canonical facts duplicated in scripts/publishLib.ts
-// (the worker cannot import scripts): DOWNLOAD_HOST, GH_REPO, the
-// /<app>/<version|latest>/<file> redirect contract, VERSION_SEGMENT,
-// FILE_SEGMENT, the v<version> tag scheme (one release holds both apps'
-// assets), and the canonical asset names below. Change both sides together.
-export const DOWNLOAD_HOST = "i.paperboard.dev";
-const GH_REPO = "MileniumHQ/Paperboard";
+// feeds) from R2. It never proxies bytes. The URL shape is shared with the
+// publisher (../downloadUrl.ts); the canonical asset names below are
+// scripts/publishLib.ts's too.
 
 // URL path segments: "pb" is the Paperboard app, "crane" the server.
 const DL_APPS = new Set(["pb", "crane"]);
 // electron-updater channel files, one per scripts/publishLib.ts ymlKeyFor
 // feed. Linux arm64 AppImages request latest-linux-arm64.yml.
 const PB_FEEDS = new Set(["latest.yml", "latest-mac.yml", "latest-linux.yml", "latest-linux-arm64.yml"]);
-
-// A version or filename sits inside a URL path slot here and inside the
-// redirect target, so neither may contain "/", whitespace, "%", "?", or
-// "#". "latest" matches VERSION_SEGMENT on purpose — the router checks the
-// alias before the versioned route.
-const VERSION_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._+\-]{0,63}$/;
-const FILE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._\-]{0,127}$/;
 
 export function isDownloadHost(hostname: string): boolean {
     return hostname.toLowerCase() === DOWNLOAD_HOST;
@@ -166,8 +154,8 @@ async function serveR2Sums(env: Env): Promise<Response> {
 }
 
 // i.paperboard.dev is downloads-only: the install scripts, feeds, short
-// download routes, and nothing else. Every other path falls through to the host's 404, so the
-// registry, panels, java, and publish routes are unreachable here.
+// download routes, and nothing else. Every other path falls through to the
+// host's 404, so the registry and panel routes are unreachable here.
 export async function handleDownloadHostRoutes(
     request: Request,
     env: Env,
@@ -212,12 +200,23 @@ function legacyRedirectTarget(
     return null;
 }
 
+// a legacy download moves to its canonical file's "latest" alias, which
+// moves with every release, so the redirect is never cached
+function legacyRedirect(target: { seg: string; file: string }): Response {
+    return new Response(null, {
+        status: 302,
+        headers: {
+            Location: `https://${DOWNLOAD_HOST}/${target.seg}/latest/${target.file}`,
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-cache",
+        },
+    });
+}
+
 export async function handlePaperdlRoutes(
     request: Request,
     env: Env,
-    _url: URL,
     pathname: string,
-    _bucket: R2Bucket | undefined,
 ): Promise<Response | null> {
     // New versioned scheme, mirroring i.paperboard.dev under /paperdl/.
     const scheme = pathname.match(/^\/paperdl\/(pb|crane)(\/.*)?$/);
@@ -256,14 +255,7 @@ export async function handlePaperdlRoutes(
                 const leg = sub.match(/^\/([A-Za-z0-9_\-]+)\/download(?:\/.*)?$/);
                 if (leg && leg[1]) {
                     const r = legacyRedirectTarget("crane", leg[1]);
-                    if (r) {
-                        const headers = new Headers({
-                            Location: `https://${DOWNLOAD_HOST}/${r.seg}/latest/${r.file}`,
-                            "Access-Control-Allow-Origin": "*",
-                            "Cache-Control": "no-cache",
-                        });
-                        return new Response(null, { status: 302, headers });
-                    }
+                    if (r) return legacyRedirect(r);
                 }
             }
             return redir;
@@ -302,12 +294,7 @@ export async function handlePaperdlRoutes(
         if (request.method === "GET" && dlMatch && dlMatch[1]) {
             const redir = legacyRedirectTarget(app, dlMatch[1]);
             if (!redir) return jsonResponse({ error: "Not found" }, 404);
-            const headers = new Headers({
-                Location: `https://${DOWNLOAD_HOST}/${redir.seg}/latest/${redir.file}`,
-                "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "no-cache",
-            });
-            return new Response(null, { status: 302, headers });
+            return legacyRedirect(redir);
         }
     }
 

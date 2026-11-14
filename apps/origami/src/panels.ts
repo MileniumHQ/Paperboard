@@ -1,4 +1,4 @@
-import { isPanelId } from "../../../packages/paperapi/src/panelIdentity";
+import { UnreadableRecordError } from "./recordError";
 import type { StoreListing } from "../../../packages/paperapi/src/storeListing";
 
 export interface PanelRecord {
@@ -6,12 +6,10 @@ export interface PanelRecord {
     name: string;
     version: string;
     description?: string;
-    // O11: publisher-supplied icon URLs are refused at publish — icons are
-    // hosted by the registry (iconUrl) or absent. The field is kept in the
-    // type only because old deployed records may still carry it; new
-    // records never write it.
-    icon?: string;
+    /** the registry-hosted icon's address; set exactly when `iconKey` is */
     iconUrl?: string;
+    /** the R2 object the icon route serves: only this release's icon, never an older one's */
+    iconKey?: string;
     downloadUrl?: string;
     archiveKey?: string;
     sha256?: string;
@@ -20,7 +18,6 @@ export interface PanelRecord {
     signature?: string;
     sizeBytes?: number;
     updatedAt?: string;
-    trashedAt?: string;
     /** taken off the store: out of `panels:index`, but the record and its archive stay for the installs that have it */
     unlistedAt?: string;
     author?: string;
@@ -39,10 +36,6 @@ export const PANELS_INDEX_KEY = "panels:index";
 // quotes/control chars break the download header. One validator, both
 // fields, enforced at the publish boundary — never at read time.
 const VERSION_PATTERN = /^[a-zA-Z0-9._+-]+$/;
-
-export function isValidPanelId(id: unknown): id is string {
-    return isPanelId(id);
-}
 
 export function isValidPanelVersion(version: unknown): version is string {
     return typeof version === "string" && version.length >= 1 &&
@@ -81,16 +74,19 @@ async function listRecordsByPrefix(
         );
 
         for (const record of records) {
-            if (walked >= MAX_WALK_KEYS) break;
             // an unlisted panel stays out of the store even when the index is rebuilt from the records
-            if (record && record.id && !record.unlistedAt) {
-                index[record.id] = record;
-                walked++;
+            if (!record || !record.id || record.unlistedAt) continue;
+            if (walked === MAX_WALK_KEYS) {
+                // the store quietly loses every panel past this point unless someone hears of it
+                console.error(`[origami] the panels index walk stopped at ${MAX_WALK_KEYS} panels; the rest are missing from the store`);
+                return;
             }
+            index[record.id] = record;
+            walked++;
         }
 
         cursor = listResult.list_complete ? undefined : listResult.cursor;
-    } while (cursor && walked < MAX_WALK_KEYS);
+    } while (cursor);
 }
 
 export async function getPanelsIndex(
@@ -114,15 +110,6 @@ export async function getPanelsIndex(
     return index;
 }
 
-// A record that exists but can't be read. The message is the caller's
-// answer: it names the panel, never the KV error behind it (O9).
-export class UnreadablePanelError extends Error {
-    constructor(id: string) {
-        super(`The registry record for ${id} could not be read`);
-        this.name = "UnreadablePanelError";
-    }
-}
-
 // null only when there is no record: a record that can't be read is not a
 // panel that doesn't exist, and answering 404 for it would tell the updater
 // the panel was never published
@@ -135,18 +122,24 @@ export async function getPanel(
         record = await kv.get(`${PANEL_KEY_PREFIX}${id}`, { type: "json" });
     } catch (err) {
         console.error(`[origami] panel read failed for ${id}:`, err);
-        throw new UnreadablePanelError(id);
+        throw new UnreadableRecordError(id);
     }
     if (record === null) return null;
     if (typeof record !== "object" || Array.isArray(record)) {
         console.error(`[origami] panel record for ${id} is not an object`);
-        throw new UnreadablePanelError(id);
+        throw new UnreadableRecordError(id);
     }
     return record as PanelRecord;
 }
 
-// Media keys are shared by the write path (panelPublish.ts, operator-side)
-// and the read route; one definition so they cannot drift.
+// Media and icon keys are shared by the write path (panelPublish.ts,
+// operator-side) and the read routes; one definition so they cannot drift.
 export function storeMediaPrefix(panelId: string): string {
     return `panels/${panelId}/media/`;
+}
+
+// per release, like the media: a new release's icon never overwrites the
+// one an older record still names
+export function iconKey(panelId: string, version: string, ext: string): string {
+    return `panels/${panelId}/icons/${version}.${ext}`;
 }

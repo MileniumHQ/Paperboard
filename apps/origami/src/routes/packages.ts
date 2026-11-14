@@ -1,11 +1,22 @@
 import { jsonResponse, type Env } from "../lib";
+import { UnreadableRecordError } from "../recordError";
+
+// A package record daemons install from. One that isn't JSON is a broken
+// record, never a string to hand them: it fails the request, naming the
+// package, with the detail in the logs.
+async function readPackage(kv: KVNamespace, name: string): Promise<unknown> {
+    try {
+        return await kv.get(name, { type: "json" });
+    } catch (err) {
+        console.error(`[origami] package record ${name} could not be read:`, err);
+        throw new UnreadableRecordError(name);
+    }
+}
 
 export async function handlePackagesRoutes(
     request: Request,
     env: Env,
-    _url: URL,
     pathname: string,
-    _bucket: R2Bucket | undefined,
 ): Promise<Response | null> {
     if (
         pathname === "/package/index.json" ||
@@ -57,23 +68,7 @@ export async function handlePackagesRoutes(
                 );
 
             const values = await Promise.all(
-                keys.map(async (key) => {
-                    try {
-                        const val = await env.PACKAGES.get(key, {
-                            type: "json",
-                        });
-                        return { key, val };
-                    } catch (err) {
-                        console.warn(
-                            `[origami] package index: JSON read failed for ${key}, falling back to text:`,
-                            err instanceof Error ? err.message : String(err),
-                        );
-                        const textVal = await env.PACKAGES.get(key, {
-                            type: "text",
-                        });
-                        return { key, val: textVal };
-                    }
-                }),
+                keys.map(async (key) => ({ key, val: await readPackage(env.PACKAGES, key) })),
             );
 
             for (const { key, val } of values) {
@@ -116,20 +111,7 @@ export async function handlePackagesRoutes(
             );
         }
 
-        let pkgData: unknown = null;
-        try {
-            pkgData = await env.PACKAGES.get(packageName, {
-                type: "json",
-            });
-        } catch (err) {
-            console.warn(
-                `[origami] package ${packageName}: JSON read failed, falling back to text:`,
-                err instanceof Error ? err.message : String(err),
-            );
-            pkgData = await env.PACKAGES.get(packageName, {
-                type: "text",
-            });
-        }
+        const pkgData = await readPackage(env.PACKAGES, packageName);
 
         if (pkgData === null || pkgData === undefined) {
             return jsonResponse(

@@ -153,6 +153,17 @@ describe("the worker is read-only and its indexes are faithful", () => {
         // a panel that was never published is still a 404
         expect((await request("/panel/dev.example.never.json")).status).toBe(404);
     });
+
+    test("an unreadable package record answers 500 naming it, never its raw text", async () => {
+        registry.kv.setJson("ollama", { name: "ollama", version: "0.9.0", platforms: {} });
+        registry.kv.values.set("java-21", '{ "name": "java-21", "platforms": ');
+        for (const route of ["/package/java-21.json", "/package/index.json"]) {
+            const res = await request(route);
+            expect({ route, status: res.status }).toEqual({ route, status: 500 });
+            expect((await res.json()) as object).toEqual({ error: "The registry record for java-21 could not be read" });
+        }
+        expect((await request("/package/ollama.json")).status).toBe(200);
+    });
 });
 
 // Panel id and version are validated before any write.
@@ -258,7 +269,7 @@ describe("publisher-supplied content cannot gain library authority", () => {
         );
         const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
         await publishPanel(upload("dev.example.clock", "1.0.0", { icon: { name: "logo.svg", bytes: svg } }), ctx);
-        expect(registry.panels.objects.get("panels/dev.example.clock/icon.svg")?.contentType).toBe("image/svg+xml");
+        expect(registry.panels.objects.get("panels/dev.example.clock/icons/1.0.0.svg")?.contentType).toBe("image/svg+xml");
     });
 
     test("icons are served sandboxed and unsniffable", async () => {
@@ -272,6 +283,21 @@ describe("publisher-supplied content cannot gain library authority", () => {
             expect(res.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
             expect(res.headers.get("x-content-type-options")).toBe("nosniff");
         }
+    });
+
+    test("a release serves its own icon: a new format replaces the old one, and no icon serves none", async () => {
+        const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        const icon = async () => {
+            const res = await request("/panel/dev.example.clock/icon");
+            return res.status === 200 ? res.headers.get("content-type") : res.status;
+        };
+        await publishPanel(upload("dev.example.clock", "1.0.0", { icon: { name: "icon.png", bytes: png } }), ctx);
+        expect(await icon()).toBe("image/png");
+        await publishPanel(upload("dev.example.clock", "1.1.0", { icon: { name: "icon.svg", bytes: new TextEncoder().encode("<svg/>") } }), ctx);
+        expect(await icon()).toBe("image/svg+xml");
+        const record = await publishPanel(upload("dev.example.clock", "1.2.0"), ctx);
+        expect(record.iconUrl).toBeUndefined();
+        expect(await icon()).toBe(404);
     });
 
     test("record URLs come only from the configured origin", async () => {

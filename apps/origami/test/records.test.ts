@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
-import { putRecord, signRecord, type CommandRunner } from "../scripts/lib/kv";
+import { putRecord, signRecord } from "../scripts/lib/kv";
+import type { CommandRunner } from "../scripts/lib/wrangler";
 import type { PackageRecord } from "../scripts/lib/records";
 import { releaseMessage, verifyRelease } from "../../paperboard/papercrane/releaseSignature";
 import { parsePackageRecipe, recipeDigest } from "../../paperboard/papercrane/packageRecipe";

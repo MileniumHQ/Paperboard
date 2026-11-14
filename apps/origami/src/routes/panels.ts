@@ -1,9 +1,4 @@
-import {
-    getPanelsIndex,
-    getPanel,
-    storeMediaPrefix,
-    UnreadablePanelError,
-} from "../panels";
+import { getPanelsIndex, getPanel, storeMediaPrefix, type PanelRecord } from "../panels";
 import { jsonResponse, type Env } from "../lib";
 
 // Read-only panel routes. Panel writes are operator actions through
@@ -14,24 +9,8 @@ export async function handlePanelsRoutes(
     request: Request,
     env: Env,
     pathname: string,
-    bucket: R2Bucket | undefined,
 ): Promise<Response | null> {
-    try {
-        return await routePanels(request, env, pathname, bucket);
-    } catch (err) {
-        if (err instanceof UnreadablePanelError) {
-            return jsonResponse({ error: err.message }, 500);
-        }
-        throw err;
-    }
-}
-
-async function routePanels(
-    request: Request,
-    env: Env,
-    pathname: string,
-    bucket: R2Bucket | undefined,
-): Promise<Response | null> {
+    const bucket = env.PANELS_BUCKET;
     if (
         pathname === "/panels/index.json" ||
         pathname === "/panels" ||
@@ -56,8 +35,8 @@ async function routePanels(
         /^\/panel\/([a-zA-Z0-9_\-\.]+)\/download$/,
     );
     if (downloadMatch && downloadMatch[1]) {
-        // O8: downloads are reads — any state-changing method is refused
-        // rather than served with archive bytes
+        // downloads are reads: any state-changing method is refused rather
+        // than served with archive bytes
         if (request.method !== "GET" && request.method !== "HEAD") {
             return jsonResponse({ error: "Method Not Allowed" }, 405);
         }
@@ -92,7 +71,7 @@ async function routePanels(
         // longer resolve — re-publish through the operator publisher. The
         // message matches the missing-record case above: a not-found here
         // must not distinguish "record exists, archive missing" to an
-        // unauthenticated caller (O12).
+        // unauthenticated caller.
         return jsonResponse({ error: "Panel not found" }, 404);
     }
 
@@ -104,39 +83,21 @@ async function routePanels(
             return jsonResponse({ error: "Method Not Allowed" }, 405);
         }
         const panelId = iconMatch[1];
-        // O6: an icon is only served while its panel record is live — a
-        // taken-down panel's branding must not outlive its record.
+        // an icon is only served while its panel record is live: a
+        // taken-down panel's branding must not outlive its record
         const record = await getPanel(env.PACKAGES, panelId);
-        if (!record) {
-            return jsonResponse({ error: "Icon not found" }, 404);
-        }
-        if (bucket) {
-            for (const ext of ["png", "svg", "webp"]) {
-                const object = await bucket.get(
-                    `panels/${panelId}/icon.${ext}`,
-                );
-                if (object) {
-                    const headers = new Headers();
-                    object.writeHttpMetadata(headers);
-                    // icons share the library's origin and may be SVG
-                    // documents: sandboxed with nothing to load, an icon
-                    // navigated to as a top-level document cannot run
-                    // script in the registry origin
-                    headers.set(
-                        "Content-Security-Policy",
-                        "default-src 'none'; sandbox",
-                    );
-                    headers.set("X-Content-Type-Options", "nosniff");
-                    headers.set(
-                        "Cache-Control",
-                        "public, max-age=86400",
-                    );
-                    headers.set("Access-Control-Allow-Origin", "*");
-                    return new Response(object.body, { headers });
-                }
-            }
-        }
-        return jsonResponse({ error: "Icon not found" }, 404);
+        const object = record && bucket ? await iconObject(bucket, record) : null;
+        if (!object) return jsonResponse({ error: "Icon not found" }, 404);
+        const headers = new Headers();
+        object.writeHttpMetadata(headers);
+        // icons share the library's origin and may be SVG documents:
+        // sandboxed with nothing to load, an icon navigated to as a
+        // top-level document cannot run script in the registry origin
+        headers.set("Content-Security-Policy", "default-src 'none'; sandbox");
+        headers.set("X-Content-Type-Options", "nosniff");
+        headers.set("Cache-Control", "public, max-age=86400");
+        headers.set("Access-Control-Allow-Origin", "*");
+        return new Response(object.body, { headers });
     }
 
     const mediaMatch = pathname.match(
@@ -182,5 +143,18 @@ async function routePanels(
         return jsonResponse({ error: "Method Not Allowed" }, 405);
     }
 
+    return null;
+}
+
+// The record names its icon. Records published before it did kept one
+// fixed key per extension, so for those the first one stored is the icon
+// until the panel's next release; a record with no icon serves none.
+async function iconObject(bucket: R2Bucket, record: PanelRecord): Promise<R2ObjectBody | null> {
+    if (record.iconKey) return bucket.get(record.iconKey);
+    if (!record.iconUrl) return null;
+    for (const ext of ["png", "svg", "webp"]) {
+        const object = await bucket.get(`panels/${record.id}/icon.${ext}`);
+        if (object) return object;
+    }
     return null;
 }

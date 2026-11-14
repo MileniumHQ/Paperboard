@@ -12,7 +12,7 @@
 // publisher and the worker routes meet over one KV and one bucket.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import type { CommandRunner } from "../../scripts/lib/panelPublish";
+import type { CommandRunner } from "../../scripts/lib/wrangler";
 import type { Env } from "../../src/lib";
 
 export class MemoryKV {

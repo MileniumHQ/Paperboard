@@ -6,10 +6,10 @@
 // (publishLib.test.ts) and the interactive publish.ts is a thin shell
 // around it.
 //
-// URL-shape constants are duplicated in apps/origami/src/routes/paperdl.ts
-// (the worker cannot import scripts). The two sides must stay in sync:
-// VERSION_SEGMENT, FILE_SEGMENT, DL_HOST, kvKeyFor, and the /<app>/<file>
-// redirect contract. If you change one side, change the other and say so.
+// The download URL shape (host, repo, path segments) is the worker's own
+// (apps/origami/src/downloadUrl.ts), imported rather than copied. kvKeyFor
+// and the canonical asset names are mirrored by
+// apps/origami/src/routes/paperdl.ts: change both sides together.
 
 import {
     parseStoreManifest,
@@ -18,9 +18,9 @@ import {
     STORE_IMAGE_TYPES,
     STORE_MAX_SCREENSHOT_BYTES,
 } from "../packages/paperapi/src/storeListing";
+import { DOWNLOAD_HOST, FILE_SEGMENT, GH_REPO, VERSION_SEGMENT } from "../apps/origami/src/downloadUrl";
 
-export const GH_REPO = "MileniumHQ/Paperboard";
-export const DL_HOST = "i.paperboard.dev";
+export { GH_REPO };
 export const ORIGAMI_HOST = "origami.ariapis.com";
 
 // Deploy targets. PAPERDL_R2_BUCKET and KV_PACKAGES_BINDING must match
@@ -203,7 +203,7 @@ export function dlFileUrl(
     versionOrLatest: string,
     file: string,
 ): string {
-    return `https://${DL_HOST}/${app}/${versionOrLatest}/${file}`;
+    return `https://${DOWNLOAD_HOST}/${app}/${versionOrLatest}/${file}`;
 }
 
 // The host's crane update planner reads Origami's R2 crane/index.json (it
@@ -234,13 +234,7 @@ export function buildCraneIndex(
     return index;
 }
 
-// URL-shape guards. A version or filename sits inside a URL path slot on
-// both the worker and the redirect target, so neither may contain "/",
-// whitespace, "%", "?", or "#". "latest" matches VERSION_SEGMENT on
-// purpose — the router checks the alias before the versioned route.
-export const VERSION_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._+\-]{0,63}$/;
-export const FILE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._\-]{0,127}$/;
-
+// URL-shape guards: the worker's own (apps/origami/src/downloadUrl.ts)
 export function isValidVersionSegment(v: string): boolean {
     return VERSION_SEGMENT.test(v);
 }

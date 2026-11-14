@@ -1,4 +1,5 @@
 import { CORS_HEADERS, jsonResponse, type Env } from "./lib";
+import { UnreadableRecordError } from "./recordError";
 import { handlePanelsRoutes } from "./routes/panels";
 import { handlePackagesRoutes } from "./routes/packages";
 import {
@@ -8,7 +9,6 @@ import {
 } from "./routes/paperdl";
 
 export type { Env };
-export type { PackageMetadata } from "./lib";
 
 export default {
     async fetch(
@@ -23,14 +23,13 @@ export default {
             });
         }
 
-        const bucket = env.PANELS_BUCKET;
         const url = new URL(request.url);
         const pathname = url.pathname;
 
         try {
             // i.paperboard.dev is downloads-only: short routes and feeds,
-            // everything else is a 404 (no registry, panels, publish,
-            // or health on this host).
+            // everything else is a 404 (no registry, panels or health on
+            // this host).
             if (isDownloadHost(url.hostname)) {
                 const dlRes = await handleDownloadHostRoutes(request, env, pathname);
                 if (dlRes) return dlRes;
@@ -64,37 +63,21 @@ export default {
                 });
             }
 
-            const panelsRes = await handlePanelsRoutes(
-                request,
-                env,
-                pathname,
-                bucket,
+            return (
+                (await handlePanelsRoutes(request, env, pathname)) ??
+                (await handlePackagesRoutes(request, env, pathname)) ??
+                (await handlePaperdlRoutes(request, env, pathname)) ??
+                jsonResponse({ error: "Not Found" }, 404)
             );
-            if (panelsRes) return panelsRes;
-
-            const packagesRes = await handlePackagesRoutes(
-                request,
-                env,
-                url,
-                pathname,
-                bucket,
-            );
-            if (packagesRes) return packagesRes;
-
-            const paperdlRes = await handlePaperdlRoutes(
-                request,
-                env,
-                url,
-                pathname,
-                bucket,
-            );
-            if (paperdlRes) return paperdlRes;
-
-            return jsonResponse({ error: "Not Found" }, 404);
         } catch (err) {
-            // O9: the detail goes to the logs, not the caller — KV/R2
-            // binding errors are internal facts, and echoing err.message
-            // to an unauthenticated caller is an information leak.
+            // a record that exists but can't be read names itself; the
+            // KV error behind it stays in the logs
+            if (err instanceof UnreadableRecordError) {
+                return jsonResponse({ error: err.message }, 500);
+            }
+            // the detail goes to the logs, not the caller: KV/R2 binding
+            // errors are internal facts, and echoing err.message to an
+            // unauthenticated caller is an information leak
             console.error("[origami] unhandled error:", err);
             return jsonResponse({ error: "Internal Server Error" }, 500);
         }

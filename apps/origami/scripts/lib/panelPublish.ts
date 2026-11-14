@@ -16,12 +16,12 @@
 // Unlisting takes a panel off the store (out of `panels:index`) and leaves
 // its record and archive: installs that have it keep it, and stop getting
 // updates. Publishing it again lists it again.
-import { execFile } from "node:child_process";
 import { writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
 import {
-    isValidPanelId,
+    iconKey,
     isValidPanelVersion,
     storeMediaPrefix,
     PANEL_KEY_PREFIX,
@@ -37,6 +37,7 @@ import {
     STORE_MAX_SCREENSHOT_BYTES,
     type StoreListing,
 } from "../../../../packages/paperapi/src/storeListing";
+import { kvGetArgs, kvListArgs, kvPutArgs, ORIGAMI_DIR, runCommand, type CommandRunner } from "./wrangler";
 
 export const PANELS_BUCKET = "paperboard-boards";
 export const MAX_ARCHIVE_BYTES = 64 * 1024 * 1024;
@@ -49,42 +50,6 @@ const ICON_CONTENT_TYPES: Record<string, string> = {
 };
 
 export class PanelPublishError extends Error {}
-
-export type CommandRunner = (
-    command: string,
-    args: string[],
-    cwd: string,
-) => Promise<{ stdout: string; stderr: string }>;
-
-export const runCommand: CommandRunner = (command, args, cwd) =>
-    new Promise((resolve, reject) => {
-        // argv arrays only, never a shell: versions/ids/JSON go verbatim
-        execFile(command, args, { cwd, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
-            if (err) {
-                reject(
-                    new Error(
-                        `${command} ${args.slice(0, 5).join(" ")} failed: ${stderr.trim() || err.message}`,
-                    ),
-                );
-                return;
-            }
-            resolve({ stdout, stderr });
-        });
-    });
-
-const ORIGAMI_DIR = path.resolve(import.meta.dir, "..", "..");
-
-export function kvGetArgs(key: string): string[] {
-    return ["wrangler", "kv", "key", "get", key, "--binding", "PACKAGES", "--remote"];
-}
-
-export function kvListArgs(key: string): string[] {
-    return ["wrangler", "kv", "key", "list", "--prefix", key, "--binding", "PACKAGES", "--remote"];
-}
-
-export function kvPutArgs(key: string, value: string): string[] {
-    return ["wrangler", "kv", "key", "put", key, value, "--binding", "PACKAGES", "--remote"];
-}
 
 export function r2PutArgs(
     key: string,
@@ -219,7 +184,7 @@ function assertInput(upload: PanelUpload): string | null {
     if (!upload.id || !upload.name || !upload.version) {
         return "metadata must include 'id', 'name', and 'version'";
     }
-    if (!isValidPanelId(upload.id)) {
+    if (!isPanelId(upload.id)) {
         return "invalid panel id: use a lowercase dotted identifier, at most 128 characters; library, settings and landing are reserved";
     }
     if (!isValidPanelVersion(upload.version)) {
@@ -345,17 +310,15 @@ export async function publishPanel(
     const archiveKey = `panels/${upload.id}/${upload.id}-${upload.version}.tar.gz`;
     await storage.putObject(archiveKey, upload.archive, "application/gzip");
 
-    let iconUrl: string | undefined;
+    // the record names this release's icon, so a new extension or no icon
+    // at all replaces the old one instead of leaving it served
+    let icon: Pick<PanelRecord, "iconKey" | "iconUrl"> = {};
     if (upload.icon) {
         const ext = iconExtension(upload.icon.name)!;
+        const key = iconKey(upload.id, upload.version, ext);
         // content type derived from the extension, never the uploader's
-        await storage.putObject(
-            `panels/${upload.id}/icon.${ext}`,
-            upload.icon.bytes,
-            ICON_CONTENT_TYPES[ext]!,
-            "public, max-age=31536000, immutable",
-        );
-        iconUrl = `${ctx.origin}/panel/${upload.id}/icon`;
+        await storage.putObject(key, upload.icon.bytes, ICON_CONTENT_TYPES[ext]!, "public, max-age=31536000, immutable");
+        icon = { iconKey: key, iconUrl: `${ctx.origin}/panel/${upload.id}/icon` };
     }
 
     // media keys are per version: a republish never overwrites bytes an
@@ -390,7 +353,7 @@ export async function publishPanel(
         name: upload.name,
         version: upload.version,
         description: upload.description,
-        iconUrl,
+        ...icon,
         archiveKey,
         sha256,
         signature: upload.signature,
@@ -431,7 +394,7 @@ export async function publishPanel(
  * Refuses an id the registry has no record of, or one the store doesn't list.
  */
 export async function unlistPanel(id: string, ctx: { storage: PanelStorage }): Promise<PanelRecord> {
-    if (!isValidPanelId(id)) throw new PanelPublishError(`invalid panel id: ${JSON.stringify(id)}`);
+    if (!isPanelId(id)) throw new PanelPublishError(`invalid panel id: ${JSON.stringify(id)}`);
     const { storage } = ctx;
     const record = await storage.getJson<PanelRecord>(`${PANEL_KEY_PREFIX}${id}`);
     if (!record) throw new PanelPublishError(`the registry has no panel ${id}`);

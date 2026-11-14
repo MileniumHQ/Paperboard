@@ -1,5 +1,6 @@
 import type { KeyObject } from "node:crypto";
-import { putRecord, readPublished, type CommandRunner, type PublishedReader } from "./kv";
+import { putRecord, readPublished, type PublishedReader } from "./kv";
+import type { CommandRunner } from "./wrangler";
 import { loadReleaseSigningKey } from "../../../../scripts/releaseSigning";
 import type { PackageRecord } from "./records";
 
@@ -50,4 +51,44 @@ export function report(outcome: UpdateOutcome, dryRun: boolean): number {
         console.error(`FAILED ${key}: ${message}`);
     }
     return Object.keys(outcome.errors).length > 0 ? 1 : 0;
+}
+
+export type BuiltEntry = { key: string; record?: PackageRecord; error?: string };
+
+function messageOf(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+}
+
+/** One record, or the failure that stopped it, keyed for writeRecords. */
+export async function settle(key: string, build: () => Promise<PackageRecord>): Promise<BuiltEntry> {
+    try {
+        return { key, record: await build() };
+    } catch (err) {
+        return { key, error: messageOf(err) };
+    }
+}
+
+/** Records built together: one failure fails every key, and a built record is keyed by its name. */
+export async function settleAll(keys: string[], build: () => Promise<PackageRecord[]>): Promise<BuiltEntry[]> {
+    try {
+        return (await build()).map((record) => ({ key: record.name, record }));
+    } catch (err) {
+        const error = messageOf(err);
+        return keys.map((key) => ({ key, error }));
+    }
+}
+
+/** An updater's entry point: builds from argv, writes (or prints with --dry-run), and exits non-zero on any failure. */
+export function runUpdater(build: (argv: string[]) => Promise<BuiltEntry[]>): void {
+    const argv = process.argv.slice(2);
+    const dryRun = argv.includes("--dry-run");
+    build(argv)
+        .then((built) => writeRecords(built, { dryRun }))
+        .then(
+            (outcome) => process.exit(report(outcome, dryRun)),
+            (err) => {
+                console.error(messageOf(err));
+                process.exit(1);
+            },
+        );
 }

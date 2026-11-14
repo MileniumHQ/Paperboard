@@ -4,15 +4,6 @@ export interface Env {
     PAPERDL_BUCKET?: R2Bucket;
 }
 
-export interface PackageMetadata {
-    name: string;
-    version?: string;
-    checksum?: string;
-    url?: string;
-    downloadUrl?: string;
-    [key: string]: unknown;
-}
-
 export const CORS_HEADERS: Record<string, string> = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, HEAD, OPTIONS",
@@ -33,5 +24,3 @@ export function jsonResponse(
         },
     });
 }
-
-

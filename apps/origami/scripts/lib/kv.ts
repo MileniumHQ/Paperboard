@@ -1,37 +1,12 @@
 // Writes records to the production PACKAGES namespace through wrangler,
 // authenticated as the operator (`wrangler login`). No worker route can
 // write package records: the only writer is someone holding the account.
-import { execFile } from "node:child_process";
-import path from "node:path";
 import type { KeyObject } from "node:crypto";
 import { assertValidRecord, type PackageRecord, type PlatformKey } from "./records";
 import { releaseMessage, signRelease } from "../../../../scripts/releaseSigning";
 import { RELEASE_PUBLIC_KEY, verifyRelease } from "../../../paperboard/papercrane/releaseSignature";
 import { parsePackageRecipe, recipeDigest } from "../../../paperboard/papercrane/packageRecipe";
-
-const ORIGAMI_DIR = path.resolve(import.meta.dir, "..", "..");
-
-export type CommandRunner = (
-    command: string,
-    args: string[],
-    cwd: string,
-) => Promise<{ stdout: string; stderr: string }>;
-
-export const runCommand: CommandRunner = (command, args, cwd) =>
-    new Promise((resolve, reject) => {
-        // argv array, no shell: the record JSON is passed verbatim
-        execFile(command, args, { cwd, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
-            if (err) {
-                reject(new Error(`${command} ${args.slice(0, 4).join(" ")} failed: ${stderr.trim() || err.message}`));
-                return;
-            }
-            resolve({ stdout, stderr });
-        });
-    });
-
-export function wranglerPutArgs(key: string, value: string): string[] {
-    return ["wrangler", "kv", "key", "put", key, value, "--binding", "PACKAGES", "--remote"];
-}
+import { kvPutArgs, ORIGAMI_DIR, runCommand, type CommandRunner } from "./wrangler";
 
 // Signs every platform entry with the offline release key. Daemons refuse
 // an entry without a valid signature, so an unsigned record is never
@@ -100,6 +75,6 @@ export async function putRecord(
         });
         if (live !== undefined && canonical(live) === canonical(signed)) return "unchanged";
     }
-    await run("bunx", wranglerPutArgs(signed.name, JSON.stringify(signed, null, 2)), ORIGAMI_DIR);
+    await run("bunx", kvPutArgs(signed.name, JSON.stringify(signed, null, 2)), ORIGAMI_DIR);
     return "written";
 }
